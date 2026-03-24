@@ -1,0 +1,14 @@
+{
+  "name": "octopus",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.11.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=10.0.0"
+  },
+  "devDependencies": {
+    "lefthook": "^1.10.0",
+    "turbo": "^2.5.0"
+  }
+}

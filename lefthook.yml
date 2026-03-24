@@ -1,0 +1,30 @@
+pre-commit:
+  parallel: true
+  commands:
+    required-files:
+      run: >
+        test -f AGENTS.md &&
+        test -f README.md &&
+        test -f docs/PRD.md &&
+        test -f docs/SAD.md &&
+        test -f docs/DEVELOPMENT_STANDARDS.md &&
+        test -f docs/VIBECODING.md &&
+        test -f docs/VISUAL_FRAMEWORK.md &&
+        test -f package.json &&
+        test -f pnpm-workspace.yaml &&
+        test -f turbo.json &&
+        test -f Cargo.toml
+    json-configs:
+      run: >
+        node -e "JSON.parse(require('node:fs').readFileSync('package.json','utf8'))" &&
+        node -e "JSON.parse(require('node:fs').readFileSync('turbo.json','utf8'))"
+    cargo-workspace:
+      run: cargo metadata --no-deps --format-version 1 > /dev/null
+
+commit-msg:
+  commands:
+    conventional-commit:
+      run: >
+        grep -Eq
+        '^(feat|fix|refactor|docs|test|build|ci|chore|perf|revert)(\([a-z0-9._/-]+\))?!?: .+'
+        "{1}"
