@@ -4,6 +4,9 @@ info:
   version: 1.0.0
   description: >-
     Skeleton control plane contract for the first v1 implementation phases.
+  contact:
+    name: octopus maintainers
+    url: https://github.com/weilaizhihuigu/super-agent
 servers:
   - url: https://octopus.local/api/v1
 tags:
@@ -17,6 +20,7 @@ paths:
     get:
       tags: [Workspaces]
       summary: List workspaces
+      description: Return the visible workspace list for the current control-plane session.
       operationId: listWorkspaces
       responses:
         '200':
@@ -35,6 +39,7 @@ paths:
     get:
       tags: [Agents]
       summary: List agents
+      description: Return the governed agent assets that belong to the current workspace scope.
       operationId: listAgents
       responses:
         '200':
@@ -53,6 +58,7 @@ paths:
     get:
       tags: [Runs]
       summary: List runs
+      description: Return the most recent runs with their current projected lifecycle status.
       operationId: listRuns
       responses:
         '200':
@@ -70,6 +76,7 @@ paths:
     post:
       tags: [Runs]
       summary: Create a run
+      description: Create a minimum Phase 3 run that immediately enters a waiting interaction or approval state.
       operationId: createRun
       requestBody:
         required: true
@@ -88,6 +95,7 @@ paths:
     get:
       tags: [Runs]
       summary: Get a run
+      description: Return the current run projection for a single run identifier.
       operationId: getRun
       parameters:
         - $ref: '#/components/parameters/RunId'
@@ -102,6 +110,7 @@ paths:
     get:
       tags: [Runs]
       summary: Get run timeline
+      description: Return the projected execution timeline for a run, including waiting and resume state transitions.
       operationId: getRunTimeline
       parameters:
         - $ref: '#/components/parameters/RunId'
@@ -122,6 +131,7 @@ paths:
     post:
       tags: [Runs]
       summary: Resume a waiting run
+      description: Resume a waiting run with a governed response payload, resume token, and idempotency key.
       operationId: resumeRun
       parameters:
         - $ref: '#/components/parameters/RunId'
@@ -142,6 +152,7 @@ paths:
     get:
       tags: [Inbox]
       summary: List inbox items
+      description: Return pending and resolved inbox work items for ask-user and approval interactions.
       operationId: listInboxItems
       responses:
         '200':
@@ -160,6 +171,7 @@ paths:
     get:
       tags: [Audit]
       summary: List audit events
+      description: Return the recorded audit events for run creation, resume handling, and governed operator actions.
       operationId: listAuditEvents
       responses:
         '200':
@@ -216,6 +228,9 @@ components:
           type: string
         agentId:
           type: string
+        interactionType:
+          type: string
+          enum: [ask_user, approval]
         status:
           type: string
           enum:
@@ -224,10 +239,15 @@ components:
             - waiting_input
             - waiting_approval
             - waiting_trigger
+            - suspended
+            - resuming
             - completed
             - failed
             - canceled
+            - handoff
         summary:
+          type: string
+        input:
           type: string
         createdAt:
           type: string
@@ -235,7 +255,7 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, workspaceId, agentId, status, createdAt, updatedAt]
+      required: [id, workspaceId, agentId, interactionType, status, summary, input, createdAt, updatedAt]
     CreateRunRequest:
       type: object
       properties:
@@ -245,7 +265,10 @@ components:
           type: string
         input:
           type: string
-      required: [workspaceId, agentId, input]
+        interactionType:
+          type: string
+          enum: [ask_user, approval]
+      required: [workspaceId, agentId, input, interactionType]
     ResumeRunRequest:
       type: object
       properties:
@@ -263,9 +286,27 @@ components:
       properties:
         accepted:
           type: boolean
+        deduplicated:
+          type: boolean
         runId:
           type: string
-      required: [accepted, runId]
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - waiting_input
+            - waiting_approval
+            - waiting_trigger
+            - suspended
+            - resuming
+            - completed
+            - failed
+            - canceled
+            - handoff
+        run:
+          $ref: '#/components/schemas/Run'
+      required: [accepted, deduplicated, runId, status, run]
     InteractionResponse:
       type: object
       properties:
@@ -280,6 +321,8 @@ components:
           type: string
         approved:
           type: boolean
+        goalChanged:
+          type: boolean
       required: [type]
     InboxItem:
       type: object
@@ -290,15 +333,30 @@ components:
           type: string
         kind:
           type: string
-          enum: [ask_user, approval, resume]
+          enum: [ask_user, approval]
         status:
           type: string
+          enum: [pending, resolved]
         title:
+          type: string
+        prompt:
+          type: string
+        responseType:
+          type: string
+          enum: [single_select, multi_select, text, approval]
+        options:
+          type: array
+          items:
+            type: string
+        resumeToken:
           type: string
         createdAt:
           type: string
           format: date-time
-      required: [id, kind, status, title, createdAt]
+        resolvedAt:
+          type: string
+          format: date-time
+      required: [id, runId, kind, status, title, prompt, responseType, options, resumeToken, createdAt]
     TimelineEvent:
       type: object
       properties:
@@ -327,7 +385,9 @@ components:
           type: string
         action:
           type: string
+        summary:
+          type: string
         occurredAt:
           type: string
           format: date-time
-      required: [id, subjectType, subjectId, action, occurredAt]
+      required: [id, actorId, subjectType, subjectId, action, summary, occurredAt]

@@ -33,6 +33,26 @@
         "storybook-static/**"
       ]
     },
+    "generate": {
+      "dependsOn": [
+        "^generate"
+      ],
+      "outputs": [
+        "src/generated/**"
+      ]
+    },
+    "check:generated": {
+      "dependsOn": [
+        "^check:generated"
+      ],
+      "outputs": []
+    },
+    "lint:openapi": {
+      "dependsOn": [
+        "^lint:openapi"
+      ],
+      "outputs": []
+    },
     "dev": {
       "cache": false,
       "persistent": true

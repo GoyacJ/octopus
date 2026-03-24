@@ -11,16 +11,22 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@octopus/api-client": "workspace:*",
     "@octopus/composables": "workspace:*",
     "@octopus/design-tokens": "workspace:*",
     "@octopus/i18n": "workspace:*",
     "@octopus/icons": "workspace:*",
     "@octopus/shared": "workspace:*",
     "@octopus/ui": "workspace:*",
+    "@tanstack/vue-query": "catalog:",
     "@vueuse/core": "catalog:",
     "pinia": "catalog:",
     "vue": "catalog:",
     "vue-i18n": "catalog:",
     "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "@vue/test-utils": "^2.4.6",
+    "jsdom": "^26.1.0"
   }
 }

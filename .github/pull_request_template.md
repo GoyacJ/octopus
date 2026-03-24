@@ -43,3 +43,4 @@
 - ADR or architecture impact:
 - Security or policy impact:
 - Contract or schema impact:
+- Large cross-responsibility files introduced or retained; if yes, why not splitting now is still reasonable:

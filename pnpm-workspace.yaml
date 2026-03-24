@@ -2,6 +2,7 @@ packages:
   - apps/*
   - packages/*
 catalog:
+  "@tanstack/vue-query": ^5.90.2
   "@vueuse/core": ^13.0.0
   pinia: ^3.0.1
   vue: ^3.5.13

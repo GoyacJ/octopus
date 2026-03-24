@@ -6,3 +6,4 @@ license.workspace = true
 
 [dependencies]
 octopus-shared = { path = "../octopus-shared" }
+serde.workspace = true

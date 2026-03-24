@@ -5,4 +5,15 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+anyhow.workspace = true
+axum.workspace = true
+octopus-application = { path = "../octopus-application" }
 octopus-runtime = { path = "../octopus-runtime" }
+serde.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+octopus-infra-sqlite = { path = "../octopus-infra-sqlite" }
+serde_json.workspace = true
+tokio.workspace = true
+tower = { version = "0.5.3", features = ["util"] }

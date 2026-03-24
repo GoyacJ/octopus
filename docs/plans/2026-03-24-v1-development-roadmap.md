@@ -33,7 +33,7 @@
 | Phase 0 | 计划与变更跟踪基线 | `Done` | `2026-03-24` | `docs/changes/2026-03-24-phase-0-planning-and-tracking.md` |
 | Phase 1 | 契约源骨架 | `Done` | `2026-03-24` | `docs/changes/2026-03-24-phase-1-contract-sources.md` |
 | Phase 2 | Monorepo 工程脚手架 | `Done` | `2026-03-24` | `docs/changes/2026-03-24-phase-2-monorepo-scaffolding.md` |
-| Phase 3 | 首条 MVP 纵切片 | `Not Started` | `-` | `TBD` |
+| Phase 3 | 首条 MVP 纵切片 | `Done` | `2026-03-24` | `docs/changes/2026-03-24-phase-3-mvp-vertical-slice.md` |
 | Phase 4 | v1 能力扩展 | `Not Started` | `-` | `TBD` |
 | Phase 5 | Blueprint 与发布硬化 | `Not Started` | `-` | `TBD` |
 
@@ -142,10 +142,10 @@
 
 ### Phase 3: 首条 MVP 纵切片
 
-- Status: `Not Started`
-- Last Updated: `-`
+- Status: `Done`
+- Last Updated: `2026-03-24`
 - Dependencies: Phase 2
-- Change Record: `TBD`
+- Change Record: `docs/changes/2026-03-24-phase-3-mvp-vertical-slice.md`
 
 **Objectives**
 
@@ -155,10 +155,10 @@
 
 **Checklist**
 
-- [ ] 后端打通统一事件模型：`Run`、`AskUserRequest`、`ApprovalRequest`、`resume`。
-- [ ] 建立最小状态投影、审计事件和时间线读取能力。
-- [ ] Web 控制面落地首批页面：应用壳、`Runs`、`Inbox`、基础 `Audit`。
-- [ ] 打通 `run -> ask-user/approval -> resume -> timeline/audit` 闭环。
+- [x] 后端打通统一事件模型：`Run`、`AskUserRequest`、`ApprovalRequest`、`resume`。
+- [x] 建立最小状态投影、审计事件和时间线读取能力。
+- [x] Web 控制面落地首批页面：应用壳、`Runs`、`Inbox`、基础 `Audit`。
+- [x] 打通 `run -> ask-user/approval -> resume -> timeline/audit` 闭环。
 
 **Exit Criteria**
 
@@ -172,6 +172,8 @@
 2. `pnpm build`
 3. `cargo test`
 4. 手工验证最小闭环和审计回放
+5. `pnpm check:generated`
+6. `pnpm lint:openapi`
 
 ### Phase 4: v1 能力扩展
 
