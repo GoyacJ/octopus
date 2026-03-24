@@ -1,0 +1,58 @@
+:root {
+  color-scheme: light;
+  --oc-font-sans: "IBM Plex Sans", "Noto Sans SC", sans-serif;
+  --oc-font-display: "Fraunces", "Noto Serif SC", serif;
+  --oc-bg-canvas: #f5f7fb;
+  --oc-bg-surface: rgba(255, 255, 255, 0.84);
+  --oc-bg-panel: #ffffff;
+  --oc-bg-muted: #e8edf5;
+  --oc-border-subtle: rgba(15, 23, 42, 0.1);
+  --oc-text-primary: #122033;
+  --oc-text-secondary: #516176;
+  --oc-text-muted: #6c7a90;
+  --oc-accent: #2864ff;
+  --oc-accent-soft: rgba(40, 100, 255, 0.14);
+  --oc-success: #14795b;
+  --oc-warning: #a85d09;
+  --oc-danger: #b53b3b;
+  --oc-shadow-soft: 0 22px 50px rgba(15, 23, 42, 0.08);
+  --oc-shadow-card: 0 10px 24px rgba(15, 23, 42, 0.08);
+  --oc-radius-card: 24px;
+  --oc-radius-pill: 999px;
+  --oc-space-page: 28px;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --oc-bg-canvas: #08111f;
+  --oc-bg-surface: rgba(10, 20, 36, 0.9);
+  --oc-bg-panel: #0f1a2d;
+  --oc-bg-muted: #16243b;
+  --oc-border-subtle: rgba(195, 208, 229, 0.12);
+  --oc-text-primary: #edf4ff;
+  --oc-text-secondary: #b1c0d6;
+  --oc-text-muted: #8c9bb2;
+  --oc-accent: #7ca1ff;
+  --oc-accent-soft: rgba(124, 161, 255, 0.16);
+  --oc-success: #35bf90;
+  --oc-warning: #f0ac4f;
+  --oc-danger: #ef7676;
+  --oc-shadow-soft: 0 24px 56px rgba(0, 0, 0, 0.36);
+  --oc-shadow-card: 0 12px 28px rgba(0, 0, 0, 0.34);
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at top left, rgba(40, 100, 255, 0.12), transparent 32%),
+    radial-gradient(circle at top right, rgba(20, 121, 91, 0.08), transparent 24%),
+    var(--oc-bg-canvas);
+  color: var(--oc-text-primary);
+  font-family: var(--oc-font-sans);
+}

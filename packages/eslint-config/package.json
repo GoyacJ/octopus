@@ -1,0 +1,16 @@
+{
+  "name": "@octopus/eslint-config",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    "./base": "./base.mjs",
+    "./vue": "./vue.mjs"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "node -e \"process.exit(0)\"",
+    "test": "vitest run --passWithNoTests",
+    "build": "node -e \"process.exit(0)\""
+  }
+}

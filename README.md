@@ -9,6 +9,7 @@
 - 当前仓库已完成治理文档固化，并进入基础脚手架初始化阶段。
 - 已完成首版产品需求、目标态架构、开发规范、VibeCoding 执行基线、视觉框架和仓库级 AI 协作约束。
 - 已初始化 Monorepo 根配置、目录骨架、PR 模板、hooks 和最小 CI 入口，但尚未进入核心业务功能实现阶段。
+- 已补充 v1 实施路线图、阶段状态跟踪机制与阶段变更记录目录。
 
 ## 一句话定位
 
@@ -79,6 +80,8 @@
 | [docs/DEVELOPMENT_STANDARDS.md](docs/DEVELOPMENT_STANDARDS.md) | 技术栈、目录结构、设计模式、代码规范、提交规范 |
 | [docs/VIBECODING.md](docs/VIBECODING.md) | AI 主导实现模式下的执行规则、边界与错误处置流程 |
 | [docs/VISUAL_FRAMEWORK.md](docs/VISUAL_FRAMEWORK.md) | 首版视觉框架、表面职责、导航结构和页面优先级 |
+| [docs/plans/2026-03-24-v1-development-roadmap.md](docs/plans/2026-03-24-v1-development-roadmap.md) | 当前 v1 实施路线图与阶段状态 |
+| [docs/changes/README.md](docs/changes/README.md) | 阶段变更记录规则与模板入口 |
 | [AGENTS.md](AGENTS.md) | 面向 Codex/AI agent 的仓库级协作约束 |
 
 建议阅读顺序：

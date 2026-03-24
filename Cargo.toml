@@ -1,7 +1,30 @@
 [workspace]
+members = [
+  "crates/octopus-shared",
+  "crates/octopus-domain",
+  "crates/octopus-application",
+  "crates/octopus-runtime",
+  "crates/octopus-api-http",
+  "crates/octopus-api-grpc",
+  "crates/octopus-infra-sqlite",
+  "crates/octopus-infra-postgres",
+  "crates/octopus-node-runtime",
+  "crates/octopus-plugin-host",
+]
 resolver = "2"
 
 [workspace.package]
 edition = "2021"
 license = "UNLICENSED"
 version = "0.1.0"
+
+[workspace.dependencies]
+anyhow = "1.0.97"
+axum = "0.8.1"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+sqlx = { version = "0.8.3", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "postgres", "macros"] }
+thiserror = "2.0.12"
+tokio = { version = "1.44.1", features = ["macros", "rt-multi-thread", "sync"] }
+tonic = "0.13.0"
+tracing = "0.1.41"

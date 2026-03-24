@@ -1,0 +1,10 @@
+[package]
+name = "octopus-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+octopus-application = { path = "../octopus-application" }
+octopus-domain = { path = "../octopus-domain" }
+octopus-shared = { path = "../octopus-shared" }

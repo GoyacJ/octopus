@@ -26,3 +26,13 @@
 文件名统一为：
 
 `YYYY-MM-DD-<topic>.md`
+
+## 状态与证据
+
+实施计划建议显式包含以下字段：
+
+1. 阶段状态：`Not Started / In Progress / Blocked / Done`
+2. `Last Updated`
+3. 退出条件（Exit Criteria）
+4. 验证命令（Verification）
+5. 对应阶段变更记录（`docs/changes/`）

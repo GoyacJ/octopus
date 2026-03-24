@@ -10,6 +10,8 @@ pre-commit:
         test -f docs/DEVELOPMENT_STANDARDS.md &&
         test -f docs/VIBECODING.md &&
         test -f docs/VISUAL_FRAMEWORK.md &&
+        test -f docs/plans/README.md &&
+        test -f docs/changes/README.md &&
         test -f package.json &&
         test -f pnpm-workspace.yaml &&
         test -f turbo.json &&

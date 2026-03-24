@@ -26,6 +26,8 @@
 - [ ] `docs/VIBECODING.md`
 - [ ] `docs/VISUAL_FRAMEWORK.md`
 - [ ] `docs/adr/`
+- [ ] `docs/plans/`
+- [ ] `docs/changes/`
 - [ ] No doc update needed
 
 ## UI Evidence

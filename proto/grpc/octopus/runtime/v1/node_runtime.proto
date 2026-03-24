@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package octopus.runtime.v1;
+
+option go_package = "github.com/weilaizhihuigu/octopus/proto/gen/go/octopus/runtime/v1;runtimev1";
+
+message NodeInfo {
+  string node_id = 1;
+  string hostname = 2;
+  repeated string capabilities = 3;
+}
+
+message RegisterNodeRequest {
+  NodeInfo node = 1;
+}
+
+message RegisterNodeResponse {
+  string registration_id = 1;
+}
+
+message DispatchRunRequest {
+  string run_id = 1;
+  string workspace_id = 2;
+  string agent_id = 3;
+  string instruction = 4;
+}
+
+message DispatchRunResponse {
+  bool accepted = 1;
+  string node_run_id = 2;
+}
+
+message ExecutionEvent {
+  string event_id = 1;
+  string run_id = 2;
+  string event_type = 3;
+  string summary = 4;
+  string occurred_at = 5;
+}
+
+message ReportExecutionEventRequest {
+  ExecutionEvent event = 1;
+}
+
+message ReportExecutionEventResponse {
+  bool accepted = 1;
+}
+
+message ResumeRunRequest {
+  string run_id = 1;
+  string resume_token = 2;
+  string idempotency_key = 3;
+}
+
+message ResumeRunResponse {
+  bool accepted = 1;
+}
+
+service NodeRuntimeService {
+  rpc RegisterNode(RegisterNodeRequest) returns (RegisterNodeResponse);
+  rpc DispatchRun(DispatchRunRequest) returns (DispatchRunResponse);
+  rpc ReportExecutionEvent(ReportExecutionEventRequest) returns (ReportExecutionEventResponse);
+  rpc ResumeRun(ResumeRunRequest) returns (ResumeRunResponse);
+}

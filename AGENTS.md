@@ -2,9 +2,12 @@
 
 ## Repository expectations
 
-- This repository is currently doc-first. Before proposing scaffolding, code, or architecture changes, read `docs/PRD.md`, `docs/SAD.md`, and `docs/DEVELOPMENT_STANDARDS.md`.
+- This repository is currently in a doc-first plus scaffold-baseline stage. Before proposing scaffolding, code, contract, or architecture changes, read `docs/PRD.md`, `docs/SAD.md`, and `docs/DEVELOPMENT_STANDARDS.md`.
 - Before implementation, also read `docs/VIBECODING.md` for execution-process constraints and `docs/VISUAL_FRAMEWORK.md` for UI information architecture and visual boundaries. These two docs do not override the primary product, architecture, or engineering sources.
+- Before starting implementation work for a phase or slice, also read the current execution docs in `docs/plans/` and the relevant records in `docs/changes/`. Treat them as the source of truth for current delivery order, phase status, exit criteria, and evidence expectations.
 - Treat those three documents as the source of truth for product scope, architecture boundaries, and engineering standards. If code or requests conflict with them, call out the conflict before proceeding.
+- Treat `docs/plans/` and `docs/changes/` as execution tracking documents only. They guide sequencing and status, but they do not override the product, architecture, or engineering source documents.
+- The repository already contains Phase 0-2 baseline work: planning/change tracking, contract skeletons under `proto/`, and workspace scaffolding under `apps/`, `packages/`, and `crates/`. Do not describe these skeletons as full product capability.
 - The working tree may already contain user changes. Never overwrite or revert unrelated edits. Prefer additive changes and explain conflicts early.
 - Keep repository-wide guidance here in the root file. If a future subdirectory needs different rules, add a nearby `AGENTS.override.md` instead of expanding this file indefinitely.
 
@@ -36,6 +39,8 @@
 - For Rust, keep domain, application, infrastructure, and transport boundaries explicit. Domain code must not depend directly on Axum, Tonic, SQLx, Redis, S3, or filesystem SDKs.
 - When adding Node tasks, define scripts in each package/app and register them in `turbo.json`. Root `package.json` should only delegate via `turbo run ...`.
 - Architecture-level, contract-level, token-system, component-API, and database-strategy changes must be reflected in docs and, when material, in `docs/adr/`.
+- If a change advances or completes a roadmap phase, update the corresponding phase status in `docs/plans/` and add or update the matching `docs/changes/` record in the same change.
+- When repository entry points change, keep `README.md`, `.github/pull_request_template.md`, `lefthook.yml`, and `.github/workflows/guardrails.yml` aligned with the new baseline where relevant.
 
 ## VibeCoding rules
 
@@ -49,5 +54,9 @@
 
 - Before claiming work is complete, run the relevant checks that actually exist in the repository at that point. Do not claim success based on expected future tooling.
 - When Node workspace tooling exists, prefer repo-standard `pnpm` + `turbo run` commands. When Rust workspace tooling exists, prefer Cargo workspace commands.
+- At the current repository stage, the default truthful verification set is: `pnpm install`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `cargo metadata --no-deps --format-version 1`, `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo test`.
+- Contract verification should include `buf lint`, OpenAPI lint, and generation-sync checks when those tools are available. If `buf`, `spectral`, or equivalent tooling is not installed yet, say so explicitly instead of implying contract lint passed.
 - UI changes should be reviewed in both light and dark themes, and in both Chinese and English when copy is affected.
+- Store UI evidence in `output/playwright/` unless a more specific repository convention is introduced later.
+- Phase completion claims must include updated status in `docs/plans/`, an updated `docs/changes/` record, and verification evidence that matches what was actually run.
 - If the required verification stack is missing because the repo is still being scaffolded, say so explicitly and verify at the highest truthful level available.

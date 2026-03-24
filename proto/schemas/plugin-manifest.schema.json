@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/plugin-manifest.v1.json",
+  "title": "PluginManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "version",
+    "displayName",
+    "kind",
+    "entry",
+    "capabilities",
+    "permissions"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9._-]+$"
+    },
+    "version": {
+      "type": "string"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["ui", "backend", "hybrid"]
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module"],
+      "properties": {
+        "module": {
+          "type": "string"
+        },
+        "ui": {
+          "type": "string"
+        },
+        "backend": {
+          "type": "string"
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "uiExtensions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "backendExtensions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "minimumHostVersion": {
+      "type": "string"
+    }
+  }
+}
