@@ -1,0 +1,201 @@
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { useRuntimeControlStore } from './useRuntimeControlStore'
+
+describe('useRuntimeControlStore', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+  })
+
+  it('submits tasks with explicit workspace and project context', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            run: {
+              id: 'run-1',
+              project_id: 'project-alpha',
+              run_type: 'task',
+              status: 'completed',
+              idempotency_key: 'task:project-alpha:run-1',
+              requested_by: 'operator-1',
+              title: 'Review runtime wiring',
+              checkpoint_token: null,
+              created_at: '2026-03-25T00:00:00Z',
+              updated_at: '2026-03-25T00:00:00Z',
+            },
+            artifact: {
+              id: 'artifact-1',
+              project_id: 'project-alpha',
+              run_id: 'run-1',
+              version: 1,
+              title: 'Artifact for Review runtime wiring',
+              content_ref: 'Direct path without approval',
+              state: 'current',
+              created_at: '2026-03-25T00:00:00Z',
+            },
+            approval: null,
+            inbox_item: null,
+            trace: [],
+            audit: [],
+          }),
+        ),
+      )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const store = useRuntimeControlStore()
+    await store.submitTask({
+      workspace_id: 'workspace-alpha',
+      project_id: 'project-alpha',
+      title: 'Review runtime wiring',
+      description: 'Direct path without approval',
+      requested_by: 'operator-1',
+      requires_approval: false,
+    })
+
+    expect(store.currentRunDetail?.run.id).toBe('run-1')
+    expect(JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string)).toMatchObject({
+      workspace_id: 'workspace-alpha',
+      project_id: 'project-alpha',
+    })
+  })
+
+  it('loads automations, creates one, and replays trigger deliveries without duplicating local state', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] })))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            automation: {
+              id: 'automation-1',
+              workspace_id: 'workspace-alpha',
+              project_id: 'project-alpha',
+              name: 'Nightly workspace scan',
+              trigger_ids: ['trigger-1'],
+              state: 'active',
+              requires_approval: false,
+              last_run_id: null,
+              created_at: '2026-03-25T00:00:00Z',
+              updated_at: '2026-03-25T00:00:00Z',
+            },
+            trigger: {
+              id: 'trigger-1',
+              automation_id: 'automation-1',
+              source_type: 'cron',
+              dedupe_key: 'automation:automation-1',
+              owner_ref: 'automation:automation-1',
+              state: 'active',
+              created_at: '2026-03-25T00:00:00Z',
+            },
+            latest_delivery: null,
+            latest_run: null,
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            delivery: {
+              id: 'delivery-1',
+              trigger_id: 'trigger-1',
+              source_type: 'cron',
+              dedupe_key: 'cron-2026-03-26T00:00',
+              state: 'succeeded',
+              run_id: 'run-1',
+              failure_reason: null,
+              occurred_at: '2026-03-26T00:00:00Z',
+            },
+            run: {
+              run: {
+                id: 'run-1',
+                project_id: 'project-alpha',
+                run_type: 'automation',
+                status: 'completed',
+                idempotency_key: 'trigger:trigger-1:cron-2026-03-26T00:00',
+                requested_by: 'operator-1',
+                title: 'Nightly workspace scan',
+                checkpoint_token: null,
+                created_at: '2026-03-26T00:00:00Z',
+                updated_at: '2026-03-26T00:00:00Z',
+              },
+              artifact: null,
+              approval: null,
+              inbox_item: null,
+              trace: [],
+              audit: [],
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            delivery: {
+              id: 'delivery-1',
+              trigger_id: 'trigger-1',
+              source_type: 'cron',
+              dedupe_key: 'cron-2026-03-26T00:00',
+              state: 'succeeded',
+              run_id: 'run-1',
+              failure_reason: null,
+              occurred_at: '2026-03-26T00:00:00Z',
+            },
+            run: {
+              run: {
+                id: 'run-1',
+                project_id: 'project-alpha',
+                run_type: 'automation',
+                status: 'completed',
+                idempotency_key: 'trigger:trigger-1:cron-2026-03-26T00:00',
+                requested_by: 'operator-1',
+                title: 'Nightly workspace scan',
+                checkpoint_token: null,
+                created_at: '2026-03-26T00:00:00Z',
+                updated_at: '2026-03-26T00:00:00Z',
+              },
+              artifact: null,
+              approval: null,
+              inbox_item: null,
+              trace: [],
+              audit: [],
+            },
+          }),
+        ),
+      )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const store = useRuntimeControlStore()
+    await store.loadAutomations()
+    await store.createAutomation({
+      workspace_id: 'workspace-alpha',
+      project_id: 'project-alpha',
+      name: 'Nightly workspace scan',
+      trigger_source: 'cron',
+      requested_by: 'operator-1',
+      requires_approval: false,
+    })
+
+    expect(store.automations).toHaveLength(1)
+
+    await store.deliverTrigger({
+      trigger_id: 'trigger-1',
+      dedupe_key: 'cron-2026-03-26T00:00',
+      requested_by: 'operator-1',
+      description: 'Scan the workspace',
+    })
+    await store.deliverTrigger({
+      trigger_id: 'trigger-1',
+      dedupe_key: 'cron-2026-03-26T00:00',
+      requested_by: 'operator-1',
+      description: 'Scan the workspace',
+    })
+
+    expect(store.currentRunDetail?.run.id).toBe('run-1')
+    expect(store.automations).toHaveLength(1)
+    expect(store.automations[0]?.latest_delivery?.id).toBe('delivery-1')
+  })
+})

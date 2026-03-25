@@ -7,8 +7,9 @@ use axum::{
 use octopus_hub::{
     contracts::{contract_catalog, ContractCatalog},
     runtime::{
-        ApprovalResolutionRequest, InMemoryRuntimeService, RunDetailResponse, RuntimeError,
-        TaskSubmissionRequest,
+        ApprovalResolutionRequest, AutomationCreateRequest, AutomationListResponse,
+        InMemoryRuntimeService, RunDetailResponse, RuntimeError, TaskSubmissionRequest,
+        TriggerDeliveryRequest, TriggerDeliveryResponse,
     },
 };
 use serde::Serialize;
@@ -27,9 +28,11 @@ pub fn build_app() -> Router {
     Router::new()
         .route("/healthz", get(healthz))
         .route("/api/v1/contracts", get(get_contracts))
+        .route("/api/v1/automations", get(list_automations).post(create_automation))
         .route("/api/v1/runs/task", post(submit_task))
         .route("/api/v1/runs/{run_id}", get(get_run))
         .route("/api/v1/runs/{run_id}/resume", post(resume_run))
+        .route("/api/v1/triggers/deliver", post(deliver_trigger))
         .route("/api/v1/approvals/{approval_id}/resolve", post(resolve_approval))
         .with_state(AppState::default())
 }
@@ -56,6 +59,22 @@ async fn submit_task(
     };
 
     (status, Json(response))
+}
+
+async fn list_automations(State(state): State<AppState>) -> Json<AutomationListResponse> {
+    Json(AutomationListResponse {
+        items: state.runtime.list_automations(),
+    })
+}
+
+async fn create_automation(
+    State(state): State<AppState>,
+    Json(request): Json<AutomationCreateRequest>,
+) -> (StatusCode, Json<octopus_hub::runtime::AutomationDetailResponse>) {
+    (
+        StatusCode::CREATED,
+        Json(state.runtime.create_automation(request)),
+    )
 }
 
 async fn get_run(
@@ -97,6 +116,25 @@ async fn resume_run(
         .resume_run(&run_id)
         .map(Json)
         .map_err(into_runtime_http_error)
+}
+
+async fn deliver_trigger(
+    State(state): State<AppState>,
+    Json(request): Json<TriggerDeliveryRequest>,
+) -> Result<(StatusCode, Json<TriggerDeliveryResponse>), (StatusCode, Json<ErrorResponse>)> {
+    let response = state.runtime.deliver_trigger(request).map_err(into_runtime_http_error)?;
+    let status = if response
+        .run
+        .as_ref()
+        .and_then(|detail| detail.approval.as_ref())
+        .is_some()
+    {
+        StatusCode::ACCEPTED
+    } else {
+        StatusCode::OK
+    };
+
+    Ok((status, Json(response)))
 }
 
 fn into_runtime_http_error(error: RuntimeError) -> (StatusCode, Json<ErrorResponse>) {

@@ -34,6 +34,7 @@ async fn task_flow_waits_for_approval_and_resumes() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&TaskSubmissionRequest {
+                        workspace_id: "workspace-alpha".into(),
                         project_id: "project-alpha".into(),
                         title: "Review remote hub policy".into(),
                         description: Some("Need approval before artifact generation".into()),
@@ -109,6 +110,7 @@ async fn invalid_approval_decision_returns_bad_request() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&TaskSubmissionRequest {
+                        workspace_id: "workspace-alpha".into(),
                         project_id: "project-alpha".into(),
                         title: "Review remote hub policy".into(),
                         description: Some("Need approval before artifact generation".into()),
@@ -202,6 +204,7 @@ async fn repeated_approval_resolution_keeps_the_first_decision_visible() {
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&TaskSubmissionRequest {
+                        workspace_id: "workspace-alpha".into(),
                         project_id: "project-alpha".into(),
                         title: "Review remote hub policy".into(),
                         description: Some("Need approval before artifact generation".into()),
@@ -303,6 +306,7 @@ async fn rejected_runs_return_conflict_on_resume_and_do_not_expose_a_checkpoint(
                 .header("content-type", "application/json")
                 .body(Body::from(
                     serde_json::to_vec(&TaskSubmissionRequest {
+                        workspace_id: "workspace-alpha".into(),
                         project_id: "project-alpha".into(),
                         title: "Review remote hub policy".into(),
                         description: Some("Need approval before artifact generation".into()),
@@ -371,4 +375,205 @@ async fn rejected_runs_return_conflict_on_resume_and_do_not_expose_a_checkpoint(
         .expect("router should respond");
 
     assert_eq!(resume_response.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn automation_endpoints_create_list_and_manually_deliver() {
+    let app = build_app();
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/automations")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "workspace_id": "workspace-alpha",
+                        "project_id": "project-alpha",
+                        "name": "Manual drift detector",
+                        "trigger_source": "manual_event",
+                        "requested_by": "operator-1",
+                        "requires_approval": true
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+
+    let create_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    let trigger_id = create_payload["trigger"]["id"]
+        .as_str()
+        .expect("trigger id should exist")
+        .to_owned();
+
+    let list_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/automations")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(list_response.status(), StatusCode::OK);
+
+    let list_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(list_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+
+    assert_eq!(list_payload["items"][0]["automation"]["workspace_id"], "workspace-alpha");
+
+    let delivery_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/triggers/deliver")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "trigger_id": trigger_id,
+                        "dedupe_key": "manual-event-001",
+                        "requested_by": "operator-1",
+                        "title": "Investigate configuration drift",
+                        "description": "Needs review before artifact generation"
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(delivery_response.status(), StatusCode::ACCEPTED);
+
+    let delivery_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(delivery_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+
+    assert_eq!(delivery_payload["delivery"]["state"], "succeeded");
+    assert_eq!(delivery_payload["run"]["run"]["run_type"], "watch");
+    assert_eq!(
+        delivery_payload["run"]["inbox_item"]["workspace_id"],
+        "workspace-alpha"
+    );
+}
+
+#[tokio::test]
+async fn repeated_trigger_delivery_returns_the_existing_run_without_duplication() {
+    let app = build_app();
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/automations")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "workspace_id": "workspace-alpha",
+                        "project_id": "project-alpha",
+                        "name": "Nightly workspace scan",
+                        "trigger_source": "cron",
+                        "requested_by": "operator-1",
+                        "requires_approval": false
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+
+    let create_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(create_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    let trigger_id = create_payload["trigger"]["id"]
+        .as_str()
+        .expect("trigger id should exist")
+        .to_owned();
+
+    let first_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/triggers/deliver")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "trigger_id": trigger_id,
+                        "dedupe_key": "cron-2026-03-26T00:00",
+                        "requested_by": "operator-1",
+                        "description": "Scan the workspace"
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    let second_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/triggers/deliver")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "trigger_id": trigger_id,
+                        "dedupe_key": "cron-2026-03-26T00:00",
+                        "requested_by": "operator-1",
+                        "description": "Scan the workspace"
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(first_response.status(), StatusCode::OK);
+    assert_eq!(second_response.status(), StatusCode::OK);
+
+    let first_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(first_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    let second_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(second_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+
+    assert_eq!(first_payload["delivery"]["id"], second_payload["delivery"]["id"]);
+    assert_eq!(first_payload["run"]["run"]["id"], second_payload["run"]["run"]["id"]);
 }

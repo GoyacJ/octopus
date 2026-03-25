@@ -1,19 +1,53 @@
-import type { ApprovalType, RunStatus, RunType } from './catalog'
+import type { ApprovalType, RunStatus, RunType, TriggerSource } from './catalog'
 
 export const approvalDecisionValues = ['approved', 'rejected'] as const
 export const approvalStateValues = ['pending', 'approved', 'rejected', 'expired', 'cancelled'] as const
 export const inboxStateValues = ['open', 'acknowledged', 'resolved', 'dismissed', 'expired'] as const
+export const automationStateValues = ['draft', 'active', 'paused', 'suspended', 'archived'] as const
+export const triggerDeliveryStateValues = [
+  'pending',
+  'claimed',
+  'dispatched',
+  'succeeded',
+  'failed',
+  'retried',
+  'dead_letter',
+] as const
 
 export type ApprovalDecision = (typeof approvalDecisionValues)[number]
 export type ApprovalState = (typeof approvalStateValues)[number]
 export type InboxState = (typeof inboxStateValues)[number]
+export type AutomationState = (typeof automationStateValues)[number]
+export type TriggerDeliveryState = (typeof triggerDeliveryStateValues)[number]
 
 export interface TaskSubmissionRequest {
+  workspace_id: string
   project_id: string
   title: string
   description: string | null
   requested_by: string
   requires_approval: boolean
+}
+
+export interface AutomationCreateRequest {
+  workspace_id: string
+  project_id: string
+  name: string
+  trigger_source: TriggerSource
+  requested_by: string
+  requires_approval: boolean
+}
+
+export interface AutomationStateUpdateRequest {
+  state: AutomationState
+}
+
+export interface TriggerDeliveryRequest {
+  trigger_id: string
+  dedupe_key: string
+  requested_by: string
+  title?: string | null
+  description?: string | null
 }
 
 export interface ApprovalResolutionRequest {
@@ -65,6 +99,40 @@ export interface InboxItemRecord {
   dedupe_key: string
 }
 
+export interface AutomationRecord {
+  id: string
+  workspace_id: string
+  project_id: string
+  name: string
+  trigger_ids: string[]
+  state: AutomationState
+  requires_approval: boolean
+  last_run_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TriggerRecord {
+  id: string
+  automation_id: string
+  source_type: TriggerSource
+  dedupe_key: string
+  owner_ref: string
+  state: string
+  created_at: string
+}
+
+export interface TriggerDeliveryRecord {
+  id: string
+  trigger_id: string
+  source_type: TriggerSource
+  dedupe_key: string
+  state: TriggerDeliveryState
+  run_id: string | null
+  failure_reason: string | null
+  occurred_at: string
+}
+
 export interface TraceEvent {
   name: string
   message: string
@@ -85,6 +153,22 @@ export interface RunDetailResponse {
   inbox_item: InboxItemRecord | null
   trace: TraceEvent[]
   audit: AuditEntry[]
+}
+
+export interface AutomationDetailResponse {
+  automation: AutomationRecord
+  trigger: TriggerRecord
+  latest_delivery: TriggerDeliveryRecord | null
+  latest_run: RunDetailResponse | null
+}
+
+export interface AutomationListResponse {
+  items: AutomationDetailResponse[]
+}
+
+export interface TriggerDeliveryResponse {
+  delivery: TriggerDeliveryRecord
+  run: RunDetailResponse | null
 }
 
 export interface ErrorResponse {

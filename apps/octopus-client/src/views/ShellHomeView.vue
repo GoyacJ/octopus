@@ -1,11 +1,16 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import RunLifecycleDemo from '@/components/RunLifecycleDemo.vue'
+import AutomationControlPanel from '@/components/AutomationControlPanel.vue'
+import RuntimeActivityPanel from '@/components/RuntimeActivityPanel.vue'
 import RuntimeOverview from '@/components/RuntimeOverview.vue'
+import TaskControlPanel from '@/components/TaskControlPanel.vue'
+import { useRuntimeControlStore } from '@/stores/useRuntimeControlStore'
 import { useShellStore } from '@/stores/useShellStore'
 
 const shellStore = useShellStore()
+const runtimeStore = useRuntimeControlStore()
 const { locale, t } = useI18n()
 
 const switchLocale = () => {
@@ -14,6 +19,10 @@ const switchLocale = () => {
   shellStore.setLocale(nextLocale)
   locale.value = nextLocale
 }
+
+onMounted(() => {
+  void runtimeStore.loadAutomations()
+})
 </script>
 
 <template>
@@ -42,7 +51,13 @@ const switchLocale = () => {
         </div>
       </div>
     </div>
-    <RunLifecycleDemo />
+    <section class="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+      <div class="space-y-6">
+        <TaskControlPanel />
+        <AutomationControlPanel />
+      </div>
+      <RuntimeActivityPanel />
+    </section>
     <RuntimeOverview />
   </section>
 </template>

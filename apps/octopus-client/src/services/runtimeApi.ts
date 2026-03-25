@@ -1,8 +1,13 @@
 import type {
   ApprovalResolutionRequest,
+  AutomationCreateRequest,
+  AutomationDetailResponse,
+  AutomationListResponse,
   ErrorResponse,
   RunDetailResponse,
   TaskSubmissionRequest,
+  TriggerDeliveryRequest,
+  TriggerDeliveryResponse,
 } from '@octopus/contracts'
 
 const defaultHeaders = {
@@ -53,6 +58,12 @@ const getJson = async <T>(path: string): Promise<T> => {
 }
 
 export const runtimeApi = {
+  listAutomations() {
+    return getJson<AutomationListResponse>('/api/v1/automations')
+  },
+  createAutomation(payload: AutomationCreateRequest) {
+    return postJson<AutomationDetailResponse>('/api/v1/automations', payload)
+  },
   submitTask(payload: TaskSubmissionRequest) {
     return postJson<RunDetailResponse>('/api/v1/runs/task', payload)
   },
@@ -61,6 +72,9 @@ export const runtimeApi = {
   },
   resolveApproval(approvalId: string, payload: ApprovalResolutionRequest) {
     return postJson<RunDetailResponse>(`/api/v1/approvals/${approvalId}/resolve`, payload)
+  },
+  deliverTrigger(payload: TriggerDeliveryRequest) {
+    return postJson<TriggerDeliveryResponse>('/api/v1/triggers/deliver', payload)
   },
   resumeRun(runId: string) {
     return postJson<RunDetailResponse>(`/api/v1/runs/${runId}/resume`, {})
