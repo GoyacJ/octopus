@@ -1,9 +1,9 @@
 # octopus VibeCoding 执行基线
 
-更新时间：2026-03-24  
-文档状态：Draft  
-文档定位：仓库级研发流程基线  
-关联文档：`docs/PRD.md`、`docs/SAD.md`、`docs/ARCHITECTURE.md`、`docs/DOMAIN.md`、`docs/DATA_MODEL.md`、`docs/ENGINEERING_STANDARD.md`、`docs/VISUAL_FRAMEWORK.md`
+更新时间：2026-03-25
+文档状态：Draft
+文档定位：仓库级研发流程基线
+关联文档：`README.md`、`AGENTS.md`、`docs/PRD.md`、`docs/SAD.md`、`docs/CONTRACTS.md`、`docs/ENGINEERING_STANDARD.md`、`docs/adr/README.md`
 
 ---
 
@@ -23,7 +23,7 @@
 
 1. 人主导边界、验收、例外审批和风险签收。
 2. AI 负责在既定范围内推进细节实现、重复劳动和文档同步。
-3. 任何超出 PRD、SAD、开发规范和视觉框架的扩张，都必须先回到人工决策。
+3. 任何超出 PRD、SAD、开发规范、ADR 或仓库级协作约束的扩张，都必须先回到人工决策。
 4. 安全底线与功能迭代并行推进，不允许用“先跑起来再说”替代治理。
 
 ---
@@ -34,7 +34,7 @@
 
 1. 需求梳理：明确问题、用户、场景、非目标和约束。
 2. 结构化 PRD 与验收标准：写清范围、场景、核心对象和可验证验收。
-3. 视觉框架规划：明确表面职责、导航、关键页面边界、主题和语言边界。
+3. 交互与表面规划：明确表面职责、导航、关键页面边界、主题和语言边界。
 4. 边界与非功能需求界定：明确性能、恢复、安全、审计、兼容性要求。
 5. 可验证技术栈选定：选型必须可安装、可构建、可测试、可运维。
 6. 轻量化架构草案：先锁模块职责、数据流和信任边界，不先铺细节实现。
@@ -115,24 +115,24 @@ AI 默认不允许：
 
 ## 6. 当前仓库事实基线
 
-截至 2026-03-25，`octopus` 当前仍以文档为中心，`docs/` 与 `.github/` 是仓库内最稳定的事实来源。
+截至 2026-03-25，`octopus` 当前仍以文档为中心，但 tracked tree 已具备 Phase 1 skeleton：根目录文档、`docs/`、`contracts/`、`.github/` 与最小 `apps/`、`packages/`、`crates/` 骨架共同构成事实基线。
 
 已具备：
 
-1. `PRD`
-2. `SAD`
-3. `ARCHITECTURE`
-4. `DOMAIN`
-5. `DATA_MODEL`
-6. `ENGINEERING_STANDARD`
-7. `API` 文档目录
-8. 仓库级 AI 约束
+1. [README.md](../README.md)
+2. [AGENTS.md](../AGENTS.md)
+3. [CONTRACTS.md](CONTRACTS.md)
+4. [PRD.md](PRD.md)
+5. [SAD.md](SAD.md)
+6. [ENGINEERING_STANDARD.md](ENGINEERING_STANDARD.md)
+7. [adr/README.md](adr/README.md)
 
 在这一状态下，执行时必须遵守以下事实约束：
 
 1. 优先把产品、架构、数据、契约和治理规则对齐，再推进实现。
 2. 不把目标态目录、脚手架或运行时行为误写成“当前已存在能力”。
-3. 在缺少 manifest、源码或工具时，不虚构构建、测试或运行结论。
+3. 在缺少 manifest、源码或工具时，不虚构构建、测试或运行结论；当前若改动触达 `apps/`、`packages/`、`crates/`，应使用实际存在的 `pnpm` / `cargo` 验证链路。
+4. 不引用已删除的旧文档树作为正式输入，例如旧 API 文档目录、旧计划目录、旧变更目录，以及已经下线的架构/领域/数据模型/视觉框架文档。
 
 ---
 

@@ -22,31 +22,10 @@ jobs:
             README.md
             docs/PRD.md
             docs/SAD.md
-            docs/ARCHITECTURE.md
-            docs/DOMAIN.md
-            docs/DATA_MODEL.md
+            docs/CONTRACTS.md
             docs/ENGINEERING_STANDARD.md
             docs/VIBECODING.md
-            docs/VISUAL_FRAMEWORK.md
-            docs/API/README.md
-            docs/API/AGENTS.md
             docs/adr/README.md
-            docs/plans/README.md
-            docs/plans/2026-03-25-product-development-master-plan.md
-            docs/plans/2026-03-25-m00-doc-truth-and-governance-repair.md
-            docs/plans/2026-03-25-m01-architecture-and-runtime-contract-freeze.md
-            docs/plans/2026-03-25-m02-identity-workspace-model-and-secret-foundation.md
-            docs/plans/2026-03-25-m03-execution-plane-and-capability-governance-foundation.md
-            docs/plans/2026-03-25-m04-agent-context-and-memory.md
-            docs/plans/2026-03-25-m05-team-task-approval-and-recovery.md
-            docs/plans/2026-03-25-m06-discussion-engine.md
-            docs/plans/2026-03-25-m07-surface-shells-and-governance-ui.md
-            docs/plans/2026-03-25-m08-blueprint-import-export-templates-and-console.md
-            docs/plans/2026-03-25-m09-security-observability-and-operations.md
-            docs/plans/2026-03-25-m10-advanced-backlog.md
-            docs/changes/README.md
-            docs/changes/2026-03-25-planning-governance-unification.md
-            docs/changes/2026-03-25-contract-and-repo-baseline.md
             .github/pull_request_template.md
           )
           for file in "${required_files[@]}"; do
@@ -55,6 +34,37 @@ jobs:
 
       - name: Fail on stale doc references
         run: |
-          ! grep -Rni "docs/DEVELOPMENT_STANDARDS.md" README.md AGENTS.md docs .github/pull_request_template.md docs/changes/TEMPLATE.md
-          ! grep -RniE "2026-03-24-v1-development-roadmap|2026-03-24-phase-(0-planning-and-tracking|1-contract-sources|2-monorepo-scaffolding|3-mvp-vertical-slice)|2026-03-25-phase-1-mvp-roadmap|2026-03-25-phase-0-planning-and-tracking" README.md AGENTS.md docs .github/pull_request_template.md docs/changes/TEMPLATE.md
-          ! grep -nE "^## 里程碑 [A-K]：" docs/plans/2026-03-25-product-development-master-plan.md
+          targets=(
+            README.md
+            AGENTS.md
+            docs
+            .github/pull_request_template.md
+          )
+          ! grep -Rni "docs/DEVELOPMENT_STANDARDS.md" "${targets[@]}"
+          ! grep -RniE "docs/(ARCHITECTURE|DOMAIN|DATA_MODEL|VISUAL_FRAMEWORK)\\.md|docs/API/|docs/plans/|docs/changes/" "${targets[@]}"
+          ! grep -Rni "no[v]ai-" "${targets[@]}"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.11.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install web dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Validate workspace skeleton
+        run: |
+          pnpm run typecheck:web
+          pnpm run test:web
+          pnpm run build:web
+          cargo test --workspace
+          cargo build --workspace

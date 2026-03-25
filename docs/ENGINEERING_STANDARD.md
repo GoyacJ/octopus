@@ -1,7 +1,7 @@
 # octopus · 开发技术规范（ENGINEERING_STANDARD.md）
 
-**版本**: v0.1.0 | **状态**: 正式版 | **日期**: 2026-03-11
-**依赖文档**: PRD v0.1.0 · ARCHITECTURE v0.1.0 · DOMAIN v0.1.0 · DATA_MODEL v0.1.0
+**版本**: v0.2.0 | **状态**: 正式版 | **日期**: 2026-03-25
+**依赖文档**: PRD v2.0 · SAD v2.0 · CONTRACTS v1.0 · VIBECODING 2026-03-25
 
 ---
 
@@ -38,14 +38,15 @@
 
 - Hub 核心、Server 适配层、Tauri Shell。
 - Vue 3 Client、共享 UI 组件、Pinia Store、Transport 层。
-- 数据迁移、API DTO、事件定义、测试代码、开发流程。
+- 数据迁移草案、契约、事件定义、测试代码、开发流程。
 
 以下内容**不**由本规范重复定义：
 
-- 产品需求与业务边界：见 [PRD.md](./PRD.md)
-- 系统架构、模块边界、技术选型：见 [ARCHITECTURE.md](./ARCHITECTURE.md)
-- 领域边界、聚合根、不变量：见 [DOMAIN.md](./DOMAIN.md)
-- 数据 Schema、迁移目录与索引策略：见 [DATA_MODEL.md](./DATA_MODEL.md)
+- 产品需求、能力切片与非目标：见 [PRD.md](./PRD.md)
+- 系统架构、运行平面、治理模型与恢复机制：见 [SAD.md](./SAD.md)
+- 正式对象、枚举与事件契约：见 [CONTRACTS.md](./CONTRACTS.md)
+- AI 主导实现的执行边界、人工签收和风险控制：见 [VIBECODING.md](./VIBECODING.md)
+- 架构例外与正式决策：见 [adr/README.md](./adr/README.md)
 
 ### 1.3 关键词约定
 
@@ -73,9 +74,10 @@
 
 所有实现 MUST 以现有架构文档为基准，不得在代码中另起一套抽象体系。
 
-- Client 是交互层，Hub 是执行层；前端不得私自承载业务规则。
-- `Agent / Task / Discussion / Capability / Team / Identity & Access` 是既定领域边界，不得随意跨 Context 泄漏职责。
+- Client 是交互层，Hub 是执行与治理事实源；前端不得私自承载业务规则。
+- `Workspace / Project / Agent / Team / Run / Knowledge / CapabilityGrant / BudgetPolicy / Approval / Artifact` 是既定核心对象，不得随意跨 Context 泄漏职责。
 - `Service / Repository / Domain Event / Transport` 的职责边界是架构约束，不是风格建议。
+- 当前仓库仍以文档为治理事实源，但 tracked tree 已包含 `contracts/`、`apps/`、`packages/`、`crates/` 的 Phase 1 skeleton。只有在对应 manifest、源码和验证结果实际存在时，才能声明该能力已成立。
 
 ### 2.2 单一职责与边界清晰
 
@@ -117,6 +119,7 @@ octopus 的默认风格是可维护、可推理、可替换。
 - 把临时业务判断写进基础设施层或共享组件。
 - 先硬编码再说，后续再抽象。
 - 没有验证和测试依据就声称“已完成”。
+- 在缺少 manifest、源码或工具时虚构构建、测试、运行或联调结论。
 
 ---
 
@@ -128,15 +131,15 @@ octopus 的默认风格是可维护、可推理、可替换。
 
 | 模块 | 责任 |
 |------|------|
-| `novai-hub` | 领域模型、Service、Repository trait、运行时编排、事件定义 |
-| `novai-server` | HTTP API、认证中间件、SSE、外部协议适配 |
-| `novai-tauri` | 本地命令桥接、系统集成、事件转发、密钥链适配 |
+| `octopus-hub` | 领域模型、Service、Repository trait、运行时编排、事件定义 |
+| `octopus-server` | HTTP API、认证中间件、SSE、外部协议适配 |
+| `octopus-tauri` | 本地命令桥接、系统集成、事件转发、密钥链适配 |
 
 强制要求：
 
-- 领域规则 MUST 放在 `novai-hub`，不得放入 `novai-server` 或 `novai-tauri`。
-- `novai-server` 和 `novai-tauri` MUST 作为适配层存在，不得复制业务规则。
-- 任何新能力若同时作用于本地和远程模式，优先放在 `novai-hub`。
+- 领域规则 MUST 放在 `octopus-hub`，不得放入 `octopus-server` 或 `octopus-tauri`。
+- `octopus-server` 和 `octopus-tauri` MUST 作为适配层存在，不得复制业务规则。
+- 任何新能力若同时作用于本地和远程模式，优先放在 `octopus-hub`。
 
 ### 3.2 Service / Repository / Trait / Domain Event 分工
 
@@ -169,7 +172,7 @@ octopus 的默认风格是可维护、可推理、可替换。
 
 ### 3.5 数据访问与迁移规范
 
-- Schema 设计 MUST 与 [DATA_MODEL.md](./DATA_MODEL.md) 保持一致。
+- Schema、状态机和迁移语义 MUST 与 [PRD.md](./PRD.md) 和 [SAD.md](./SAD.md) 保持一致；在专门的数据模型文档重新建立前，不得凭空发明一套独立数据基线。
 - 每次迁移 MUST 聚焦一个明确目标，不得把无关改动混在同一 migration。
 - SQLite 与 PostgreSQL 双实现存在时，迁移 MUST 成对更新。
 - 已合入主线的 migration `MUST NOT` 被静默改写；需要变更时新增后续 migration。
@@ -188,7 +191,7 @@ octopus 的默认风格是可维护、可推理、可替换。
 - 是否绕过 Service 直接访问 Repository 或底层 client。
 - 是否破坏领域不变量、tenant 隔离或审批边界。
 - 是否引入不可控后台任务、阻塞操作或无上下文错误。
-- 是否同步更新迁移、事件、API 文档或相关设计文档。
+- 是否同步更新迁移草案、事件、契约说明或相关设计文档。
 
 ---
 
@@ -242,7 +245,7 @@ octopus 的默认风格是可维护、可推理、可替换。
 
 ### 4.5 Transport 与副作用规范
 
-- 所有 Hub 通信 MUST 通过统一 Transport 层进入，不得在页面或组件中分散处理 `invoke` / HTTP / SSE 差异。
+- 所有 Hub 通信 MUST 通过统一 Transport 层进入，不得在页面或组件中分散处理 `invoke`、`HTTP`、`SSE`、`webhook` 或 `MCP` 差异。
 - 本地 Hub 与远程 Hub 的语义 MUST 保持一致；差异属于传输层，不属于页面层。
 - 事件订阅 MUST 有明确注册与释放位置，禁止重复订阅导致泄漏。
 - 表单提交、通知弹窗、页面跳转等副作用 SHOULD 由页面或编排层触发，不要深埋在基础组件中。
@@ -537,6 +540,7 @@ octopus 前端 MUST 以 `self-built UI components + shared design tokens + UnoCS
 - 影响公共接口、分层边界、i18n、主题或状态流的改动 MUST 明确验证方式。
 - 合并前 MUST 至少验证本次变更涉及的关键路径，不得只靠肉眼判断。
 - 若因阶段原因暂不补自动化测试，PR 中 MUST 明确写出风险与人工验证步骤。
+- 当前默认验证集合 SHOULD 以文档存在性检查、旧引用扫描、聚焦 diff 复核和 `git diff --check` 为基础；若改动触达 `contracts/`、`packages/`、`apps/` 或 `crates/`，还 SHOULD 执行 `pnpm run typecheck:web`、`pnpm run test:web`、`cargo test --workspace` 与 `cargo build --workspace`。
 
 ### 8.4 Git 与提交规范
 
@@ -560,6 +564,7 @@ Reviewer MUST 至少检查以下内容：
 - 是否引入硬编码文案或硬编码颜色
 - 是否破坏主题 / i18n / tenant / 审批等系统级约束
 - 是否补足必要文档与验证说明
+- 若变更涉及治理入口或契约源，是否同步更新 `README.md`、`AGENTS.md`、`docs/CONTRACTS.md`、`.github/workflows/guardrails.yml` 与 `.github/pull_request_template.md`
 
 ### 8.6 Definition of Done
 
@@ -570,6 +575,7 @@ Reviewer MUST 至少检查以下内容：
 3. 必要的文档、类型、迁移、示例或接口说明已同步。
 4. 前端改动已检查 i18n 与亮暗主题兼容。
 5. Review 问题已处理或明确记录待处理原因。
+6. 若仓库仍处于 `doc-first` 阶段，结论没有超出当前 tracked tree 能证明的事实边界。
 
 ---
 

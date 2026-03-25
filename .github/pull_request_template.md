@@ -22,19 +22,14 @@
 
 - [ ] `README.md`
 - [ ] `AGENTS.md`
-- [ ] `.github/workflows/guardrails.yml`
 - [ ] `docs/PRD.md`
 - [ ] `docs/SAD.md`
-- [ ] `docs/ARCHITECTURE.md`
-- [ ] `docs/DOMAIN.md`
-- [ ] `docs/DATA_MODEL.md`
+- [ ] `docs/CONTRACTS.md`
 - [ ] `docs/ENGINEERING_STANDARD.md`
-- [ ] `docs/API/`
 - [ ] `docs/VIBECODING.md`
-- [ ] `docs/VISUAL_FRAMEWORK.md`
 - [ ] `docs/adr/`
-- [ ] `docs/plans/`
-- [ ] `docs/changes/`
+- [ ] `.github/workflows/guardrails.yml`
+- [ ] `.github/pull_request_template.md`
 - [ ] No doc update needed
 
 ## UI Evidence
@@ -50,4 +45,4 @@
 - ADR or architecture impact:
 - Security or policy impact:
 - Contract or schema impact:
-- Large cross-responsibility files introduced or retained; if yes, why not splitting now is still reasonable:
+- If verification is doc-only, confirm no build or runtime claims exceeded the tracked repository state:

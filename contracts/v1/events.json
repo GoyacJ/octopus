@@ -1,0 +1,46 @@
+{
+  "version": "1.0.0",
+  "events": [
+    {
+      "name": "RunStateChanged",
+      "category": "runtime",
+      "required_fields": ["run_id", "previous_status", "next_status", "run_type", "occurred_at"]
+    },
+    {
+      "name": "PolicyDecisionRecorded",
+      "category": "governance",
+      "required_fields": ["subject_ref", "action", "decision", "policy_layer", "reason", "occurred_at"]
+    },
+    {
+      "name": "ApprovalRequested",
+      "category": "governance",
+      "required_fields": ["approval_id", "run_id", "approval_type", "target_ref", "occurred_at"]
+    },
+    {
+      "name": "ApprovalResolved",
+      "category": "governance",
+      "required_fields": ["approval_id", "run_id", "decision", "reviewed_by", "occurred_at"]
+    },
+    {
+      "name": "KnowledgeCandidateCreated",
+      "category": "knowledge",
+      "required_fields": ["candidate_id", "source_ref", "knowledge_space_id", "trust_level", "occurred_at"]
+    },
+    {
+      "name": "KnowledgeCandidatePromoted",
+      "category": "knowledge",
+      "required_fields": ["knowledge_asset_id", "knowledge_space_id", "promoted_to", "approved_by", "occurred_at"]
+    },
+    {
+      "name": "TriggerDelivered",
+      "category": "runtime",
+      "required_fields": ["trigger_id", "source_type", "dedupe_key", "delivery_state", "occurred_at"]
+    },
+    {
+      "name": "DelegationIssued",
+      "category": "mesh",
+      "required_fields": ["delegation_grant_id", "run_id", "issuer_ref", "delegate_ref", "occurred_at"]
+    }
+  ]
+}
+

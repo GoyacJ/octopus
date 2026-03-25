@@ -1,0 +1,26 @@
+{
+  "version": "1.0.0",
+  "enums": {
+    "run_type": ["task", "discussion", "automation", "watch", "delegation", "review"],
+    "run_status": [
+      "queued",
+      "planning",
+      "running",
+      "waiting_input",
+      "waiting_approval",
+      "waiting_dependency",
+      "paused",
+      "recovering",
+      "completed",
+      "failed",
+      "terminated",
+      "cancelled"
+    ],
+    "approval_type": ["execution", "knowledge_promotion", "external_delegation", "export_sharing"],
+    "trigger_source": ["cron", "webhook", "manual_event", "mcp_event"],
+    "sandbox_tier": ["local_trusted", "tenant_sandboxed", "ephemeral_restricted", "external_delegated"],
+    "knowledge_status": ["candidate", "verified_shared", "promoted_org", "revoked_or_tombstoned"],
+    "trust_level": ["low", "medium", "high", "verified"]
+  }
+}
+
