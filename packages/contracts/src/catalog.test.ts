@@ -33,6 +33,10 @@ const readJson = <T>(relativePath: string): T =>
   JSON.parse(readFileSync(new URL(relativePath, import.meta.url), 'utf8')) as T
 
 describe('contractCatalog', () => {
+  it('includes KnowledgeCandidate in the frozen core object catalog', () => {
+    expect(contractCatalog.coreObjects.some((entry) => entry.name === 'KnowledgeCandidate')).toBe(true)
+  })
+
   it('mirrors the canonical enum catalog', () => {
     const enumFile = readJson<EnumFile>('../../../contracts/v1/enums.json')
 

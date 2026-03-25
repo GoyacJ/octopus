@@ -5,6 +5,10 @@ import type {
   ApprovalDecision,
   AutomationCreateRequest,
   AutomationDetailResponse,
+  KnowledgeAssetRecord,
+  KnowledgeCandidateRecord,
+  KnowledgeSpaceDetailResponse,
+  McpEventDeliveryRequest,
   RunDetailResponse,
   TaskSubmissionRequest,
   TriggerDeliveryRecord,
@@ -25,18 +29,48 @@ const upsertAutomation = (
   return current.map((entry, index) => (index === existingIndex ? incoming : entry))
 }
 
+const upsertCandidate = (
+  current: KnowledgeCandidateRecord[],
+  incoming: KnowledgeCandidateRecord,
+): KnowledgeCandidateRecord[] => {
+  const existingIndex = current.findIndex((entry) => entry.id === incoming.id)
+  if (existingIndex === -1) {
+    return [...current, incoming]
+  }
+
+  return current.map((entry, index) => (index === existingIndex ? incoming : entry))
+}
+
+const upsertAsset = (
+  current: KnowledgeAssetRecord[],
+  incoming: KnowledgeAssetRecord,
+): KnowledgeAssetRecord[] => {
+  const existingIndex = current.findIndex((entry) => entry.id === incoming.id)
+  if (existingIndex === -1) {
+    return [...current, incoming]
+  }
+
+  return current.map((entry, index) => (index === existingIndex ? incoming : entry))
+}
+
 export const useRuntimeControlStore = defineStore('runtime-control', () => {
   const automations = ref<AutomationDetailResponse[]>([])
+  const knowledgeSpaces = ref<KnowledgeSpaceDetailResponse[]>([])
   const currentRunDetail = ref<RunDetailResponse | null>(null)
   const errorMessage = ref('')
   const hasLoadedAutomations = ref(false)
+  const hasLoadedKnowledgeSpaces = ref(false)
 
   const isLoadingAutomations = ref(false)
+  const isLoadingKnowledgeSpaces = ref(false)
   const isCreatingAutomation = ref(false)
   const isSubmittingTask = ref(false)
   const isResolvingApproval = ref(false)
   const isResumingRun = ref(false)
+  const isCreatingCandidate = ref(false)
+  const isDeliveringMcpEvent = ref(false)
   const activeTriggerId = ref<string | null>(null)
+  const promotingCandidateId = ref<string | null>(null)
 
   const currentRun = computed(() => currentRunDetail.value?.run ?? null)
   const currentApproval = computed(() => currentRunDetail.value?.approval ?? null)
@@ -56,6 +90,14 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
     errorMessage.value = 'Request failed.'
   }
 
+  const refreshCurrentRun = async (runId: string | null | undefined) => {
+    if (!runId) {
+      return
+    }
+
+    currentRunDetail.value = await runtimeApi.getRun(runId)
+  }
+
   const loadAutomations = async (force = false) => {
     if (isLoadingAutomations.value || (hasLoadedAutomations.value && !force)) {
       return
@@ -72,6 +114,25 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
       setError(error)
     } finally {
       isLoadingAutomations.value = false
+    }
+  }
+
+  const loadKnowledgeSpaces = async (force = false) => {
+    if (isLoadingKnowledgeSpaces.value || (hasLoadedKnowledgeSpaces.value && !force)) {
+      return
+    }
+
+    clearError()
+    isLoadingKnowledgeSpaces.value = true
+
+    try {
+      const response = await runtimeApi.listKnowledgeSpaces()
+      knowledgeSpaces.value = response.items
+      hasLoadedKnowledgeSpaces.value = true
+    } catch (error) {
+      setError(error)
+    } finally {
+      isLoadingKnowledgeSpaces.value = false
     }
   }
 
@@ -130,6 +191,27 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
     }
   }
 
+  const deliverMcpEvent = async (payload: McpEventDeliveryRequest) => {
+    clearError()
+    isDeliveringMcpEvent.value = true
+
+    try {
+      const response = await runtimeApi.deliverMcpEvent(payload)
+      response.items.forEach((entry) => {
+        updateAutomationDelivery(entry.delivery.trigger_id, entry.delivery, entry.run ?? null)
+      })
+
+      const latestRun = [...response.items].reverse().find((entry) => entry.run)?.run ?? null
+      currentRunDetail.value = latestRun ?? currentRunDetail.value
+      return response
+    } catch (error) {
+      setError(error)
+      throw error
+    } finally {
+      isDeliveringMcpEvent.value = false
+    }
+  }
+
   const submitTask = async (payload: TaskSubmissionRequest) => {
     clearError()
     isSubmittingTask.value = true
@@ -142,6 +224,78 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
       throw error
     } finally {
       isSubmittingTask.value = false
+    }
+  }
+
+  const createCandidateFromRun = async (knowledgeSpaceId: string) => {
+    if (!currentRun.value) {
+      return null
+    }
+
+    clearError()
+    isCreatingCandidate.value = true
+
+    try {
+      const response = await runtimeApi.createCandidateFromRun({
+        run_id: currentRun.value.id,
+        knowledge_space_id: knowledgeSpaceId,
+        created_by: currentRun.value.requested_by,
+      })
+
+      knowledgeSpaces.value = knowledgeSpaces.value.map((entry) => {
+        if (entry.space.id !== knowledgeSpaceId) {
+          return entry
+        }
+
+        return {
+          ...entry,
+          candidates: upsertCandidate(entry.candidates, response.candidate),
+        }
+      })
+      await refreshCurrentRun(response.candidate.run_id)
+      return response.candidate
+    } catch (error) {
+      setError(error)
+      throw error
+    } finally {
+      isCreatingCandidate.value = false
+    }
+  }
+
+  const promoteCandidate = async (candidateId: string) => {
+    const targetSpace = knowledgeSpaces.value.find((space) =>
+      space.candidates.some((candidate) => candidate.id === candidateId),
+    )
+    if (!targetSpace) {
+      return null
+    }
+
+    clearError()
+    promotingCandidateId.value = candidateId
+
+    try {
+      const response = await runtimeApi.promoteCandidate(candidateId, {
+        promoted_by: targetSpace.space.owner_refs[0] ?? 'owner-1',
+      })
+
+      knowledgeSpaces.value = knowledgeSpaces.value.map((entry) => {
+        if (entry.space.id !== response.candidate.knowledge_space_id) {
+          return entry
+        }
+
+        return {
+          ...entry,
+          candidates: upsertCandidate(entry.candidates, response.candidate),
+          assets: upsertAsset(entry.assets, response.asset),
+        }
+      })
+      await refreshCurrentRun(response.candidate.run_id)
+      return response
+    } catch (error) {
+      setError(error)
+      throw error
+    } finally {
+      promotingCandidateId.value = null
     }
   }
 
@@ -195,15 +349,25 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
     currentRun,
     currentRunDetail,
     errorMessage,
+    hasLoadedKnowledgeSpaces,
     isCreatingAutomation,
+    isCreatingCandidate,
+    isDeliveringMcpEvent,
     isLoadingAutomations,
+    isLoadingKnowledgeSpaces,
     isResolvingApproval,
     isResumingRun,
     isSubmittingTask,
+    knowledgeSpaces,
+    promotingCandidateId,
     clearError,
     createAutomation,
+    createCandidateFromRun,
+    deliverMcpEvent,
     deliverTrigger,
     loadAutomations,
+    loadKnowledgeSpaces,
+    promoteCandidate,
     resolveApproval,
     resumeRun,
     submitTask,

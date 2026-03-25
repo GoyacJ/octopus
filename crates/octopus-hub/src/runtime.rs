@@ -8,7 +8,15 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::contracts::{ApprovalType, RunStatus, RunType, TriggerSource};
+use crate::contracts::{
+    ApprovalType, KnowledgeStatus, RunStatus, RunType, TriggerSource, TrustLevel,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpBinding {
+    pub server_name: String,
+    pub event_name: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskSubmissionRequest {
@@ -28,6 +36,7 @@ pub struct AutomationCreateRequest {
     pub trigger_source: TriggerSource,
     pub requested_by: String,
     pub requires_approval: bool,
+    pub mcp_binding: Option<McpBinding>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,9 +54,39 @@ pub struct TriggerDeliveryRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpEventDeliveryRequest {
+    pub server_name: String,
+    pub event_name: String,
+    pub dedupe_key: String,
+    pub requested_by: String,
+    pub title: Option<String>,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalResolutionRequest {
     pub decision: String,
     pub reviewed_by: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeSpaceCreateRequest {
+    pub workspace_id: String,
+    pub name: String,
+    pub owner_refs: Vec<String>,
+    pub scope: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeCandidateCreateRequest {
+    pub run_id: String,
+    pub knowledge_space_id: String,
+    pub created_by: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgePromotionRequest {
+    pub promoted_by: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -169,6 +208,7 @@ pub struct TriggerRecord {
     pub owner_ref: String,
     pub state: String,
     pub created_at: String,
+    pub mcp_binding: Option<McpBinding>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -196,6 +236,47 @@ pub struct AuditEntry {
     pub actor: String,
     pub target_ref: String,
     pub occurred_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeSpaceRecord {
+    pub id: String,
+    pub workspace_id: String,
+    pub name: String,
+    pub owner_refs: Vec<String>,
+    pub scope: String,
+    pub state: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeCandidateRecord {
+    pub id: String,
+    pub knowledge_space_id: String,
+    pub run_id: String,
+    pub artifact_id: String,
+    pub title: String,
+    pub summary: String,
+    pub status: KnowledgeStatus,
+    pub trust_level: TrustLevel,
+    pub source_ref: String,
+    pub created_by: String,
+    pub created_at: String,
+    pub promoted_asset_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeAssetRecord {
+    pub id: String,
+    pub knowledge_space_id: String,
+    pub title: String,
+    pub summary: String,
+    pub layer: String,
+    pub status: KnowledgeStatus,
+    pub trust_level: TrustLevel,
+    pub source_ref: String,
+    pub created_at: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -227,34 +308,53 @@ pub struct TriggerDeliveryResponse {
     pub run: Option<RunDetailResponse>,
 }
 
-#[derive(Default)]
-struct RuntimeState {
-    runs: HashMap<String, RunRecord>,
-    artifacts: HashMap<String, ArtifactRecord>,
-    approvals: HashMap<String, ApprovalRequestRecord>,
-    inbox_items: HashMap<String, InboxItemRecord>,
-    traces: HashMap<String, Vec<TraceEvent>>,
-    audits: HashMap<String, Vec<AuditEntry>>,
-    automations: HashMap<String, AutomationRecord>,
-    triggers: HashMap<String, TriggerRecord>,
-    trigger_deliveries: HashMap<String, TriggerDeliveryRecord>,
-    delivery_dedupe_index: HashMap<String, String>,
-    latest_delivery_by_trigger: HashMap<String, String>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpEventDeliveryResponse {
+    pub items: Vec<TriggerDeliveryResponse>,
 }
 
-#[derive(Clone, Default)]
-pub struct InMemoryRuntimeService {
-    state: Arc<Mutex<RuntimeState>>,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeSpaceDetailResponse {
+    pub space: KnowledgeSpaceRecord,
+    pub candidates: Vec<KnowledgeCandidateRecord>,
+    pub assets: Vec<KnowledgeAssetRecord>,
 }
 
-#[derive(Debug, Error)]
-pub enum RuntimeError {
-    #[error("{kind} {id} not found")]
-    NotFound { kind: &'static str, id: String },
-    #[error("run {run_id} is in invalid state: {reason}")]
-    InvalidState { run_id: String, reason: String },
-    #[error("invalid approval decision: {decision}")]
-    InvalidDecision { decision: String },
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeSpaceListResponse {
+    pub items: Vec<KnowledgeSpaceDetailResponse>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeAssetListResponse {
+    pub items: Vec<KnowledgeAssetRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeCandidateResponse {
+    pub candidate: KnowledgeCandidateRecord,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgePromotionResponse {
+    pub candidate: KnowledgeCandidateRecord,
+    pub asset: KnowledgeAssetRecord,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+struct KnowledgeLineageRecord {
+    candidate_id: String,
+    asset_id: String,
+    run_id: String,
+    artifact_id: String,
+    occurred_at: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RunSource {
+    Task,
+    Trigger(TriggerSource),
 }
 
 struct RunStartRequest {
@@ -268,11 +368,81 @@ struct RunStartRequest {
     requires_approval: bool,
     initial_audit_action: &'static str,
     initial_audit_target: AuditTarget,
+    run_source: RunSource,
 }
 
 enum AuditTarget {
     Run,
     Explicit(String),
+}
+
+struct RuntimeState {
+    runs: HashMap<String, RunRecord>,
+    run_sources: HashMap<String, RunSource>,
+    artifacts: HashMap<String, ArtifactRecord>,
+    approvals: HashMap<String, ApprovalRequestRecord>,
+    inbox_items: HashMap<String, InboxItemRecord>,
+    traces: HashMap<String, Vec<TraceEvent>>,
+    audits: HashMap<String, Vec<AuditEntry>>,
+    automations: HashMap<String, AutomationRecord>,
+    triggers: HashMap<String, TriggerRecord>,
+    trigger_deliveries: HashMap<String, TriggerDeliveryRecord>,
+    delivery_dedupe_index: HashMap<String, String>,
+    latest_delivery_by_trigger: HashMap<String, String>,
+    knowledge_spaces: HashMap<String, KnowledgeSpaceRecord>,
+    knowledge_candidates: HashMap<String, KnowledgeCandidateRecord>,
+    candidate_index_by_run_and_space: HashMap<String, String>,
+    knowledge_assets: HashMap<String, KnowledgeAssetRecord>,
+    knowledge_lineage: Vec<KnowledgeLineageRecord>,
+}
+
+impl Default for RuntimeState {
+    fn default() -> Self {
+        let default_space = default_knowledge_space();
+        let mut knowledge_spaces = HashMap::new();
+        knowledge_spaces.insert(default_space.id.clone(), default_space);
+
+        Self {
+            runs: HashMap::new(),
+            run_sources: HashMap::new(),
+            artifacts: HashMap::new(),
+            approvals: HashMap::new(),
+            inbox_items: HashMap::new(),
+            traces: HashMap::new(),
+            audits: HashMap::new(),
+            automations: HashMap::new(),
+            triggers: HashMap::new(),
+            trigger_deliveries: HashMap::new(),
+            delivery_dedupe_index: HashMap::new(),
+            latest_delivery_by_trigger: HashMap::new(),
+            knowledge_spaces,
+            knowledge_candidates: HashMap::new(),
+            candidate_index_by_run_and_space: HashMap::new(),
+            knowledge_assets: HashMap::new(),
+            knowledge_lineage: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct InMemoryRuntimeService {
+    state: Arc<Mutex<RuntimeState>>,
+}
+
+#[derive(Debug, Error)]
+pub enum RuntimeError {
+    #[error("{kind} {id} not found")]
+    NotFound { kind: &'static str, id: String },
+    #[error("{kind} {id} is in invalid state: {reason}")]
+    InvalidState {
+        kind: &'static str,
+        id: String,
+        reason: String,
+    },
+    #[error("invalid approval decision: {decision}")]
+    InvalidDecision { decision: String },
+    #[error("invalid request: {reason}")]
+    InvalidRequest { reason: String },
 }
 
 impl InMemoryRuntimeService {
@@ -292,11 +462,17 @@ impl InMemoryRuntimeService {
                 requires_approval: request.requires_approval,
                 initial_audit_action: "task.submitted",
                 initial_audit_target: AuditTarget::Run,
+                run_source: RunSource::Task,
             },
         )
     }
 
-    pub fn create_automation(&self, request: AutomationCreateRequest) -> AutomationDetailResponse {
+    pub fn create_automation(
+        &self,
+        request: AutomationCreateRequest,
+    ) -> Result<AutomationDetailResponse, RuntimeError> {
+        validate_mcp_binding(request.trigger_source, request.mcp_binding.as_ref())?;
+
         let mut state = self.state.lock().expect("runtime state should lock");
         let automation_id = Uuid::new_v4().to_string();
         let trigger_id = Uuid::new_v4().to_string();
@@ -322,12 +498,16 @@ impl InMemoryRuntimeService {
             owner_ref: format!("automation:{automation_id}"),
             state: "active".into(),
             created_at: now,
+            mcp_binding: request.mcp_binding,
         };
 
         state.automations.insert(automation_id.clone(), automation);
         state.triggers.insert(trigger_id, trigger);
 
-        hydrate_automation_detail(&state, &automation_id).expect("new automation should hydrate")
+        hydrate_automation_detail(&state, &automation_id).ok_or_else(|| RuntimeError::NotFound {
+            kind: "automation",
+            id: automation_id,
+        })
     }
 
     pub fn list_automations(&self) -> Vec<AutomationDetailResponse> {
@@ -371,121 +551,312 @@ impl InMemoryRuntimeService {
         request: TriggerDeliveryRequest,
     ) -> Result<TriggerDeliveryResponse, RuntimeError> {
         let mut state = self.state.lock().expect("runtime state should lock");
-        let dedupe_key = format!("{}:{}", request.trigger_id, request.dedupe_key);
+        deliver_trigger_inner(&mut state, request)
+    }
 
-        if let Some(delivery_id) = state.delivery_dedupe_index.get(&dedupe_key).cloned() {
-            let delivery = state
-                .trigger_deliveries
-                .get(&delivery_id)
-                .cloned()
-                .ok_or_else(|| RuntimeError::NotFound {
-                    kind: "trigger_delivery",
-                    id: delivery_id,
-                })?;
-            let run = delivery
-                .run_id
-                .as_deref()
-                .and_then(|run_id| hydrate_response(&state, run_id));
-
-            return Ok(TriggerDeliveryResponse { delivery, run });
-        }
-
-        let trigger = state
+    pub fn deliver_mcp_event(
+        &self,
+        request: McpEventDeliveryRequest,
+    ) -> Result<McpEventDeliveryResponse, RuntimeError> {
+        let mut state = self.state.lock().expect("runtime state should lock");
+        let mut trigger_ids = state
             .triggers
-            .get(&request.trigger_id)
-            .cloned()
-            .ok_or_else(|| RuntimeError::NotFound {
-                kind: "trigger",
-                id: request.trigger_id.clone(),
-            })?;
-        let automation = state
-            .automations
-            .get(&trigger.automation_id)
-            .cloned()
-            .ok_or_else(|| RuntimeError::NotFound {
-                kind: "automation",
-                id: trigger.automation_id.clone(),
-            })?;
+            .values()
+            .filter(|trigger| {
+                trigger.source_type == TriggerSource::McpEvent
+                    && trigger
+                        .mcp_binding
+                        .as_ref()
+                        .map(|binding| {
+                            binding.server_name == request.server_name
+                                && binding.event_name == request.event_name
+                        })
+                        .unwrap_or(false)
+            })
+            .map(|trigger| trigger.id.clone())
+            .collect::<Vec<_>>();
+        trigger_ids.sort();
 
-        if automation.state != AutomationState::Active {
-            let delivery = record_failed_delivery(
-                &mut state,
-                &trigger,
-                &request.dedupe_key,
-                format!(
-                    "automation {} is paused and cannot accept deliveries",
-                    automation.id
-                ),
-            );
-
-            return Err(RuntimeError::InvalidState {
-                run_id: automation.id,
-                reason: delivery
-                    .failure_reason
-                    .unwrap_or_else(|| "delivery failed".into()),
+        if trigger_ids.is_empty() {
+            return Err(RuntimeError::NotFound {
+                kind: "mcp_binding",
+                id: format!("{}:{}", request.server_name, request.event_name),
             });
         }
 
-        let delivery_id = Uuid::new_v4().to_string();
-        let run_title = request.title.clone().unwrap_or_else(|| automation.name.clone());
-        let run_type = trigger_run_type(trigger.source_type);
-        let run_response = start_run(
-            &mut state,
-            RunStartRequest {
-                workspace_id: automation.workspace_id.clone(),
-                project_id: automation.project_id.clone(),
-                run_type,
-                idempotency_key: format!("trigger:{}:{}", trigger.id, request.dedupe_key),
-                requested_by: request.requested_by.clone(),
-                title: run_title,
-                description: request.description.clone(),
-                requires_approval: automation.requires_approval,
-                initial_audit_action: "trigger.delivered",
-                initial_audit_target: AuditTarget::Explicit(delivery_id.clone()),
-            },
-        );
+        let mut items = Vec::with_capacity(trigger_ids.len());
+        for trigger_id in trigger_ids {
+            items.push(deliver_trigger_inner(
+                &mut state,
+                TriggerDeliveryRequest {
+                    trigger_id,
+                    dedupe_key: request.dedupe_key.clone(),
+                    requested_by: request.requested_by.clone(),
+                    title: request.title.clone(),
+                    description: request.description.clone(),
+                },
+            )?);
+        }
 
-        push_trace(
-            &mut state,
-            &run_response.run.id,
-            trace_event(
-                "TriggerDelivered",
-                format!(
-                    "Trigger {} delivered {}",
-                    trigger.id, request.dedupe_key
-                ),
-            ),
-        );
+        Ok(McpEventDeliveryResponse { items })
+    }
 
-        let delivery = TriggerDeliveryRecord {
-            id: delivery_id.clone(),
-            trigger_id: trigger.id.clone(),
-            source_type: trigger.source_type,
-            dedupe_key: request.dedupe_key.clone(),
-            state: TriggerDeliveryState::Succeeded,
-            run_id: Some(run_response.run.id.clone()),
-            failure_reason: None,
-            occurred_at: now_iso(),
+    pub fn list_knowledge_spaces(&self) -> Vec<KnowledgeSpaceDetailResponse> {
+        let state = self.state.lock().expect("runtime state should lock");
+        let mut space_ids = state.knowledge_spaces.keys().cloned().collect::<Vec<_>>();
+        space_ids.sort();
+
+        space_ids
+            .into_iter()
+            .filter_map(|space_id| hydrate_knowledge_space_detail(&state, &space_id))
+            .collect()
+    }
+
+    pub fn create_knowledge_space(
+        &self,
+        request: KnowledgeSpaceCreateRequest,
+    ) -> Result<KnowledgeSpaceDetailResponse, RuntimeError> {
+        if request.owner_refs.is_empty() {
+            return Err(RuntimeError::InvalidRequest {
+                reason: "knowledge spaces require at least one owner_ref".into(),
+            });
+        }
+        if request.scope.trim().is_empty() {
+            return Err(RuntimeError::InvalidRequest {
+                reason: "knowledge spaces require a non-empty scope".into(),
+            });
+        }
+
+        let mut state = self.state.lock().expect("runtime state should lock");
+        let now = now_iso();
+        let space = KnowledgeSpaceRecord {
+            id: Uuid::new_v4().to_string(),
+            workspace_id: request.workspace_id,
+            name: request.name,
+            owner_refs: request.owner_refs,
+            scope: request.scope,
+            state: "active".into(),
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        let space_id = space.id.clone();
+        state.knowledge_spaces.insert(space_id.clone(), space);
+
+        hydrate_knowledge_space_detail(&state, &space_id).ok_or_else(|| RuntimeError::NotFound {
+            kind: "knowledge_space",
+            id: space_id,
+        })
+    }
+
+    pub fn create_candidate_from_run(
+        &self,
+        request: KnowledgeCandidateCreateRequest,
+    ) -> Result<KnowledgeCandidateRecord, RuntimeError> {
+        let mut state = self.state.lock().expect("runtime state should lock");
+        if !state.knowledge_spaces.contains_key(&request.knowledge_space_id) {
+            return Err(RuntimeError::NotFound {
+                kind: "knowledge_space",
+                id: request.knowledge_space_id,
+            });
+        }
+
+        let run = state
+            .runs
+            .get(&request.run_id)
+            .cloned()
+            .ok_or_else(|| RuntimeError::NotFound {
+                kind: "run",
+                id: request.run_id.clone(),
+            })?;
+        let artifact = state
+            .artifacts
+            .get(&request.run_id)
+            .cloned()
+            .ok_or_else(|| RuntimeError::InvalidState {
+                kind: "run",
+                id: request.run_id.clone(),
+                reason: "knowledge candidates require a completed artifact".into(),
+            })?;
+        let candidate_index = format!("{}:{}", request.knowledge_space_id, request.run_id);
+        if let Some(candidate_id) = state.candidate_index_by_run_and_space.get(&candidate_index) {
+            return state
+                .knowledge_candidates
+                .get(candidate_id)
+                .cloned()
+                .ok_or_else(|| RuntimeError::NotFound {
+                    kind: "knowledge_candidate",
+                    id: candidate_id.clone(),
+                });
+        }
+
+        let trust_level = match state.run_sources.get(&run.id).copied() {
+            Some(RunSource::Trigger(TriggerSource::McpEvent)) => TrustLevel::Low,
+            _ => TrustLevel::High,
+        };
+        let candidate = KnowledgeCandidateRecord {
+            id: Uuid::new_v4().to_string(),
+            knowledge_space_id: request.knowledge_space_id.clone(),
+            run_id: run.id.clone(),
+            artifact_id: artifact.id.clone(),
+            title: artifact.title.clone(),
+            summary: artifact.content_ref.clone(),
+            status: KnowledgeStatus::Candidate,
+            trust_level,
+            source_ref: run.id.clone(),
+            created_by: request.created_by.clone(),
+            created_at: now_iso(),
+            promoted_asset_id: None,
         };
 
         state
-            .trigger_deliveries
-            .insert(delivery_id.clone(), delivery.clone());
+            .candidate_index_by_run_and_space
+            .insert(candidate_index, candidate.id.clone());
         state
-            .delivery_dedupe_index
-            .insert(dedupe_key, delivery_id.clone());
-        state
-            .latest_delivery_by_trigger
-            .insert(trigger.id.clone(), delivery_id);
+            .knowledge_candidates
+            .insert(candidate.id.clone(), candidate.clone());
 
-        if let Some(entry) = state.automations.get_mut(&automation.id) {
-            entry.last_run_id = Some(run_response.run.id.clone());
-            entry.updated_at = now_iso();
+        push_trace(
+            &mut state,
+            &run.id,
+            trace_event(
+                "KnowledgeCandidateCreated",
+                format!(
+                    "Candidate {} created in {}",
+                    candidate.id, candidate.knowledge_space_id
+                ),
+            ),
+        );
+        push_audit(
+            &mut state,
+            &run.id,
+            audit_entry("knowledge.candidate.created", &request.created_by, &candidate.id),
+        );
+
+        Ok(candidate)
+    }
+
+    pub fn promote_candidate(
+        &self,
+        candidate_id: &str,
+        request: KnowledgePromotionRequest,
+    ) -> Result<KnowledgePromotionResponse, RuntimeError> {
+        let mut state = self.state.lock().expect("runtime state should lock");
+        let candidate = state
+            .knowledge_candidates
+            .get(candidate_id)
+            .cloned()
+            .ok_or_else(|| RuntimeError::NotFound {
+                kind: "knowledge_candidate",
+                id: candidate_id.to_string(),
+            })?;
+        let space = state
+            .knowledge_spaces
+            .get(&candidate.knowledge_space_id)
+            .cloned()
+            .ok_or_else(|| RuntimeError::NotFound {
+                kind: "knowledge_space",
+                id: candidate.knowledge_space_id.clone(),
+            })?;
+
+        if !space.owner_refs.iter().any(|owner| owner == &request.promoted_by) {
+            return Err(RuntimeError::InvalidState {
+                kind: "knowledge_space",
+                id: space.id,
+                reason: format!(
+                    "{} is not allowed to promote candidates in this space",
+                    request.promoted_by
+                ),
+            });
         }
 
-        let run = hydrate_response(&state, &run_response.run.id);
+        if candidate.status != KnowledgeStatus::Candidate {
+            return Err(RuntimeError::InvalidState {
+                kind: "knowledge_candidate",
+                id: candidate.id,
+                reason: "candidate can only be promoted once".into(),
+            });
+        }
 
-        Ok(TriggerDeliveryResponse { delivery, run })
+        let asset = KnowledgeAssetRecord {
+            id: Uuid::new_v4().to_string(),
+            knowledge_space_id: candidate.knowledge_space_id.clone(),
+            title: candidate.title.clone(),
+            summary: candidate.summary.clone(),
+            layer: "shared".into(),
+            status: KnowledgeStatus::VerifiedShared,
+            trust_level: candidate.trust_level,
+            source_ref: candidate.id.clone(),
+            created_at: now_iso(),
+        };
+
+        let updated_candidate = {
+            let candidate_entry = state
+                .knowledge_candidates
+                .get_mut(candidate_id)
+                .ok_or_else(|| RuntimeError::NotFound {
+                    kind: "knowledge_candidate",
+                    id: candidate_id.to_string(),
+                })?;
+            candidate_entry.status = KnowledgeStatus::VerifiedShared;
+            candidate_entry.promoted_asset_id = Some(asset.id.clone());
+            candidate_entry.clone()
+        };
+
+        state
+            .knowledge_assets
+            .insert(asset.id.clone(), asset.clone());
+        state.knowledge_lineage.push(KnowledgeLineageRecord {
+            candidate_id: updated_candidate.id.clone(),
+            asset_id: asset.id.clone(),
+            run_id: updated_candidate.run_id.clone(),
+            artifact_id: updated_candidate.artifact_id.clone(),
+            occurred_at: now_iso(),
+        });
+
+        push_trace(
+            &mut state,
+            &updated_candidate.run_id,
+            trace_event(
+                "KnowledgeCandidatePromoted",
+                format!(
+                    "Candidate {} promoted to asset {}",
+                    updated_candidate.id, asset.id
+                ),
+            ),
+        );
+        push_audit(
+            &mut state,
+            &updated_candidate.run_id,
+            audit_entry("knowledge.asset.promoted", &request.promoted_by, &asset.id),
+        );
+
+        Ok(KnowledgePromotionResponse {
+            candidate: updated_candidate,
+            asset,
+        })
+    }
+
+    pub fn list_knowledge_assets(
+        &self,
+        knowledge_space_id: &str,
+    ) -> Result<KnowledgeAssetListResponse, RuntimeError> {
+        let state = self.state.lock().expect("runtime state should lock");
+        if !state.knowledge_spaces.contains_key(knowledge_space_id) {
+            return Err(RuntimeError::NotFound {
+                kind: "knowledge_space",
+                id: knowledge_space_id.to_string(),
+            });
+        }
+
+        let mut items = state
+            .knowledge_assets
+            .values()
+            .filter(|asset| asset.knowledge_space_id == knowledge_space_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+
+        Ok(KnowledgeAssetListResponse { items })
     }
 
     pub fn get_run(&self, run_id: &str) -> Option<RunDetailResponse> {
@@ -520,7 +891,8 @@ impl InMemoryRuntimeService {
 
             if run.status != RunStatus::WaitingApproval {
                 return Err(RuntimeError::InvalidState {
-                    run_id: run.id.clone(),
+                    kind: "approval",
+                    id: approval_id.to_string(),
                     reason: "approval can only be resolved while waiting_approval".into(),
                 });
             }
@@ -624,7 +996,8 @@ impl InMemoryRuntimeService {
 
             if run.status != RunStatus::Paused {
                 return Err(RuntimeError::InvalidState {
-                    run_id: run.id.clone(),
+                    kind: "run",
+                    id: run.id.clone(),
                     reason: "resume is only allowed after approval grants a checkpoint".into(),
                 });
             }
@@ -680,6 +1053,158 @@ impl InMemoryRuntimeService {
             id: run_id.to_string(),
         })
     }
+}
+
+fn default_knowledge_space() -> KnowledgeSpaceRecord {
+    let now = now_iso();
+    KnowledgeSpaceRecord {
+        id: "knowledge-space-alpha".into(),
+        workspace_id: "workspace-alpha".into(),
+        name: "Workspace Alpha Shared Knowledge".into(),
+        owner_refs: vec!["owner-1".into()],
+        scope: "project:project-alpha".into(),
+        state: "active".into(),
+        created_at: now.clone(),
+        updated_at: now,
+    }
+}
+
+fn validate_mcp_binding(
+    trigger_source: TriggerSource,
+    mcp_binding: Option<&McpBinding>,
+) -> Result<(), RuntimeError> {
+    match (trigger_source, mcp_binding) {
+        (TriggerSource::McpEvent, Some(binding))
+            if !binding.server_name.trim().is_empty() && !binding.event_name.trim().is_empty() =>
+        {
+            Ok(())
+        }
+        (TriggerSource::McpEvent, _) => Err(RuntimeError::InvalidRequest {
+            reason: "mcp_event automations require a non-empty mcp_binding".into(),
+        }),
+        (_, Some(_)) => Err(RuntimeError::InvalidRequest {
+            reason: "mcp_binding is only allowed for mcp_event automations".into(),
+        }),
+        _ => Ok(()),
+    }
+}
+
+fn deliver_trigger_inner(
+    state: &mut RuntimeState,
+    request: TriggerDeliveryRequest,
+) -> Result<TriggerDeliveryResponse, RuntimeError> {
+    let dedupe_key = format!("{}:{}", request.trigger_id, request.dedupe_key);
+
+    if let Some(delivery_id) = state.delivery_dedupe_index.get(&dedupe_key).cloned() {
+        let delivery = state
+            .trigger_deliveries
+            .get(&delivery_id)
+            .cloned()
+            .ok_or_else(|| RuntimeError::NotFound {
+                kind: "trigger_delivery",
+                id: delivery_id,
+            })?;
+        let run = delivery
+            .run_id
+            .as_deref()
+            .and_then(|run_id| hydrate_response(state, run_id));
+
+        return Ok(TriggerDeliveryResponse { delivery, run });
+    }
+
+    let trigger = state
+        .triggers
+        .get(&request.trigger_id)
+        .cloned()
+        .ok_or_else(|| RuntimeError::NotFound {
+            kind: "trigger",
+            id: request.trigger_id.clone(),
+        })?;
+    let automation = state
+        .automations
+        .get(&trigger.automation_id)
+        .cloned()
+        .ok_or_else(|| RuntimeError::NotFound {
+            kind: "automation",
+            id: trigger.automation_id.clone(),
+        })?;
+
+    if automation.state != AutomationState::Active {
+        let delivery = record_failed_delivery(
+            state,
+            &trigger,
+            &request.dedupe_key,
+            format!(
+                "automation {} is paused and cannot accept deliveries",
+                automation.id
+            ),
+        );
+
+        return Err(RuntimeError::InvalidState {
+            kind: "automation",
+            id: automation.id,
+            reason: delivery
+                .failure_reason
+                .unwrap_or_else(|| "delivery failed".into()),
+        });
+    }
+
+    let delivery_id = Uuid::new_v4().to_string();
+    let run_title = request.title.clone().unwrap_or_else(|| automation.name.clone());
+    let run_type = trigger_run_type(trigger.source_type);
+    let run_response = start_run(
+        state,
+        RunStartRequest {
+            workspace_id: automation.workspace_id.clone(),
+            project_id: automation.project_id.clone(),
+            run_type,
+            idempotency_key: format!("trigger:{}:{}", trigger.id, request.dedupe_key),
+            requested_by: request.requested_by.clone(),
+            title: run_title,
+            description: request.description.clone(),
+            requires_approval: automation.requires_approval,
+            initial_audit_action: "trigger.delivered",
+            initial_audit_target: AuditTarget::Explicit(delivery_id.clone()),
+            run_source: RunSource::Trigger(trigger.source_type),
+        },
+    );
+
+    push_trace(
+        state,
+        &run_response.run.id,
+        trace_event(
+            "TriggerDelivered",
+            format!("Trigger {} delivered {}", trigger.id, request.dedupe_key),
+        ),
+    );
+
+    let delivery = TriggerDeliveryRecord {
+        id: delivery_id.clone(),
+        trigger_id: trigger.id.clone(),
+        source_type: trigger.source_type,
+        dedupe_key: request.dedupe_key.clone(),
+        state: TriggerDeliveryState::Succeeded,
+        run_id: Some(run_response.run.id.clone()),
+        failure_reason: None,
+        occurred_at: now_iso(),
+    };
+
+    state
+        .trigger_deliveries
+        .insert(delivery_id.clone(), delivery.clone());
+    state.delivery_dedupe_index.insert(dedupe_key, delivery_id.clone());
+    state
+        .latest_delivery_by_trigger
+        .insert(trigger.id.clone(), delivery_id);
+
+    if let Some(entry) = state.automations.get_mut(&automation.id) {
+        entry.last_run_id = Some(run_response.run.id.clone());
+        entry.updated_at = now_iso();
+    }
+
+    let run = hydrate_response(state, &run_response.run.id);
+
+    Ok(TriggerDeliveryResponse { delivery, run })
 }
 
 fn start_run(state: &mut RuntimeState, request: RunStartRequest) -> RunDetailResponse {
@@ -775,6 +1300,7 @@ fn start_run(state: &mut RuntimeState, request: RunStartRequest) -> RunDetailRes
     };
 
     state.runs.insert(run.id.clone(), run);
+    state.run_sources.insert(response.run.id.clone(), request.run_source);
     if let Some(entry) = artifact {
         state.artifacts.insert(entry.run_id.clone(), entry);
     }
@@ -837,6 +1363,34 @@ fn hydrate_automation_detail(
     })
 }
 
+fn hydrate_knowledge_space_detail(
+    state: &RuntimeState,
+    knowledge_space_id: &str,
+) -> Option<KnowledgeSpaceDetailResponse> {
+    let space = state.knowledge_spaces.get(knowledge_space_id)?.clone();
+    let mut candidates = state
+        .knowledge_candidates
+        .values()
+        .filter(|candidate| candidate.knowledge_space_id == knowledge_space_id)
+        .cloned()
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+
+    let mut assets = state
+        .knowledge_assets
+        .values()
+        .filter(|asset| asset.knowledge_space_id == knowledge_space_id)
+        .cloned()
+        .collect::<Vec<_>>();
+    assets.sort_by(|left, right| left.created_at.cmp(&right.created_at));
+
+    Some(KnowledgeSpaceDetailResponse {
+        space,
+        candidates,
+        assets,
+    })
+}
+
 fn record_failed_delivery(
     state: &mut RuntimeState,
     trigger: &TriggerRecord,
@@ -869,7 +1423,11 @@ fn record_failed_delivery(
     delivery
 }
 
-fn sync_trigger_states(state: &mut RuntimeState, automation_id: &str, automation_state: AutomationState) {
+fn sync_trigger_states(
+    state: &mut RuntimeState,
+    automation_id: &str,
+    automation_state: AutomationState,
+) {
     let trigger_state = match automation_state {
         AutomationState::Active => "active",
         AutomationState::Draft => "draft",
@@ -896,7 +1454,12 @@ fn trigger_run_type(source_type: TriggerSource) -> RunType {
     }
 }
 
-fn build_artifact(run_id: &str, project_id: &str, title: &str, description: Option<&str>) -> ArtifactRecord {
+fn build_artifact(
+    run_id: &str,
+    project_id: &str,
+    title: &str,
+    description: Option<&str>,
+) -> ArtifactRecord {
     ArtifactRecord {
         id: Uuid::new_v4().to_string(),
         project_id: project_id.to_string(),

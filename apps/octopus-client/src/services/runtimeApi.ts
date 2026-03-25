@@ -4,6 +4,13 @@ import type {
   AutomationDetailResponse,
   AutomationListResponse,
   ErrorResponse,
+  KnowledgeCandidateCreateRequest,
+  KnowledgeCandidateResponse,
+  KnowledgePromotionRequest,
+  KnowledgePromotionResponse,
+  KnowledgeSpaceListResponse,
+  McpEventDeliveryRequest,
+  McpEventDeliveryResponse,
   RunDetailResponse,
   TaskSubmissionRequest,
   TriggerDeliveryRequest,
@@ -64,6 +71,15 @@ export const runtimeApi = {
   createAutomation(payload: AutomationCreateRequest) {
     return postJson<AutomationDetailResponse>('/api/v1/automations', payload)
   },
+  listKnowledgeSpaces() {
+    return getJson<KnowledgeSpaceListResponse>('/api/v1/knowledge/spaces')
+  },
+  createCandidateFromRun(payload: KnowledgeCandidateCreateRequest) {
+    return postJson<KnowledgeCandidateResponse>('/api/v1/knowledge/candidates/from-run', payload)
+  },
+  promoteCandidate(candidateId: string, payload: KnowledgePromotionRequest) {
+    return postJson<KnowledgePromotionResponse>(`/api/v1/knowledge/candidates/${candidateId}/promote`, payload)
+  },
   submitTask(payload: TaskSubmissionRequest) {
     return postJson<RunDetailResponse>('/api/v1/runs/task', payload)
   },
@@ -75,6 +91,9 @@ export const runtimeApi = {
   },
   deliverTrigger(payload: TriggerDeliveryRequest) {
     return postJson<TriggerDeliveryResponse>('/api/v1/triggers/deliver', payload)
+  },
+  deliverMcpEvent(payload: McpEventDeliveryRequest) {
+    return postJson<McpEventDeliveryResponse>('/api/v1/mcp/events/deliver', payload)
   },
   resumeRun(runId: string) {
     return postJson<RunDetailResponse>(`/api/v1/runs/${runId}/resume`, {})

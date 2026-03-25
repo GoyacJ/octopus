@@ -3,6 +3,7 @@ import { onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import AutomationControlPanel from '@/components/AutomationControlPanel.vue'
+import KnowledgeControlPanel from '@/components/KnowledgeControlPanel.vue'
 import RuntimeActivityPanel from '@/components/RuntimeActivityPanel.vue'
 import RuntimeOverview from '@/components/RuntimeOverview.vue'
 import TaskControlPanel from '@/components/TaskControlPanel.vue'
@@ -22,6 +23,7 @@ const switchLocale = () => {
 
 onMounted(() => {
   void runtimeStore.loadAutomations()
+  void runtimeStore.loadKnowledgeSpaces()
 })
 </script>
 
@@ -55,6 +57,7 @@ onMounted(() => {
       <div class="space-y-6">
         <TaskControlPanel />
         <AutomationControlPanel />
+        <KnowledgeControlPanel />
       </div>
       <RuntimeActivityPanel />
     </section>

@@ -83,6 +83,8 @@ export const messages = {
         name: 'Automation name',
         source: 'Trigger source',
         dedupeKey: 'Delivery dedupe key',
+        mcpServer: 'MCP server',
+        mcpEvent: 'MCP event',
       },
       actions: {
         create: '创建 Automation',
@@ -95,6 +97,33 @@ export const messages = {
         state: 'State',
         trigger: 'Trigger',
         delivery: 'Latest delivery',
+      },
+    },
+    knowledge: {
+      eyebrow: 'Knowledge / Shared Writeback',
+      title: '最小知识闭环',
+      subtitle: '把当前 Run 的 Artifact 显式写入候选知识，再由空间负责人晋升为共享知识。',
+      loading: '加载中...',
+      empty: '未加载',
+      emptyDescription: 'KnowledgeSpace 加载后，这里会显示候选知识与共享知识条目。',
+      sections: {
+        space: 'Knowledge Space',
+        candidates: 'Candidates',
+        assets: 'Shared Assets',
+      },
+      summary: {
+        run: 'Current run',
+        artifact: 'Current artifact',
+      },
+      actions: {
+        createCandidate: '创建 Candidate',
+        creating: '创建中...',
+        promote: '晋升 Shared Asset',
+        promoting: '晋升中...',
+      },
+      pending: {
+        candidates: '当前还没有候选知识。',
+        assets: '当前还没有共享知识条目。',
       },
     },
     activity: {
@@ -204,6 +233,8 @@ export const messages = {
         name: 'Automation name',
         source: 'Trigger source',
         dedupeKey: 'Delivery dedupe key',
+        mcpServer: 'MCP server',
+        mcpEvent: 'MCP event',
       },
       actions: {
         create: 'Create Automation',
@@ -216,6 +247,33 @@ export const messages = {
         state: 'State',
         trigger: 'Trigger',
         delivery: 'Latest delivery',
+      },
+    },
+    knowledge: {
+      eyebrow: 'Knowledge / Shared Writeback',
+      title: 'Minimal Knowledge Loop',
+      subtitle: 'Write the current run artifact into a candidate first, then promote it into shared knowledge with an explicit owner action.',
+      loading: 'Loading...',
+      empty: 'Not loaded',
+      emptyDescription: 'Once KnowledgeSpace data loads, this panel shows candidates and shared assets.',
+      sections: {
+        space: 'Knowledge Space',
+        candidates: 'Candidates',
+        assets: 'Shared Assets',
+      },
+      summary: {
+        run: 'Current run',
+        artifact: 'Current artifact',
+      },
+      actions: {
+        createCandidate: 'Create Candidate',
+        creating: 'Creating...',
+        promote: 'Promote Shared Asset',
+        promoting: 'Promoting...',
+      },
+      pending: {
+        candidates: 'No knowledge candidates yet.',
+        assets: 'No shared assets yet.',
       },
     },
     activity: {

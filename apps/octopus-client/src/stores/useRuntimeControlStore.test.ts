@@ -198,4 +198,186 @@ describe('useRuntimeControlStore', () => {
     expect(store.automations).toHaveLength(1)
     expect(store.automations[0]?.latest_delivery?.id).toBe('delivery-1')
   })
+
+  it('loads knowledge spaces, creates a candidate from the current run, and promotes it', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                space: {
+                  id: 'knowledge-space-alpha',
+                  workspace_id: 'workspace-alpha',
+                  name: 'Workspace Alpha Shared Knowledge',
+                  owner_refs: ['owner-1'],
+                  scope: 'project:project-alpha',
+                  state: 'active',
+                  created_at: '2026-03-26T00:00:00Z',
+                  updated_at: '2026-03-26T00:00:00Z',
+                },
+                candidates: [],
+                assets: [],
+              },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            candidate: {
+              id: 'candidate-1',
+              knowledge_space_id: 'knowledge-space-alpha',
+              run_id: 'run-1',
+              artifact_id: 'artifact-1',
+              title: 'Artifact for Review runtime wiring',
+              summary: 'Direct path without approval',
+              status: 'candidate',
+              trust_level: 'high',
+              source_ref: 'run-1',
+              created_by: 'operator-1',
+              created_at: '2026-03-26T00:01:00Z',
+              promoted_asset_id: null,
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            run: {
+              id: 'run-1',
+              project_id: 'project-alpha',
+              run_type: 'task',
+              status: 'completed',
+              idempotency_key: 'task:run-1',
+              requested_by: 'operator-1',
+              title: 'Review runtime wiring',
+              checkpoint_token: null,
+              created_at: '2026-03-26T00:00:00Z',
+              updated_at: '2026-03-26T00:01:00Z',
+            },
+            artifact: {
+              id: 'artifact-1',
+              project_id: 'project-alpha',
+              run_id: 'run-1',
+              version: 1,
+              title: 'Artifact for Review runtime wiring',
+              content_ref: 'Direct path without approval',
+              state: 'current',
+              created_at: '2026-03-26T00:00:00Z',
+            },
+            approval: null,
+            inbox_item: null,
+            trace: [],
+            audit: [],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            candidate: {
+              id: 'candidate-1',
+              knowledge_space_id: 'knowledge-space-alpha',
+              run_id: 'run-1',
+              artifact_id: 'artifact-1',
+              title: 'Artifact for Review runtime wiring',
+              summary: 'Direct path without approval',
+              status: 'verified_shared',
+              trust_level: 'high',
+              source_ref: 'run-1',
+              created_by: 'operator-1',
+              created_at: '2026-03-26T00:01:00Z',
+              promoted_asset_id: 'asset-1',
+            },
+            asset: {
+              id: 'asset-1',
+              knowledge_space_id: 'knowledge-space-alpha',
+              title: 'Artifact for Review runtime wiring',
+              summary: 'Direct path without approval',
+              layer: 'shared',
+              status: 'verified_shared',
+              trust_level: 'high',
+              source_ref: 'candidate-1',
+              created_at: '2026-03-26T00:02:00Z',
+            },
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            run: {
+              id: 'run-1',
+              project_id: 'project-alpha',
+              run_type: 'task',
+              status: 'completed',
+              idempotency_key: 'task:run-1',
+              requested_by: 'operator-1',
+              title: 'Review runtime wiring',
+              checkpoint_token: null,
+              created_at: '2026-03-26T00:00:00Z',
+              updated_at: '2026-03-26T00:02:00Z',
+            },
+            artifact: {
+              id: 'artifact-1',
+              project_id: 'project-alpha',
+              run_id: 'run-1',
+              version: 1,
+              title: 'Artifact for Review runtime wiring',
+              content_ref: 'Direct path without approval',
+              state: 'current',
+              created_at: '2026-03-26T00:00:00Z',
+            },
+            approval: null,
+            inbox_item: null,
+            trace: [],
+            audit: [],
+          }),
+        ),
+      )
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const store = useRuntimeControlStore()
+    store.currentRunDetail = {
+      run: {
+        id: 'run-1',
+        project_id: 'project-alpha',
+        run_type: 'task',
+        status: 'completed',
+        idempotency_key: 'task:run-1',
+        requested_by: 'operator-1',
+        title: 'Review runtime wiring',
+        checkpoint_token: null,
+        created_at: '2026-03-26T00:00:00Z',
+        updated_at: '2026-03-26T00:00:00Z',
+      },
+      artifact: {
+        id: 'artifact-1',
+        project_id: 'project-alpha',
+        run_id: 'run-1',
+        version: 1,
+        title: 'Artifact for Review runtime wiring',
+        content_ref: 'Direct path without approval',
+        state: 'current',
+        created_at: '2026-03-26T00:00:00Z',
+      },
+      approval: null,
+      inbox_item: null,
+      trace: [],
+      audit: [],
+    }
+
+    await store.loadKnowledgeSpaces()
+    const candidate = await store.createCandidateFromRun('knowledge-space-alpha')
+    const promotion = await store.promoteCandidate('candidate-1')
+
+    expect(candidate?.id).toBe('candidate-1')
+    expect(promotion?.asset.id).toBe('asset-1')
+    expect(store.knowledgeSpaces[0]?.candidates[0]?.status).toBe('verified_shared')
+    expect(store.knowledgeSpaces[0]?.assets[0]?.id).toBe('asset-1')
+  })
 })

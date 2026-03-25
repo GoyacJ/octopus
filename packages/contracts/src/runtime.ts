@@ -1,4 +1,4 @@
-import type { ApprovalType, RunStatus, RunType, TriggerSource } from './catalog'
+import type { ApprovalType, KnowledgeStatus, RunStatus, RunType, TriggerSource, TrustLevel } from './catalog'
 
 export const approvalDecisionValues = ['approved', 'rejected'] as const
 export const approvalStateValues = ['pending', 'approved', 'rejected', 'expired', 'cancelled'] as const
@@ -20,6 +20,11 @@ export type InboxState = (typeof inboxStateValues)[number]
 export type AutomationState = (typeof automationStateValues)[number]
 export type TriggerDeliveryState = (typeof triggerDeliveryStateValues)[number]
 
+export interface McpBinding {
+  server_name: string
+  event_name: string
+}
+
 export interface TaskSubmissionRequest {
   workspace_id: string
   project_id: string
@@ -36,6 +41,7 @@ export interface AutomationCreateRequest {
   trigger_source: TriggerSource
   requested_by: string
   requires_approval: boolean
+  mcp_binding?: McpBinding | null
 }
 
 export interface AutomationStateUpdateRequest {
@@ -50,9 +56,35 @@ export interface TriggerDeliveryRequest {
   description?: string | null
 }
 
+export interface McpEventDeliveryRequest {
+  server_name: string
+  event_name: string
+  dedupe_key: string
+  requested_by: string
+  title?: string | null
+  description?: string | null
+}
+
 export interface ApprovalResolutionRequest {
   decision: ApprovalDecision
   reviewed_by: string
+}
+
+export interface KnowledgeSpaceCreateRequest {
+  workspace_id: string
+  name: string
+  owner_refs: string[]
+  scope: string
+}
+
+export interface KnowledgeCandidateCreateRequest {
+  run_id: string
+  knowledge_space_id: string
+  created_by: string
+}
+
+export interface KnowledgePromotionRequest {
+  promoted_by: string
 }
 
 export interface RunRecord {
@@ -120,6 +152,7 @@ export interface TriggerRecord {
   owner_ref: string
   state: string
   created_at: string
+  mcp_binding: McpBinding | null
 }
 
 export interface TriggerDeliveryRecord {
@@ -146,6 +179,44 @@ export interface AuditEntry {
   occurred_at: string
 }
 
+export interface KnowledgeSpaceRecord {
+  id: string
+  workspace_id: string
+  name: string
+  owner_refs: string[]
+  scope: string
+  state: string
+  created_at: string
+  updated_at: string
+}
+
+export interface KnowledgeCandidateRecord {
+  id: string
+  knowledge_space_id: string
+  run_id: string
+  artifact_id: string
+  title: string
+  summary: string
+  status: KnowledgeStatus
+  trust_level: TrustLevel
+  source_ref: string
+  created_by: string
+  created_at: string
+  promoted_asset_id: string | null
+}
+
+export interface KnowledgeAssetRecord {
+  id: string
+  knowledge_space_id: string
+  title: string
+  summary: string
+  layer: string
+  status: KnowledgeStatus
+  trust_level: TrustLevel
+  source_ref: string
+  created_at: string
+}
+
 export interface RunDetailResponse {
   run: RunRecord
   artifact: ArtifactRecord | null
@@ -169,6 +240,33 @@ export interface AutomationListResponse {
 export interface TriggerDeliveryResponse {
   delivery: TriggerDeliveryRecord
   run: RunDetailResponse | null
+}
+
+export interface McpEventDeliveryResponse {
+  items: TriggerDeliveryResponse[]
+}
+
+export interface KnowledgeSpaceDetailResponse {
+  space: KnowledgeSpaceRecord
+  candidates: KnowledgeCandidateRecord[]
+  assets: KnowledgeAssetRecord[]
+}
+
+export interface KnowledgeSpaceListResponse {
+  items: KnowledgeSpaceDetailResponse[]
+}
+
+export interface KnowledgeAssetListResponse {
+  items: KnowledgeAssetRecord[]
+}
+
+export interface KnowledgeCandidateResponse {
+  candidate: KnowledgeCandidateRecord
+}
+
+export interface KnowledgePromotionResponse {
+  candidate: KnowledgeCandidateRecord
+  asset: KnowledgeAssetRecord
 }
 
 export interface ErrorResponse {

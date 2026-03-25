@@ -9,7 +9,7 @@ import { useRuntimeControlStore } from '@/stores/useRuntimeControlStore'
 
 const { t } = useI18n()
 const runtimeStore = useRuntimeControlStore()
-const { activeTriggerId, automations, isCreatingAutomation } = storeToRefs(runtimeStore)
+const { activeTriggerId, automations, isCreatingAutomation, isDeliveringMcpEvent } = storeToRefs(runtimeStore)
 
 const formState = reactive({
   workspaceId: 'workspace-alpha',
@@ -19,11 +19,16 @@ const formState = reactive({
   requestedBy: 'operator-1',
   requiresApproval: true,
   deliveryDedupeKey: '',
+  mcpServerName: 'confluence',
+  mcpEventName: 'page.updated',
 })
 
 const primaryAutomation = computed(() => automations.value[0] ?? null)
-const isDeliveringPrimary = computed(
-  () => primaryAutomation.value && activeTriggerId.value === primaryAutomation.value.trigger.id,
+const isPrimaryMcpTrigger = computed(() => primaryAutomation.value?.trigger.source_type === 'mcp_event')
+const isDeliveringPrimary = computed(() =>
+  isPrimaryMcpTrigger.value
+    ? isDeliveringMcpEvent.value
+    : Boolean(primaryAutomation.value && activeTriggerId.value === primaryAutomation.value.trigger.id),
 )
 
 const createAutomation = async () => {
@@ -34,6 +39,12 @@ const createAutomation = async () => {
     trigger_source: formState.triggerSource,
     requested_by: formState.requestedBy,
     requires_approval: formState.requiresApproval,
+    mcp_binding: formState.triggerSource === 'mcp_event'
+      ? {
+          server_name: formState.mcpServerName,
+          event_name: formState.mcpEventName,
+        }
+      : null,
   }
 
   try {
@@ -49,15 +60,27 @@ const deliverPrimaryTrigger = async () => {
     return
   }
 
-  const payload: TriggerDeliveryRequest = {
-    trigger_id: primaryAutomation.value.trigger.id,
-    dedupe_key: formState.deliveryDedupeKey,
-    requested_by: formState.requestedBy,
-    title: null,
-    description: `Trigger delivery ${formState.deliveryDedupeKey}`,
-  }
-
   try {
+    if (primaryAutomation.value.trigger.source_type === 'mcp_event' && primaryAutomation.value.trigger.mcp_binding) {
+      await runtimeStore.deliverMcpEvent({
+        server_name: primaryAutomation.value.trigger.mcp_binding.server_name,
+        event_name: primaryAutomation.value.trigger.mcp_binding.event_name,
+        dedupe_key: formState.deliveryDedupeKey,
+        requested_by: formState.requestedBy,
+        title: null,
+        description: `MCP delivery ${formState.deliveryDedupeKey}`,
+      })
+      return
+    }
+
+    const payload: TriggerDeliveryRequest = {
+      trigger_id: primaryAutomation.value.trigger.id,
+      dedupe_key: formState.deliveryDedupeKey,
+      requested_by: formState.requestedBy,
+      title: null,
+      description: `Trigger delivery ${formState.deliveryDedupeKey}`,
+    }
+
     await runtimeStore.deliverTrigger(payload)
   } catch {
     // The store owns the visible error state.
@@ -74,7 +97,7 @@ const deliverPrimaryTrigger = async () => {
         <p class="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">{{ t('automation.subtitle') }}</p>
       </div>
       <span class="rounded-full bg-[var(--surface-elevated)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
-        {{ primaryAutomation?.automation.state ?? 'draft' }}
+        {{ primaryAutomation?.automation?.state ?? 'draft' }}
       </span>
     </div>
 
@@ -92,6 +115,7 @@ const deliverPrimaryTrigger = async () => {
       <label class="grid gap-2 text-sm">
         <span class="font-medium">{{ t('automation.fields.source') }}</span>
         <select
+          data-test="automation-source"
           v-model="formState.triggerSource"
           class="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-elevated)] px-4 py-3 outline-none transition focus:border-[var(--accent-primary)]"
         >
@@ -102,10 +126,31 @@ const deliverPrimaryTrigger = async () => {
         </select>
       </label>
 
+      <div v-if="formState.triggerSource === 'mcp_event'" class="grid gap-4 sm:grid-cols-2">
+        <label class="grid gap-2 text-sm">
+          <span class="font-medium">{{ t('automation.fields.mcpServer') }}</span>
+          <input
+            data-test="automation-mcp-server"
+            v-model="formState.mcpServerName"
+            class="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-elevated)] px-4 py-3 outline-none transition focus:border-[var(--accent-primary)]"
+            type="text"
+          >
+        </label>
+        <label class="grid gap-2 text-sm">
+          <span class="font-medium">{{ t('automation.fields.mcpEvent') }}</span>
+          <input
+            data-test="automation-mcp-event"
+            v-model="formState.mcpEventName"
+            class="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-elevated)] px-4 py-3 outline-none transition focus:border-[var(--accent-primary)]"
+            type="text"
+          >
+        </label>
+      </div>
+
       <button
         data-test="automation-create"
         class="rounded-full bg-[var(--accent-primary)] px-4 py-2 text-sm font-medium text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-        :disabled="isCreatingAutomation || !formState.name.trim()"
+        :disabled="isCreatingAutomation || !formState.name.trim() || (formState.triggerSource === 'mcp_event' && (!formState.mcpServerName.trim() || !formState.mcpEventName.trim()))"
         type="button"
         @click="createAutomation"
       >
@@ -119,6 +164,9 @@ const deliverPrimaryTrigger = async () => {
           <p class="text-sm font-medium">{{ primaryAutomation?.automation.name ?? t('automation.empty') }}</p>
           <p v-if="primaryAutomation" class="mt-1 text-sm text-[var(--text-muted)]">
             {{ t('automation.summary.trigger') }}: {{ primaryAutomation.trigger.source_type }}
+          </p>
+          <p v-if="primaryAutomation?.trigger.mcp_binding" class="mt-1 text-sm text-[var(--text-muted)]">
+            {{ primaryAutomation.trigger.mcp_binding.server_name }} / {{ primaryAutomation.trigger.mcp_binding.event_name }}
           </p>
         </div>
         <p v-if="primaryAutomation" class="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">

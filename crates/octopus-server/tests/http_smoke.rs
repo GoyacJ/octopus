@@ -577,3 +577,256 @@ async fn repeated_trigger_delivery_returns_the_existing_run_without_duplication(
     assert_eq!(first_payload["delivery"]["id"], second_payload["delivery"]["id"]);
     assert_eq!(first_payload["run"]["run"]["id"], second_payload["run"]["run"]["id"]);
 }
+
+#[tokio::test]
+async fn knowledge_routes_create_candidates_and_promote_assets() {
+    let app = build_app();
+
+    let run_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/runs/task")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "workspace_id": "workspace-alpha",
+                        "project_id": "project-alpha",
+                        "title": "Summarize workspace health",
+                        "description": "Artifact body for the workspace summary",
+                        "requested_by": "operator-1",
+                        "requires_approval": false
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(run_response.status(), StatusCode::CREATED);
+
+    let run_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(run_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    let run_id = run_payload["run"]["id"]
+        .as_str()
+        .expect("run id should exist")
+        .to_owned();
+
+    let spaces_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/knowledge/spaces")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(spaces_response.status(), StatusCode::OK);
+
+    let spaces_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(spaces_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    assert_eq!(spaces_payload["items"][0]["space"]["id"], "knowledge-space-alpha");
+
+    let candidate_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/knowledge/candidates/from-run")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "run_id": run_id,
+                        "knowledge_space_id": "knowledge-space-alpha",
+                        "created_by": "operator-1"
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(candidate_response.status(), StatusCode::CREATED);
+
+    let candidate_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(candidate_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    let candidate_id = candidate_payload["candidate"]["id"]
+        .as_str()
+        .expect("candidate id should exist")
+        .to_owned();
+
+    let assets_before = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/knowledge/spaces/knowledge-space-alpha/assets")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    let assets_before_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(assets_before.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    assert_eq!(assets_before_payload["items"], serde_json::json!([]));
+
+    let promote_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/knowledge/candidates/{candidate_id}/promote"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "promoted_by": "owner-1"
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(promote_response.status(), StatusCode::OK);
+
+    let promote_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(promote_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    assert_eq!(promote_payload["asset"]["status"], "verified_shared");
+
+    let assets_after = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/knowledge/spaces/knowledge-space-alpha/assets")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    let assets_after_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(assets_after.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    assert_eq!(assets_after_payload["items"][0]["status"], "verified_shared");
+}
+
+#[tokio::test]
+async fn mcp_event_delivery_requires_binding_and_matches_registered_automation() {
+    let app = build_app();
+
+    let invalid_create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/automations")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "workspace_id": "workspace-alpha",
+                        "project_id": "project-alpha",
+                        "name": "Broken MCP watcher",
+                        "trigger_source": "mcp_event",
+                        "requested_by": "operator-1",
+                        "requires_approval": false
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(invalid_create_response.status(), StatusCode::BAD_REQUEST);
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/automations")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "workspace_id": "workspace-alpha",
+                        "project_id": "project-alpha",
+                        "name": "Confluence sync",
+                        "trigger_source": "mcp_event",
+                        "requested_by": "operator-1",
+                        "requires_approval": false,
+                        "mcp_binding": {
+                            "server_name": "confluence",
+                            "event_name": "page.updated"
+                        }
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+
+    let mcp_delivery_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/mcp/events/deliver")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "server_name": "confluence",
+                        "event_name": "page.updated",
+                        "dedupe_key": "evt-001",
+                        "requested_by": "operator-1",
+                        "title": "Confluence page updated",
+                        "description": "Remote page update"
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(mcp_delivery_response.status(), StatusCode::OK);
+
+    let mcp_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(mcp_delivery_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+
+    assert_eq!(mcp_payload["items"][0]["delivery"]["source_type"], "mcp_event");
+    assert_eq!(mcp_payload["items"][0]["run"]["run"]["run_type"], "watch");
+}

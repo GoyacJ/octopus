@@ -192,6 +192,12 @@ export const contractCatalog = {
       notes: 'Shared Knowledge 权威容器。',
     },
     {
+      name: 'KnowledgeCandidate',
+      bounded_context: 'Knowledge System',
+      required_fields: ['id', 'knowledge_space_id', 'status', 'trust_level', 'source_ref', 'created_at'],
+      notes: '待验证的候选知识记录，必须先进入候选队列再决定是否晋升。',
+    },
+    {
       name: 'KnowledgeAsset',
       bounded_context: 'Knowledge System',
       required_fields: ['id', 'knowledge_space_id', 'layer', 'status', 'trust_level', 'source_ref'],
@@ -278,4 +284,3 @@ export const interactionSurfaces = [
   'Workspace',
   'Connections',
 ] as const
-

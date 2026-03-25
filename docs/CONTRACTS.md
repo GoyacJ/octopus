@@ -54,6 +54,7 @@
 - `Artifact`
 - `InboxItem`
 - `KnowledgeSpace`
+- `KnowledgeCandidate`
 - `KnowledgeAsset`
 - `DelegationGrant`
 - `A2APeer`
@@ -64,6 +65,7 @@
 - 字段命名、枚举值和事件名必须使用英文。
 - 新对象若进入正式运行路径，不得只写在聊天记录中，必须先补入契约源。
 - `Project` 只能附着 `KnowledgeSpace` 视图，不能替代 `KnowledgeSpace` 成为 Shared Knowledge 主属边界。
+- `KnowledgeCandidate` 是共享知识写回的强制前置对象；Run、Automation、MCP 或其他外部结果不得直接绕过候选路径写入长期共享知识。
 
 ---
 
@@ -104,4 +106,3 @@
 - 契约校验至少覆盖：对象名、枚举值、事件名及其最小字段集合。
 - 若仓库引入新的可执行验证链路，CI 必须将契约校验纳入默认检查。
 - 目标态 transport、数据库表结构和 protobuf/OpenAPI 细节不在本阶段锁定，但不得违反这里冻结的对象与枚举语义。
-

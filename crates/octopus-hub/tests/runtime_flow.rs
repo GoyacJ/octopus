@@ -2,7 +2,8 @@ use octopus_hub::{
     contracts::TriggerSource,
     runtime::{
         ApprovalResolutionRequest, ApprovalState, AutomationCreateRequest, AutomationState,
-        AutomationStateUpdateRequest, InMemoryRuntimeService, TaskSubmissionRequest,
+        AutomationStateUpdateRequest, InMemoryRuntimeService, KnowledgeCandidateCreateRequest,
+        KnowledgePromotionRequest, McpBinding, McpEventDeliveryRequest, TaskSubmissionRequest,
         TriggerDeliveryRequest, TriggerDeliveryState,
     },
 };
@@ -62,14 +63,17 @@ fn submitting_without_approval_completes_with_artifact_and_no_checkpoint() {
 fn creating_and_listing_automations_exposes_single_trigger_metadata() {
     let runtime = InMemoryRuntimeService::default();
 
-    let created = runtime.create_automation(AutomationCreateRequest {
-        workspace_id: "workspace-alpha".into(),
-        project_id: "project-alpha".into(),
-        name: "Daily policy review".into(),
-        trigger_source: TriggerSource::Cron,
-        requested_by: "operator-1".into(),
-        requires_approval: false,
-    });
+    let created = runtime
+        .create_automation(AutomationCreateRequest {
+            workspace_id: "workspace-alpha".into(),
+            project_id: "project-alpha".into(),
+            name: "Daily policy review".into(),
+            trigger_source: TriggerSource::Cron,
+            requested_by: "operator-1".into(),
+            requires_approval: false,
+            mcp_binding: None,
+        })
+        .expect("automation creation should succeed");
 
     assert_eq!(created.automation.workspace_id, "workspace-alpha");
     assert_eq!(created.automation.project_id, "project-alpha");
@@ -87,14 +91,17 @@ fn creating_and_listing_automations_exposes_single_trigger_metadata() {
 #[test]
 fn manual_event_delivery_creates_watch_runs_and_preserves_workspace_context() {
     let runtime = InMemoryRuntimeService::default();
-    let automation = runtime.create_automation(AutomationCreateRequest {
-        workspace_id: "workspace-alpha".into(),
-        project_id: "project-alpha".into(),
-        name: "Manual drift detector".into(),
-        trigger_source: TriggerSource::ManualEvent,
-        requested_by: "operator-1".into(),
-        requires_approval: true,
-    });
+    let automation = runtime
+        .create_automation(AutomationCreateRequest {
+            workspace_id: "workspace-alpha".into(),
+            project_id: "project-alpha".into(),
+            name: "Manual drift detector".into(),
+            trigger_source: TriggerSource::ManualEvent,
+            requested_by: "operator-1".into(),
+            requires_approval: true,
+            mcp_binding: None,
+        })
+        .expect("automation creation should succeed");
 
     let delivery = runtime
         .deliver_trigger(TriggerDeliveryRequest {
@@ -124,14 +131,17 @@ fn manual_event_delivery_creates_watch_runs_and_preserves_workspace_context() {
 #[test]
 fn repeated_trigger_delivery_reuses_the_existing_run() {
     let runtime = InMemoryRuntimeService::default();
-    let automation = runtime.create_automation(AutomationCreateRequest {
-        workspace_id: "workspace-alpha".into(),
-        project_id: "project-alpha".into(),
-        name: "Nightly workspace scan".into(),
-        trigger_source: TriggerSource::Cron,
-        requested_by: "operator-1".into(),
-        requires_approval: false,
-    });
+    let automation = runtime
+        .create_automation(AutomationCreateRequest {
+            workspace_id: "workspace-alpha".into(),
+            project_id: "project-alpha".into(),
+            name: "Nightly workspace scan".into(),
+            trigger_source: TriggerSource::Cron,
+            requested_by: "operator-1".into(),
+            requires_approval: false,
+            mcp_binding: None,
+        })
+        .expect("automation creation should succeed");
 
     let first = runtime
         .deliver_trigger(TriggerDeliveryRequest {
@@ -162,14 +172,20 @@ fn repeated_trigger_delivery_reuses_the_existing_run() {
 #[test]
 fn paused_automations_reject_delivery_and_record_failure_classification() {
     let runtime = InMemoryRuntimeService::default();
-    let automation = runtime.create_automation(AutomationCreateRequest {
-        workspace_id: "workspace-alpha".into(),
-        project_id: "project-alpha".into(),
-        name: "MCP feed watcher".into(),
-        trigger_source: TriggerSource::McpEvent,
-        requested_by: "operator-1".into(),
-        requires_approval: false,
-    });
+    let automation = runtime
+        .create_automation(AutomationCreateRequest {
+            workspace_id: "workspace-alpha".into(),
+            project_id: "project-alpha".into(),
+            name: "MCP feed watcher".into(),
+            trigger_source: TriggerSource::McpEvent,
+            requested_by: "operator-1".into(),
+            requires_approval: false,
+            mcp_binding: Some(McpBinding {
+                server_name: "notion".into(),
+                event_name: "page.updated".into(),
+            }),
+        })
+        .expect("automation creation should succeed");
 
     runtime
         .update_automation_state(
@@ -351,4 +367,107 @@ fn resuming_after_approval_records_artifact_audit_against_the_artifact() {
     assert!(resumed.audit.iter().any(|entry| {
         entry.action == "artifact.created" && entry.target_ref == artifact.id
     }));
+}
+
+#[test]
+fn knowledge_candidates_are_created_from_runs_and_promoted_into_shared_assets() {
+    let runtime = InMemoryRuntimeService::default();
+
+    let detail = runtime.submit_task(TaskSubmissionRequest {
+        workspace_id: "workspace-alpha".into(),
+        project_id: "project-alpha".into(),
+        title: "Summarize workspace health".into(),
+        description: Some("Artifact body for the workspace summary".into()),
+        requested_by: "operator-1".into(),
+        requires_approval: false,
+    });
+
+    let spaces = runtime.list_knowledge_spaces();
+    assert_eq!(spaces.len(), 1);
+    assert_eq!(spaces[0].space.id, "knowledge-space-alpha");
+
+    let candidate = runtime
+        .create_candidate_from_run(KnowledgeCandidateCreateRequest {
+            run_id: detail.run.id.clone(),
+            knowledge_space_id: "knowledge-space-alpha".into(),
+            created_by: "operator-1".into(),
+        })
+        .expect("candidate creation should succeed");
+
+    assert_eq!(candidate.status.as_str(), "candidate");
+    assert_eq!(candidate.trust_level.as_str(), "high");
+    assert_eq!(candidate.source_ref, detail.run.id);
+
+    let assets_before = runtime
+        .list_knowledge_assets("knowledge-space-alpha")
+        .expect("space should exist");
+    assert!(assets_before.items.is_empty());
+
+    let promoted = runtime
+        .promote_candidate(
+            &candidate.id,
+            KnowledgePromotionRequest {
+                promoted_by: "owner-1".into(),
+            },
+        )
+        .expect("promotion should succeed");
+
+    assert_eq!(promoted.asset.status.as_str(), "verified_shared");
+    assert_eq!(promoted.asset.source_ref, candidate.id);
+    assert_eq!(promoted.candidate.status.as_str(), "verified_shared");
+
+    let assets_after = runtime
+        .list_knowledge_assets("knowledge-space-alpha")
+        .expect("space should exist");
+    assert_eq!(assets_after.items.len(), 1);
+}
+
+#[test]
+fn mcp_event_delivery_matches_binding_and_requires_manual_knowledge_promotion() {
+    let runtime = InMemoryRuntimeService::default();
+    let automation = runtime
+        .create_automation(AutomationCreateRequest {
+            workspace_id: "workspace-alpha".into(),
+            project_id: "project-alpha".into(),
+            name: "Confluence sync".into(),
+            trigger_source: TriggerSource::McpEvent,
+            requested_by: "operator-1".into(),
+            requires_approval: false,
+            mcp_binding: Some(McpBinding {
+                server_name: "confluence".into(),
+                event_name: "page.updated".into(),
+            }),
+        })
+        .expect("automation creation should succeed");
+
+    let response = runtime
+        .deliver_mcp_event(McpEventDeliveryRequest {
+            server_name: "confluence".into(),
+            event_name: "page.updated".into(),
+            dedupe_key: "evt-001".into(),
+            requested_by: "operator-1".into(),
+            title: Some("Confluence page updated".into()),
+            description: Some("Remote page update".into()),
+        })
+        .expect("mcp event delivery should succeed");
+
+    assert_eq!(response.items.len(), 1);
+    assert_eq!(response.items[0].delivery.trigger_id, automation.trigger.id);
+    let run = response.items[0].run.as_ref().expect("run should exist");
+    assert_eq!(run.run.run_type.as_str(), "watch");
+
+    let candidate = runtime
+        .create_candidate_from_run(KnowledgeCandidateCreateRequest {
+            run_id: run.run.id.clone(),
+            knowledge_space_id: "knowledge-space-alpha".into(),
+            created_by: "operator-1".into(),
+        })
+        .expect("candidate creation should succeed");
+
+    assert_eq!(candidate.trust_level.as_str(), "low");
+
+    let assets = runtime
+        .list_knowledge_assets("knowledge-space-alpha")
+        .expect("space should exist");
+    assert!(assets.items.is_empty());
 }
