@@ -103,6 +103,7 @@ fn into_runtime_http_error(error: RuntimeError) -> (StatusCode, Json<ErrorRespon
     let status = match error {
         RuntimeError::NotFound { .. } => StatusCode::NOT_FOUND,
         RuntimeError::InvalidState { .. } => StatusCode::CONFLICT,
+        RuntimeError::InvalidDecision { .. } => StatusCode::BAD_REQUEST,
     };
 
     (

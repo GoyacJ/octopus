@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 
 import { describe, expect, it } from 'vitest'
 
+import * as exportedContracts from './index'
 import { contractCatalog } from './catalog'
 
 interface CoreObjectFile {
@@ -44,6 +45,7 @@ describe('contractCatalog', () => {
     expect(contractCatalog.coreObjects.map((entry) => entry.name)).toEqual(
       coreObjectFile.objects.map((entry) => entry.name),
     )
+    expect(contractCatalog.coreObjects).toEqual(coreObjectFile.objects)
   })
 
   it('mirrors the canonical event names', () => {
@@ -52,6 +54,14 @@ describe('contractCatalog', () => {
     expect(contractCatalog.events.map((entry) => entry.name)).toEqual(
       eventFile.events.map((entry) => entry.name),
     )
+    expect(contractCatalog.events).toEqual(eventFile.events)
+  })
+
+  it('exports explicit run-flow enum catalogs for approvals and inbox state', () => {
+    expect(exportedContracts).toMatchObject({
+      approvalDecisionValues: ['approved', 'rejected'],
+      approvalStateValues: ['pending', 'approved', 'rejected', 'expired', 'cancelled'],
+      inboxStateValues: ['open', 'acknowledged', 'resolved', 'dismissed', 'expired'],
+    })
   })
 })
-

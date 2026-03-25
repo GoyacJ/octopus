@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
+import RunLifecycleDemo from '@/components/RunLifecycleDemo.vue'
 import RuntimeOverview from '@/components/RuntimeOverview.vue'
 import { useShellStore } from '@/stores/useShellStore'
 
@@ -41,7 +42,7 @@ const switchLocale = () => {
         </div>
       </div>
     </div>
+    <RunLifecycleDemo />
     <RuntimeOverview />
   </section>
 </template>
-

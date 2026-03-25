@@ -25,6 +25,12 @@ pub struct ApprovalResolutionRequest {
     pub reviewed_by: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalDecision {
+    Approved,
+    Rejected,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ApprovalState {
@@ -139,6 +145,8 @@ pub enum RuntimeError {
     NotFound { kind: &'static str, id: String },
     #[error("run {run_id} is in invalid state: {reason}")]
     InvalidState { run_id: String, reason: String },
+    #[error("invalid approval decision: {decision}")]
+    InvalidDecision { decision: String },
 }
 
 impl InMemoryRuntimeService {
@@ -200,17 +208,22 @@ impl InMemoryRuntimeService {
             ));
         } else {
             run.status = RunStatus::Completed;
-            artifact = Some(build_artifact(
+            let built_artifact = build_artifact(
                 &run.id,
                 &run.project_id,
                 &run.title,
                 request.description.as_deref(),
+            );
+            audit.push(audit_entry(
+                "artifact.created",
+                &request.requested_by,
+                &built_artifact.id,
             ));
+            artifact = Some(built_artifact);
             trace.push(trace_event(
                 "RunStateChanged",
                 format!("Run {} completed without approval", run.id),
             ));
-            audit.push(audit_entry("artifact.created", &request.requested_by, &run.id));
         }
 
         let response = RunDetailResponse {
@@ -249,37 +262,22 @@ impl InMemoryRuntimeService {
         approval_id: &str,
         request: ApprovalResolutionRequest,
     ) -> Result<RunDetailResponse, RuntimeError> {
+        let decision = ApprovalDecision::try_from(request.decision.as_str())?;
         let mut state = self.state.lock().expect("runtime state should lock");
-        let decision = request.decision.to_lowercase();
-        let (run_id, approval_id, next_status) = {
+        let (run_id, resolved_approval_id) = {
             let approval = state
                 .approvals
-                .get_mut(approval_id)
+                .get(approval_id)
                 .ok_or_else(|| RuntimeError::NotFound {
                     kind: "approval",
                     id: approval_id.to_string(),
                 })?;
 
-            approval.reviewed_by = Some(request.reviewed_by.clone());
-            approval.state = if decision == "approved" {
-                ApprovalState::Approved
-            } else {
-                ApprovalState::Rejected
-            };
-
-            (
-                approval.run_id.clone(),
-                approval.id.clone(),
-                if decision == "approved" {
-                    RunStatus::Paused
-                } else {
-                    RunStatus::Terminated
-                },
-            )
+            (approval.run_id.clone(), approval.id.clone())
         };
 
         {
-            let run = state.runs.get_mut(&run_id).ok_or_else(|| RuntimeError::NotFound {
+            let run = state.runs.get(&run_id).ok_or_else(|| RuntimeError::NotFound {
                 kind: "run",
                 id: run_id.clone(),
             })?;
@@ -291,7 +289,28 @@ impl InMemoryRuntimeService {
                 });
             }
 
-            run.status = next_status;
+        }
+
+        {
+            let approval = state
+                .approvals
+                .get_mut(approval_id)
+                .ok_or_else(|| RuntimeError::NotFound {
+                    kind: "approval",
+                    id: approval_id.to_string(),
+                })?;
+
+            approval.reviewed_by = Some(request.reviewed_by.clone());
+            approval.state = decision.into();
+        }
+
+        {
+            let run = state.runs.get_mut(&run_id).ok_or_else(|| RuntimeError::NotFound {
+                kind: "run",
+                id: run_id.clone(),
+            })?;
+
+            run.status = decision.next_status();
             run.updated_at = now_iso();
         }
 
@@ -299,13 +318,13 @@ impl InMemoryRuntimeService {
             inbox_item.state = InboxState::Resolved;
         }
 
-        if next_status == RunStatus::Paused {
+        if decision == ApprovalDecision::Approved {
             push_trace(
                 &mut state,
                 &run_id,
                 trace_event(
                     "ApprovalResolved",
-                    format!("Approval {} approved by {}", approval_id, request.reviewed_by),
+                    format!("Approval {} approved by {}", resolved_approval_id, request.reviewed_by),
                 ),
             );
             push_trace(
@@ -319,7 +338,7 @@ impl InMemoryRuntimeService {
             push_audit(
                 &mut state,
                 &run_id,
-                audit_entry("approval.approved", &request.reviewed_by, &approval_id),
+                audit_entry("approval.approved", &request.reviewed_by, &resolved_approval_id),
             );
         } else {
             push_trace(
@@ -327,7 +346,7 @@ impl InMemoryRuntimeService {
                 &run_id,
                 trace_event(
                     "ApprovalResolved",
-                    format!("Approval {} rejected by {}", approval_id, request.reviewed_by),
+                    format!("Approval {} rejected by {}", resolved_approval_id, request.reviewed_by),
                 ),
             );
             push_trace(
@@ -341,7 +360,7 @@ impl InMemoryRuntimeService {
             push_audit(
                 &mut state,
                 &run_id,
-                audit_entry("approval.rejected", &request.reviewed_by, &approval_id),
+                audit_entry("approval.rejected", &request.reviewed_by, &resolved_approval_id),
             );
         }
 
@@ -383,7 +402,7 @@ impl InMemoryRuntimeService {
         );
 
         let artifact = build_artifact(run_id, &project_id, &title, Some("Generated after explicit resume"));
-        state.artifacts.insert(run_id.to_string(), artifact);
+        store_artifact_and_audit(&mut state, artifact, &requested_by, run_id);
 
         {
             let run = state.runs.get_mut(run_id).ok_or_else(|| RuntimeError::NotFound {
@@ -450,6 +469,17 @@ fn build_artifact(run_id: &str, project_id: &str, title: &str, description: Opti
     }
 }
 
+fn store_artifact_and_audit(
+    state: &mut RuntimeState,
+    artifact: ArtifactRecord,
+    actor: &str,
+    run_id: &str,
+) {
+    let artifact_id = artifact.id.clone();
+    state.artifacts.insert(run_id.to_string(), artifact);
+    push_audit(state, run_id, audit_entry("artifact.created", actor, &artifact_id));
+}
+
 fn trace_event(name: &str, message: String) -> TraceEvent {
     TraceEvent {
         name: name.to_string(),
@@ -477,4 +507,36 @@ fn push_audit(state: &mut RuntimeState, run_id: &str, entry: AuditEntry) {
 
 fn now_iso() -> String {
     Utc::now().to_rfc3339()
+}
+
+impl ApprovalDecision {
+    fn next_status(self) -> RunStatus {
+        match self {
+            Self::Approved => RunStatus::Paused,
+            Self::Rejected => RunStatus::Terminated,
+        }
+    }
+}
+
+impl TryFrom<&str> for ApprovalDecision {
+    type Error = RuntimeError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value.to_lowercase().as_str() {
+            "approved" => Ok(Self::Approved),
+            "rejected" => Ok(Self::Rejected),
+            _ => Err(RuntimeError::InvalidDecision {
+                decision: value.to_string(),
+            }),
+        }
+    }
+}
+
+impl From<ApprovalDecision> for ApprovalState {
+    fn from(value: ApprovalDecision) -> Self {
+        match value {
+            ApprovalDecision::Approved => Self::Approved,
+            ApprovalDecision::Rejected => Self::Rejected,
+        }
+    }
 }
