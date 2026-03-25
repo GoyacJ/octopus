@@ -1,5 +1,0 @@
-export { default as UiAppShell } from './components/UiAppShell.vue'
-export { default as UiStatusBadge } from './components/UiStatusBadge.vue'
-export { default as UiStatTile } from './components/UiStatTile.vue'
-export { default as UiSurfaceCard } from './components/UiSurfaceCard.vue'
-export type { ShellNavigationItem } from './types'
