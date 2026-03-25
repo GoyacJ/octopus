@@ -22,6 +22,7 @@ Repository-wide instructions for Codex and compatible coding agents.
 - Do not restore deleted legacy doc trees or cite missing paths as if they still govern the repository.
 - Never describe target-state architecture, repo layout, or runtime capabilities as implemented reality unless the tracked tree proves they exist.
 - Code identifiers, schema fields, config keys, and code comments should be in English. Repository-level docs should remain in Chinese unless a file already uses another convention.
+- For frontend UI polishing or page redesign requests, follow the AI frontend design prompt template in `docs/ENGINEERING_STANDARD.md`; treat Apple and Google as aesthetic references only, not direct copy targets.
 - Never overwrite or revert unrelated user changes.
 
 ## Required Sync

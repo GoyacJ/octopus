@@ -1,6 +1,6 @@
 # octopus VibeCoding 执行基线
 
-更新时间：2026-03-25
+更新时间：2026-03-26
 文档状态：Draft
 文档定位：仓库级研发流程基线
 关联文档：`README.md`、`AGENTS.md`、`docs/PRD.md`、`docs/SAD.md`、`docs/CONTRACTS.md`、`docs/ENGINEERING_STANDARD.md`、`docs/adr/README.md`
@@ -69,6 +69,7 @@ AI 默认只允许：
 1. 在已批准目录中增量实现。
 2. 依据现有契约和文档补代码、补测试、补脚手架。
 3. 做局部重构与文档同步。
+4. 在前端页面优化或界面生成任务中，默认遵循 `docs/ENGINEERING_STANDARD.md` 中的 AI 前端设计提示模板，并以现有 design tokens、主题、i18n 和组件约束为准。
 
 AI 默认不允许：
 
