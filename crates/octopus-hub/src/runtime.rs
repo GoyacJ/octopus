@@ -1,15 +1,19 @@
 use std::{
     collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
-use chrono::Utc;
+use chrono::{Duration, Utc};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 use crate::contracts::{
-    ApprovalType, KnowledgeStatus, RunStatus, RunType, TriggerSource, TrustLevel,
+    ApprovalType, KnowledgeStatus, RunStatus, RunType, SandboxTier, TriggerSource, TrustLevel,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -341,20 +345,117 @@ pub struct KnowledgePromotionResponse {
     pub asset: KnowledgeAssetRecord,
 }
 
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
-struct KnowledgeLineageRecord {
-    candidate_id: String,
-    asset_id: String,
-    run_id: String,
-    artifact_id: String,
-    occurred_at: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunListResponse {
+    pub items: Vec<RunRecord>,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum RunSource {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InboxListResponse {
+    pub items: Vec<InboxItemRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeEventEnvelope {
+    pub sequence: u64,
+    pub topic: String,
+    pub occurred_at: String,
+    pub run_id: Option<String>,
+    pub workspace_id: Option<String>,
+    pub automation_id: Option<String>,
+    pub trigger_id: Option<String>,
+    pub candidate_id: Option<String>,
+    pub asset_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnowledgeLineageRecord {
+    pub candidate_id: String,
+    pub asset_id: String,
+    pub run_id: String,
+    pub artifact_id: String,
+    pub occurred_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnvironmentLeaseRecord {
+    pub id: String,
+    pub run_id: String,
+    pub sandbox_tier: SandboxTier,
+    pub state: String,
+    pub expiry_at: String,
+    pub resume_token: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+pub enum RunSource {
     Task,
     Trigger(TriggerSource),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RuntimeSnapshot {
+    pub runs: HashMap<String, RunRecord>,
+    pub run_workspaces: HashMap<String, String>,
+    pub run_sources: HashMap<String, RunSource>,
+    pub environment_leases: HashMap<String, EnvironmentLeaseRecord>,
+    pub artifacts: HashMap<String, ArtifactRecord>,
+    pub approvals: HashMap<String, ApprovalRequestRecord>,
+    pub inbox_items: HashMap<String, InboxItemRecord>,
+    pub traces: HashMap<String, Vec<TraceEvent>>,
+    pub audits: HashMap<String, Vec<AuditEntry>>,
+    pub automations: HashMap<String, AutomationRecord>,
+    pub triggers: HashMap<String, TriggerRecord>,
+    pub trigger_deliveries: HashMap<String, TriggerDeliveryRecord>,
+    pub delivery_dedupe_index: HashMap<String, String>,
+    pub latest_delivery_by_trigger: HashMap<String, String>,
+    pub knowledge_spaces: HashMap<String, KnowledgeSpaceRecord>,
+    pub knowledge_candidates: HashMap<String, KnowledgeCandidateRecord>,
+    pub candidate_index_by_run_and_space: HashMap<String, String>,
+    pub knowledge_assets: HashMap<String, KnowledgeAssetRecord>,
+    pub knowledge_lineage: Vec<KnowledgeLineageRecord>,
+}
+
+impl Default for RuntimeSnapshot {
+    fn default() -> Self {
+        let default_space = default_knowledge_space();
+        let mut knowledge_spaces = HashMap::new();
+        knowledge_spaces.insert(default_space.id.clone(), default_space);
+
+        Self {
+            runs: HashMap::new(),
+            run_workspaces: HashMap::new(),
+            run_sources: HashMap::new(),
+            environment_leases: HashMap::new(),
+            artifacts: HashMap::new(),
+            approvals: HashMap::new(),
+            inbox_items: HashMap::new(),
+            traces: HashMap::new(),
+            audits: HashMap::new(),
+            automations: HashMap::new(),
+            triggers: HashMap::new(),
+            trigger_deliveries: HashMap::new(),
+            delivery_dedupe_index: HashMap::new(),
+            latest_delivery_by_trigger: HashMap::new(),
+            knowledge_spaces,
+            knowledge_candidates: HashMap::new(),
+            candidate_index_by_run_and_space: HashMap::new(),
+            knowledge_assets: HashMap::new(),
+            knowledge_lineage: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewRuntimeEvent {
+    topic: String,
+    occurred_at: String,
+    run_id: Option<String>,
+    workspace_id: Option<String>,
+    automation_id: Option<String>,
+    trigger_id: Option<String>,
+    candidate_id: Option<String>,
+    asset_id: Option<String>,
 }
 
 struct RunStartRequest {
@@ -376,58 +477,40 @@ enum AuditTarget {
     Explicit(String),
 }
 
-struct RuntimeState {
-    runs: HashMap<String, RunRecord>,
-    run_sources: HashMap<String, RunSource>,
-    artifacts: HashMap<String, ArtifactRecord>,
-    approvals: HashMap<String, ApprovalRequestRecord>,
-    inbox_items: HashMap<String, InboxItemRecord>,
-    traces: HashMap<String, Vec<TraceEvent>>,
-    audits: HashMap<String, Vec<AuditEntry>>,
-    automations: HashMap<String, AutomationRecord>,
-    triggers: HashMap<String, TriggerRecord>,
-    trigger_deliveries: HashMap<String, TriggerDeliveryRecord>,
-    delivery_dedupe_index: HashMap<String, String>,
-    latest_delivery_by_trigger: HashMap<String, String>,
-    knowledge_spaces: HashMap<String, KnowledgeSpaceRecord>,
-    knowledge_candidates: HashMap<String, KnowledgeCandidateRecord>,
-    candidate_index_by_run_and_space: HashMap<String, String>,
-    knowledge_assets: HashMap<String, KnowledgeAssetRecord>,
-    knowledge_lineage: Vec<KnowledgeLineageRecord>,
+struct DeliveryContext {
+    automation_id: String,
+    workspace_id: String,
+    trigger_id: String,
+    mutated: bool,
 }
 
-impl Default for RuntimeState {
-    fn default() -> Self {
-        let default_space = default_knowledge_space();
-        let mut knowledge_spaces = HashMap::new();
-        knowledge_spaces.insert(default_space.id.clone(), default_space);
-
-        Self {
-            runs: HashMap::new(),
-            run_sources: HashMap::new(),
-            artifacts: HashMap::new(),
-            approvals: HashMap::new(),
-            inbox_items: HashMap::new(),
-            traces: HashMap::new(),
-            audits: HashMap::new(),
-            automations: HashMap::new(),
-            triggers: HashMap::new(),
-            trigger_deliveries: HashMap::new(),
-            delivery_dedupe_index: HashMap::new(),
-            latest_delivery_by_trigger: HashMap::new(),
-            knowledge_spaces,
-            knowledge_candidates: HashMap::new(),
-            candidate_index_by_run_and_space: HashMap::new(),
-            knowledge_assets: HashMap::new(),
-            knowledge_lineage: Vec::new(),
-        }
-    }
+pub trait RuntimeRepository: Send + Sync {
+    fn load_snapshot(&self) -> Result<RuntimeSnapshot, RuntimeError>;
+    fn persist(
+        &self,
+        snapshot: &RuntimeSnapshot,
+        events: &[NewRuntimeEvent],
+    ) -> Result<Vec<RuntimeEventEnvelope>, RuntimeError>;
+    fn list_events(&self, after_sequence: Option<u64>) -> Result<Vec<RuntimeEventEnvelope>, RuntimeError>;
 }
 
-#[derive(Clone, Default)]
-pub struct InMemoryRuntimeService {
-    state: Arc<Mutex<RuntimeState>>,
+#[derive(Default)]
+pub struct InMemoryRuntimeRepository {
+    snapshot: Mutex<RuntimeSnapshot>,
+    events: Mutex<Vec<RuntimeEventEnvelope>>,
 }
+
+pub struct SqliteRuntimeRepository {
+    database_path: PathBuf,
+}
+
+#[derive(Clone)]
+pub struct RuntimeService {
+    repository: Arc<dyn RuntimeRepository>,
+    event_sender: broadcast::Sender<RuntimeEventEnvelope>,
+}
+
+pub type InMemoryRuntimeService = RuntimeService;
 
 #[derive(Debug, Error)]
 pub enum RuntimeError {
@@ -443,16 +526,47 @@ pub enum RuntimeError {
     InvalidDecision { decision: String },
     #[error("invalid request: {reason}")]
     InvalidRequest { reason: String },
+    #[error("repository error: {reason}")]
+    Repository { reason: String },
 }
 
-impl InMemoryRuntimeService {
-    pub fn submit_task(&self, request: TaskSubmissionRequest) -> RunDetailResponse {
-        let mut state = self.state.lock().expect("runtime state should lock");
+impl Default for RuntimeService {
+    fn default() -> Self {
+        Self::in_memory()
+    }
+}
 
-        start_run(
-            &mut state,
+impl RuntimeService {
+    pub fn in_memory() -> Self {
+        Self::from_repository(Arc::new(InMemoryRuntimeRepository::default()))
+    }
+
+    pub fn sqlite(path: impl AsRef<Path>) -> Result<Self, RuntimeError> {
+        Ok(Self::from_repository(Arc::new(SqliteRuntimeRepository::new(path)?)))
+    }
+
+    pub fn sqlite_default_path() -> PathBuf {
+        PathBuf::from("target/octopus-runtime.sqlite3")
+    }
+
+    pub fn sqlite_default() -> Result<Self, RuntimeError> {
+        Self::sqlite(Self::sqlite_default_path())
+    }
+
+    pub fn subscribe_events(&self) -> broadcast::Receiver<RuntimeEventEnvelope> {
+        self.event_sender.subscribe()
+    }
+
+    pub fn list_events(&self, after_sequence: Option<u64>) -> Result<Vec<RuntimeEventEnvelope>, RuntimeError> {
+        self.repository.list_events(after_sequence)
+    }
+
+    pub fn submit_task(&self, request: TaskSubmissionRequest) -> RunDetailResponse {
+        let mut snapshot = self.load_snapshot();
+        let response = start_run(
+            &mut snapshot,
             RunStartRequest {
-                workspace_id: request.workspace_id,
+                workspace_id: request.workspace_id.clone(),
                 project_id: request.project_id.clone(),
                 run_type: RunType::Task,
                 idempotency_key: format!("task:{}", Uuid::new_v4()),
@@ -464,7 +578,16 @@ impl InMemoryRuntimeService {
                 initial_audit_target: AuditTarget::Run,
                 run_source: RunSource::Task,
             },
-        )
+        );
+
+        self.persist_snapshot(
+            &snapshot,
+            events_for_run_detail(
+                &response,
+                snapshot.run_workspaces.get(&response.run.id).cloned(),
+            ),
+        );
+        response
     }
 
     pub fn create_automation(
@@ -473,14 +596,14 @@ impl InMemoryRuntimeService {
     ) -> Result<AutomationDetailResponse, RuntimeError> {
         validate_mcp_binding(request.trigger_source, request.mcp_binding.as_ref())?;
 
-        let mut state = self.state.lock().expect("runtime state should lock");
+        let mut snapshot = self.load_snapshot();
         let automation_id = Uuid::new_v4().to_string();
         let trigger_id = Uuid::new_v4().to_string();
         let now = now_iso();
 
         let automation = AutomationRecord {
             id: automation_id.clone(),
-            workspace_id: request.workspace_id,
+            workspace_id: request.workspace_id.clone(),
             project_id: request.project_id,
             name: request.name,
             trigger_ids: vec![trigger_id.clone()],
@@ -501,23 +624,37 @@ impl InMemoryRuntimeService {
             mcp_binding: request.mcp_binding,
         };
 
-        state.automations.insert(automation_id.clone(), automation);
-        state.triggers.insert(trigger_id, trigger);
+        snapshot.automations.insert(automation_id.clone(), automation);
+        snapshot.triggers.insert(trigger_id.clone(), trigger);
 
-        hydrate_automation_detail(&state, &automation_id).ok_or_else(|| RuntimeError::NotFound {
+        let detail = hydrate_automation_detail(&snapshot, &automation_id).ok_or_else(|| RuntimeError::NotFound {
             kind: "automation",
-            id: automation_id,
-        })
+            id: automation_id.clone(),
+        })?;
+        self.persist_snapshot(
+            &snapshot,
+            vec![new_runtime_event(
+                "automation.updated",
+                None,
+                Some(request.workspace_id),
+                Some(automation_id),
+                Some(trigger_id),
+                None,
+                None,
+            )],
+        );
+
+        Ok(detail)
     }
 
     pub fn list_automations(&self) -> Vec<AutomationDetailResponse> {
-        let state = self.state.lock().expect("runtime state should lock");
-        let mut automation_ids = state.automations.keys().cloned().collect::<Vec<_>>();
+        let snapshot = self.load_snapshot();
+        let mut automation_ids = snapshot.automations.keys().cloned().collect::<Vec<_>>();
         automation_ids.sort();
 
         automation_ids
             .into_iter()
-            .filter_map(|automation_id| hydrate_automation_detail(&state, &automation_id))
+            .filter_map(|automation_id| hydrate_automation_detail(&snapshot, &automation_id))
             .collect()
     }
 
@@ -526,40 +663,93 @@ impl InMemoryRuntimeService {
         automation_id: &str,
         request: AutomationStateUpdateRequest,
     ) -> Result<AutomationDetailResponse, RuntimeError> {
-        let mut state = self.state.lock().expect("runtime state should lock");
-        let automation = state
-            .automations
-            .get_mut(automation_id)
-            .ok_or_else(|| RuntimeError::NotFound {
-                kind: "automation",
-                id: automation_id.to_string(),
-            })?;
+        let mut snapshot = self.load_snapshot();
+        let workspace_id = {
+            let automation = snapshot
+                .automations
+                .get_mut(automation_id)
+                .ok_or_else(|| RuntimeError::NotFound {
+                    kind: "automation",
+                    id: automation_id.to_string(),
+                })?;
 
-        automation.state = request.state;
-        automation.updated_at = now_iso();
+            automation.state = request.state;
+            automation.updated_at = now_iso();
+            automation.workspace_id.clone()
+        };
 
-        sync_trigger_states(&mut state, automation_id, request.state);
-
-        hydrate_automation_detail(&state, automation_id).ok_or_else(|| RuntimeError::NotFound {
+        sync_trigger_states(&mut snapshot, automation_id, request.state);
+        let detail = hydrate_automation_detail(&snapshot, automation_id).ok_or_else(|| RuntimeError::NotFound {
             kind: "automation",
             id: automation_id.to_string(),
-        })
+        })?;
+
+        self.persist_snapshot(
+            &snapshot,
+            vec![new_runtime_event(
+                "automation.updated",
+                None,
+                Some(workspace_id),
+                Some(automation_id.to_string()),
+                Some(detail.trigger.id.clone()),
+                None,
+                None,
+            )],
+        );
+
+        Ok(detail)
     }
 
     pub fn deliver_trigger(
         &self,
         request: TriggerDeliveryRequest,
     ) -> Result<TriggerDeliveryResponse, RuntimeError> {
-        let mut state = self.state.lock().expect("runtime state should lock");
-        deliver_trigger_inner(&mut state, request)
+        let mut snapshot = self.load_snapshot();
+        let (response, context) = match deliver_trigger_inner(&mut snapshot, request) {
+            Ok(value) => value,
+            Err(error) => {
+                self.persist_snapshot(&snapshot, Vec::new());
+                return Err(error);
+            }
+        };
+
+        if context.mutated {
+            let mut events = vec![
+                new_runtime_event(
+                    "trigger.delivery_updated",
+                    response.delivery.run_id.clone(),
+                    Some(context.workspace_id.clone()),
+                    Some(context.automation_id.clone()),
+                    Some(context.trigger_id),
+                    None,
+                    None,
+                ),
+                new_runtime_event(
+                    "automation.updated",
+                    response.delivery.run_id.clone(),
+                    Some(context.workspace_id.clone()),
+                    Some(context.automation_id),
+                    None,
+                    None,
+                    None,
+                ),
+            ];
+
+            if let Some(run) = response.run.as_ref() {
+                events.extend(events_for_run_detail(run, Some(context.workspace_id)));
+            }
+            self.persist_snapshot(&snapshot, events);
+        }
+
+        Ok(response)
     }
 
     pub fn deliver_mcp_event(
         &self,
         request: McpEventDeliveryRequest,
     ) -> Result<McpEventDeliveryResponse, RuntimeError> {
-        let mut state = self.state.lock().expect("runtime state should lock");
-        let mut trigger_ids = state
+        let mut snapshot = self.load_snapshot();
+        let mut trigger_ids = snapshot
             .triggers
             .values()
             .filter(|trigger| {
@@ -585,9 +775,11 @@ impl InMemoryRuntimeService {
         }
 
         let mut items = Vec::with_capacity(trigger_ids.len());
+        let mut events = Vec::new();
+
         for trigger_id in trigger_ids {
-            items.push(deliver_trigger_inner(
-                &mut state,
+            let (response, context) = match deliver_trigger_inner(
+                &mut snapshot,
                 TriggerDeliveryRequest {
                     trigger_id,
                     dedupe_key: request.dedupe_key.clone(),
@@ -595,20 +787,53 @@ impl InMemoryRuntimeService {
                     title: request.title.clone(),
                     description: request.description.clone(),
                 },
-            )?);
+            ) {
+                Ok(value) => value,
+                Err(error) => {
+                    self.persist_snapshot(&snapshot, events);
+                    return Err(error);
+                }
+            };
+
+            if context.mutated {
+                events.push(new_runtime_event(
+                    "trigger.delivery_updated",
+                    response.delivery.run_id.clone(),
+                    Some(context.workspace_id.clone()),
+                    Some(context.automation_id.clone()),
+                    Some(context.trigger_id),
+                    None,
+                    None,
+                ));
+                events.push(new_runtime_event(
+                    "automation.updated",
+                    response.delivery.run_id.clone(),
+                    Some(context.workspace_id.clone()),
+                    Some(context.automation_id),
+                    None,
+                    None,
+                    None,
+                ));
+                if let Some(run) = response.run.as_ref() {
+                    events.extend(events_for_run_detail(run, Some(context.workspace_id)));
+                }
+            }
+
+            items.push(response);
         }
 
+        self.persist_snapshot(&snapshot, events);
         Ok(McpEventDeliveryResponse { items })
     }
 
     pub fn list_knowledge_spaces(&self) -> Vec<KnowledgeSpaceDetailResponse> {
-        let state = self.state.lock().expect("runtime state should lock");
-        let mut space_ids = state.knowledge_spaces.keys().cloned().collect::<Vec<_>>();
+        let snapshot = self.load_snapshot();
+        let mut space_ids = snapshot.knowledge_spaces.keys().cloned().collect::<Vec<_>>();
         space_ids.sort();
 
         space_ids
             .into_iter()
-            .filter_map(|space_id| hydrate_knowledge_space_detail(&state, &space_id))
+            .filter_map(|space_id| hydrate_knowledge_space_detail(&snapshot, &space_id))
             .collect()
     }
 
@@ -627,11 +852,11 @@ impl InMemoryRuntimeService {
             });
         }
 
-        let mut state = self.state.lock().expect("runtime state should lock");
+        let mut snapshot = self.load_snapshot();
         let now = now_iso();
         let space = KnowledgeSpaceRecord {
             id: Uuid::new_v4().to_string(),
-            workspace_id: request.workspace_id,
+            workspace_id: request.workspace_id.clone(),
             name: request.name,
             owner_refs: request.owner_refs,
             scope: request.scope,
@@ -640,97 +865,48 @@ impl InMemoryRuntimeService {
             updated_at: now,
         };
         let space_id = space.id.clone();
-        state.knowledge_spaces.insert(space_id.clone(), space);
+        snapshot.knowledge_spaces.insert(space_id.clone(), space);
 
-        hydrate_knowledge_space_detail(&state, &space_id).ok_or_else(|| RuntimeError::NotFound {
+        let detail = hydrate_knowledge_space_detail(&snapshot, &space_id).ok_or_else(|| RuntimeError::NotFound {
             kind: "knowledge_space",
-            id: space_id,
-        })
+            id: space_id.clone(),
+        })?;
+
+        self.persist_snapshot(&snapshot, Vec::new());
+        Ok(detail)
     }
 
     pub fn create_candidate_from_run(
         &self,
         request: KnowledgeCandidateCreateRequest,
     ) -> Result<KnowledgeCandidateRecord, RuntimeError> {
-        let mut state = self.state.lock().expect("runtime state should lock");
-        if !state.knowledge_spaces.contains_key(&request.knowledge_space_id) {
-            return Err(RuntimeError::NotFound {
-                kind: "knowledge_space",
-                id: request.knowledge_space_id,
-            });
-        }
-
-        let run = state
-            .runs
-            .get(&request.run_id)
-            .cloned()
+        let mut snapshot = self.load_snapshot();
+        let workspace_id = snapshot
+            .knowledge_spaces
+            .get(&request.knowledge_space_id)
             .ok_or_else(|| RuntimeError::NotFound {
-                kind: "run",
-                id: request.run_id.clone(),
-            })?;
-        let artifact = state
-            .artifacts
-            .get(&request.run_id)
-            .cloned()
-            .ok_or_else(|| RuntimeError::InvalidState {
-                kind: "run",
-                id: request.run_id.clone(),
-                reason: "knowledge candidates require a completed artifact".into(),
-            })?;
-        let candidate_index = format!("{}:{}", request.knowledge_space_id, request.run_id);
-        if let Some(candidate_id) = state.candidate_index_by_run_and_space.get(&candidate_index) {
-            return state
-                .knowledge_candidates
-                .get(candidate_id)
-                .cloned()
-                .ok_or_else(|| RuntimeError::NotFound {
-                    kind: "knowledge_candidate",
-                    id: candidate_id.clone(),
-                });
+                kind: "knowledge_space",
+                id: request.knowledge_space_id.clone(),
+            })?
+            .workspace_id
+            .clone();
+
+        let (candidate, mutated) = create_candidate_from_run_inner(&mut snapshot, request)?;
+
+        if mutated {
+            self.persist_snapshot(
+                &snapshot,
+                vec![new_runtime_event(
+                    "knowledge.candidate_updated",
+                    Some(candidate.run_id.clone()),
+                    Some(workspace_id),
+                    None,
+                    None,
+                    Some(candidate.id.clone()),
+                    None,
+                )],
+            );
         }
-
-        let trust_level = match state.run_sources.get(&run.id).copied() {
-            Some(RunSource::Trigger(TriggerSource::McpEvent)) => TrustLevel::Low,
-            _ => TrustLevel::High,
-        };
-        let candidate = KnowledgeCandidateRecord {
-            id: Uuid::new_v4().to_string(),
-            knowledge_space_id: request.knowledge_space_id.clone(),
-            run_id: run.id.clone(),
-            artifact_id: artifact.id.clone(),
-            title: artifact.title.clone(),
-            summary: artifact.content_ref.clone(),
-            status: KnowledgeStatus::Candidate,
-            trust_level,
-            source_ref: run.id.clone(),
-            created_by: request.created_by.clone(),
-            created_at: now_iso(),
-            promoted_asset_id: None,
-        };
-
-        state
-            .candidate_index_by_run_and_space
-            .insert(candidate_index, candidate.id.clone());
-        state
-            .knowledge_candidates
-            .insert(candidate.id.clone(), candidate.clone());
-
-        push_trace(
-            &mut state,
-            &run.id,
-            trace_event(
-                "KnowledgeCandidateCreated",
-                format!(
-                    "Candidate {} created in {}",
-                    candidate.id, candidate.knowledge_space_id
-                ),
-            ),
-        );
-        push_audit(
-            &mut state,
-            &run.id,
-            audit_entry("knowledge.candidate.created", &request.created_by, &candidate.id),
-        );
 
         Ok(candidate)
     }
@@ -740,115 +916,59 @@ impl InMemoryRuntimeService {
         candidate_id: &str,
         request: KnowledgePromotionRequest,
     ) -> Result<KnowledgePromotionResponse, RuntimeError> {
-        let mut state = self.state.lock().expect("runtime state should lock");
-        let candidate = state
+        let mut snapshot = self.load_snapshot();
+        let workspace_id = snapshot
             .knowledge_candidates
             .get(candidate_id)
-            .cloned()
+            .and_then(|candidate| snapshot.knowledge_spaces.get(&candidate.knowledge_space_id))
             .ok_or_else(|| RuntimeError::NotFound {
                 kind: "knowledge_candidate",
                 id: candidate_id.to_string(),
-            })?;
-        let space = state
-            .knowledge_spaces
-            .get(&candidate.knowledge_space_id)
-            .cloned()
-            .ok_or_else(|| RuntimeError::NotFound {
-                kind: "knowledge_space",
-                id: candidate.knowledge_space_id.clone(),
-            })?;
+            })?
+            .workspace_id
+            .clone();
 
-        if !space.owner_refs.iter().any(|owner| owner == &request.promoted_by) {
-            return Err(RuntimeError::InvalidState {
-                kind: "knowledge_space",
-                id: space.id,
-                reason: format!(
-                    "{} is not allowed to promote candidates in this space",
-                    request.promoted_by
+        let response = promote_candidate_inner(&mut snapshot, candidate_id, request)?;
+        self.persist_snapshot(
+            &snapshot,
+            vec![
+                new_runtime_event(
+                    "knowledge.candidate_updated",
+                    Some(response.candidate.run_id.clone()),
+                    Some(workspace_id.clone()),
+                    None,
+                    None,
+                    Some(response.candidate.id.clone()),
+                    None,
                 ),
-            });
-        }
-
-        if candidate.status != KnowledgeStatus::Candidate {
-            return Err(RuntimeError::InvalidState {
-                kind: "knowledge_candidate",
-                id: candidate.id,
-                reason: "candidate can only be promoted once".into(),
-            });
-        }
-
-        let asset = KnowledgeAssetRecord {
-            id: Uuid::new_v4().to_string(),
-            knowledge_space_id: candidate.knowledge_space_id.clone(),
-            title: candidate.title.clone(),
-            summary: candidate.summary.clone(),
-            layer: "shared".into(),
-            status: KnowledgeStatus::VerifiedShared,
-            trust_level: candidate.trust_level,
-            source_ref: candidate.id.clone(),
-            created_at: now_iso(),
-        };
-
-        let updated_candidate = {
-            let candidate_entry = state
-                .knowledge_candidates
-                .get_mut(candidate_id)
-                .ok_or_else(|| RuntimeError::NotFound {
-                    kind: "knowledge_candidate",
-                    id: candidate_id.to_string(),
-                })?;
-            candidate_entry.status = KnowledgeStatus::VerifiedShared;
-            candidate_entry.promoted_asset_id = Some(asset.id.clone());
-            candidate_entry.clone()
-        };
-
-        state
-            .knowledge_assets
-            .insert(asset.id.clone(), asset.clone());
-        state.knowledge_lineage.push(KnowledgeLineageRecord {
-            candidate_id: updated_candidate.id.clone(),
-            asset_id: asset.id.clone(),
-            run_id: updated_candidate.run_id.clone(),
-            artifact_id: updated_candidate.artifact_id.clone(),
-            occurred_at: now_iso(),
-        });
-
-        push_trace(
-            &mut state,
-            &updated_candidate.run_id,
-            trace_event(
-                "KnowledgeCandidatePromoted",
-                format!(
-                    "Candidate {} promoted to asset {}",
-                    updated_candidate.id, asset.id
+                new_runtime_event(
+                    "knowledge.asset_updated",
+                    Some(response.candidate.run_id.clone()),
+                    Some(workspace_id),
+                    None,
+                    None,
+                    Some(response.candidate.id.clone()),
+                    Some(response.asset.id.clone()),
                 ),
-            ),
-        );
-        push_audit(
-            &mut state,
-            &updated_candidate.run_id,
-            audit_entry("knowledge.asset.promoted", &request.promoted_by, &asset.id),
+            ],
         );
 
-        Ok(KnowledgePromotionResponse {
-            candidate: updated_candidate,
-            asset,
-        })
+        Ok(response)
     }
 
     pub fn list_knowledge_assets(
         &self,
         knowledge_space_id: &str,
     ) -> Result<KnowledgeAssetListResponse, RuntimeError> {
-        let state = self.state.lock().expect("runtime state should lock");
-        if !state.knowledge_spaces.contains_key(knowledge_space_id) {
+        let snapshot = self.load_snapshot();
+        if !snapshot.knowledge_spaces.contains_key(knowledge_space_id) {
             return Err(RuntimeError::NotFound {
                 kind: "knowledge_space",
                 id: knowledge_space_id.to_string(),
             });
         }
 
-        let mut items = state
+        let mut items = snapshot
             .knowledge_assets
             .values()
             .filter(|asset| asset.knowledge_space_id == knowledge_space_id)
@@ -859,9 +979,46 @@ impl InMemoryRuntimeService {
         Ok(KnowledgeAssetListResponse { items })
     }
 
+    pub fn list_runs(&self, workspace_id: Option<&str>, project_id: Option<&str>) -> Vec<RunRecord> {
+        let snapshot = self.load_snapshot();
+        let mut items = snapshot
+            .runs
+            .values()
+            .filter(|run| {
+                let workspace_matches = workspace_id
+                    .map(|expected| {
+                        snapshot
+                            .run_workspaces
+                            .get(&run.id)
+                            .map(|actual| actual == expected)
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(true);
+                let project_matches = project_id.map(|expected| run.project_id == expected).unwrap_or(true);
+
+                workspace_matches && project_matches
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));
+        items
+    }
+
+    pub fn list_inbox_items(&self, workspace_id: Option<&str>) -> Vec<InboxItemRecord> {
+        let snapshot = self.load_snapshot();
+        let mut items = snapshot
+            .inbox_items
+            .values()
+            .filter(|item| workspace_id.map(|expected| item.workspace_id == expected).unwrap_or(true))
+            .cloned()
+            .collect::<Vec<_>>();
+        items.sort_by(|left, right| left.target_ref.cmp(&right.target_ref));
+        items
+    }
+
     pub fn get_run(&self, run_id: &str) -> Option<RunDetailResponse> {
-        let state = self.state.lock().expect("runtime state should lock");
-        hydrate_response(&state, run_id)
+        let snapshot = self.load_snapshot();
+        hydrate_response(&snapshot, run_id)
     }
 
     pub fn resolve_approval(
@@ -870,188 +1027,310 @@ impl InMemoryRuntimeService {
         request: ApprovalResolutionRequest,
     ) -> Result<RunDetailResponse, RuntimeError> {
         let decision = ApprovalDecision::try_from(request.decision.as_str())?;
-        let mut state = self.state.lock().expect("runtime state should lock");
-        let (run_id, resolved_approval_id) = {
-            let approval = state
-                .approvals
-                .get(approval_id)
-                .ok_or_else(|| RuntimeError::NotFound {
-                    kind: "approval",
-                    id: approval_id.to_string(),
-                })?;
+        let mut snapshot = self.load_snapshot();
+        let response = resolve_approval_inner(&mut snapshot, approval_id, request, decision)?;
+        let workspace_id = snapshot.run_workspaces.get(&response.run.id).cloned();
 
-            (approval.run_id.clone(), approval.id.clone())
-        };
+        self.persist_snapshot(
+            &snapshot,
+            {
+                let mut events = events_for_run_detail(&response, workspace_id);
+                events.push(new_runtime_event(
+                    "approval.updated",
+                    Some(response.run.id.clone()),
+                    snapshot.run_workspaces.get(&response.run.id).cloned(),
+                    None,
+                    None,
+                    None,
+                    None,
+                ));
+                events
+            },
+        );
 
-        {
-            let run = state.runs.get(&run_id).ok_or_else(|| RuntimeError::NotFound {
-                kind: "run",
-                id: run_id.clone(),
-            })?;
-
-            if run.status != RunStatus::WaitingApproval {
-                return Err(RuntimeError::InvalidState {
-                    kind: "approval",
-                    id: approval_id.to_string(),
-                    reason: "approval can only be resolved while waiting_approval".into(),
-                });
-            }
-        }
-
-        {
-            let approval = state
-                .approvals
-                .get_mut(approval_id)
-                .ok_or_else(|| RuntimeError::NotFound {
-                    kind: "approval",
-                    id: approval_id.to_string(),
-                })?;
-
-            approval.reviewed_by = Some(request.reviewed_by.clone());
-            approval.state = decision.into();
-        }
-
-        {
-            let run = state.runs.get_mut(&run_id).ok_or_else(|| RuntimeError::NotFound {
-                kind: "run",
-                id: run_id.clone(),
-            })?;
-
-            run.status = decision.next_status();
-            if decision == ApprovalDecision::Rejected {
-                run.checkpoint_token = None;
-            }
-            run.updated_at = now_iso();
-        }
-
-        if let Some(inbox_item) = state.inbox_items.get_mut(&run_id) {
-            inbox_item.state = InboxState::Resolved;
-        }
-
-        if decision == ApprovalDecision::Approved {
-            push_trace(
-                &mut state,
-                &run_id,
-                trace_event(
-                    "ApprovalResolved",
-                    format!(
-                        "Approval {} approved by {}",
-                        resolved_approval_id, request.reviewed_by
-                    ),
-                ),
-            );
-            push_trace(
-                &mut state,
-                &run_id,
-                trace_event(
-                    "RunStateChanged",
-                    format!("Run {} paused and ready to resume", run_id),
-                ),
-            );
-            push_audit(
-                &mut state,
-                &run_id,
-                audit_entry("approval.approved", &request.reviewed_by, &resolved_approval_id),
-            );
-        } else {
-            push_trace(
-                &mut state,
-                &run_id,
-                trace_event(
-                    "ApprovalResolved",
-                    format!(
-                        "Approval {} rejected by {}",
-                        resolved_approval_id, request.reviewed_by
-                    ),
-                ),
-            );
-            push_trace(
-                &mut state,
-                &run_id,
-                trace_event(
-                    "RunStateChanged",
-                    format!("Run {} terminated after rejection", run_id),
-                ),
-            );
-            push_audit(
-                &mut state,
-                &run_id,
-                audit_entry("approval.rejected", &request.reviewed_by, &resolved_approval_id),
-            );
-        }
-
-        hydrate_response(&state, &run_id).ok_or_else(|| RuntimeError::NotFound {
-            kind: "run",
-            id: run_id,
-        })
+        Ok(response)
     }
 
     pub fn resume_run(&self, run_id: &str) -> Result<RunDetailResponse, RuntimeError> {
-        let mut state = self.state.lock().expect("runtime state should lock");
-        let (project_id, title, requested_by) = {
-            let run = state.runs.get_mut(run_id).ok_or_else(|| RuntimeError::NotFound {
-                kind: "run",
-                id: run_id.to_string(),
-            })?;
+        let mut snapshot = self.load_snapshot();
+        let response = resume_run_inner(&mut snapshot, run_id)?;
+        let workspace_id = snapshot.run_workspaces.get(run_id).cloned();
 
-            if run.status != RunStatus::Paused {
-                return Err(RuntimeError::InvalidState {
-                    kind: "run",
-                    id: run.id.clone(),
-                    reason: "resume is only allowed after approval grants a checkpoint".into(),
-                });
-            }
+        self.persist_snapshot(&snapshot, events_for_run_detail(&response, workspace_id));
+        Ok(response)
+    }
 
-            run.status = RunStatus::Running;
-            run.checkpoint_token = None;
-            run.updated_at = now_iso();
+    fn from_repository(repository: Arc<dyn RuntimeRepository>) -> Self {
+        let (event_sender, _) = broadcast::channel(256);
+        Self {
+            repository,
+            event_sender,
+        }
+    }
 
-            (
-                run.project_id.clone(),
-                run.title.clone(),
-                run.requested_by.clone(),
-            )
-        };
+    fn load_snapshot(&self) -> RuntimeSnapshot {
+        self.repository
+            .load_snapshot()
+            .expect("runtime repository should load snapshot")
+    }
 
-        push_trace(
-            &mut state,
-            run_id,
-            trace_event("RunStateChanged", format!("Run {} resumed execution", run_id)),
-        );
+    fn persist_snapshot(&self, snapshot: &RuntimeSnapshot, events: Vec<NewRuntimeEvent>) {
+        let persisted = self
+            .repository
+            .persist(snapshot, &events)
+            .expect("runtime repository should persist snapshot");
 
-        let artifact = build_artifact(
-            run_id,
-            &project_id,
-            &title,
-            Some("Generated after explicit resume"),
-        );
-        store_artifact_and_audit(&mut state, artifact, &requested_by, run_id);
+        for event in persisted {
+            let _ = self.event_sender.send(event);
+        }
+    }
+}
 
-        {
-            let run = state.runs.get_mut(run_id).ok_or_else(|| RuntimeError::NotFound {
-                kind: "run",
-                id: run_id.to_string(),
-            })?;
+impl RuntimeRepository for InMemoryRuntimeRepository {
+    fn load_snapshot(&self) -> Result<RuntimeSnapshot, RuntimeError> {
+        Ok(self
+            .snapshot
+            .lock()
+            .expect("in-memory snapshot should lock")
+            .clone())
+    }
 
-            run.status = RunStatus::Completed;
-            run.updated_at = now_iso();
+    fn persist(
+        &self,
+        snapshot: &RuntimeSnapshot,
+        events: &[NewRuntimeEvent],
+    ) -> Result<Vec<RuntimeEventEnvelope>, RuntimeError> {
+        *self
+            .snapshot
+            .lock()
+            .expect("in-memory snapshot should lock") = snapshot.clone();
+
+        let mut stored = self.events.lock().expect("in-memory events should lock");
+        let mut persisted = Vec::with_capacity(events.len());
+
+        for event in events {
+            let envelope = RuntimeEventEnvelope {
+                sequence: stored.len() as u64 + 1,
+                topic: event.topic.clone(),
+                occurred_at: event.occurred_at.clone(),
+                run_id: event.run_id.clone(),
+                workspace_id: event.workspace_id.clone(),
+                automation_id: event.automation_id.clone(),
+                trigger_id: event.trigger_id.clone(),
+                candidate_id: event.candidate_id.clone(),
+                asset_id: event.asset_id.clone(),
+            };
+            stored.push(envelope.clone());
+            persisted.push(envelope);
         }
 
-        push_trace(
-            &mut state,
-            run_id,
-            trace_event("RunStateChanged", format!("Run {} completed after resume", run_id)),
-        );
-        push_audit(
-            &mut state,
-            run_id,
-            audit_entry("run.resumed", &requested_by, run_id),
-        );
+        Ok(persisted)
+    }
 
-        hydrate_response(&state, run_id).ok_or_else(|| RuntimeError::NotFound {
-            kind: "run",
-            id: run_id.to_string(),
+    fn list_events(&self, after_sequence: Option<u64>) -> Result<Vec<RuntimeEventEnvelope>, RuntimeError> {
+        let stored = self.events.lock().expect("in-memory events should lock");
+        Ok(stored
+            .iter()
+            .filter(|event| after_sequence.map(|after| event.sequence > after).unwrap_or(true))
+            .cloned()
+            .collect())
+    }
+}
+
+impl SqliteRuntimeRepository {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self, RuntimeError> {
+        let database_path = path.as_ref().to_path_buf();
+        if let Some(parent) = database_path.parent() {
+            fs::create_dir_all(parent).map_err(|error| RuntimeError::Repository {
+                reason: error.to_string(),
+            })?;
+        }
+
+        let repository = Self { database_path };
+        repository.initialize()?;
+        Ok(repository)
+    }
+
+    fn initialize(&self) -> Result<(), RuntimeError> {
+        let connection = self.open_connection()?;
+        connection
+            .execute_batch(
+                "
+                CREATE TABLE IF NOT EXISTS runtime_state (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    payload TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS runtime_events (
+                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                    topic TEXT NOT NULL,
+                    occurred_at TEXT NOT NULL,
+                    run_id TEXT,
+                    workspace_id TEXT,
+                    automation_id TEXT,
+                    trigger_id TEXT,
+                    candidate_id TEXT,
+                    asset_id TEXT
+                );
+                ",
+            )
+            .map_err(|error| RuntimeError::Repository {
+                reason: error.to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    fn open_connection(&self) -> Result<Connection, RuntimeError> {
+        Connection::open(&self.database_path).map_err(|error| RuntimeError::Repository {
+            reason: error.to_string(),
         })
+    }
+}
+
+impl RuntimeRepository for SqliteRuntimeRepository {
+    fn load_snapshot(&self) -> Result<RuntimeSnapshot, RuntimeError> {
+        let connection = self.open_connection()?;
+        let payload = connection
+            .query_row(
+                "SELECT payload FROM runtime_state WHERE id = 1",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| RuntimeError::Repository {
+                reason: error.to_string(),
+            })?;
+
+        match payload {
+            Some(value) => serde_json::from_str(&value).map_err(|error| RuntimeError::Repository {
+                reason: error.to_string(),
+            }),
+            None => Ok(RuntimeSnapshot::default()),
+        }
+    }
+
+    fn persist(
+        &self,
+        snapshot: &RuntimeSnapshot,
+        events: &[NewRuntimeEvent],
+    ) -> Result<Vec<RuntimeEventEnvelope>, RuntimeError> {
+        let mut connection = self.open_connection()?;
+        let transaction = connection.transaction().map_err(|error| RuntimeError::Repository {
+            reason: error.to_string(),
+        })?;
+        let payload = serde_json::to_string(snapshot).map_err(|error| RuntimeError::Repository {
+            reason: error.to_string(),
+        })?;
+        let updated_at = now_iso();
+
+        transaction
+            .execute(
+                "
+                INSERT INTO runtime_state (id, payload, updated_at)
+                VALUES (1, ?1, ?2)
+                ON CONFLICT(id) DO UPDATE SET
+                    payload = excluded.payload,
+                    updated_at = excluded.updated_at
+                ",
+                params![payload, updated_at],
+            )
+            .map_err(|error| RuntimeError::Repository {
+                reason: error.to_string(),
+            })?;
+
+        let mut persisted = Vec::with_capacity(events.len());
+        for event in events {
+            transaction
+                .execute(
+                    "
+                    INSERT INTO runtime_events (
+                        topic,
+                        occurred_at,
+                        run_id,
+                        workspace_id,
+                        automation_id,
+                        trigger_id,
+                        candidate_id,
+                        asset_id
+                    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                    ",
+                    params![
+                        event.topic,
+                        event.occurred_at,
+                        event.run_id,
+                        event.workspace_id,
+                        event.automation_id,
+                        event.trigger_id,
+                        event.candidate_id,
+                        event.asset_id
+                    ],
+                )
+                .map_err(|error| RuntimeError::Repository {
+                    reason: error.to_string(),
+                })?;
+
+            persisted.push(RuntimeEventEnvelope {
+                sequence: transaction.last_insert_rowid() as u64,
+                topic: event.topic.clone(),
+                occurred_at: event.occurred_at.clone(),
+                run_id: event.run_id.clone(),
+                workspace_id: event.workspace_id.clone(),
+                automation_id: event.automation_id.clone(),
+                trigger_id: event.trigger_id.clone(),
+                candidate_id: event.candidate_id.clone(),
+                asset_id: event.asset_id.clone(),
+            });
+        }
+
+        transaction.commit().map_err(|error| RuntimeError::Repository {
+            reason: error.to_string(),
+        })?;
+
+        Ok(persisted)
+    }
+
+    fn list_events(&self, after_sequence: Option<u64>) -> Result<Vec<RuntimeEventEnvelope>, RuntimeError> {
+        let connection = self.open_connection()?;
+        let mut statement = connection
+            .prepare(
+                "
+                SELECT sequence, topic, occurred_at, run_id, workspace_id, automation_id, trigger_id, candidate_id, asset_id
+                FROM runtime_events
+                WHERE (?1 IS NULL OR sequence > ?1)
+                ORDER BY sequence ASC
+                ",
+            )
+            .map_err(|error| RuntimeError::Repository {
+                reason: error.to_string(),
+            })?;
+
+        let rows = statement
+            .query_map([after_sequence.map(|value| value as i64)], |row| {
+                Ok(RuntimeEventEnvelope {
+                    sequence: row.get::<_, i64>(0)? as u64,
+                    topic: row.get(1)?,
+                    occurred_at: row.get(2)?,
+                    run_id: row.get(3)?,
+                    workspace_id: row.get(4)?,
+                    automation_id: row.get(5)?,
+                    trigger_id: row.get(6)?,
+                    candidate_id: row.get(7)?,
+                    asset_id: row.get(8)?,
+                })
+            })
+            .map_err(|error| RuntimeError::Repository {
+                reason: error.to_string(),
+            })?;
+
+        let mut items = Vec::new();
+        for row in rows {
+            items.push(row.map_err(|error| RuntimeError::Repository {
+                reason: error.to_string(),
+            })?);
+        }
+
+        Ok(items)
     }
 }
 
@@ -1090,13 +1369,13 @@ fn validate_mcp_binding(
 }
 
 fn deliver_trigger_inner(
-    state: &mut RuntimeState,
+    snapshot: &mut RuntimeSnapshot,
     request: TriggerDeliveryRequest,
-) -> Result<TriggerDeliveryResponse, RuntimeError> {
+) -> Result<(TriggerDeliveryResponse, DeliveryContext), RuntimeError> {
     let dedupe_key = format!("{}:{}", request.trigger_id, request.dedupe_key);
 
-    if let Some(delivery_id) = state.delivery_dedupe_index.get(&dedupe_key).cloned() {
-        let delivery = state
+    if let Some(delivery_id) = snapshot.delivery_dedupe_index.get(&dedupe_key).cloned() {
+        let delivery = snapshot
             .trigger_deliveries
             .get(&delivery_id)
             .cloned()
@@ -1107,12 +1386,34 @@ fn deliver_trigger_inner(
         let run = delivery
             .run_id
             .as_deref()
-            .and_then(|run_id| hydrate_response(state, run_id));
+            .and_then(|run_id| hydrate_response(snapshot, run_id));
+        let trigger = snapshot
+            .triggers
+            .get(&delivery.trigger_id)
+            .ok_or_else(|| RuntimeError::NotFound {
+                kind: "trigger",
+                id: delivery.trigger_id.clone(),
+            })?;
+        let automation = snapshot
+            .automations
+            .get(&trigger.automation_id)
+            .ok_or_else(|| RuntimeError::NotFound {
+                kind: "automation",
+                id: trigger.automation_id.clone(),
+            })?;
 
-        return Ok(TriggerDeliveryResponse { delivery, run });
+        return Ok((
+            TriggerDeliveryResponse { delivery, run },
+            DeliveryContext {
+                automation_id: automation.id.clone(),
+                workspace_id: automation.workspace_id.clone(),
+                trigger_id: trigger.id.clone(),
+                mutated: false,
+            },
+        ));
     }
 
-    let trigger = state
+    let trigger = snapshot
         .triggers
         .get(&request.trigger_id)
         .cloned()
@@ -1120,7 +1421,7 @@ fn deliver_trigger_inner(
             kind: "trigger",
             id: request.trigger_id.clone(),
         })?;
-    let automation = state
+    let automation = snapshot
         .automations
         .get(&trigger.automation_id)
         .cloned()
@@ -1131,7 +1432,7 @@ fn deliver_trigger_inner(
 
     if automation.state != AutomationState::Active {
         let delivery = record_failed_delivery(
-            state,
+            snapshot,
             &trigger,
             &request.dedupe_key,
             format!(
@@ -1153,7 +1454,7 @@ fn deliver_trigger_inner(
     let run_title = request.title.clone().unwrap_or_else(|| automation.name.clone());
     let run_type = trigger_run_type(trigger.source_type);
     let run_response = start_run(
-        state,
+        snapshot,
         RunStartRequest {
             workspace_id: automation.workspace_id.clone(),
             project_id: automation.project_id.clone(),
@@ -1170,7 +1471,7 @@ fn deliver_trigger_inner(
     );
 
     push_trace(
-        state,
+        snapshot,
         &run_response.run.id,
         trace_event(
             "TriggerDelivered",
@@ -1189,25 +1490,35 @@ fn deliver_trigger_inner(
         occurred_at: now_iso(),
     };
 
-    state
+    snapshot
         .trigger_deliveries
         .insert(delivery_id.clone(), delivery.clone());
-    state.delivery_dedupe_index.insert(dedupe_key, delivery_id.clone());
-    state
+    snapshot
+        .delivery_dedupe_index
+        .insert(dedupe_key, delivery_id.clone());
+    snapshot
         .latest_delivery_by_trigger
         .insert(trigger.id.clone(), delivery_id);
 
-    if let Some(entry) = state.automations.get_mut(&automation.id) {
+    if let Some(entry) = snapshot.automations.get_mut(&automation.id) {
         entry.last_run_id = Some(run_response.run.id.clone());
         entry.updated_at = now_iso();
     }
 
-    let run = hydrate_response(state, &run_response.run.id);
+    let run = hydrate_response(snapshot, &run_response.run.id);
 
-    Ok(TriggerDeliveryResponse { delivery, run })
+    Ok((
+        TriggerDeliveryResponse { delivery, run },
+        DeliveryContext {
+            automation_id: automation.id,
+            workspace_id: automation.workspace_id,
+            trigger_id: trigger.id,
+            mutated: true,
+        },
+    ))
 }
 
-fn start_run(state: &mut RuntimeState, request: RunStartRequest) -> RunDetailResponse {
+fn start_run(snapshot: &mut RuntimeSnapshot, request: RunStartRequest) -> RunDetailResponse {
     let run_id = Uuid::new_v4().to_string();
     let now = now_iso();
     let initial_audit_target = match request.initial_audit_target {
@@ -1255,13 +1566,27 @@ fn start_run(state: &mut RuntimeState, request: RunStartRequest) -> RunDetailRes
         });
         inbox_item = Some(InboxItemRecord {
             id: Uuid::new_v4().to_string(),
-            workspace_id: request.workspace_id,
+            workspace_id: request.workspace_id.clone(),
             owner_ref: "reviewer.execution".into(),
             state: InboxState::Open,
             priority: "high".into(),
             target_ref: run.id.clone(),
             dedupe_key: format!("approval:{}", run.id),
         });
+        snapshot.environment_leases.insert(
+            run.id.clone(),
+            EnvironmentLeaseRecord {
+                id: Uuid::new_v4().to_string(),
+                run_id: run.id.clone(),
+                sandbox_tier: SandboxTier::LocalTrusted,
+                state: "active".into(),
+                expiry_at: (Utc::now() + Duration::hours(1)).to_rfc3339(),
+                resume_token: run
+                    .checkpoint_token
+                    .clone()
+                    .expect("checkpoint token should exist for approval runs"),
+            },
+        );
         trace.push(trace_event(
             "ApprovalRequested",
             format!("Run {} requires execution approval", run.id),
@@ -1299,34 +1624,442 @@ fn start_run(state: &mut RuntimeState, request: RunStartRequest) -> RunDetailRes
         audit: audit.clone(),
     };
 
-    state.runs.insert(run.id.clone(), run);
-    state.run_sources.insert(response.run.id.clone(), request.run_source);
+    snapshot.runs.insert(run.id.clone(), run);
+    snapshot
+        .run_workspaces
+        .insert(response.run.id.clone(), request.workspace_id);
+    snapshot
+        .run_sources
+        .insert(response.run.id.clone(), request.run_source);
     if let Some(entry) = artifact {
-        state.artifacts.insert(entry.run_id.clone(), entry);
+        snapshot.artifacts.insert(entry.run_id.clone(), entry);
     }
     if let Some(entry) = approval {
-        state.approvals.insert(entry.id.clone(), entry);
+        snapshot.approvals.insert(entry.id.clone(), entry);
     }
     if let Some(entry) = inbox_item {
-        state.inbox_items.insert(entry.target_ref.clone(), entry);
+        snapshot.inbox_items.insert(entry.target_ref.clone(), entry);
     }
-    state.traces.insert(response.run.id.clone(), trace);
-    state.audits.insert(response.run.id.clone(), audit);
+    snapshot.traces.insert(response.run.id.clone(), trace);
+    snapshot.audits.insert(response.run.id.clone(), audit);
 
     response
 }
 
-fn hydrate_response(state: &RuntimeState, run_id: &str) -> Option<RunDetailResponse> {
-    let run = state.runs.get(run_id)?.clone();
-    let artifact = state.artifacts.get(run_id).cloned();
-    let approval = state
+fn create_candidate_from_run_inner(
+    snapshot: &mut RuntimeSnapshot,
+    request: KnowledgeCandidateCreateRequest,
+) -> Result<(KnowledgeCandidateRecord, bool), RuntimeError> {
+    let run = snapshot
+        .runs
+        .get(&request.run_id)
+        .cloned()
+        .ok_or_else(|| RuntimeError::NotFound {
+            kind: "run",
+            id: request.run_id.clone(),
+        })?;
+    let artifact = snapshot
+        .artifacts
+        .get(&request.run_id)
+        .cloned()
+        .ok_or_else(|| RuntimeError::InvalidState {
+            kind: "run",
+            id: request.run_id.clone(),
+            reason: "knowledge candidates require a completed artifact".into(),
+        })?;
+    let candidate_index = format!("{}:{}", request.knowledge_space_id, request.run_id);
+    if let Some(candidate_id) = snapshot
+        .candidate_index_by_run_and_space
+        .get(&candidate_index)
+    {
+        return snapshot
+            .knowledge_candidates
+            .get(candidate_id)
+            .cloned()
+            .map(|candidate| (candidate, false))
+            .ok_or_else(|| RuntimeError::NotFound {
+                kind: "knowledge_candidate",
+                id: candidate_id.clone(),
+            });
+    }
+
+    let trust_level = match snapshot.run_sources.get(&run.id).copied() {
+        Some(RunSource::Trigger(TriggerSource::McpEvent)) => TrustLevel::Low,
+        _ => TrustLevel::High,
+    };
+    let candidate = KnowledgeCandidateRecord {
+        id: Uuid::new_v4().to_string(),
+        knowledge_space_id: request.knowledge_space_id.clone(),
+        run_id: run.id.clone(),
+        artifact_id: artifact.id.clone(),
+        title: artifact.title.clone(),
+        summary: artifact.content_ref.clone(),
+        status: KnowledgeStatus::Candidate,
+        trust_level,
+        source_ref: run.id.clone(),
+        created_by: request.created_by.clone(),
+        created_at: now_iso(),
+        promoted_asset_id: None,
+    };
+
+    snapshot
+        .candidate_index_by_run_and_space
+        .insert(candidate_index, candidate.id.clone());
+    snapshot
+        .knowledge_candidates
+        .insert(candidate.id.clone(), candidate.clone());
+
+    push_trace(
+        snapshot,
+        &run.id,
+        trace_event(
+            "KnowledgeCandidateCreated",
+            format!(
+                "Candidate {} created in {}",
+                candidate.id, candidate.knowledge_space_id
+            ),
+        ),
+    );
+    push_audit(
+        snapshot,
+        &run.id,
+        audit_entry("knowledge.candidate.created", &request.created_by, &candidate.id),
+    );
+
+    Ok((candidate, true))
+}
+
+fn promote_candidate_inner(
+    snapshot: &mut RuntimeSnapshot,
+    candidate_id: &str,
+    request: KnowledgePromotionRequest,
+) -> Result<KnowledgePromotionResponse, RuntimeError> {
+    let candidate = snapshot
+        .knowledge_candidates
+        .get(candidate_id)
+        .cloned()
+        .ok_or_else(|| RuntimeError::NotFound {
+            kind: "knowledge_candidate",
+            id: candidate_id.to_string(),
+        })?;
+    let space = snapshot
+        .knowledge_spaces
+        .get(&candidate.knowledge_space_id)
+        .cloned()
+        .ok_or_else(|| RuntimeError::NotFound {
+            kind: "knowledge_space",
+            id: candidate.knowledge_space_id.clone(),
+        })?;
+
+    if !space.owner_refs.iter().any(|owner| owner == &request.promoted_by) {
+        return Err(RuntimeError::InvalidState {
+            kind: "knowledge_candidate",
+            id: candidate_id.to_string(),
+            reason: format!(
+                "{} is not an owner of knowledge space {}",
+                request.promoted_by, space.id
+            ),
+        });
+    }
+    if candidate.status != KnowledgeStatus::Candidate {
+        return Err(RuntimeError::InvalidState {
+            kind: "knowledge_candidate",
+            id: candidate_id.to_string(),
+            reason: "candidate has already been promoted".into(),
+        });
+    }
+
+    let asset = KnowledgeAssetRecord {
+        id: Uuid::new_v4().to_string(),
+        knowledge_space_id: candidate.knowledge_space_id.clone(),
+        title: candidate.title.clone(),
+        summary: candidate.summary.clone(),
+        layer: "shared".into(),
+        status: KnowledgeStatus::VerifiedShared,
+        trust_level: candidate.trust_level,
+        source_ref: candidate.id.clone(),
+        created_at: now_iso(),
+    };
+
+    let updated_candidate = {
+        let candidate_entry = snapshot
+            .knowledge_candidates
+            .get_mut(candidate_id)
+            .ok_or_else(|| RuntimeError::NotFound {
+                kind: "knowledge_candidate",
+                id: candidate_id.to_string(),
+            })?;
+        candidate_entry.status = KnowledgeStatus::VerifiedShared;
+        candidate_entry.promoted_asset_id = Some(asset.id.clone());
+        candidate_entry.clone()
+    };
+
+    snapshot
+        .knowledge_assets
+        .insert(asset.id.clone(), asset.clone());
+    snapshot.knowledge_lineage.push(KnowledgeLineageRecord {
+        candidate_id: updated_candidate.id.clone(),
+        asset_id: asset.id.clone(),
+        run_id: updated_candidate.run_id.clone(),
+        artifact_id: updated_candidate.artifact_id.clone(),
+        occurred_at: now_iso(),
+    });
+
+    push_trace(
+        snapshot,
+        &updated_candidate.run_id,
+        trace_event(
+            "KnowledgeCandidatePromoted",
+            format!(
+                "Candidate {} promoted to asset {}",
+                updated_candidate.id, asset.id
+            ),
+        ),
+    );
+    push_audit(
+        snapshot,
+        &updated_candidate.run_id,
+        audit_entry("knowledge.asset.promoted", &request.promoted_by, &asset.id),
+    );
+
+    Ok(KnowledgePromotionResponse {
+        candidate: updated_candidate,
+        asset,
+    })
+}
+
+fn resolve_approval_inner(
+    snapshot: &mut RuntimeSnapshot,
+    approval_id: &str,
+    request: ApprovalResolutionRequest,
+    decision: ApprovalDecision,
+) -> Result<RunDetailResponse, RuntimeError> {
+    let (run_id, resolved_approval_id) = {
+        let approval = snapshot
+            .approvals
+            .get(approval_id)
+            .ok_or_else(|| RuntimeError::NotFound {
+                kind: "approval",
+                id: approval_id.to_string(),
+            })?;
+
+        (approval.run_id.clone(), approval.id.clone())
+    };
+
+    {
+        let run = snapshot.runs.get(&run_id).ok_or_else(|| RuntimeError::NotFound {
+            kind: "run",
+            id: run_id.clone(),
+        })?;
+
+        if run.status != RunStatus::WaitingApproval {
+            return Err(RuntimeError::InvalidState {
+                kind: "approval",
+                id: approval_id.to_string(),
+                reason: "approval can only be resolved while waiting_approval".into(),
+            });
+        }
+    }
+
+    {
+        let approval = snapshot
+            .approvals
+            .get_mut(approval_id)
+            .ok_or_else(|| RuntimeError::NotFound {
+                kind: "approval",
+                id: approval_id.to_string(),
+            })?;
+
+        approval.reviewed_by = Some(request.reviewed_by.clone());
+        approval.state = decision.into();
+    }
+
+    {
+        let run = snapshot.runs.get_mut(&run_id).ok_or_else(|| RuntimeError::NotFound {
+            kind: "run",
+            id: run_id.clone(),
+        })?;
+
+        run.status = decision.next_status();
+        if decision == ApprovalDecision::Rejected {
+            run.checkpoint_token = None;
+        }
+        run.updated_at = now_iso();
+    }
+
+    if let Some(inbox_item) = snapshot.inbox_items.get_mut(&run_id) {
+        inbox_item.state = InboxState::Resolved;
+    }
+
+    if decision == ApprovalDecision::Approved {
+        push_trace(
+            snapshot,
+            &run_id,
+            trace_event(
+                "ApprovalResolved",
+                format!(
+                    "Approval {} approved by {}",
+                    resolved_approval_id, request.reviewed_by
+                ),
+            ),
+        );
+        push_trace(
+            snapshot,
+            &run_id,
+            trace_event(
+                "RunStateChanged",
+                format!("Run {} paused and ready to resume", run_id),
+            ),
+        );
+        push_audit(
+            snapshot,
+            &run_id,
+            audit_entry("approval.approved", &request.reviewed_by, &resolved_approval_id),
+        );
+    } else {
+        snapshot.environment_leases.remove(&run_id);
+        push_trace(
+            snapshot,
+            &run_id,
+            trace_event(
+                "ApprovalResolved",
+                format!(
+                    "Approval {} rejected by {}",
+                    resolved_approval_id, request.reviewed_by
+                ),
+            ),
+        );
+        push_trace(
+            snapshot,
+            &run_id,
+            trace_event(
+                "RunStateChanged",
+                format!("Run {} terminated after rejection", run_id),
+            ),
+        );
+        push_audit(
+            snapshot,
+            &run_id,
+            audit_entry("approval.rejected", &request.reviewed_by, &resolved_approval_id),
+        );
+    }
+
+    hydrate_response(snapshot, &run_id).ok_or_else(|| RuntimeError::NotFound {
+        kind: "run",
+        id: run_id,
+    })
+}
+
+fn resume_run_inner(
+    snapshot: &mut RuntimeSnapshot,
+    run_id: &str,
+) -> Result<RunDetailResponse, RuntimeError> {
+    let (project_id, title, requested_by, checkpoint_token) = {
+        let run = snapshot.runs.get(run_id).ok_or_else(|| RuntimeError::NotFound {
+            kind: "run",
+            id: run_id.to_string(),
+        })?;
+
+        if run.status != RunStatus::Paused {
+            return Err(RuntimeError::InvalidState {
+                kind: "run",
+                id: run.id.clone(),
+                reason: "resume is only allowed after approval grants a checkpoint".into(),
+            });
+        }
+
+        (
+            run.project_id.clone(),
+            run.title.clone(),
+            run.requested_by.clone(),
+            run.checkpoint_token.clone().ok_or_else(|| RuntimeError::InvalidState {
+                kind: "run",
+                id: run.id.clone(),
+                reason: "paused runs require a checkpoint token".into(),
+            })?,
+        )
+    };
+
+    let lease = snapshot
+        .environment_leases
+        .get(run_id)
+        .ok_or_else(|| RuntimeError::InvalidState {
+            kind: "run",
+            id: run_id.to_string(),
+            reason: "resume requires an active environment lease".into(),
+        })?;
+    if lease.resume_token != checkpoint_token {
+        return Err(RuntimeError::InvalidState {
+            kind: "run",
+            id: run_id.to_string(),
+            reason: "resume token does not match the active environment lease".into(),
+        });
+    }
+
+    {
+        let run = snapshot.runs.get_mut(run_id).ok_or_else(|| RuntimeError::NotFound {
+            kind: "run",
+            id: run_id.to_string(),
+        })?;
+        run.status = RunStatus::Running;
+        run.checkpoint_token = None;
+        run.updated_at = now_iso();
+    }
+
+    snapshot.environment_leases.remove(run_id);
+
+    push_trace(
+        snapshot,
+        run_id,
+        trace_event("RunStateChanged", format!("Run {} resumed execution", run_id)),
+    );
+
+    let artifact = build_artifact(
+        run_id,
+        &project_id,
+        &title,
+        Some("Generated after explicit resume"),
+    );
+    store_artifact_and_audit(snapshot, artifact, &requested_by, run_id);
+
+    {
+        let run = snapshot.runs.get_mut(run_id).ok_or_else(|| RuntimeError::NotFound {
+            kind: "run",
+            id: run_id.to_string(),
+        })?;
+
+        run.status = RunStatus::Completed;
+        run.updated_at = now_iso();
+    }
+
+    push_trace(
+        snapshot,
+        run_id,
+        trace_event("RunStateChanged", format!("Run {} completed after resume", run_id)),
+    );
+    push_audit(
+        snapshot,
+        run_id,
+        audit_entry("run.resumed", &requested_by, run_id),
+    );
+
+    hydrate_response(snapshot, run_id).ok_or_else(|| RuntimeError::NotFound {
+        kind: "run",
+        id: run_id.to_string(),
+    })
+}
+
+fn hydrate_response(snapshot: &RuntimeSnapshot, run_id: &str) -> Option<RunDetailResponse> {
+    let run = snapshot.runs.get(run_id)?.clone();
+    let artifact = snapshot.artifacts.get(run_id).cloned();
+    let approval = snapshot
         .approvals
         .values()
         .find(|entry| entry.run_id == run_id)
         .cloned();
-    let inbox_item = state.inbox_items.get(run_id).cloned();
-    let trace = state.traces.get(run_id).cloned().unwrap_or_default();
-    let audit = state.audits.get(run_id).cloned().unwrap_or_default();
+    let inbox_item = snapshot.inbox_items.get(run_id).cloned();
+    let trace = snapshot.traces.get(run_id).cloned().unwrap_or_default();
+    let audit = snapshot.audits.get(run_id).cloned().unwrap_or_default();
 
     Some(RunDetailResponse {
         run,
@@ -1339,21 +2072,21 @@ fn hydrate_response(state: &RuntimeState, run_id: &str) -> Option<RunDetailRespo
 }
 
 fn hydrate_automation_detail(
-    state: &RuntimeState,
+    snapshot: &RuntimeSnapshot,
     automation_id: &str,
 ) -> Option<AutomationDetailResponse> {
-    let automation = state.automations.get(automation_id)?.clone();
+    let automation = snapshot.automations.get(automation_id)?.clone();
     let trigger_id = automation.trigger_ids.first()?.clone();
-    let trigger = state.triggers.get(&trigger_id)?.clone();
-    let latest_delivery = state
+    let trigger = snapshot.triggers.get(&trigger_id)?.clone();
+    let latest_delivery = snapshot
         .latest_delivery_by_trigger
         .get(&trigger_id)
-        .and_then(|delivery_id| state.trigger_deliveries.get(delivery_id))
+        .and_then(|delivery_id| snapshot.trigger_deliveries.get(delivery_id))
         .cloned();
     let latest_run = automation
         .last_run_id
         .as_deref()
-        .and_then(|run_id| hydrate_response(state, run_id));
+        .and_then(|run_id| hydrate_response(snapshot, run_id));
 
     Some(AutomationDetailResponse {
         automation,
@@ -1364,11 +2097,11 @@ fn hydrate_automation_detail(
 }
 
 fn hydrate_knowledge_space_detail(
-    state: &RuntimeState,
+    snapshot: &RuntimeSnapshot,
     knowledge_space_id: &str,
 ) -> Option<KnowledgeSpaceDetailResponse> {
-    let space = state.knowledge_spaces.get(knowledge_space_id)?.clone();
-    let mut candidates = state
+    let space = snapshot.knowledge_spaces.get(knowledge_space_id)?.clone();
+    let mut candidates = snapshot
         .knowledge_candidates
         .values()
         .filter(|candidate| candidate.knowledge_space_id == knowledge_space_id)
@@ -1376,7 +2109,7 @@ fn hydrate_knowledge_space_detail(
         .collect::<Vec<_>>();
     candidates.sort_by(|left, right| left.created_at.cmp(&right.created_at));
 
-    let mut assets = state
+    let mut assets = snapshot
         .knowledge_assets
         .values()
         .filter(|asset| asset.knowledge_space_id == knowledge_space_id)
@@ -1392,7 +2125,7 @@ fn hydrate_knowledge_space_detail(
 }
 
 fn record_failed_delivery(
-    state: &mut RuntimeState,
+    snapshot: &mut RuntimeSnapshot,
     trigger: &TriggerRecord,
     dedupe_key: &str,
     failure_reason: String,
@@ -1410,13 +2143,13 @@ fn record_failed_delivery(
         occurred_at: now_iso(),
     };
 
-    state
+    snapshot
         .trigger_deliveries
         .insert(delivery_id.clone(), delivery.clone());
-    state
+    snapshot
         .delivery_dedupe_index
         .insert(composite_dedupe_key, delivery_id.clone());
-    state
+    snapshot
         .latest_delivery_by_trigger
         .insert(trigger.id.clone(), delivery_id);
 
@@ -1424,7 +2157,7 @@ fn record_failed_delivery(
 }
 
 fn sync_trigger_states(
-    state: &mut RuntimeState,
+    snapshot: &mut RuntimeSnapshot,
     automation_id: &str,
     automation_state: AutomationState,
 ) {
@@ -1436,7 +2169,7 @@ fn sync_trigger_states(
         AutomationState::Archived => "archived",
     };
 
-    for trigger in state
+    for trigger in snapshot
         .triggers
         .values_mut()
         .filter(|entry| entry.automation_id == automation_id)
@@ -1475,14 +2208,14 @@ fn build_artifact(
 }
 
 fn store_artifact_and_audit(
-    state: &mut RuntimeState,
+    snapshot: &mut RuntimeSnapshot,
     artifact: ArtifactRecord,
     actor: &str,
     run_id: &str,
 ) {
     let artifact_id = artifact.id.clone();
-    state.artifacts.insert(run_id.to_string(), artifact);
-    push_audit(state, run_id, audit_entry("artifact.created", actor, &artifact_id));
+    snapshot.artifacts.insert(run_id.to_string(), artifact);
+    push_audit(snapshot, run_id, audit_entry("artifact.created", actor, &artifact_id));
 }
 
 fn trace_event(name: &str, message: String) -> TraceEvent {
@@ -1502,12 +2235,62 @@ fn audit_entry(action: &str, actor: &str, target_ref: &str) -> AuditEntry {
     }
 }
 
-fn push_trace(state: &mut RuntimeState, run_id: &str, entry: TraceEvent) {
-    state.traces.entry(run_id.to_string()).or_default().push(entry);
+fn push_trace(snapshot: &mut RuntimeSnapshot, run_id: &str, entry: TraceEvent) {
+    snapshot.traces.entry(run_id.to_string()).or_default().push(entry);
 }
 
-fn push_audit(state: &mut RuntimeState, run_id: &str, entry: AuditEntry) {
-    state.audits.entry(run_id.to_string()).or_default().push(entry);
+fn push_audit(snapshot: &mut RuntimeSnapshot, run_id: &str, entry: AuditEntry) {
+    snapshot.audits.entry(run_id.to_string()).or_default().push(entry);
+}
+
+fn new_runtime_event(
+    topic: &str,
+    run_id: Option<String>,
+    workspace_id: Option<String>,
+    automation_id: Option<String>,
+    trigger_id: Option<String>,
+    candidate_id: Option<String>,
+    asset_id: Option<String>,
+) -> NewRuntimeEvent {
+    NewRuntimeEvent {
+        topic: topic.to_string(),
+        occurred_at: now_iso(),
+        run_id,
+        workspace_id,
+        automation_id,
+        trigger_id,
+        candidate_id,
+        asset_id,
+    }
+}
+
+fn events_for_run_detail(
+    detail: &RunDetailResponse,
+    workspace_id: Option<String>,
+) -> Vec<NewRuntimeEvent> {
+    let mut events = vec![new_runtime_event(
+        "run.state_changed",
+        Some(detail.run.id.clone()),
+        workspace_id.clone(),
+        None,
+        None,
+        None,
+        None,
+    )];
+
+    if detail.approval.is_some() {
+        events.push(new_runtime_event(
+            "approval.updated",
+            Some(detail.run.id.clone()),
+            workspace_id,
+            None,
+            None,
+            None,
+            None,
+        ));
+    }
+
+    events
 }
 
 fn now_iso() -> String {

@@ -52,6 +52,20 @@ describe('ShellHomeView', () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            items: [],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
             run: {
               id: 'run-1',
               project_id: 'project-alpha',
@@ -228,6 +242,8 @@ describe('ShellHomeView', () => {
     expect(wrapper.text()).toContain('Phase 1')
     expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/v1/automations')
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/v1/knowledge/spaces')
+    expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/v1/runs')
+    expect(fetchMock).toHaveBeenNthCalledWith(4, '/api/v1/inbox')
 
     await wrapper.get('[data-test="task-title"]').setValue('Review remote hub policy')
     await wrapper.get('[data-test="task-description"]').setValue('Need approval before artifact generation')
@@ -248,9 +264,9 @@ describe('ShellHomeView', () => {
 
     expect(wrapper.text()).toContain('Artifact for Review remote hub policy')
     expect(wrapper.text()).toContain('artifact.created')
-    expect(fetchMock).toHaveBeenCalledTimes(5)
+    expect(fetchMock).toHaveBeenCalledTimes(7)
 
-    const submitRequest = fetchMock.mock.calls[2]
+    const submitRequest = fetchMock.mock.calls[4]
     expect(submitRequest[0]).toBe('/api/v1/runs/task')
     expect(JSON.parse((submitRequest[1] as RequestInit).body as string)).toMatchObject({
       workspace_id: 'workspace-alpha',
@@ -261,6 +277,20 @@ describe('ShellHomeView', () => {
 
   it('creates an automation and delivers a manual trigger from the homepage', async () => {
     const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [],
+          }),
+        ),
+      )
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -408,7 +438,7 @@ describe('ShellHomeView', () => {
     expect(wrapper.text()).toContain('watch')
     expect(wrapper.text()).toContain('succeeded')
 
-    const createAutomationRequest = fetchMock.mock.calls[2]
+    const createAutomationRequest = fetchMock.mock.calls[4]
     expect(createAutomationRequest[0]).toBe('/api/v1/automations')
     expect(JSON.parse((createAutomationRequest[1] as RequestInit).body as string)).toMatchObject({
       workspace_id: 'workspace-alpha',
@@ -442,6 +472,8 @@ describe('ShellHomeView', () => {
           }),
         ),
       )
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] })))
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
@@ -676,7 +708,7 @@ describe('ShellHomeView', () => {
     expect(wrapper.text()).toContain('verified_shared')
     expect(wrapper.text()).toContain('asset-1')
 
-    const createAutomationRequest = fetchMock.mock.calls[2]
+    const createAutomationRequest = fetchMock.mock.calls[4]
     expect(createAutomationRequest[0]).toBe('/api/v1/automations')
     expect(JSON.parse((createAutomationRequest[1] as RequestInit).body as string)).toMatchObject({
       trigger_source: 'mcp_event',

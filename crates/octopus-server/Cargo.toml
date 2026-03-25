@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+async-stream = "0.3.6"
 axum.workspace = true
 octopus-hub = { path = "../octopus-hub" }
 serde.workspace = true
@@ -13,5 +14,5 @@ tokio.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+http-body-util = "0.1.3"
 tower.workspace = true
-

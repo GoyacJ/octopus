@@ -69,6 +69,12 @@
 - `DiscussionSession`
 - `ResidentAgentSession`
 
+补充说明（截至 2026-03-26 的 tracked implementation）：
+
+- 当前跟踪树已落地本地模式最小事实层：Hub 默认使用 SQLite 持久化 `Run`、`ApprovalRequest`、`Artifact`、`InboxItem`、`Automation`、`Trigger`、`Knowledge*` 及最小 `EnvironmentLease` 恢复信息。
+- 当前跟踪树已落地最小 transport 事实视图：HTTP 提供 persisted `run` / `inbox` 列表读取，SSE 提供 runtime 事件流，Vue 控制面采用“快照 + 订阅”模型收敛状态。
+- `Remote Hub` 边界、完整 `HubConnection` 工作台与更高阶 `Desktop` 集成仍停留在目标态架构层，尚未在当前跟踪树中完成。
+
 ### 1.5 架构平面
 
 Octopus 目标态架构显式拆分为六个主平面和一个横切观测层：

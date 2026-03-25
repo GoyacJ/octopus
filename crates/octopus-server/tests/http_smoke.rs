@@ -1,10 +1,20 @@
+use std::{env, fs, path::PathBuf};
+
 use axum::{
     body::{to_bytes, Body},
-    http::{Request, StatusCode},
+    http::{header, Request, StatusCode},
 };
-use octopus_hub::runtime::{ApprovalResolutionRequest, TaskSubmissionRequest};
-use octopus_server::build_app;
+use http_body_util::BodyExt;
+use octopus_hub::runtime::{ApprovalResolutionRequest, RuntimeService, TaskSubmissionRequest};
+use octopus_server::{build_app, build_app_with_runtime};
 use tower::ServiceExt;
+use uuid::Uuid;
+
+fn temp_db_path(name: &str) -> PathBuf {
+    let path = env::temp_dir().join(format!("octopus-server-{name}-{}.sqlite3", Uuid::new_v4()));
+    let _ = fs::remove_file(&path);
+    path
+}
 
 #[tokio::test]
 async fn healthz_returns_ok() {
@@ -829,4 +839,155 @@ async fn mcp_event_delivery_requires_binding_and_matches_registered_automation()
 
     assert_eq!(mcp_payload["items"][0]["delivery"]["source_type"], "mcp_event");
     assert_eq!(mcp_payload["items"][0]["run"]["run"]["run_type"], "watch");
+}
+
+#[tokio::test]
+async fn list_endpoints_read_persisted_runs_and_inbox_items_after_restart() {
+    let database_path = temp_db_path("list-endpoints");
+    let app = build_app_with_runtime(
+        RuntimeService::sqlite(&database_path).expect("sqlite runtime should boot"),
+    );
+
+    let create_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/runs/task")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    serde_json::json!({
+                        "workspace_id": "workspace-alpha",
+                        "project_id": "project-alpha",
+                        "title": "Review remote hub policy",
+                        "description": "Need approval before artifact generation",
+                        "requested_by": "operator-1",
+                        "requires_approval": true
+                    })
+                    .to_string(),
+                ))
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(create_response.status(), StatusCode::ACCEPTED);
+
+    let runs_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/runs?workspace_id=workspace-alpha&project_id=project-alpha")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(runs_response.status(), StatusCode::OK);
+    let runs_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(runs_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    assert_eq!(runs_payload["items"][0]["project_id"], "project-alpha");
+
+    let inbox_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/inbox?workspace_id=workspace-alpha")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(inbox_response.status(), StatusCode::OK);
+    let inbox_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(inbox_response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    assert_eq!(inbox_payload["items"][0]["workspace_id"], "workspace-alpha");
+
+    let restarted = build_app_with_runtime(
+        RuntimeService::sqlite(&database_path).expect("sqlite runtime should restart"),
+    );
+    let restarted_runs = restarted
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/runs?workspace_id=workspace-alpha&project_id=project-alpha")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(restarted_runs.status(), StatusCode::OK);
+    let restarted_payload: serde_json::Value = serde_json::from_slice(
+        &to_bytes(restarted_runs.into_body(), usize::MAX)
+            .await
+            .expect("response body should read"),
+    )
+    .expect("response should deserialize");
+    assert_eq!(restarted_payload["items"][0]["status"], "waiting_approval");
+
+    let _ = fs::remove_file(database_path);
+}
+
+#[tokio::test]
+async fn event_stream_returns_server_sent_runtime_events() {
+    let database_path = temp_db_path("sse");
+    let runtime = RuntimeService::sqlite(&database_path).expect("sqlite runtime should boot");
+    runtime.submit_task(TaskSubmissionRequest {
+        workspace_id: "workspace-alpha".into(),
+        project_id: "project-alpha".into(),
+        title: "Summarize workspace health".into(),
+        description: Some("Artifact body for the workspace summary".into()),
+        requested_by: "operator-1".into(),
+        requires_approval: false,
+    });
+    let app = build_app_with_runtime(runtime);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/events/stream")
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await
+        .expect("router should respond");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .expect("content type should exist"),
+        "text/event-stream"
+    );
+
+    let mut body = response.into_body();
+    let first_frame = body
+        .frame()
+        .await
+        .expect("body should produce a frame")
+        .expect("frame should be ok");
+    let payload = String::from_utf8(
+        first_frame
+            .into_data()
+            .expect("frame should contain data")
+            .to_vec(),
+    )
+    .expect("chunk should be utf8");
+
+    assert!(payload.contains("run.state_changed"));
+    assert!(payload.contains("\"topic\":\"run.state_changed\""));
+
+    let _ = fs::remove_file(database_path);
 }

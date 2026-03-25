@@ -8,15 +8,16 @@
 
 - 当前跟踪树中，最重要的正式事实源是 `README.md`、`AGENTS.md`、`docs/`、`contracts/` 和 `.github/`。
 - 当前仓库已经具备最小 `pnpm` + `cargo` workspace、Vue 控制面壳、共享契约包以及 Rust Hub/Server/Desktop adapter skeleton。
-- 当前已存在两条最小本地 runtime 纵切片：`task -> waiting_approval -> paused/terminated -> completed` 与 `automation/trigger -> automation|watch run -> latest delivery/run view`，并由 Vue 控制面测试与 Rust HTTP smoke 共同覆盖。
+- 当前已存在三条最小本地 runtime 纵切片：`task -> waiting_approval -> paused/terminated -> completed`、`automation/trigger -> automation|watch run -> latest delivery/run view`、`candidate knowledge -> shared asset`，并由 Vue 控制面测试与 Rust HTTP smoke 共同覆盖。
+- 当前本地 Hub 默认以 SQLite 作为事实层，并已开放 persisted `run` / `inbox` 快照读取与 SSE 事件流，用于支撑控制面的“快照 + 订阅”模型。
 - 当前仓库仍不应被描述为“功能完整平台”或“已完成目标态实现”。
 - 当前只对已存在的 `pnpm` / `cargo` 验证链路作真实声明；`turbo`、`buf` 和端到端 UI 验证仍未成立。
 - `node_modules/`、IDE 配置和本地缓存不属于仓库正式设计输入。
 
 ## 本地开发切片
 
-- `cargo run -p octopus-server` 会在 `127.0.0.1:3000` 启动当前最小 HTTP runtime。
-- 当前最小 HTTP runtime 已开放 `/api/v1/runs/task`、`/api/v1/runs/{run_id}`、`/api/v1/runs/{run_id}/resume`、`/api/v1/approvals/{approval_id}/resolve`、`/api/v1/automations` 与 `/api/v1/triggers/deliver`。
+- `cargo run -p octopus-server` 会在 `127.0.0.1:3000` 启动当前最小 HTTP runtime，并默认把本地事实层持久化到 `target/octopus-runtime.sqlite3`。
+- 当前最小 HTTP runtime 已开放 `/api/v1/runs`、`/api/v1/runs/task`、`/api/v1/runs/{run_id}`、`/api/v1/runs/{run_id}/resume`、`/api/v1/inbox`、`/api/v1/approvals/{approval_id}/resolve`、`/api/v1/automations`、`/api/v1/triggers/deliver` 与 `/api/v1/events/stream`。
 - `pnpm --filter @octopus/client dev` 会通过 Vite dev proxy 将同源 `/api/*` 请求转发到本地 runtime。
 - 该联调方式只用于本地开发便利，不等同于仓库级 live E2E 能力声明；当前正式验证仍以组件测试、HTTP smoke 和 workspace build/test 为准。
 

@@ -226,6 +226,14 @@ export interface RunDetailResponse {
   audit: AuditEntry[]
 }
 
+export interface RunListResponse {
+  items: RunRecord[]
+}
+
+export interface InboxListResponse {
+  items: InboxItemRecord[]
+}
+
 export interface AutomationDetailResponse {
   automation: AutomationRecord
   trigger: TriggerRecord
@@ -267,6 +275,18 @@ export interface KnowledgeCandidateResponse {
 export interface KnowledgePromotionResponse {
   candidate: KnowledgeCandidateRecord
   asset: KnowledgeAssetRecord
+}
+
+export interface RuntimeEventEnvelope {
+  sequence: number
+  topic: string
+  occurred_at: string
+  run_id?: string | null
+  workspace_id?: string | null
+  automation_id?: string | null
+  trigger_id?: string | null
+  candidate_id?: string | null
+  asset_id?: string | null
 }
 
 export interface ErrorResponse {

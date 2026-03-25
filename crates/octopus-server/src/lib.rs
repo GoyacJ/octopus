@@ -1,6 +1,9 @@
+use std::convert::Infallible;
+
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
+    response::sse::{Event, KeepAlive, Sse},
     routing::{get, post},
     Json, Router,
 };
@@ -8,18 +11,19 @@ use octopus_hub::{
     contracts::{contract_catalog, ContractCatalog},
     runtime::{
         ApprovalResolutionRequest, AutomationCreateRequest, AutomationListResponse,
-        InMemoryRuntimeService, KnowledgeAssetListResponse, KnowledgeCandidateCreateRequest,
+        InboxListResponse, KnowledgeAssetListResponse, KnowledgeCandidateCreateRequest,
         KnowledgeCandidateResponse, KnowledgePromotionRequest, KnowledgePromotionResponse,
         KnowledgeSpaceCreateRequest, KnowledgeSpaceDetailResponse, KnowledgeSpaceListResponse,
-        McpEventDeliveryRequest, McpEventDeliveryResponse, RunDetailResponse, RuntimeError,
-        TaskSubmissionRequest, TriggerDeliveryRequest, TriggerDeliveryResponse,
+        McpEventDeliveryRequest, McpEventDeliveryResponse, RunDetailResponse, RunListResponse,
+        RuntimeError, RuntimeEventEnvelope, RuntimeService, TaskSubmissionRequest,
+        TriggerDeliveryRequest, TriggerDeliveryResponse,
     },
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct AppState {
-    runtime: InMemoryRuntimeService,
+    runtime: RuntimeService,
 }
 
 #[derive(Debug, Serialize)]
@@ -27,11 +31,34 @@ struct ErrorResponse {
     message: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct RunListQuery {
+    workspace_id: Option<String>,
+    project_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct InboxListQuery {
+    workspace_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct EventStreamQuery {
+    after: Option<u64>,
+}
+
 pub fn build_app() -> Router {
+    build_app_with_runtime(RuntimeService::default())
+}
+
+pub fn build_app_with_runtime(runtime: RuntimeService) -> Router {
     Router::new()
         .route("/healthz", get(healthz))
         .route("/api/v1/contracts", get(get_contracts))
+        .route("/api/v1/events/stream", get(stream_events))
         .route("/api/v1/automations", get(list_automations).post(create_automation))
+        .route("/api/v1/runs", get(list_runs))
+        .route("/api/v1/inbox", get(list_inbox_items))
         .route("/api/v1/knowledge/spaces", get(list_knowledge_spaces).post(create_knowledge_space))
         .route(
             "/api/v1/knowledge/spaces/{space_id}/assets",
@@ -51,7 +78,11 @@ pub fn build_app() -> Router {
         .route("/api/v1/runs/{run_id}/resume", post(resume_run))
         .route("/api/v1/triggers/deliver", post(deliver_trigger))
         .route("/api/v1/approvals/{approval_id}/resolve", post(resolve_approval))
-        .with_state(AppState::default())
+        .with_state(AppState { runtime })
+}
+
+pub fn build_default_app() -> Result<Router, RuntimeError> {
+    Ok(build_app_with_runtime(RuntimeService::sqlite_default()?))
 }
 
 async fn healthz() -> StatusCode {
@@ -62,6 +93,36 @@ async fn get_contracts() -> Result<Json<ContractCatalog>, (StatusCode, Json<Erro
     contract_catalog()
         .map(Json)
         .map_err(into_http_error)
+}
+
+async fn stream_events(
+    State(state): State<AppState>,
+    Query(query): Query<EventStreamQuery>,
+) -> Result<impl axum::response::IntoResponse, (StatusCode, Json<ErrorResponse>)> {
+    let backlog = state.runtime.list_events(query.after).map_err(into_runtime_http_error)?;
+    let mut receiver = state.runtime.subscribe_events();
+    let after = query.after;
+
+    let stream = async_stream::stream! {
+        for envelope in backlog {
+            yield Ok::<Event, Infallible>(to_sse_event(envelope));
+        }
+
+        loop {
+            match receiver.recv().await {
+                Ok(envelope) => {
+                    if after.map(|sequence| envelope.sequence <= sequence).unwrap_or(false) {
+                        continue;
+                    }
+                    yield Ok::<Event, Infallible>(to_sse_event(envelope));
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    };
+
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
 async fn submit_task(
@@ -96,6 +157,26 @@ async fn create_automation(
         .create_automation(request)
         .map(|response| (StatusCode::CREATED, Json(response)))
         .map_err(into_runtime_http_error)
+}
+
+async fn list_runs(
+    State(state): State<AppState>,
+    Query(query): Query<RunListQuery>,
+) -> Json<RunListResponse> {
+    Json(RunListResponse {
+        items: state
+            .runtime
+            .list_runs(query.workspace_id.as_deref(), query.project_id.as_deref()),
+    })
+}
+
+async fn list_inbox_items(
+    State(state): State<AppState>,
+    Query(query): Query<InboxListQuery>,
+) -> Json<InboxListResponse> {
+    Json(InboxListResponse {
+        items: state.runtime.list_inbox_items(query.workspace_id.as_deref()),
+    })
 }
 
 async fn list_knowledge_spaces(State(state): State<AppState>) -> Json<KnowledgeSpaceListResponse> {
@@ -235,12 +316,19 @@ async fn deliver_trigger(
     Ok((status, Json(response)))
 }
 
+fn to_sse_event(envelope: RuntimeEventEnvelope) -> Event {
+    Event::default()
+        .id(envelope.sequence.to_string())
+        .data(serde_json::to_string(&envelope).expect("runtime event should serialize"))
+}
+
 fn into_runtime_http_error(error: RuntimeError) -> (StatusCode, Json<ErrorResponse>) {
     let status = match error {
         RuntimeError::NotFound { .. } => StatusCode::NOT_FOUND,
         RuntimeError::InvalidState { .. } => StatusCode::CONFLICT,
         RuntimeError::InvalidDecision { .. } => StatusCode::BAD_REQUEST,
         RuntimeError::InvalidRequest { .. } => StatusCode::BAD_REQUEST,
+        RuntimeError::Repository { .. } => StatusCode::INTERNAL_SERVER_ERROR,
     };
 
     (

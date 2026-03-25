@@ -128,14 +128,20 @@ export const messages = {
     },
     activity: {
       eyebrow: 'Run Activity',
-      title: '当前 Run / Inbox / Trace / Audit',
+      title: '事实视图 / 当前 Run / Trace / Audit',
       emptyState: '尚未启动',
-      emptyDescription: 'Task 或 Automation 触发后，这里会显示当前 Run 详情、审批状态、Trace 与 Audit。',
+      emptyDescription: 'Task 或 Automation 触发后，这里会显示持久化 Run / Inbox 快照，以及当前 Run 详情、Trace 与 Audit。',
       sections: {
+        runs: 'Persisted Runs',
+        inbox: 'Inbox Queue',
         run: 'Run Detail',
         artifact: 'Artifact',
         trace: 'Trace',
         audit: 'Audit',
+      },
+      stream: {
+        idle: 'Stream idle',
+        live: 'Live · seq {sequence}',
       },
       summary: {
         runId: 'Run ID',
@@ -145,6 +151,8 @@ export const messages = {
         inboxState: 'Inbox State',
       },
       pending: {
+        runs: '当前还没有持久化 Run 记录。',
+        inbox: '当前还没有 Inbox 项目。',
         artifact: 'Artifact 会在直接完成或审批通过后的 resume 场景中出现。',
         trace: 'Trace 会在提交、触发、审批和恢复后逐步累积。',
         audit: 'Audit 记录会在关键动作落地后出现。',
@@ -278,14 +286,20 @@ export const messages = {
     },
     activity: {
       eyebrow: 'Run Activity',
-      title: 'Current Run / Inbox / Trace / Audit',
+      title: 'Fact View / Current Run / Trace / Audit',
       emptyState: 'Not started',
-      emptyDescription: 'After a task or automation trigger runs, this panel shows the current run detail, approval state, trace, and audit.',
+      emptyDescription: 'After a task or automation trigger runs, this panel shows the persisted run and inbox snapshots alongside the current run detail, trace, and audit.',
       sections: {
+        runs: 'Persisted Runs',
+        inbox: 'Inbox Queue',
         run: 'Run Detail',
         artifact: 'Artifact',
         trace: 'Trace',
         audit: 'Audit',
+      },
+      stream: {
+        idle: 'Stream idle',
+        live: 'Live · seq {sequence}',
       },
       summary: {
         runId: 'Run ID',
@@ -295,6 +309,8 @@ export const messages = {
         inboxState: 'Inbox State',
       },
       pending: {
+        runs: 'No persisted runs yet.',
+        inbox: 'No inbox items yet.',
         artifact: 'The artifact appears after a direct completion path or after an approved run resumes.',
         trace: 'Trace events accumulate after submit, trigger delivery, approval, and resume.',
         audit: 'Audit entries appear once the runtime records key actions.',

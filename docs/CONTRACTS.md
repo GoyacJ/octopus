@@ -1,6 +1,6 @@
 # Octopus · 契约冻结说明（CONTRACTS）
 
-**版本**: v1.0 | **状态**: Phase 0 冻结版 | **日期**: 2026-03-25
+**版本**: v1.0 | **状态**: Phase 1 冻结版 | **日期**: 2026-03-26
 **对应文档**: PRD v2.0 · SAD v2.0
 
 ---
@@ -103,6 +103,7 @@
 ## 5. 实施与校验规则
 
 - TypeScript 共享契约包和 Rust Hub 契约模块必须对齐 `contracts/v1/`。
+- 当前 `packages/contracts` 与 `crates/octopus-hub` 允许在冻结对象之上提供最小 transport mirror，例如 `RunDetailResponse`、`RunListResponse`、`InboxListResponse` 与 `RuntimeEventEnvelope`，但这些包裹不得扩展未冻结 Beta 对象或改变冻结对象语义。
 - 契约校验至少覆盖：对象名、枚举值、事件名及其最小字段集合。
 - 若仓库引入新的可执行验证链路，CI 必须将契约校验纳入默认检查。
 - 目标态 transport、数据库表结构和 protobuf/OpenAPI 细节不在本阶段锁定，但不得违反这里冻结的对象与枚举语义。

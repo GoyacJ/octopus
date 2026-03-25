@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import AutomationControlPanel from '@/components/AutomationControlPanel.vue'
@@ -24,6 +24,13 @@ const switchLocale = () => {
 onMounted(() => {
   void runtimeStore.loadAutomations()
   void runtimeStore.loadKnowledgeSpaces()
+  void runtimeStore.loadRuns()
+  void runtimeStore.loadInboxItems()
+  runtimeStore.startRuntimeEventStream()
+})
+
+onUnmounted(() => {
+  runtimeStore.stopRuntimeEventStream()
 })
 </script>
 

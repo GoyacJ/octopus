@@ -1,15 +1,18 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 
 import type {
   ApprovalDecision,
   AutomationCreateRequest,
   AutomationDetailResponse,
+  InboxItemRecord,
   KnowledgeAssetRecord,
   KnowledgeCandidateRecord,
   KnowledgeSpaceDetailResponse,
   McpEventDeliveryRequest,
   RunDetailResponse,
+  RunRecord,
+  RuntimeEventEnvelope,
   TaskSubmissionRequest,
   TriggerDeliveryRecord,
   TriggerDeliveryRequest,
@@ -53,14 +56,45 @@ const upsertAsset = (
   return current.map((entry, index) => (index === existingIndex ? incoming : entry))
 }
 
+const upsertRun = (current: RunRecord[], incoming: RunRecord): RunRecord[] => {
+  const existingIndex = current.findIndex((entry) => entry.id === incoming.id)
+  if (existingIndex === -1) {
+    return [...current, incoming]
+  }
+
+  return current.map((entry, index) => (index === existingIndex ? incoming : entry))
+}
+
+const upsertInboxItem = (
+  current: InboxItemRecord[],
+  incoming: InboxItemRecord,
+): InboxItemRecord[] => {
+  const existingIndex = current.findIndex((entry) => entry.id === incoming.id)
+  if (existingIndex === -1) {
+    return [...current, incoming]
+  }
+
+  return current.map((entry, index) => (index === existingIndex ? incoming : entry))
+}
+
+const runEventTopics = ['run.state_changed', 'approval.updated', 'trigger.delivery_updated']
+const automationEventTopics = ['automation.updated', 'trigger.delivery_updated']
+const knowledgeEventTopics = ['knowledge.candidate_updated', 'knowledge.asset_updated']
+
 export const useRuntimeControlStore = defineStore('runtime-control', () => {
   const automations = ref<AutomationDetailResponse[]>([])
   const knowledgeSpaces = ref<KnowledgeSpaceDetailResponse[]>([])
+  const runs = ref<RunRecord[]>([])
+  const inboxItems = ref<InboxItemRecord[]>([])
   const currentRunDetail = ref<RunDetailResponse | null>(null)
   const errorMessage = ref('')
+  const hasLoadedRuns = ref(false)
+  const hasLoadedInboxItems = ref(false)
   const hasLoadedAutomations = ref(false)
   const hasLoadedKnowledgeSpaces = ref(false)
 
+  const isLoadingRuns = ref(false)
+  const isLoadingInboxItems = ref(false)
   const isLoadingAutomations = ref(false)
   const isLoadingKnowledgeSpaces = ref(false)
   const isCreatingAutomation = ref(false)
@@ -71,6 +105,8 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
   const isDeliveringMcpEvent = ref(false)
   const activeTriggerId = ref<string | null>(null)
   const promotingCandidateId = ref<string | null>(null)
+  const runtimeEventSource = shallowRef<EventSource | null>(null)
+  const lastEventSequence = ref<number | null>(null)
 
   const currentRun = computed(() => currentRunDetail.value?.run ?? null)
   const currentApproval = computed(() => currentRunDetail.value?.approval ?? null)
@@ -90,12 +126,61 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
     errorMessage.value = 'Request failed.'
   }
 
+  const syncRunDetail = (detail: RunDetailResponse) => {
+    currentRunDetail.value = detail
+    runs.value = upsertRun(runs.value, detail.run)
+
+    if (detail.inbox_item) {
+      inboxItems.value = upsertInboxItem(inboxItems.value, detail.inbox_item)
+    }
+  }
+
   const refreshCurrentRun = async (runId: string | null | undefined) => {
     if (!runId) {
+      return null
+    }
+
+    const detail = await runtimeApi.getRun(runId)
+    syncRunDetail(detail)
+    return detail
+  }
+
+  const loadRuns = async (force = false) => {
+    if (isLoadingRuns.value || (hasLoadedRuns.value && !force)) {
       return
     }
 
-    currentRunDetail.value = await runtimeApi.getRun(runId)
+    clearError()
+    isLoadingRuns.value = true
+
+    try {
+      const response = await runtimeApi.listRuns()
+      runs.value = response.items
+      hasLoadedRuns.value = true
+    } catch (error) {
+      setError(error)
+    } finally {
+      isLoadingRuns.value = false
+    }
+  }
+
+  const loadInboxItems = async (force = false) => {
+    if (isLoadingInboxItems.value || (hasLoadedInboxItems.value && !force)) {
+      return
+    }
+
+    clearError()
+    isLoadingInboxItems.value = true
+
+    try {
+      const response = await runtimeApi.listInboxItems()
+      inboxItems.value = response.items
+      hasLoadedInboxItems.value = true
+    } catch (error) {
+      setError(error)
+    } finally {
+      isLoadingInboxItems.value = false
+    }
   }
 
   const loadAutomations = async (force = false) => {
@@ -180,7 +265,10 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
 
     try {
       const response = await runtimeApi.deliverTrigger(payload)
-      currentRunDetail.value = response.run ?? currentRunDetail.value
+      if (response.run) {
+        syncRunDetail(response.run)
+      }
+
       updateAutomationDelivery(payload.trigger_id, response.delivery, response.run ?? null)
       return response
     } catch (error) {
@@ -202,7 +290,10 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
       })
 
       const latestRun = [...response.items].reverse().find((entry) => entry.run)?.run ?? null
-      currentRunDetail.value = latestRun ?? currentRunDetail.value
+      if (latestRun) {
+        syncRunDetail(latestRun)
+      }
+
       return response
     } catch (error) {
       setError(error)
@@ -217,8 +308,9 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
     isSubmittingTask.value = true
 
     try {
-      currentRunDetail.value = await runtimeApi.submitTask(payload)
-      return currentRunDetail.value
+      const detail = await runtimeApi.submitTask(payload)
+      syncRunDetail(detail)
+      return detail
     } catch (error) {
       setError(error)
       throw error
@@ -252,6 +344,7 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
           candidates: upsertCandidate(entry.candidates, response.candidate),
         }
       })
+
       await refreshCurrentRun(response.candidate.run_id)
       return response.candidate
     } catch (error) {
@@ -289,6 +382,7 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
           assets: upsertAsset(entry.assets, response.asset),
         }
       })
+
       await refreshCurrentRun(response.candidate.run_id)
       return response
     } catch (error) {
@@ -308,11 +402,12 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
     isResolvingApproval.value = true
 
     try {
-      currentRunDetail.value = await runtimeApi.resolveApproval(currentApproval.value.id, {
+      const detail = await runtimeApi.resolveApproval(currentApproval.value.id, {
         decision,
         reviewed_by: reviewedBy,
       })
-      return currentRunDetail.value
+      syncRunDetail(detail)
+      return detail
     } catch (error) {
       setError(error)
       throw error
@@ -330,14 +425,76 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
     isResumingRun.value = true
 
     try {
-      currentRunDetail.value = await runtimeApi.resumeRun(currentRun.value.id)
-      return currentRunDetail.value
+      const detail = await runtimeApi.resumeRun(currentRun.value.id)
+      syncRunDetail(detail)
+      return detail
     } catch (error) {
       setError(error)
       throw error
     } finally {
       isResumingRun.value = false
     }
+  }
+
+  const selectRun = async (runId: string) => {
+    clearError()
+
+    try {
+      return await refreshCurrentRun(runId)
+    } catch (error) {
+      setError(error)
+      throw error
+    }
+  }
+
+  const refreshFromRuntimeEvent = async (event: RuntimeEventEnvelope) => {
+    try {
+      if (event.run_id && runEventTopics.includes(event.topic)) {
+        await refreshCurrentRun(event.run_id)
+      }
+
+      const refreshTasks: Array<Promise<void>> = []
+
+      if (runEventTopics.includes(event.topic)) {
+        refreshTasks.push(loadRuns(true), loadInboxItems(true))
+      }
+
+      if (automationEventTopics.includes(event.topic)) {
+        refreshTasks.push(loadAutomations(true))
+      }
+
+      if (knowledgeEventTopics.includes(event.topic)) {
+        refreshTasks.push(loadKnowledgeSpaces(true))
+      }
+
+      await Promise.all(refreshTasks)
+    } catch (error) {
+      setError(error)
+    }
+  }
+
+  const startRuntimeEventStream = () => {
+    if (runtimeEventSource.value || typeof EventSource === 'undefined') {
+      return
+    }
+
+    const source = new EventSource('/api/v1/events/stream')
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data) as RuntimeEventEnvelope
+        lastEventSequence.value = payload.sequence
+        void refreshFromRuntimeEvent(payload)
+      } catch {
+        errorMessage.value = 'Request failed.'
+      }
+    }
+
+    runtimeEventSource.value = source
+  }
+
+  const stopRuntimeEventStream = () => {
+    runtimeEventSource.value?.close()
+    runtimeEventSource.value = null
   }
 
   return {
@@ -349,27 +506,40 @@ export const useRuntimeControlStore = defineStore('runtime-control', () => {
     currentRun,
     currentRunDetail,
     errorMessage,
+    hasLoadedAutomations,
+    hasLoadedInboxItems,
     hasLoadedKnowledgeSpaces,
+    hasLoadedRuns,
+    inboxItems,
     isCreatingAutomation,
     isCreatingCandidate,
     isDeliveringMcpEvent,
     isLoadingAutomations,
+    isLoadingInboxItems,
     isLoadingKnowledgeSpaces,
+    isLoadingRuns,
     isResolvingApproval,
     isResumingRun,
     isSubmittingTask,
     knowledgeSpaces,
+    lastEventSequence,
     promotingCandidateId,
+    runs,
     clearError,
     createAutomation,
     createCandidateFromRun,
     deliverMcpEvent,
     deliverTrigger,
     loadAutomations,
+    loadInboxItems,
     loadKnowledgeSpaces,
+    loadRuns,
     promoteCandidate,
     resolveApproval,
     resumeRun,
+    selectRun,
+    startRuntimeEventStream,
+    stopRuntimeEventStream,
     submitTask,
   }
 })

@@ -13,6 +13,9 @@ const {
   currentRun,
   currentRunDetail,
   errorMessage,
+  inboxItems,
+  lastEventSequence,
+  runs,
 } = storeToRefs(runtimeStore)
 </script>
 
@@ -24,9 +27,18 @@ const {
           <p class="text-xs uppercase tracking-[0.24em] text-[var(--text-muted)]">{{ t('activity.eyebrow') }}</p>
           <h2 class="mt-3 text-2xl font-semibold leading-tight">{{ t('activity.title') }}</h2>
         </div>
-        <span class="rounded-full bg-[var(--surface-elevated)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
-          {{ currentRun?.status ?? t('activity.emptyState') }}
-        </span>
+        <div class="flex flex-wrap justify-end gap-2">
+          <span class="rounded-full bg-[var(--surface-elevated)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
+            {{ currentRun?.status ?? t('activity.emptyState') }}
+          </span>
+          <span class="rounded-full border border-[var(--border-muted)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
+            {{
+              lastEventSequence === null
+                ? t('activity.stream.idle')
+                : t('activity.stream.live', { sequence: lastEventSequence })
+            }}
+          </span>
+        </div>
       </div>
 
       <p
@@ -61,6 +73,61 @@ const {
       </dl>
       <p v-else class="mt-4 text-sm text-[var(--text-muted)]">{{ t('activity.emptyDescription') }}</p>
     </article>
+
+    <section class="grid gap-6 xl:grid-cols-2">
+      <article class="rounded-[28px] border border-[var(--border-muted)] bg-[var(--surface-panel)] p-6 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-lg font-semibold">{{ t('activity.sections.runs') }}</h3>
+          <span class="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">{{ runs.length }}</span>
+        </div>
+        <ul v-if="runs.length" class="mt-4 space-y-3">
+          <li v-for="run in runs" :key="run.id">
+            <button
+              class="w-full rounded-2xl border px-4 py-3 text-left transition"
+              :class="
+                run.id === currentRun?.id
+                  ? 'border-[var(--accent-primary)] bg-[var(--accent-soft)]'
+                  : 'border-[var(--border-muted)] bg-[var(--surface-elevated)] hover:border-[var(--accent-primary)]/50'
+              "
+              type="button"
+              @click="runtimeStore.selectRun(run.id)"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="font-medium">{{ run.title }}</p>
+                  <p class="mt-1 text-sm text-[var(--text-muted)]">{{ run.project_id }} · {{ run.run_type }}</p>
+                </div>
+                <span class="text-xs font-medium text-[var(--text-muted)]">{{ run.status }}</span>
+              </div>
+            </button>
+          </li>
+        </ul>
+        <p v-else class="mt-4 text-sm text-[var(--text-muted)]">{{ t('activity.pending.runs') }}</p>
+      </article>
+
+      <article class="rounded-[28px] border border-[var(--border-muted)] bg-[var(--surface-panel)] p-6 shadow-sm">
+        <div class="flex items-center justify-between gap-3">
+          <h3 class="text-lg font-semibold">{{ t('activity.sections.inbox') }}</h3>
+          <span class="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">{{ inboxItems.length }}</span>
+        </div>
+        <ul v-if="inboxItems.length" class="mt-4 space-y-3 text-sm">
+          <li
+            v-for="item in inboxItems"
+            :key="item.id"
+            class="rounded-2xl border border-[var(--border-muted)] bg-[var(--surface-elevated)] px-4 py-3"
+          >
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <p class="font-medium">{{ item.owner_ref }}</p>
+                <p class="mt-1 text-[var(--text-muted)]">{{ item.target_ref }} · {{ item.priority }}</p>
+              </div>
+              <span class="text-xs font-medium text-[var(--text-muted)]">{{ item.state }}</span>
+            </div>
+          </li>
+        </ul>
+        <p v-else class="mt-4 text-sm text-[var(--text-muted)]">{{ t('activity.pending.inbox') }}</p>
+      </article>
+    </section>
 
     <section class="rounded-[28px] border border-[var(--border-muted)] bg-[var(--surface-panel)] p-6 shadow-sm">
       <h3 class="text-lg font-semibold">{{ t('activity.sections.artifact') }}</h3>

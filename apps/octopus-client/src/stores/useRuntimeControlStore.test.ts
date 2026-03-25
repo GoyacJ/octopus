@@ -1,3 +1,4 @@
+import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -379,5 +380,177 @@ describe('useRuntimeControlStore', () => {
     expect(promotion?.asset.id).toBe('asset-1')
     expect(store.knowledgeSpaces[0]?.candidates[0]?.status).toBe('verified_shared')
     expect(store.knowledgeSpaces[0]?.assets[0]?.id).toBe('asset-1')
+  })
+
+  it('loads run and inbox snapshots and refreshes them from runtime events', async () => {
+    const eventSources: Array<{
+      url: string
+      onmessage: ((event: MessageEvent<string>) => void) | null
+      close: () => void
+      emit: (payload: unknown) => void
+    }> = []
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: 'run-1',
+                project_id: 'project-alpha',
+                run_type: 'task',
+                status: 'waiting_approval',
+                idempotency_key: 'task:run-1',
+                requested_by: 'operator-1',
+                title: 'Review runtime wiring',
+                checkpoint_token: 'resume:run-1',
+                created_at: '2026-03-26T00:00:00Z',
+                updated_at: '2026-03-26T00:00:00Z',
+              },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: 'inbox-1',
+                workspace_id: 'workspace-alpha',
+                owner_ref: 'reviewer.execution',
+                state: 'open',
+                priority: 'high',
+                target_ref: 'run-1',
+                dedupe_key: 'approval:run-1',
+              },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            run: {
+              id: 'run-1',
+              project_id: 'project-alpha',
+              run_type: 'task',
+              status: 'paused',
+              idempotency_key: 'task:run-1',
+              requested_by: 'operator-1',
+              title: 'Review runtime wiring',
+              checkpoint_token: 'resume:run-1',
+              created_at: '2026-03-26T00:00:00Z',
+              updated_at: '2026-03-26T00:01:00Z',
+            },
+            artifact: null,
+            approval: {
+              id: 'approval-1',
+              run_id: 'run-1',
+              approval_type: 'execution',
+              state: 'approved',
+              target_ref: 'run-1',
+              requested_at: '2026-03-26T00:00:30Z',
+              reviewed_by: 'reviewer-1',
+            },
+            inbox_item: {
+              id: 'inbox-1',
+              workspace_id: 'workspace-alpha',
+              owner_ref: 'reviewer.execution',
+              state: 'resolved',
+              priority: 'high',
+              target_ref: 'run-1',
+              dedupe_key: 'approval:run-1',
+            },
+            trace: [],
+            audit: [],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: 'run-1',
+                project_id: 'project-alpha',
+                run_type: 'task',
+                status: 'paused',
+                idempotency_key: 'task:run-1',
+                requested_by: 'operator-1',
+                title: 'Review runtime wiring',
+                checkpoint_token: 'resume:run-1',
+                created_at: '2026-03-26T00:00:00Z',
+                updated_at: '2026-03-26T00:01:00Z',
+              },
+            ],
+          }),
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            items: [
+              {
+                id: 'inbox-1',
+                workspace_id: 'workspace-alpha',
+                owner_ref: 'reviewer.execution',
+                state: 'resolved',
+                priority: 'high',
+                target_ref: 'run-1',
+                dedupe_key: 'approval:run-1',
+              },
+            ],
+          }),
+        ),
+      )
+
+    vi.stubGlobal('fetch', fetchMock)
+    vi.stubGlobal(
+      'EventSource',
+      vi.fn().mockImplementation((url: string) => {
+        const source: {
+          url: string
+          onmessage: ((event: MessageEvent<string>) => void) | null
+          close: ReturnType<typeof vi.fn>
+          emit: (payload: unknown) => void
+        } = {
+          url,
+          onmessage: null,
+          close: vi.fn(),
+          emit(payload: unknown) {
+            source.onmessage?.(
+              new MessageEvent('message', {
+                data: JSON.stringify(payload),
+              }),
+            )
+          },
+        }
+
+        eventSources.push(source)
+        return source
+      }),
+    )
+
+    const store = useRuntimeControlStore()
+    await store.loadRuns()
+    await store.loadInboxItems()
+    store.startRuntimeEventStream()
+
+    expect(store.runs[0]?.status).toBe('waiting_approval')
+    expect(store.inboxItems[0]?.state).toBe('open')
+    expect(eventSources[0]?.url).toBe('/api/v1/events/stream')
+
+    eventSources[0]?.emit({
+      sequence: 1,
+      topic: 'approval.updated',
+      occurred_at: '2026-03-26T00:01:00Z',
+      run_id: 'run-1',
+      workspace_id: 'workspace-alpha',
+    })
+    await flushPromises()
+
+    expect(store.currentRunDetail?.run.status).toBe('paused')
+    expect(store.runs[0]?.status).toBe('paused')
+    expect(store.inboxItems[0]?.state).toBe('resolved')
   })
 })

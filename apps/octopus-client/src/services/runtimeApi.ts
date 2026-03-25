@@ -4,6 +4,7 @@ import type {
   AutomationDetailResponse,
   AutomationListResponse,
   ErrorResponse,
+  InboxListResponse,
   KnowledgeCandidateCreateRequest,
   KnowledgeCandidateResponse,
   KnowledgePromotionRequest,
@@ -12,6 +13,7 @@ import type {
   McpEventDeliveryRequest,
   McpEventDeliveryResponse,
   RunDetailResponse,
+  RunListResponse,
   TaskSubmissionRequest,
   TriggerDeliveryRequest,
   TriggerDeliveryResponse,
@@ -64,6 +66,19 @@ const getJson = async <T>(path: string): Promise<T> => {
   return parseResponse<T>(response)
 }
 
+const buildPath = (path: string, query: Record<string, string | undefined>) => {
+  const searchParams = new URLSearchParams()
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value) {
+      searchParams.set(key, value)
+    }
+  })
+
+  const search = searchParams.toString()
+  return search ? `${path}?${search}` : path
+}
+
 export const runtimeApi = {
   listAutomations() {
     return getJson<AutomationListResponse>('/api/v1/automations')
@@ -82,6 +97,21 @@ export const runtimeApi = {
   },
   submitTask(payload: TaskSubmissionRequest) {
     return postJson<RunDetailResponse>('/api/v1/runs/task', payload)
+  },
+  listRuns(workspaceId?: string, projectId?: string) {
+    return getJson<RunListResponse>(
+      buildPath('/api/v1/runs', {
+        workspace_id: workspaceId,
+        project_id: projectId,
+      }),
+    )
+  },
+  listInboxItems(workspaceId?: string) {
+    return getJson<InboxListResponse>(
+      buildPath('/api/v1/inbox', {
+        workspace_id: workspaceId,
+      }),
+    )
   },
   getRun(runId: string) {
     return getJson<RunDetailResponse>(`/api/v1/runs/${runId}`)
