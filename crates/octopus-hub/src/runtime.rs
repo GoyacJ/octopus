@@ -311,6 +311,9 @@ impl InMemoryRuntimeService {
             })?;
 
             run.status = decision.next_status();
+            if decision == ApprovalDecision::Rejected {
+                run.checkpoint_token = None;
+            }
             run.updated_at = now_iso();
         }
 
@@ -386,6 +389,7 @@ impl InMemoryRuntimeService {
             }
 
             run.status = RunStatus::Running;
+            run.checkpoint_token = None;
             run.updated_at = now_iso();
 
             (

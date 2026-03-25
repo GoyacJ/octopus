@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
-    "test": "vitest run src/components/RuntimeOverview.test.ts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@octopus/contracts": "workspace:*",
@@ -17,4 +17,3 @@
     "vue-router": "^4.6.3"
   }
 }
-

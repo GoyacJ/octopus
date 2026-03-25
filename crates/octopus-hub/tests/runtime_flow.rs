@@ -25,6 +25,33 @@ fn submit_run_requiring_approval(
 }
 
 #[test]
+fn submitting_without_approval_completes_with_artifact_and_no_checkpoint() {
+    let runtime = InMemoryRuntimeService::default();
+
+    let detail = runtime.submit_task(TaskSubmissionRequest {
+        project_id: "project-alpha".into(),
+        title: "Generate final artifact".into(),
+        description: Some("Direct path without approval".into()),
+        requested_by: "operator-1".into(),
+        requires_approval: false,
+    });
+
+    assert_eq!(detail.run.status.as_str(), "completed");
+    assert_eq!(detail.run.checkpoint_token, None);
+    assert!(detail.approval.is_none());
+    assert!(detail.inbox_item.is_none());
+    assert_eq!(
+        detail
+            .artifact
+            .as_ref()
+            .expect("artifact should exist")
+            .run_id,
+        detail.run.id
+    );
+    assert!(detail.audit.iter().any(|entry| entry.action == "artifact.created"));
+}
+
+#[test]
 fn rejects_unknown_approval_decisions_without_mutating_the_run() {
     let runtime = InMemoryRuntimeService::default();
     let (run_id, approval_id, _) = submit_run_requiring_approval(&runtime);
@@ -47,6 +74,43 @@ fn rejects_unknown_approval_decisions_without_mutating_the_run() {
     assert_eq!(detail.run.status.as_str(), "waiting_approval");
     assert_eq!(approval.state, ApprovalState::Pending);
     assert_eq!(approval.reviewed_by, None);
+}
+
+#[test]
+fn rejected_runs_clear_checkpoint_and_cannot_resume() {
+    let runtime = InMemoryRuntimeService::default();
+    let (run_id, approval_id, _) = submit_run_requiring_approval(&runtime);
+
+    let rejected = runtime
+        .resolve_approval(
+            &approval_id,
+            ApprovalResolutionRequest {
+                decision: "rejected".into(),
+                reviewed_by: "reviewer-1".into(),
+            },
+        )
+        .expect("rejection should succeed");
+
+    assert_eq!(rejected.run.status.as_str(), "terminated");
+    assert_eq!(rejected.run.checkpoint_token, None);
+    assert_eq!(
+        rejected
+            .approval
+            .as_ref()
+            .expect("approval should exist")
+            .state,
+        ApprovalState::Rejected
+    );
+
+    let error = runtime
+        .resume_run(&run_id)
+        .expect_err("terminated runs should not resume");
+
+    assert!(
+        error
+            .to_string()
+            .contains("resume is only allowed after approval grants a checkpoint")
+    );
 }
 
 #[test]
@@ -118,6 +182,7 @@ fn resuming_after_approval_records_artifact_audit_against_the_artifact() {
         .expect("resuming a paused run should succeed");
     let artifact = resumed.artifact.expect("resume should create an artifact");
 
+    assert_eq!(resumed.run.checkpoint_token, None);
     assert!(resumed.audit.iter().any(|entry| {
         entry.action == "artifact.created" && entry.target_ref == artifact.id
     }));
