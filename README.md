@@ -10,6 +10,7 @@
 - 当前仓库不包含可执行的 `apps/`、`packages/`、`crates/` 实现骨架，也不包含根级 `package.json`、`pnpm-workspace.yaml`、`Cargo.toml` 等 workspace manifests；任何运行时、API、UI 或测试能力都必须以后续实际引入的 tracked sources 为准。
 - 当前重建设计的正式焦点是：`CapabilityCatalog`、`CapabilityResolver`、`ToolSearch`、结构化交互、分层记忆、`ArtifactSessionState` 与 `SkillPack` 注入机制。
 - `contracts/v1/` 保存机器可读契约源，`contracts/templates/` 保存 capability card 模板。
+- `docs/DEVELOPMENT_PLAN.md` 是仓库级 AI 开发执行主文档，`docs/DEVELOPMENT_CHANGELOG.md` 是累计式变更记录文档。
 - 当前仓库仍不应被描述为“功能完整平台”或“已完成目标态实现”。
 - 当前只对 tracked tree 实际支持的验证链路作真实声明；若未来重新引入 `pnpm` / `cargo` manifests，方可声明对应构建、测试或运行结果。
 - `node_modules/`、IDE 配置和本地缓存不属于仓库正式设计输入。
@@ -25,6 +26,8 @@
 | [docs/SAD.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/SAD.md) | 目标态逻辑架构、运行平面、治理模型与恢复机制 |
 | [docs/CONTRACTS.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/CONTRACTS.md) | 核心对象、共享枚举与事件骨架的正式契约冻结说明 |
 | [contracts/README.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/contracts/README.md) | 机器可读契约源与 capability card 模板入口 |
+| [docs/DEVELOPMENT_PLAN.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/DEVELOPMENT_PLAN.md) | 仓库级 AI 开发执行主文档，定义阶段、门禁与防跑偏规则 |
+| [docs/DEVELOPMENT_CHANGELOG.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/DEVELOPMENT_CHANGELOG.md) | 仓库级累计变更记录，追踪阶段任务、验证与偏离情况 |
 | [docs/ENGINEERING_STANDARD.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/ENGINEERING_STANDARD.md) | 工程实现约束、分层规则、交付与评审基线 |
 | [docs/VIBECODING.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/VIBECODING.md) | AI 主导实现模式下的执行边界与风控原则 |
 | [docs/adr/README.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/adr/README.md) | 架构例外和正式决策的记录入口 |
@@ -40,10 +43,12 @@
 2. [docs/SAD.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/SAD.md)
 3. [docs/CONTRACTS.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/CONTRACTS.md)
 4. [contracts/README.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/contracts/README.md)
-5. [docs/ENGINEERING_STANDARD.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/ENGINEERING_STANDARD.md)
-6. [docs/VIBECODING.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/VIBECODING.md)
-7. [docs/adr/README.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/adr/README.md)
-8. [AGENTS.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/AGENTS.md)
+5. [docs/DEVELOPMENT_PLAN.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/DEVELOPMENT_PLAN.md)
+6. [docs/DEVELOPMENT_CHANGELOG.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/DEVELOPMENT_CHANGELOG.md)
+7. [docs/ENGINEERING_STANDARD.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/ENGINEERING_STANDARD.md)
+8. [docs/VIBECODING.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/VIBECODING.md)
+9. [docs/adr/README.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/adr/README.md)
+10. [AGENTS.md](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/AGENTS.md)
 
 ## 协作与验证边界
 

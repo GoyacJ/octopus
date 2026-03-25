@@ -12,6 +12,8 @@ Repository-wide instructions for Codex and compatible coding agents.
   - `docs/SAD.md`
   - `docs/CONTRACTS.md`
   - `contracts/README.md`
+  - `docs/DEVELOPMENT_PLAN.md`
+  - `docs/DEVELOPMENT_CHANGELOG.md`
   - `docs/ENGINEERING_STANDARD.md`
   - `docs/VIBECODING.md`
   - `docs/adr/README.md`
@@ -30,7 +32,7 @@ Repository-wide instructions for Codex and compatible coding agents.
 ## Required Sync
 
 - If a change affects repository entrypoints, architecture boundaries, engineering rules, or verification expectations, update the affected docs in the same change.
-- Keep the formal doc list aligned across `README.md`, `AGENTS.md`, `docs/ENGINEERING_STANDARD.md`, `docs/VIBECODING.md`, `.github/workflows/guardrails.yml`, and `.github/pull_request_template.md`, including `contracts/README.md` when contract sources are part of the change.
+- Keep the formal doc list aligned across `README.md`, `AGENTS.md`, `docs/DEVELOPMENT_PLAN.md`, `docs/DEVELOPMENT_CHANGELOG.md`, `docs/ENGINEERING_STANDARD.md`, `docs/VIBECODING.md`, `.github/workflows/guardrails.yml`, and `.github/pull_request_template.md`, including `contracts/README.md` when contract sources are part of the change.
 - Record architecture exceptions in `docs/adr/` rather than only in chat or commit messages.
 
 ## Verification

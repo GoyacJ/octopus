@@ -3,7 +3,7 @@
 更新时间：2026-03-26
 文档状态：Draft
 文档定位：仓库级研发流程基线
-关联文档：`README.md`、`AGENTS.md`、`docs/PRD.md`、`docs/SAD.md`、`docs/CONTRACTS.md`、`contracts/README.md`、`docs/ENGINEERING_STANDARD.md`、`docs/adr/README.md`
+关联文档：`README.md`、`AGENTS.md`、`docs/PRD.md`、`docs/SAD.md`、`docs/CONTRACTS.md`、`contracts/README.md`、`docs/DEVELOPMENT_PLAN.md`、`docs/DEVELOPMENT_CHANGELOG.md`、`docs/ENGINEERING_STANDARD.md`、`docs/adr/README.md`
 
 ---
 
@@ -51,6 +51,7 @@
 1. 每轮只交付一条最小可验证纵切片。
 2. 在一个闭环通过之前，不扩展第二批能力。
 3. 所有“未来能力”必须先留接口位或目录位，再按优先级解锁。
+4. 每轮开始前先对齐 `docs/DEVELOPMENT_PLAN.md` 当前阶段，并在 `docs/DEVELOPMENT_CHANGELOG.md` 建立或更新记录。
 
 ### 4.2 人工介入防代码混沌
 
@@ -127,8 +128,10 @@ AI 默认不允许：
 4. [SAD.md](SAD.md)
 5. [CONTRACTS.md](CONTRACTS.md)
 6. [../contracts/README.md](../contracts/README.md)
-7. [ENGINEERING_STANDARD.md](ENGINEERING_STANDARD.md)
-8. [adr/README.md](adr/README.md)
+7. [DEVELOPMENT_PLAN.md](DEVELOPMENT_PLAN.md)
+8. [DEVELOPMENT_CHANGELOG.md](DEVELOPMENT_CHANGELOG.md)
+9. [ENGINEERING_STANDARD.md](ENGINEERING_STANDARD.md)
+10. [adr/README.md](adr/README.md)
 
 在这一状态下，执行时必须遵守以下事实约束：
 
@@ -145,9 +148,10 @@ AI 默认不允许：
 后续所有实施默认按以下依赖顺序推进：
 
 1. 治理与文档基线。
-2. 契约源目录。
-3. `CapabilityCatalog / CapabilityResolver / ToolSearch / SkillPack` 等能力运行时骨架。
-4. 结构化交互、分层记忆与 Artifact 会话态的共享契约。
-5. 如需重建实现，再引入仓库和工具链骨架。
-6. 任一条 `run -> interaction/approval -> resume -> timeline/audit` 的可验证纵切片。
-7. 后续能力按验证结果逐条解锁。
+2. `docs/DEVELOPMENT_PLAN.md` 与 `docs/DEVELOPMENT_CHANGELOG.md`。
+3. 契约源目录。
+4. `CapabilityCatalog / CapabilityResolver / ToolSearch / SkillPack` 等能力运行时骨架。
+5. 结构化交互、分层记忆与 Artifact 会话态的共享契约。
+6. 如需重建实现，再引入仓库和工具链骨架。
+7. 任一条 `run -> interaction/approval -> resume -> timeline/audit` 的可验证纵切片。
+8. 后续能力按验证结果逐条解锁。

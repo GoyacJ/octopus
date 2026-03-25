@@ -1,7 +1,7 @@
 # octopus · 开发技术规范（ENGINEERING_STANDARD.md）
 
 **版本**: v0.2.2 | **状态**: 正式版 | **日期**: 2026-03-26
-**依赖文档**: PRD v2.1 · SAD v2.1 · CONTRACTS v1.1 · contracts/README.md · VIBECODING 2026-03-26
+**依赖文档**: PRD v2.1 · SAD v2.1 · CONTRACTS v1.1 · contracts/README.md · DEVELOPMENT_PLAN 2026-03-26 · DEVELOPMENT_CHANGELOG 2026-03-26 · VIBECODING 2026-03-26
 
 ---
 
@@ -45,6 +45,8 @@
 - 产品需求、能力切片与非目标：见 [PRD.md](./PRD.md)
 - 系统架构、运行平面、治理模型与恢复机制：见 [SAD.md](./SAD.md)
 - 正式对象、枚举与事件契约：见 [CONTRACTS.md](./CONTRACTS.md)
+- 分阶段开发顺序、阶段门禁与防跑偏规则：见 [DEVELOPMENT_PLAN.md](./DEVELOPMENT_PLAN.md)
+- 执行性变更登记与完成回填：见 [DEVELOPMENT_CHANGELOG.md](./DEVELOPMENT_CHANGELOG.md)
 - AI 主导实现的执行边界、人工签收和风险控制：见 [VIBECODING.md](./VIBECODING.md)
 - 架构例外与正式决策：见 [adr/README.md](./adr/README.md)
 
@@ -593,7 +595,7 @@ Reviewer MUST 至少检查以下内容：
 - 是否引入硬编码文案或硬编码颜色
 - 是否破坏主题 / i18n / tenant / 审批等系统级约束
 - 是否补足必要文档与验证说明
-- 若变更涉及治理入口或契约源，是否同步更新 `README.md`、`AGENTS.md`、`docs/CONTRACTS.md`、`.github/workflows/guardrails.yml` 与 `.github/pull_request_template.md`
+- 若变更涉及治理入口或契约源，是否同步更新 `README.md`、`AGENTS.md`、`docs/DEVELOPMENT_PLAN.md`、`docs/DEVELOPMENT_CHANGELOG.md`、`docs/CONTRACTS.md`、`.github/workflows/guardrails.yml` 与 `.github/pull_request_template.md`
 
 ### 8.6 Definition of Done
 

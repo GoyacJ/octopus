@@ -24,6 +24,8 @@ jobs:
             docs/SAD.md
             docs/CONTRACTS.md
             contracts/README.md
+            docs/DEVELOPMENT_PLAN.md
+            docs/DEVELOPMENT_CHANGELOG.md
             contracts/v1/core-objects.json
             contracts/v1/enums.json
             contracts/v1/events.json
