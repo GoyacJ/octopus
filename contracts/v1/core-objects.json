@@ -1,131 +1,198 @@
 {
-  "version": "1.0.0",
+  "version": "1.1",
+  "released_at": "2026-03-26",
   "objects": [
     {
       "name": "HubConnection",
-      "bounded_context": "Access & Identity",
-      "required_fields": ["id", "name", "endpoint", "mode", "auth_strategy", "last_status"],
-      "notes": "Client 持有的连接配置，不是远程业务事实源。"
+      "context": "Access & Identity",
+      "stability": "frozen",
+      "minimal_fields": ["hub_connection_id", "display_name", "endpoint", "auth_mode", "connection_status"]
     },
     {
       "name": "Workspace",
-      "bounded_context": "Workspace & Project",
-      "required_fields": ["id", "tenant_id", "name", "default_budget_policy_id", "state"],
-      "notes": "共享协作、共享知识和共享治理的基本边界。"
+      "context": "Workspace & Project",
+      "stability": "frozen",
+      "minimal_fields": ["workspace_id", "tenant_ref", "display_name", "policy_ref", "member_refs"]
     },
     {
       "name": "Project",
-      "bounded_context": "Workspace & Project",
-      "required_fields": ["id", "workspace_id", "name", "attached_space_ids", "state"],
-      "notes": "承载 Run、Artifact 和 KnowledgeSpace 视图。"
+      "context": "Workspace & Project",
+      "stability": "frozen",
+      "minimal_fields": ["project_id", "workspace_ref", "display_name", "attached_knowledge_space_refs", "status"]
     },
     {
       "name": "Agent",
-      "bounded_context": "Agent Registry",
-      "required_fields": ["id", "workspace_id", "identity", "capability_profile", "knowledge_scope", "state"],
-      "notes": "统一数字协作者对象。"
+      "context": "Agent Registry",
+      "stability": "frozen",
+      "minimal_fields": ["agent_id", "workspace_ref", "display_name", "identity_ref", "execution_profile_ref"]
     },
     {
       "name": "Team",
-      "bounded_context": "Collaboration Mesh",
-      "required_fields": ["id", "workspace_id", "coordination_mode", "member_ids", "authority_scope", "knowledge_scope", "delegation_edges"],
-      "notes": "协作拓扑单元，不作为 Shared Knowledge 主属边界。"
+      "context": "Agent Registry",
+      "stability": "frozen",
+      "minimal_fields": ["team_id", "workspace_ref", "coordination_mode", "member_refs", "knowledge_scope"]
     },
     {
       "name": "Run",
-      "bounded_context": "Run Orchestration",
-      "required_fields": ["id", "project_id", "run_type", "status", "idempotency_key", "requested_by", "created_at"],
-      "notes": "所有正式执行的权威外壳。"
+      "context": "Run Orchestration",
+      "stability": "frozen",
+      "minimal_fields": ["run_id", "project_ref", "run_type", "status", "submitted_by_ref"]
     },
     {
       "name": "Task",
-      "bounded_context": "Run Orchestration",
-      "required_fields": ["id", "run_id", "title", "goal", "state"],
-      "notes": "交付导向业务对象。"
+      "context": "Run Orchestration",
+      "stability": "frozen",
+      "minimal_fields": ["task_id", "project_ref", "goal", "owner_ref", "status"]
     },
     {
       "name": "Automation",
-      "bounded_context": "Run Orchestration",
-      "required_fields": ["id", "workspace_id", "name", "trigger_ids", "budget_policy_id", "state"],
-      "notes": "可重复执行定义。"
+      "context": "Run Orchestration",
+      "stability": "frozen",
+      "minimal_fields": ["automation_id", "workspace_ref", "trigger_refs", "budget_policy_ref", "status"]
     },
     {
       "name": "Trigger",
-      "bounded_context": "Run Orchestration",
-      "required_fields": ["id", "source_type", "dedupe_key", "owner_ref", "state"],
-      "notes": "启动或续接 Run 的正式触发器。"
+      "context": "Run Orchestration",
+      "stability": "frozen",
+      "minimal_fields": ["trigger_id", "source_type", "scope_ref", "idempotency_key", "status"]
     },
     {
       "name": "CapabilityGrant",
-      "bounded_context": "Governance & Policy",
-      "required_fields": ["id", "subject_ref", "scope", "tool_set", "environment_scope", "protocol_scope", "effective_window"],
-      "notes": "主体能力授权窗口。"
+      "context": "Governance & Policy",
+      "stability": "frozen",
+      "minimal_fields": ["grant_id", "subject_ref", "scope_ref", "capability_refs", "effective_window"]
     },
     {
       "name": "BudgetPolicy",
-      "bounded_context": "Governance & Policy",
-      "required_fields": ["id", "owner_ref", "model_budget", "token_budget", "tool_action_budget", "runtime_ceiling", "escalation_condition"],
-      "notes": "约束成本、动作次数和时窗。"
+      "context": "Governance & Policy",
+      "stability": "frozen",
+      "minimal_fields": ["budget_policy_id", "scope_ref", "token_budget", "runtime_ceiling", "overrun_handling"]
     },
     {
       "name": "ApprovalRequest",
-      "bounded_context": "Governance & Policy",
-      "required_fields": ["id", "run_id", "approval_type", "state", "target_ref", "requested_at"],
-      "notes": "高风险动作、知识晋升和导出的正式审批对象。"
+      "context": "Governance & Policy",
+      "stability": "frozen",
+      "minimal_fields": ["approval_request_id", "run_ref", "approval_type", "status", "assignee_ref"]
     },
     {
       "name": "EnvironmentLease",
-      "bounded_context": "Execution Management",
-      "required_fields": ["id", "run_id", "sandbox_tier", "state", "expiry_at", "resume_token"],
-      "notes": "环境租约与恢复锚点。"
+      "context": "Execution Management",
+      "stability": "frozen",
+      "minimal_fields": ["environment_lease_id", "run_ref", "sandbox_tier", "expiry_at", "resume_token"]
     },
     {
       "name": "Artifact",
-      "bounded_context": "Artifact & Inbox",
-      "required_fields": ["id", "project_id", "run_id", "version", "title", "content_ref", "state"],
-      "notes": "正式结果对象。"
+      "context": "Artifact & Inbox",
+      "stability": "frozen",
+      "minimal_fields": ["artifact_id", "project_ref", "version_ref", "content_ref", "status"]
     },
     {
       "name": "InboxItem",
-      "bounded_context": "Artifact & Inbox",
-      "required_fields": ["id", "workspace_id", "owner_ref", "state", "priority", "target_ref", "dedupe_key"],
-      "notes": "正式待处理项。"
+      "context": "Artifact & Inbox",
+      "stability": "frozen",
+      "minimal_fields": ["inbox_item_id", "owner_ref", "target_ref", "state", "priority"]
     },
     {
       "name": "KnowledgeSpace",
-      "bounded_context": "Knowledge System",
-      "required_fields": ["id", "workspace_id", "name", "owner_refs", "scope", "state"],
-      "notes": "Shared Knowledge 权威容器。"
+      "context": "Knowledge System",
+      "stability": "frozen",
+      "minimal_fields": ["knowledge_space_id", "workspace_ref", "display_name", "owner_refs", "status"]
     },
     {
       "name": "KnowledgeCandidate",
-      "bounded_context": "Knowledge System",
-      "required_fields": ["id", "knowledge_space_id", "status", "trust_level", "source_ref", "created_at"],
-      "notes": "待验证的候选知识记录，必须先进入候选队列再决定是否晋升。"
+      "context": "Knowledge System",
+      "stability": "frozen",
+      "minimal_fields": ["knowledge_candidate_id", "source_ref", "knowledge_space_ref", "trust_level", "status"]
     },
     {
       "name": "KnowledgeAsset",
-      "bounded_context": "Knowledge System",
-      "required_fields": ["id", "knowledge_space_id", "layer", "status", "trust_level", "source_ref"],
-      "notes": "正式知识条目。"
+      "context": "Knowledge System",
+      "stability": "frozen",
+      "minimal_fields": ["knowledge_asset_id", "knowledge_space_ref", "layer", "status", "lineage_ref"]
     },
     {
       "name": "DelegationGrant",
-      "bounded_context": "Collaboration Mesh",
-      "required_fields": ["id", "run_id", "authority_scope", "budget_policy_id", "expiry_at", "state"],
-      "notes": "某次委托的 authority、budget 和 expiry 约束。"
+      "context": "Collaboration Mesh",
+      "stability": "frozen",
+      "minimal_fields": ["delegation_grant_id", "run_ref", "scope_ref", "budget_ref", "expiry_at"]
     },
     {
       "name": "A2APeer",
-      "bounded_context": "Interop Gateway",
-      "required_fields": ["id", "tenant_id", "display_name", "trust_level", "peer_status", "capability_summary"],
-      "notes": "已登记的外部 Agent 对端。"
+      "context": "Interop Gateway",
+      "stability": "frozen",
+      "minimal_fields": ["a2a_peer_id", "display_name", "trust_level", "capability_refs", "status"]
     },
     {
       "name": "ExternalAgentIdentity",
-      "bounded_context": "Interop Gateway",
-      "required_fields": ["id", "peer_id", "subject_claim", "delegated_authority", "identity_status"],
-      "notes": "绑定在具体 A2A 对端上的外部主体身份声明。"
+      "context": "Interop Gateway",
+      "stability": "frozen",
+      "minimal_fields": ["external_agent_identity_id", "a2a_peer_ref", "subject_claim", "delegated_authority", "status"]
+    },
+    {
+      "name": "CapabilityDescriptor",
+      "context": "Capability Management",
+      "stability": "frozen",
+      "minimal_fields": ["capability_id", "kind", "source", "risk_level", "schema_ref"]
+    },
+    {
+      "name": "CapabilityBinding",
+      "context": "Capability Management",
+      "stability": "frozen",
+      "minimal_fields": ["capability_binding_id", "capability_ref", "subject_ref", "binding_status", "policy_ref"]
+    },
+    {
+      "name": "CapabilitySearchQuery",
+      "context": "Capability Management",
+      "stability": "frozen",
+      "minimal_fields": ["search_query_id", "query", "requestor_ref", "visible_kinds", "limit"]
+    },
+    {
+      "name": "CapabilitySearchResult",
+      "context": "Capability Management",
+      "stability": "frozen",
+      "minimal_fields": ["search_result_id", "query_ref", "capability_refs", "policy_snapshot_ref", "generated_at"]
+    },
+    {
+      "name": "InteractionPrompt",
+      "context": "Artifact & Inbox",
+      "stability": "frozen",
+      "minimal_fields": ["interaction_prompt_id", "run_ref", "prompt_kind", "schema_ref", "status"]
+    },
+    {
+      "name": "MessageDraft",
+      "context": "Artifact & Inbox",
+      "stability": "frozen",
+      "minimal_fields": ["message_draft_id", "run_ref", "channel", "content_ref", "status"]
+    },
+    {
+      "name": "ArtifactSessionState",
+      "context": "Execution Management",
+      "stability": "frozen",
+      "minimal_fields": ["artifact_session_state_id", "artifact_ref", "scope", "ttl_seconds", "state_ref"]
+    },
+    {
+      "name": "ConversationRecallRef",
+      "context": "Knowledge System",
+      "stability": "frozen",
+      "minimal_fields": ["conversation_recall_ref_id", "scope_ref", "source_ref", "summary", "retrieval_status"]
+    },
+    {
+      "name": "AgentTemplate",
+      "context": "Agent Registry",
+      "stability": "frozen",
+      "minimal_fields": ["agent_template_id", "display_name", "default_role", "execution_profile_ref", "default_capability_binding_refs"]
+    },
+    {
+      "name": "ExecutionProfile",
+      "context": "Capability Management",
+      "stability": "frozen",
+      "minimal_fields": ["execution_profile_id", "default_model_ref", "capability_binding_refs", "budget_policy_ref", "skill_pack_refs"]
+    },
+    {
+      "name": "SkillPack",
+      "context": "Capability Management",
+      "stability": "frozen",
+      "minimal_fields": ["skill_pack_id", "source", "version", "rules_ref", "priority"]
     }
   ]
 }

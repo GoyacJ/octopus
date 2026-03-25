@@ -1,7 +1,7 @@
 # Octopus · 产品需求文档（PRD）
 
-**版本**: v2.0 | **状态**: 重构定稿版 | **日期**: 2026-03-25
-**对应 SAD**: v2.0
+**版本**: v2.1 | **状态**: 重构定稿版 | **日期**: 2026-03-26
+**对应 SAD**: v2.1
 
 ---
 
@@ -57,6 +57,7 @@ Octopus 的核心不是“聊天窗口”，而是将以下对象变成正式系
 - 代码目录、模块命名、函数签名、数据库表字段和接口样板
 - 公共多租户 SaaS 控制平面作为首要交付形态
 - 消费级移动设备专属能力作为正式默认能力面，例如短信、定位、提醒事项
+- 按 Claude.ai 的消费级工具全集复刻平台能力，例如 `alarm`、`reminder`、`recipes`、`weather`、`places` 或 Google 专属连接器
 - 无治理前提下的自由自治网格或任意跨 Hub 自动同步
 
 ### 1.5 核心主线
@@ -182,9 +183,14 @@ Octopus 的目标态支持以下运行模式；首版 GA / Beta 切片如下：
 | **KnowledgeAsset** | 可检索、可追溯、可治理的正式知识条目，支持来源、权限、晋升和删除传播 |
 | **KnowledgeCandidate** | 尚未晋升为正式共享知识或组织知识的候选知识记录，必须带来源、信任级别和待处理状态 |
 | **Agent Private Memory** | Agent 的私有经验集合，仅该 Agent 在授权范围内可直接读取和治理 |
+| **ConversationRecallRef** | 对历史会话、讨论或运行片段的结构化引用，用于 episodic recall，不直接等同于长期共享知识 |
 | **Org Knowledge Graph** | 组织级知识图谱，承载实体、关系、结论、约束和长期共享知识 |
 | **Artifact** | 正式结果对象，可预览、审批、版本化、导出和追溯 |
+| **ArtifactSessionState** | Artifact 交互期内的短期会话状态，只用于 UI/runtime 过程，不作为 Hub 长期事实源 |
 | **Attachment** | 用户提供的输入材料或外部引用文件，不等同于 Artifact 或 KnowledgeAsset |
+| **CapabilityDescriptor** | CapabilityCatalog 中的正式能力描述项，记录 schema、来源、平台、风险级别、fallback 和观测要求 |
+| **CapabilityBinding** | 将某个 CapabilityDescriptor 绑定到 Agent、Team、Workspace、Project、Run 或 Tenant 范围内的正式对象 |
+| **ToolSearch** | Hub 内部的元能力，用于发现当前主体在当前上下文中可见的 deferred 或 connector-backed capabilities |
 | **CapabilityGrant** | 某主体在特定作用域内可使用哪些能力的正式授权对象 |
 | **BudgetPolicy** | 对模型、工具、动作次数、成本、时间窗和升级条件的预算约束对象 |
 | **DelegationGrant** | 某次内部或外部委托的受控授权对象，定义 authority、scope、budget、expiry |
@@ -194,6 +200,11 @@ Octopus 的目标态支持以下运行模式；首版 GA / Beta 切片如下：
 | **ExternalAgentIdentity** | 外部 Agent 的具体身份声明，绑定到某个 A2APeer，用于表示“哪个外部主体正在代表谁行动” |
 | **InboxItem** | 面向用户或 Agent 的待处理项，承载审批、澄清、委托、异常、知识晋升等任务，具备归属人、来源对象和状态 |
 | **Notification** | 事件驱动的用户提醒，支持站内、桌面和移动端渠道，具备去重键、投递状态和渠道策略 |
+| **InteractionPrompt** | 面向 Chat / Inbox / Approval 的结构化提问或确认对象，支持单选、多选、排序等形式 |
+| **MessageDraft** | 由 Agent 生成、待人工审阅或发送的正式消息草稿对象，不等同于直接发送动作 |
+| **AgentTemplate** | Agent 的可复用模板定义，声明默认角色、能力、知识边界与流程偏好 |
+| **ExecutionProfile** | 运行模板，定义模型档案、能力选择、预算缺省、记忆/检索策略与交互行为 |
+| **SkillPack** | 在运行阶段即时注入的规则包，用于规划、生成、验证与安全约束，但不能绕过平台治理 |
 
 ### 3.3 协作拓扑
 
@@ -225,6 +236,11 @@ Octopus 必须正式支持以下协作拓扑：
 13. **Client 可以缓存，不是事实源**：远程模式下 Hub 始终是正式数据和运行状态事实源。
 14. **Hub 间默认隔离**：不跨 Hub 自动同步 Agent、Run、Knowledge、Artifact、Grant 或 Audit。
 15. **撤销必须优先于自治**：当 CapabilityGrant、BudgetPolicy 或 DelegationGrant 被撤销时，相关运行必须停止或降级。
+16. **能力可见性由正式上下文共同决定**：`platform`、connector 状态、`Workspace / Project` policy、`CapabilityGrant` 与 `BudgetPolicy` 共同决定能力是否可见或可执行。
+17. **ToolSearch 只发现，不授予权限**：搜索结果只能暴露当前主体可见的能力 schema、治理标签和 fallback，不能自动完成授权。
+18. **结构化交互必须进入正式流程**：`InteractionPrompt` 与 `MessageDraft` 必须进入 `Chat / Inbox / ApprovalRequest` 语义，不得只存在于前端私有控件层。
+19. **ArtifactSessionState 不是长期事实**：Artifact 的会话态不得被当作长期 memory、共享知识或 Run 恢复快照。
+20. **消费级工具只作为 adapter 或 connector**：消费级设备能力、provider-specific connector 和内容型工具不得直接升级为首版核心领域对象。
 
 ---
 
@@ -253,6 +269,9 @@ Octopus 必须正式支持以下协作拓扑：
   - `watch`
   - `delegation`
   - `review`
+- 平台必须提供 `CapabilityCatalog` 与 `CapabilityResolver`，使 Agent、Team、Workspace、Project 与 Run 通过 `CapabilityDescriptor / CapabilityBinding` 引用能力，而不是直接绑定具体第三方工具名。
+- 平台必须支持 `ToolSearch`，用于发现当前上下文中允许暴露的 deferred 或 connector-backed capabilities。
+- 平台必须支持 `AgentTemplate`、`ExecutionProfile` 与 `SkillPack`，用于声明默认能力、运行偏好和即时规则注入。
 - Run 必须支持创建、计划、执行、暂停、等待输入、等待审批、恢复、终止、失败恢复和回放。
 - Automation 必须支持计划任务、事件触发、启停、暂停、预算窗口和最近执行记录。
 - ResidentAgentSession 必须支持启动、常驻、降级、暂停、停止和恢复。
@@ -265,10 +284,14 @@ Octopus 必须正式支持以下协作拓扑：
 - `task`、`discussion` 是用户可直接理解和发起的主要业务型 Run。
 - `automation`、`watch` 是由 Trigger 或 Resident 语义驱动的运行型 Run，不单独替代业务对象。
 - `delegation`、`review` 是治理和协作辅助型 Run，用于承载受控委托与审阅回路，必须在 Runtime 和审计中有独立适配路径。
+- `CapabilityCatalog` 必须显式区分 `core`、`deferred`、`connector-backed` 与 `platform-native` 四类能力。
+- `CapabilityResolver` 必须综合 `platform`、connector 状态、`Workspace / Project` policy、`CapabilityGrant` 与 `BudgetPolicy` 决定能力是否可见、可搜索和可执行。
+- `ToolSearch` 只能返回当前主体可见的 capability descriptor、schema、风险标签和 fallback，不得直接越过审批或预算窗口。
 - Mesh 协作不等于无规则协作，任何委托都必须产生可追溯的 DelegationGrant 或等价受控记录。
 - ResidentAgentSession 不能直接越过策略创建高风险动作；必须在授权窗口内行动或生成审批。
 - 被运行中 Run 或 ResidentAgentSession 引用的 Agent 不能直接删除，只能停用或归档。
 - 如果模型档案、Skill、MCP 绑定或策略窗口失效，Agent 进入“运行受限”状态，不能发起新的自治运行。
+- `SkillPack` 是执行时约束和增强，不得凭空创造平台未注册能力，也不得绕过 CapabilityGrant、BudgetPolicy 或 ApprovalRequest。
 
 #### 异常与边界
 
@@ -299,8 +322,9 @@ Octopus 必须正式支持以下协作拓扑：
 
 - 平台必须正式支持三层知识体系：
   - `Agent Private Memory`
-  - `Workspace / Project Attached Shared Knowledge`
-  - `Org Knowledge Graph`
+  - `Conversation Recall`
+  - `KnowledgeCandidate -> Shared Knowledge -> Org Knowledge Graph`
+- 平台必须支持 `ConversationRecallRef`，用于按 `Workspace / Project` 边界引用历史会话、讨论和运行结论。
 - Run 执行前必须基于授权范围自动检索相关知识。
 - Task、Discussion、Automation 和 Resident 观察结果可异步提取为候选知识。
 - 候选知识必须至少区分 `candidate`、`verified_shared`、`promoted_org`、`revoked_or_tombstoned` 四类治理状态。
@@ -312,6 +336,7 @@ Octopus 必须正式支持以下协作拓扑：
 #### 业务规则
 
 - 私有记忆只归属于单个 Agent，不因 Team 成员身份自动共享。
+- `ConversationRecallRef` 只表示对历史会话片段的结构化引用，不等同于共享知识事实，也不能绕过候选知识晋升路径。
 - Shared Knowledge 必须通过 KnowledgeSpace 管理，并按 Workspace、Project 或显式授权决定可见范围。
 - Project 对共享知识只形成引用和视图，不直接拥有 Shared Knowledge。
 - Org Knowledge Graph 只接收经过写回门控、来源校验和必要审批的正式知识。
@@ -434,6 +459,8 @@ Octopus 必须正式支持以下协作拓扑：
 - Artifact 必须支持版本化、预览、审批、导出、引用、Lineage 和当前有效版本概念。
 - Attachment 必须支持上传、预览、解析状态、来源引用和替换。
 - InboxItem 必须覆盖审批、澄清、异常、委托、知识晋升、自动化告警和恢复待办。
+- Chat 与 Inbox 必须支持 `InteractionPrompt` 与 `MessageDraft` 的结构化交互。
+- Artifact runtime 可以维护 `ArtifactSessionState`，用于短期 UI 状态、临时草稿或渲染过程状态。
 - Notification 在目标态必须支持站内、桌面、移动端推送，并按去重键聚合；首版 GA 至少支持站内与桌面。
 
 #### 业务规则
@@ -441,11 +468,14 @@ Octopus 必须正式支持以下协作拓扑：
 - Workspace 管理共享边界，不等于 Tenant；Tenant 管理组织治理和资源隔离。
 - Shared Knowledge 的主属边界是 KnowledgeSpace；Project 通过附着的 KnowledgeSpace 呈现共享知识，而不是直接拥有 Shared Knowledge。
 - Artifact 是正式结果对象；Attachment 是输入对象；KnowledgeAsset 是正式知识对象，三者生命周期独立。
+- `InteractionPrompt` 必须具备归属对象、schema、发起主体和可审计结果，不能只是前端控件行为。
+- `MessageDraft` 是待审阅或待确认的正式草稿对象，不等同于直接发送动作。
 - 用户在审批阶段修改 Artifact 时，必须生成新版本，旧版本仍可追溯。
 - InboxItem 必须具备可归因目标对象，不允许无来源待办。
 - InboxItem 必须具备 `owner/assignee`、`state`、`priority` 和 `target object`，才能作为正式待处理事实存在。
 - Notification 的语义不能替代 Inbox；Notification 是提醒，Inbox 是待处理事实。
 - Notification 必须具备去重键、投递状态和抑制策略，不能因同一事件短时间重复轰炸。
+- `ArtifactSessionState` 只允许存在于 Artifact 会话生命周期内，默认在会话结束时清空，且不得写入长期 Knowledge 或 Run 恢复状态。
 
 #### 异常与边界
 
@@ -474,6 +504,8 @@ Octopus 必须正式支持以下协作拓扑：
 
 - 平台必须正式支持 MCP，用于工具、数据源、工作流和应用接入。
 - 平台必须正式支持 A2A，用于外部 Agent 的发现、身份、委托、回执和治理。
+- 平台必须维护统一的 `CapabilityCatalog`，覆盖原生能力、MCP、A2A、artifact runtime 与 `SkillPack` 注入入口。
+- 平台必须支持 `CapabilityBinding`，以便在 `Agent / Team / Workspace / Project / Run / Tenant` 范围内绑定能力。
 - MCP 和 A2A 都必须进入统一的能力目录、策略校验、信任分级、Trace 和 Audit 体系。
 - 用户和管理员必须能看到对端身份、可用能力、最近健康状态、信任级别和授权范围。
 - 外部结果必须支持 provenance、可信度标记和写回门控。
@@ -482,6 +514,8 @@ Octopus 必须正式支持以下协作拓扑：
 
 - MCP 负责“连接外部工具和数据”。
 - A2A 负责“连接外部 Agent 和协作系统”。
+- `alarm`、`reminder`、`recipes`、`weather`、`places` 与 provider-specific connectors 默认只能以 adapter 或 MCP connector 形态接入，不进入首版核心领域对象。
+- `CapabilityCatalog` 的可见性求值不得复制 Claude “Project 不影响工具行为”的假设；`Workspace / Project` policy 必须能影响能力暴露与搜索结果。
 - 任一协议接入都不能绕过 CapabilityGrant、BudgetPolicy、ApprovalRequest 和审计。
 - 协议输出默认不等于系统事实；必须由平台决定能否进入 Artifact、Knowledge 或 Org Knowledge Graph。
 - 外部 Agent 不能假冒内部 Agent 身份；平台必须区分本地主体、租户主体和外部主体。
@@ -496,6 +530,7 @@ Octopus 必须正式支持以下协作拓扑：
 #### 验收标准
 
 - 用户在 Agent 配置页能看到 MCP 与 A2A 的有效能力与治理边界。
+- 用户或管理员可以解释为什么某个 capability 在当前 `platform + connector + policy + grant` 条件下可见、不可见或只可搜索不可执行。
 - 外部 Agent 协作不会绕过审计和授权。
 - 协议输出不会未经门控直接进入组织级长期知识。
 - 协议对端健康变化可在运行态和治理界面中被感知。
@@ -508,10 +543,10 @@ Octopus 必须正式支持以下协作拓扑：
 
 | 交互面 | 面向对象 | 核心用途 |
 | --- | --- | --- |
-| **Chat** | 用户、Agent、Run | 发起任务、讨论介入、查看流式输出、处理澄清 |
+| **Chat** | 用户、Agent、Run | 发起任务、讨论介入、处理 `InteractionPrompt`、查看流式输出和结构化澄清 |
 | **Board** | Run、Automation、Resident | 查看运行状态、阶段、预算、阻塞项和负责人 |
 | **Trace** | Run、Action、Delegation、Policy | 回放执行路径、工具调用、审批、预算命中和异常 |
-| **Inbox** | 用户、Reviewer、Manager | 处理审批、越界、异常、知识晋升和委托待办 |
+| **Inbox** | 用户、Reviewer、Manager | 处理审批、越界、异常、知识晋升、消息草稿审阅和委托待办 |
 | **Knowledge** | KnowledgeSpace、KnowledgeAsset、Graph | 查看知识条目、图谱关系、来源、使用情况和治理状态 |
 | **Workspace / Project** | 团队、项目、Artifact | 管理协作边界、共享资产和结果沉淀 |
 | **Hub Connections** | Client、Hub | 管理本地 Hub、远程 Hub、认证与缓存状态 |

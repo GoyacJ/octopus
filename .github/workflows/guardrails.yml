@@ -23,6 +23,12 @@ jobs:
             docs/PRD.md
             docs/SAD.md
             docs/CONTRACTS.md
+            contracts/README.md
+            contracts/v1/core-objects.json
+            contracts/v1/enums.json
+            contracts/v1/events.json
+            contracts/v1/capabilities.json
+            contracts/templates/capability-card.template.md
             docs/ENGINEERING_STANDARD.md
             docs/VIBECODING.md
             docs/adr/README.md
@@ -31,6 +37,21 @@ jobs:
           for file in "${required_files[@]}"; do
             test -e "$file"
           done
+
+      - name: Validate contract JSON
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          for path in [
+              Path("contracts/v1/core-objects.json"),
+              Path("contracts/v1/enums.json"),
+              Path("contracts/v1/events.json"),
+              Path("contracts/v1/capabilities.json"),
+          ]:
+              json.loads(path.read_text())
+          PY
 
       - name: Fail on stale doc references
         run: |
@@ -45,26 +66,40 @@ jobs:
           ! grep -Rni "no[v]ai-" "${targets[@]}"
 
       - name: Setup pnpm
+        if: ${{ hashFiles('package.json', 'pnpm-workspace.yaml') != '' }}
         uses: pnpm/action-setup@v4
         with:
           version: 10.11.0
 
       - name: Setup Node
+        if: ${{ hashFiles('package.json', 'pnpm-workspace.yaml') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
 
       - name: Install web dependencies
-        run: pnpm install --frozen-lockfile
+        if: ${{ hashFiles('package.json', 'pnpm-workspace.yaml') != '' }}
+        run: |
+          if [ -f pnpm-lock.yaml ]; then
+            pnpm install --frozen-lockfile
+          else
+            pnpm install
+          fi
 
       - name: Setup Rust
+        if: ${{ hashFiles('Cargo.toml') != '' }}
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Validate workspace skeleton
+      - name: Validate tracked workspaces
+        if: ${{ hashFiles('package.json', 'pnpm-workspace.yaml') != '' || hashFiles('Cargo.toml') != '' }}
         run: |
-          pnpm run typecheck:web
-          pnpm run test:web
-          pnpm run build:web
-          cargo test --workspace
-          cargo build --workspace
+          if [ -f package.json ] && [ -f pnpm-workspace.yaml ]; then
+            pnpm run typecheck:web
+            pnpm run test:web
+            pnpm run build:web
+          fi
+          if [ -f Cargo.toml ]; then
+            cargo test --workspace
+            cargo build --workspace
+          fi

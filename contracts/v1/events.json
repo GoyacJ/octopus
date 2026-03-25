@@ -1,46 +1,86 @@
 {
-  "version": "1.0.0",
+  "version": "1.1",
+  "released_at": "2026-03-26",
   "events": [
     {
       "name": "RunStateChanged",
-      "category": "runtime",
-      "required_fields": ["run_id", "previous_status", "next_status", "run_type", "occurred_at"]
+      "context": "Run Orchestration",
+      "minimal_payload_fields": ["run_id", "run_type", "previous_status", "current_status", "occurred_at"]
     },
     {
       "name": "PolicyDecisionRecorded",
-      "category": "governance",
-      "required_fields": ["subject_ref", "action", "decision", "policy_layer", "reason", "occurred_at"]
+      "context": "Governance & Policy",
+      "minimal_payload_fields": ["decision_id", "subject_ref", "action_ref", "decision", "occurred_at"]
     },
     {
       "name": "ApprovalRequested",
-      "category": "governance",
-      "required_fields": ["approval_id", "run_id", "approval_type", "target_ref", "occurred_at"]
+      "context": "Governance & Policy",
+      "minimal_payload_fields": ["approval_request_id", "run_ref", "approval_type", "assignee_ref", "occurred_at"]
     },
     {
       "name": "ApprovalResolved",
-      "category": "governance",
-      "required_fields": ["approval_id", "run_id", "decision", "reviewed_by", "occurred_at"]
+      "context": "Governance & Policy",
+      "minimal_payload_fields": ["approval_request_id", "resolution", "resolved_by_ref", "occurred_at"]
     },
     {
       "name": "KnowledgeCandidateCreated",
-      "category": "knowledge",
-      "required_fields": ["candidate_id", "source_ref", "knowledge_space_id", "trust_level", "occurred_at"]
+      "context": "Knowledge System",
+      "minimal_payload_fields": ["knowledge_candidate_id", "source_ref", "knowledge_space_ref", "occurred_at"]
     },
     {
       "name": "KnowledgeCandidatePromoted",
-      "category": "knowledge",
-      "required_fields": ["knowledge_asset_id", "knowledge_space_id", "promoted_to", "approved_by", "occurred_at"]
+      "context": "Knowledge System",
+      "minimal_payload_fields": ["knowledge_candidate_id", "knowledge_asset_id", "target_layer", "occurred_at"]
     },
     {
       "name": "TriggerDelivered",
-      "category": "runtime",
-      "required_fields": ["trigger_id", "source_type", "dedupe_key", "delivery_state", "occurred_at"]
+      "context": "Run Orchestration",
+      "minimal_payload_fields": ["trigger_id", "delivery_id", "run_ref", "idempotency_key", "occurred_at"]
     },
     {
       "name": "DelegationIssued",
-      "category": "mesh",
-      "required_fields": ["delegation_grant_id", "run_id", "issuer_ref", "delegate_ref", "occurred_at"]
+      "context": "Collaboration Mesh",
+      "minimal_payload_fields": ["delegation_grant_id", "run_ref", "delegate_ref", "scope_ref", "occurred_at"]
+    },
+    {
+      "name": "CapabilityBound",
+      "context": "Capability Management",
+      "minimal_payload_fields": ["capability_binding_id", "capability_ref", "subject_ref", "binding_status", "occurred_at"]
+    },
+    {
+      "name": "CapabilityBindingRevoked",
+      "context": "Capability Management",
+      "minimal_payload_fields": ["capability_binding_id", "capability_ref", "subject_ref", "reason", "occurred_at"]
+    },
+    {
+      "name": "ToolSearchExecuted",
+      "context": "Capability Management",
+      "minimal_payload_fields": ["search_query_id", "requestor_ref", "query", "visible_capability_refs", "policy_snapshot_ref"]
+    },
+    {
+      "name": "InteractionPromptIssued",
+      "context": "Artifact & Inbox",
+      "minimal_payload_fields": ["interaction_prompt_id", "run_ref", "prompt_kind", "target_ref", "occurred_at"]
+    },
+    {
+      "name": "MessageDraftPrepared",
+      "context": "Artifact & Inbox",
+      "minimal_payload_fields": ["message_draft_id", "run_ref", "channel", "target_ref", "occurred_at"]
+    },
+    {
+      "name": "ConversationRecallRecorded",
+      "context": "Knowledge System",
+      "minimal_payload_fields": ["conversation_recall_ref_id", "scope_ref", "source_ref", "summary", "occurred_at"]
+    },
+    {
+      "name": "ArtifactSessionStateCleared",
+      "context": "Execution Management",
+      "minimal_payload_fields": ["artifact_session_state_id", "artifact_ref", "scope", "cleared_reason", "occurred_at"]
+    },
+    {
+      "name": "SkillPackResolved",
+      "context": "Capability Management",
+      "minimal_payload_fields": ["skill_pack_id", "execution_profile_ref", "run_ref", "resolution_status", "occurred_at"]
     }
   ]
 }
-

@@ -3,7 +3,7 @@
 更新时间：2026-03-26
 文档状态：Draft
 文档定位：仓库级研发流程基线
-关联文档：`README.md`、`AGENTS.md`、`docs/PRD.md`、`docs/SAD.md`、`docs/CONTRACTS.md`、`docs/ENGINEERING_STANDARD.md`、`docs/adr/README.md`
+关联文档：`README.md`、`AGENTS.md`、`docs/PRD.md`、`docs/SAD.md`、`docs/CONTRACTS.md`、`contracts/README.md`、`docs/ENGINEERING_STANDARD.md`、`docs/adr/README.md`
 
 ---
 
@@ -78,6 +78,7 @@ AI 默认不允许：
 3. 绕过 ADR、审批或文档同步。
 4. 把目标态设计说成现状能力。
 5. 在未验证时声称“已完成”。
+6. 把外部参考资料中的消费级工具全集直接映射为 Octopus 的核心领域对象或默认能力面。
 
 ### 4.4 安全底线刚性执行
 
@@ -116,24 +117,26 @@ AI 默认不允许：
 
 ## 6. 当前仓库事实基线
 
-截至 2026-03-25，`octopus` 当前仍以文档为中心，但 tracked tree 已具备 Phase 1 skeleton：根目录文档、`docs/`、`contracts/`、`.github/` 与最小 `apps/`、`packages/`、`crates/` 骨架共同构成事实基线。
+截至 2026-03-26，`octopus` 当前处于 `doc-first rebuild` 状态：根目录文档、`docs/`、`contracts/` 与 `.github/` 共同构成事实基线。历史 `apps/`、`packages/`、`crates/` 与 workspace manifests 已不在当前 tracked tree 中。
 
 已具备：
 
 1. [README.md](../README.md)
 2. [AGENTS.md](../AGENTS.md)
-3. [CONTRACTS.md](CONTRACTS.md)
-4. [PRD.md](PRD.md)
-5. [SAD.md](SAD.md)
-6. [ENGINEERING_STANDARD.md](ENGINEERING_STANDARD.md)
-7. [adr/README.md](adr/README.md)
+3. [PRD.md](PRD.md)
+4. [SAD.md](SAD.md)
+5. [CONTRACTS.md](CONTRACTS.md)
+6. [../contracts/README.md](../contracts/README.md)
+7. [ENGINEERING_STANDARD.md](ENGINEERING_STANDARD.md)
+8. [adr/README.md](adr/README.md)
 
 在这一状态下，执行时必须遵守以下事实约束：
 
 1. 优先把产品、架构、数据、契约和治理规则对齐，再推进实现。
 2. 不把目标态目录、脚手架或运行时行为误写成“当前已存在能力”。
-3. 在缺少 manifest、源码或工具时，不虚构构建、测试或运行结论；当前若改动触达 `apps/`、`packages/`、`crates/`，应使用实际存在的 `pnpm` / `cargo` 验证链路。
+3. 在缺少 manifest、源码或工具时，不虚构构建、测试或运行结论；仅当对应 manifests 和源码重新进入 tracked tree 时，才使用 `pnpm` / `cargo` 验证链路。
 4. 不引用已删除的旧文档树作为正式输入，例如旧 API 文档目录、旧计划目录、旧变更目录，以及已经下线的架构/领域/数据模型/视觉框架文档。
+5. 不把参考资料中的 `alarm`、`reminder`、`weather`、`places` 等消费级工具默认纳入首版核心范围；若未来需要，只能先经契约和 ADR 进入 adapter / connector 设计。
 
 ---
 
@@ -143,8 +146,8 @@ AI 默认不允许：
 
 1. 治理与文档基线。
 2. 契约源目录。
-3. 仓库和工具链骨架。
-4. 最小 Web 控制面壳。
-5. 最小 Rust 控制面与运行时骨架。
+3. `CapabilityCatalog / CapabilityResolver / ToolSearch / SkillPack` 等能力运行时骨架。
+4. 结构化交互、分层记忆与 Artifact 会话态的共享契约。
+5. 如需重建实现，再引入仓库和工具链骨架。
 6. 任一条 `run -> interaction/approval -> resume -> timeline/audit` 的可验证纵切片。
 7. 后续能力按验证结果逐条解锁。

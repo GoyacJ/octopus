@@ -1,7 +1,7 @@
 # octopus · 开发技术规范（ENGINEERING_STANDARD.md）
 
-**版本**: v0.2.1 | **状态**: 正式版 | **日期**: 2026-03-26
-**依赖文档**: PRD v2.0 · SAD v2.0 · CONTRACTS v1.0 · VIBECODING 2026-03-26
+**版本**: v0.2.2 | **状态**: 正式版 | **日期**: 2026-03-26
+**依赖文档**: PRD v2.1 · SAD v2.1 · CONTRACTS v1.1 · contracts/README.md · VIBECODING 2026-03-26
 
 ---
 
@@ -77,7 +77,7 @@
 - Client 是交互层，Hub 是执行与治理事实源；前端不得私自承载业务规则。
 - `Workspace / Project / Agent / Team / Run / Knowledge / CapabilityGrant / BudgetPolicy / Approval / Artifact` 是既定核心对象，不得随意跨 Context 泄漏职责。
 - `Service / Repository / Domain Event / Transport` 的职责边界是架构约束，不是风格建议。
-- 当前仓库仍以文档为治理事实源，但 tracked tree 已包含 `contracts/`、`apps/`、`packages/`、`crates/` 的 Phase 1 skeleton。只有在对应 manifest、源码和验证结果实际存在时，才能声明该能力已成立。
+- 当前仓库处于 `doc-first rebuild` 阶段；只有 `README.md`、`AGENTS.md`、`docs/`、`contracts/`、`.github/` 与实际存在的 tracked manifests / 源码 / 验证结果，才能被声明为当前已成立能力。
 
 ### 2.2 单一职责与边界清晰
 
@@ -120,6 +120,13 @@ octopus 的默认风格是可维护、可推理、可替换。
 - 先硬编码再说，后续再抽象。
 - 没有验证和测试依据就声称“已完成”。
 - 在缺少 manifest、源码或工具时虚构构建、测试、运行或联调结论。
+
+### 2.7 能力运行时补充约束
+
+- `CapabilityCatalog`、`CapabilityResolver` 与 `ToolSearch` MUST 作为正式领域服务存在，不得散落为前端 util、prompt 拼接器或 connector 脚本。
+- `InteractionPrompt` 与 `MessageDraft` MUST 通过共享契约进入 `Chat / Inbox / Approval` 流程，不得只在前端本地状态中自定义 schema。
+- `ArtifactSessionState` MUST 仅承载短期 UI / runtime 状态；MUST NOT 被当作长期 Knowledge、Run checkpoint 或共享事实源。
+- `SkillPack` MAY 影响规划、生成、验证与安全默认值，但 MUST NOT 凭空授予新 capability，也 MUST NOT 绕过 PDP、Grant、Budget 或 Approval。
 
 ---
 
@@ -562,7 +569,7 @@ octopus 前端 MUST 以 `self-built UI components + shared design tokens + UnoCS
 - 影响公共接口、分层边界、i18n、主题或状态流的改动 MUST 明确验证方式。
 - 合并前 MUST 至少验证本次变更涉及的关键路径，不得只靠肉眼判断。
 - 若因阶段原因暂不补自动化测试，PR 中 MUST 明确写出风险与人工验证步骤。
-- 当前默认验证集合 SHOULD 以文档存在性检查、旧引用扫描、聚焦 diff 复核和 `git diff --check` 为基础；若改动触达 `contracts/`、`packages/`、`apps/` 或 `crates/`，还 SHOULD 执行 `pnpm run typecheck:web`、`pnpm run test:web`、`cargo test --workspace` 与 `cargo build --workspace`。
+- 当前默认验证集合 SHOULD 以文档与契约存在性检查、旧引用扫描、聚焦 diff 复核和 `git diff --check` 为基础；若改动触达 `contracts/`、`packages/`、`apps/` 或 `crates/`，且对应 manifests / 源码实际存在，还 SHOULD 执行 `pnpm run typecheck:web`、`pnpm run test:web`、`cargo test --workspace` 与 `cargo build --workspace`。
 
 ### 8.4 Git 与提交规范
 

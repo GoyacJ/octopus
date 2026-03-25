@@ -1,7 +1,7 @@
 # Octopus · 软件架构设计说明书（SAD）
 
-**版本**: v2.0 | **状态**: 重构定稿版 | **日期**: 2026-03-25
-**对应 PRD**: v2.0
+**版本**: v2.1 | **状态**: 重构定稿版 | **日期**: 2026-03-26
+**对应 PRD**: v2.1
 
 ---
 
@@ -69,11 +69,11 @@
 - `DiscussionSession`
 - `ResidentAgentSession`
 
-补充说明（截至 2026-03-26 的 tracked implementation）：
+补充说明（截至 2026-03-26 的 tracked repository state）：
 
-- 当前跟踪树已落地本地模式最小事实层：Hub 默认使用 SQLite 持久化 `Run`、`ApprovalRequest`、`Artifact`、`InboxItem`、`Automation`、`Trigger`、`Knowledge*` 及最小 `EnvironmentLease` 恢复信息。
-- 当前跟踪树已落地最小 transport 事实视图：HTTP 提供 persisted `run` / `inbox` 列表读取，SSE 提供 runtime 事件流，Vue 控制面采用“快照 + 订阅”模型收敛状态。
-- `Remote Hub` 边界、完整 `HubConnection` 工作台与更高阶 `Desktop` 集成仍停留在目标态架构层，尚未在当前跟踪树中完成。
+- 当前跟踪树已回到 `doc-first rebuild` 状态：正式事实源是根目录文档、`docs/`、`contracts/` 与 `.github/`。
+- 历史 `apps/`、`packages/`、`crates/` 与 workspace manifests 不在当前 tracked tree 中，不能再被当作已实现能力、已存在 runtime 或可执行验证链路。
+- 本文档描述目标态架构与重建约束；若未来重新引入实现骨架，必须以后续 tracked manifests、源码与验证结果为准。
 
 ### 1.5 架构平面
 
@@ -81,13 +81,38 @@ Octopus 目标态架构显式拆分为六个主平面和一个横切观测层：
 
 | 平面 | 核心职责 |
 | --- | --- |
-| **Interaction Plane** | Chat、Board、Trace、Inbox、Knowledge、Hub Connections 等交互表面 |
-| **Runtime Plane** | Intent Intake、Scheduler、Event Bus、Run Orchestration、Resident Supervisor |
+| **Interaction Plane** | Chat、Board、Trace、Inbox、Knowledge、Hub Connections、结构化交互与消息草稿等交互表面 |
+| **Runtime Plane** | Intent Intake、Scheduler、Event Bus、Run Orchestration、CapabilityResolver、Resident Supervisor |
 | **Knowledge Plane** | 私有记忆、共享知识空间、组织知识图谱、lineage、检索和写回门控 |
 | **Governance Plane** | RBAC、Policy Decision Point、Grant/Budget、Approval、Model Center、Secrets |
-| **Interop Plane** | MCP Gateway、A2A Gateway、Webhook / Event Adapter、Peer Registry |
-| **Execution Plane** | Environment Manager、Sandbox Runner、Tool Runtime、Lease Manager、Node Runtime |
+| **Interop Plane** | MCP Gateway、A2A Gateway、Webhook / Event Adapter、Peer Registry、Connector Registry |
+| **Execution Plane** | Environment Manager、Sandbox Runner、Tool Runtime、Artifact Runtime、Lease Manager、Node Runtime |
 | **Observation Layer** | Trace、Audit Log、Policy Decision Log、Knowledge Lineage、Delegation Graph、Cost Ledger |
+
+
+### 1.6 技术选型总览
+
+所有决策已确认，无待决项。
+
+| 层次 | 技术 | 版本要求 | 备注 |
+|------|------|---------|------|
+| **Desktop Shell** | Tauri 2 | 2.x | Hub 逻辑直接内嵌，无 sidecar |
+| **Hub 核心** | Rust + tokio + axum | Rust stable, tokio 1.x, axum 0.7 | 本地走 Tauri invoke，远程走 HTTP |
+| **数据库** | sqlx | 0.7+ | async，编译期 SQL 检查 |
+| **向量 DB（本地）** | LanceDB | lancedb crate 0.x | 编译进二进制，零外部依赖 |
+| **向量 DB（远程）** | Qdrant | qdrant-client 1.x | 官方 Rust client |
+| **Frontend** | Vue 3 + TypeScript | Vue 3.4+, TS 5 | Composition API + `<script setup>` |
+| **构建工具** | Vite | 5.x | Tauri 官方推荐 |
+| **状态管理** | Pinia | 2.x | Vue 官方 |
+| **UI 组件** | shadcn-vue + Tailwind CSS | — | 可定制，无运行时依赖 |
+| **实时推送（本地）** | Tauri Event System | built-in | emit/listen，零网络开销 |
+| **实时推送（远程）** | SSE | — | axum 内置支持 |
+| **认证** | JWT（jsonwebtoken crate）| — | 仅远程 Hub 模式 |
+| **DB 迁移** | sqlx migrate | built-in | 嵌入二进制，启动时自动执行 |
+| **序列化** | serde + serde_json | — | 全链路统一 |
+| **HTTP 客户端** | reqwest | 0.12+ | 调 LLM API + MCP HTTP transport |
+| **MCP 协议** | 自实现（reqwest + serde）| — | JSON-RPC 2.0，不依赖任何 SDK |
+| **部署容器化** | Docker + Docker Compose | — | 远程 Hub 分发 |
 
 ---
 
@@ -159,6 +184,7 @@ flowchart LR
 | Access & Identity | HubConnection、认证、会话身份、设备与跨端上下文 |
 | Workspace & Project | Workspace、Project、成员、共享边界和项目归属 |
 | Agent Registry | Agent、Team、coordination_mode、模板和运行前有效性校验 |
+| Capability Management | CapabilityCatalog、CapabilityBinding、CapabilityResolver、ToolSearch、ExecutionProfile、SkillPack 注入 |
 | Run Orchestration | Run、Task、Discussion、Automation、Trigger、checkpoint、恢复 |
 | Collaboration Mesh | delegation、authority_scope、knowledge_scope、cross-team 协作 |
 | Knowledge System | 私有记忆、共享知识空间、组织知识图谱、lineage、晋升、删除传播 |
@@ -202,11 +228,40 @@ classDiagram
         trust_level
     }
     class Artifact
+    class ArtifactSessionState {
+        session_scope
+        ttl_seconds
+    }
     class Attachment
+    class CapabilityDescriptor {
+        capability_id
+        kind
+        source
+        risk_level
+    }
+    class CapabilityBinding {
+        binding_status
+    }
     class CapabilityGrant
     class BudgetPolicy
     class DelegationGrant
     class ApprovalRequest
+    class InteractionPrompt {
+        prompt_kind
+    }
+    class MessageDraft {
+        channel
+        draft_status
+    }
+    class ConversationRecallRef {
+        source_ref
+    }
+    class AgentTemplate
+    class ExecutionProfile
+    class SkillPack {
+        source
+        priority
+    }
     class EnvironmentLease
     class A2APeer {
         peer_status
@@ -237,10 +292,12 @@ classDiagram
     Workspace "1" --> "*" KnowledgeSpace
     Workspace "1" --> "*" InboxItem
     Workspace "1" --> "*" Notification
+    Workspace "0..*" --> "*" CapabilityBinding
 
     Project "1" --> "*" Run
     Project "1" --> "*" Artifact
     Project "0..*" --> "*" KnowledgeSpace : attached_spaces
+    Project "0..*" --> "*" CapabilityBinding
 
     Team "1" --> "*" Agent : members
     Team "0..1" --> "1" Agent : leader
@@ -248,6 +305,9 @@ classDiagram
     Run "1" --> "0..1" Task
     Run "1" --> "0..1" DiscussionSession
     Run "0..*" --> "*" Artifact
+    Run "0..*" --> "*" InteractionPrompt
+    Run "0..*" --> "*" MessageDraft
+    Run "0..*" --> "*" ConversationRecallRef
     Run "0..*" --> "*" ApprovalRequest
     Run "0..*" --> "*" DelegationGrant
     Run "0..*" --> "*" EnvironmentLease
@@ -259,8 +319,14 @@ classDiagram
     KnowledgeSpace "1" --> "*" KnowledgeAsset
     Agent "1" --> "*" KnowledgeAsset : private_memory
 
+    Agent "0..*" --> "*" CapabilityBinding
+    CapabilityBinding "*" --> "1" CapabilityDescriptor
     Run "0..*" --> "*" CapabilityGrant
     Run "0..*" --> "*" BudgetPolicy
+    Artifact "0..*" --> "*" ArtifactSessionState
+    AgentTemplate "1" --> "1" ExecutionProfile
+    ExecutionProfile "0..*" --> "*" SkillPack
+    ExecutionProfile "0..*" --> "*" CapabilityBinding
     DelegationGrant "0..*" --> "0..1" A2APeer
     DelegationGrant "0..*" --> "0..1" ExternalAgentIdentity
     A2APeer "1" --> "*" ExternalAgentIdentity
@@ -279,9 +345,18 @@ classDiagram
 | `ResidentAgentSession` | Run Orchestration | 长驻观察和自主建 Run 的正式对象 |
 | `KnowledgeSpace` | Knowledge System | Shared Knowledge 的权威容器与权限边界，并负责指定知识晋升与冲突处理责任人 |
 | `KnowledgeAsset` | Knowledge System | 正式知识条目，承载来源、层级、可信度、晋升状态和关系 |
+| `ConversationRecallRef` | Knowledge System | 对历史会话、讨论或运行片段的结构化引用，用于 episodic recall，但不直接等同于长期知识事实 |
+| `CapabilityDescriptor` | Capability Management | 正式能力描述项，声明 schema、来源、平台、风险级别、fallback 和观测要求 |
+| `CapabilityBinding` | Capability Management | 将正式能力绑定到 Agent、Workspace、Project、Run 或 Template 范围内的连接对象 |
 | `CapabilityGrant` | Governance & Policy | 主体在某范围内的能力授权窗口 |
 | `BudgetPolicy` | Governance & Policy | 约束成本、时间、动作数、重试数和升级条件 |
 | `DelegationGrant` | Collaboration Mesh | 某次委托的 authority、budget 和 expiry 约束 |
+| `InteractionPrompt` | Artifact & Inbox | 正式结构化提问/确认对象，进入 Chat、Inbox 与 Approval 语义 |
+| `MessageDraft` | Artifact & Inbox | 正式消息草稿对象，支持审阅、确认、发送前校验和引用 |
+| `ArtifactSessionState` | Execution Management | Artifact 会话内的短期状态容器，默认随会话结束而失效，不作为长期事实源 |
+| `AgentTemplate` | Agent Registry | Agent 的复用模板，描述默认角色、能力、知识边界和协作偏好 |
+| `ExecutionProfile` | Capability Management | 运行模板，定义模型档案、能力选择、预算缺省、记忆/检索策略与交互行为 |
+| `SkillPack` | Capability Management | 在运行期间即时注入的规则包，用于规划、生成、验证和安全约束 |
 | `EnvironmentLease` | Execution Management | 对执行环境的租约与恢复锚点 |
 | `A2APeer` | Interop Gateway | 外部 Agent 系统的身份、能力和信任承载对象 |
 | `ExternalAgentIdentity` | Interop Gateway | 绑定到具体 A2A 对端的外部主体身份声明，用于委托、回执、轮换和吊销 |
@@ -301,6 +376,12 @@ classDiagram
 9. 没有 grant 和 budget 的真实动作不能执行。
 10. 需要环境的动作必须绑定 `EnvironmentLease`。
 11. 外部 Agent 协作必须绑定 `A2APeer` 与具体 `ExternalAgentIdentity`，不能只依赖粗粒度对端注册。
+12. `CapabilityDescriptor` 与 `CapabilityBinding` 是正式能力目录的唯一入口；顶层领域对象不得直接绑定具体第三方工具名。
+13. 能力可见性必须由 `platform`、connector 状态、`Workspace / Project` policy、grant 和 budget 共同求值。
+14. `ToolSearch` 只能发现当前主体可见的 deferred 或 connector-backed capabilities，不能自动完成授权。
+15. `InteractionPrompt` 与 `MessageDraft` 必须进入 `Chat / Inbox / Approval` 流程，而不是仅作为前端私有控件。
+16. `ArtifactSessionState` 只允许持有短期 UI/runtime 状态，默认不进入 Hub 长期存储、Knowledge 写回或 Run 恢复检查点。
+17. `SkillPack` 只能增强既有运行约束，不能绕过 PDP、Grant、Budget 或 CapabilityCatalog。
 
 ---
 
@@ -347,8 +428,9 @@ flowchart LR
 职责：
 
 - 提供 Chat、Board、Trace、Inbox、Knowledge、Workspace / Project、Hub Connections 界面
+- 提供 `InteractionPrompt`、`MessageDraft` 与能力可见性解释等结构化交互能力
 - 管理本地连接配置、凭证、安全缓存与实时事件订阅
-- 提供审批、导出、跨端继续和通知处理入口
+- 提供审批、导出、跨端继续、Artifact 会话态呈现和通知处理入口
 
 不负责：
 
@@ -363,6 +445,8 @@ flowchart LR
 | 组件 | 职责 |
 | --- | --- |
 | `Intent Intake` | 接收用户输入、触发器事件、外部回执并标准化为运行请求 |
+| `Capability Resolver` | 基于 platform、connector、Workspace / Project policy、grant 和 budget 解析能力可见性与执行性 |
+| `Tool Search Service` | 在已解析可见性的前提下暴露 deferred / connector-backed capability descriptors 与 schema |
 | `Scheduler / Event Bus` | 调度自动化、触发器投递、事件发布和异步恢复 |
 | `Run Orchestrator` | 管理 Run 生命周期、计划、状态机、checkpoint 和恢复 |
 | `Task Adapter` | 将 Task 业务语义映射到 Run 执行流程 |
@@ -372,6 +456,7 @@ flowchart LR
 | `Review Adapter` | 将审阅、审批前复核和结论校验映射到 review 型 Run |
 | `Resident Supervisor` | 管理 ResidentAgentSession 生命周期、心跳和降级 |
 | `Automation Manager` | 管理 Automation、Trigger 和最近执行状态 |
+| `Execution Profile Resolver` | 将 AgentTemplate、ExecutionProfile 与 SkillPack 解析为具体运行约束和默认策略 |
 
 ### 4.4 Knowledge Plane
 
@@ -380,6 +465,7 @@ flowchart LR
 | 组件 | 职责 |
 | --- | --- |
 | `Private Memory Service` | 管理 Agent 私有记忆的 recall、writeback、delete |
+| `Conversation Recall Service` | 管理对历史会话、讨论与运行片段的引用、索引与检索授权 |
 | `Shared Knowledge Service` | 管理 KnowledgeSpace、候选知识、共享知识条目和查询授权 |
 | `Org Graph Service` | 管理组织知识图谱的实体、关系、晋升和回滚 |
 | `Knowledge Write Gate` | 对外部结果、候选知识和图谱晋升进行门控 |
@@ -409,6 +495,7 @@ flowchart LR
 | --- | --- |
 | `MCP Gateway` | 注册 MCP Server、命名空间管理、健康检测、鉴权和调用代理 |
 | `A2A Gateway` | 外部 Agent 发现、身份校验、委托、回执和治理接入 |
+| `Connector Registry` | 维护 connector 启用状态、平台可见性、provider 绑定与 capability exposure policy |
 | `Peer Registry` | 维护 A2APeer、ExternalAgentIdentity 和信任级别 |
 | `Webhook / Event Adapter` | 将外部事件标准化为 Trigger 或回执 |
 | `Trust & Provenance Service` | 对协议结果打标签、记录来源并提供写回门控输入 |
@@ -422,6 +509,7 @@ flowchart LR
 | `Environment Manager` | 分配执行环境、维护 sandbox tier、环境租约和回收 |
 | `Lease Manager` | 维护 EnvironmentLease、heartbeat、expiry、revoke 和 resume token |
 | `Tool Runtime` | 执行原生工具、MCP 工具、代码执行、受控文件和网络操作 |
+| `Artifact Runtime` | 托管 artifact 执行、会话态桥接、短期状态隔离与 capability bridge |
 | `Node Runtime` | 管理本地节点、远程节点或受控执行节点能力画像 |
 | `Safety Adapter` | 应用命令过滤、路径约束、外部写限制和系统命令控制 |
 
@@ -445,11 +533,12 @@ flowchart LR
 
 Octopus 的目标态运行链路统一为：
 
-`Intent -> Trigger -> Run -> Plan -> Action / Delegation -> Artifact / Knowledge -> Policy Check -> Approval / Escalation -> Resume / Terminate`
+`Intent -> Capability Resolve / Recall -> Trigger -> Run -> Plan -> Action / Delegation -> Artifact / Knowledge -> Policy Check -> Approval / Escalation -> Resume / Terminate`
 
 解释：
 
 - `Intent` 可以来自用户、Automation、ResidentAgentSession、Webhook、MCP 事件或 A2A 回执。
+- `Capability Resolve / Recall` 负责解析当前可见能力、检索 `ConversationRecallRef` 与知识引用，并决定是否允许 `ToolSearch` 继续暴露 deferred capabilities。
 - `Trigger` 是将 Intent 变成可执行入口的正式对象。
 - `Run` 是正式执行外壳。
 - `Run` 可以是 `task / discussion / automation / watch / delegation / review` 中的一种，但并非每种都要求独立业务对象。
@@ -457,6 +546,7 @@ Octopus 的目标态运行链路统一为：
 - 所有关键动作都会进入 `Policy Check`。
 - 越界时通过 `Approval / Escalation` 处理。
 - 运行可以继续、等待、恢复、终止或失败。
+- `ArtifactSessionState` 只服务于单次 artifact 会话，不进入长期恢复或跨会话事实层。
 
 ### 5.2 人工发起 Run
 
@@ -624,9 +714,12 @@ sequenceDiagram
 | 数据类别 | 典型对象 | 本地模式 | 远程模式 |
 | --- | --- | --- | --- |
 | 元数据与业务状态 | Workspace、Project、Agent、Team、Run、Automation、Approval、Inbox、Notification | SQLite | PostgreSQL |
+| Capability 与模板元数据 | CapabilityDescriptor、CapabilityBinding、AgentTemplate、ExecutionProfile、SkillPack | SQLite | PostgreSQL |
 | Artifact 与 Attachment 内容 | 文档、报告、文件、结论 | 本地文件系统或嵌入式对象存储 | 对象存储或文件存储 |
+| Conversation recall 引用 | ConversationRecallRef、历史片段索引、episodic recall metadata | SQLite | PostgreSQL |
 | 私有记忆与共享知识向量索引 | Embedding、检索索引 | LanceDB | Qdrant |
 | 知识元数据与图谱投影 | KnowledgeAsset、实体、关系、lineage | SQLite + 图谱投影表 | PostgreSQL + 图谱投影表 |
+| Artifact 会话态 | ArtifactSessionState、短期 UI/runtime state | 会话缓存 / 临时存储 | 会话缓存 / 临时存储 |
 | 客户端缓存 | 摘要、连接状态、只读快照 | 加密本地缓存 | 加密本地缓存 |
 | 秘密与凭证 | Hub Token、Provider Secret、Protocol Secret | OS Keychain / Keystore | Hub Secret Store + Client 安全存储 |
 | 事件与观测数据 | Trace、Audit、Policy Log、Cost Ledger、Evaluation Record | SQLite / 本地事件存储 | PostgreSQL / 事件存储 |
@@ -794,6 +887,7 @@ stateDiagram-v2
 - `Artifact` 采用版本化引用，审批修改不覆盖旧版本。
 - `KnowledgeAsset` 删除采用墓碑 + 索引撤回 + lineage 保留策略。
 - `InboxItem` 与 `Notification` 必须有去重键和幂等投递语义，避免多端重复提醒或重复待办。
+- `ArtifactSessionState` 默认是 session-scoped；会话结束后清除，不作为 `Run` checkpoint、长期 memory 或共享知识事实。
 
 ### 6.5 保留与清理策略
 
@@ -841,6 +935,7 @@ stateDiagram-v2
 - `CapabilityGrant` 不能绕过 RBAC 或租户硬策略。
 - `BudgetPolicy` 只约束资源与时窗，不授予新能力。
 - `ApprovalRequest` 只能覆盖被标记为可升级的动作，不能越过不可覆盖的硬禁止。
+- `CapabilityResolver` 必须在 `platform`、connector 状态、Workspace / Project policy 和 grant/budget 共同上下文中运行，不允许把 conversation 或 artifact 会话态当作授权来源。
 
 ### 7.2 CapabilityGrant 与 BudgetPolicy
 
@@ -943,6 +1038,7 @@ MCP 在 Octopus 中承担：
 架构要求：
 
 - 由 Hub 统一注册和治理
+- 作为 `connector-backed capabilities` 注册进统一 `CapabilityCatalog`
 - 使用命名空间隔离
 - 鉴权、健康、失败和信任级别可见
 - 输出进入 Artifact 或 Knowledge 前必须经过门控
@@ -960,6 +1056,7 @@ A2A 在 Octopus 中承担：
 架构要求：
 
 - A2A Peer 必须由 `tenant_admin` 在 Hub 中登记并带有信任级别
+- 作为 `connector-backed` 或 `beta-reserved` capability descriptors 进入统一 `CapabilityCatalog`
 - 每次外部委托和回执都必须绑定具体 `ExternalAgentIdentity`
 - DelegationGrant 必须能映射到 A2A 委托语义
 - 回执必须可关联 Run、DelegationGrant 和 Cost Ledger
@@ -1058,11 +1155,14 @@ A2A 在 Octopus 中承担：
 | 恢复复杂度上升 | Run、Automation、Resident 和环境租约共同参与恢复 | 使用统一 checkpoint、lease 和 idempotency 模型 |
 | 多端认知不一致 | 不同 Client 对同一 Run、Grant、Knowledge 理解偏差 | 统一状态机、统一日志和统一通知语义 |
 | 扩展供应链风险 | MCP、A2A、插件和外部模型增加攻击面 | 名单治理、信任级别、权限约束、审计和快速吊销 |
+| 能力表面膨胀 | 能力目录、connector 和 adapter 数量增加后容易失控 | 采用 CapabilityCatalog、风险分级、ToolSearch 暴露控制和 capability card 审核 |
+| Artifact 会话态泄漏 | UI 会话状态被误当作长期事实或恢复锚点 | 把 ArtifactSessionState 明确限定为 session-scoped 并禁止写回长期层 |
 
 ### 10.2 明确约束
 
 - 不支持跨 Hub 自动共享正式业务对象。
 - consumer-only 设备能力不纳入正式默认能力面。
+- 消费级设备工具、provider-specific connectors 与内容型工具只允许以 adapter 或 connector-backed capability 形态接入，不进入首版核心领域对象。
 - 不允许外部协议绕过平台治理直接修改正式事实。
 - 本 SAD 提供逻辑与运行时架构，不锁定具体接口和表结构。
 
