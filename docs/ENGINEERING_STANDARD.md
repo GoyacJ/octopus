@@ -1,4 +1,4 @@
-# Novai · 开发技术规范（ENGINEERING_STANDARD.md）
+# octopus · 开发技术规范（ENGINEERING_STANDARD.md）
 
 **版本**: v0.1.0 | **状态**: 正式版 | **日期**: 2026-03-11
 **依赖文档**: PRD v0.1.0 · ARCHITECTURE v0.1.0 · DOMAIN v0.1.0 · DATA_MODEL v0.1.0
@@ -23,7 +23,7 @@
 
 ### 1.1 文档目的
 
-本规范用于回答一个问题：**在 Novai 中，工程实现必须怎么做**。
+本规范用于回答一个问题：**在 octopus 中，工程实现必须怎么做**。
 
 本文件是项目级开发约束，目标如下：
 
@@ -34,7 +34,7 @@
 
 ### 1.2 适用范围
 
-本规范适用于 Novai 仓库内所有代码与文档变更，覆盖：
+本规范适用于 octopus 仓库内所有代码与文档变更，覆盖：
 
 - Hub 核心、Server 适配层、Tauri Shell。
 - Vue 3 Client、共享 UI 组件、Pinia Store、Transport 层。
@@ -42,7 +42,7 @@
 
 以下内容**不**由本规范重复定义：
 
-- 产品需求与业务边界：见 [PRD.md](./PRD/PRD.md)
+- 产品需求与业务边界：见 [PRD.md](./PRD.md)
 - 系统架构、模块边界、技术选型：见 [ARCHITECTURE.md](./ARCHITECTURE.md)
 - 领域边界、聚合根、不变量：见 [DOMAIN.md](./DOMAIN.md)
 - 数据 Schema、迁移目录与索引策略：见 [DATA_MODEL.md](./DATA_MODEL.md)
@@ -95,7 +95,7 @@
 
 ### 2.4 可读性优先于技巧性
 
-Novai 的默认风格是可维护、可推理、可替换。
+octopus 的默认风格是可维护、可推理、可替换。
 
 - 代码 MUST 以 6 个月后的维护者仍能快速读懂为目标。
 - 禁止为了减少几行代码引入难以理解的宏技巧、泛型体操、过度链式写法或嵌套回调。
@@ -202,7 +202,12 @@ Novai 的默认风格是可维护、可推理、可替换。
 - Composition API
 - `<script setup>`
 - Pinia
-- `shadcn-vue + Tailwind CSS`
+- Vue Router
+- VueUse
+- UnoCSS
+- Vue I18n
+- self-built UI components
+- shared design tokens
 
 以下做法 `MUST NOT` 作为默认方案：
 
@@ -263,7 +268,7 @@ Novai 的默认风格是可维护、可推理、可替换。
 
 ### 5.1 基础约束
 
-Novai 前端 MUST 自首发起支持国际化。
+octopus 前端 MUST 自首发起支持国际化。
 
 项目默认语言集合固定为：
 
@@ -364,7 +369,7 @@ feature.section.empty.description
 
 ### 6.1 基础约束
 
-Novai 前端 MUST 自首发起支持完整主题模式。
+octopus 前端 MUST 自首发起支持完整主题模式。
 
 项目默认主题模式集合固定为：
 
@@ -449,7 +454,7 @@ type ThemeMode = 'light' | 'dark' | 'system'
 
 ### 7.1 UI 基线
 
-Novai 前端 MUST 以 `shadcn-vue + Tailwind CSS` 为统一 UI 基线。
+octopus 前端 MUST 以 `self-built UI components + shared design tokens + UnoCSS` 为统一 UI 基线。
 
 实施原则：
 
@@ -725,4 +730,4 @@ impl<R: AgentRepository> AgentService<R> {
 
 ---
 
-*本规范是 Novai 的默认开发基线。若与临时实现冲突，以本规范为准；若与架构文档冲突，必须先更新设计文档并完成例外说明。*
+*本规范是 octopus 的默认开发基线。若与临时实现冲突，以本规范为准；若与架构文档冲突，必须先更新设计文档并完成例外说明。*

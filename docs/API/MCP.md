@@ -268,7 +268,7 @@ mcp__{server_id}__{tool_name}
 
 **示例**：
 
-| Server ID | MCP 原始工具名 | Novai 工具名（全局唯一） |
+| Server ID | MCP 原始工具名 | octopus 工具名（全局唯一） |
 |---------|------------|-------------------|
 | `mcp_notion` | `search` | `mcp__mcp_notion__search` |
 | `mcp_github` | `create_issue` | `mcp__mcp_github__create_issue` |

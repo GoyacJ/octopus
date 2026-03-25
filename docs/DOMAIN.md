@@ -1,4 +1,4 @@
-# Novai · 领域模型文档（DOMAIN.md）
+# octopus · 领域模型文档（DOMAIN.md）
 
 **版本**: v0.1.0 | **状态**: 正式版 | **日期**: 2026-03-10
 **依赖文档**: PRD v0.1.0 · ARCHITECTURE v0.1.0
@@ -80,7 +80,7 @@
 
 ### 2.1 Agent 是"人"，不是"模块"
 
-Novai 最核心的设计理念：Agent 是对现实世界中"人"的数字化抽象。这个比喻不只是产品层面的叙事，而是直接影响领域建模决策：
+octopus 最核心的设计理念：Agent 是对现实世界中"人"的数字化抽象。这个比喻不只是产品层面的叙事，而是直接影响领域建模决策：
 
 - **三个不可分割的维度**：`Identity`（他是谁）、`Capability`（他能做什么）、`Memory`（他经历过什么）构成 Agent 完整存在。
 - **记忆是 Agent 的私有财产**：`MemoryStore` 作为 `AgentService` 的内部依赖，不对外暴露，外部只能通过 `AgentService.recall()` 和 `AgentService.memorize()` 访问。
@@ -1190,5 +1190,5 @@ pub enum LlmProvider {
 
 ---
 
-*本文档由 PRD v0.1.0 和 ARCHITECTURE v0.1.0 推导生成，描述 Novai Hub 的核心领域模型。*
+*本文档由 PRD v0.1.0 和 ARCHITECTURE v0.1.0 推导生成，描述 octopus Hub 的核心领域模型。*
 *后续迭代：Phase 2 引入 `TeamGroup`、团队评分、多用户协作等新实体时同步更新本文档。*

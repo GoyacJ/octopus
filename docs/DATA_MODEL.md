@@ -1,4 +1,4 @@
-# Novai · 数据模型文档（DATA_MODEL.md）
+# octopus · 数据模型文档（DATA_MODEL.md）
 
 **版本**: v0.1.0 | **状态**: 正式版 | **日期**: 2026-03-10
 **依赖文档**: PRD v0.1.0 · ARCHITECTURE v0.1.0 · DOMAIN v0.1.0
@@ -29,7 +29,7 @@
 
 ### 1.1 双层存储模型
 
-Novai Hub 使用两类存储，职责严格分离：
+octopus Hub 使用两类存储，职责严格分离：
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -727,10 +727,12 @@ CREATE INDEX idx_tasks_target_team
 
 ## 7. 迁移规范（sqlx migrate）
 
-### 7.1 目录结构
+### 7.1 目录结构（目标态蓝图，非当前仓库事实）
+
+以下路径只描述后续脚手架落地后的目标态目录，不代表当前 tracked tree 已存在这些目录。
 
 ```
-crates/novai-hub/src/db/
+<target-root>/crates/octopus-hub/src/db/
 ├── migrations/
 │   ├── sqlite/
 │   │   ├── 0001_init_iam.sql
@@ -774,7 +776,7 @@ pub async fn run_migrations(pool: &AnyPool, db_type: DbType) -> Result<()> {
 ### 7.4 启动时自动迁移
 
 ```rust
-// novai-tauri/main.rs 和 novai-server/main.rs
+// octopus-tauri/main.rs 和 octopus-server/main.rs
 HubCore::new(config).await?
 // 内部 → db::run_migrations(&pool, config.db_type).await?
 // sqlx migrate 检测版本表 _sqlx_migrations，增量执行未运行的迁移
@@ -875,5 +877,5 @@ HubCore::new(config).await?
 
 ---
 
-*本文档由 PRD v0.1.0、ARCHITECTURE v0.1.0、DOMAIN v0.1.0 推导生成，描述 Novai Hub 的完整数据存储模型。*
+*本文档由 PRD v0.1.0、ARCHITECTURE v0.1.0、DOMAIN v0.1.0 推导生成，描述 octopus Hub 的完整数据存储模型。*
 *Phase 2 新增实体（TeamGroup、团队评分、多用户协作扩展）在对应版本更新本文档。*

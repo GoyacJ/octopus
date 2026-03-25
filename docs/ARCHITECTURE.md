@@ -8,7 +8,7 @@
 ## 目录
 
 1. [技术选型总览](#1-技术选型总览)
-2. [仓库结构](#2-仓库结构)
+2. [目标态仓库蓝图（非当前仓库事实）](#2-目标态仓库蓝图非当前仓库事实)
 3. [整体架构图](#3-整体架构图)
 4. [核心架构决策：合并模式](#4-核心架构决策合并模式)
 5. [Client 层（Vue 3）](#5-client-层vue-3)
@@ -31,6 +31,8 @@
 
 ## 1. 技术选型总览
 
+> 本节描述的是目标态技术蓝图，不代表当前仓库已经存在对应 manifest、目录或运行时代码。
+
 所有决策已确认，无待决项。
 
 | 层次 | 技术 | 版本要求 | 备注 |
@@ -43,7 +45,7 @@
 | **Frontend** | Vue 3 + TypeScript | Vue 3.4+, TS 5 | Composition API + `<script setup>` |
 | **构建工具** | Vite | 5.x | Tauri 官方推荐 |
 | **状态管理** | Pinia | 2.x | Vue 官方 |
-| **UI 组件** | shadcn-vue + Tailwind CSS | — | 可定制，无运行时依赖 |
+| **UI 组件** | self-built UI components + design tokens + UnoCSS | — | 与 `AGENTS.md` 的当前前端基线保持一致 |
 | **实时推送（本地）** | Tauri Event System | built-in | emit/listen，零网络开销 |
 | **实时推送（远程）** | SSE | — | axum 内置支持 |
 | **认证** | JWT（jsonwebtoken crate）| — | 仅远程 Hub 模式 |
@@ -55,7 +57,9 @@
 
 ---
 
-## 2. 仓库结构
+## 2. 目标态仓库蓝图（非当前仓库事实）
+
+以下结构只表达后续实现阶段的目标态蓝图。除非某目录已经出现在 tracked tree 中，否则不得把这些目录、crate、app、manifest 或命令入口描述为当前事实。
 
 ```
 Octopus/
@@ -645,7 +649,7 @@ pub enum ToolSource {
 }
 ```
 
-### 7.2 内置工具全表（21 个）
+### 7.2 内置工具全表,参考[Claude_Hidden_Toolkit.md](references/Claude_Hidden_Toolkit.md)
 
 ```rust
 // Octopus-hub/src/tools/builtin/mod.rs

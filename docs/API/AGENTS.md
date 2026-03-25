@@ -1,6 +1,6 @@
 # Agents API
 
-> Agent 是 Novai 的核心实体，对现实世界"人"的数字化抽象，拥有 Identity（身份）、Capability（能力）、Memory（记忆）三个维度。
+> Agent 是 octopus 的核心实体，对现实世界"人"的数字化抽象，拥有 Identity（身份）、Capability（能力）、Memory（记忆）三个维度。
 
 ---
 
