@@ -3,12 +3,41 @@
   "$id": "https://octopus.local/schemas/observe/audit-record.schema.json",
   "title": "AuditRecord",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for audit records.",
+  "description": "Slice 1 shared contract for audit records emitted during task intake and run orchestration.",
   "properties": {
     "id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "project_id": { "type": "string" },
     "run_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "task_created",
+        "run_created",
+        "run_started",
+        "run_completed",
+        "run_failed",
+        "run_retry_requested",
+        "run_terminated",
+        "artifact_created"
+      ]
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    },
     "created_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "workspace_id",
+    "project_id",
+    "run_id",
+    "task_id",
+    "event_type",
+    "message",
+    "created_at"
+  ],
+  "additionalProperties": false
 }

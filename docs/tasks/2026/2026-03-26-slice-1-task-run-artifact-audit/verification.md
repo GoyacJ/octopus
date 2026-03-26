@@ -1,0 +1,30 @@
+## Verification
+
+- Unit Tests:
+  - `cargo test --workspace`
+  - Result: `octopus-execution` unit tests `2` passed
+  - Result: `octopus-runtime` unit tests `2` passed
+- Integration Tests:
+  - `cargo test --workspace`
+  - Result: `crates/runtime/tests/slice1_runtime.rs` integration tests `4` passed
+- Contract Tests:
+  - `cargo test --workspace`
+  - Result: `crates/runtime/tests/schema_contracts.rs` tests `2` passed
+  - Result: all tracked schema files parse as JSON
+  - Result: refined Slice 1 example payloads validate against the updated schemas
+- Failure Cases:
+  - `failed_run_can_retry_and_then_succeed`
+  - `failed_run_can_be_explicitly_terminated`
+- Boundary Cases:
+  - `persists_completed_run_and_reloads_after_reopen`
+  - `idempotency_deduplicates_task_and_run_creation`
+- Manual Verification:
+  - `cargo metadata --format-version 1 --no-deps`
+  - Result: workspace resolves `4` Rust members under `crates/`
+- Static Checks:
+  - `cargo fmt --all --check`
+  - Result: pass
+- Remaining Gaps:
+  - No transport API, app surface, approval/policy, automation, MCP, or shared-knowledge slice is implemented in this task.
+- Confidence Level:
+  - High

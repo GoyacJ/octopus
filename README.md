@@ -2,8 +2,8 @@
 
 Octopus is currently a **doc-first rebuild** of a unified Agent Runtime Platform.
 
-This repository does **not** currently prove a working implementation tree.  
-The tracked truth starts with the repository entry docs, the `docs/` directory, and any tracked manifests or skeleton files that actually exist in the tree. If code, manifests, commands, or verification results are not present in the tracked tree, they must not be described as if they already exist.
+This repository now proves a **local, test-verified Slice 1 runtime** under `crates/`, but it does **not** yet prove a runnable UI surface, remote-hub transport, or a full GA implementation tree.  
+The tracked truth starts with the repository entry docs, the `docs/` directory, and any tracked manifests, source files, schemas, and verification results that actually exist in the tree. If code, manifests, commands, or verification results are not present in the tracked tree, they must not be described as if they already exist.
 
 ## Where To Start
 
@@ -31,10 +31,12 @@ The repository currently contains:
 
 - repository-level instructions in [AGENTS.md](AGENTS.md)
 - product, architecture, governance, decision, and reference docs under [docs/](docs/README.md)
-- initial monorepo root manifests in `Cargo.toml`, `package.json`, and `pnpm-workspace.yaml`
-- initial top-level skeleton directories in `apps/`, `crates/`, `packages/`, and `schemas/`
+- monorepo root manifests in `Cargo.toml`, `package.json`, and `pnpm-workspace.yaml`
+- refined Slice 1 shared contracts for `Workspace`, `Project`, `Task`, `Run`, `Artifact`, `AuditRecord`, and `TraceRecord` under `schemas/`
+- first real Rust workspace members in `crates/domain-context`, `crates/execution`, `crates/observe-artifact`, and `crates/runtime`
+- task packages for the GA foundation skeleton and Slice 1 runtime startup under [docs/tasks/](docs/tasks/README.md)
 
-Those manifests and directories establish repo boundaries and shared-contract placement only. They do **not** yet prove a working runtime, UI surface, or end-to-end execution path.
+The current tracked implementation proves a local SQLite-backed `Task -> Run -> Artifact -> Audit / Trace` loop through automated tests only. It does **not** yet prove UI surfaces, approval, automation, MCP, shared knowledge, or remote transport slices.
 
 ## Working Rule
 

@@ -76,8 +76,8 @@
 
 补充说明（截至 2026-03-26 的 tracked repository state）：
 
-- 当前跟踪树仍处于 `doc-first rebuild` 状态，但已包含首批 monorepo 根 manifests 与 `apps/`、`crates/`、`packages/`、`schemas/` 骨架；
-- 正式事实源仍以根目录入口文档、`docs/` 与实际 tracked manifests / 占位契约为准，不得把这些骨架误写成已完成实现。
+- 当前跟踪树仍处于 `doc-first rebuild` 状态，但已包含首批 monorepo 根 manifests、Slice 1 细化后的共享契约，以及本地 SQLite 驱动的首批 Rust runtime crates；
+- 当前已验证的实现范围仅限 `Task -> Run -> Artifact -> Audit / Trace` 的本地闭环，不得把这一步误写成已完成的 UI、远程 Hub、审批、自动化或知识系统实现。
 
 ### 1.5 架构平面
 

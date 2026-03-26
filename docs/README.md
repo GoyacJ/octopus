@@ -4,7 +4,7 @@ This repository uses a role-based documentation structure so each document has a
 
 ## Current State Note
 
-The tracked tree now includes an initial monorepo skeleton under `apps/`, `crates/`, `packages/`, and `schemas/`, plus root workspace manifests. Those files are boundary scaffolding and shared-contract foundations, not proof of a working runtime or application surface.
+The tracked tree now includes the monorepo skeleton, refined Slice 1 shared contracts, and first real Rust workspace members for a local SQLite-backed runtime slice. That tracked implementation proves only the `Task -> Run -> Artifact -> Audit / Trace` loop through tests, not a runnable application surface or later GA slices.
 
 ## Source Of Truth Order
 

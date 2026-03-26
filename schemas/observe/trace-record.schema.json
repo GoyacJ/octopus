@@ -3,12 +3,42 @@
   "$id": "https://octopus.local/schemas/observe/trace-record.schema.json",
   "title": "TraceRecord",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for trace records.",
+  "description": "Slice 1 shared contract for trace records that capture the orchestration and execution path for a run.",
   "properties": {
     "id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "project_id": { "type": "string" },
     "run_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "task_intake",
+        "run_orchestrator",
+        "execution_action",
+        "artifact_store"
+      ]
+    },
+    "attempt": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    },
     "created_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "workspace_id",
+    "project_id",
+    "run_id",
+    "task_id",
+    "stage",
+    "attempt",
+    "message",
+    "created_at"
+  ],
+  "additionalProperties": false
 }

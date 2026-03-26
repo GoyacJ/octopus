@@ -38,6 +38,7 @@ Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-d
 ## Current Task Packages
 
 - [2026-03-26-ga-foundation-repo-skeleton](2026/2026-03-26-ga-foundation-repo-skeleton/README.md)
+- [2026-03-26-slice-1-task-run-artifact-audit](2026/2026-03-26-slice-1-task-run-artifact-audit/README.md)
 
 ## Relationship To ADRs
 

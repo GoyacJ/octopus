@@ -1,0 +1,75 @@
+## Design Note
+
+- Problem:
+  - The repository has schema placeholders and a monorepo skeleton, but it still lacks any verified formal runtime path that proves Octopus can execute a Task as a Run and persist the result as first-class records.
+- Goal:
+  - Deliver a Rust-only Slice 1 runtime that proves the Task -> Run -> Artifact -> Audit/Trace closed loop on local SQLite without introducing later-slice governance or UI concerns.
+- Acceptance Criteria:
+  - Workspace/Project context is persisted and linked to Task, Run, and observation records.
+  - Task intake produces a formal Task object with an execution action contract.
+  - Run orchestration persists lifecycle state and supports success, failure, retry, and terminate outcomes.
+  - Artifact, AuditRecord, and TraceRecord are queryable by Run after execution and after reopening the database.
+- Non-functional Constraints:
+  - SQLite is the local source of persisted runtime truth for this slice.
+  - `schemas/` remains the only source of cross-language contract truth.
+  - Keep crate ownership aligned to the approved top-level groups and avoid extra crates.
+  - Preserve truthful docs about what is and is not implemented.
+- MVP Boundary:
+  - A local library API and automated tests are sufficient for Slice 1.
+  - No UI, transport, policy, approval, automation, or shared knowledge behavior enters this slice.
+- Layer Placement:
+  - `schemas/` defines shared contracts.
+  - `crates/domain-context` defines Workspace/Project domain records and the minimal context repository boundary.
+  - `crates/execution` defines the deterministic built-in execution action model.
+  - `crates/observe-artifact` defines Artifact/Audit/Trace records plus SQLite-backed observation stores.
+  - `crates/runtime` owns migrations, task intake, run orchestration, and SQLite-backed composition across the other crates.
+- Module Boundaries:
+  - `TaskIntake` owns Task creation, context upsert/use, and task idempotency.
+  - `RunOrchestrator` owns run creation, status progression, retry, terminate, checkpoint metadata, and calls into execution plus observation stores.
+  - `SqliteContextStore` owns Workspace/Project persistence and lookup.
+  - `SqliteObservationStore` owns Artifact/Audit/Trace persistence and retrieval.
+  - `ExecutionAction` and the deterministic execution engine stay isolated from storage and orchestration concerns.
+- Inputs:
+  - Workspace identifier and metadata
+  - Project identifier and metadata
+  - Task title, instruction, idempotency key, and deterministic execution action
+- Outputs:
+  - Persisted Task
+  - Persisted Run
+  - Zero or one Artifact per attempt sequence in this slice
+  - Persisted AuditRecord and TraceRecord streams
+- State Transitions:
+  - `Run`: `created -> running -> completed`
+  - `Run`: `created -> running -> failed -> resuming -> running -> completed`
+  - `Run`: `created -> running -> failed -> terminated`
+  - `checkpoint_seq` increments on significant orchestration transitions, and `resume_token` is present only when the run can be resumed.
+- Error Handling:
+  - Missing context, task, or run lookups return explicit runtime errors.
+  - Execution failures persist failure trace/audit records before surfacing the failure state.
+  - Retry is only allowed for failed runs with remaining attempts.
+  - Terminate is explicit and leaves a durable audit/trace trail.
+- Tech Stack Decision:
+  - Use Rust libraries with `tokio`, `sqlx`, `serde`, and SQLite because SAD already fixes those as the local-mode runtime/storage baseline.
+- Visual Framework Impact:
+  - None. This task does not touch UI or surface artifacts.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - Existing workspace root manifests
+  - Existing `RunStatus` schema enum
+  - Existing repo structure and schema-first governance rules
+- New Abstractions:
+  - `TaskIntake`
+  - `RunOrchestrator`
+  - `ExecutionAction`
+  - `ArtifactStore`
+  - `ObservationWriter`
+- Trade-offs:
+  - This slice centralizes migrations in `crates/runtime` to keep the first runnable persistence setup small, while the context and observation crates own their record/store APIs.
+  - It intentionally stops at a library/test harness instead of inventing a transport API before later slices need one.
+- Test Strategy:
+  - Contract validation tests for refined schemas and untouched placeholders.
+  - Integration tests around a file-backed SQLite database for success, failure, retry, terminate, and reopen scenarios.
+  - Lightweight unit tests around deterministic execution behavior and retry/terminate eligibility.
+- ADR Needed:
+  - No new ADR is required if implementation remains within ADR 0001 and ADR 0002 boundaries.

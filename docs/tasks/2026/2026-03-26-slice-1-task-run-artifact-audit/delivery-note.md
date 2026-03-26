@@ -1,0 +1,39 @@
+## Delivery Note
+
+- What Changed:
+  - Added the Slice 1 task package and refined the shared contracts for `Workspace`, `Project`, `Task`, `Run`, `Artifact`, `AuditRecord`, and `TraceRecord`.
+  - Added the first real Rust workspace members in `crates/domain-context`, `crates/execution`, `crates/observe-artifact`, and `crates/runtime`.
+  - Implemented a local SQLite-backed runtime API that can ensure context, create tasks, start runs, retry failed runs, terminate runs, and query persisted artifacts.
+  - Added a SQLite migration plus automated schema, unit, and integration tests for the Slice 1 closed loop.
+  - Updated repository entry docs to describe the new tracked implementation state accurately.
+- Why:
+  - The GA blueprint requires Slice 1 to prove Octopus has a formal execution shell before wider UI or governance work begins.
+  - Using SQLite-backed crates instead of an in-memory demo preserves the recovery and durability semantics required by SAD.
+- User / System Impact:
+  - Developers can now exercise a verified local `Task -> Run -> Artifact -> Audit / Trace` slice through Rust APIs and tests.
+  - No UI, remote hub, approval, automation, MCP, or shared-knowledge behavior is exposed yet.
+- Risks:
+  - The current runtime API is library-only and may need reshaping once transport or app surfaces are introduced.
+  - Slice 1 contracts are intentionally narrow and will need explicit follow-up task packages when later slices expand adjacent objects.
+- Rollback Notes:
+  - The new Rust crates and refined schemas can be reverted together as one Slice 1 unit.
+  - The SQLite migration should be rolled back together with the runtime crates; partial rollback of contracts without code is not recommended.
+- Follow-ups:
+  - Start Slice 2 task packaging for Approval + Inbox / Notification.
+  - Decide whether the next transport-facing slice should expose this runtime through Tauri invoke, HTTP, or both.
+  - Introduce schema-consumer strategy for Rust/TypeScript only after more field sets stabilize.
+- Docs Updated:
+  - `README.md`
+  - `AGENTS.md`
+  - `docs/README.md`
+  - `docs/architecture/SAD.md`
+  - `docs/tasks/README.md`
+  - `docs/tasks/2026/2026-03-26-slice-1-task-run-artifact-audit/*`
+- Tests Included:
+  - `cargo fmt --all --check`
+  - `cargo metadata --format-version 1 --no-deps`
+  - `cargo test --workspace`
+- ADR Updated:
+  - None. Existing ADR 0001 and ADR 0002 still cover this slice.
+- Temporary Workarounds:
+  - The runtime is exposed only as a local Rust library and test harness in this slice; transport/API layers are intentionally deferred, not silently omitted.

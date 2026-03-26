@@ -1,6 +1,24 @@
 [workspace]
 resolver = "2"
-members = []
+members = [
+  "crates/domain-context",
+  "crates/execution",
+  "crates/observe-artifact",
+  "crates/runtime",
+]
 
 [workspace.package]
 edition = "2021"
+
+[workspace.dependencies]
+async-trait = "0.1.89"
+chrono = { version = "0.4.42", features = ["serde"] }
+jsonschema = "0.18.3"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sqlx = { version = "0.7.4", features = ["runtime-tokio", "sqlite", "migrate"] }
+tempfile = "3.23.0"
+thiserror = "2.0.17"
+tokio = { version = "1.48.0", features = ["macros", "rt-multi-thread"] }
+uuid = { version = "1.18.1", features = ["v4", "serde"] }
+walkdir = "2.5.0"

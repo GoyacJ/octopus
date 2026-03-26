@@ -114,8 +114,8 @@ Follow these owner docs:
 
 Current actual repository state note:
 
-- the tracked tree now includes initial top-level skeleton directories such as `apps/`, `crates/`, `packages/`, and `schemas/`, plus root workspace manifests
-- those files establish placement constraints and contract-source ownership, but they do **not** by themselves prove runnable implementation members or verified runtime behavior
+- the tracked tree now includes root workspace manifests, refined Slice 1 shared contracts in `schemas/`, and first real Rust workspace members under `crates/domain-context`, `crates/execution`, `crates/observe-artifact`, and `crates/runtime`
+- the current verified implementation scope is limited to the local SQLite-backed `Task -> Run -> Artifact -> Audit / Trace` slice; app surfaces, approval, automation, MCP, shared knowledge, and remote transport remain out of scope unless later tracked files prove otherwise
 
 ---
 

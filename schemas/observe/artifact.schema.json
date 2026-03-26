@@ -3,15 +3,34 @@
   "$id": "https://octopus.local/schemas/observe/artifact.schema.json",
   "title": "Artifact",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for result artifacts.",
+  "description": "Slice 1 shared contract for execution result artifacts produced by a completed run.",
   "properties": {
     "id": { "type": "string" },
     "workspace_id": { "type": "string" },
     "project_id": { "type": "string" },
     "run_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "artifact_type": {
+      "type": "string",
+      "const": "execution_output"
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id", "workspace_id", "project_id"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "workspace_id",
+    "project_id",
+    "run_id",
+    "task_id",
+    "artifact_type",
+    "content",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
 }

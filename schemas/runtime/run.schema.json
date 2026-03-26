@@ -3,16 +3,64 @@
   "$id": "https://octopus.local/schemas/runtime/run.schema.json",
   "title": "Run",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for Run as the authority execution shell.",
+  "description": "Slice 1 shared contract for Run as the authority execution shell for task execution.",
   "properties": {
     "id": { "type": "string" },
+    "task_id": { "type": "string" },
     "workspace_id": { "type": "string" },
     "project_id": { "type": "string" },
+    "run_type": {
+      "type": "string",
+      "const": "task"
+    },
     "status": { "$ref": "https://octopus.local/schemas/runtime/run-status.schema.json" },
     "idempotency_key": { "type": "string" },
+    "attempt_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_attempts": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "checkpoint_seq": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "resume_token": {
+      "type": ["string", "null"]
+    },
+    "last_error": {
+      "type": ["string", "null"]
+    },
     "created_at": { "type": "string", "format": "date-time" },
-    "updated_at": { "type": "string", "format": "date-time" }
+    "updated_at": { "type": "string", "format": "date-time" },
+    "started_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
+    "terminated_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    }
   },
-  "required": ["id", "workspace_id", "project_id", "status"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "task_id",
+    "workspace_id",
+    "project_id",
+    "run_type",
+    "status",
+    "idempotency_key",
+    "attempt_count",
+    "max_attempts",
+    "checkpoint_seq",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
 }
