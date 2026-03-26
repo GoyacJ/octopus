@@ -4,7 +4,7 @@ This repository uses a role-based documentation structure so each document has a
 
 ## Current State Note
 
-The tracked tree now includes the monorepo skeleton, refined Slice 1 and Slice 2 shared contracts, and first real Rust workspace members for a local SQLite-backed governed runtime slice. That tracked implementation proves the local `Task -> Policy / Budget / Approval -> Run -> Artifact -> Audit / Trace` loop plus persistent approval inbox/notification records through tests, not a runnable application surface or later GA slices.
+The tracked tree now includes the monorepo skeleton, refined Slice 1 through Slice 3 shared contracts, and first real Rust workspace members for a local SQLite-backed governed runtime slice. That tracked implementation proves the local `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Artifact -> Audit / Trace` loop plus persistent approval inbox/notification and delivery records through tests, not a runnable application surface or later GA slices.
 
 ## Source Of Truth Order
 

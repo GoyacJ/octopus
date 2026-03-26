@@ -14,6 +14,7 @@
       "type": "string",
       "enum": [
         "task_intake",
+        "trigger_delivery",
         "governance_evaluation",
         "run_orchestrator",
         "execution_action",

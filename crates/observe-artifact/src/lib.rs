@@ -6,12 +6,18 @@ use thiserror::Error;
 
 pub const ARTIFACT_TYPE_EXECUTION_OUTPUT: &str = "execution_output";
 pub const TRACE_STAGE_TASK_INTAKE: &str = "task_intake";
+pub const TRACE_STAGE_TRIGGER_DELIVERY: &str = "trigger_delivery";
 pub const TRACE_STAGE_GOVERNANCE_EVALUATION: &str = "governance_evaluation";
 pub const TRACE_STAGE_RUN_ORCHESTRATOR: &str = "run_orchestrator";
 pub const TRACE_STAGE_EXECUTION_ACTION: &str = "execution_action";
 pub const TRACE_STAGE_ARTIFACT_STORE: &str = "artifact_store";
 
 pub const AUDIT_EVENT_TASK_CREATED: &str = "task_created";
+pub const AUDIT_EVENT_AUTOMATION_CREATED: &str = "automation_created";
+pub const AUDIT_EVENT_TRIGGER_DELIVERY_CREATED: &str = "trigger_delivery_created";
+pub const AUDIT_EVENT_TRIGGER_DELIVERY_RETRY_REQUESTED: &str = "trigger_delivery_retry_requested";
+pub const AUDIT_EVENT_TRIGGER_DELIVERY_SUCCEEDED: &str = "trigger_delivery_succeeded";
+pub const AUDIT_EVENT_TRIGGER_DELIVERY_FAILED: &str = "trigger_delivery_failed";
 pub const AUDIT_EVENT_RUN_CREATED: &str = "run_created";
 pub const AUDIT_EVENT_RUN_STARTED: &str = "run_started";
 pub const AUDIT_EVENT_RUN_COMPLETED: &str = "run_completed";

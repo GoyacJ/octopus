@@ -1,0 +1,36 @@
+## Contract Change
+
+- Change Type:
+  - Cross-language Contract
+- New / Updated Schemas:
+  - Update `schemas/runtime/task.schema.json`
+  - Update `schemas/runtime/run.schema.json`
+  - Update `schemas/runtime/automation.schema.json`
+  - Update `schemas/runtime/trigger.schema.json`
+  - Update `schemas/runtime/trigger-delivery.schema.json`
+  - Update `schemas/observe/trace-record.schema.json`
+- New / Updated Commands:
+  - None as shared contracts. Slice 3 still exposes a Rust library API only.
+- New / Updated Queries:
+  - None as shared contracts. Runtime query APIs remain local implementation concerns.
+- New / Updated Events:
+  - None as formal shared event contracts in this slice.
+- New / Updated DTOs:
+  - `Task` grows source metadata for manual versus automation-derived intake.
+  - `Run` grows optional automation and trigger-delivery references and broadens `run_type` to include `automation`.
+  - `Automation`, `Trigger`, and `TriggerDelivery` are refined from placeholders into concrete Slice 3 contracts.
+  - `TraceRecord.stage` grows `trigger_delivery`.
+- Compatibility Impact:
+  - There are still no tracked external consumers, so this is a refinement of placeholder contracts rather than a published breaking API change.
+  - Slice 1/2 runtime tests and future consumers must use the new Task/Run fields and TriggerDelivery object shape.
+- Affected Consumers:
+  - Rust consumers under `crates/`
+  - Future TypeScript consumers under `packages/`
+  - Runtime contract tests in `crates/runtime/tests`
+- Migration Notes:
+  - Add SQLite migration `0003` for automations, triggers, trigger_deliveries, and Task/Run automation reference columns.
+  - Existing Slice 1/2 databases should migrate forward in place.
+- Generation Impact:
+  - None currently. The repo still does not generate Rust or TypeScript consumers from `schemas/`.
+- Open Questions:
+  - None for this slice; additional trigger types remain deferred to later work.

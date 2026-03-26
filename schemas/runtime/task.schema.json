@@ -59,6 +59,13 @@
     "id": { "type": "string" },
     "workspace_id": { "type": "string" },
     "project_id": { "type": "string" },
+    "source_kind": {
+      "type": "string",
+      "enum": ["manual", "automation"]
+    },
+    "automation_id": {
+      "type": ["string", "null"]
+    },
     "title": {
       "type": "string",
       "minLength": 1
@@ -93,6 +100,8 @@
     "id",
     "workspace_id",
     "project_id",
+    "source_kind",
+    "automation_id",
     "title",
     "instruction",
     "action",

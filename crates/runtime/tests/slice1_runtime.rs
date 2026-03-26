@@ -73,6 +73,8 @@ async fn persists_completed_run_and_reloads_after_reopen() {
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-slice1".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "Write a deterministic note".into(),
             instruction: "Emit a single execution artifact".into(),
             action: ExecutionAction::EmitText {
@@ -136,6 +138,8 @@ async fn failed_run_can_retry_and_then_succeed() {
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-retry".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "Retry once".into(),
             instruction: "Fail once then emit text".into(),
             action: ExecutionAction::FailOnceThenEmitText {
@@ -185,6 +189,8 @@ async fn failed_run_can_be_explicitly_terminated() {
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-terminate".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "Terminate after failure".into(),
             instruction: "Always fail and then terminate".into(),
             action: ExecutionAction::AlwaysFail {
@@ -230,6 +236,8 @@ async fn idempotency_deduplicates_task_and_run_creation() {
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-idempotent".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "Deduplicate intake".into(),
             instruction: "Use one task and one run".into(),
             action: ExecutionAction::EmitText {
@@ -246,6 +254,8 @@ async fn idempotency_deduplicates_task_and_run_creation() {
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-idempotent".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "Deduplicate intake".into(),
             instruction: "Use one task and one run".into(),
             action: ExecutionAction::EmitText {

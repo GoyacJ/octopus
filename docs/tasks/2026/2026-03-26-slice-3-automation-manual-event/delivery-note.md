@@ -1,0 +1,35 @@
+## Delivery Note
+- What Changed:
+  - Added Slice 3 task-package artifacts and ADR 0003 for the Automation -> TriggerDelivery -> derived Task -> Run projection model.
+  - Refined shared schemas for `Automation`, `Trigger`, `TriggerDelivery`, `Task`, `Run`, and `TraceRecord`.
+  - Added SQLite migration `0003_slice3_automation.sql` and extended `crates/runtime` with Automation creation, manual-event dispatch, delivery dedupe, and explicit delivery retry APIs.
+  - Added automation integration tests and updated repository entry docs to reflect the new tracked state.
+- Why:
+  - The GA blueprint requires Slice 3 to prove Octopus can accept a formal non-manual entrypoint without breaking the governed runtime semantics already proven in Slices 1 and 2.
+- User / System Impact:
+  - Developers can now exercise a local `manual_event` automation flow that produces deduped TriggerDelivery records and governed `run_type=automation` runs.
+  - Existing manual task, approval, retry, and reopen behaviors remain available and verified.
+- Risks:
+  - Delivery retry currently depends on explicit API calls; there is still no scheduler or background worker.
+  - Later trigger types may still require reshaping Trigger or delivery metadata beyond the minimal Slice 3 contract.
+- Rollback Notes:
+  - Roll back the Slice 3 migration, runtime/schema changes, ADR 0003, and task-package docs together as one unit.
+  - Partial rollback of schemas without the migration and runtime changes is not recommended.
+- Follow-ups:
+  - Extend Slice 3 to `cron`, `webhook`, and `MCP event` when scheduling and transport boundaries are ready.
+  - Start Slice 4 task packaging once Shared Knowledge becomes the next active milestone.
+- Docs Updated:
+  - `README.md`
+  - `docs/README.md`
+  - `AGENTS.md`
+  - `docs/architecture/SAD.md`
+  - `docs/tasks/README.md`
+  - `docs/decisions/README.md`
+  - Slice 3 task package files
+- Tests Included:
+  - Full `cargo test --workspace`
+  - New `slice3_automation` integration coverage for allow, dedupe, approval, deny, retry, and reopen paths
+- ADR Updated:
+  - Added `docs/decisions/0003-automation-delivery-projects-into-derived-tasks.md`
+- Temporary Workarounds:
+  - Retry remains explicit API-driven recovery; no background automation worker is introduced in this slice.

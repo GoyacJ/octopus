@@ -16,11 +16,16 @@ use octopus_observe_artifact::{
     AUDIT_EVENT_RUN_CREATED, AUDIT_EVENT_RUN_FAILED, AUDIT_EVENT_RUN_RETRY_REQUESTED,
     AUDIT_EVENT_RUN_STARTED, AUDIT_EVENT_RUN_TERMINATED, TRACE_STAGE_ARTIFACT_STORE,
     TRACE_STAGE_EXECUTION_ACTION, TRACE_STAGE_GOVERNANCE_EVALUATION, TRACE_STAGE_RUN_ORCHESTRATOR,
+    TRACE_STAGE_TRIGGER_DELIVERY,
 };
+use serde_json::Value;
 use sqlx::{Row, SqlitePool};
 
 use crate::{
-    models::{current_timestamp, CreateTaskInput, RunExecutionReport, RunRecord, TaskRecord},
+    models::{
+        current_timestamp, AutomationRecord, CreateAutomationInput, CreateTaskInput,
+        RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord, TriggerRecord,
+    },
     RuntimeError,
 };
 
@@ -74,14 +79,16 @@ impl TaskIntake {
         sqlx::query(
             r#"
             INSERT INTO tasks (
-                id, workspace_id, project_id, title, instruction, action_json, capability_id,
-                estimated_cost, idempotency_key, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                id, workspace_id, project_id, source_kind, automation_id, title, instruction,
+                action_json, capability_id, estimated_cost, idempotency_key, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             "#,
         )
         .bind(&task.id)
         .bind(&task.workspace_id)
         .bind(&task.project_id)
+        .bind(&task.source_kind)
+        .bind(&task.automation_id)
         .bind(&task.title)
         .bind(&task.instruction)
         .bind(action_json)
@@ -99,8 +106,8 @@ impl TaskIntake {
     pub async fn fetch_task(&self, task_id: &str) -> Result<TaskRecord, RuntimeError> {
         let row = sqlx::query(
             r#"
-            SELECT id, workspace_id, project_id, title, instruction, action_json, capability_id,
-                   estimated_cost, idempotency_key, created_at, updated_at
+            SELECT id, workspace_id, project_id, source_kind, automation_id, title, instruction,
+                   action_json, capability_id, estimated_cost, idempotency_key, created_at, updated_at
             FROM tasks
             WHERE id = ?1
             "#,
@@ -119,8 +126,8 @@ impl TaskIntake {
     ) -> Result<Option<TaskRecord>, RuntimeError> {
         let row = sqlx::query(
             r#"
-            SELECT id, workspace_id, project_id, title, instruction, action_json, capability_id,
-                   estimated_cost, idempotency_key, created_at, updated_at
+            SELECT id, workspace_id, project_id, source_kind, automation_id, title, instruction,
+                   action_json, capability_id, estimated_cost, idempotency_key, created_at, updated_at
             FROM tasks
             WHERE idempotency_key = ?1
             "#,
@@ -130,6 +137,276 @@ impl TaskIntake {
         .await?;
 
         row.map(|row| task_from_row(&row)).transpose()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct AutomationIntake {
+    pool: SqlitePool,
+    context_store: SqliteContextStore,
+}
+
+impl AutomationIntake {
+    pub fn new(pool: SqlitePool, context_store: SqliteContextStore) -> Self {
+        Self {
+            pool,
+            context_store,
+        }
+    }
+
+    pub async fn create_automation(
+        &self,
+        input: CreateAutomationInput,
+    ) -> Result<AutomationRecord, RuntimeError> {
+        self.context_store
+            .fetch_project_context(&input.workspace_id, &input.project_id)
+            .await?;
+
+        let trigger = TriggerRecord::manual_event("pending");
+        let automation = AutomationRecord::new(input, trigger.id.clone());
+        let trigger = TriggerRecord {
+            automation_id: automation.id.clone(),
+            ..trigger
+        };
+
+        sqlx::query(
+            r#"
+            INSERT INTO automations (
+                id, workspace_id, project_id, trigger_id, title, instruction, action_json,
+                capability_id, estimated_cost, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            "#,
+        )
+        .bind(&automation.id)
+        .bind(&automation.workspace_id)
+        .bind(&automation.project_id)
+        .bind(&automation.trigger_id)
+        .bind(&automation.title)
+        .bind(&automation.instruction)
+        .bind(serde_json::to_string(&automation.action)?)
+        .bind(&automation.capability_id)
+        .bind(automation.estimated_cost)
+        .bind(&automation.created_at)
+        .bind(&automation.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO triggers (
+                id, automation_id, trigger_type, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5)
+            "#,
+        )
+        .bind(&trigger.id)
+        .bind(&trigger.automation_id)
+        .bind(&trigger.trigger_type)
+        .bind(&trigger.created_at)
+        .bind(&trigger.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(automation)
+    }
+
+    pub async fn fetch_automation(
+        &self,
+        automation_id: &str,
+    ) -> Result<Option<AutomationRecord>, RuntimeError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, workspace_id, project_id, trigger_id, title, instruction, action_json,
+                   capability_id, estimated_cost, created_at, updated_at
+            FROM automations
+            WHERE id = ?1
+            "#,
+        )
+        .bind(automation_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| automation_from_row(&row)).transpose()
+    }
+
+    pub async fn fetch_trigger(&self, trigger_id: &str) -> Result<Option<TriggerRecord>, RuntimeError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, automation_id, trigger_type, created_at, updated_at
+            FROM triggers
+            WHERE id = ?1
+            "#,
+        )
+        .bind(trigger_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| trigger_from_row(&row)).transpose()
+    }
+
+    pub async fn create_trigger_delivery(
+        &self,
+        trigger_id: &str,
+        dedupe_key: &str,
+        payload: Value,
+    ) -> Result<TriggerDeliveryRecord, RuntimeError> {
+        let delivery = TriggerDeliveryRecord::new(trigger_id.to_string(), dedupe_key.to_string(), payload);
+        sqlx::query(
+            r#"
+            INSERT INTO trigger_deliveries (
+                id, trigger_id, run_id, status, dedupe_key, payload_json, attempt_count,
+                last_error, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            "#,
+        )
+        .bind(&delivery.id)
+        .bind(&delivery.trigger_id)
+        .bind(&delivery.run_id)
+        .bind(&delivery.status)
+        .bind(&delivery.dedupe_key)
+        .bind(serde_json::to_string(&delivery.payload)?)
+        .bind(delivery.attempt_count)
+        .bind(&delivery.last_error)
+        .bind(&delivery.created_at)
+        .bind(&delivery.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(delivery)
+    }
+
+    pub async fn find_trigger_delivery_by_dedupe_key(
+        &self,
+        dedupe_key: &str,
+    ) -> Result<Option<TriggerDeliveryRecord>, RuntimeError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, trigger_id, run_id, status, dedupe_key, payload_json, attempt_count,
+                   last_error, created_at, updated_at
+            FROM trigger_deliveries
+            WHERE dedupe_key = ?1
+            "#,
+        )
+        .bind(dedupe_key)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| trigger_delivery_from_row(&row)).transpose()
+    }
+
+    pub async fn fetch_trigger_delivery(
+        &self,
+        delivery_id: &str,
+    ) -> Result<Option<TriggerDeliveryRecord>, RuntimeError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, trigger_id, run_id, status, dedupe_key, payload_json, attempt_count,
+                   last_error, created_at, updated_at
+            FROM trigger_deliveries
+            WHERE id = ?1
+            "#,
+        )
+        .bind(delivery_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| trigger_delivery_from_row(&row)).transpose()
+    }
+
+    pub async fn list_trigger_deliveries_by_automation(
+        &self,
+        automation_id: &str,
+    ) -> Result<Vec<TriggerDeliveryRecord>, RuntimeError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT td.id, td.trigger_id, td.run_id, td.status, td.dedupe_key, td.payload_json,
+                   td.attempt_count, td.last_error, td.created_at, td.updated_at
+            FROM trigger_deliveries td
+            JOIN triggers t ON t.id = td.trigger_id
+            WHERE t.automation_id = ?1
+            ORDER BY td.created_at, td.id
+            "#,
+        )
+        .bind(automation_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(trigger_delivery_from_row)
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    pub async fn update_trigger_delivery(
+        &self,
+        delivery: &TriggerDeliveryRecord,
+    ) -> Result<(), RuntimeError> {
+        sqlx::query(
+            r#"
+            UPDATE trigger_deliveries
+            SET run_id = ?2,
+                status = ?3,
+                payload_json = ?4,
+                attempt_count = ?5,
+                last_error = ?6,
+                updated_at = ?7
+            WHERE id = ?1
+            "#,
+        )
+        .bind(&delivery.id)
+        .bind(&delivery.run_id)
+        .bind(&delivery.status)
+        .bind(serde_json::to_string(&delivery.payload)?)
+        .bind(delivery.attempt_count)
+        .bind(&delivery.last_error)
+        .bind(&delivery.updated_at)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn transition_delivery_to_delivering(
+        &self,
+        mut delivery: TriggerDeliveryRecord,
+    ) -> Result<TriggerDeliveryRecord, RuntimeError> {
+        delivery.status = "delivering".to_string();
+        delivery.attempt_count += 1;
+        delivery.last_error = None;
+        delivery.updated_at = current_timestamp();
+        self.update_trigger_delivery(&delivery).await?;
+        Ok(delivery)
+    }
+
+    pub async fn mark_delivery_retry_scheduled(
+        &self,
+        mut delivery: TriggerDeliveryRecord,
+    ) -> Result<TriggerDeliveryRecord, RuntimeError> {
+        delivery.status = "retry_scheduled".to_string();
+        delivery.attempt_count += 1;
+        delivery.updated_at = current_timestamp();
+        self.update_trigger_delivery(&delivery).await?;
+        Ok(delivery)
+    }
+
+    pub async fn sync_delivery_from_run(
+        &self,
+        delivery_id: &str,
+        run: &RunRecord,
+    ) -> Result<TriggerDeliveryRecord, RuntimeError> {
+        let mut delivery = self
+            .fetch_trigger_delivery(delivery_id)
+            .await?
+            .ok_or_else(|| RuntimeError::TriggerDeliveryNotFound(delivery_id.to_string()))?;
+
+        delivery.run_id = Some(run.id.clone());
+        delivery.last_error = run.last_error.clone();
+        delivery.status = match run.status.as_str() {
+            "completed" => "succeeded".to_string(),
+            "waiting_approval" | "running" | "resuming" | "created" => "delivering".to_string(),
+            "failed" | "blocked" | "terminated" | "cancelled" => "failed".to_string(),
+            _ => delivery.status,
+        };
+        delivery.updated_at = current_timestamp();
+        self.update_trigger_delivery(&delivery).await?;
+        Ok(delivery)
     }
 }
 
@@ -192,6 +469,14 @@ impl RunOrchestrator {
     }
 
     pub async fn start_task(&self, task: &TaskRecord) -> Result<RunExecutionReport, RuntimeError> {
+        self.start_task_with_trigger_delivery(task, None).await
+    }
+
+    pub async fn start_task_with_trigger_delivery(
+        &self,
+        task: &TaskRecord,
+        trigger_delivery_id: Option<&str>,
+    ) -> Result<RunExecutionReport, RuntimeError> {
         if let Some(existing) = self
             .fetch_run_by_idempotency_key(&format!("run:task:{}", task.id))
             .await?
@@ -199,7 +484,7 @@ impl RunOrchestrator {
             return self.load_run_report(&existing.id).await;
         }
 
-        let run = RunRecord::new(task);
+        let run = RunRecord::new(task, trigger_delivery_id.map(str::to_string));
         self.insert_run(&run).await?;
         self.observation_store
             .write_audit(&AuditRecord::new(
@@ -211,6 +496,19 @@ impl RunOrchestrator {
                 "Run created for task",
             ))
             .await?;
+        if run.trigger_delivery_id.is_some() {
+            self.observation_store
+                .write_trace(&TraceRecord::new(
+                    &run.workspace_id,
+                    &run.project_id,
+                    &run.id,
+                    &run.task_id,
+                    TRACE_STAGE_TRIGGER_DELIVERY,
+                    1,
+                    "Trigger delivery started automation execution",
+                ))
+                .await?;
+        }
 
         let decision = self
             .governance_store
@@ -466,9 +764,10 @@ impl RunOrchestrator {
         let row = sqlx::query(
             r#"
             SELECT
-                id, task_id, workspace_id, project_id, run_type, status, approval_request_id,
-                idempotency_key, attempt_count, max_attempts, checkpoint_seq, resume_token,
-                last_error, created_at, updated_at, started_at, completed_at, terminated_at
+                id, task_id, workspace_id, project_id, automation_id, trigger_delivery_id,
+                run_type, status, approval_request_id, idempotency_key, attempt_count,
+                max_attempts, checkpoint_seq, resume_token, last_error, created_at, updated_at,
+                started_at, completed_at, terminated_at
             FROM runs
             WHERE id = ?1
             "#,
@@ -886,16 +1185,19 @@ impl RunOrchestrator {
         sqlx::query(
             r#"
             INSERT INTO runs (
-                id, task_id, workspace_id, project_id, run_type, status, approval_request_id,
-                idempotency_key, attempt_count, max_attempts, checkpoint_seq, resume_token,
-                last_error, created_at, updated_at, started_at, completed_at, terminated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+                id, task_id, workspace_id, project_id, automation_id, trigger_delivery_id,
+                run_type, status, approval_request_id, idempotency_key, attempt_count,
+                max_attempts, checkpoint_seq, resume_token, last_error, created_at, updated_at,
+                started_at, completed_at, terminated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
             "#,
         )
         .bind(&run.id)
         .bind(&run.task_id)
         .bind(&run.workspace_id)
         .bind(&run.project_id)
+        .bind(&run.automation_id)
+        .bind(&run.trigger_delivery_id)
         .bind(&run.run_type)
         .bind(&run.status)
         .bind(&run.approval_request_id)
@@ -920,21 +1222,25 @@ impl RunOrchestrator {
         sqlx::query(
             r#"
             UPDATE runs
-            SET status = ?2,
-                approval_request_id = ?3,
-                attempt_count = ?4,
-                max_attempts = ?5,
-                checkpoint_seq = ?6,
-                resume_token = ?7,
-                last_error = ?8,
-                updated_at = ?9,
-                started_at = ?10,
-                completed_at = ?11,
-                terminated_at = ?12
+            SET automation_id = ?2,
+                trigger_delivery_id = ?3,
+                status = ?4,
+                approval_request_id = ?5,
+                attempt_count = ?6,
+                max_attempts = ?7,
+                checkpoint_seq = ?8,
+                resume_token = ?9,
+                last_error = ?10,
+                updated_at = ?11,
+                started_at = ?12,
+                completed_at = ?13,
+                terminated_at = ?14
             WHERE id = ?1
             "#,
         )
         .bind(&run.id)
+        .bind(&run.automation_id)
+        .bind(&run.trigger_delivery_id)
         .bind(&run.status)
         .bind(&run.approval_request_id)
         .bind(run.attempt_count)
@@ -959,9 +1265,10 @@ impl RunOrchestrator {
         let row = sqlx::query(
             r#"
             SELECT
-                id, task_id, workspace_id, project_id, run_type, status, approval_request_id,
-                idempotency_key, attempt_count, max_attempts, checkpoint_seq, resume_token,
-                last_error, created_at, updated_at, started_at, completed_at, terminated_at
+                id, task_id, workspace_id, project_id, automation_id, trigger_delivery_id,
+                run_type, status, approval_request_id, idempotency_key, attempt_count,
+                max_attempts, checkpoint_seq, resume_token, last_error, created_at, updated_at,
+                started_at, completed_at, terminated_at
             FROM runs
             WHERE idempotency_key = ?1
             "#,
@@ -980,6 +1287,8 @@ fn task_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<TaskRecord, RuntimeErr
         id: row.try_get("id")?,
         workspace_id: row.try_get("workspace_id")?,
         project_id: row.try_get("project_id")?,
+        source_kind: row.try_get("source_kind")?,
+        automation_id: row.try_get("automation_id")?,
         title: row.try_get("title")?,
         instruction: row.try_get("instruction")?,
         action: serde_json::from_str(&action_json)?,
@@ -991,12 +1300,59 @@ fn task_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<TaskRecord, RuntimeErr
     })
 }
 
+fn automation_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<AutomationRecord, RuntimeError> {
+    let action_json: String = row.try_get("action_json")?;
+    Ok(AutomationRecord {
+        id: row.try_get("id")?,
+        workspace_id: row.try_get("workspace_id")?,
+        project_id: row.try_get("project_id")?,
+        trigger_id: row.try_get("trigger_id")?,
+        title: row.try_get("title")?,
+        instruction: row.try_get("instruction")?,
+        action: serde_json::from_str(&action_json)?,
+        capability_id: row.try_get("capability_id")?,
+        estimated_cost: row.try_get("estimated_cost")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn trigger_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<TriggerRecord, RuntimeError> {
+    Ok(TriggerRecord {
+        id: row.try_get("id")?,
+        automation_id: row.try_get("automation_id")?,
+        trigger_type: row.try_get("trigger_type")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn trigger_delivery_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<TriggerDeliveryRecord, RuntimeError> {
+    let payload_json: String = row.try_get("payload_json")?;
+    Ok(TriggerDeliveryRecord {
+        id: row.try_get("id")?,
+        trigger_id: row.try_get("trigger_id")?,
+        run_id: row.try_get("run_id")?,
+        status: row.try_get("status")?,
+        dedupe_key: row.try_get("dedupe_key")?,
+        payload: serde_json::from_str(&payload_json)?,
+        attempt_count: row.try_get("attempt_count")?,
+        last_error: row.try_get("last_error")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
 fn run_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<RunRecord, RuntimeError> {
     Ok(RunRecord {
         id: row.try_get("id")?,
         task_id: row.try_get("task_id")?,
         workspace_id: row.try_get("workspace_id")?,
         project_id: row.try_get("project_id")?,
+        automation_id: row.try_get("automation_id")?,
+        trigger_delivery_id: row.try_get("trigger_delivery_id")?,
         run_type: row.try_get("run_type")?,
         status: row.try_get("status")?,
         approval_request_id: row.try_get("approval_request_id")?,

@@ -76,8 +76,8 @@
 
 补充说明（截至 2026-03-26 的 tracked repository state）：
 
-- 当前跟踪树仍处于 `doc-first rebuild` 状态，但已包含首批 monorepo 根 manifests、Slice 1 与 Slice 2 细化后的共享契约，以及本地 SQLite 驱动的首批 Rust runtime crates；
-- 当前已验证的实现范围是本地 `Task -> Policy / Budget / Approval -> Run -> Artifact -> Audit / Trace` 闭环，并包含持久化的 `ApprovalRequest`、`InboxItem`、`Notification` 与 `PolicyDecisionLog` 记录；不得把这一步误写成已完成的 UI、远程 Hub、自动化、MCP 或知识系统实现。
+- 当前跟踪树仍处于 `doc-first rebuild` 状态，但已包含首批 monorepo 根 manifests、Slice 1 到 Slice 3 细化后的共享契约，以及本地 SQLite 驱动的首批 Rust runtime crates；
+- 当前已验证的实现范围是本地 `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Artifact -> Audit / Trace` 闭环，并包含持久化的 `ApprovalRequest`、`InboxItem`、`Notification`、`PolicyDecisionLog` 与 TriggerDelivery 去重/恢复记录；不得把这一步误写成已完成的 UI、远程 Hub、`cron` / `webhook` / `MCP event` 自动化、MCP 执行或知识系统实现。
 
 ### 1.5 架构平面
 

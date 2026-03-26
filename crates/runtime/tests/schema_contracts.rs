@@ -73,6 +73,9 @@ fn refined_slice1_examples_validate() {
     let project_schema = compiled_schema("context/project.schema.json");
     let task_schema = compiled_schema("runtime/task.schema.json");
     let run_schema = compiled_schema("runtime/run.schema.json");
+    let automation_schema = compiled_schema("runtime/automation.schema.json");
+    let trigger_schema = compiled_schema("runtime/trigger.schema.json");
+    let trigger_delivery_schema = compiled_schema("runtime/trigger-delivery.schema.json");
     let approval_schema = compiled_schema("governance/approval-request.schema.json");
     let capability_descriptor_schema =
         compiled_schema("governance/capability-descriptor.schema.json");
@@ -105,6 +108,8 @@ fn refined_slice1_examples_validate() {
         "id": "task-1",
         "workspace_id": "workspace-alpha",
         "project_id": "project-slice1",
+        "source_kind": "manual",
+        "automation_id": null,
         "title": "Write note",
         "instruction": "Emit a deterministic artifact",
         "action": {
@@ -122,6 +127,8 @@ fn refined_slice1_examples_validate() {
         "task_id": "task-1",
         "workspace_id": "workspace-alpha",
         "project_id": "project-slice1",
+        "automation_id": null,
+        "trigger_delivery_id": null,
         "run_type": "task",
         "status": "completed",
         "approval_request_id": null,
@@ -136,6 +143,43 @@ fn refined_slice1_examples_validate() {
         "started_at": "2026-03-26T10:00:00Z",
         "completed_at": "2026-03-26T10:00:01Z",
         "terminated_at": null
+    })));
+    assert!(automation_schema.is_valid(&json!({
+        "id": "automation-1",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "trigger_id": "trigger-1",
+        "title": "Automation note",
+        "instruction": "Run from manual event",
+        "action": {
+            "kind": "emit_text",
+            "content": "hello from automation"
+        },
+        "capability_id": "capability-write-note",
+        "estimated_cost": 1,
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(trigger_schema.is_valid(&json!({
+        "id": "trigger-1",
+        "automation_id": "automation-1",
+        "trigger_type": "manual_event",
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(trigger_delivery_schema.is_valid(&json!({
+        "id": "delivery-1",
+        "trigger_id": "trigger-1",
+        "run_id": "run-automation-1",
+        "status": "succeeded",
+        "dedupe_key": "delivery:1",
+        "payload": {
+            "source": "test"
+        },
+        "attempt_count": 1,
+        "last_error": null,
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:01Z"
     })));
     assert!(capability_descriptor_schema.is_valid(&json!({
         "id": "capability-write-note",
@@ -215,9 +259,9 @@ fn refined_slice1_examples_validate() {
         "project_id": "project-slice1",
         "run_id": "run-1",
         "task_id": "task-1",
-        "stage": "execution_action",
+        "stage": "trigger_delivery",
         "attempt": 1,
-        "message": "Execution action succeeded",
+        "message": "Trigger delivery started",
         "created_at": "2026-03-26T10:00:01Z"
     })));
     assert!(inbox_schema.is_valid(&json!({

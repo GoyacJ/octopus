@@ -1,0 +1,64 @@
+## Design Note
+
+- Problem:
+  - The repository proves manual Task intake and governed Run execution, but it still cannot accept a formal Automation entrypoint or persist TriggerDelivery state for non-manual execution.
+- Goal:
+  - Deliver a Rust-only Slice 3 runtime that adds the minimum `manual_event` automation path while preserving the existing governed Run lifecycle.
+- Acceptance Criteria:
+  - Automation creation persists a reusable Automation definition and a default `manual_event` Trigger.
+  - Manual dispatch persists a deduped TriggerDelivery, creates a derived Task, and starts a governed `run_type=automation` Run.
+  - Delivery state remains durable across reopen and maps correctly to waiting approval, blocked, failed, and completed Run outcomes.
+  - Explicit delivery retry can recover retryable failures without duplicating delivery records.
+- Non-functional Constraints:
+  - Keep SQLite as the formal authority store.
+  - Keep crate boundaries stable and avoid creating app/package surfaces.
+  - Reuse existing governance and observation flows instead of introducing a parallel execution path.
+- MVP Boundary:
+  - Only `manual_event` is implemented.
+  - Event payload is stored for traceability, not used for templating or dynamic action synthesis.
+  - Retry is explicit API-driven recovery only.
+- Layer Placement:
+  - Shared object shapes stay in `schemas/runtime` and `schemas/observe`.
+  - Automation orchestration, persistence composition, and API surface stay in `crates/runtime`.
+  - No new crate is introduced.
+- Module Boundaries:
+  - `TaskIntake` continues to own Task persistence and gains support for automation-sourced Tasks.
+  - `RunOrchestrator` continues to own Run lifecycle and gains automation-aware start/retry hooks.
+  - A new runtime-local automation service layer owns Automation, Trigger, and TriggerDelivery persistence plus manual dispatch orchestration.
+- Inputs:
+  - `CreateAutomationInput` with workspace/project context, execution action, governance inputs, and default manual-event trigger metadata.
+  - `DispatchManualEventInput` with trigger reference, delivery `dedupe_key`, and opaque JSON payload.
+  - Existing approval resolution and run retry inputs.
+- Outputs:
+  - `AutomationRecord`, `TriggerRecord`, `TriggerDeliveryRecord`, and `TriggerDeliveryReport`.
+  - Existing `RunExecutionReport` reused for run-level visibility.
+- State Transitions:
+  - TriggerDelivery: `pending -> delivering -> succeeded | failed`
+  - Explicit retry: `failed -> retry_scheduled -> delivering -> succeeded | failed`
+  - Waiting approval keeps delivery in `delivering` until approval resolves.
+- Error Handling:
+  - Duplicate delivery dispatch returns the existing persisted delivery/report instead of creating new records.
+  - Approval reject and policy deny mark the delivery failed without producing artifacts.
+  - Retry only succeeds when the associated Run remains retryable; otherwise the API returns an explicit transition error.
+- Tech Stack Decision:
+  - None. Reuse existing Rust + SQLite + JSON Schema stack.
+- Visual Framework Impact:
+  - None. No UI work in this slice.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - Existing `TaskIntake`, `RunOrchestrator`, governance evaluation, approval lifecycle, observation records, and schema contract tests.
+- New Abstractions:
+  - `AutomationRecord`
+  - `TriggerRecord`
+  - `TriggerDeliveryRecord`
+  - `TriggerDeliveryReport`
+  - runtime-local automation persistence/orchestration helpers
+- Trade-offs:
+  - Materializing a derived Task per TriggerDelivery reuses the proven Task/Run/Governance path and keeps Run as the only execution shell, at the cost of an extra persisted object per delivery.
+  - Keeping retry explicit avoids inventing a scheduler before later trigger types require one.
+- Test Strategy:
+  - Add contract examples for Automation-related schemas and updated Task/Run/Trace contracts.
+  - Add integration tests for allow, dedupe, approval approve/reject, deny, retry, and reopen paths.
+- ADR Needed:
+  - Yes. The Automation -> TriggerDelivery -> derived Task -> Run projection model is a durable boundary decision.

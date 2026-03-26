@@ -84,6 +84,8 @@ async fn low_risk_allowed_task_executes_without_approval() {
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-allow".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "Allowed task".into(),
             instruction: "Run immediately".into(),
             action: ExecutionAction::EmitText {
@@ -127,6 +129,8 @@ async fn high_risk_task_waits_for_approval_and_persists_pending_records() {
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-approval".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "High risk task".into(),
             instruction: "Pause for approval".into(),
             action: ExecutionAction::EmitText {
@@ -176,6 +180,8 @@ async fn approved_request_resumes_waiting_run_and_completes() {
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-approve".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "Approve and resume".into(),
             instruction: "Needs approval, then run".into(),
             action: ExecutionAction::EmitText {
@@ -233,6 +239,8 @@ async fn rejected_request_blocks_run_without_artifact() {
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-reject".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "Reject and block".into(),
             instruction: "Needs approval, then block".into(),
             action: ExecutionAction::EmitText {
@@ -277,6 +285,8 @@ async fn hard_limit_denied_task_does_not_execute_and_logs_policy_decision() {
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-deny".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "Denied task".into(),
             instruction: "Should be denied before execution".into(),
             action: ExecutionAction::EmitText {
@@ -320,6 +330,8 @@ async fn pending_approval_survives_reopen_without_duplicate_records() {
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-reopen".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "Reopen pending approval".into(),
             instruction: "Pause and stay pending".into(),
             action: ExecutionAction::EmitText {
@@ -373,6 +385,8 @@ async fn repeated_approval_resolution_is_idempotent_and_does_not_duplicate_recor
         .create_task(CreateTaskInput {
             workspace_id: "workspace-alpha".into(),
             project_id: "project-repeat".into(),
+            source_kind: "manual".into(),
+            automation_id: None,
             title: "Repeat approval".into(),
             instruction: "Approval should be idempotent".into(),
             action: ExecutionAction::EmitText {

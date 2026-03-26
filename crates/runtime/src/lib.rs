@@ -8,10 +8,14 @@ use database::Slice1Database;
 use octopus_observe_artifact::{
     ArtifactRecord, InboxItemRecord, NotificationRecord, PolicyDecisionLogRecord,
 };
-use services::{RunOrchestrator, TaskIntake};
+use services::{AutomationIntake, RunOrchestrator, TaskIntake};
 use thiserror::Error;
 
-pub use models::{CreateTaskInput, RunExecutionReport, RunRecord, TaskRecord};
+pub use models::{
+    AutomationRecord, CreateAutomationInput, CreateTaskInput, DispatchManualEventInput,
+    RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord, TriggerDeliveryReport,
+    TriggerRecord,
+};
 pub use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
     CapabilityDescriptorRecord, CapabilityGrantRecord,
@@ -31,6 +35,20 @@ pub enum RuntimeError {
     },
     #[error("approval request `{0}` not found")]
     ApprovalRequestNotFound(String),
+    #[error("automation `{0}` not found")]
+    AutomationNotFound(String),
+    #[error("trigger `{0}` not found")]
+    TriggerNotFound(String),
+    #[error("trigger delivery `{0}` not found")]
+    TriggerDeliveryNotFound(String),
+    #[error("trigger `{trigger_id}` has unsupported type `{trigger_type}`")]
+    InvalidTriggerType { trigger_id: String, trigger_type: String },
+    #[error("trigger delivery `{delivery_id}` cannot transition from `{from}` to `{to}`")]
+    InvalidTriggerDeliveryTransition {
+        delivery_id: String,
+        from: String,
+        to: String,
+    },
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -50,6 +68,7 @@ pub enum RuntimeError {
 #[derive(Debug, Clone)]
 pub struct Slice2Runtime {
     task_intake: TaskIntake,
+    automation_intake: AutomationIntake,
     run_orchestrator: RunOrchestrator,
 }
 
@@ -60,6 +79,10 @@ impl Slice2Runtime {
         let database = Slice1Database::open_at(path).await?;
         Ok(Self {
             task_intake: TaskIntake::new(database.pool().clone(), database.context_store().clone()),
+            automation_intake: AutomationIntake::new(
+                database.pool().clone(),
+                database.context_store().clone(),
+            ),
             run_orchestrator: RunOrchestrator::new(
                 database.pool().clone(),
                 database.governance_store().clone(),
@@ -125,9 +148,106 @@ impl Slice2Runtime {
         self.task_intake.create_task(input).await
     }
 
+    pub async fn create_automation(
+        &self,
+        input: CreateAutomationInput,
+    ) -> Result<AutomationRecord, RuntimeError> {
+        self.automation_intake.create_automation(input).await
+    }
+
+    pub async fn fetch_automation(
+        &self,
+        automation_id: &str,
+    ) -> Result<Option<AutomationRecord>, RuntimeError> {
+        self.automation_intake.fetch_automation(automation_id).await
+    }
+
     pub async fn start_task(&self, task_id: &str) -> Result<RunExecutionReport, RuntimeError> {
         let task = self.task_intake.fetch_task(task_id).await?;
         self.run_orchestrator.start_task(&task).await
+    }
+
+    pub async fn dispatch_manual_event(
+        &self,
+        input: DispatchManualEventInput,
+    ) -> Result<TriggerDeliveryReport, RuntimeError> {
+        let trigger = self
+            .automation_intake
+            .fetch_trigger(&input.trigger_id)
+            .await?
+            .ok_or_else(|| RuntimeError::TriggerNotFound(input.trigger_id.clone()))?;
+        if trigger.trigger_type != "manual_event" {
+            return Err(RuntimeError::InvalidTriggerType {
+                trigger_id: trigger.id,
+                trigger_type: trigger.trigger_type,
+            });
+        }
+
+        let automation = self
+            .automation_intake
+            .fetch_automation(&trigger.automation_id)
+            .await?
+            .ok_or_else(|| RuntimeError::AutomationNotFound(trigger.automation_id.clone()))?;
+
+        let mut delivery = if let Some(existing) = self
+            .automation_intake
+            .find_trigger_delivery_by_dedupe_key(&input.dedupe_key)
+            .await?
+        {
+            if let Some(run_id) = existing.run_id.clone() {
+                let run_report = self.run_orchestrator.load_run_report(&run_id).await?;
+                let task = self.task_intake.fetch_task(&run_report.run.task_id).await?;
+                return Ok(TriggerDeliveryReport {
+                    automation,
+                    trigger,
+                    delivery: existing,
+                    task,
+                    run_report,
+                });
+            }
+            existing
+        } else {
+            self.automation_intake
+                .create_trigger_delivery(&input.trigger_id, &input.dedupe_key, input.payload)
+                .await?
+        };
+        delivery = self
+            .automation_intake
+            .transition_delivery_to_delivering(delivery)
+            .await?;
+
+        let task = self
+            .task_intake
+            .create_task(CreateTaskInput {
+                workspace_id: automation.workspace_id.clone(),
+                project_id: automation.project_id.clone(),
+                source_kind: "automation".into(),
+                automation_id: Some(automation.id.clone()),
+                title: automation.title.clone(),
+                instruction: automation.instruction.clone(),
+                action: automation.action.clone(),
+                capability_id: automation.capability_id.clone(),
+                estimated_cost: automation.estimated_cost,
+                idempotency_key: format!("task:trigger_delivery:{}", delivery.id),
+            })
+            .await?;
+
+        let run_report = self
+            .run_orchestrator
+            .start_task_with_trigger_delivery(&task, Some(delivery.id.as_str()))
+            .await?;
+        let delivery = self
+            .automation_intake
+            .sync_delivery_from_run(&delivery.id, &run_report.run)
+            .await?;
+
+        Ok(TriggerDeliveryReport {
+            automation,
+            trigger,
+            delivery,
+            task,
+            run_report,
+        })
     }
 
     pub async fn resolve_approval(
@@ -143,9 +263,16 @@ impl Slice2Runtime {
             .await?
             .ok_or_else(|| RuntimeError::ApprovalRequestNotFound(approval_id.to_string()))?;
         let task = self.task_intake.fetch_task(&approval.task_id).await?;
-        self.run_orchestrator
+        let report = self
+            .run_orchestrator
             .resolve_approval(approval_id, &task, decision, actor_ref, note)
-            .await
+            .await?;
+        if let Some(trigger_delivery_id) = report.run.trigger_delivery_id.clone() {
+            self.automation_intake
+                .sync_delivery_from_run(&trigger_delivery_id, &report.run)
+                .await?;
+        }
+        Ok(report)
     }
 
     pub async fn retry_run(&self, run_id: &str) -> Result<RunExecutionReport, RuntimeError> {
@@ -155,7 +282,77 @@ impl Slice2Runtime {
             .await?
             .ok_or_else(|| RuntimeError::RunNotFound(run_id.to_string()))?;
         let task = self.task_intake.fetch_task(&run.task_id).await?;
-        self.run_orchestrator.retry_run(run_id, &task).await
+        let report = self.run_orchestrator.retry_run(run_id, &task).await?;
+        if let Some(trigger_delivery_id) = report.run.trigger_delivery_id.clone() {
+            self.automation_intake
+                .sync_delivery_from_run(&trigger_delivery_id, &report.run)
+                .await?;
+        }
+        Ok(report)
+    }
+
+    pub async fn retry_trigger_delivery(
+        &self,
+        delivery_id: &str,
+    ) -> Result<TriggerDeliveryReport, RuntimeError> {
+        let delivery = self
+            .automation_intake
+            .fetch_trigger_delivery(delivery_id)
+            .await?
+            .ok_or_else(|| RuntimeError::TriggerDeliveryNotFound(delivery_id.to_string()))?;
+        if delivery.status != "failed" {
+            return Err(RuntimeError::InvalidTriggerDeliveryTransition {
+                delivery_id: delivery.id,
+                from: delivery.status,
+                to: "retry_scheduled".to_string(),
+            });
+        }
+        let trigger = self
+            .automation_intake
+            .fetch_trigger(&delivery.trigger_id)
+            .await?
+            .ok_or_else(|| RuntimeError::TriggerNotFound(delivery.trigger_id.clone()))?;
+        let automation = self
+            .automation_intake
+            .fetch_automation(&trigger.automation_id)
+            .await?
+            .ok_or_else(|| RuntimeError::AutomationNotFound(trigger.automation_id.clone()))?;
+        let run_id = delivery.run_id.clone().ok_or_else(|| {
+            RuntimeError::InvalidTriggerDeliveryTransition {
+                delivery_id: delivery.id.clone(),
+                from: delivery.status.clone(),
+                to: "retry_scheduled".to_string(),
+            }
+        })?;
+        let run = self
+            .run_orchestrator
+            .fetch_run(&run_id)
+            .await?
+            .ok_or_else(|| RuntimeError::RunNotFound(run_id.clone()))?;
+        if !run.can_retry() {
+            return Err(RuntimeError::InvalidTriggerDeliveryTransition {
+                delivery_id: delivery.id.clone(),
+                from: delivery.status.clone(),
+                to: "retry_scheduled".to_string(),
+            });
+        }
+        let task = self.task_intake.fetch_task(&run.task_id).await?;
+        self.automation_intake
+            .mark_delivery_retry_scheduled(delivery)
+            .await?;
+        let run_report = self.run_orchestrator.retry_run(&run_id, &task).await?;
+        let delivery = self
+            .automation_intake
+            .sync_delivery_from_run(delivery_id, &run_report.run)
+            .await?;
+
+        Ok(TriggerDeliveryReport {
+            automation,
+            trigger,
+            delivery,
+            task,
+            run_report,
+        })
     }
 
     pub async fn terminate_run(
@@ -216,6 +413,15 @@ impl Slice2Runtime {
             .list_policy_decisions_by_run(run_id)
             .await
     }
+
+    pub async fn list_trigger_deliveries_by_automation(
+        &self,
+        automation_id: &str,
+    ) -> Result<Vec<TriggerDeliveryRecord>, RuntimeError> {
+        self.automation_intake
+            .list_trigger_deliveries_by_automation(automation_id)
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -229,6 +435,8 @@ mod tests {
             task_id: "task-1".into(),
             workspace_id: "workspace-alpha".into(),
             project_id: "project-alpha".into(),
+            automation_id: None,
+            trigger_delivery_id: None,
             run_type: "task".into(),
             status: "failed".into(),
             approval_request_id: None,
@@ -258,6 +466,8 @@ mod tests {
             task_id: "task-1".into(),
             workspace_id: "workspace-alpha".into(),
             project_id: "project-alpha".into(),
+            automation_id: None,
+            trigger_delivery_id: None,
             run_type: "task".into(),
             status: "completed".into(),
             approval_request_id: None,

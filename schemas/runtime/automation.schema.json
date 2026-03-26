@@ -3,14 +3,101 @@
   "$id": "https://octopus.local/schemas/runtime/automation.schema.json",
   "title": "Automation",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for Automation definitions.",
+  "description": "Slice 3 shared contract for reusable Automation definitions that own a default manual-event trigger and project deliveries into derived tasks.",
+  "$defs": {
+    "emit_text_action": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "emit_text"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["kind", "content"],
+      "additionalProperties": false
+    },
+    "fail_once_then_emit_text_action": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "fail_once_then_emit_text"
+        },
+        "failure_message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["kind", "failure_message", "content"],
+      "additionalProperties": false
+    },
+    "always_fail_action": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "always_fail"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": ["kind", "message"],
+      "additionalProperties": false
+    }
+  },
   "properties": {
     "id": { "type": "string" },
     "workspace_id": { "type": "string" },
     "project_id": { "type": "string" },
+    "trigger_id": { "type": "string" },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "instruction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "action": {
+      "oneOf": [
+        { "$ref": "#/$defs/emit_text_action" },
+        { "$ref": "#/$defs/fail_once_then_emit_text_action" },
+        { "$ref": "#/$defs/always_fail_action" }
+      ]
+    },
+    "capability_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "estimated_cost": {
+      "type": "integer",
+      "minimum": 0
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id", "workspace_id", "project_id"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "workspace_id",
+    "project_id",
+    "trigger_id",
+    "title",
+    "instruction",
+    "action",
+    "capability_id",
+    "estimated_cost",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
 }

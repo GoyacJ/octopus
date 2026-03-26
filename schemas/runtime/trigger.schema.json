@@ -3,13 +3,17 @@
   "$id": "https://octopus.local/schemas/runtime/trigger.schema.json",
   "title": "Trigger",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for trigger definitions that start or resume runs.",
+  "description": "Slice 3 shared contract for trigger definitions that start automation deliveries.",
   "properties": {
     "id": { "type": "string" },
     "automation_id": { "type": "string" },
+    "trigger_type": {
+      "type": "string",
+      "const": "manual_event"
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id"],
-  "additionalProperties": true
+  "required": ["id", "automation_id", "trigger_type", "created_at", "updated_at"],
+  "additionalProperties": false
 }

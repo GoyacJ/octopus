@@ -3,15 +3,21 @@
   "$id": "https://octopus.local/schemas/runtime/run.schema.json",
   "title": "Run",
   "type": "object",
-  "description": "Slice 1 shared contract for Run as the authority execution shell for task execution.",
+  "description": "Slice 3 shared contract for Run as the authority execution shell for manual and automation execution.",
   "properties": {
     "id": { "type": "string" },
     "task_id": { "type": "string" },
     "workspace_id": { "type": "string" },
     "project_id": { "type": "string" },
+    "automation_id": {
+      "type": ["string", "null"]
+    },
+    "trigger_delivery_id": {
+      "type": ["string", "null"]
+    },
     "run_type": {
       "type": "string",
-      "const": "task"
+      "enum": ["task", "automation"]
     },
     "status": { "$ref": "https://octopus.local/schemas/runtime/run-status.schema.json" },
     "approval_request_id": {
@@ -56,6 +62,8 @@
     "task_id",
     "workspace_id",
     "project_id",
+    "automation_id",
+    "trigger_delivery_id",
     "run_type",
     "status",
     "approval_request_id",

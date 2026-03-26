@@ -114,8 +114,8 @@ Follow these owner docs:
 
 Current actual repository state note:
 
-- the tracked tree now includes root workspace manifests, refined Slice 1 and Slice 2 shared contracts in `schemas/`, and first real Rust workspace members under `crates/domain-context`, `crates/execution`, `crates/governance`, `crates/observe-artifact`, and `crates/runtime`
-- the current verified implementation scope is limited to the local SQLite-backed governed runtime slice for `Task -> Policy / Budget / Approval -> Run -> Artifact -> Audit / Trace`, with persistent `ApprovalRequest`, `InboxItem`, `Notification`, and `PolicyDecisionLog` records; app surfaces, automation, MCP, shared knowledge, and remote transport remain out of scope unless later tracked files prove otherwise
+- the tracked tree now includes root workspace manifests, refined Slice 1 through Slice 3 shared contracts in `schemas/`, and first real Rust workspace members under `crates/domain-context`, `crates/execution`, `crates/governance`, `crates/observe-artifact`, and `crates/runtime`
+- the current verified implementation scope is limited to the local SQLite-backed governed runtime slice for `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Artifact -> Audit / Trace`, with persistent `ApprovalRequest`, `InboxItem`, `Notification`, `PolicyDecisionLog`, and TriggerDelivery dedupe/retry records; app surfaces, non-manual-event automation types, MCP, shared knowledge, and remote transport remain out of scope unless later tracked files prove otherwise
 
 ---
 
