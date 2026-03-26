@@ -1,5 +1,10 @@
 use chrono::Utc;
 use octopus_execution::ExecutionAction;
+use octopus_governance::ApprovalRequestRecord;
+use octopus_observe_artifact::{
+    ArtifactRecord, AuditRecord, InboxItemRecord, NotificationRecord, PolicyDecisionLogRecord,
+    TraceRecord,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -9,6 +14,8 @@ pub struct CreateTaskInput {
     pub title: String,
     pub instruction: String,
     pub action: ExecutionAction,
+    pub capability_id: String,
+    pub estimated_cost: i64,
     pub idempotency_key: String,
 }
 
@@ -20,6 +27,8 @@ pub struct TaskRecord {
     pub title: String,
     pub instruction: String,
     pub action: ExecutionAction,
+    pub capability_id: String,
+    pub estimated_cost: i64,
     pub idempotency_key: String,
     pub created_at: String,
     pub updated_at: String,
@@ -35,6 +44,8 @@ impl TaskRecord {
             title: input.title,
             instruction: input.instruction,
             action: input.action,
+            capability_id: input.capability_id,
+            estimated_cost: input.estimated_cost,
             idempotency_key: input.idempotency_key,
             created_at: now.clone(),
             updated_at: now,
@@ -50,6 +61,7 @@ pub struct RunRecord {
     pub project_id: String,
     pub run_type: String,
     pub status: String,
+    pub approval_request_id: Option<String>,
     pub idempotency_key: String,
     pub attempt_count: i64,
     pub max_attempts: i64,
@@ -73,6 +85,7 @@ impl RunRecord {
             project_id: task.project_id.clone(),
             run_type: "task".to_string(),
             status: "created".to_string(),
+            approval_request_id: None,
             idempotency_key: format!("run:task:{}", task.id),
             attempt_count: 0,
             max_attempts: 2,
@@ -96,7 +109,7 @@ impl RunRecord {
     pub fn can_terminate(&self) -> bool {
         matches!(
             self.status.as_str(),
-            "created" | "running" | "failed" | "resuming" | "blocked"
+            "created" | "running" | "failed" | "resuming" | "blocked" | "waiting_approval"
         )
     }
 }
@@ -104,9 +117,13 @@ impl RunRecord {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunExecutionReport {
     pub run: RunRecord,
-    pub artifacts: Vec<octopus_observe_artifact::ArtifactRecord>,
-    pub audits: Vec<octopus_observe_artifact::AuditRecord>,
-    pub traces: Vec<octopus_observe_artifact::TraceRecord>,
+    pub artifacts: Vec<ArtifactRecord>,
+    pub audits: Vec<AuditRecord>,
+    pub traces: Vec<TraceRecord>,
+    pub approvals: Vec<ApprovalRequestRecord>,
+    pub inbox_items: Vec<InboxItemRecord>,
+    pub notifications: Vec<NotificationRecord>,
+    pub policy_decisions: Vec<PolicyDecisionLogRecord>,
 }
 
 pub fn current_timestamp() -> String {

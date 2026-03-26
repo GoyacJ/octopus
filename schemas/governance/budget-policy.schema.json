@@ -3,14 +3,30 @@
   "$id": "https://octopus.local/schemas/governance/budget-policy.schema.json",
   "title": "BudgetPolicy",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for budget policy boundaries.",
+  "description": "Slice 2 shared contract for the minimal Workspace / Project-scoped execution budget policy.",
   "properties": {
     "id": { "type": "string" },
     "workspace_id": { "type": "string" },
     "project_id": { "type": "string" },
+    "soft_cost_limit": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "hard_cost_limit": {
+      "type": "integer",
+      "minimum": 0
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "workspace_id",
+    "project_id",
+    "soft_cost_limit",
+    "hard_cost_limit",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
 }

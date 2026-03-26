@@ -1,0 +1,41 @@
+## Implementation Summary
+
+- Goal:
+  - Implement the first verified local governance slice for approval, inbox, notification, and policy-decision handling on top of the existing Slice 1 runtime.
+- Files Added:
+  - `crates/governance/Cargo.toml`
+  - `crates/governance/src/lib.rs`
+  - `crates/runtime/migrations/0002_slice2_governance.sql`
+  - `crates/runtime/tests/slice2_governance.rs`
+  - `schemas/observe/policy-decision-log.schema.json`
+  - `docs/tasks/2026/2026-03-26-slice-2-approval-inbox-notification/*`
+- Files Changed:
+  - Root workspace manifests and entry docs
+  - `crates/runtime/*`
+  - `crates/observe-artifact/src/lib.rs`
+  - Slice 2-related schema files under `schemas/runtime`, `schemas/governance`, and `schemas/observe`
+  - `docs/tasks/README.md`
+- Files Removed:
+  - None.
+- Structure Decision:
+  - Add `crates/governance` for capability/budget/approval persistence and evaluation, keep observation records in `crates/observe-artifact`, and keep orchestration/composition in `crates/runtime`.
+- Why This Structure:
+  - It introduces the governed runtime path without collapsing approval state, observation records, and run orchestration into one crate or inventing app/package surfaces before they exist.
+- Reused Patterns:
+  - Existing Slice 1 SQLite migration pattern
+  - Existing `TaskIntake` and `RunOrchestrator` composition
+  - Existing schema-first contract tests and file-backed integration tests
+- New Dependencies:
+  - No new third-party dependencies beyond the existing workspace set
+  - One new internal crate dependency: `octopus-governance`
+- Error Handling Strategy:
+  - Treat missing or inactive governance config as explicit deny decisions
+  - Keep invalid approval transitions as typed runtime/governance errors
+  - Preserve blocked or waiting approval run states durably in SQLite
+- Deferred Items:
+  - Automation, trigger delivery, MCP, shared knowledge, transport, and any UI surface work
+  - User/team/tenant-level subject graphs and advanced approval routing
+- Non-goals Preserved:
+  - No HTTP/Tauri surface
+  - No shared-knowledge writeback
+  - No transport or remote-hub implementation

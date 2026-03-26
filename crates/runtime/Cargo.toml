@@ -7,6 +7,7 @@ edition.workspace = true
 chrono.workspace = true
 octopus-domain-context = { path = "../domain-context" }
 octopus-execution = { path = "../execution" }
+octopus-governance = { path = "../governance" }
 octopus-observe-artifact = { path = "../observe-artifact" }
 serde.workspace = true
 serde_json.workspace = true

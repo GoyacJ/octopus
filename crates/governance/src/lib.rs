@@ -1,0 +1,777 @@
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use sqlx::{Row, SqlitePool};
+use thiserror::Error;
+
+pub const DECISION_ALLOW: &str = "allow";
+pub const DECISION_REQUIRE_APPROVAL: &str = "require_approval";
+pub const DECISION_DENY: &str = "deny";
+
+pub const APPROVAL_TYPE_EXECUTION: &str = "execution";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CapabilityDescriptorRecord {
+    pub id: String,
+    pub slug: String,
+    pub risk_level: String,
+    pub requires_approval: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl CapabilityDescriptorRecord {
+    pub fn new(
+        id: impl Into<String>,
+        slug: impl Into<String>,
+        risk_level: impl Into<String>,
+        requires_approval: bool,
+    ) -> Self {
+        let now = current_timestamp();
+        Self {
+            id: id.into(),
+            slug: slug.into(),
+            risk_level: risk_level.into(),
+            requires_approval,
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CapabilityBindingRecord {
+    pub id: String,
+    pub capability_id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub scope_ref: String,
+    pub binding_status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl CapabilityBindingRecord {
+    pub fn project_scope(
+        id: impl Into<String>,
+        capability_id: impl Into<String>,
+        workspace_id: impl Into<String>,
+        project_id: impl Into<String>,
+    ) -> Self {
+        let workspace_id = workspace_id.into();
+        let project_id = project_id.into();
+        let now = current_timestamp();
+        Self {
+            id: id.into(),
+            capability_id: capability_id.into(),
+            workspace_id: workspace_id.clone(),
+            project_id: project_id.clone(),
+            scope_ref: project_scope_ref(&workspace_id, &project_id),
+            binding_status: "active".to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CapabilityGrantRecord {
+    pub id: String,
+    pub capability_id: String,
+    pub subject_ref: String,
+    pub grant_status: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl CapabilityGrantRecord {
+    pub fn project_scope(
+        id: impl Into<String>,
+        capability_id: impl Into<String>,
+        workspace_id: impl Into<String>,
+        project_id: impl Into<String>,
+    ) -> Self {
+        let workspace_id = workspace_id.into();
+        let project_id = project_id.into();
+        let now = current_timestamp();
+        Self {
+            id: id.into(),
+            capability_id: capability_id.into(),
+            subject_ref: project_scope_ref(&workspace_id, &project_id),
+            grant_status: "active".to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BudgetPolicyRecord {
+    pub id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub soft_cost_limit: i64,
+    pub hard_cost_limit: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl BudgetPolicyRecord {
+    pub fn project_scope(
+        id: impl Into<String>,
+        workspace_id: impl Into<String>,
+        project_id: impl Into<String>,
+        soft_cost_limit: i64,
+        hard_cost_limit: i64,
+    ) -> Self {
+        let now = current_timestamp();
+        Self {
+            id: id.into(),
+            workspace_id: workspace_id.into(),
+            project_id: project_id.into(),
+            soft_cost_limit,
+            hard_cost_limit,
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ApprovalRequestRecord {
+    pub id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub run_id: String,
+    pub task_id: String,
+    pub approval_type: String,
+    pub status: String,
+    pub reason: String,
+    pub dedupe_key: String,
+    pub decided_by: Option<String>,
+    pub decision_note: Option<String>,
+    pub decided_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl ApprovalRequestRecord {
+    pub fn new_execution(
+        workspace_id: impl Into<String>,
+        project_id: impl Into<String>,
+        run_id: impl Into<String>,
+        task_id: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Self {
+        let run_id = run_id.into();
+        let now = current_timestamp();
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            workspace_id: workspace_id.into(),
+            project_id: project_id.into(),
+            run_id: run_id.clone(),
+            task_id: task_id.into(),
+            approval_type: APPROVAL_TYPE_EXECUTION.to_string(),
+            status: "pending".to_string(),
+            reason: reason.into(),
+            dedupe_key: format!("approval:{run_id}"),
+            decided_by: None,
+            decision_note: None,
+            decided_at: None,
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalDecision {
+    Approve,
+    Reject,
+    Expire,
+    Cancel,
+}
+
+impl ApprovalDecision {
+    pub fn target_status(self) -> &'static str {
+        match self {
+            Self::Approve => "approved",
+            Self::Reject => "rejected",
+            Self::Expire => "expired",
+            Self::Cancel => "cancelled",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GovernanceDecision {
+    Allow { reason: String },
+    RequireApproval { reason: String },
+    Deny { reason: String },
+}
+
+impl GovernanceDecision {
+    pub fn decision(&self) -> &'static str {
+        match self {
+            Self::Allow { .. } => DECISION_ALLOW,
+            Self::RequireApproval { .. } => DECISION_REQUIRE_APPROVAL,
+            Self::Deny { .. } => DECISION_DENY,
+        }
+    }
+
+    pub fn reason(&self) -> &str {
+        match self {
+            Self::Allow { reason } | Self::RequireApproval { reason } | Self::Deny { reason } => {
+                reason.as_str()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaskGovernanceInput {
+    pub workspace_id: String,
+    pub project_id: String,
+    pub capability_id: String,
+    pub estimated_cost: i64,
+}
+
+#[derive(Debug, Error)]
+pub enum GovernanceStoreError {
+    #[error("approval request `{0}` not found")]
+    ApprovalRequestNotFound(String),
+    #[error("invalid approval transition for `{approval_id}`: `{from}` -> `{to}`")]
+    InvalidApprovalTransition {
+        approval_id: String,
+        from: String,
+        to: String,
+    },
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+}
+
+#[derive(Debug, Clone)]
+pub struct SqliteGovernanceStore {
+    pool: SqlitePool,
+}
+
+impl SqliteGovernanceStore {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn upsert_capability_descriptor(
+        &self,
+        record: &CapabilityDescriptorRecord,
+    ) -> Result<(), GovernanceStoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO capability_descriptors (
+                id, slug, risk_level, requires_approval, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(id) DO UPDATE SET
+                slug = excluded.slug,
+                risk_level = excluded.risk_level,
+                requires_approval = excluded.requires_approval,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.slug)
+        .bind(&record.risk_level)
+        .bind(record.requires_approval)
+        .bind(&record.created_at)
+        .bind(&record.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn upsert_capability_binding(
+        &self,
+        record: &CapabilityBindingRecord,
+    ) -> Result<(), GovernanceStoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO capability_bindings (
+                id, capability_id, workspace_id, project_id, scope_ref, binding_status, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(id) DO UPDATE SET
+                capability_id = excluded.capability_id,
+                workspace_id = excluded.workspace_id,
+                project_id = excluded.project_id,
+                scope_ref = excluded.scope_ref,
+                binding_status = excluded.binding_status,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.capability_id)
+        .bind(&record.workspace_id)
+        .bind(&record.project_id)
+        .bind(&record.scope_ref)
+        .bind(&record.binding_status)
+        .bind(&record.created_at)
+        .bind(&record.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn upsert_capability_grant(
+        &self,
+        record: &CapabilityGrantRecord,
+    ) -> Result<(), GovernanceStoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO capability_grants (
+                id, capability_id, subject_ref, grant_status, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            ON CONFLICT(id) DO UPDATE SET
+                capability_id = excluded.capability_id,
+                subject_ref = excluded.subject_ref,
+                grant_status = excluded.grant_status,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.capability_id)
+        .bind(&record.subject_ref)
+        .bind(&record.grant_status)
+        .bind(&record.created_at)
+        .bind(&record.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn upsert_budget_policy(
+        &self,
+        record: &BudgetPolicyRecord,
+    ) -> Result<(), GovernanceStoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO budget_policies (
+                id, workspace_id, project_id, soft_cost_limit, hard_cost_limit, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ON CONFLICT(id) DO UPDATE SET
+                workspace_id = excluded.workspace_id,
+                project_id = excluded.project_id,
+                soft_cost_limit = excluded.soft_cost_limit,
+                hard_cost_limit = excluded.hard_cost_limit,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.workspace_id)
+        .bind(&record.project_id)
+        .bind(record.soft_cost_limit)
+        .bind(record.hard_cost_limit)
+        .bind(&record.created_at)
+        .bind(&record.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn evaluate_task(
+        &self,
+        input: &TaskGovernanceInput,
+    ) -> Result<GovernanceDecision, GovernanceStoreError> {
+        let Some(descriptor) = self
+            .fetch_capability_descriptor(input.capability_id.as_str())
+            .await?
+        else {
+            return Ok(GovernanceDecision::Deny {
+                reason: "capability_not_registered".to_string(),
+            });
+        };
+
+        let Some(binding) = self
+            .fetch_active_binding(
+                input.capability_id.as_str(),
+                input.workspace_id.as_str(),
+                input.project_id.as_str(),
+            )
+            .await?
+        else {
+            return Ok(GovernanceDecision::Deny {
+                reason: "capability_not_bound".to_string(),
+            });
+        };
+
+        if binding.binding_status != "active" {
+            return Ok(GovernanceDecision::Deny {
+                reason: "capability_not_bound".to_string(),
+            });
+        }
+
+        let subject_ref = project_scope_ref(input.workspace_id.as_str(), input.project_id.as_str());
+        let Some(grant) = self
+            .fetch_active_grant(input.capability_id.as_str(), subject_ref.as_str())
+            .await?
+        else {
+            return Ok(GovernanceDecision::Deny {
+                reason: "capability_not_granted".to_string(),
+            });
+        };
+
+        if grant.grant_status != "active" {
+            return Ok(GovernanceDecision::Deny {
+                reason: "capability_not_granted".to_string(),
+            });
+        }
+
+        let Some(policy) = self
+            .fetch_budget_policy(input.workspace_id.as_str(), input.project_id.as_str())
+            .await?
+        else {
+            return Ok(GovernanceDecision::Deny {
+                reason: "budget_policy_missing".to_string(),
+            });
+        };
+
+        if input.estimated_cost > policy.hard_cost_limit {
+            return Ok(GovernanceDecision::Deny {
+                reason: "budget_hard_limit_exceeded".to_string(),
+            });
+        }
+
+        if descriptor.requires_approval || descriptor.risk_level == "high" {
+            return Ok(GovernanceDecision::RequireApproval {
+                reason: "risk_level_high".to_string(),
+            });
+        }
+
+        if input.estimated_cost > policy.soft_cost_limit {
+            return Ok(GovernanceDecision::RequireApproval {
+                reason: "budget_soft_limit_exceeded".to_string(),
+            });
+        }
+
+        Ok(GovernanceDecision::Allow {
+            reason: "within_budget".to_string(),
+        })
+    }
+
+    pub async fn find_approval_request_by_dedupe_key(
+        &self,
+        dedupe_key: &str,
+    ) -> Result<Option<ApprovalRequestRecord>, GovernanceStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, workspace_id, project_id, run_id, task_id, approval_type, status, reason,
+                   dedupe_key, decided_by, decision_note, decided_at, created_at, updated_at
+            FROM approval_requests
+            WHERE dedupe_key = ?1
+            "#,
+        )
+        .bind(dedupe_key)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| approval_request_from_row(&row)).transpose()?)
+    }
+
+    pub async fn create_approval_request(
+        &self,
+        request: &ApprovalRequestRecord,
+    ) -> Result<(), GovernanceStoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO approval_requests (
+                id, workspace_id, project_id, run_id, task_id, approval_type, status, reason,
+                dedupe_key, decided_by, decision_note, decided_at, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+            "#,
+        )
+        .bind(&request.id)
+        .bind(&request.workspace_id)
+        .bind(&request.project_id)
+        .bind(&request.run_id)
+        .bind(&request.task_id)
+        .bind(&request.approval_type)
+        .bind(&request.status)
+        .bind(&request.reason)
+        .bind(&request.dedupe_key)
+        .bind(&request.decided_by)
+        .bind(&request.decision_note)
+        .bind(&request.decided_at)
+        .bind(&request.created_at)
+        .bind(&request.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn fetch_approval_request(
+        &self,
+        approval_id: &str,
+    ) -> Result<Option<ApprovalRequestRecord>, GovernanceStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, workspace_id, project_id, run_id, task_id, approval_type, status, reason,
+                   dedupe_key, decided_by, decision_note, decided_at, created_at, updated_at
+            FROM approval_requests
+            WHERE id = ?1
+            "#,
+        )
+        .bind(approval_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| approval_request_from_row(&row)).transpose()?)
+    }
+
+    pub async fn list_approval_requests_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<ApprovalRequestRecord>, GovernanceStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, workspace_id, project_id, run_id, task_id, approval_type, status, reason,
+                   dedupe_key, decided_by, decision_note, decided_at, created_at, updated_at
+            FROM approval_requests
+            WHERE run_id = ?1
+            ORDER BY created_at, id
+            "#,
+        )
+        .bind(run_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(approval_request_from_row)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(GovernanceStoreError::from)
+    }
+
+    pub async fn resolve_approval_request(
+        &self,
+        approval_id: &str,
+        decision: ApprovalDecision,
+        actor_ref: &str,
+        note: &str,
+    ) -> Result<ApprovalRequestRecord, GovernanceStoreError> {
+        let mut request = self
+            .fetch_approval_request(approval_id)
+            .await?
+            .ok_or_else(|| {
+                GovernanceStoreError::ApprovalRequestNotFound(approval_id.to_string())
+            })?;
+
+        let target = decision.target_status().to_string();
+        if request.status == target {
+            return Ok(request);
+        }
+        if request.status != "pending" {
+            return Err(GovernanceStoreError::InvalidApprovalTransition {
+                approval_id: approval_id.to_string(),
+                from: request.status,
+                to: target,
+            });
+        }
+
+        request.status = target;
+        request.decided_by = Some(actor_ref.to_string());
+        request.decision_note = Some(note.to_string());
+        request.decided_at = Some(current_timestamp());
+        request.updated_at = request.decided_at.clone().unwrap();
+
+        sqlx::query(
+            r#"
+            UPDATE approval_requests
+            SET status = ?2,
+                decided_by = ?3,
+                decision_note = ?4,
+                decided_at = ?5,
+                updated_at = ?6
+            WHERE id = ?1
+            "#,
+        )
+        .bind(&request.id)
+        .bind(&request.status)
+        .bind(&request.decided_by)
+        .bind(&request.decision_note)
+        .bind(&request.decided_at)
+        .bind(&request.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(request)
+    }
+
+    async fn fetch_capability_descriptor(
+        &self,
+        capability_id: &str,
+    ) -> Result<Option<CapabilityDescriptorRecord>, GovernanceStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, slug, risk_level, requires_approval, created_at, updated_at
+            FROM capability_descriptors
+            WHERE id = ?1
+            "#,
+        )
+        .bind(capability_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row
+            .map(|row| capability_descriptor_from_row(&row))
+            .transpose()?)
+    }
+
+    async fn fetch_active_binding(
+        &self,
+        capability_id: &str,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Option<CapabilityBindingRecord>, GovernanceStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, capability_id, workspace_id, project_id, scope_ref, binding_status, created_at, updated_at
+            FROM capability_bindings
+            WHERE capability_id = ?1 AND workspace_id = ?2 AND project_id = ?3
+            "#,
+        )
+        .bind(capability_id)
+        .bind(workspace_id)
+        .bind(project_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row
+            .map(|row| capability_binding_from_row(&row))
+            .transpose()?)
+    }
+
+    async fn fetch_active_grant(
+        &self,
+        capability_id: &str,
+        subject_ref: &str,
+    ) -> Result<Option<CapabilityGrantRecord>, GovernanceStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, capability_id, subject_ref, grant_status, created_at, updated_at
+            FROM capability_grants
+            WHERE capability_id = ?1 AND subject_ref = ?2
+            "#,
+        )
+        .bind(capability_id)
+        .bind(subject_ref)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| capability_grant_from_row(&row)).transpose()?)
+    }
+
+    async fn fetch_budget_policy(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Option<BudgetPolicyRecord>, GovernanceStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, workspace_id, project_id, soft_cost_limit, hard_cost_limit, created_at, updated_at
+            FROM budget_policies
+            WHERE workspace_id = ?1 AND project_id = ?2
+            ORDER BY created_at, id
+            LIMIT 1
+            "#,
+        )
+        .bind(workspace_id)
+        .bind(project_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| budget_policy_from_row(&row)).transpose()?)
+    }
+}
+
+pub fn project_scope_ref(workspace_id: &str, project_id: &str) -> String {
+    format!("workspace:{workspace_id}/project:{project_id}")
+}
+
+fn capability_descriptor_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<CapabilityDescriptorRecord, sqlx::Error> {
+    Ok(CapabilityDescriptorRecord {
+        id: row.try_get("id")?,
+        slug: row.try_get("slug")?,
+        risk_level: row.try_get("risk_level")?,
+        requires_approval: row.try_get("requires_approval")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn capability_binding_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<CapabilityBindingRecord, sqlx::Error> {
+    Ok(CapabilityBindingRecord {
+        id: row.try_get("id")?,
+        capability_id: row.try_get("capability_id")?,
+        workspace_id: row.try_get("workspace_id")?,
+        project_id: row.try_get("project_id")?,
+        scope_ref: row.try_get("scope_ref")?,
+        binding_status: row.try_get("binding_status")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn capability_grant_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<CapabilityGrantRecord, sqlx::Error> {
+    Ok(CapabilityGrantRecord {
+        id: row.try_get("id")?,
+        capability_id: row.try_get("capability_id")?,
+        subject_ref: row.try_get("subject_ref")?,
+        grant_status: row.try_get("grant_status")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn budget_policy_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<BudgetPolicyRecord, sqlx::Error> {
+    Ok(BudgetPolicyRecord {
+        id: row.try_get("id")?,
+        workspace_id: row.try_get("workspace_id")?,
+        project_id: row.try_get("project_id")?,
+        soft_cost_limit: row.try_get("soft_cost_limit")?,
+        hard_cost_limit: row.try_get("hard_cost_limit")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn approval_request_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<ApprovalRequestRecord, sqlx::Error> {
+    Ok(ApprovalRequestRecord {
+        id: row.try_get("id")?,
+        workspace_id: row.try_get("workspace_id")?,
+        project_id: row.try_get("project_id")?,
+        run_id: row.try_get("run_id")?,
+        task_id: row.try_get("task_id")?,
+        approval_type: row.try_get("approval_type")?,
+        status: row.try_get("status")?,
+        reason: row.try_get("reason")?,
+        dedupe_key: row.try_get("dedupe_key")?,
+        decided_by: row.try_get("decided_by")?,
+        decision_note: row.try_get("decision_note")?,
+        decided_at: row.try_get("decided_at")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn current_timestamp() -> String {
+    Utc::now().to_rfc3339()
+}

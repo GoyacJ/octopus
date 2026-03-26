@@ -18,6 +18,7 @@ These instructions apply to work under `schemas/observe/`.
 - `trace-record.schema.json`
 - `inbox-item.schema.json`
 - `notification.schema.json`
+- `policy-decision-log.schema.json`
 - `knowledge-candidate.schema.json`
 - `knowledge-asset.schema.json`
 - `knowledge-lineage-record.schema.json`

@@ -73,9 +73,18 @@ fn refined_slice1_examples_validate() {
     let project_schema = compiled_schema("context/project.schema.json");
     let task_schema = compiled_schema("runtime/task.schema.json");
     let run_schema = compiled_schema("runtime/run.schema.json");
+    let approval_schema = compiled_schema("governance/approval-request.schema.json");
+    let capability_descriptor_schema =
+        compiled_schema("governance/capability-descriptor.schema.json");
+    let capability_binding_schema = compiled_schema("governance/capability-binding.schema.json");
+    let capability_grant_schema = compiled_schema("governance/capability-grant.schema.json");
+    let budget_policy_schema = compiled_schema("governance/budget-policy.schema.json");
     let artifact_schema = compiled_schema("observe/artifact.schema.json");
     let audit_schema = compiled_schema("observe/audit-record.schema.json");
     let trace_schema = compiled_schema("observe/trace-record.schema.json");
+    let inbox_schema = compiled_schema("observe/inbox-item.schema.json");
+    let notification_schema = compiled_schema("observe/notification.schema.json");
+    let policy_decision_schema = compiled_schema("observe/policy-decision-log.schema.json");
 
     assert!(workspace_schema.is_valid(&json!({
         "id": "workspace-alpha",
@@ -102,6 +111,8 @@ fn refined_slice1_examples_validate() {
             "kind": "emit_text",
             "content": "hello"
         },
+        "capability_id": "capability-write-note",
+        "estimated_cost": 1,
         "idempotency_key": "task-1",
         "created_at": "2026-03-26T10:00:00Z",
         "updated_at": "2026-03-26T10:00:00Z"
@@ -113,6 +124,7 @@ fn refined_slice1_examples_validate() {
         "project_id": "project-slice1",
         "run_type": "task",
         "status": "completed",
+        "approval_request_id": null,
         "idempotency_key": "run-task-1",
         "attempt_count": 1,
         "max_attempts": 2,
@@ -124,6 +136,57 @@ fn refined_slice1_examples_validate() {
         "started_at": "2026-03-26T10:00:00Z",
         "completed_at": "2026-03-26T10:00:01Z",
         "terminated_at": null
+    })));
+    assert!(capability_descriptor_schema.is_valid(&json!({
+        "id": "capability-write-note",
+        "slug": "capability-write-note",
+        "risk_level": "low",
+        "requires_approval": false,
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(capability_binding_schema.is_valid(&json!({
+        "id": "binding-1",
+        "capability_id": "capability-write-note",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "scope_ref": "workspace:workspace-alpha/project:project-slice1",
+        "binding_status": "active",
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(capability_grant_schema.is_valid(&json!({
+        "id": "grant-1",
+        "capability_id": "capability-write-note",
+        "subject_ref": "workspace:workspace-alpha/project:project-slice1",
+        "grant_status": "active",
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(budget_policy_schema.is_valid(&json!({
+        "id": "budget-1",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "soft_cost_limit": 5,
+        "hard_cost_limit": 10,
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(approval_schema.is_valid(&json!({
+        "id": "approval-1",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "run_id": "run-1",
+        "task_id": "task-1",
+        "approval_type": "execution",
+        "status": "pending",
+        "reason": "risk_level_high",
+        "dedupe_key": "approval:run-1",
+        "decided_by": null,
+        "decision_note": null,
+        "decided_at": null,
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
     })));
     assert!(artifact_schema.is_valid(&json!({
         "id": "artifact-1",
@@ -156,5 +219,46 @@ fn refined_slice1_examples_validate() {
         "attempt": 1,
         "message": "Execution action succeeded",
         "created_at": "2026-03-26T10:00:01Z"
+    })));
+    assert!(inbox_schema.is_valid(&json!({
+        "id": "inbox-1",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "run_id": "run-1",
+        "approval_request_id": "approval-1",
+        "item_type": "approval_request",
+        "status": "open",
+        "dedupe_key": "inbox:approval-1",
+        "title": "Approval required",
+        "message": "A run needs approval before execution",
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z",
+        "resolved_at": null
+    })));
+    assert!(notification_schema.is_valid(&json!({
+        "id": "notification-1",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "run_id": "run-1",
+        "approval_request_id": "approval-1",
+        "status": "delivered",
+        "dedupe_key": "notification:approval-1",
+        "title": "Approval required",
+        "message": "A run is waiting for approval",
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(policy_decision_schema.is_valid(&json!({
+        "id": "decision-1",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "run_id": "run-1",
+        "task_id": "task-1",
+        "capability_id": "capability-write-note",
+        "decision": "allow",
+        "reason": "within_budget",
+        "estimated_cost": 1,
+        "approval_request_id": null,
+        "created_at": "2026-03-26T10:00:00Z"
     })));
 }

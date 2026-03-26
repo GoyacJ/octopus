@@ -3,13 +3,25 @@
   "$id": "https://octopus.local/schemas/governance/capability-grant.schema.json",
   "title": "CapabilityGrant",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for governed capability grants.",
+  "description": "Slice 2 shared contract for governed capability grants resolved against the current subject scope.",
   "properties": {
     "id": { "type": "string" },
+    "capability_id": { "type": "string" },
     "subject_ref": { "type": "string" },
+    "grant_status": {
+      "type": "string",
+      "enum": ["active", "revoked"]
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id", "subject_ref"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "capability_id",
+    "subject_ref",
+    "grant_status",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
 }

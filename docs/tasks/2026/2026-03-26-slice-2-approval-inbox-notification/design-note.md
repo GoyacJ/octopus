@@ -1,0 +1,71 @@
+## Design Note
+
+- Problem:
+  - The repository now proves the Slice 1 local execution shell, but it still cannot govern execution before actions run, cannot persist approval workflows, and cannot expose durable inbox, notification, or policy-decision records.
+- Goal:
+  - Deliver a Rust-only Slice 2 runtime that adds the minimum governed execution path for approval, inbox, notification, and deny semantics on top of the existing SQLite-backed local runtime.
+- Acceptance Criteria:
+  - Tasks can carry the minimum governance inputs required for capability and budget evaluation.
+  - Governance evaluation produces a stable `allow`, `require_approval`, or `deny` result before execution.
+  - Pending approvals create durable `ApprovalRequest`, `InboxItem`, `Notification`, and `PolicyDecisionLog` records and hold the Run in `waiting_approval`.
+  - Approval decisions can resume or block the same Run without creating duplicate pending records.
+  - Existing Slice 1 success, failure, retry, terminate, and reopen behavior stays intact for allowed runs.
+- Non-functional Constraints:
+  - Keep the runtime library-only and Rust-only for this slice.
+  - Preserve schema-first ownership and approved crate boundaries.
+  - Make approval, inbox, notification, and decision-log state durable across reopen and idempotent across retries/restarts.
+- MVP Boundary:
+  - Only `execution` approvals are implemented.
+  - Only Workspace / Project-scoped subject and capability evaluation is implemented.
+  - No transport, UI, automation, or shared-knowledge integration is introduced.
+- Layer Placement:
+  - `crates/governance` owns capability/budget config records, approval records, and the minimal evaluation logic.
+  - `crates/observe-artifact` owns persisted observation records for inbox, notification, and policy decisions.
+  - `crates/runtime` owns task intake, run lifecycle integration, and composition across governance plus observation stores.
+- Module Boundaries:
+  - `TaskIntake` continues to own context lookup, task creation, and task idempotency.
+  - `RunOrchestrator` continues to own Run lifecycle, but now calls governance evaluation before execution and coordinates approval-driven resume/block behavior.
+  - `SqliteGovernanceStore` owns capability/budget configuration, approval-request persistence, and approval-state transitions.
+  - `SqliteObservationStore` owns artifact, audit, trace, inbox, notification, and policy-decision persistence/query behavior.
+- Inputs:
+  - Workspace and Project context
+  - Task metadata, execution action, capability identifier, and estimated execution cost
+  - Workspace / Project-scoped capability descriptors, bindings, grants, and budget policy
+  - Approval resolution input for pending requests
+- Outputs:
+  - Persisted `ApprovalRequest`
+  - Persisted `InboxItem`
+  - Persisted `Notification`
+  - Persisted `PolicyDecisionLog`
+  - Updated Run state and existing artifact/audit/trace outputs where execution proceeds
+- State Transitions:
+  - `Run`: `created -> running -> completed`
+  - `Run`: `created -> waiting_approval -> resuming -> running -> completed`
+  - `Run`: `created -> waiting_approval -> blocked`
+  - `Run`: `created -> blocked`
+  - `ApprovalRequest`: `pending -> approved | rejected | expired | cancelled`
+- Error Handling:
+  - Missing capability config or missing approval request returns explicit runtime errors or deny decisions instead of implicit fallback.
+  - Invalid approval transitions are rejected explicitly.
+  - Repeated start or approval handling must load existing state instead of duplicating pending governance records.
+- Tech Stack Decision:
+  - Continue using Rust + SQLite + `sqlx` for the whole slice to preserve reopen and idempotency semantics.
+- Visual Framework Impact:
+  - None. This is not a UI / Surface task.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - Existing `TaskIntake`, `RunOrchestrator`, `SqliteContextStore`, `SqliteObservationStore`, and Slice 1 migration/testing patterns.
+- New Abstractions:
+  - `SqliteGovernanceStore`
+  - `GovernanceDecision`
+  - `ApprovalDecisionInput`
+- Trade-offs:
+  - The slice keeps approval handling in the same local runtime path to validate semantics quickly, at the cost of delaying transport-facing separation.
+  - Capability and budget evaluation stay intentionally narrow so Slice 2 does not drift into later authorization or multi-tenant design.
+- Test Strategy:
+  - Contract validation tests for all refined and newly-added schemas.
+  - Integration tests around file-backed SQLite for approval wait, resume, block, deny, dedupe, and reopen behavior.
+  - Regression coverage to keep Slice 1 paths green.
+- ADR Needed:
+  - No, unless implementation uncovers a durable crate-boundary or approval-semantics decision that exceeds the current blueprint and governance docs.
