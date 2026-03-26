@@ -1,37 +1,39 @@
-# octopus
+# Octopus
 
-`octopus` 是一个面向个人、团队与企业的统一 Agent Runtime Platform。
+Octopus is currently a **doc-first rebuild** of a unified Agent Runtime Platform.
 
-## 当前仓库状态
+This repository does **not** currently prove a working implementation tree.  
+The tracked truth is the repository entry docs and the `docs/` directory. If code, manifests, commands, or verification results are not present in the tracked tree, they must not be described as if they already exist.
 
-当前仓库处于 `doc-first rebuild` 阶段。
+## Where To Start
 
-- 当前 tracked tree 仅包含根目录文档与 `docs/`。
-- 历史运行时骨架，例如 `apps/`、`packages/`、`crates/` 与 workspace manifests，不在当前 tracked tree 中。
-- 在未来实际源码进入 tracked tree 之前，不得把产品与架构目标态描述成“当前已实现能力”。
+Read in this order:
 
-## 正式文档入口
+1. [AGENTS.md](AGENTS.md)
+2. [docs/README.md](docs/README.md)
+3. [docs/product/PRD.md](docs/product/PRD.md)
+4. [docs/architecture/SAD.md](docs/architecture/SAD.md)
+5. [docs/architecture/ga-implementation-blueprint.md](docs/architecture/ga-implementation-blueprint.md)
 
-以下文件是当前面向人的正式入口。
+## Documentation Map
 
-### 核心真相文档
+- [docs/product/PRD.md](docs/product/PRD.md): product meaning, release slices, and formal scope
+- [docs/architecture/SAD.md](docs/architecture/SAD.md): architecture boundaries, runtime model, and trust boundaries
+- [docs/architecture/ga-implementation-blueprint.md](docs/architecture/ga-implementation-blueprint.md): current GA implementation direction and slice order
+- [docs/governance/README.md](docs/governance/README.md): engineering process, schema-first, repo structure, review, and delivery rules
+- [docs/decisions/README.md](docs/decisions/README.md): ADR index and durable decision rules
+- [docs/tasks/README.md](docs/tasks/README.md): task-package placement and structure
+- [docs/references/](docs/references/): non-normative reference material
 
-- [`README.md`](./README.md)：仓库当前状态与文档入口
-- [`AGENTS.md`](./AGENTS.md)：仓库级 coding agent 协作约束
-- [`docs/PRD.md`](./docs/PRD.md)：产品范围、发版切片、核心对象与验收意图
-- [`docs/SAD.md`](./docs/SAD.md)：架构边界、运行模型、治理约束、恢复机制与技术方向
+## Current Tracked Tree
 
-### 建议阅读顺序
+The repository currently contains:
 
-如果你是工程师或 agent，建议按以下顺序进入：
+- repository-level instructions in [AGENTS.md](AGENTS.md)
+- product, architecture, governance, decision, and reference docs under [docs/](docs/README.md)
 
-1. `README.md`
-2. `AGENTS.md`
-3. `docs/PRD.md`
-4. `docs/SAD.md`
+The repository does **not** yet prove that target-state implementation directories such as `apps/`, `crates/`, `packages/`, or `schemas/` are present.
 
-## README 与 AGENTS 的分工
+## Working Rule
 
-- `README.md` 面向人，说明仓库是什么、当前处于什么状态，以及正式文档在哪里。
-- `AGENTS.md` 面向 agent，定义在本仓库中如何工作、如何验证，以及哪些事实不能被夸大或臆造。
-- `docs/` 下的补充规范文档负责把产品与架构真相源转换成实现、AI 协作、视觉和交付治理规则。
+Blueprint first, local design second, contracts before implementation, and truthful verification over optimistic claims.

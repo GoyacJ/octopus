@@ -9,10 +9,11 @@
 
 ### 1.1 文档目标
 
-本文档定义 Octopus 的目标态逻辑架构、领域边界、运行时模型、知识架构、治理模型、协议互操作层、安全与恢复机制，用于支撑 [PRD](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/PRD.md) 中定义的统一 Agent Runtime Platform。
+本文档定义 Octopus 的目标态逻辑架构、领域边界、运行时模型、知识架构、治理模型、协议互操作层、安全与恢复机制，用于支撑 [PRD](../product/PRD.md) 中定义的统一 Agent Runtime Platform。
 
 本文档覆盖：
 
+- repo 级架构拓扑、workspace 治理与跨层依赖约束
 - 系统边界、部署模式与信任边界
 - 领域对象、边界上下文和跨平面职责
 - Run、Automation、Trigger、ResidentAgentSession、Delegation、Knowledge、Approval 的运行时流程
@@ -23,7 +24,7 @@
 本文档不覆盖：
 
 - 项目排期、团队拆分与开发里程碑
-- 仓库目录、crate 组织、数据库表字段和 API 路由样板
+- 具体 crate / package 名称、数据库表字段和 API 路由样板
 - 函数级伪代码、框架样板和容器编排脚本
 
 ### 1.2 架构驱动因素
@@ -41,15 +42,17 @@
 
 ### 1.3 核心设计原则
 
-1. **Hub 中心化**：Hub 是正式事实源与治理中心；Client 负责交互和连续性。
-2. **Run 优先**：所有正式执行都必须以 Run 为权威执行外壳。
-3. **能力运行时一等化**：工具存在性、能力可见性、结构化交互和 skill 注入都必须经正式目录、求值与审计，而不是 prompt 层偶然行为。
-4. **环境真值驱动**：Agent 必须基于工具结果、环境状态和外部反馈持续校正。
-5. **知识分层治理**：私有记忆、共享知识和组织图谱采用不同写入、检索和删除规则。
-6. **预授权优先，越界审批兜底**：系统默认通过 grant 和 budget 控制自治，通过审批处理越界。
-7. **协议一等化**：MCP 和 A2A 与原生能力共享治理语义，不是旁路扩展。
-8. **恢复内建**：checkpoint、lease、idempotency 和 resume token 是正式架构要素。
-9. **可观测优先于隐式智能**：Trace、Audit、Policy Decision、Knowledge Lineage、Cost Ledger 都必须可见。
+1. **统一平台，不拆产品线**：个人、团队、企业是同一平台中的能力组合与治理深度差异，不形成独立产品、平行目录树或平行实现。
+2. **Monorepo + 双 Workspace 治理**：仓库目标态由根统一治理 `Cargo Workspace` 与 `pnpm Workspace`，在同一仓库内承载应用表面、Hub 领域能力、前端共享能力、共享契约与文档。
+3. **Hub 为事实源，Client 为交互层**：Hub 是正式事实源与治理中心；Client 负责交互、缓存和连续性，但不持有远程正式业务事实。
+4. **Run 优先**：所有正式执行都必须以 Run 为权威执行外壳。
+5. **能力运行时一等化**：工具存在性、能力可见性、结构化交互和 skill 注入都必须经正式目录、求值与审计，而不是 prompt 层偶然行为。
+6. **环境真值驱动**：Agent 必须基于工具结果、环境状态和外部反馈持续校正。
+7. **知识分层治理**：私有记忆、共享知识和组织图谱采用不同写入、检索和删除规则。
+8. **预授权优先，越界审批兜底**：系统默认通过 grant 和 budget 控制自治，通过审批处理越界。
+9. **协议一等化**：MCP 和 A2A 与原生能力共享治理语义，不是旁路扩展。
+10. **恢复内建**：checkpoint、lease、idempotency 和 resume token 是正式架构要素。
+11. **可观测优先于隐式智能**：Trace、Audit、Policy Decision、Knowledge Lineage、Cost Ledger 都必须可见。
 
 ### 1.4 首版 GA 交付切片
 
@@ -73,8 +76,7 @@
 
 补充说明（截至 2026-03-26 的 tracked repository state）：
 
-- 当前跟踪树已回到 `doc-first rebuild` 状态：正式事实源是根目录文档与 `docs/`；`contracts/` 与 `.github/` 当前不在 tracked tree 中，不能被当作已存在资产。
-- 历史 `apps/`、`packages/`、`crates/` 与 workspace manifests 不在当前 tracked tree 中，不能再被当作已实现能力、已存在 runtime 或可执行验证链路。
+- 当前跟踪树已回到 `doc-first rebuild` 状态：正式事实源是根目录文档与 `docs/`;
 - 本文档描述目标态架构与重建约束；若未来重新引入实现骨架，必须以后续 tracked manifests、源码与验证结果为准。
 
 ### 1.5 架构平面
@@ -115,6 +117,43 @@ Octopus 目标态架构显式拆分为六个主平面和一个横切观测层：
 | **HTTP 客户端** | reqwest | 0.12+ | 调 LLM API + MCP HTTP transport |
 | **MCP 协议** | 自实现（reqwest + serde）| — | JSON-RPC 2.0，不依赖任何 SDK |
 | **部署容器化** | Docker + Docker Compose | — | 远程 Hub 分发 |
+
+### 1.7 仓库组织与工程治理
+
+以下内容描述的是目标态 monorepo 组织与重建约束，不代表当前 tracked tree 已经存在这些目录或 workspace manifests。当前 tracked tree 仍然只有根目录文档与 `docs/`；若后续重新引入实现骨架，必须以后续实际 tracked manifests、源码与验证结果为准。
+
+目标态仓库采用单一 monorepo，由根同时治理 Rust Workspace 与 pnpm Workspace，并按以下五层组织：
+
+| 顶层路径 | 角色定位 | 目标态职责边界 |
+| --- | --- | --- |
+| `apps/` | 应用表面 | 承载 Desktop、Web、Mobile 等交互 surface 与可部署应用，只按 surface / target 组织，不按个人、团队、企业拆目录 |
+| `crates/` | 领域能力 | 承载 Hub 领域模型、运行时、治理、互操作、执行与存储适配能力 |
+| `packages/` | 前端共享 | 承载 UI、状态模型、Client 适配器、共享 TypeScript 工具与前端复用逻辑 |
+| `schemas/` | 契约层 | 承载 Hub / Client 共享 schema、IDL 与生成入口，是跨 Rust / TypeScript 的唯一契约事实源 |
+| `docs/` | 文档层 | 承载 PRD、SAD、参考资料、计划与治理文档 |
+
+根治理入口约束：
+
+- 目标态根 `Cargo.toml` 作为 Rust Workspace 根，统一管理 `crates/` 与需要进入 Rust 构建图的应用侧宿主工程。
+- 目标态根 `pnpm-workspace.yaml` 与根 `package.json` 作为 pnpm Workspace 根，统一管理前端应用、共享包与契约消费链路。
+- 两套 workspace 必须共处同一 monorepo，并接受同一套版本控制、文档约束、评测门禁与变更治理。
+
+跨层依赖规则：
+
+- `schemas/` 不依赖 `apps/`、`crates/` 或 `packages/`。
+- `crates/` 只能消费 `schemas/` 提供的共享契约，不反向依赖 `packages/`。
+- `packages/` 只能消费 `schemas/` 提供的共享契约，不反向依赖 `crates/`。
+- `apps/` 负责 surface-specific 的装配、接线与交互编排，不承载应下沉到 `crates/` 或 `packages/` 的共享业务逻辑。
+- `docs/` 不参与运行时依赖图。
+- 由 `schemas/` 生成到 Rust 或 TypeScript 消费侧的语言绑定属于派生物，不改变 `schemas/` 的契约所有权。
+
+管理方式与变更落点规则：
+
+- 契约变更必须先落在 `schemas/`，再同步更新 Hub 与 Client 的消费侧实现。
+- Hub 侧领域、运行时、治理、互操作和执行逻辑必须优先落在 `crates/`。
+- 前端跨 surface 复用逻辑必须优先落在 `packages/`。
+- `apps/` 只保留应用表面专有的装配、接线、壳层能力与交互编排。
+- 禁止在仓库根目录或按产品线建立平行实现；个人、团队、企业差异必须体现在能力组合、配置与治理深度上，而不是体现在平行代码树上。
 
 ---
 
@@ -170,8 +209,8 @@ flowchart LR
 
 ### 2.4 事实源与缓存原则
 
-1. 远程模式下，Hub 是 Agent、Team、Workspace、Run、Automation、ResidentAgentSession、Artifact、Knowledge、Grant 和 Audit 的事实源。
-2. Client 只保留连接配置、认证凭证和最近同步快照，用于离线查看和跨端连续性。
+1. 远程模式下，Hub 是 Agent、Team、Workspace、Run、Automation、ResidentAgentSession、Artifact、Knowledge、Grant 和 Audit 的权威事实源；Client 是交互层，不持有这些对象的远程正式业务事实。
+2. Client 只保留连接配置、认证凭证和最近同步快照，用于离线查看、状态呈现和跨端连续性。
 3. 本地模式下虽然 Client 与 Hub 同包部署，但逻辑上仍保留 Hub 为事实源的边界。
 4. 断网或认证失效时，Client 进入只读缓存模式，不得假装远程写操作成功。
 
@@ -742,8 +781,8 @@ sequenceDiagram
 
 ### 6.2 数据事实源
 
-1. 远程模式下，Hub 是正式对象的唯一权威事实源。
-2. Client 只保存快照和连接上下文，不保存权威运行状态。
+1. 远程模式下，Hub 是正式对象的唯一权威事实源；Client 是交互层，不保存权威运行状态或远程正式业务事实。
+2. Client 只保存快照、连接上下文和必要缓存，用于显示、离线查看与连续性。
 3. Knowledge 的事实由元数据、向量索引和 lineage 共同组成。
 4. 观测数据虽可单独存储，但必须与正式对象可关联追溯。
 
@@ -1130,6 +1169,7 @@ A2A 在 Octopus 中承担：
 
 | 层次 | 选型 | 作用 |
 | --- | --- | --- |
+| Repository / Workspace | Monorepo + Cargo Workspace + pnpm Workspace | 统一 Hub、Client、共享契约与文档治理边界 |
 | Desktop Shell | Tauri 2 | 构建桌面端并承载本地 Hub |
 | Frontend | Vue 3 + TypeScript | 构建统一 Client 交互层 |
 | Hub Core | Rust | 构建运行时、治理、协议和执行核心 |
@@ -1144,6 +1184,10 @@ A2A 在 Octopus 中承担：
 
 | 决策 | 结论 | 原因 |
 | --- | --- | --- |
+| 是否按个人 / 团队 / 企业拆产品线 | 否 | 三者是同一平台中的能力组合与治理深度差异，不形成平行产品或目录树 |
+| 是否采用根级双 Workspace Monorepo | 是 | 需要在同一仓库统一治理 Hub、Client、共享契约与文档 |
+| `schemas/` 是否为唯一契约源 | 是 | Rust 与 TypeScript 的共享契约必须从单一事实源派生，避免双边漂移 |
+| Client 是否可以拥有远程业务事实 | 否 | Client 只负责交互、缓存与连续性，远程正式对象由 Hub 持有 |
 | 正式运行对象是否统一为 Run | 是 | 统一任务、讨论、自动化、常驻与委托语义 |
 | Team 是否仍然全局强制唯一 Leader | 否 | 支持 leadered、mesh、hybrid 三种拓扑 |
 | Knowledge 是否只保留私有记忆 | 否 | 需要共享知识与组织图谱支撑协作和治理 |
@@ -1178,6 +1222,10 @@ A2A 在 Octopus 中承担：
 - consumer-only 设备能力不纳入正式默认能力面。
 - 消费级设备工具、provider-specific connectors 与内容型工具只允许以 adapter 或 connector-backed capability 形态接入，不进入首版核心领域对象。
 - 不允许外部协议绕过平台治理直接修改正式事实。
+- 不允许按个人、团队、企业产品线建立平行目录树或平行实现。
+- 不允许 Client 成为远程正式业务状态的事实源。
+- 不允许 `packages/` 与 `crates/` 直接形成实现依赖；共享契约只能经由 `schemas/`。
+- 不允许把目标态目录设计、workspace manifests 或应用骨架写成“当前 tracked tree 已存在实现”。
 - 本 SAD 提供逻辑与运行时架构，不锁定具体接口和表结构。
 
 ### 10.3 结论
