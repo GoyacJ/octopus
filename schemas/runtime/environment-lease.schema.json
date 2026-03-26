@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/runtime/environment-lease.schema.json",
+  "title": "EnvironmentLease",
+  "type": "object",
+  "description": "GA foundation placeholder shared contract for execution environment leases.",
+  "properties": {
+    "id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "status": { "$ref": "https://octopus.local/schemas/runtime/environment-lease-status.schema.json" },
+    "resume_token": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "run_id", "status"],
+  "additionalProperties": true
+}

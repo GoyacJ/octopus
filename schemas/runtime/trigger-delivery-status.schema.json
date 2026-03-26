@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/runtime/trigger-delivery-status.schema.json",
+  "title": "TriggerDeliveryStatus",
+  "type": "string",
+  "description": "Minimal GA trigger delivery status set preserving delivery, retry, and cancellation semantics.",
+  "enum": [
+    "pending",
+    "delivering",
+    "succeeded",
+    "failed",
+    "retry_scheduled",
+    "cancelled"
+  ]
+}

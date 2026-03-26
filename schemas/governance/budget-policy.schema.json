@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/governance/budget-policy.schema.json",
+  "title": "BudgetPolicy",
+  "type": "object",
+  "description": "GA foundation placeholder shared contract for budget policy boundaries.",
+  "properties": {
+    "id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "project_id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id"],
+  "additionalProperties": true
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/observe/notification-status.schema.json",
+  "title": "NotificationStatus",
+  "type": "string",
+  "description": "Minimal GA notification status set preserving delivery and user-seen semantics.",
+  "enum": [
+    "pending",
+    "delivered",
+    "read",
+    "failed",
+    "dismissed"
+  ]
+}

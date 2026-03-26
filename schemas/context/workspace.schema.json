@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/context/workspace.schema.json",
+  "title": "Workspace",
+  "type": "object",
+  "description": "GA foundation placeholder shared contract for Workspace. Freezes object name, group ownership, and minimal identity semantics only.",
+  "properties": {
+    "id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id"],
+  "additionalProperties": true
+}

@@ -35,6 +35,10 @@ Example:
 
 Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-delivery-templates.md).
 
+## Current Task Packages
+
+- [2026-03-26-ga-foundation-repo-skeleton](2026/2026-03-26-ga-foundation-repo-skeleton/README.md)
+
 ## Relationship To ADRs
 
 - Use a task package for local, slice-specific work.

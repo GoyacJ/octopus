@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/observe/knowledge-asset.schema.json",
+  "title": "KnowledgeAsset",
+  "type": "object",
+  "description": "GA foundation placeholder shared contract for shared knowledge assets.",
+  "properties": {
+    "id": { "type": "string" },
+    "knowledge_space_id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "knowledge_space_id"],
+  "additionalProperties": true
+}

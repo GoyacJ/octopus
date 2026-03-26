@@ -3,7 +3,7 @@
 Octopus is currently a **doc-first rebuild** of a unified Agent Runtime Platform.
 
 This repository does **not** currently prove a working implementation tree.  
-The tracked truth is the repository entry docs and the `docs/` directory. If code, manifests, commands, or verification results are not present in the tracked tree, they must not be described as if they already exist.
+The tracked truth starts with the repository entry docs, the `docs/` directory, and any tracked manifests or skeleton files that actually exist in the tree. If code, manifests, commands, or verification results are not present in the tracked tree, they must not be described as if they already exist.
 
 ## Where To Start
 
@@ -31,8 +31,10 @@ The repository currently contains:
 
 - repository-level instructions in [AGENTS.md](AGENTS.md)
 - product, architecture, governance, decision, and reference docs under [docs/](docs/README.md)
+- initial monorepo root manifests in `Cargo.toml`, `package.json`, and `pnpm-workspace.yaml`
+- initial top-level skeleton directories in `apps/`, `crates/`, `packages/`, and `schemas/`
 
-The repository does **not** yet prove that target-state implementation directories such as `apps/`, `crates/`, `packages/`, or `schemas/` are present.
+Those manifests and directories establish repo boundaries and shared-contract placement only. They do **not** yet prove a working runtime, UI surface, or end-to-end execution path.
 
 ## Working Rule
 

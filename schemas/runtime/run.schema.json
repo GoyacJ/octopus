@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/runtime/run.schema.json",
+  "title": "Run",
+  "type": "object",
+  "description": "GA foundation placeholder shared contract for Run as the authority execution shell.",
+  "properties": {
+    "id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "project_id": { "type": "string" },
+    "status": { "$ref": "https://octopus.local/schemas/runtime/run-status.schema.json" },
+    "idempotency_key": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "workspace_id", "project_id", "status"],
+  "additionalProperties": true
+}

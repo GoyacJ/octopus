@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/governance/capability-descriptor.schema.json",
+  "title": "CapabilityDescriptor",
+  "type": "object",
+  "description": "GA foundation placeholder shared contract for cataloged capability descriptors.",
+  "properties": {
+    "id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id"],
+  "additionalProperties": true
+}

@@ -2,6 +2,10 @@
 
 This repository uses a role-based documentation structure so each document has a clear job, a clear update trigger, and a clear owner.
 
+## Current State Note
+
+The tracked tree now includes an initial monorepo skeleton under `apps/`, `crates/`, `packages/`, and `schemas/`, plus root workspace manifests. Those files are boundary scaffolding and shared-contract foundations, not proof of a working runtime or application surface.
+
 ## Source Of Truth Order
 
 1. [../README.md](../README.md)

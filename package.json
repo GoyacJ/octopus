@@ -1,0 +1,6 @@
+{
+  "name": "@octopus/root",
+  "private": true,
+  "packageManager": "pnpm@10.6.0",
+  "description": "Octopus monorepo root governance package. Runtime members are added slice-by-slice after contracts and local design are frozen."
+}

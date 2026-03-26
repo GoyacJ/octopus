@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/runtime/environment-lease-status.schema.json",
+  "title": "EnvironmentLeaseStatus",
+  "type": "string",
+  "description": "Minimal GA environment lease status set preserving active, expiry, revocation, and resume semantics.",
+  "enum": [
+    "active",
+    "expired",
+    "released",
+    "revoked",
+    "resuming"
+  ]
+}

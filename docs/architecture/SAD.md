@@ -76,8 +76,8 @@
 
 补充说明（截至 2026-03-26 的 tracked repository state）：
 
-- 当前跟踪树已回到 `doc-first rebuild` 状态：正式事实源是根目录文档与 `docs/`;
-- 本文档描述目标态架构与重建约束；若未来重新引入实现骨架，必须以后续 tracked manifests、源码与验证结果为准。
+- 当前跟踪树仍处于 `doc-first rebuild` 状态，但已包含首批 monorepo 根 manifests 与 `apps/`、`crates/`、`packages/`、`schemas/` 骨架；
+- 正式事实源仍以根目录入口文档、`docs/` 与实际 tracked manifests / 占位契约为准，不得把这些骨架误写成已完成实现。
 
 ### 1.5 架构平面
 
@@ -120,7 +120,7 @@ Octopus 目标态架构显式拆分为六个主平面和一个横切观测层：
 
 ### 1.7 仓库组织与工程治理
 
-以下内容描述的是目标态 monorepo 组织与重建约束，不代表当前 tracked tree 已经存在这些目录或 workspace manifests。当前 tracked tree 仍然只有根目录文档与 `docs/`；若后续重新引入实现骨架，必须以后续实际 tracked manifests、源码与验证结果为准。
+以下内容描述的是目标态 monorepo 组织与重建约束。当前 tracked tree 已包含根 `Cargo.toml`、根 `package.json`、`pnpm-workspace.yaml` 与首批顶层骨架目录，但这些只证明边界骨架和共享契约源初始化已存在，不等于已存在可运行实现；后续仍必须以后续实际 tracked manifests、源码与验证结果为准。
 
 目标态仓库采用单一 monorepo，由根同时治理 Rust Workspace 与 pnpm Workspace，并按以下五层组织：
 

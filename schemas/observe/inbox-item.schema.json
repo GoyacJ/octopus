@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/observe/inbox-item.schema.json",
+  "title": "InboxItem",
+  "type": "object",
+  "description": "GA foundation placeholder shared contract for inbox items linked to governance or knowledge actions.",
+  "properties": {
+    "id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "status": { "$ref": "https://octopus.local/schemas/observe/inbox-item-status.schema.json" },
+    "dedupe_key": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "workspace_id", "status"],
+  "additionalProperties": true
+}

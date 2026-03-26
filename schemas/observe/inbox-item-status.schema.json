@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/observe/inbox-item-status.schema.json",
+  "title": "InboxItemStatus",
+  "type": "string",
+  "description": "Minimal GA inbox-item status set preserving actionable and resolved states.",
+  "enum": [
+    "open",
+    "in_progress",
+    "resolved",
+    "dismissed"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/runtime/trigger-delivery.schema.json",
+  "title": "TriggerDelivery",
+  "type": "object",
+  "description": "GA foundation placeholder shared contract for individual trigger deliveries with dedupe semantics.",
+  "properties": {
+    "id": { "type": "string" },
+    "trigger_id": { "type": "string" },
+    "status": { "$ref": "https://octopus.local/schemas/runtime/trigger-delivery-status.schema.json" },
+    "dedupe_key": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "trigger_id", "status"],
+  "additionalProperties": true
+}

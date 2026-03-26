@@ -1,0 +1,58 @@
+## Design Note
+
+- Problem: The repository had architecture and governance rules for a target-state monorepo, but no tracked skeleton that made those boundaries, manifests, and contract-source ownership concrete.
+- Goal: Initialize a minimal tracked skeleton that makes the monorepo boundary real, without pretending that GA runtime implementation already exists.
+- Acceptance Criteria:
+  - Root manifests exist and parse.
+  - Top-level directories exist and declare their ownership.
+  - `schemas/` owns the first GA placeholder contracts.
+  - Task package and ADR document the boundary decisions.
+- Non-functional Constraints:
+  - Truthful current-state documentation.
+  - No business logic or UI logic introduced.
+  - No second source of truth for shared objects.
+  - Minimal, reviewable placeholder contracts only.
+- MVP Boundary: The design covers only repo skeleton, source-of-truth ownership, and placeholder contracts. It excludes crate/package members, transport APIs, and runtime flows.
+- Layer Placement:
+  - Root manifests at repository root as workspace governance entry points.
+  - Boundary docs in `docs/tasks/` and `docs/decisions/`.
+  - Shared contracts in `schemas/`.
+  - Surface-specific placeholders in `apps/`.
+  - Rust and TypeScript ownership placeholders in `crates/` and `packages/`.
+- Module Boundaries:
+  - `apps/` stays surface-only and receives only `desktop` and `remote-hub` placeholders.
+  - `crates/` freezes ownership groups for runtime, domain/context, governance, observe/artifact, interop-mcp, and execution.
+  - `packages/` freezes ownership groups for `schema-ts` and `hub-client`.
+  - `schemas/` becomes the only cross-language contract fact source and is split into `context`, `runtime`, `governance`, and `observe`.
+- Inputs:
+  - Approved implementation plan.
+  - README, AGENTS, PRD, SAD, GA blueprint, repo-structure rules, schema-first rules, ADR rules, and task-package rules.
+- Outputs:
+  - Tracked skeleton directories and root manifests.
+  - Placeholder JSON Schemas.
+  - Task package and ADR.
+  - Updated entry-state documentation.
+- State Transitions:
+  - Repository state changes from doc-only architecture planning to doc-first rebuild with an initialized monorepo skeleton and placeholder contract source.
+  - No runtime object lifecycle is implemented in this task.
+- Error Handling:
+  - If any placeholder schema or directory grouping conflicts with PRD/SAD/blueprint boundaries, the task must prefer boundary correction in docs over silently forcing a local structure.
+  - If a root manifest would imply runnable members that do not exist, keep it governance-only and empty.
+- Tech Stack Decision: Use JSON Schema as the contract source format and leave concrete generation tooling to a later slice.
+- Visual Framework Impact: None.
+- Human Approval Points: None.
+- Reused Components:
+  - Existing owner docs and ADR conventions.
+  - Existing monorepo and schema-first governance rules.
+- New Abstractions:
+  - Placeholder contract files and a limited set of directory-local `AGENTS.md` files only.
+  - No runtime abstraction layers are introduced.
+- Trade-offs:
+  - We add more files up front to reduce later boundary drift.
+  - We accept placeholder schemas now to avoid prematurely freezing complete field sets.
+- Test Strategy:
+  - Parse root manifests.
+  - Parse all JSON Schemas.
+  - Inspect created directory structure against the approved plan.
+  - Review scope to confirm no runtime or Beta behavior slipped in.
+- ADR Needed: Yes. The shared contract source format and generation boundary are durable repository guidance.

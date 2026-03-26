@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/observe/audit-record.schema.json",
+  "title": "AuditRecord",
+  "type": "object",
+  "description": "GA foundation placeholder shared contract for audit records.",
+  "properties": {
+    "id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id"],
+  "additionalProperties": true
+}

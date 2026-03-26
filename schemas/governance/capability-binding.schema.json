@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/governance/capability-binding.schema.json",
+  "title": "CapabilityBinding",
+  "type": "object",
+  "description": "GA foundation placeholder shared contract for binding capabilities to a governed scope.",
+  "properties": {
+    "id": { "type": "string" },
+    "scope_ref": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": ["id", "scope_ref"],
+  "additionalProperties": true
+}

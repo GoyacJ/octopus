@@ -13,7 +13,7 @@ Detailed process, governance, and documentation rules belong in the owner docume
 
 This repository is currently in **doc-first rebuild** mode.
 
-Current tracked truth is the root entry docs and the `docs/` tree.  
+Current tracked truth starts with the root entry docs, the `docs/` tree, and any tracked manifests or skeleton files that actually exist in the repository.  
 Do **not** describe target-state architecture as if it were already implemented.  
 Do **not** invent code structure, build commands, runtime behavior, or verification results that are not present in the tracked tree.
 
@@ -26,6 +26,7 @@ Current default allowed work:
 - repo layout design
 - slice planning
 - skeleton planning
+- skeleton initialization
 - repo-level review rules
 
 If implementation work begins later, it must follow the rules in this file and the linked owner docs.
@@ -37,6 +38,7 @@ If implementation work begins later, it must follow the rules in this file and t
 - This root `AGENTS.md` is the repository-wide default.
 - When work primarily touches repository documentation, also read [docs/README.md](docs/README.md) and [docs/AGENTS.md](docs/AGENTS.md).
 - Keep specialized rules close to the work. Nested `AGENTS.md` files may narrow or refine guidance for specific areas.
+- Add nested `AGENTS.md` files only when a subtree needs materially more specific guidance; do not create them mechanically for every directory.
 - Do not duplicate full policy text in multiple instruction files when a single owner doc already exists.
 
 This follows the Codex guidance to keep repository-level instructions basic and place more specific guidance closer to specialized work.
@@ -112,8 +114,8 @@ Follow these owner docs:
 
 Current actual repository state note:
 
-- the tracked tree does **not** yet prove the existence of target-state implementation directories such as `apps/`, `crates/`, `packages/`, or `schemas/`
-- the rules for those directories are target-state placement constraints, not claims that the implementation tree already exists
+- the tracked tree now includes initial top-level skeleton directories such as `apps/`, `crates/`, `packages/`, and `schemas/`, plus root workspace manifests
+- those files establish placement constraints and contract-source ownership, but they do **not** by themselves prove runnable implementation members or verified runtime behavior
 
 ---
 

@@ -23,6 +23,11 @@ Do **not** use an ADR for temporary task notes, local implementation details, or
 - Keep numbering monotonic
 - Prefer a stable title that reflects the decision rather than the triggering task
 
+## Current ADRs
+
+- [0001-monorepo-and-boundary-rules.md](0001-monorepo-and-boundary-rules.md)
+- [0002-json-schema-source-of-truth-and-generation-boundary.md](0002-json-schema-source-of-truth-and-generation-boundary.md)
+
 ## Minimal Structure
 
 - Status
