@@ -554,6 +554,11 @@ Octopus 必须正式支持以下协作拓扑：
 | **Workspace / Project** | 团队、项目、Artifact | 管理协作边界、共享资产和结果沉淀 |
 | **Hub Connections** | Client、Hub | 管理本地 Hub、远程 Hub、认证与缓存状态 |
 
+补充约束：
+
+- 首轮 GA 的页面优先级、最小页面集合、信息架构层级与视觉语法由 [`VISUAL_FRAMEWORK.md`](./VISUAL_FRAMEWORK.md) 补充定义。
+- `VISUAL_FRAMEWORK.md` 只约束交互实现与视觉表达，不扩大本 PRD 的产品范围，也不把 Beta 能力提前带入 GA。
+
 ### 5.2 首次使用：桌面端本地模式
 
 1. 用户安装并启动桌面端。
