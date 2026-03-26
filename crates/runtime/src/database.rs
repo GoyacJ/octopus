@@ -1,6 +1,7 @@
 use std::{fs, path::Path};
 
 use octopus_domain_context::SqliteContextStore;
+use octopus_governance::SqliteGovernanceStore;
 use octopus_observe_artifact::SqliteObservationStore;
 use sqlx::{
     migrate::Migrator,
@@ -16,6 +17,7 @@ static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 pub struct Slice1Database {
     pool: SqlitePool,
     context_store: SqliteContextStore,
+    governance_store: SqliteGovernanceStore,
     observation_store: SqliteObservationStore,
 }
 
@@ -38,6 +40,7 @@ impl Slice1Database {
 
         Ok(Self {
             context_store: SqliteContextStore::new(pool.clone()),
+            governance_store: SqliteGovernanceStore::new(pool.clone()),
             observation_store: SqliteObservationStore::new(pool.clone()),
             pool,
         })
@@ -49,6 +52,10 @@ impl Slice1Database {
 
     pub fn context_store(&self) -> &SqliteContextStore {
         &self.context_store
+    }
+
+    pub fn governance_store(&self) -> &SqliteGovernanceStore {
+        &self.governance_store
     }
 
     pub fn observation_store(&self) -> &SqliteObservationStore {

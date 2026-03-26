@@ -3,12 +3,30 @@
   "$id": "https://octopus.local/schemas/governance/capability-descriptor.schema.json",
   "title": "CapabilityDescriptor",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for cataloged capability descriptors.",
+  "description": "Slice 2 shared contract for cataloged capability descriptors used by runtime governance evaluation.",
   "properties": {
     "id": { "type": "string" },
+    "slug": {
+      "type": "string",
+      "minLength": 1
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": ["low", "high"]
+    },
+    "requires_approval": {
+      "type": "boolean"
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "slug",
+    "risk_level",
+    "requires_approval",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
 }

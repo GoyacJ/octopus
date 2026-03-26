@@ -14,6 +14,9 @@
       "const": "task"
     },
     "status": { "$ref": "https://octopus.local/schemas/runtime/run-status.schema.json" },
+    "approval_request_id": {
+      "type": ["string", "null"]
+    },
     "idempotency_key": { "type": "string" },
     "attempt_count": {
       "type": "integer",
@@ -55,6 +58,7 @@
     "project_id",
     "run_type",
     "status",
+    "approval_request_id",
     "idempotency_key",
     "attempt_count",
     "max_attempts",

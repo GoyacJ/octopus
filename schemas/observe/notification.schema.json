@@ -3,15 +3,38 @@
   "$id": "https://octopus.local/schemas/observe/notification.schema.json",
   "title": "Notification",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for user notifications.",
+  "description": "Slice 2 shared contract for approval notifications emitted by the governed runtime path.",
   "properties": {
     "id": { "type": "string" },
     "workspace_id": { "type": "string" },
+    "project_id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "approval_request_id": { "type": "string" },
     "status": { "$ref": "https://octopus.local/schemas/observe/notification-status.schema.json" },
     "dedupe_key": { "type": "string" },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id", "workspace_id", "status"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "workspace_id",
+    "project_id",
+    "run_id",
+    "approval_request_id",
+    "status",
+    "dedupe_key",
+    "title",
+    "message",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
 }

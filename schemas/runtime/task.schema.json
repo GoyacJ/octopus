@@ -74,6 +74,14 @@
         { "$ref": "#/$defs/always_fail_action" }
       ]
     },
+    "capability_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "estimated_cost": {
+      "type": "integer",
+      "minimum": 0
+    },
     "idempotency_key": {
       "type": "string",
       "minLength": 1
@@ -88,6 +96,8 @@
     "title",
     "instruction",
     "action",
+    "capability_id",
+    "estimated_cost",
     "idempotency_key",
     "created_at",
     "updated_at"

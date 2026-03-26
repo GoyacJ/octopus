@@ -20,7 +20,14 @@
         "run_failed",
         "run_retry_requested",
         "run_terminated",
-        "artifact_created"
+        "artifact_created",
+        "approval_requested",
+        "approval_approved",
+        "approval_rejected",
+        "approval_expired",
+        "approval_cancelled",
+        "run_blocked",
+        "policy_denied"
       ]
     },
     "message": {

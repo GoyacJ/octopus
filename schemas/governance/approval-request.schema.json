@@ -3,14 +3,51 @@
   "$id": "https://octopus.local/schemas/governance/approval-request.schema.json",
   "title": "ApprovalRequest",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for approval requests.",
+  "description": "Slice 2 shared contract for execution approval requests emitted by the governed runtime path.",
   "properties": {
     "id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "project_id": { "type": "string" },
     "run_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "approval_type": {
+      "type": "string",
+      "const": "execution"
+    },
     "status": { "$ref": "https://octopus.local/schemas/governance/approval-request-status.schema.json" },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dedupe_key": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decided_by": {
+      "type": ["string", "null"]
+    },
+    "decision_note": {
+      "type": ["string", "null"]
+    },
+    "decided_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id", "run_id", "status"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "workspace_id",
+    "project_id",
+    "run_id",
+    "task_id",
+    "approval_type",
+    "status",
+    "reason",
+    "dedupe_key",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
 }

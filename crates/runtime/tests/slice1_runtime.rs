@@ -1,10 +1,53 @@
 use std::path::Path;
 
 use octopus_execution::ExecutionAction;
-use octopus_runtime::{CreateTaskInput, Slice1Runtime};
+use octopus_runtime::{
+    BudgetPolicyRecord, CapabilityBindingRecord, CapabilityDescriptorRecord, CapabilityGrantRecord,
+    CreateTaskInput, Slice1Runtime,
+};
 
 fn sample_db_path(base: &Path) -> std::path::PathBuf {
     base.join("slice1.sqlite")
+}
+
+async fn seed_governance(runtime: &Slice1Runtime, project_id: &str) {
+    runtime
+        .upsert_capability_descriptor(CapabilityDescriptorRecord::new(
+            "capability-slice1",
+            "capability-slice1",
+            "low",
+            false,
+        ))
+        .await
+        .unwrap();
+    runtime
+        .upsert_capability_binding(CapabilityBindingRecord::project_scope(
+            format!("binding-{project_id}"),
+            "capability-slice1",
+            "workspace-alpha",
+            project_id,
+        ))
+        .await
+        .unwrap();
+    runtime
+        .upsert_capability_grant(CapabilityGrantRecord::project_scope(
+            format!("grant-{project_id}"),
+            "capability-slice1",
+            "workspace-alpha",
+            project_id,
+        ))
+        .await
+        .unwrap();
+    runtime
+        .upsert_budget_policy(BudgetPolicyRecord::project_scope(
+            format!("budget-{project_id}"),
+            "workspace-alpha",
+            project_id,
+            5,
+            10,
+        ))
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -24,6 +67,7 @@ async fn persists_completed_run_and_reloads_after_reopen() {
         )
         .await
         .unwrap();
+    seed_governance(&runtime, "project-slice1").await;
 
     let task = runtime
         .create_task(CreateTaskInput {
@@ -34,6 +78,8 @@ async fn persists_completed_run_and_reloads_after_reopen() {
             action: ExecutionAction::EmitText {
                 content: "Slice 1 says hello".into(),
             },
+            capability_id: "capability-slice1".into(),
+            estimated_cost: 1,
             idempotency_key: "task-success-1".into(),
         })
         .await
@@ -84,6 +130,7 @@ async fn failed_run_can_retry_and_then_succeed() {
         )
         .await
         .unwrap();
+    seed_governance(&runtime, "project-retry").await;
 
     let task = runtime
         .create_task(CreateTaskInput {
@@ -95,6 +142,8 @@ async fn failed_run_can_retry_and_then_succeed() {
                 failure_message: "network_glitch".into(),
                 content: "Recovered artifact".into(),
             },
+            capability_id: "capability-slice1".into(),
+            estimated_cost: 1,
             idempotency_key: "task-retry-1".into(),
         })
         .await
@@ -130,6 +179,7 @@ async fn failed_run_can_be_explicitly_terminated() {
         )
         .await
         .unwrap();
+    seed_governance(&runtime, "project-terminate").await;
 
     let task = runtime
         .create_task(CreateTaskInput {
@@ -140,6 +190,8 @@ async fn failed_run_can_be_explicitly_terminated() {
             action: ExecutionAction::AlwaysFail {
                 message: "irrecoverable".into(),
             },
+            capability_id: "capability-slice1".into(),
+            estimated_cost: 1,
             idempotency_key: "task-terminate-1".into(),
         })
         .await
@@ -172,6 +224,7 @@ async fn idempotency_deduplicates_task_and_run_creation() {
         )
         .await
         .unwrap();
+    seed_governance(&runtime, "project-idempotent").await;
 
     let first_task = runtime
         .create_task(CreateTaskInput {
@@ -182,6 +235,8 @@ async fn idempotency_deduplicates_task_and_run_creation() {
             action: ExecutionAction::EmitText {
                 content: "Stable artifact".into(),
             },
+            capability_id: "capability-slice1".into(),
+            estimated_cost: 1,
             idempotency_key: "task-idempotent-1".into(),
         })
         .await
@@ -196,6 +251,8 @@ async fn idempotency_deduplicates_task_and_run_creation() {
             action: ExecutionAction::EmitText {
                 content: "Stable artifact".into(),
             },
+            capability_id: "capability-slice1".into(),
+            estimated_cost: 1,
             idempotency_key: "task-idempotent-1".into(),
         })
         .await
