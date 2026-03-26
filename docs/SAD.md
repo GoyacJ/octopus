@@ -94,7 +94,7 @@ Octopus 目标态架构显式拆分为六个主平面和一个横切观测层：
 
 ### 1.6 技术选型总览
 
-当前架构主决策已确认；实施层规范、GA 视觉语法与交付治理由配套规范文档补充约束。
+当前架构主决策已确认；后续若重新补充实施规范或交付文档，也不得改写本 SAD 的架构主边界。
 
 | 层次 | 技术 | 版本要求 | 备注 |
 |------|------|---------|------|
@@ -115,11 +115,6 @@ Octopus 目标态架构显式拆分为六个主平面和一个横切观测层：
 | **HTTP 客户端** | reqwest | 0.12+ | 调 LLM API + MCP HTTP transport |
 | **MCP 协议** | 自实现（reqwest + serde）| — | JSON-RPC 2.0，不依赖任何 SDK |
 | **部署容器化** | Docker + Docker Compose | — | 远程 Hub 分发 |
-
-补充说明：
-
-- `Interaction Plane` 的 GA 页面语法、视觉 token、状态表达与组件分层由 [`VISUAL_FRAMEWORK.md`](./VISUAL_FRAMEWORK.md) 约束。
-- 工程实现规则、AI 执行行为与交付治理流程由 `docs/ENGINEERING_STANDARD.md`、`docs/AI_ENGINEERING_PLAYBOOK.md` 与 `docs/DELIVERY_GOVERNANCE.md` 补充，不改变本 SAD 的架构主边界。
 
 ---
 

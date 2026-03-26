@@ -16,21 +16,10 @@
 
 ### 核心真相文档
 
+- [`README.md`](./README.md)：仓库当前状态与文档入口
+- [`AGENTS.md`](./AGENTS.md)：仓库级 coding agent 协作约束
 - [`docs/PRD.md`](./docs/PRD.md)：产品范围、发版切片、核心对象与验收意图
 - [`docs/SAD.md`](./docs/SAD.md)：架构边界、运行模型、治理约束、恢复机制与技术方向
-- [`AGENTS.md`](./AGENTS.md)：仓库级 coding agent 协作约束
-
-### 实施与治理规范
-
-- [`docs/ENGINEERING_STANDARD.md`](./docs/ENGINEERING_STANDARD.md)：工程开发规范与实现约束
-- [`docs/CODING_STANDARD.md`](./docs/CODING_STANDARD.md)：实现级代码风格、分层模式、状态与 review 规则
-- [`docs/AI_ENGINEERING_PLAYBOOK.md`](./docs/AI_ENGINEERING_PLAYBOOK.md)：AI 开发行为手册与停机条件
-- [`docs/AI_DEVELOPMENT_PROTOCOL.md`](./docs/AI_DEVELOPMENT_PROTOCOL.md)：AI 每次进入仓库时应遵循的标准开发协议
-- [`docs/AI_PROMPT_HANDBOOK.md`](./docs/AI_PROMPT_HANDBOOK.md)：与 AI 协作推进项目时可直接复用的提示词手册
-- [`docs/VISUAL_FRAMEWORK.md`](./docs/VISUAL_FRAMEWORK.md)：首版 GA 核心交互面的视觉框架与页面语法
-- [`docs/DELIVERY_GOVERNANCE.md`](./docs/DELIVERY_GOVERNANCE.md)：文档类型、ADR/contract/plan/review 流程与 Done 门禁
-- [`docs/contracts/README.md`](./docs/contracts/README.md)：正式 contract 文档目录与首批对象契约索引
-- [`docs/templates/README.md`](./docs/templates/README.md)：任务切片卡、contract、implementation plan 模板入口
 
 ### 建议阅读顺序
 
@@ -40,16 +29,6 @@
 2. `AGENTS.md`
 3. `docs/PRD.md`
 4. `docs/SAD.md`
-5. 按任务类型继续阅读：
-   - 实现与命名规范：`docs/ENGINEERING_STANDARD.md`
-   - 代码风格与分层模式：`docs/CODING_STANDARD.md`
-   - AI 执行原则：`docs/AI_ENGINEERING_PLAYBOOK.md`
-   - AI 固定 SOP：`docs/AI_DEVELOPMENT_PROTOCOL.md`
-   - AI 提示词手册：`docs/AI_PROMPT_HANDBOOK.md`
-   - GA 交互与视觉：`docs/VISUAL_FRAMEWORK.md`
-   - 交付与门禁：`docs/DELIVERY_GOVERNANCE.md`
-   - 正式 contract 目录：`docs/contracts/README.md`
-   - 模板资产：`docs/templates/README.md`
 
 ## README 与 AGENTS 的分工
 
