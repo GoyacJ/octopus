@@ -1,7 +1,7 @@
 # Octopus · 软件架构设计说明书（SAD）
 
-**版本**: v2.1 | **状态**: 重构定稿版 | **日期**: 2026-03-26
-**对应 PRD**: v2.1
+**版本**: v2.2 | **状态**: 重构定稿版 | **日期**: 2026-03-26
+**对应 PRD**: v2.2
 
 ---
 
@@ -36,18 +36,20 @@
 | 多 Agent 协作不再局限于单 Leader 编排 | 将 Collaboration Mesh 作为正式平面，引入 delegation、authority、knowledge scope |
 | 自治执行必须受预算和权限治理 | 建立 CapabilityGrant、BudgetPolicy、ApprovalRequest、Policy Decision Point |
 | 外部工具和外部 Agent 都是核心能力 | 将 MCP 与 A2A 都纳入 Interop Plane，并共享身份、信任、授权和审计 |
+| 工具暴露、结构化交互与 skill 注入不能依赖 prompt 偶然行为 | 用 CapabilityCatalog、CapabilityResolver、ToolSearch、InteractionPrompt / MessageDraft 与 ExecutionProfile / SkillPack 建立正式运行时约束链路 |
 | 长时运行必须可恢复、可回放、可撤销 | 采用事件驱动状态机、checkpoint、lease、idempotency 和 lineage |
 
 ### 1.3 核心设计原则
 
 1. **Hub 中心化**：Hub 是正式事实源与治理中心；Client 负责交互和连续性。
 2. **Run 优先**：所有正式执行都必须以 Run 为权威执行外壳。
-3. **环境真值驱动**：Agent 必须基于工具结果、环境状态和外部反馈持续校正。
-4. **知识分层治理**：私有记忆、共享知识和组织图谱采用不同写入、检索和删除规则。
-5. **预授权优先，越界审批兜底**：系统默认通过 grant 和 budget 控制自治，通过审批处理越界。
-6. **协议一等化**：MCP 和 A2A 与原生能力共享治理语义，不是旁路扩展。
-7. **恢复内建**：checkpoint、lease、idempotency 和 resume token 是正式架构要素。
-8. **可观测优先于隐式智能**：Trace、Audit、Policy Decision、Knowledge Lineage、Cost Ledger 都必须可见。
+3. **能力运行时一等化**：工具存在性、能力可见性、结构化交互和 skill 注入都必须经正式目录、求值与审计，而不是 prompt 层偶然行为。
+4. **环境真值驱动**：Agent 必须基于工具结果、环境状态和外部反馈持续校正。
+5. **知识分层治理**：私有记忆、共享知识和组织图谱采用不同写入、检索和删除规则。
+6. **预授权优先，越界审批兜底**：系统默认通过 grant 和 budget 控制自治，通过审批处理越界。
+7. **协议一等化**：MCP 和 A2A 与原生能力共享治理语义，不是旁路扩展。
+8. **恢复内建**：checkpoint、lease、idempotency 和 resume token 是正式架构要素。
+9. **可观测优先于隐式智能**：Trace、Audit、Policy Decision、Knowledge Lineage、Cost Ledger 都必须可见。
 
 ### 1.4 首版 GA 交付切片
 
@@ -458,6 +460,13 @@ flowchart LR
 | `Automation Manager` | 管理 Automation、Trigger 和最近执行状态 |
 | `Execution Profile Resolver` | 将 AgentTemplate、ExecutionProfile 与 SkillPack 解析为具体运行约束和默认策略 |
 
+关键约束：
+
+- Runtime Plane 不把“工具是否存在”建模为 prompt 层偶然行为；正式闭环是 `CapabilityCatalog -> CapabilityBinding -> CapabilityResolver -> ToolSearch -> InteractionPrompt / MessageDraft -> Audit`。
+- `Tool Search Service` 只返回当前主体在当前上下文中可发现的 descriptor、schema、治理标签与 fallback，不直接授予执行权。
+- `Execution Profile Resolver` 只能基于已注册 capability 和现有治理上下文解析 `SkillPack`，不能注入未注册能力或绕过 grant、budget、approval。
+- 工具实现、deferred discovery、结构化提问与消息草稿交互形态可参考 `docs/references/Claude_Hidden_Toolkit.md` 作为模式样例，但正式能力边界、对象语义和治理约束仍以本 SAD 与 PRD 为准。
+
 ### 4.4 Knowledge Plane
 
 核心组件：
@@ -546,6 +555,7 @@ Octopus 的目标态运行链路统一为：
 - 所有关键动作都会进入 `Policy Check`。
 - 越界时通过 `Approval / Escalation` 处理。
 - 运行可以继续、等待、恢复、终止或失败。
+- `ToolSearch` 命中、`InteractionPrompt` 产生和 `MessageDraft` 生成都必须具备可审计来源，并可追溯到 resolver、policy decision 与 run context。
 - `ArtifactSessionState` 只服务于单次 artifact 会话，不进入长期恢复或跨会话事实层。
 
 ### 5.2 人工发起 Run
@@ -1138,6 +1148,9 @@ A2A 在 Octopus 中承担：
 | Knowledge 是否只保留私有记忆 | 否 | 需要共享知识与组织图谱支撑协作和治理 |
 | 自治治理是否以逐项审批为主 | 否 | 采用预授权 + 预算窗口 + 越界审批 |
 | MCP 与 A2A 是否为一等能力 | 是 | 工具接入和外部 Agent 协作都已成为核心架构能力 |
+| 工具存在性是否可由 prompt 隐式决定 | 否 | 正式能力必须经 CapabilityCatalog、Resolver 与 ToolSearch 暴露，并进入审计链路 |
+| ToolSearch 是否等同自动授权 | 否 | 搜索只负责发现，执行仍受 grant、budget 与 approval 约束 |
+| 结构化交互与 SkillPack 是否可绕过治理 | 否 | InteractionPrompt、MessageDraft 与 SkillPack 都必须进入正式运行和审计流程 |
 | 组织知识图谱是否必须引入独立图库 | 否 | 首版以逻辑图谱模型为主，避免物理实现锁死 |
 | 恢复机制是否内建 | 是 | 长时运行和常驻代理要求恢复成为架构内核 |
 
