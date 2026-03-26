@@ -29,6 +29,7 @@
 - [`docs/AI_PROMPT_HANDBOOK.md`](./docs/AI_PROMPT_HANDBOOK.md)：与 AI 协作推进项目时可直接复用的提示词手册
 - [`docs/VISUAL_FRAMEWORK.md`](./docs/VISUAL_FRAMEWORK.md)：首版 GA 核心交互面的视觉框架与页面语法
 - [`docs/DELIVERY_GOVERNANCE.md`](./docs/DELIVERY_GOVERNANCE.md)：文档类型、ADR/contract/plan/review 流程与 Done 门禁
+- [`docs/contracts/README.md`](./docs/contracts/README.md)：正式 contract 文档目录与首批对象契约索引
 - [`docs/templates/README.md`](./docs/templates/README.md)：任务切片卡、contract、implementation plan 模板入口
 
 ### 建议阅读顺序
@@ -47,6 +48,7 @@
    - AI 提示词手册：`docs/AI_PROMPT_HANDBOOK.md`
    - GA 交互与视觉：`docs/VISUAL_FRAMEWORK.md`
    - 交付与门禁：`docs/DELIVERY_GOVERNANCE.md`
+   - 正式 contract 目录：`docs/contracts/README.md`
    - 模板资产：`docs/templates/README.md`
 
 ## README 与 AGENTS 的分工

@@ -73,7 +73,7 @@
 
 补充说明（截至 2026-03-26 的 tracked repository state）：
 
-- 当前跟踪树已回到 `doc-first rebuild` 状态：正式事实源是根目录文档、`docs/`、`contracts/` 与 `.github/`。
+- 当前跟踪树已回到 `doc-first rebuild` 状态：正式事实源是根目录文档与 `docs/`；`contracts/` 与 `.github/` 当前不在 tracked tree 中，不能被当作已存在资产。
 - 历史 `apps/`、`packages/`、`crates/` 与 workspace manifests 不在当前 tracked tree 中，不能再被当作已实现能力、已存在 runtime 或可执行验证链路。
 - 本文档描述目标态架构与重建约束；若未来重新引入实现骨架，必须以后续 tracked manifests、源码与验证结果为准。
 

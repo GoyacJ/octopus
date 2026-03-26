@@ -46,13 +46,15 @@
 - 工程、AI、视觉、交付治理规范
 - AI 开发协议与模板
 - AI 协作提示词手册
+- Phase 1 项目骨架设计文档与最小 topology ADR
+- Phase 2 首批 `docs/contracts/` 正式契约
+- Phase 3 Slice A 的 task slice card、IA 设计与 implementation plan
 
 当前仍缺失的关键实施资产：
 
-- 项目骨架设计
-- `docs/contracts/` 下的正式契约
-- `docs/plans/` 下的切片级实施计划
 - 第一批真实实现骨架
+- 可运行的 Slice A 最小实现
+- 与真实代码树对应的 manifests、局部 `AGENTS.md`、测试与更高阶验证链路
 
 ## 4. 总体推进顺序
 
@@ -311,10 +313,10 @@
 
 本计划批准后，建议立即启动以下动作：
 
-1. 产出“项目骨架设计”文档
-2. 产出第一批 GA 核心 contract
-3. 产出 Slice A 的 `task slice card`
-4. 产出 Slice A 的 `implementation plan`
+1. 进入 Phase 4，按已批准的骨架设计仅创建 `apps/octopus-desktop/` 与 `crates/octopus-hub/` 的最小代码骨架
+2. 同步创建必要的局部 `AGENTS.md` 与最小 manifest / 构建 / 验证入口
+3. 进入 Phase 5，在不扩出 `packages/`、`crates/octopus-server/`、`apps/octopus-web/` 的前提下实现 Slice A 主链路
+4. 继续按 tracked repo 能力执行 truthful verification，并在实现推进时同步文档
 
 ## 18. 结论
 
