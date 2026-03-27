@@ -1,0 +1,27 @@
+## Delivery Note
+
+- What Changed:
+  - Added Slice 9 task-package documentation, a new runtime migration for MCP server transport metadata and credential persistence, and a new `slice9_real_mcp_transport` integration test suite.
+  - Refactored `crates/interop-mcp` so `McpGateway` now supports both simulated transport and real HTTP JSON-RPC transport with runtime credential resolution, health updates, and normalized external-failure handling.
+  - Extended runtime with MCP credential upsert/query APIs while keeping connector-backed execution inside the existing governed run shell.
+- Why:
+  - The repository needed a truthful real MCP transport boundary for GA slice sequencing without skipping policy, approval, audit, artifact provenance, or knowledge gating.
+- User / System Impact:
+  - Connector-backed runs can now talk to a real HTTP JSON-RPC MCP endpoint using a credential reference resolved inside runtime.
+  - Existing fake Slice 5 and Slice 8 flows continue to work unchanged.
+- Risks:
+  - Secrets are still stored locally in SQLite for this slice and are not yet backed by richer remote-hub auth/persistence.
+  - Only one transport kind is supported today.
+- Rollback Notes:
+  - Revert the Slice 9 migration, `interop-mcp` changes, runtime API additions, and Slice 9 tests together; the simulated transport path remains the fallback baseline.
+- Follow-ups:
+  - Introduce richer remote-hub auth/persistence and secret management in the next planned phase.
+  - Evaluate whether the credential-reference boundary warrants a durable ADR once remote-hub assembly lands.
+- Docs Updated:
+  - Yes. Added the Slice 9 task package and updated `docs/tasks/README.md`.
+- Tests Included:
+  - Yes. Added `crates/runtime/tests/slice9_real_mcp_transport.rs` and re-ran workspace tests.
+- ADR Updated:
+  - No.
+- Temporary Workarounds:
+  - Local SQLite secret storage is the temporary credential backend for this slice.

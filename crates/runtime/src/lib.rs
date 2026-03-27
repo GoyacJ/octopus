@@ -20,7 +20,9 @@ pub use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
     CapabilityDescriptorRecord, CapabilityGrantRecord,
 };
-pub use octopus_interop_mcp::{EnvironmentLeaseRecord, McpInvocationRecord, McpServerRecord};
+pub use octopus_interop_mcp::{
+    EnvironmentLeaseRecord, McpCredentialRecord, McpInvocationRecord, McpServerRecord,
+};
 pub use octopus_knowledge::{KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeSpaceRecord};
 pub use octopus_observe_artifact::{
     ArtifactRecord, AuditRecord, InboxItemRecord, KnowledgeLineageRecord, NotificationRecord,
@@ -53,7 +55,10 @@ pub enum RuntimeError {
         trigger_type: String,
     },
     #[error("cron trigger `{trigger_id}` has invalid schedule `{schedule}`")]
-    InvalidCronSchedule { trigger_id: String, schedule: String },
+    InvalidCronSchedule {
+        trigger_id: String,
+        schedule: String,
+    },
     #[error("webhook event for trigger `{trigger_id}` requires a non-empty idempotency key")]
     MissingWebhookIdempotencyKey { trigger_id: String },
     #[error("webhook event for trigger `{trigger_id}` has invalid secret")]
@@ -184,6 +189,16 @@ impl Slice2Runtime {
         self.run_orchestrator.upsert_mcp_server(record).await
     }
 
+    pub async fn upsert_mcp_credential(
+        &self,
+        record: McpCredentialRecord,
+        secret: &str,
+    ) -> Result<(), RuntimeError> {
+        self.run_orchestrator
+            .upsert_mcp_credential(record, secret)
+            .await
+    }
+
     pub async fn create_task(&self, input: CreateTaskInput) -> Result<TaskRecord, RuntimeError> {
         self.task_intake.create_task(input).await
     }
@@ -242,7 +257,10 @@ impl Slice2Runtime {
         self.automation_intake.fetch_automation(automation_id).await
     }
 
-    pub async fn fetch_trigger(&self, trigger_id: &str) -> Result<Option<TriggerRecord>, RuntimeError> {
+    pub async fn fetch_trigger(
+        &self,
+        trigger_id: &str,
+    ) -> Result<Option<TriggerRecord>, RuntimeError> {
         self.automation_intake.fetch_trigger(trigger_id).await
     }
 
@@ -282,7 +300,10 @@ impl Slice2Runtime {
                 trigger_id: trigger.id.clone(),
             });
         }
-        if !self.automation_intake.verify_webhook_secret(config, &input.secret) {
+        if !self
+            .automation_intake
+            .verify_webhook_secret(config, &input.secret)
+        {
             return Err(RuntimeError::InvalidWebhookSecret {
                 trigger_id: trigger.id.clone(),
             });
@@ -336,9 +357,11 @@ impl Slice2Runtime {
                 .fetch_automation(&trigger.automation_id)
                 .await?
                 .ok_or_else(|| RuntimeError::AutomationNotFound(trigger.automation_id.clone()))?;
-            let next_fire_at = self
-                .automation_intake
-                .compute_next_cron_fire(&trigger.id, config, &scheduled_at)?;
+            let next_fire_at = self.automation_intake.compute_next_cron_fire(
+                &trigger.id,
+                config,
+                &scheduled_at,
+            )?;
             self.automation_intake
                 .update_cron_next_fire_at(&trigger.id, &next_fire_at)
                 .await?;
@@ -545,6 +568,10 @@ impl Slice2Runtime {
         self.run_orchestrator.list_mcp_servers().await
     }
 
+    pub async fn list_mcp_credentials(&self) -> Result<Vec<McpCredentialRecord>, RuntimeError> {
+        self.run_orchestrator.list_mcp_credentials().await
+    }
+
     pub async fn list_mcp_invocations_by_run(
         &self,
         run_id: &str,
@@ -662,7 +689,9 @@ impl Slice2Runtime {
         &self,
         run_id: &str,
     ) -> Result<Vec<KnowledgeAssetRecord>, RuntimeError> {
-        self.knowledge_manager.list_knowledge_assets_by_run(run_id).await
+        self.knowledge_manager
+            .list_knowledge_assets_by_run(run_id)
+            .await
     }
 
     pub async fn list_trigger_deliveries_by_automation(

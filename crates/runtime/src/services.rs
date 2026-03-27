@@ -14,8 +14,8 @@ use octopus_governance::{
     TaskGovernanceInput, DECISION_ALLOW, DECISION_DENY, DECISION_REQUIRE_APPROVAL,
 };
 use octopus_interop_mcp::{
-    EnvironmentLeaseRecord, GatewayExecutionOutcome, GatewayRequest, McpGateway,
-    McpInvocationRecord, McpServerRecord, SqliteInteropStore, KNOWLEDGE_GATE_ELIGIBLE,
+    EnvironmentLeaseRecord, GatewayExecutionOutcome, GatewayRequest, McpCredentialRecord,
+    McpGateway, McpInvocationRecord, McpServerRecord, SqliteInteropStore, KNOWLEDGE_GATE_ELIGIBLE,
 };
 use octopus_knowledge::{
     KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeCaptureRetryRecord,
@@ -374,16 +374,21 @@ impl AutomationIntake {
             })?
             .with_timezone(&Utc)
             .with_timezone(&timezone);
-        let next = schedule.after(&after).next().ok_or_else(|| {
-            RuntimeError::InvalidCronSchedule {
-                trigger_id: trigger_id.to_string(),
-                schedule: config.schedule.clone(),
-            }
-        })?;
+        let next =
+            schedule
+                .after(&after)
+                .next()
+                .ok_or_else(|| RuntimeError::InvalidCronSchedule {
+                    trigger_id: trigger_id.to_string(),
+                    schedule: config.schedule.clone(),
+                })?;
         Ok(next.with_timezone(&Utc).to_rfc3339())
     }
 
-    pub async fn list_due_cron_triggers(&self, now: &str) -> Result<Vec<TriggerRecord>, RuntimeError> {
+    pub async fn list_due_cron_triggers(
+        &self,
+        now: &str,
+    ) -> Result<Vec<TriggerRecord>, RuntimeError> {
         let now = DateTime::parse_from_rfc3339(now)
             .map_err(|_| RuntimeError::InvalidCronSchedule {
                 trigger_id: "cron".to_string(),
@@ -722,7 +727,11 @@ fn trigger_event_pattern(trigger: &TriggerRecord) -> Option<&str> {
 }
 
 fn generate_webhook_secret() -> String {
-    format!("whsec_{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple())
+    format!(
+        "whsec_{}{}",
+        uuid::Uuid::new_v4().simple(),
+        uuid::Uuid::new_v4().simple()
+    )
 }
 
 fn default_secret_hint(secret: &str) -> Option<String> {
@@ -749,7 +758,11 @@ fn wildcard_match(pattern: &str, value: &str) -> bool {
     let anchored_end = !pattern.ends_with('*');
     let mut remainder = value;
 
-    for (index, part) in pattern.split('*').filter(|segment| !segment.is_empty()).enumerate() {
+    for (index, part) in pattern
+        .split('*')
+        .filter(|segment| !segment.is_empty())
+        .enumerate()
+    {
         if index == 0 && anchored_start {
             let Some(stripped) = remainder.strip_prefix(part) else {
                 return false;
@@ -1288,6 +1301,17 @@ impl RunOrchestrator {
         Ok(())
     }
 
+    pub async fn upsert_mcp_credential(
+        &self,
+        record: McpCredentialRecord,
+        secret: &str,
+    ) -> Result<(), RuntimeError> {
+        self.interop_store
+            .upsert_mcp_credential(&record, secret)
+            .await?;
+        Ok(())
+    }
+
     pub async fn list_visible_capabilities(
         &self,
         workspace_id: &str,
@@ -1301,6 +1325,10 @@ impl RunOrchestrator {
 
     pub async fn list_mcp_servers(&self) -> Result<Vec<McpServerRecord>, RuntimeError> {
         Ok(self.interop_store.list_mcp_servers().await?)
+    }
+
+    pub async fn list_mcp_credentials(&self) -> Result<Vec<McpCredentialRecord>, RuntimeError> {
+        Ok(self.interop_store.list_mcp_credentials().await?)
     }
 
     pub async fn list_mcp_invocations_by_run(

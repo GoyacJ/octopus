@@ -1,0 +1,58 @@
+## Design Note
+
+- Problem:
+  - Slice 5 proved governed MCP-backed execution with a fake/test-double transport, but the tracked repository still lacks a truthful credential-aware transport boundary for real connector calls.
+- Goal:
+  - Add one real HTTP JSON-RPC MCP transport path plus runtime credential resolution while preserving `RunOrchestrator` as the only execution shell.
+- Acceptance Criteria:
+  - `RunOrchestrator` continues to choose between built-in execution and connector-backed gateway execution after governance decisions are complete.
+  - `octopus-interop-mcp` supports both `SimulatedTransport` and `HttpMcpTransport` behind the same `McpGateway`.
+  - Credential resolution happens inside the interop boundary and external failures normalize into auditable invocation failures.
+  - Artifact provenance, trust level, approval flow, retry/reopen behavior, and knowledge gate semantics stay unchanged.
+- Non-functional Constraints:
+  - No plaintext credential material in query DTOs.
+  - No second execution shell.
+  - No app-layer or TS-client surface expansion in this slice.
+- MVP Boundary:
+  - One outbound HTTP JSON-RPC transport only.
+  - One minimal credential-reference model resolved at runtime.
+  - Minimal health-state tracking only: success/failure, last checked time, disabled/degraded state.
+- Layer Placement:
+  - MCP transport, credential persistence, resolution, and health mutation live in `crates/interop-mcp`.
+  - `crates/runtime` only wires orchestration and exposes minimal registry/query APIs needed by tests and later assembly.
+  - No new client-facing app/package layer work.
+- Module Boundaries:
+  - `RunOrchestrator` remains the only authority execution shell.
+  - `McpGateway` owns lease acquisition/release, credential resolution, transport invocation, health updates, and invocation persistence.
+  - `SqliteInteropStore` owns MCP server, credential, lease, and invocation persistence.
+- Inputs:
+  - Connector-backed `ExecutionAction::ConnectorCall`
+  - Registered `McpServerRecord`
+  - Registered credential reference plus secret material
+  - Existing governance approval/budget/policy outcomes
+- Outputs:
+  - Existing `GatewayExecutionOutcome` success/failure results with unchanged artifact/trust metadata shape.
+- State Transitions:
+  - `Run`, `ApprovalRequest`, `EnvironmentLease`, `Artifact`, and knowledge-capture state transitions remain unchanged.
+  - `McpServerRecord.health_status` moves between `unknown` or configured state, `healthy`, `degraded`, and manually seeded `disabled`.
+- Error Handling:
+  - Missing credential, unresolved credential, HTTP auth rejection, timeout, unreachable endpoint, non-2xx, invalid JSON-RPC, and JSON-RPC error results normalize inside `McpGateway` into failed invocations with explicit retryability.
+  - Store/migration failures remain hard errors.
+- Tech Stack Decision:
+  - Add `reqwest` for outbound HTTP transport and reuse existing `serde`/`serde_json` stack for JSON-RPC encoding/decoding.
+- Visual Framework Impact:
+  - None.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - Existing runtime governance shell, environment lease records, invocation records, artifact provenance, and knowledge-gate evaluation helpers.
+- New Abstractions:
+  - Transport adapter boundary inside `octopus-interop-mcp`.
+  - Minimal credential-reference persistence and resolver.
+- Trade-offs:
+  - This slice intentionally stops at one HTTP JSON-RPC transport and local secret persistence, leaving richer remote-hub auth/persistence and broader provider ecosystems to later slices.
+- Test Strategy:
+  - Write failing runtime integration tests first for HTTP success, approval wait/resume, retry-after-reopen, normalized transport failures, and low-trust knowledge gating.
+  - Keep Slice 5 and Slice 8 regressions green by retaining the simulated transport.
+- ADR Needed:
+  - Maybe. Add one only if the credential-reference boundary becomes durable repository guidance beyond this slice.

@@ -1,0 +1,29 @@
+## Contract Change
+
+- Change Type:
+  - Internal Interface
+  - Persistence Model
+- New / Updated Schemas:
+  - None for shared TS/client contracts by default.
+- New / Updated Commands:
+  - Rust runtime API gains MCP credential upsert/query helpers for slice-scoped assembly and tests.
+- New / Updated Queries:
+  - Rust runtime API gains credential-reference inspection and server-health observation through interop-backed queries.
+- New / Updated Events:
+  - None.
+- New / Updated DTOs:
+  - `McpServerRecord` gains transport metadata required for real HTTP JSON-RPC execution.
+  - Add `McpCredentialRecord` query DTO with reference metadata only.
+- Compatibility Impact:
+  - Compatible for existing runtime consumers that continue using simulated MCP server registration.
+  - Existing fake Slice 5 and Slice 8 tests remain supported through the simulated transport adapter.
+- Affected Consumers:
+  - Rust runtime tests
+  - Future remote-hub assembly code in Rust
+- Migration Notes:
+  - Extend `mcp_servers` for transport metadata.
+  - Add MCP credential persistence for reference metadata and secret material.
+- Generation Impact:
+  - None unless a later tracked consumer requires shared contracts under `schemas/interop`.
+- Open Questions:
+  - Whether the credential-reference boundary should graduate into a durable ADR after implementation.

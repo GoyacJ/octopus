@@ -48,6 +48,7 @@ Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-d
 - [2026-03-27-slice-6-cron-trigger](2026/2026-03-27-slice-6-cron-trigger/README.md)
 - [2026-03-27-slice-7-webhook-trigger](2026/2026-03-27-slice-7-webhook-trigger/README.md)
 - [2026-03-27-slice-8-mcp-event-trigger](2026/2026-03-27-slice-8-mcp-event-trigger/README.md)
+- [2026-03-27-slice-9-real-mcp-transport-credentials](2026/2026-03-27-slice-9-real-mcp-transport-credentials/README.md)
 
 ## Relationship To ADRs
 

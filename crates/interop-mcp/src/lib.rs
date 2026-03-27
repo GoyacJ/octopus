@@ -1,4 +1,10 @@
+use std::time::Duration as StdDuration;
+
 use chrono::{Duration, Utc};
+use reqwest::{
+    header::{HeaderMap, HeaderName, HeaderValue},
+    Client, StatusCode,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sqlx::{Row, SqlitePool};
@@ -10,12 +16,27 @@ pub const PROVENANCE_SOURCE_MCP_CONNECTOR: &str = "mcp_connector";
 pub const KNOWLEDGE_GATE_ELIGIBLE: &str = "eligible";
 pub const KNOWLEDGE_GATE_BLOCKED_LOW_TRUST: &str = "blocked_low_trust";
 
+pub const TRANSPORT_KIND_SIMULATED: &str = "simulated";
+pub const TRANSPORT_KIND_HTTP_JSONRPC: &str = "http_jsonrpc";
+
+pub const HEALTH_STATUS_UNKNOWN: &str = "unknown";
+pub const HEALTH_STATUS_HEALTHY: &str = "healthy";
+pub const HEALTH_STATUS_DEGRADED: &str = "degraded";
+pub const HEALTH_STATUS_DISABLED: &str = "disabled";
+
+pub const CREDENTIAL_KIND_BEARER_TOKEN: &str = "bearer_token";
+pub const CREDENTIAL_KIND_STATIC_HEADER: &str = "static_header";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct McpServerRecord {
     pub id: String,
     pub capability_id: String,
     pub namespace: String,
     pub platform: String,
+    pub transport_kind: String,
+    pub endpoint: Option<String>,
+    pub request_timeout_ms: i64,
+    pub credential_ref: Option<String>,
     pub trust_level: String,
     pub health_status: String,
     pub lease_ttl_seconds: i64,
@@ -39,14 +60,100 @@ impl McpServerRecord {
             capability_id: capability_id.into(),
             namespace: namespace.into(),
             platform: platform.into(),
+            transport_kind: TRANSPORT_KIND_SIMULATED.to_string(),
+            endpoint: None,
+            request_timeout_ms: 1_000,
+            credential_ref: None,
             trust_level: trust_level.into(),
-            health_status: "healthy".to_string(),
+            health_status: HEALTH_STATUS_HEALTHY.to_string(),
             lease_ttl_seconds,
             created_at: now.clone(),
             updated_at: now.clone(),
             last_checked_at: now,
         }
     }
+
+    pub fn new_http(
+        id: impl Into<String>,
+        capability_id: impl Into<String>,
+        namespace: impl Into<String>,
+        platform: impl Into<String>,
+        trust_level: impl Into<String>,
+        lease_ttl_seconds: i64,
+        endpoint: impl Into<String>,
+        request_timeout_ms: i64,
+        credential_ref: Option<impl Into<String>>,
+    ) -> Self {
+        let now = current_timestamp();
+        Self {
+            id: id.into(),
+            capability_id: capability_id.into(),
+            namespace: namespace.into(),
+            platform: platform.into(),
+            transport_kind: TRANSPORT_KIND_HTTP_JSONRPC.to_string(),
+            endpoint: Some(endpoint.into()),
+            request_timeout_ms: request_timeout_ms.max(1),
+            credential_ref: credential_ref.map(|value| value.into()),
+            trust_level: trust_level.into(),
+            health_status: HEALTH_STATUS_UNKNOWN.to_string(),
+            lease_ttl_seconds,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            last_checked_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct McpCredentialRecord {
+    pub id: String,
+    pub namespace: String,
+    pub credential_kind: String,
+    pub header_name: String,
+    pub auth_scheme: Option<String>,
+    pub secret_present: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl McpCredentialRecord {
+    pub fn bearer_token(id: impl Into<String>, namespace: impl Into<String>) -> Self {
+        let now = current_timestamp();
+        Self {
+            id: id.into(),
+            namespace: namespace.into(),
+            credential_kind: CREDENTIAL_KIND_BEARER_TOKEN.to_string(),
+            header_name: "Authorization".to_string(),
+            auth_scheme: Some("Bearer".to_string()),
+            secret_present: false,
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+
+    pub fn static_header(
+        id: impl Into<String>,
+        namespace: impl Into<String>,
+        header_name: impl Into<String>,
+    ) -> Self {
+        let now = current_timestamp();
+        Self {
+            id: id.into(),
+            namespace: namespace.into(),
+            credential_kind: CREDENTIAL_KIND_STATIC_HEADER.to_string(),
+            header_name: header_name.into(),
+            auth_scheme: None,
+            secret_present: false,
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct StoredMcpCredentialRecord {
+    record: McpCredentialRecord,
+    secret_value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -210,11 +317,341 @@ pub struct GatewayRequest {
 }
 
 #[derive(Debug, Clone)]
-struct SimulatedToolResult {
+struct TransportExecutionResult {
     content: Option<String>,
     response_json: Option<Value>,
     error_message: Option<String>,
     retryable: bool,
+    health_status: String,
+}
+
+#[derive(Debug)]
+enum CredentialResolutionError {
+    Store(InteropStoreError),
+    Normalized(TransportExecutionResult),
+}
+
+impl TransportExecutionResult {
+    fn succeeded(content: String, response_json: Option<Value>) -> Self {
+        Self {
+            content: Some(content),
+            response_json,
+            error_message: None,
+            retryable: false,
+            health_status: HEALTH_STATUS_HEALTHY.to_string(),
+        }
+    }
+
+    fn failed(
+        message: impl Into<String>,
+        retryable: bool,
+        response_json: Option<Value>,
+        health_status: impl Into<String>,
+    ) -> Self {
+        Self {
+            content: None,
+            response_json,
+            error_message: Some(message.into()),
+            retryable,
+            health_status: health_status.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SimulatedTransport;
+
+impl SimulatedTransport {
+    async fn execute(&self, request: &GatewayRequest) -> TransportExecutionResult {
+        match request.tool_name.as_str() {
+            "emit_text" => match required_string(&request.arguments, "content", &request.tool_name)
+            {
+                Ok(content) => TransportExecutionResult::succeeded(
+                    content.clone(),
+                    Some(json!({ "content": content })),
+                ),
+                Err(message) => {
+                    TransportExecutionResult::failed(message, false, None, HEALTH_STATUS_HEALTHY)
+                }
+            },
+            "fail_once_then_emit_text" => {
+                let failure_message = match required_string(
+                    &request.arguments,
+                    "failure_message",
+                    &request.tool_name,
+                ) {
+                    Ok(value) => value,
+                    Err(message) => {
+                        return TransportExecutionResult::failed(
+                            message,
+                            false,
+                            None,
+                            HEALTH_STATUS_HEALTHY,
+                        );
+                    }
+                };
+                let content =
+                    match required_string(&request.arguments, "content", &request.tool_name) {
+                        Ok(value) => value,
+                        Err(message) => {
+                            return TransportExecutionResult::failed(
+                                message,
+                                false,
+                                None,
+                                HEALTH_STATUS_HEALTHY,
+                            );
+                        }
+                    };
+
+                if request.attempt <= 1 {
+                    TransportExecutionResult::failed(
+                        failure_message,
+                        true,
+                        None,
+                        HEALTH_STATUS_HEALTHY,
+                    )
+                } else {
+                    TransportExecutionResult::succeeded(
+                        content.clone(),
+                        Some(json!({ "content": content })),
+                    )
+                }
+            }
+            "always_fail" => {
+                match required_string(&request.arguments, "message", &request.tool_name) {
+                    Ok(message) => TransportExecutionResult::failed(
+                        message,
+                        false,
+                        None,
+                        HEALTH_STATUS_HEALTHY,
+                    ),
+                    Err(message) => TransportExecutionResult::failed(
+                        message,
+                        false,
+                        None,
+                        HEALTH_STATUS_HEALTHY,
+                    ),
+                }
+            }
+            _ => TransportExecutionResult::failed(
+                format!("unsupported fake tool `{}`", request.tool_name),
+                false,
+                None,
+                HEALTH_STATUS_HEALTHY,
+            ),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct HttpMcpTransport {
+    client: Client,
+}
+
+impl HttpMcpTransport {
+    fn new() -> Self {
+        Self {
+            client: Client::new(),
+        }
+    }
+
+    async fn execute(
+        &self,
+        store: &SqliteInteropStore,
+        server: &McpServerRecord,
+        request: &GatewayRequest,
+    ) -> Result<TransportExecutionResult, InteropStoreError> {
+        if server.health_status == HEALTH_STATUS_DISABLED {
+            return Ok(TransportExecutionResult::failed(
+                format!("mcp server `{}` is disabled", server.id),
+                false,
+                None,
+                HEALTH_STATUS_DISABLED,
+            ));
+        }
+
+        let Some(endpoint) = server.endpoint.as_deref() else {
+            return Ok(TransportExecutionResult::failed(
+                format!("mcp server `{}` missing endpoint", server.id),
+                false,
+                None,
+                HEALTH_STATUS_DEGRADED,
+            ));
+        };
+        if endpoint.trim().is_empty() {
+            return Ok(TransportExecutionResult::failed(
+                format!("mcp server `{}` missing endpoint", server.id),
+                false,
+                None,
+                HEALTH_STATUS_DEGRADED,
+            ));
+        }
+
+        let headers = match self.resolve_headers(store, server).await {
+            Ok(headers) => headers,
+            Err(CredentialResolutionError::Store(error)) => return Err(error),
+            Err(CredentialResolutionError::Normalized(result)) => return Ok(result),
+        };
+        let payload = json!({
+            "jsonrpc": "2.0",
+            "id": format!("{}:{}", request.run_id, request.attempt),
+            "method": "tools/call",
+            "params": {
+                "name": request.tool_name,
+                "arguments": request.arguments,
+                "namespace": server.namespace,
+            }
+        });
+
+        let response = match self
+            .client
+            .post(endpoint)
+            .headers(headers)
+            .timeout(StdDuration::from_millis(
+                server.request_timeout_ms.max(1) as u64
+            ))
+            .json(&payload)
+            .send()
+            .await
+        {
+            Ok(response) => response,
+            Err(error) => return Ok(normalize_reqwest_error(error)),
+        };
+
+        let status = response.status();
+        let body = match response.text().await {
+            Ok(body) => body,
+            Err(error) => {
+                return Ok(TransportExecutionResult::failed(
+                    format!("mcp transport response read failed: {error}"),
+                    true,
+                    None,
+                    HEALTH_STATUS_DEGRADED,
+                ));
+            }
+        };
+
+        if !status.is_success() {
+            return Ok(normalize_http_status(status, body));
+        }
+
+        let response_json = match serde_json::from_str::<Value>(&body) {
+            Ok(value) => value,
+            Err(_) => {
+                return Ok(TransportExecutionResult::failed(
+                    "invalid JSON-RPC response from MCP server",
+                    false,
+                    Some(json!({ "raw_body": body })),
+                    HEALTH_STATUS_DEGRADED,
+                ));
+            }
+        };
+
+        Ok(parse_jsonrpc_response(response_json))
+    }
+
+    async fn resolve_headers(
+        &self,
+        store: &SqliteInteropStore,
+        server: &McpServerRecord,
+    ) -> Result<HeaderMap, CredentialResolutionError> {
+        let mut headers = HeaderMap::new();
+
+        let Some(credential_ref) = server.credential_ref.as_deref() else {
+            return Ok(headers);
+        };
+
+        let Some(credential) = store
+            .fetch_stored_mcp_credential(credential_ref)
+            .await
+            .map_err(CredentialResolutionError::Store)?
+        else {
+            headers.insert(
+                "x-octopus-missing-credential",
+                HeaderValue::from_static("true"),
+            );
+            return Err(CredentialResolutionError::Normalized(
+                TransportExecutionResult::failed(
+                    format!("credential reference `{credential_ref}` not found"),
+                    false,
+                    None,
+                    HEALTH_STATUS_DEGRADED,
+                ),
+            ));
+        };
+
+        if credential.secret_value.trim().is_empty() {
+            return Err(CredentialResolutionError::Normalized(
+                TransportExecutionResult::failed(
+                    format!("credential reference `{credential_ref}` has no secret material"),
+                    false,
+                    None,
+                    HEALTH_STATUS_DEGRADED,
+                ),
+            ));
+        }
+
+        let header_name = match HeaderName::from_bytes(credential.record.header_name.as_bytes()) {
+            Ok(name) => name,
+            Err(_) => {
+                return Err(CredentialResolutionError::Normalized(
+                    TransportExecutionResult::failed(
+                        format!("credential reference `{credential_ref}` has invalid header name"),
+                        false,
+                        None,
+                        HEALTH_STATUS_DEGRADED,
+                    ),
+                ));
+            }
+        };
+        let header_value_raw = match credential.record.credential_kind.as_str() {
+            CREDENTIAL_KIND_BEARER_TOKEN => format!(
+                "{} {}",
+                credential
+                    .record
+                    .auth_scheme
+                    .as_deref()
+                    .unwrap_or("Bearer")
+                    .trim(),
+                credential.secret_value
+            ),
+            CREDENTIAL_KIND_STATIC_HEADER => credential.secret_value.clone(),
+            other => {
+                return Err(CredentialResolutionError::Normalized(
+                    TransportExecutionResult::failed(
+                        format!(
+                            "credential reference `{credential_ref}` uses unsupported kind `{other}`"
+                        ),
+                        false,
+                        None,
+                        HEALTH_STATUS_DEGRADED,
+                    ),
+                ));
+            }
+        };
+        let header_value = match HeaderValue::from_str(header_value_raw.trim()) {
+            Ok(value) => value,
+            Err(_) => {
+                return Err(CredentialResolutionError::Normalized(
+                    TransportExecutionResult::failed(
+                        format!(
+                            "credential reference `{credential_ref}` produced invalid header value"
+                        ),
+                        false,
+                        None,
+                        HEALTH_STATUS_DEGRADED,
+                    ),
+                ));
+            }
+        };
+
+        headers.insert(header_name, header_value);
+        store
+            .touch_mcp_credential(&credential.record.id)
+            .await
+            .map_err(CredentialResolutionError::Store)?;
+        Ok(headers)
+    }
 }
 
 #[derive(Debug, Error)]
@@ -254,13 +691,18 @@ impl SqliteInteropStore {
         sqlx::query(
             r#"
             INSERT INTO mcp_servers (
-                id, capability_id, namespace, platform, trust_level, health_status,
+                id, capability_id, namespace, platform, transport_kind, endpoint,
+                request_timeout_ms, credential_ref, trust_level, health_status,
                 lease_ttl_seconds, created_at, updated_at, last_checked_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             ON CONFLICT(id) DO UPDATE SET
                 capability_id = excluded.capability_id,
                 namespace = excluded.namespace,
                 platform = excluded.platform,
+                transport_kind = excluded.transport_kind,
+                endpoint = excluded.endpoint,
+                request_timeout_ms = excluded.request_timeout_ms,
+                credential_ref = excluded.credential_ref,
                 trust_level = excluded.trust_level,
                 health_status = excluded.health_status,
                 lease_ttl_seconds = excluded.lease_ttl_seconds,
@@ -272,6 +714,10 @@ impl SqliteInteropStore {
         .bind(&record.capability_id)
         .bind(&record.namespace)
         .bind(&record.platform)
+        .bind(&record.transport_kind)
+        .bind(&record.endpoint)
+        .bind(record.request_timeout_ms)
+        .bind(&record.credential_ref)
         .bind(&record.trust_level)
         .bind(&record.health_status)
         .bind(record.lease_ttl_seconds)
@@ -287,7 +733,8 @@ impl SqliteInteropStore {
     pub async fn list_mcp_servers(&self) -> Result<Vec<McpServerRecord>, InteropStoreError> {
         let rows = sqlx::query(
             r#"
-            SELECT id, capability_id, namespace, platform, trust_level, health_status,
+            SELECT id, capability_id, namespace, platform, transport_kind, endpoint,
+                   request_timeout_ms, credential_ref, trust_level, health_status,
                    lease_ttl_seconds, created_at, updated_at, last_checked_at
             FROM mcp_servers
             ORDER BY created_at ASC
@@ -308,7 +755,8 @@ impl SqliteInteropStore {
     ) -> Result<Option<McpServerRecord>, InteropStoreError> {
         let row = sqlx::query(
             r#"
-            SELECT id, capability_id, namespace, platform, trust_level, health_status,
+            SELECT id, capability_id, namespace, platform, transport_kind, endpoint,
+                   request_timeout_ms, credential_ref, trust_level, health_status,
                    lease_ttl_seconds, created_at, updated_at, last_checked_at
             FROM mcp_servers
             WHERE capability_id = ?1
@@ -322,6 +770,70 @@ impl SqliteInteropStore {
 
         row.map(|row| mcp_server_from_row(&row))
             .transpose()
+            .map_err(InteropStoreError::from)
+    }
+
+    pub async fn upsert_mcp_credential(
+        &self,
+        record: &McpCredentialRecord,
+        secret: &str,
+    ) -> Result<(), InteropStoreError> {
+        let secret_present = !secret.trim().is_empty();
+        let updated_at = current_timestamp();
+        let created_at = if record.created_at.is_empty() {
+            updated_at.clone()
+        } else {
+            record.created_at.clone()
+        };
+
+        sqlx::query(
+            r#"
+            INSERT INTO mcp_credentials (
+                id, namespace, credential_kind, header_name, auth_scheme, secret_value,
+                secret_present, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            ON CONFLICT(id) DO UPDATE SET
+                namespace = excluded.namespace,
+                credential_kind = excluded.credential_kind,
+                header_name = excluded.header_name,
+                auth_scheme = excluded.auth_scheme,
+                secret_value = excluded.secret_value,
+                secret_present = excluded.secret_present,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.namespace)
+        .bind(&record.credential_kind)
+        .bind(&record.header_name)
+        .bind(&record.auth_scheme)
+        .bind(secret)
+        .bind(secret_present)
+        .bind(created_at)
+        .bind(updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn list_mcp_credentials(
+        &self,
+    ) -> Result<Vec<McpCredentialRecord>, InteropStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, namespace, credential_kind, header_name, auth_scheme,
+                   secret_present, created_at, updated_at
+            FROM mcp_credentials
+            ORDER BY created_at ASC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|row| mcp_credential_from_row(&row))
+            .collect::<Result<Vec<_>, _>>()
             .map_err(InteropStoreError::from)
     }
 
@@ -510,6 +1022,66 @@ impl SqliteInteropStore {
             .map_err(InteropStoreError::from)
     }
 
+    async fn fetch_stored_mcp_credential(
+        &self,
+        credential_id: &str,
+    ) -> Result<Option<StoredMcpCredentialRecord>, InteropStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, namespace, credential_kind, header_name, auth_scheme,
+                   secret_value, secret_present, created_at, updated_at
+            FROM mcp_credentials
+            WHERE id = ?1
+            LIMIT 1
+            "#,
+        )
+        .bind(credential_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| stored_mcp_credential_from_row(&row))
+            .transpose()
+            .map_err(InteropStoreError::from)
+    }
+
+    async fn touch_mcp_credential(&self, credential_id: &str) -> Result<(), InteropStoreError> {
+        sqlx::query(
+            r#"
+            UPDATE mcp_credentials
+            SET updated_at = ?2
+            WHERE id = ?1
+            "#,
+        )
+        .bind(credential_id)
+        .bind(current_timestamp())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn update_mcp_server_health(
+        &self,
+        server_id: &str,
+        health_status: &str,
+    ) -> Result<(), InteropStoreError> {
+        let now = current_timestamp();
+        sqlx::query(
+            r#"
+            UPDATE mcp_servers
+            SET health_status = ?2,
+                last_checked_at = ?3,
+                updated_at = ?3
+            WHERE id = ?1
+            "#,
+        )
+        .bind(server_id)
+        .bind(health_status)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     async fn fetch_environment_lease(
         &self,
         lease_id: &str,
@@ -592,11 +1164,17 @@ impl SqliteInteropStore {
 #[derive(Debug, Clone)]
 pub struct McpGateway {
     store: SqliteInteropStore,
+    simulated_transport: SimulatedTransport,
+    http_transport: HttpMcpTransport,
 }
 
 impl McpGateway {
     pub fn new(store: SqliteInteropStore) -> Self {
-        Self { store }
+        Self {
+            store,
+            simulated_transport: SimulatedTransport,
+            http_transport: HttpMcpTransport::new(),
+        }
     }
 
     pub async fn execute(
@@ -622,13 +1200,13 @@ impl McpGateway {
                 server.lease_ttl_seconds,
             )
             .await?;
-        let simulation = simulate_tool_call(
-            request.tool_name.as_str(),
-            &request.arguments,
-            request.attempt,
-        )?;
-        let gate_status = gate_status_for_trust(server.trust_level.as_str()).to_string();
 
+        let execution = self.execute_transport(&server, &request).await?;
+        self.store
+            .update_mcp_server_health(&server.id, &execution.health_status)
+            .await?;
+
+        let gate_status = gate_status_for_trust(server.trust_level.as_str()).to_string();
         let invocation = McpInvocationRecord::completed(
             &request.workspace_id,
             &request.project_id,
@@ -640,24 +1218,24 @@ impl McpGateway {
             &server.namespace,
             &request.tool_name,
             request.arguments.clone(),
-            simulation.response_json.clone(),
-            if simulation.error_message.is_some() {
+            execution.response_json.clone(),
+            if execution.error_message.is_some() {
                 "failed"
             } else {
                 "succeeded"
             },
-            simulation.error_message.clone(),
-            simulation.retryable,
+            execution.error_message.clone(),
+            execution.retryable,
             &server.trust_level,
             &gate_status,
         );
         self.store.insert_mcp_invocation(&invocation).await?;
         let released_lease = self.store.release_environment_lease(&lease.id).await?;
 
-        if let Some(message) = simulation.error_message {
+        if let Some(message) = execution.error_message {
             return Ok(GatewayExecutionOutcome::Failed(GatewayExecutionFailure {
                 message,
-                retryable: simulation.retryable,
+                retryable: execution.retryable,
                 invocation,
                 lease: released_lease,
             }));
@@ -665,7 +1243,7 @@ impl McpGateway {
 
         Ok(GatewayExecutionOutcome::Succeeded(
             GatewayExecutionSuccess {
-                content: simulation.content.unwrap_or_default(),
+                content: execution.content.unwrap_or_default(),
                 invocation: invocation.clone(),
                 lease: released_lease,
                 artifact_metadata: GatewayArtifactMetadata {
@@ -678,71 +1256,158 @@ impl McpGateway {
             },
         ))
     }
-}
 
-fn simulate_tool_call(
-    tool_name: &str,
-    arguments: &Value,
-    attempt: i64,
-) -> Result<SimulatedToolResult, InteropStoreError> {
-    match tool_name {
-        "emit_text" => {
-            let content = required_string(arguments, "content", tool_name)?;
-            Ok(SimulatedToolResult {
-                content: Some(content.clone()),
-                response_json: Some(json!({ "content": content })),
-                error_message: None,
-                retryable: false,
-            })
-        }
-        "fail_once_then_emit_text" => {
-            let failure_message = required_string(arguments, "failure_message", tool_name)?;
-            let content = required_string(arguments, "content", tool_name)?;
-            if attempt <= 1 {
-                Ok(SimulatedToolResult {
-                    content: None,
-                    response_json: None,
-                    error_message: Some(failure_message),
-                    retryable: true,
-                })
-            } else {
-                Ok(SimulatedToolResult {
-                    content: Some(content.clone()),
-                    response_json: Some(json!({ "content": content })),
-                    error_message: None,
-                    retryable: false,
-                })
+    async fn execute_transport(
+        &self,
+        server: &McpServerRecord,
+        request: &GatewayRequest,
+    ) -> Result<TransportExecutionResult, InteropStoreError> {
+        match server.transport_kind.as_str() {
+            TRANSPORT_KIND_SIMULATED => Ok(self.simulated_transport.execute(request).await),
+            TRANSPORT_KIND_HTTP_JSONRPC => {
+                self.http_transport
+                    .execute(&self.store, server, request)
+                    .await
             }
+            other => Ok(TransportExecutionResult::failed(
+                format!("unsupported MCP transport `{other}`"),
+                false,
+                None,
+                HEALTH_STATUS_DEGRADED,
+            )),
         }
-        "always_fail" => {
-            let message = required_string(arguments, "message", tool_name)?;
-            Ok(SimulatedToolResult {
-                content: None,
-                response_json: None,
-                error_message: Some(message),
-                retryable: false,
-            })
-        }
-        _ => Err(InteropStoreError::InvalidToolArguments {
-            tool_name: tool_name.to_string(),
-            message: "unsupported fake tool".to_string(),
-        }),
     }
 }
 
-fn required_string(
-    arguments: &Value,
-    field: &str,
-    tool_name: &str,
-) -> Result<String, InteropStoreError> {
+fn required_string(arguments: &Value, field: &str, tool_name: &str) -> Result<String, String> {
     arguments
         .get(field)
         .and_then(Value::as_str)
         .map(str::to_string)
-        .ok_or_else(|| InteropStoreError::InvalidToolArguments {
-            tool_name: tool_name.to_string(),
-            message: format!("missing `{field}` string"),
+        .ok_or_else(|| {
+            format!("invalid MCP tool arguments for `{tool_name}`: missing `{field}` string")
         })
+}
+
+fn normalize_reqwest_error(error: reqwest::Error) -> TransportExecutionResult {
+    if error.is_timeout() {
+        return TransportExecutionResult::failed(
+            "mcp transport timeout",
+            true,
+            Some(json!({ "error": error.to_string() })),
+            HEALTH_STATUS_DEGRADED,
+        );
+    }
+
+    if error.is_connect() {
+        return TransportExecutionResult::failed(
+            "mcp transport connection failed",
+            true,
+            Some(json!({ "error": error.to_string() })),
+            HEALTH_STATUS_DEGRADED,
+        );
+    }
+
+    TransportExecutionResult::failed(
+        format!("mcp transport request failed: {error}"),
+        true,
+        Some(json!({ "error": error.to_string() })),
+        HEALTH_STATUS_DEGRADED,
+    )
+}
+
+fn normalize_http_status(status: StatusCode, body: String) -> TransportExecutionResult {
+    let retryable = matches!(
+        status,
+        StatusCode::REQUEST_TIMEOUT
+            | StatusCode::TOO_MANY_REQUESTS
+            | StatusCode::BAD_GATEWAY
+            | StatusCode::SERVICE_UNAVAILABLE
+            | StatusCode::GATEWAY_TIMEOUT
+    ) || status.is_server_error();
+    let message = match status {
+        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
+            "mcp transport unauthorized".to_string()
+        }
+        _ => format!("mcp transport returned HTTP {}", status.as_u16()),
+    };
+
+    TransportExecutionResult::failed(
+        message,
+        retryable,
+        Some(json!({
+            "http_status": status.as_u16(),
+            "body": body,
+        })),
+        HEALTH_STATUS_DEGRADED,
+    )
+}
+
+fn parse_jsonrpc_response(response_json: Value) -> TransportExecutionResult {
+    if let Some(error) = response_json.get("error") {
+        let message = error
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("mcp JSON-RPC error")
+            .to_string();
+        let retryable = error
+            .get("data")
+            .and_then(|data| data.get("retryable"))
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        return TransportExecutionResult::failed(
+            message,
+            retryable,
+            Some(response_json),
+            HEALTH_STATUS_DEGRADED,
+        );
+    }
+
+    let Some(result) = response_json.get("result") else {
+        return TransportExecutionResult::failed(
+            "invalid JSON-RPC response from MCP server",
+            false,
+            Some(response_json),
+            HEALTH_STATUS_DEGRADED,
+        );
+    };
+
+    let Some(content) = extract_result_content(result) else {
+        return TransportExecutionResult::failed(
+            "invalid JSON-RPC response from MCP server",
+            false,
+            Some(response_json),
+            HEALTH_STATUS_DEGRADED,
+        );
+    };
+
+    TransportExecutionResult::succeeded(content, Some(response_json))
+}
+
+fn extract_result_content(result: &Value) -> Option<String> {
+    if let Some(content) = result.get("content").and_then(Value::as_str) {
+        return Some(content.to_string());
+    }
+
+    if let Some(text) = result.get("text").and_then(Value::as_str) {
+        return Some(text.to_string());
+    }
+
+    let items = result.get("content")?.as_array()?;
+    let texts: Vec<&str> = items
+        .iter()
+        .filter_map(|item| match item {
+            Value::String(text) => Some(text.as_str()),
+            Value::Object(_) => item.get("text").and_then(Value::as_str),
+            _ => None,
+        })
+        .collect();
+
+    if texts.is_empty() {
+        None
+    } else {
+        Some(texts.join("\n"))
+    }
 }
 
 fn gate_status_for_trust(trust_level: &str) -> &'static str {
@@ -759,12 +1424,49 @@ fn mcp_server_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<McpServerRecord,
         capability_id: row.try_get("capability_id")?,
         namespace: row.try_get("namespace")?,
         platform: row.try_get("platform")?,
+        transport_kind: row.try_get("transport_kind")?,
+        endpoint: row.try_get("endpoint")?,
+        request_timeout_ms: row.try_get("request_timeout_ms")?,
+        credential_ref: row.try_get("credential_ref")?,
         trust_level: row.try_get("trust_level")?,
         health_status: row.try_get("health_status")?,
         lease_ttl_seconds: row.try_get("lease_ttl_seconds")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
         last_checked_at: row.try_get("last_checked_at")?,
+    })
+}
+
+fn mcp_credential_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<McpCredentialRecord, sqlx::Error> {
+    Ok(McpCredentialRecord {
+        id: row.try_get("id")?,
+        namespace: row.try_get("namespace")?,
+        credential_kind: row.try_get("credential_kind")?,
+        header_name: row.try_get("header_name")?,
+        auth_scheme: row.try_get("auth_scheme")?,
+        secret_present: row.try_get("secret_present")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn stored_mcp_credential_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<StoredMcpCredentialRecord, sqlx::Error> {
+    Ok(StoredMcpCredentialRecord {
+        record: McpCredentialRecord {
+            id: row.try_get("id")?,
+            namespace: row.try_get("namespace")?,
+            credential_kind: row.try_get("credential_kind")?,
+            header_name: row.try_get("header_name")?,
+            auth_scheme: row.try_get("auth_scheme")?,
+            secret_present: row.try_get("secret_present")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
+        },
+        secret_value: row.try_get("secret_value")?,
     })
 }
 
