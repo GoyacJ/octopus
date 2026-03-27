@@ -199,24 +199,107 @@ impl AutomationRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ManualEventTriggerConfig {}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CronTriggerConfig {
+    pub schedule: String,
+    pub timezone: String,
+    pub next_fire_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WebhookTriggerConfig {
+    pub ingress_mode: String,
+    pub secret_header_name: String,
+    pub secret_hint: Option<String>,
+    pub secret_present: bool,
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub secret_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct McpEventTriggerConfig {
+    pub server_id: String,
+    pub event_name: Option<String>,
+    pub event_pattern: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "trigger_type", rename_all = "snake_case")]
+pub enum TriggerSpec {
+    ManualEvent { config: ManualEventTriggerConfig },
+    Cron { config: CronTriggerConfig },
+    Webhook { config: WebhookTriggerConfig },
+    McpEvent { config: McpEventTriggerConfig },
+}
+
+impl TriggerSpec {
+    pub fn manual_event() -> Self {
+        Self::ManualEvent {
+            config: ManualEventTriggerConfig {},
+        }
+    }
+
+    pub fn trigger_type(&self) -> &'static str {
+        match self {
+            Self::ManualEvent { .. } => "manual_event",
+            Self::Cron { .. } => "cron",
+            Self::Webhook { .. } => "webhook",
+            Self::McpEvent { .. } => "mcp_event",
+        }
+    }
+
+    pub fn cron_config(&self) -> Option<&CronTriggerConfig> {
+        match self {
+            Self::Cron { config } => Some(config),
+            _ => None,
+        }
+    }
+
+    pub fn webhook_config(&self) -> Option<&WebhookTriggerConfig> {
+        match self {
+            Self::Webhook { config } => Some(config),
+            _ => None,
+        }
+    }
+
+    pub fn mcp_event_config(&self) -> Option<&McpEventTriggerConfig> {
+        match self {
+            Self::McpEvent { config } => Some(config),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TriggerRecord {
     pub id: String,
     pub automation_id: String,
-    pub trigger_type: String,
+    #[serde(flatten)]
+    pub spec: TriggerSpec,
     pub created_at: String,
     pub updated_at: String,
 }
 
 impl TriggerRecord {
-    pub fn manual_event(automation_id: impl Into<String>) -> Self {
+    pub fn new(automation_id: impl Into<String>, spec: TriggerSpec) -> Self {
         let now = current_timestamp();
         Self {
             id: uuid::Uuid::new_v4().to_string(),
             automation_id: automation_id.into(),
-            trigger_type: "manual_event".to_string(),
+            spec,
             created_at: now.clone(),
             updated_at: now,
         }
+    }
+
+    pub fn manual_event(automation_id: impl Into<String>) -> Self {
+        Self::new(automation_id, TriggerSpec::manual_event())
+    }
+
+    pub fn trigger_type(&self) -> &'static str {
+        self.spec.trigger_type()
     }
 }
 
@@ -225,6 +308,57 @@ pub struct DispatchManualEventInput {
     pub trigger_id: String,
     pub dedupe_key: String,
     pub payload: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CreateTriggerInput {
+    ManualEvent,
+    Cron {
+        schedule: String,
+        timezone: String,
+        next_fire_at: String,
+    },
+    Webhook {
+        ingress_mode: String,
+        secret_header_name: String,
+        secret_hint: Option<String>,
+        secret_plaintext: Option<String>,
+    },
+    McpEvent {
+        server_id: String,
+        event_name: Option<String>,
+        event_pattern: Option<String>,
+    },
+}
+
+impl CreateTriggerInput {
+    pub fn manual_event() -> Self {
+        Self::ManualEvent
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DispatchWebhookEventInput {
+    pub trigger_id: String,
+    pub idempotency_key: String,
+    pub secret: String,
+    pub payload: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DispatchMcpEventInput {
+    pub trigger_id: String,
+    pub server_id: String,
+    pub event_name: String,
+    pub dedupe_key: String,
+    pub payload: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CreateAutomationReport {
+    pub automation: AutomationRecord,
+    pub trigger: TriggerRecord,
+    pub webhook_secret: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

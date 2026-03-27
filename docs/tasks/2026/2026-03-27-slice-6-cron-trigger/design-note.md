@@ -1,0 +1,51 @@
+## Design Note
+
+- Problem:
+  - GA promises `cron` triggers, but the tracked repository only proves `manual_event`.
+- Goal:
+  - Add the smallest persisted schedule model and tick-driven runtime ingress needed to project `cron` automations into the existing governed delivery path.
+- Acceptance Criteria:
+  - `cron` triggers store their schedule metadata and next due time.
+  - A runtime tick API dispatches due triggers exactly once per overdue fire window.
+  - Remote-hub can host a minimal periodic ticker without becoming a new scheduler subsystem.
+- Non-functional Constraints:
+  - No distributed scheduling and no complex expression language beyond the minimum persisted schedule semantics required by tests.
+  - Preserve one trigger per automation and one delivery state machine.
+- MVP Boundary:
+  - Local periodic ticking only.
+  - No surface APIs or pages for cron management.
+- Layer Placement:
+  - Schedule contracts stay in `schemas/runtime`.
+  - Tick selection and schedule advancement stay in `crates/runtime`.
+  - Periodic ticking assembly stays in `apps/remote-hub`.
+- Module Boundaries:
+  - `AutomationIntake` owns trigger fetch/update and due-trigger selection.
+  - `Slice2Runtime` owns the public tick API.
+  - `apps/remote-hub` owns the polling loop only.
+- Inputs:
+  - Current timestamp supplied explicitly to the runtime tick API.
+  - Persisted trigger config for `cron`.
+- Outputs:
+  - Zero or more `TriggerDeliveryReport` values, capped to one overdue fire window per due trigger per tick.
+- State Transitions:
+  - `TriggerDelivery` state transitions remain unchanged.
+  - `cron.next_fire_at` advances after a due fire is accepted.
+- Error Handling:
+  - Invalid or missing cron config fails explicitly rather than silently skipping.
+  - Duplicate overdue windows reuse existing deduped deliveries.
+- Tech Stack Decision:
+  - Reuse current runtime and remote-hub stack; no new scheduler dependency.
+- Visual Framework Impact:
+  - None.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - Shared trigger substrate, delivery projection, retry, approval, and reopen logic.
+- New Abstractions:
+  - Minimal due-trigger selection/ticking helper.
+- Trade-offs:
+  - The slice prefers explicit tick-driven scheduling over background-job abstraction to keep the runtime boundary small and testable.
+- Test Strategy:
+  - Add failing runtime tests for due, duplicate, reopen, approval, and retry paths before runtime implementation.
+- ADR Needed:
+  - No.

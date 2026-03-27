@@ -5,6 +5,8 @@ edition.workspace = true
 
 [dependencies]
 chrono.workspace = true
+chrono-tz.workspace = true
+cron.workspace = true
 octopus-domain-context = { path = "../domain-context" }
 octopus-execution = { path = "../execution" }
 octopus-governance = { path = "../governance" }
@@ -13,6 +15,7 @@ octopus-knowledge = { path = "../knowledge" }
 octopus-observe-artifact = { path = "../observe-artifact" }
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 uuid.workspace = true

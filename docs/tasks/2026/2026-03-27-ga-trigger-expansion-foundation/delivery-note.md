@@ -1,0 +1,31 @@
+## Delivery Note
+
+- What Changed:
+  - Generalized `Trigger` into the GA four-variant contract, added typed runtime trigger configs, and moved all automation trigger kinds onto one shared delivery projection path.
+  - Added the forward SQLite migration and kept `dispatch_manual_event` as the compatibility entrypoint for existing callers.
+- Why:
+  - GA requires four trigger types, but it should still keep one automation-one-trigger semantics and one governed delivery state machine.
+- User / System Impact:
+  - Runtime callers can now persist trigger definitions for `manual_event`, `cron`, `webhook`, and `mcp_event` without inventing parallel execution chains.
+  - Existing manual-event automation callers keep working through the same public API.
+- Risks:
+  - The shared dispatch path is now more central; regressions here would affect every automation trigger kind.
+- Rollback Notes:
+  - Revert `0006_slice6_trigger_expansion.sql`, the widened trigger schema, and the runtime trigger-substrate changes together. Partial rollback is unsafe once non-manual triggers exist in a database.
+- Follow-ups:
+  - Concrete `cron`, `webhook`, and `mcp_event` ingress slices are delivered in the sibling task packages.
+  - The next broader program priority is real MCP transport / credentials, then richer remote-hub persistence / auth.
+- Docs Updated:
+  - `README.md`
+  - `AGENTS.md`
+  - `docs/README.md`
+  - `docs/architecture/SAD.md`
+  - `docs/architecture/ga-implementation-blueprint.md`
+  - `docs/tasks/2026/2026-03-27-ga-trigger-expansion-foundation/*`
+- Tests Included:
+  - Fresh full `cargo test --workspace`, including `trigger_foundation`, `schema_contracts`, and the preserved `slice3_automation` regression suite.
+  - Fresh full `pnpm test:ts`.
+- ADR Updated:
+  - None.
+- Temporary Workarounds:
+  - None at the substrate layer.

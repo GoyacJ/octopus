@@ -1,0 +1,23 @@
+## Verification
+
+- Unit Tests:
+  - Fresh `cargo test --workspace` run includes `tests/trigger_foundation.rs`: 1 test passed.
+- Integration Tests:
+  - Fresh `cargo test --workspace` run kept `tests/slice3_automation.rs`: 6 tests passed, proving the existing `manual_event` automation path stayed green on the shared substrate.
+- Contract Tests:
+  - Fresh `cargo test --workspace` run includes `tests/schema_contracts.rs`: 2 tests passed.
+- Failure Cases:
+  - Existing manual-event deny / retry / reopen paths remained green through `slice3_automation`.
+  - The downstream Slice 6 through Slice 8 suites all reuse this shared substrate and cover trigger-specific rejection, retry, approval, and dedupe paths.
+- Boundary Cases:
+  - One automation still binds one trigger.
+  - The public `dispatch_manual_event` compatibility wrapper still produces the same governed delivery / run shell.
+- Manual Verification:
+  - None.
+- Static Checks:
+  - Fresh `cargo test --workspace` passed.
+  - Fresh `pnpm test:ts` passed.
+- Remaining Gaps:
+  - This slice does not by itself provide cron ticking, webhook ingress, MCP-event ingress transport, or automation surface management.
+- Confidence Level:
+  - High for the tracked substrate and compatibility boundary.

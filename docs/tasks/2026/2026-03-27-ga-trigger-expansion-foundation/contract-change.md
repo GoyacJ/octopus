@@ -1,0 +1,31 @@
+## Contract Change
+
+- Change Type:
+  - Cross-language Contract
+- New / Updated Schemas:
+  - Update `schemas/runtime/trigger.schema.json`
+  - Update `schemas/runtime/automation.schema.json`
+  - Update `schemas/runtime/trigger-delivery.schema.json` if trigger metadata references require it
+- New / Updated Commands:
+  - None as shared contracts. This slice still exposes Rust runtime APIs only.
+- New / Updated Queries:
+  - None as shared contracts.
+- New / Updated Events:
+  - None as shared contracts.
+- New / Updated DTOs:
+  - `Trigger` grows trigger-type-specific config for `manual_event`, `cron`, `webhook`, and `mcp_event`.
+  - `Automation` remains one-trigger-per-automation and continues to reference a single `trigger_id`.
+- Compatibility Impact:
+  - Compatible for current runtime consumers as long as existing `manual_event` payloads still validate.
+  - TypeScript consumers must accept the widened trigger union once they consume automation-trigger data in a later slice.
+- Affected Consumers:
+  - Rust consumers under `crates/runtime`
+  - Future TypeScript consumers under `packages/`
+  - Runtime schema contract tests
+- Migration Notes:
+  - Add a new SQLite migration for trigger config metadata and any required indexes.
+  - Existing Slice 3/5 databases should migrate forward in place.
+- Generation Impact:
+  - None currently. `packages/schema-ts` consumes schemas manually.
+- Open Questions:
+  - None for this slice. Ingress semantics are deferred to later trigger slices.

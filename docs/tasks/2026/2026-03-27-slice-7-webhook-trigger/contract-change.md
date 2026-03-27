@@ -1,0 +1,27 @@
+## Contract Change
+
+- Change Type:
+  - Cross-language Contract
+- New / Updated Schemas:
+  - Update `schemas/runtime/trigger.schema.json`
+  - Add any webhook-specific helper schema under `schemas/runtime/` only if needed
+- New / Updated Commands:
+  - None as shared contracts.
+- New / Updated Queries:
+  - None as shared contracts.
+- New / Updated Events:
+  - None as shared contracts.
+- New / Updated DTOs:
+  - `Trigger` gains webhook ingress metadata and secret-hash fields.
+- Compatibility Impact:
+  - Compatible with existing manual-event and cron behavior.
+- Affected Consumers:
+  - Rust runtime
+  - Remote-hub ingress
+  - Future TS automation consumers
+- Migration Notes:
+  - Persist webhook metadata and secret hash in a new runtime migration.
+- Generation Impact:
+  - None.
+- Open Questions:
+  - None.

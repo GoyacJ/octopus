@@ -1,0 +1,28 @@
+## Implementation Summary
+
+- Goal:
+  - Add the minimum persisted `cron` trigger path so due schedules can create deduped trigger deliveries and governed automation runs.
+- Files Added:
+  - `crates/runtime/tests/slice6_cron_trigger.rs`
+- Files Changed:
+  - `crates/runtime/migrations/0006_slice6_trigger_expansion.sql` and `schemas/runtime/trigger.schema.json` to persist `cron` config and `next_fire_at`
+  - `crates/runtime/src/models.rs`, `crates/runtime/src/lib.rs`, and `crates/runtime/src/services.rs` to add typed `cron` config, `tick_due_triggers(now)`, due-trigger queries, and next-fire computation
+  - `apps/remote-hub/src/main.rs` to add the minimum background poll loop over `tick_due_triggers`
+  - `Cargo.toml` and `crates/runtime/Cargo.toml` to register `cron` and `chrono-tz`
+- Files Removed:
+  - None.
+- Structure Decision:
+  - Keep scheduling state on the persisted trigger itself and let the existing runtime plus a thin remote-hub loop own due-fire projection.
+- Why This Structure:
+  - It keeps the GA cron slice local, auditable, restart-safe, and explicitly bounded away from a dedicated scheduler service.
+- Reused Patterns:
+  - The shared trigger-substrate dispatch path, existing delivery dedupe / retry / approval states, and reopen semantics.
+- New Dependencies:
+  - `cron`
+  - `chrono-tz`
+- Error Handling Strategy:
+  - Invalid or missing cron config fails explicitly, duplicate ticks become no-ops once `next_fire_at` advances, and deny / retryable failure paths still flow through the existing delivery and run state machines.
+- Deferred Items:
+  - No distributed scheduler, no separate scheduler service, and no automation UI / API surface for cron management.
+- Non-goals Preserved:
+  - No automation UI, no distributed scheduler, and no cron DSL beyond the persisted schedule string accepted by the runtime.

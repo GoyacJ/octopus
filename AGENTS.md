@@ -25,6 +25,7 @@ Current default allowed work:
 - architecture refinement
 - schema and module planning
 - slice-scoped Rust implementation inside tracked crates
+- slice-scoped TypeScript or thin assembly implementation inside tracked `packages/` and `apps/` when the current blueprint explicitly brings those modules into scope
 - SQLite migration and automated verification work for tracked slices
 - repo layout design
 - slice planning
@@ -116,8 +117,8 @@ Follow these owner docs:
 
 Current actual repository state note:
 
-- the tracked tree now includes root workspace manifests, refined Slice 1 through Slice 5 shared contracts in `schemas/`, and first real Rust workspace members under `crates/domain-context`, `crates/execution`, `crates/governance`, `crates/interop-mcp`, `crates/knowledge`, `crates/observe-artifact`, and `crates/runtime`
-- the current verified implementation scope is limited to the local SQLite-backed governed runtime slice for `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Execution Adapter / MCP Gateway -> EnvironmentLease -> Artifact -> KnowledgeCandidate gate -> Shared Knowledge recall -> Audit / Trace`, with persistent `ApprovalRequest`, `InboxItem`, `Notification`, `PolicyDecisionLog`, TriggerDelivery dedupe/retry records, `McpServer`, `McpInvocation`, `EnvironmentLease`, project-scoped `KnowledgeSpace`, `KnowledgeCandidate`, `KnowledgeAsset`, capture-retry records, and lineage; low-trust connector output is gated before Shared Knowledge candidate creation, while app surfaces, non-manual-event automation types, real MCP transport, approval-driven knowledge promotion, vector retrieval, Org Graph promotion, and remote transport remain out of scope unless later tracked files prove otherwise
+- the tracked tree now includes root workspace manifests, refined shared contracts for the current GA slices in `schemas/`, first real Rust workspace members under `crates/domain-context`, `crates/execution`, `crates/governance`, `crates/interop-mcp`, `crates/knowledge`, `crates/observe-artifact`, and `crates/runtime`, plus the minimum surface foundation under `apps/remote-hub`, `apps/desktop`, `packages/schema-ts`, and `packages/hub-client`
+- the current verified implementation scope covers the local SQLite-backed governed runtime for `Automation(manual_event | cron | webhook | mcp_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Execution Adapter / MCP Gateway -> EnvironmentLease -> Artifact -> KnowledgeCandidate gate -> Shared Knowledge recall -> Audit / Trace`, with persistent `ApprovalRequest`, `InboxItem`, `Notification`, `PolicyDecisionLog`, TriggerDelivery dedupe/retry records, `McpServer`, `McpInvocation`, `EnvironmentLease`, project-scoped `KnowledgeSpace`, `KnowledgeCandidate`, `KnowledgeAsset`, capture-retry records, and lineage, plus a thin remote-hub webhook ingress / cron tick shell and first cross-language client contracts; low-trust connector output is gated before Shared Knowledge candidate creation, while real credentialed MCP transport, richer remote-hub auth/persistence, approval-driven knowledge promotion, vector retrieval, full automation-management surfaces, and Org Graph promotion remain out of scope unless later tracked files prove otherwise
 
 ---
 

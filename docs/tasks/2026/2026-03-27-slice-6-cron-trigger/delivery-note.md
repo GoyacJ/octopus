@@ -1,0 +1,31 @@
+## Delivery Note
+
+- What Changed:
+  - Added persisted `cron` trigger config and the explicit `tick_due_triggers(now)` runtime API.
+  - Added the minimum `remote-hub` background ticker so due cron automations project into the same governed delivery / run path.
+- Why:
+  - `cron` is the closest GA trigger to the existing automation semantics, and it closes that gap without introducing a separate scheduler architecture.
+- User / System Impact:
+  - Due cron automations can now create governed deliveries and automation runs.
+  - Restarted runtimes keep chasing `next_fire_at` one overdue window per tick instead of silently dropping or flooding missed schedule windows.
+- Risks:
+  - The ticker is local-process-only, so poll interval drift or process downtime directly affects when cron fires are observed.
+- Rollback Notes:
+  - Revert the persisted cron config fields, `tick_due_triggers(now)`, and the `remote-hub` loop together. Partial rollback is unsafe once cron triggers are stored in a database.
+- Follow-ups:
+  - The webhook and MCP-event slices are delivered in sibling task packages.
+  - The next broader program priority is real MCP transport / credentials, then richer remote-hub persistence / auth.
+- Docs Updated:
+  - `README.md`
+  - `AGENTS.md`
+  - `docs/README.md`
+  - `docs/architecture/SAD.md`
+  - `docs/architecture/ga-implementation-blueprint.md`
+  - `docs/tasks/2026/2026-03-27-slice-6-cron-trigger/*`
+- Tests Included:
+  - Fresh full `cargo test --workspace`, including `slice6_cron_trigger`.
+  - Fresh full `pnpm test:ts`.
+- ADR Updated:
+  - None.
+- Temporary Workarounds:
+  - Cron observation still runs through a process-local poll loop in `apps/remote-hub`; this is an intentional scope limit, not a separate scheduler service.

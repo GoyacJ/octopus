@@ -4,7 +4,7 @@ This repository uses a role-based documentation structure so each document has a
 
 ## Current State Note
 
-The tracked tree now includes the monorepo skeleton, refined Slice 1 through Slice 5 shared contracts, and first real Rust workspace members for a local SQLite-backed governed runtime slice. That tracked implementation proves the local `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Execution Adapter / MCP Gateway -> EnvironmentLease -> Artifact -> KnowledgeCandidate gate -> Shared Knowledge recall -> Audit / Trace` loop plus persistent approval inbox/notification, delivery, MCP registry/invocation/lease, and knowledge-lineage records through tests, not a runnable application surface, real MCP transport, or later knowledge / remote-hub slices.
+The tracked tree now includes the monorepo skeleton, refined GA shared contracts, first real Rust workspace members for the local SQLite-backed governed runtime, and the minimum `apps/desktop + apps/remote-hub + packages/schema-ts + packages/hub-client` surface foundation. That tracked implementation proves the local `Automation(manual_event | cron | webhook | mcp_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Execution Adapter / MCP Gateway -> EnvironmentLease -> Artifact -> KnowledgeCandidate gate -> Shared Knowledge recall -> Audit / Trace` loop plus persistent approval inbox/notification, delivery, MCP registry/invocation/lease, knowledge-lineage records, the thin remote-hub webhook ingress / cron tick shell, and first TypeScript surface consumers through tests. It still does not prove real credentialed MCP transport, richer remote-hub auth/persistence, or a minimum automation-management surface.
 
 ## Source Of Truth Order
 

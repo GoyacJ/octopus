@@ -2,18 +2,182 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://octopus.local/schemas/runtime/trigger.schema.json",
   "title": "Trigger",
-  "type": "object",
-  "description": "Slice 3 shared contract for trigger definitions that start automation deliveries.",
-  "properties": {
-    "id": { "type": "string" },
-    "automation_id": { "type": "string" },
-    "trigger_type": {
-      "type": "string",
-      "const": "manual_event"
+  "description": "GA shared contract for the four supported automation trigger definitions that start governed trigger deliveries.",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "automation_id": { "type": "string" },
+        "trigger_type": {
+          "type": "string",
+          "const": "manual_event"
+        },
+        "config": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "automation_id",
+        "trigger_type",
+        "config",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false
     },
-    "created_at": { "type": "string", "format": "date-time" },
-    "updated_at": { "type": "string", "format": "date-time" }
-  },
-  "required": ["id", "automation_id", "trigger_type", "created_at", "updated_at"],
-  "additionalProperties": false
+    {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "automation_id": { "type": "string" },
+        "trigger_type": {
+          "type": "string",
+          "const": "cron"
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "schedule": {
+              "type": "string",
+              "minLength": 1
+            },
+            "timezone": {
+              "type": "string",
+              "minLength": 1
+            },
+            "next_fire_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": ["schedule", "timezone", "next_fire_at"],
+          "additionalProperties": false
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "automation_id",
+        "trigger_type",
+        "config",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "automation_id": { "type": "string" },
+        "trigger_type": {
+          "type": "string",
+          "const": "webhook"
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "ingress_mode": {
+              "type": "string",
+              "minLength": 1
+            },
+            "secret_header_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "secret_hint": {
+              "type": ["string", "null"]
+            },
+            "secret_present": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "ingress_mode",
+            "secret_header_name",
+            "secret_hint",
+            "secret_present"
+          ],
+          "additionalProperties": false
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "automation_id",
+        "trigger_type",
+        "config",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "automation_id": { "type": "string" },
+        "trigger_type": {
+          "type": "string",
+          "const": "mcp_event"
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "server_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "event_name": {
+              "type": ["string", "null"],
+              "minLength": 1
+            },
+            "event_pattern": {
+              "type": ["string", "null"],
+              "minLength": 1
+            }
+          },
+          "required": ["server_id", "event_name", "event_pattern"],
+          "anyOf": [
+            {
+              "properties": {
+                "event_name": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            {
+              "properties": {
+                "event_pattern": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ],
+          "additionalProperties": false
+        },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "id",
+        "automation_id",
+        "trigger_type",
+        "config",
+        "created_at",
+        "updated_at"
+      ],
+      "additionalProperties": false
+    }
+  ]
 }

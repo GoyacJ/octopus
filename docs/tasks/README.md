@@ -44,6 +44,10 @@ Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-d
 - [2026-03-27-slice-4-shared-knowledge](2026/2026-03-27-slice-4-shared-knowledge/README.md)
 - [2026-03-27-slice-5-mcp-gateway-environment-lease](2026/2026-03-27-slice-5-mcp-gateway-environment-lease/README.md)
 - [2026-03-27-ga-minimal-surface-hub-foundation](2026/2026-03-27-ga-minimal-surface-hub-foundation/README.md)
+- [2026-03-27-ga-trigger-expansion-foundation](2026/2026-03-27-ga-trigger-expansion-foundation/README.md)
+- [2026-03-27-slice-6-cron-trigger](2026/2026-03-27-slice-6-cron-trigger/README.md)
+- [2026-03-27-slice-7-webhook-trigger](2026/2026-03-27-slice-7-webhook-trigger/README.md)
+- [2026-03-27-slice-8-mcp-event-trigger](2026/2026-03-27-slice-8-mcp-event-trigger/README.md)
 
 ## Relationship To ADRs
 

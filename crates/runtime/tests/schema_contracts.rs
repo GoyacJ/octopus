@@ -288,6 +288,55 @@ fn refined_slice1_examples_validate() {
         "id": "trigger-1",
         "automation_id": "automation-1",
         "trigger_type": "manual_event",
+        "config": {},
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(trigger_schema.is_valid(&json!({
+        "id": "trigger-cron-1",
+        "automation_id": "automation-1",
+        "trigger_type": "cron",
+        "config": {
+            "schedule": "0 * * * * * *",
+            "timezone": "UTC",
+            "next_fire_at": "2026-03-26T11:00:00Z"
+        },
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(trigger_schema.is_valid(&json!({
+        "id": "trigger-webhook-1",
+        "automation_id": "automation-1",
+        "trigger_type": "webhook",
+        "config": {
+            "ingress_mode": "shared_secret_header",
+            "secret_header_name": "X-Octopus-Trigger-Secret",
+            "secret_hint": "abcd",
+            "secret_present": true
+        },
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(trigger_schema.is_valid(&json!({
+        "id": "trigger-mcp-event-1",
+        "automation_id": "automation-1",
+        "trigger_type": "mcp_event",
+        "config": {
+            "server_id": "server-1",
+            "event_name": "connector.output.ready",
+            "event_pattern": null
+        },
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(!trigger_schema.is_valid(&json!({
+        "id": "trigger-invalid-1",
+        "automation_id": "automation-1",
+        "trigger_type": "cron",
+        "config": {
+            "schedule": "0 * * * * * *",
+            "timezone": "UTC"
+        },
         "created_at": "2026-03-26T10:00:00Z",
         "updated_at": "2026-03-26T10:00:00Z"
     })));

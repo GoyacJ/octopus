@@ -1,0 +1,30 @@
+## Delivery Note
+
+- What Changed:
+  - Added the minimum webhook trigger config, hashed-secret persistence, one-time secret reveal at creation time, and the `dispatch_webhook_event(...)` runtime ingress wrapper.
+  - Added the single remote-hub route `POST /api/triggers/{trigger_id}/webhook` with required-header extraction and governed dispatch.
+- Why:
+  - GA needs one authenticated external event boundary, but ingress should stay thin and auditable instead of becoming a second orchestration layer.
+- User / System Impact:
+  - External systems can now drive automations through a shared-secret + idempotency-key webhook entrypoint while still landing in the same governed delivery / run / approval / knowledge-gate path.
+- Risks:
+  - The current model is intentionally narrow: one shared-secret pattern, one route shape, and no management surface for rotation or partner-specific behavior.
+- Rollback Notes:
+  - Revert the webhook trigger metadata, hashed-secret persistence, runtime ingress wrapper, and remote-hub route together. Partial rollback is unsafe once webhook triggers are stored.
+- Follow-ups:
+  - The MCP-event slice is delivered in a sibling task package.
+  - The next broader program priority is real MCP transport / credentials, then richer remote-hub persistence / auth.
+- Docs Updated:
+  - `README.md`
+  - `AGENTS.md`
+  - `docs/README.md`
+  - `docs/architecture/SAD.md`
+  - `docs/architecture/ga-implementation-blueprint.md`
+  - `docs/tasks/2026/2026-03-27-slice-7-webhook-trigger/*`
+- Tests Included:
+  - Fresh full `cargo test --workspace`, including `slice7_webhook_trigger` and `webhook_ingress`.
+  - Fresh full `pnpm test:ts`.
+- ADR Updated:
+  - None.
+- Temporary Workarounds:
+  - The secret is still only revealed at creation time and the remote-hub route remains the local parity shell; richer remote auth and secret-management surfaces remain out of scope for this slice.

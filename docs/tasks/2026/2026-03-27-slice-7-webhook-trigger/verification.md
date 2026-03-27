@@ -1,0 +1,27 @@
+## Verification
+
+- Unit Tests:
+  - None separate from the runtime and remote-hub integration suites.
+- Integration Tests:
+  - Fresh `cargo test --workspace` run includes `tests/slice7_webhook_trigger.rs`: 4 tests passed.
+  - Fresh `cargo test --workspace` run includes `apps/remote-hub/tests/webhook_ingress.rs`: 1 test passed.
+- Contract Tests:
+  - Fresh `cargo test --workspace` run kept `tests/schema_contracts.rs`: 2 tests passed.
+  - Fresh `pnpm test:ts` passed without any trigger-surface regressions in the existing TS consumers.
+- Failure Cases:
+  - Invalid secret rejection
+  - Missing `Idempotency-Key` rejection
+  - Policy-denied webhook delivery failure
+  - HTTP header enforcement on the remote-hub route
+- Boundary Cases:
+  - Duplicate ingress dedupe and delivery / run reuse
+  - Reopen of a waiting-approval delivery and post-approval completion
+- Manual Verification:
+  - None.
+- Static Checks:
+  - Fresh `cargo test --workspace` passed.
+  - Fresh `pnpm test:ts` passed.
+- Remaining Gaps:
+  - The webhook route is still the single local remote-hub parity shell, with no rotated-secret management surface and no broader remote auth / persistence model yet.
+- Confidence Level:
+  - High for the tracked local ingress boundary.

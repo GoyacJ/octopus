@@ -76,8 +76,8 @@
 
 补充说明（截至 2026-03-27 的 tracked repository state）：
 
-- 当前跟踪树仍处于 `doc-first rebuild` 状态，但已包含首批 monorepo 根 manifests、Slice 1 到 Slice 5 细化后的共享契约，以及本地 SQLite 驱动的首批 Rust runtime crates，其中已包含 `interop-mcp` crate；
-- 当前已验证的实现范围是本地 `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Execution Adapter / MCP Gateway -> EnvironmentLease -> Artifact -> KnowledgeCandidate gate -> Shared Knowledge recall -> Audit / Trace` 闭环，并包含持久化的 `ApprovalRequest`、`InboxItem`、`Notification`、`PolicyDecisionLog`、TriggerDelivery 去重/恢复记录、`McpServer`、`McpInvocation`、`EnvironmentLease`、项目级 `KnowledgeSpace`、`KnowledgeCandidate`、`KnowledgeAsset`、知识写回重试记录与 knowledge lineage；低信任 connector 输出可入 Artifact，但不得绕过 gate 自动进入 Shared Knowledge。不得把这一步误写成已完成的 UI、远程 Hub、`cron` / `webhook` / `MCP event` 自动化、真实凭证驱动的 MCP 互通、向量检索、知识审批流或 Org Graph 实现。
+- 当前跟踪树仍处于 `doc-first rebuild` 状态，但已包含首批 monorepo 根 manifests、当前 GA 运行时共享契约、首批 Rust runtime crates，以及最小 `apps/desktop + apps/remote-hub + packages/schema-ts + packages/hub-client` surface foundation；
+- 当前已验证的实现范围是本地 `Automation(manual_event | cron | webhook | mcp_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Execution Adapter / MCP Gateway -> EnvironmentLease -> Artifact -> KnowledgeCandidate gate -> Shared Knowledge recall -> Audit / Trace` 闭环，并包含持久化的 `ApprovalRequest`、`InboxItem`、`Notification`、`PolicyDecisionLog`、TriggerDelivery 去重/恢复记录、`McpServer`、`McpInvocation`、`EnvironmentLease`、项目级 `KnowledgeSpace`、`KnowledgeCandidate`、`KnowledgeAsset`、知识写回重试记录与 knowledge lineage，以及 thin remote-hub webhook ingress / cron tick shell；低信任 connector 输出可入 Artifact，但不得绕过 gate 自动进入 Shared Knowledge。不得把这一步误写成已完成的真实凭证驱动 MCP 互通、richer remote-hub auth / persistence、automation management surface、向量检索、知识审批流或 Org Graph 实现。
 
 ### 1.5 架构平面
 

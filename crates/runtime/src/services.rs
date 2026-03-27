@@ -1,4 +1,8 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, str::FromStr};
+
+use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
+use cron::Schedule;
 
 use octopus_domain_context::{
     ContextRepository, ProjectContext, ProjectRecord, SqliteContextStore, WorkspaceRecord,
@@ -33,13 +37,15 @@ use octopus_observe_artifact::{
     TRACE_STAGE_RUN_ORCHESTRATOR, TRACE_STAGE_TRIGGER_DELIVERY,
 };
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use sqlx::{Row, SqlitePool};
 
 use crate::{
     models::{
-        current_timestamp, AutomationRecord, CreateAutomationInput, CreateTaskInput,
-        KnowledgePromotionReport, RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord,
-        TriggerRecord,
+        current_timestamp, AutomationRecord, CreateAutomationInput, CreateAutomationReport,
+        CreateTaskInput, CreateTriggerInput, CronTriggerConfig, KnowledgePromotionReport,
+        McpEventTriggerConfig, RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord,
+        TriggerRecord, TriggerSpec, WebhookTriggerConfig,
     },
     RuntimeError,
 };
@@ -180,15 +186,16 @@ impl AutomationIntake {
         }
     }
 
-    pub async fn create_automation(
+    pub async fn create_automation_with_trigger(
         &self,
         input: CreateAutomationInput,
-    ) -> Result<AutomationRecord, RuntimeError> {
+        trigger_input: CreateTriggerInput,
+    ) -> Result<CreateAutomationReport, RuntimeError> {
         self.context_store
             .fetch_project_context(&input.workspace_id, &input.project_id)
             .await?;
 
-        let trigger = TriggerRecord::manual_event("pending");
+        let (trigger, webhook_secret) = self.build_trigger("pending", trigger_input);
         let automation = AutomationRecord::new(input, trigger.id.clone());
         let trigger = TriggerRecord {
             automation_id: automation.id.clone(),
@@ -220,19 +227,221 @@ impl AutomationIntake {
         sqlx::query(
             r#"
             INSERT INTO triggers (
-                id, automation_id, trigger_type, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5)
+                id, automation_id, trigger_type, schedule, timezone, next_fire_at,
+                ingress_mode, secret_header_name, secret_hint, webhook_secret_hash,
+                server_id, event_name, event_pattern, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             "#,
         )
         .bind(&trigger.id)
         .bind(&trigger.automation_id)
-        .bind(&trigger.trigger_type)
+        .bind(trigger.trigger_type())
+        .bind(trigger_schedule(&trigger))
+        .bind(trigger_timezone(&trigger))
+        .bind(trigger_next_fire_at(&trigger))
+        .bind(trigger_ingress_mode(&trigger))
+        .bind(trigger_secret_header_name(&trigger))
+        .bind(trigger_secret_hint(&trigger))
+        .bind(trigger_secret_hash(&trigger))
+        .bind(trigger_server_id(&trigger))
+        .bind(trigger_event_name(&trigger))
+        .bind(trigger_event_pattern(&trigger))
         .bind(&trigger.created_at)
         .bind(&trigger.updated_at)
         .execute(&self.pool)
         .await?;
 
-        Ok(automation)
+        Ok(CreateAutomationReport {
+            automation,
+            trigger,
+            webhook_secret,
+        })
+    }
+
+    fn build_trigger(
+        &self,
+        automation_id: impl Into<String>,
+        trigger_input: CreateTriggerInput,
+    ) -> (TriggerRecord, Option<String>) {
+        let automation_id = automation_id.into();
+        match trigger_input {
+            CreateTriggerInput::ManualEvent => (TriggerRecord::manual_event(automation_id), None),
+            CreateTriggerInput::Cron {
+                schedule,
+                timezone,
+                next_fire_at,
+            } => (
+                TriggerRecord::new(
+                    automation_id,
+                    TriggerSpec::Cron {
+                        config: CronTriggerConfig {
+                            schedule,
+                            timezone,
+                            next_fire_at,
+                        },
+                    },
+                ),
+                None,
+            ),
+            CreateTriggerInput::Webhook {
+                ingress_mode,
+                secret_header_name,
+                secret_hint,
+                secret_plaintext,
+            } => {
+                let plaintext = secret_plaintext.unwrap_or_else(generate_webhook_secret);
+                let hint = secret_hint.or_else(|| default_secret_hint(&plaintext));
+                let secret_hash = Some(hash_webhook_secret(&plaintext));
+                (
+                    TriggerRecord::new(
+                        automation_id,
+                        TriggerSpec::Webhook {
+                            config: WebhookTriggerConfig {
+                                ingress_mode,
+                                secret_header_name,
+                                secret_hint: hint,
+                                secret_present: true,
+                                secret_hash,
+                            },
+                        },
+                    ),
+                    Some(plaintext),
+                )
+            }
+            CreateTriggerInput::McpEvent {
+                server_id,
+                event_name,
+                event_pattern,
+            } => (
+                TriggerRecord::new(
+                    automation_id,
+                    TriggerSpec::McpEvent {
+                        config: McpEventTriggerConfig {
+                            server_id,
+                            event_name,
+                            event_pattern,
+                        },
+                    },
+                ),
+                None,
+            ),
+        }
+    }
+
+    pub fn verify_webhook_secret(&self, config: &WebhookTriggerConfig, secret: &str) -> bool {
+        let Some(expected_hash) = config.secret_hash.as_deref() else {
+            return false;
+        };
+        hash_webhook_secret(secret) == expected_hash
+    }
+
+    pub fn mcp_event_matches(&self, config: &McpEventTriggerConfig, event_name: &str) -> bool {
+        if let Some(expected_name) = config.event_name.as_deref() {
+            if expected_name == event_name {
+                return true;
+            }
+        }
+
+        if let Some(pattern) = config.event_pattern.as_deref() {
+            return wildcard_match(pattern, event_name);
+        }
+
+        false
+    }
+
+    pub fn compute_next_cron_fire(
+        &self,
+        trigger_id: &str,
+        config: &CronTriggerConfig,
+        after: &str,
+    ) -> Result<String, RuntimeError> {
+        let timezone = Tz::from_str(config.timezone.as_str()).map_err(|_| {
+            RuntimeError::InvalidCronSchedule {
+                trigger_id: trigger_id.to_string(),
+                schedule: config.schedule.clone(),
+            }
+        })?;
+        let schedule = Schedule::from_str(config.schedule.as_str()).map_err(|_| {
+            RuntimeError::InvalidCronSchedule {
+                trigger_id: trigger_id.to_string(),
+                schedule: config.schedule.clone(),
+            }
+        })?;
+        let after = DateTime::parse_from_rfc3339(after)
+            .map_err(|_| RuntimeError::InvalidCronSchedule {
+                trigger_id: trigger_id.to_string(),
+                schedule: config.schedule.clone(),
+            })?
+            .with_timezone(&Utc)
+            .with_timezone(&timezone);
+        let next = schedule.after(&after).next().ok_or_else(|| {
+            RuntimeError::InvalidCronSchedule {
+                trigger_id: trigger_id.to_string(),
+                schedule: config.schedule.clone(),
+            }
+        })?;
+        Ok(next.with_timezone(&Utc).to_rfc3339())
+    }
+
+    pub async fn list_due_cron_triggers(&self, now: &str) -> Result<Vec<TriggerRecord>, RuntimeError> {
+        let now = DateTime::parse_from_rfc3339(now)
+            .map_err(|_| RuntimeError::InvalidCronSchedule {
+                trigger_id: "cron".to_string(),
+                schedule: now.to_string(),
+            })?
+            .with_timezone(&Utc);
+        let rows = sqlx::query(
+            r#"
+            SELECT id, automation_id, trigger_type, schedule, timezone, next_fire_at,
+                   ingress_mode, secret_header_name, secret_hint, webhook_secret_hash,
+                   server_id, event_name, event_pattern, created_at, updated_at
+            FROM triggers
+            WHERE trigger_type = 'cron'
+            ORDER BY next_fire_at, id
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut due = Vec::new();
+        for row in rows {
+            let trigger = trigger_from_row(&row)?;
+            let Some(config) = trigger.spec.cron_config() else {
+                continue;
+            };
+            let next_fire_at = DateTime::parse_from_rfc3339(config.next_fire_at.as_str())
+                .map_err(|_| RuntimeError::InvalidCronSchedule {
+                    trigger_id: trigger.id.clone(),
+                    schedule: config.schedule.clone(),
+                })?
+                .with_timezone(&Utc);
+            if next_fire_at <= now {
+                due.push(trigger);
+            }
+        }
+
+        Ok(due)
+    }
+
+    pub async fn update_cron_next_fire_at(
+        &self,
+        trigger_id: &str,
+        next_fire_at: &str,
+    ) -> Result<(), RuntimeError> {
+        sqlx::query(
+            r#"
+            UPDATE triggers
+            SET next_fire_at = ?2,
+                updated_at = ?3
+            WHERE id = ?1
+            "#,
+        )
+        .bind(trigger_id)
+        .bind(next_fire_at)
+        .bind(current_timestamp())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     pub async fn fetch_automation(
@@ -260,7 +469,9 @@ impl AutomationIntake {
     ) -> Result<Option<TriggerRecord>, RuntimeError> {
         let row = sqlx::query(
             r#"
-            SELECT id, automation_id, trigger_type, created_at, updated_at
+            SELECT id, automation_id, trigger_type, schedule, timezone, next_fire_at,
+                   ingress_mode, secret_header_name, secret_hint, webhook_secret_hash,
+                   server_id, event_name, event_pattern, created_at, updated_at
             FROM triggers
             WHERE id = ?1
             "#,
@@ -437,6 +648,131 @@ impl AutomationIntake {
         delivery.updated_at = current_timestamp();
         self.update_trigger_delivery(&delivery).await?;
         Ok(delivery)
+    }
+}
+
+fn trigger_schedule(trigger: &TriggerRecord) -> Option<&str> {
+    match &trigger.spec {
+        TriggerSpec::Cron { config } => Some(config.schedule.as_str()),
+        _ => None,
+    }
+}
+
+fn trigger_timezone(trigger: &TriggerRecord) -> Option<&str> {
+    match &trigger.spec {
+        TriggerSpec::Cron { config } => Some(config.timezone.as_str()),
+        _ => None,
+    }
+}
+
+fn trigger_next_fire_at(trigger: &TriggerRecord) -> Option<&str> {
+    match &trigger.spec {
+        TriggerSpec::Cron { config } => Some(config.next_fire_at.as_str()),
+        _ => None,
+    }
+}
+
+fn trigger_ingress_mode(trigger: &TriggerRecord) -> Option<&str> {
+    match &trigger.spec {
+        TriggerSpec::Webhook { config } => Some(config.ingress_mode.as_str()),
+        _ => None,
+    }
+}
+
+fn trigger_secret_header_name(trigger: &TriggerRecord) -> Option<&str> {
+    match &trigger.spec {
+        TriggerSpec::Webhook { config } => Some(config.secret_header_name.as_str()),
+        _ => None,
+    }
+}
+
+fn trigger_secret_hint(trigger: &TriggerRecord) -> Option<&str> {
+    match &trigger.spec {
+        TriggerSpec::Webhook { config } => config.secret_hint.as_deref(),
+        _ => None,
+    }
+}
+
+fn trigger_secret_hash(trigger: &TriggerRecord) -> Option<&str> {
+    match &trigger.spec {
+        TriggerSpec::Webhook { config } => config.secret_hash.as_deref(),
+        _ => None,
+    }
+}
+
+fn trigger_server_id(trigger: &TriggerRecord) -> Option<&str> {
+    match &trigger.spec {
+        TriggerSpec::McpEvent { config } => Some(config.server_id.as_str()),
+        _ => None,
+    }
+}
+
+fn trigger_event_name(trigger: &TriggerRecord) -> Option<&str> {
+    match &trigger.spec {
+        TriggerSpec::McpEvent { config } => config.event_name.as_deref(),
+        _ => None,
+    }
+}
+
+fn trigger_event_pattern(trigger: &TriggerRecord) -> Option<&str> {
+    match &trigger.spec {
+        TriggerSpec::McpEvent { config } => config.event_pattern.as_deref(),
+        _ => None,
+    }
+}
+
+fn generate_webhook_secret() -> String {
+    format!("whsec_{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple())
+}
+
+fn default_secret_hint(secret: &str) -> Option<String> {
+    let hint = secret.chars().rev().take(4).collect::<Vec<_>>();
+    if hint.is_empty() {
+        None
+    } else {
+        Some(hint.into_iter().rev().collect())
+    }
+}
+
+fn hash_webhook_secret(secret: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(secret.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+fn wildcard_match(pattern: &str, value: &str) -> bool {
+    if !pattern.contains('*') {
+        return pattern == value;
+    }
+
+    let anchored_start = !pattern.starts_with('*');
+    let anchored_end = !pattern.ends_with('*');
+    let mut remainder = value;
+
+    for (index, part) in pattern.split('*').filter(|segment| !segment.is_empty()).enumerate() {
+        if index == 0 && anchored_start {
+            let Some(stripped) = remainder.strip_prefix(part) else {
+                return false;
+            };
+            remainder = stripped;
+            continue;
+        }
+
+        let Some(found_at) = remainder.find(part) else {
+            return false;
+        };
+        remainder = &remainder[(found_at + part.len())..];
+    }
+
+    if anchored_end {
+        let last = pattern
+            .split('*')
+            .filter(|segment| !segment.is_empty())
+            .next_back()
+            .unwrap_or_default();
+        value.ends_with(last)
+    } else {
+        true
     }
 }
 
@@ -1932,10 +2268,48 @@ fn automation_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<AutomationRecord
 }
 
 fn trigger_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<TriggerRecord, RuntimeError> {
+    let trigger_id: String = row.try_get("id")?;
+    let trigger_type: String = row.try_get("trigger_type")?;
+    let spec = match trigger_type.as_str() {
+        "manual_event" => TriggerSpec::manual_event(),
+        "cron" => TriggerSpec::Cron {
+            config: CronTriggerConfig {
+                schedule: row.try_get("schedule")?,
+                timezone: row.try_get("timezone")?,
+                next_fire_at: row.try_get("next_fire_at")?,
+            },
+        },
+        "webhook" => {
+            let secret_hash: Option<String> = row.try_get("webhook_secret_hash")?;
+            TriggerSpec::Webhook {
+                config: WebhookTriggerConfig {
+                    ingress_mode: row.try_get("ingress_mode")?,
+                    secret_header_name: row.try_get("secret_header_name")?,
+                    secret_hint: row.try_get("secret_hint")?,
+                    secret_present: secret_hash.is_some(),
+                    secret_hash,
+                },
+            }
+        }
+        "mcp_event" => TriggerSpec::McpEvent {
+            config: McpEventTriggerConfig {
+                server_id: row.try_get("server_id")?,
+                event_name: row.try_get("event_name")?,
+                event_pattern: row.try_get("event_pattern")?,
+            },
+        },
+        other => {
+            return Err(RuntimeError::InvalidTriggerType {
+                trigger_id,
+                trigger_type: other.to_string(),
+            });
+        }
+    };
+
     Ok(TriggerRecord {
-        id: row.try_get("id")?,
+        id: trigger_id,
         automation_id: row.try_get("automation_id")?,
-        trigger_type: row.try_get("trigger_type")?,
+        spec,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
     })

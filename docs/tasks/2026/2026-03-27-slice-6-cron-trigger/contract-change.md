@@ -1,0 +1,27 @@
+## Contract Change
+
+- Change Type:
+  - Cross-language Contract
+- New / Updated Schemas:
+  - Update `schemas/runtime/trigger.schema.json`
+  - Add any cron-specific helper schema under `schemas/runtime/` only if needed
+- New / Updated Commands:
+  - None as shared contracts.
+- New / Updated Queries:
+  - None as shared contracts.
+- New / Updated Events:
+  - None as shared contracts.
+- New / Updated DTOs:
+  - `Trigger` gains `cron` schedule metadata and `next_fire_at`.
+- Compatibility Impact:
+  - Compatible with existing `manual_event` behavior.
+  - Later consumers of trigger data must handle the `cron` variant.
+- Affected Consumers:
+  - Rust runtime
+  - Future TS automation consumers
+- Migration Notes:
+  - Persist any added cron metadata in a new runtime migration.
+- Generation Impact:
+  - None.
+- Open Questions:
+  - None.

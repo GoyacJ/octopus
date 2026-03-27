@@ -9,9 +9,11 @@ use services::{AutomationIntake, KnowledgeManager, RunOrchestrator, TaskIntake};
 use thiserror::Error;
 
 pub use models::{
-    AutomationRecord, CreateAutomationInput, CreateTaskInput, DispatchManualEventInput,
-    KnowledgePromotionReport, RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord,
-    TriggerDeliveryReport, TriggerRecord,
+    AutomationRecord, CreateAutomationInput, CreateAutomationReport, CreateTaskInput,
+    CreateTriggerInput, CronTriggerConfig, DispatchManualEventInput, DispatchMcpEventInput,
+    DispatchWebhookEventInput, KnowledgePromotionReport, ManualEventTriggerConfig,
+    McpEventTriggerConfig, RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord,
+    TriggerDeliveryReport, TriggerRecord, TriggerSpec, WebhookTriggerConfig,
 };
 pub use octopus_domain_context::ProjectContext;
 pub use octopus_governance::{
@@ -49,6 +51,19 @@ pub enum RuntimeError {
     InvalidTriggerType {
         trigger_id: String,
         trigger_type: String,
+    },
+    #[error("cron trigger `{trigger_id}` has invalid schedule `{schedule}`")]
+    InvalidCronSchedule { trigger_id: String, schedule: String },
+    #[error("webhook event for trigger `{trigger_id}` requires a non-empty idempotency key")]
+    MissingWebhookIdempotencyKey { trigger_id: String },
+    #[error("webhook event for trigger `{trigger_id}` has invalid secret")]
+    InvalidWebhookSecret { trigger_id: String },
+    #[error("mcp server `{0}` not found")]
+    McpServerNotFound(String),
+    #[error("mcp event `{event_name}` does not match trigger `{trigger_id}` selector")]
+    McpEventMismatch {
+        trigger_id: String,
+        event_name: String,
     },
     #[error("trigger delivery `{delivery_id}` cannot transition from `{from}` to `{to}`")]
     InvalidTriggerDeliveryTransition {
@@ -203,7 +218,21 @@ impl Slice2Runtime {
         &self,
         input: CreateAutomationInput,
     ) -> Result<AutomationRecord, RuntimeError> {
-        self.automation_intake.create_automation(input).await
+        Ok(self
+            .automation_intake
+            .create_automation_with_trigger(input, CreateTriggerInput::manual_event())
+            .await?
+            .automation)
+    }
+
+    pub async fn create_automation_with_trigger(
+        &self,
+        input: CreateAutomationInput,
+        trigger: CreateTriggerInput,
+    ) -> Result<CreateAutomationReport, RuntimeError> {
+        self.automation_intake
+            .create_automation_with_trigger(input, trigger)
+            .await
     }
 
     pub async fn fetch_automation(
@@ -211,6 +240,10 @@ impl Slice2Runtime {
         automation_id: &str,
     ) -> Result<Option<AutomationRecord>, RuntimeError> {
         self.automation_intake.fetch_automation(automation_id).await
+    }
+
+    pub async fn fetch_trigger(&self, trigger_id: &str) -> Result<Option<TriggerRecord>, RuntimeError> {
+        self.automation_intake.fetch_trigger(trigger_id).await
     }
 
     pub async fn start_task(&self, task_id: &str) -> Result<RunExecutionReport, RuntimeError> {
@@ -222,83 +255,111 @@ impl Slice2Runtime {
         &self,
         input: DispatchManualEventInput,
     ) -> Result<TriggerDeliveryReport, RuntimeError> {
-        let trigger = self
-            .automation_intake
-            .fetch_trigger(&input.trigger_id)
-            .await?
-            .ok_or_else(|| RuntimeError::TriggerNotFound(input.trigger_id.clone()))?;
-        if trigger.trigger_type != "manual_event" {
+        let (trigger, automation) = self.load_trigger_and_automation(&input.trigger_id).await?;
+        if !matches!(trigger.spec, TriggerSpec::ManualEvent { .. }) {
             return Err(RuntimeError::InvalidTriggerType {
-                trigger_id: trigger.id,
-                trigger_type: trigger.trigger_type,
+                trigger_id: trigger.id.clone(),
+                trigger_type: trigger.trigger_type().to_string(),
             });
         }
+        self.dispatch_trigger_delivery(automation, trigger, input.dedupe_key, input.payload)
+            .await
+    }
 
-        let automation = self
-            .automation_intake
-            .fetch_automation(&trigger.automation_id)
-            .await?
-            .ok_or_else(|| RuntimeError::AutomationNotFound(trigger.automation_id.clone()))?;
-
-        let mut delivery = if let Some(existing) = self
-            .automation_intake
-            .find_trigger_delivery_by_dedupe_key(&input.dedupe_key)
-            .await?
-        {
-            if let Some(run_id) = existing.run_id.clone() {
-                let run_report = self.run_orchestrator.load_run_report(&run_id).await?;
-                let task = self.task_intake.fetch_task(&run_report.run.task_id).await?;
-                return Ok(TriggerDeliveryReport {
-                    automation,
-                    trigger,
-                    delivery: existing,
-                    task,
-                    run_report,
-                });
-            }
-            existing
-        } else {
-            self.automation_intake
-                .create_trigger_delivery(&input.trigger_id, &input.dedupe_key, input.payload)
-                .await?
+    pub async fn dispatch_webhook_event(
+        &self,
+        input: DispatchWebhookEventInput,
+    ) -> Result<TriggerDeliveryReport, RuntimeError> {
+        let (trigger, automation) = self.load_trigger_and_automation(&input.trigger_id).await?;
+        let Some(config) = trigger.spec.webhook_config() else {
+            return Err(RuntimeError::InvalidTriggerType {
+                trigger_id: trigger.id.clone(),
+                trigger_type: trigger.trigger_type().to_string(),
+            });
         };
-        delivery = self
-            .automation_intake
-            .transition_delivery_to_delivering(delivery)
-            .await?;
+        if input.idempotency_key.trim().is_empty() {
+            return Err(RuntimeError::MissingWebhookIdempotencyKey {
+                trigger_id: trigger.id.clone(),
+            });
+        }
+        if !self.automation_intake.verify_webhook_secret(config, &input.secret) {
+            return Err(RuntimeError::InvalidWebhookSecret {
+                trigger_id: trigger.id.clone(),
+            });
+        }
+        let dedupe_key = format!("webhook:{}:{}", trigger.id, input.idempotency_key);
+        self.dispatch_trigger_delivery(automation, trigger, dedupe_key, input.payload)
+            .await
+    }
 
-        let task = self
-            .task_intake
-            .create_task(CreateTaskInput {
-                workspace_id: automation.workspace_id.clone(),
-                project_id: automation.project_id.clone(),
-                source_kind: "automation".into(),
-                automation_id: Some(automation.id.clone()),
-                title: automation.title.clone(),
-                instruction: automation.instruction.clone(),
-                action: automation.action.clone(),
-                capability_id: automation.capability_id.clone(),
-                estimated_cost: automation.estimated_cost,
-                idempotency_key: format!("task:trigger_delivery:{}", delivery.id),
-            })
-            .await?;
+    pub async fn dispatch_mcp_event(
+        &self,
+        input: DispatchMcpEventInput,
+    ) -> Result<TriggerDeliveryReport, RuntimeError> {
+        let (trigger, automation) = self.load_trigger_and_automation(&input.trigger_id).await?;
+        let Some(config) = trigger.spec.mcp_event_config() else {
+            return Err(RuntimeError::InvalidTriggerType {
+                trigger_id: trigger.id.clone(),
+                trigger_type: trigger.trigger_type().to_string(),
+            });
+        };
+        self.ensure_mcp_server_exists(&input.server_id).await?;
+        if config.server_id != input.server_id
+            || !self
+                .automation_intake
+                .mcp_event_matches(config, &input.event_name)
+        {
+            return Err(RuntimeError::McpEventMismatch {
+                trigger_id: trigger.id.clone(),
+                event_name: input.event_name,
+            });
+        }
+        let dedupe_key = format!("mcp_event:{}:{}", trigger.id, input.dedupe_key);
+        self.dispatch_trigger_delivery(automation, trigger, dedupe_key, input.payload)
+            .await
+    }
 
-        let run_report = self
-            .run_orchestrator
-            .start_task_with_trigger_delivery(&task, Some(delivery.id.as_str()))
-            .await?;
-        let delivery = self
-            .automation_intake
-            .sync_delivery_from_run(&delivery.id, &run_report.run)
-            .await?;
+    pub async fn tick_due_triggers(
+        &self,
+        now: &str,
+    ) -> Result<Vec<TriggerDeliveryReport>, RuntimeError> {
+        let due_triggers = self.automation_intake.list_due_cron_triggers(now).await?;
+        let mut reports = Vec::with_capacity(due_triggers.len());
 
-        Ok(TriggerDeliveryReport {
-            automation,
-            trigger,
-            delivery,
-            task,
-            run_report,
-        })
+        for trigger in due_triggers {
+            let Some(config) = trigger.spec.cron_config() else {
+                continue;
+            };
+            let scheduled_at = config.next_fire_at.clone();
+            let automation = self
+                .automation_intake
+                .fetch_automation(&trigger.automation_id)
+                .await?
+                .ok_or_else(|| RuntimeError::AutomationNotFound(trigger.automation_id.clone()))?;
+            let next_fire_at = self
+                .automation_intake
+                .compute_next_cron_fire(&trigger.id, config, &scheduled_at)?;
+            self.automation_intake
+                .update_cron_next_fire_at(&trigger.id, &next_fire_at)
+                .await?;
+            let refreshed_trigger = self
+                .automation_intake
+                .fetch_trigger(&trigger.id)
+                .await?
+                .ok_or_else(|| RuntimeError::TriggerNotFound(trigger.id.clone()))?;
+            let dedupe_key = format!("cron:{}:{}", trigger.id, scheduled_at);
+            let payload = serde_json::json!({
+                "trigger_type": "cron",
+                "scheduled_at": scheduled_at,
+                "observed_at": now,
+            });
+            reports.push(
+                self.dispatch_trigger_delivery(automation, refreshed_trigger, dedupe_key, payload)
+                    .await?,
+            );
+        }
+
+        Ok(reports)
     }
 
     pub async fn resolve_approval(
@@ -611,6 +672,99 @@ impl Slice2Runtime {
         self.automation_intake
             .list_trigger_deliveries_by_automation(automation_id)
             .await
+    }
+
+    async fn load_trigger_and_automation(
+        &self,
+        trigger_id: &str,
+    ) -> Result<(TriggerRecord, AutomationRecord), RuntimeError> {
+        let trigger = self
+            .automation_intake
+            .fetch_trigger(trigger_id)
+            .await?
+            .ok_or_else(|| RuntimeError::TriggerNotFound(trigger_id.to_string()))?;
+        let automation = self
+            .automation_intake
+            .fetch_automation(&trigger.automation_id)
+            .await?
+            .ok_or_else(|| RuntimeError::AutomationNotFound(trigger.automation_id.clone()))?;
+        Ok((trigger, automation))
+    }
+
+    async fn ensure_mcp_server_exists(&self, server_id: &str) -> Result<(), RuntimeError> {
+        let servers = self.run_orchestrator.list_mcp_servers().await?;
+        if servers.iter().any(|server| server.id == server_id) {
+            return Ok(());
+        }
+        Err(RuntimeError::McpServerNotFound(server_id.to_string()))
+    }
+
+    async fn dispatch_trigger_delivery(
+        &self,
+        automation: AutomationRecord,
+        trigger: TriggerRecord,
+        dedupe_key: String,
+        payload: serde_json::Value,
+    ) -> Result<TriggerDeliveryReport, RuntimeError> {
+        let mut delivery = if let Some(existing) = self
+            .automation_intake
+            .find_trigger_delivery_by_dedupe_key(&dedupe_key)
+            .await?
+        {
+            if let Some(run_id) = existing.run_id.clone() {
+                let run_report = self.run_orchestrator.load_run_report(&run_id).await?;
+                let task = self.task_intake.fetch_task(&run_report.run.task_id).await?;
+                return Ok(TriggerDeliveryReport {
+                    automation,
+                    trigger,
+                    delivery: existing,
+                    task,
+                    run_report,
+                });
+            }
+            existing
+        } else {
+            self.automation_intake
+                .create_trigger_delivery(&trigger.id, &dedupe_key, payload)
+                .await?
+        };
+        delivery = self
+            .automation_intake
+            .transition_delivery_to_delivering(delivery)
+            .await?;
+
+        let task = self
+            .task_intake
+            .create_task(CreateTaskInput {
+                workspace_id: automation.workspace_id.clone(),
+                project_id: automation.project_id.clone(),
+                source_kind: "automation".into(),
+                automation_id: Some(automation.id.clone()),
+                title: automation.title.clone(),
+                instruction: automation.instruction.clone(),
+                action: automation.action.clone(),
+                capability_id: automation.capability_id.clone(),
+                estimated_cost: automation.estimated_cost,
+                idempotency_key: format!("task:trigger_delivery:{}", delivery.id),
+            })
+            .await?;
+
+        let run_report = self
+            .run_orchestrator
+            .start_task_with_trigger_delivery(&task, Some(delivery.id.as_str()))
+            .await?;
+        let delivery = self
+            .automation_intake
+            .sync_delivery_from_run(&delivery.id, &run_report.run)
+            .await?;
+
+        Ok(TriggerDeliveryReport {
+            automation,
+            trigger,
+            delivery,
+            task,
+            run_report,
+        })
     }
 }
 

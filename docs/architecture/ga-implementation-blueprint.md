@@ -1,4 +1,4 @@
-# Octopus · GA Implementation Blueprint v2.1
+# Octopus · GA Implementation Blueprint v2.2
 
 ## 1. 文档定位
 
@@ -73,6 +73,13 @@
 - 大而全 connector 生态
 - 为未来假想需求做的超前重构
 
+### 3.3 当前已落地并受验证的基线
+
+- 本地 SQLite 驱动的受治理 runtime 主闭环已覆盖 Slice 1 到 Slice 5
+- `apps/remote-hub`、`apps/desktop`、`packages/schema-ts`、`packages/hub-client` 的 minimum surface foundation 已落地
+- GA trigger expansion 已落地，当前 tracked tree 已验证 `manual event`、`cron`、`webhook`、`MCP event` 四类 trigger 进入同一 `TriggerDelivery -> Task -> Run` 主链
+- 真实凭证化 MCP transport、richer remote-hub persistence / auth、automation management surface 仍未落地
+
 ---
 
 ## 4. 首版 GA 范围
@@ -146,15 +153,19 @@
 
 ### 6.2 先做运行时内核，再做表面层
 
-实施优先级保持如下顺序：
+实施优先级继续保持“先 runtime / contract / governance，再 transport，再 surface”的原则。
 
-1. Run / Task / Automation 运行时
-2. Capability / Policy / Budget / Approval 治理链
-3. Execution Adapter / MCP Gateway
-4. Artifact / Audit / Trace
-5. Shared Knowledge 最小写入与召回
-6. 最小 UI 面与管理入口
-7. 后续 Beta / Later 能力的接口预留
+截至当前 tracked tree，以下内容已落地并通过验证：
+
+1. Slice 1 到 Slice 5 的本地 governed runtime
+2. minimum `desktop + remote-hub + schema-ts + hub-client` surface foundation
+3. trigger expansion foundation + Slice 6 `cron` + Slice 7 `webhook` + Slice 8 `MCP event`
+
+在此之后，冻结的后续顺序为：
+
+1. real MCP transport / credentials
+2. richer remote-hub persistence / auth
+3. minimum automation surface，且必须作为独立任务推进，不与 transport/runtime 收敛工作混做
 
 ### 6.3 Shared Contract 先于实现
 
@@ -637,7 +648,7 @@ GA 必须支持最小执行环境语义：
 
 ---
 
-## 13. 初始切片推进顺序
+## 13. 当前切片推进顺序与已完成基线
 
 ### 13.1 Slice 1：Task -> Run -> Artifact -> Audit
 
@@ -724,6 +735,78 @@ GA 必须支持最小执行环境语义：
 - 候选可晋升为共享知识
 - 后续执行可命中召回
 - 写回失败不影响主结果，但有失败事件与重试入口
+
+### 13.5 Slice 5 之后的 minimum surface foundation（已完成）
+
+#### 范围
+
+- 冻结最小 visual framework
+- 增加 `schema-ts` 与 `hub-client`
+- 增加 thin `remote-hub`
+- 增加 minimum `desktop` shell
+
+#### 当前状态
+
+- 已在 tracked tree 中落地并通过验证
+- 该层只证明最小表面消费边界，不等于 automation management surface 已完成
+
+### 13.6 Trigger Expansion Foundation（已完成）
+
+#### 范围
+
+- 将 `Trigger` 从 `manual_event` 单点扩展为 GA 四类 trigger 的判别联合
+- 保持一个 `Automation` 只绑定一个 `Trigger`
+- 将 trigger-specific ingress 统一收口到同一 `TriggerDelivery -> Task -> Run` 主链
+
+#### 当前状态
+
+- 已在 tracked tree 中落地并通过验证
+- 兼容入口 `dispatch_manual_event` 仍保留
+
+### 13.7 Slice 6：`cron` Trigger（已完成）
+
+#### 范围
+
+- 暴露 `tick_due_triggers(now)` 显式 runtime API
+- 在 `remote-hub` 壳层增加最小轮询 loop
+- 以 `trigger_id + scheduled_at` 形成幂等投递键
+
+#### 当前状态
+
+- 已在 tracked tree 中落地并通过验证
+- 仍是本地单进程 poller，不是独立 scheduler service
+
+### 13.8 Slice 7：`webhook` Trigger（已完成）
+
+#### 范围
+
+- 提供单一路由 `POST /api/triggers/{trigger_id}/webhook`
+- 强制 `Idempotency-Key` 与 shared-secret header
+- 保持 ingress 只做验签、去重、投递
+
+#### 当前状态
+
+- 已在 tracked tree 中落地并通过验证
+- secret 仍按 create-time reveal + persisted hash 的最小模型运行
+
+### 13.9 Slice 8：`MCP event` Trigger（已完成）
+
+#### 范围
+
+- 提供 governed MCP event ingress API
+- 事件必须绑定到已登记的 `McpServer`
+- 保持复用既有 `TriggerDelivery -> Run -> Artifact -> Knowledge gate` 主链
+
+#### 当前状态
+
+- 已在 tracked tree 中落地并通过验证
+- 该 slice 不包含真实凭证化 transport
+
+### 13.10 Trigger Expansion 之后的冻结顺序
+
+1. real MCP transport / credentials
+2. richer remote-hub persistence / auth
+3. minimum automation surface 作为独立任务启动，并在那时再扩展相关 app/package surface
 
 ---
 
@@ -919,7 +1002,8 @@ Octopus 首版 GA 不是“把目标态平台全部做出来”，而是：
 - 以 PRD 定义的正式对象模型为产品边界
 - 以 SAD 定义的运行时、治理、恢复、互操作边界为架构约束
 - 以本蓝图定义的最小正式运行闭环为实施主线
-- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 的顺序稳步推进
+- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 的顺序稳步推进
+- 当前下一优先级是 real MCP transport / credentials，其后是 richer remote-hub persistence / auth，最后才是独立的 minimum automation surface
 - 在每次模块推进前先完成局部设计包，再实现，再验证，再回写全局文档
 
 只有这样，Octopus 才能在不丢失整体方向的前提下，让 AI 主导开发同时保持可控、可审计、可维护。

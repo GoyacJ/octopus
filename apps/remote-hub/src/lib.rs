@@ -2,7 +2,7 @@ use std::convert::Infallible;
 
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{
         sse::{Event, Sse},
         IntoResponse, Response,
@@ -17,8 +17,9 @@ use octopus_runtime::{
     ApprovalDecision, ApprovalRequestRecord, ArtifactRecord, AuditRecord,
     CapabilityDescriptorRecord, CreateTaskInput, InboxItemRecord, KnowledgeAssetRecord,
     KnowledgeCandidateRecord, KnowledgeLineageRecord, KnowledgeSpaceRecord, NotificationRecord,
-    PolicyDecisionLogRecord, ProjectContext, RunExecutionReport, RunRecord, RuntimeError,
-    Slice1Runtime, TaskRecord, TraceRecord,
+    PolicyDecisionLogRecord, ProjectContext, RunExecutionReport, RunRecord,
+    RuntimeError, Slice1Runtime, TaskRecord, TraceRecord, TriggerSpec,
+    DispatchWebhookEventInput,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -43,6 +44,7 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/api/tasks", post(create_task))
         .route("/api/tasks/{task_id}/start", post(start_task))
+        .route("/api/triggers/{trigger_id}/webhook", post(dispatch_webhook))
         .route("/api/runs/{run_id}", get(get_run_detail))
         .route("/api/runs/{run_id}/artifacts", get(list_artifacts))
         .route("/api/runs/{run_id}/knowledge", get(get_knowledge_detail))
@@ -100,6 +102,26 @@ impl IntoResponse for AppError {
                 } => (
                     StatusCode::BAD_REQUEST,
                     format!("trigger `{trigger_id}` has unsupported type `{trigger_type}`"),
+                ),
+                RuntimeError::MissingWebhookIdempotencyKey { trigger_id } => (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "webhook event for trigger `{trigger_id}` requires a non-empty idempotency key"
+                    ),
+                ),
+                RuntimeError::InvalidWebhookSecret { trigger_id } => (
+                    StatusCode::UNAUTHORIZED,
+                    format!("webhook event for trigger `{trigger_id}` has invalid secret"),
+                ),
+                RuntimeError::McpServerNotFound(server_id) => {
+                    (StatusCode::NOT_FOUND, format!("mcp server `{server_id}` not found"))
+                }
+                RuntimeError::McpEventMismatch {
+                    trigger_id,
+                    event_name,
+                } => (
+                    StatusCode::BAD_REQUEST,
+                    format!("mcp event `{event_name}` does not match trigger `{trigger_id}` selector"),
                 ),
                 RuntimeError::InvalidTriggerDeliveryTransition {
                     delivery_id,
@@ -235,6 +257,14 @@ struct HubConnectionStatusResponse {
     last_refreshed_at: String,
 }
 
+#[derive(Debug, Serialize)]
+struct WebhookDispatchResponse {
+    trigger_id: String,
+    delivery_id: String,
+    run_id: String,
+    status: String,
+}
+
 async fn get_project_context(
     State(state): State<AppState>,
     Path((workspace_id, project_id)): Path<(String, String)>,
@@ -268,6 +298,52 @@ async fn create_task(
             })
             .await?,
     ))
+}
+
+async fn dispatch_webhook(
+    State(state): State<AppState>,
+    Path(trigger_id): Path<String>,
+    headers: HeaderMap,
+    Json(payload): Json<Value>,
+) -> AppResult<WebhookDispatchResponse> {
+    let trigger = state
+        .runtime
+        .fetch_trigger(trigger_id.as_str())
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("trigger `{trigger_id}` not found")))?;
+    let TriggerSpec::Webhook { config } = trigger.spec else {
+        return Err(AppError::BadRequest(format!(
+            "trigger `{trigger_id}` is not a webhook trigger"
+        )));
+    };
+
+    let idempotency_key = required_header(&headers, "Idempotency-Key")?;
+    let secret = required_header(&headers, config.secret_header_name.as_str())?;
+    let report = state
+        .runtime
+        .dispatch_webhook_event(DispatchWebhookEventInput {
+            trigger_id: trigger_id.clone(),
+            idempotency_key,
+            secret,
+            payload,
+        })
+        .await?;
+
+    Ok(Json(WebhookDispatchResponse {
+        trigger_id,
+        delivery_id: report.delivery.id,
+        run_id: report.run_report.run.id,
+        status: report.delivery.status,
+    }))
+}
+
+fn required_header(headers: &HeaderMap, name: &str) -> Result<String, AppError> {
+    headers
+        .get(name)
+        .ok_or_else(|| AppError::BadRequest(format!("missing required header `{name}`")))?
+        .to_str()
+        .map(|value| value.to_string())
+        .map_err(|_| AppError::BadRequest(format!("invalid header `{name}`")))
 }
 
 async fn start_task(
