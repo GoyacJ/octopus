@@ -1,0 +1,31 @@
+## Delivery Note
+
+- What Changed:
+  - Added the `octopus-interop-mcp` crate and wired runtime through a unified connector execution adapter.
+  - Added Slice 5 schema and SQLite migration updates for capability metadata, environment leases, MCP invocations, and artifact / knowledge provenance.
+  - Extended runtime with capability visibility, MCP registry seed/query APIs, environment-lease lifecycle APIs, connector-backed task execution, and low-trust knowledge gating.
+- Why:
+  - Slice 5 needed a truthful execution boundary between governed runs and external connector-backed actions without skipping approval, audit, artifact persistence, or Shared Knowledge guardrails.
+- User / System Impact:
+  - Manual tasks and `manual_event` automations can now execute connector-backed actions through the same governed run shell.
+  - External output now carries provenance and trust-gate metadata, and low-trust output stops at Artifact instead of silently entering Shared Knowledge.
+- Risks:
+  - The gateway path is still backed by fake/test-double tool behavior, so it must not be mistaken for proof of real MCP network transport or credential management.
+  - Capability visibility is intentionally minimal and project-scoped; broader discovery semantics still need later slices.
+- Rollback Notes:
+  - Revert migration `0005_slice5_mcp_gateway.sql`, remove the `octopus-interop-mcp` workspace member, and back out the Slice 5 schema / runtime changes together to avoid contract-store drift.
+- Follow-ups:
+  - Add real MCP transport and credential handling behind the same gateway interface.
+  - Extend the gateway path beyond `manual_event` and manual task flows when later slices authorize new triggers and surfaces.
+  - Add connector management surfaces and richer capability discovery once the desktop / hub layers enter tracked implementation.
+- Docs Updated:
+  - Updated `README.md`, `docs/README.md`, `docs/architecture/SAD.md`, `docs/architecture/ga-implementation-blueprint.md`, `AGENTS.md`, the Slice 5 task package, and the ADR index.
+- Tests Included:
+  - `cargo test -p octopus-runtime --test schema_contracts refined_slice1_examples_validate`
+  - `cargo test -p octopus-runtime --test slice5_mcp_gateway`
+  - `cargo test --workspace`
+  - `cargo fmt --all --check`
+- ADR Updated:
+  - Added `docs/decisions/0005-centralized-capability-invocation-and-gated-mcp-interop.md`.
+- Temporary Workarounds:
+  - Slice 5 uses local fake/test-double MCP tool simulation instead of real transport. This is intentional scope control, not an accidental stub.

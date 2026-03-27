@@ -44,6 +44,8 @@ pub struct KnowledgeCandidateRecord {
     pub capability_id: String,
     pub status: String,
     pub content: String,
+    pub provenance_source: String,
+    pub source_trust_level: String,
     pub dedupe_key: String,
     pub created_at: String,
     pub updated_at: String,
@@ -57,6 +59,8 @@ impl KnowledgeCandidateRecord {
         source_artifact_id: impl Into<String>,
         capability_id: impl Into<String>,
         content: impl Into<String>,
+        provenance_source: impl Into<String>,
+        source_trust_level: impl Into<String>,
         dedupe_key: impl Into<String>,
     ) -> Self {
         let now = current_timestamp();
@@ -69,6 +73,8 @@ impl KnowledgeCandidateRecord {
             capability_id: capability_id.into(),
             status: "candidate".to_string(),
             content: content.into(),
+            provenance_source: provenance_source.into(),
+            source_trust_level: source_trust_level.into(),
             dedupe_key: dedupe_key.into(),
             created_at: now.clone(),
             updated_at: now,
@@ -259,8 +265,9 @@ impl SqliteKnowledgeStore {
             r#"
             INSERT INTO knowledge_candidates (
                 id, knowledge_space_id, source_run_id, source_task_id, source_artifact_id,
-                capability_id, status, content, dedupe_key, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                capability_id, status, content, provenance_source, source_trust_level,
+                dedupe_key, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             "#,
         )
         .bind(&candidate.id)
@@ -271,6 +278,8 @@ impl SqliteKnowledgeStore {
         .bind(&candidate.capability_id)
         .bind(&candidate.status)
         .bind(&candidate.content)
+        .bind(&candidate.provenance_source)
+        .bind(&candidate.source_trust_level)
         .bind(&candidate.dedupe_key)
         .bind(&candidate.created_at)
         .bind(&candidate.updated_at)
@@ -287,7 +296,8 @@ impl SqliteKnowledgeStore {
         let row = sqlx::query(
             r#"
             SELECT id, knowledge_space_id, source_run_id, source_task_id, source_artifact_id,
-                   capability_id, status, content, dedupe_key, created_at, updated_at
+                   capability_id, status, content, provenance_source, source_trust_level,
+                   dedupe_key, created_at, updated_at
             FROM knowledge_candidates
             WHERE dedupe_key = ?1
             "#,
@@ -308,7 +318,8 @@ impl SqliteKnowledgeStore {
         let row = sqlx::query(
             r#"
             SELECT id, knowledge_space_id, source_run_id, source_task_id, source_artifact_id,
-                   capability_id, status, content, dedupe_key, created_at, updated_at
+                   capability_id, status, content, provenance_source, source_trust_level,
+                   dedupe_key, created_at, updated_at
             FROM knowledge_candidates
             WHERE id = ?1
             "#,
@@ -350,7 +361,8 @@ impl SqliteKnowledgeStore {
         let rows = sqlx::query(
             r#"
             SELECT id, knowledge_space_id, source_run_id, source_task_id, source_artifact_id,
-                   capability_id, status, content, dedupe_key, created_at, updated_at
+                   capability_id, status, content, provenance_source, source_trust_level,
+                   dedupe_key, created_at, updated_at
             FROM knowledge_candidates
             WHERE source_run_id = ?1
             ORDER BY created_at, id
@@ -580,6 +592,8 @@ fn knowledge_candidate_from_row(
         capability_id: row.try_get("capability_id")?,
         status: row.try_get("status")?,
         content: row.try_get("content")?,
+        provenance_source: row.try_get("provenance_source")?,
+        source_trust_level: row.try_get("source_trust_level")?,
         dedupe_key: row.try_get("dedupe_key")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,

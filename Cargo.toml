@@ -4,6 +4,7 @@ members = [
   "crates/domain-context",
   "crates/execution",
   "crates/governance",
+  "crates/interop-mcp",
   "crates/knowledge",
   "crates/observe-artifact",
   "crates/runtime",

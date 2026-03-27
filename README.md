@@ -2,7 +2,7 @@
 
 Octopus is currently a **doc-first rebuild** of a unified Agent Runtime Platform.
 
-This repository now proves a **local, test-verified Slice 4 runtime** under `crates/`, including the first Shared Knowledge MVP on top of the `manual_event` Automation path, but it does **not** yet prove a runnable UI surface, remote-hub transport, MCP execution, Org Knowledge Graph promotion, or a full GA implementation tree.  
+This repository now proves a **local, test-verified Slice 5 runtime** under `crates/`, including the first fake/test-double `Execution Adapter / MCP Gateway` and `EnvironmentLease` path on top of the existing `manual_event` Automation and Shared Knowledge slices, but it does **not** yet prove a runnable UI surface, remote-hub transport, real credentialed MCP transport, Org Knowledge Graph promotion, or a full GA implementation tree.  
 The tracked truth starts with the repository entry docs, the `docs/` directory, and any tracked manifests, source files, schemas, and verification results that actually exist in the tree. If code, manifests, commands, or verification results are not present in the tracked tree, they must not be described as if they already exist.
 
 ## Where To Start
@@ -32,11 +32,11 @@ The repository currently contains:
 - repository-level instructions in [AGENTS.md](AGENTS.md)
 - product, architecture, governance, decision, and reference docs under [docs/](docs/README.md)
 - monorepo root manifests in `Cargo.toml`, `package.json`, and `pnpm-workspace.yaml`
-- refined Slice 1 through Slice 4 shared contracts for runtime, governance, context, and observation objects under `schemas/`
-- first real Rust workspace members in `crates/domain-context`, `crates/execution`, `crates/governance`, `crates/knowledge`, `crates/observe-artifact`, and `crates/runtime`
-- task packages for the GA foundation skeleton and Slice 1 through Slice 4 runtime deliveries under [docs/tasks/](docs/tasks/README.md)
+- refined Slice 1 through Slice 5 shared contracts for runtime, governance, context, and observation objects under `schemas/`
+- first real Rust workspace members in `crates/domain-context`, `crates/execution`, `crates/governance`, `crates/interop-mcp`, `crates/knowledge`, `crates/observe-artifact`, and `crates/runtime`
+- task packages for the GA foundation skeleton and Slice 1 through Slice 5 runtime deliveries under [docs/tasks/](docs/tasks/README.md)
 
-The current tracked implementation proves a local SQLite-backed governed automation and Shared Knowledge path through automated tests: `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Artifact -> KnowledgeCandidate -> Shared Knowledge recall -> Audit / Trace`, including persistent `ApprovalRequest`, `InboxItem`, `Notification`, `PolicyDecisionLog`, TriggerDelivery dedupe/retry state, project-scoped `KnowledgeSpace`, `KnowledgeCandidate`, `KnowledgeAsset`, knowledge-capture retry records, and knowledge lineage. It does **not** yet prove UI surfaces, remote transport, `cron`/`webhook`/`MCP event` trigger types, MCP execution, approval-driven knowledge promotion, vector retrieval, or Org Knowledge Graph slices.
+The current tracked implementation proves a local SQLite-backed governed automation, Shared Knowledge, and fake/test-double MCP gateway path through automated tests: `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Execution Adapter / MCP Gateway -> EnvironmentLease -> Artifact -> KnowledgeCandidate gate -> Shared Knowledge recall -> Audit / Trace`, including persistent `ApprovalRequest`, `InboxItem`, `Notification`, `PolicyDecisionLog`, TriggerDelivery dedupe/retry state, `McpServer`, `McpInvocation`, `EnvironmentLease`, project-scoped `KnowledgeSpace`, `KnowledgeCandidate`, `KnowledgeAsset`, knowledge-capture retry records, and knowledge lineage. Low-trust connector output can persist as an artifact but is gated before Shared Knowledge candidate creation. It does **not** yet prove UI surfaces, remote transport, `cron`/`webhook`/`MCP event` trigger types, real credentialed MCP transport, approval-driven knowledge promotion, vector retrieval, or Org Knowledge Graph slices.
 
 ## Working Rule
 

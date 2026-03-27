@@ -13,8 +13,15 @@ pub const APPROVAL_TYPE_EXECUTION: &str = "execution";
 pub struct CapabilityDescriptorRecord {
     pub id: String,
     pub slug: String,
+    pub kind: String,
+    pub source: String,
+    pub platform: String,
     pub risk_level: String,
     pub requires_approval: bool,
+    pub input_schema_uri: Option<String>,
+    pub output_schema_uri: Option<String>,
+    pub fallback_capability_id: Option<String>,
+    pub trust_level: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -30,8 +37,42 @@ impl CapabilityDescriptorRecord {
         Self {
             id: id.into(),
             slug: slug.into(),
+            kind: "core".to_string(),
+            source: "builtin".to_string(),
+            platform: "runtime_local".to_string(),
             risk_level: risk_level.into(),
             requires_approval,
+            input_schema_uri: None,
+            output_schema_uri: None,
+            fallback_capability_id: None,
+            trust_level: "trusted".to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+
+    pub fn new_connector_backed(
+        id: impl Into<String>,
+        slug: impl Into<String>,
+        platform: impl Into<String>,
+        source: impl Into<String>,
+        risk_level: impl Into<String>,
+        requires_approval: bool,
+        trust_level: impl Into<String>,
+    ) -> Self {
+        let now = current_timestamp();
+        Self {
+            id: id.into(),
+            slug: slug.into(),
+            kind: "connector_backed".to_string(),
+            source: source.into(),
+            platform: platform.into(),
+            risk_level: risk_level.into(),
+            requires_approval,
+            input_schema_uri: None,
+            output_schema_uri: None,
+            fallback_capability_id: None,
+            trust_level: trust_level.into(),
             created_at: now.clone(),
             updated_at: now,
         }
@@ -266,19 +307,35 @@ impl SqliteGovernanceStore {
         sqlx::query(
             r#"
             INSERT INTO capability_descriptors (
-                id, slug, risk_level, requires_approval, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                id, slug, kind, source, platform, risk_level, requires_approval,
+                input_schema_uri, output_schema_uri, fallback_capability_id, trust_level,
+                created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
             ON CONFLICT(id) DO UPDATE SET
                 slug = excluded.slug,
+                kind = excluded.kind,
+                source = excluded.source,
+                platform = excluded.platform,
                 risk_level = excluded.risk_level,
                 requires_approval = excluded.requires_approval,
+                input_schema_uri = excluded.input_schema_uri,
+                output_schema_uri = excluded.output_schema_uri,
+                fallback_capability_id = excluded.fallback_capability_id,
+                trust_level = excluded.trust_level,
                 updated_at = excluded.updated_at
             "#,
         )
         .bind(&record.id)
         .bind(&record.slug)
+        .bind(&record.kind)
+        .bind(&record.source)
+        .bind(&record.platform)
         .bind(&record.risk_level)
         .bind(record.requires_approval)
+        .bind(&record.input_schema_uri)
+        .bind(&record.output_schema_uri)
+        .bind(&record.fallback_capability_id)
+        .bind(&record.trust_level)
         .bind(&record.created_at)
         .bind(&record.updated_at)
         .execute(&self.pool)
@@ -605,13 +662,15 @@ impl SqliteGovernanceStore {
         Ok(request)
     }
 
-    async fn fetch_capability_descriptor(
+    pub async fn fetch_capability_descriptor(
         &self,
         capability_id: &str,
     ) -> Result<Option<CapabilityDescriptorRecord>, GovernanceStoreError> {
         let row = sqlx::query(
             r#"
-            SELECT id, slug, risk_level, requires_approval, created_at, updated_at
+            SELECT id, slug, kind, source, platform, risk_level, requires_approval,
+                   input_schema_uri, output_schema_uri, fallback_capability_id, trust_level,
+                   created_at, updated_at
             FROM capability_descriptors
             WHERE id = ?1
             "#,
@@ -623,6 +682,41 @@ impl SqliteGovernanceStore {
         Ok(row
             .map(|row| capability_descriptor_from_row(&row))
             .transpose()?)
+    }
+
+    pub async fn list_visible_capability_descriptors(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<CapabilityDescriptorRecord>, GovernanceStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT DISTINCT d.id, d.slug, d.kind, d.source, d.platform, d.risk_level,
+                   d.requires_approval, d.input_schema_uri, d.output_schema_uri,
+                   d.fallback_capability_id, d.trust_level, d.created_at, d.updated_at
+            FROM capability_descriptors d
+            INNER JOIN capability_bindings b
+                ON b.capability_id = d.id
+            INNER JOIN capability_grants g
+                ON g.capability_id = d.id
+            WHERE b.workspace_id = ?1
+              AND b.project_id = ?2
+              AND b.binding_status = 'active'
+              AND g.subject_ref = ?3
+              AND g.grant_status = 'active'
+            ORDER BY d.slug ASC
+            "#,
+        )
+        .bind(workspace_id)
+        .bind(project_id)
+        .bind(project_scope_ref(workspace_id, project_id))
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(|row| capability_descriptor_from_row(&row))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(GovernanceStoreError::from)
     }
 
     async fn fetch_active_binding(
@@ -702,8 +796,15 @@ fn capability_descriptor_from_row(
     Ok(CapabilityDescriptorRecord {
         id: row.try_get("id")?,
         slug: row.try_get("slug")?,
+        kind: row.try_get("kind")?,
+        source: row.try_get("source")?,
+        platform: row.try_get("platform")?,
         risk_level: row.try_get("risk_level")?,
         requires_approval: row.try_get("requires_approval")?,
+        input_schema_uri: row.try_get("input_schema_uri")?,
+        output_schema_uri: row.try_get("output_schema_uri")?,
+        fallback_capability_id: row.try_get("fallback_capability_id")?,
+        trust_level: row.try_get("trust_level")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
     })

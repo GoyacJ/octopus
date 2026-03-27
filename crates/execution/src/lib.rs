@@ -1,10 +1,15 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ExecutionAction {
     EmitText {
         content: String,
+    },
+    ConnectorCall {
+        tool_name: String,
+        arguments: Value,
     },
     FailOnceThenEmitText {
         failure_message: String,
@@ -42,6 +47,10 @@ impl ExecutionEngine {
                     content: content.clone(),
                 })
             }
+            ExecutionAction::ConnectorCall { .. } => ExecutionOutcome::Failed(ExecutionFailure {
+                message: "connector_call_must_use_gateway".to_string(),
+                retryable: false,
+            }),
             ExecutionAction::FailOnceThenEmitText {
                 failure_message,
                 content,
@@ -67,6 +76,8 @@ impl ExecutionEngine {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::{ExecutionAction, ExecutionEngine, ExecutionOutcome};
 
     #[test]
@@ -93,6 +104,21 @@ mod tests {
         assert!(matches!(
             first,
             ExecutionOutcome::Failed(ref failure) if !failure.retryable
+        ));
+    }
+
+    #[test]
+    fn connector_calls_must_be_dispatched_outside_builtin_engine() {
+        let action = ExecutionAction::ConnectorCall {
+            tool_name: "emit_text".into(),
+            arguments: json!({ "content": "hello" }),
+        };
+
+        let first = ExecutionEngine::execute(&action, 1);
+        assert!(matches!(
+            first,
+            ExecutionOutcome::Failed(ref failure)
+                if failure.message == "connector_call_must_use_gateway" && !failure.retryable
         ));
     }
 }

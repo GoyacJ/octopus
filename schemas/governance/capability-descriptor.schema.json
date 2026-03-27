@@ -10,6 +10,18 @@
       "type": "string",
       "minLength": 1
     },
+    "kind": {
+      "type": "string",
+      "enum": ["core", "deferred", "connector_backed", "platform_native"]
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "platform": {
+      "type": "string",
+      "minLength": 1
+    },
     "risk_level": {
       "type": "string",
       "enum": ["low", "high"]
@@ -17,14 +29,34 @@
     "requires_approval": {
       "type": "boolean"
     },
+    "input_schema_uri": {
+      "type": ["string", "null"]
+    },
+    "output_schema_uri": {
+      "type": ["string", "null"]
+    },
+    "fallback_capability_id": {
+      "type": ["string", "null"]
+    },
+    "trust_level": {
+      "type": "string",
+      "enum": ["trusted", "external_untrusted"]
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
   "required": [
     "id",
     "slug",
+    "kind",
+    "source",
+    "platform",
     "risk_level",
     "requires_approval",
+    "input_schema_uri",
+    "output_schema_uri",
+    "fallback_capability_id",
+    "trust_level",
     "created_at",
     "updated_at"
   ],

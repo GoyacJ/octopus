@@ -36,6 +36,7 @@ pub const AUDIT_EVENT_APPROVAL_CANCELLED: &str = "approval_cancelled";
 pub const AUDIT_EVENT_RUN_BLOCKED: &str = "run_blocked";
 pub const AUDIT_EVENT_POLICY_DENIED: &str = "policy_denied";
 pub const AUDIT_EVENT_KNOWLEDGE_CANDIDATE_CREATED: &str = "knowledge_candidate_created";
+pub const AUDIT_EVENT_KNOWLEDGE_CAPTURE_GATED: &str = "knowledge_capture_gated";
 pub const AUDIT_EVENT_KNOWLEDGE_CAPTURE_FAILED: &str = "knowledge_capture_failed";
 pub const AUDIT_EVENT_KNOWLEDGE_CAPTURE_RETRIED: &str = "knowledge_capture_retried";
 pub const AUDIT_EVENT_KNOWLEDGE_ASSET_PROMOTED: &str = "knowledge_asset_promoted";
@@ -50,6 +51,11 @@ pub struct ArtifactRecord {
     pub task_id: String,
     pub artifact_type: String,
     pub content: String,
+    pub provenance_source: String,
+    pub source_descriptor_id: String,
+    pub source_invocation_id: Option<String>,
+    pub trust_level: String,
+    pub knowledge_gate_status: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -71,9 +77,30 @@ impl ArtifactRecord {
             task_id: task_id.into(),
             artifact_type: ARTIFACT_TYPE_EXECUTION_OUTPUT.to_string(),
             content: content.into(),
+            provenance_source: "builtin".to_string(),
+            source_descriptor_id: "capability-unknown".to_string(),
+            source_invocation_id: None,
+            trust_level: "trusted".to_string(),
+            knowledge_gate_status: "eligible".to_string(),
             created_at: now.clone(),
             updated_at: now,
         }
+    }
+
+    pub fn with_provenance(
+        mut self,
+        provenance_source: impl Into<String>,
+        source_descriptor_id: impl Into<String>,
+        source_invocation_id: Option<String>,
+        trust_level: impl Into<String>,
+        knowledge_gate_status: impl Into<String>,
+    ) -> Self {
+        self.provenance_source = provenance_source.into();
+        self.source_descriptor_id = source_descriptor_id.into();
+        self.source_invocation_id = source_invocation_id;
+        self.trust_level = trust_level.into();
+        self.knowledge_gate_status = knowledge_gate_status.into();
+        self
     }
 }
 
@@ -409,6 +436,11 @@ impl SqliteObservationStore {
             task_id: row.try_get("task_id")?,
             artifact_type: row.try_get("artifact_type")?,
             content: row.try_get("content")?,
+            provenance_source: row.try_get("provenance_source")?,
+            source_descriptor_id: row.try_get("source_descriptor_id")?,
+            source_invocation_id: row.try_get("source_invocation_id")?,
+            trust_level: row.try_get("trust_level")?,
+            knowledge_gate_status: row.try_get("knowledge_gate_status")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
         })
@@ -521,8 +553,10 @@ impl ArtifactStore for SqliteObservationStore {
         sqlx::query(
             r#"
             INSERT INTO artifacts (
-                id, workspace_id, project_id, run_id, task_id, artifact_type, content, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                id, workspace_id, project_id, run_id, task_id, artifact_type, content,
+                provenance_source, source_descriptor_id, source_invocation_id, trust_level,
+                knowledge_gate_status, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             "#,
         )
         .bind(&artifact.id)
@@ -532,6 +566,11 @@ impl ArtifactStore for SqliteObservationStore {
         .bind(&artifact.task_id)
         .bind(&artifact.artifact_type)
         .bind(&artifact.content)
+        .bind(&artifact.provenance_source)
+        .bind(&artifact.source_descriptor_id)
+        .bind(&artifact.source_invocation_id)
+        .bind(&artifact.trust_level)
+        .bind(&artifact.knowledge_gate_status)
         .bind(&artifact.created_at)
         .bind(&artifact.updated_at)
         .execute(&self.pool)
@@ -546,7 +585,9 @@ impl ArtifactStore for SqliteObservationStore {
     ) -> Result<Vec<ArtifactRecord>, ObservationStoreError> {
         let rows = sqlx::query(
             r#"
-            SELECT id, workspace_id, project_id, run_id, task_id, artifact_type, content, created_at, updated_at
+            SELECT id, workspace_id, project_id, run_id, task_id, artifact_type, content,
+                   provenance_source, source_descriptor_id, source_invocation_id, trust_level,
+                   knowledge_gate_status, created_at, updated_at
             FROM artifacts
             WHERE run_id = ?1
             ORDER BY created_at, id

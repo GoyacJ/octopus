@@ -18,6 +18,25 @@
       "type": "string",
       "minLength": 1
     },
+    "provenance_source": {
+      "type": "string",
+      "enum": ["builtin", "mcp_connector"]
+    },
+    "source_descriptor_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_invocation_id": {
+      "type": ["string", "null"]
+    },
+    "trust_level": {
+      "type": "string",
+      "enum": ["trusted", "external_untrusted"]
+    },
+    "knowledge_gate_status": {
+      "type": "string",
+      "enum": ["eligible", "blocked_low_trust"]
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
@@ -29,6 +48,11 @@
     "task_id",
     "artifact_type",
     "content",
+    "provenance_source",
+    "source_descriptor_id",
+    "source_invocation_id",
+    "trust_level",
+    "knowledge_gate_status",
     "created_at",
     "updated_at"
   ],

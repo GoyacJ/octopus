@@ -3,15 +3,46 @@
   "$id": "https://octopus.local/schemas/runtime/environment-lease.schema.json",
   "title": "EnvironmentLease",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for execution environment leases.",
+  "description": "Slice 5 shared contract for governed execution environment leases used by the MCP gateway and runtime recovery.",
   "properties": {
     "id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "project_id": { "type": "string" },
     "run_id": { "type": "string" },
+    "task_id": { "type": "string" },
+    "capability_id": { "type": "string" },
+    "environment_type": { "type": "string", "minLength": 1 },
+    "sandbox_tier": {
+      "type": "string",
+      "enum": [
+        "local_trusted",
+        "tenant_sandboxed",
+        "ephemeral_restricted",
+        "external_delegated"
+      ]
+    },
     "status": { "$ref": "https://octopus.local/schemas/runtime/environment-lease-status.schema.json" },
-    "resume_token": { "type": "string" },
+    "heartbeat_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "resume_token": { "type": "string", "minLength": 1 },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id", "run_id", "status"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "workspace_id",
+    "project_id",
+    "run_id",
+    "task_id",
+    "capability_id",
+    "environment_type",
+    "sandbox_tier",
+    "status",
+    "heartbeat_at",
+    "expires_at",
+    "resume_token",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
 }

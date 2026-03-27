@@ -77,6 +77,9 @@ fn refined_slice1_examples_validate() {
     let automation_schema = compiled_schema("runtime/automation.schema.json");
     let trigger_schema = compiled_schema("runtime/trigger.schema.json");
     let trigger_delivery_schema = compiled_schema("runtime/trigger-delivery.schema.json");
+    let environment_lease_status_schema =
+        compiled_schema("runtime/environment-lease-status.schema.json");
+    let environment_lease_schema = compiled_schema("runtime/environment-lease.schema.json");
     let approval_schema = compiled_schema("governance/approval-request.schema.json");
     let capability_descriptor_schema =
         compiled_schema("governance/capability-descriptor.schema.json");
@@ -139,6 +142,27 @@ fn refined_slice1_examples_validate() {
         "created_at": "2026-03-26T10:00:00Z",
         "updated_at": "2026-03-26T10:00:00Z"
     })));
+    assert!(task_schema.is_valid(&json!({
+        "id": "task-connector-1",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "source_kind": "manual",
+        "automation_id": null,
+        "title": "Run connector tool",
+        "instruction": "Invoke MCP tool through capability runtime",
+        "action": {
+            "kind": "connector_call",
+            "tool_name": "emit_text",
+            "arguments": {
+                "content": "hello from connector"
+            }
+        },
+        "capability_id": "capability-write-note-connector",
+        "estimated_cost": 1,
+        "idempotency_key": "task-connector-1",
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
     assert!(run_schema.is_valid(&json!({
         "id": "run-1",
         "task_id": "task-1",
@@ -177,6 +201,25 @@ fn refined_slice1_examples_validate() {
         "created_at": "2026-03-26T10:00:00Z",
         "updated_at": "2026-03-26T10:00:00Z"
     })));
+    assert!(automation_schema.is_valid(&json!({
+        "id": "automation-connector-1",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "trigger_id": "trigger-connector-1",
+        "title": "Connector automation",
+        "instruction": "Dispatch MCP-backed manual event automation",
+        "action": {
+            "kind": "connector_call",
+            "tool_name": "emit_text",
+            "arguments": {
+                "content": "hello from connector automation"
+            }
+        },
+        "capability_id": "capability-write-note-connector",
+        "estimated_cost": 1,
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
     assert!(trigger_schema.is_valid(&json!({
         "id": "trigger-1",
         "automation_id": "automation-1",
@@ -198,11 +241,40 @@ fn refined_slice1_examples_validate() {
         "created_at": "2026-03-26T10:00:00Z",
         "updated_at": "2026-03-26T10:00:01Z"
     })));
+    assert!(environment_lease_status_schema.is_valid(&json!("requested")));
+    assert!(environment_lease_status_schema.is_valid(&json!("granted")));
+    assert!(environment_lease_status_schema.is_valid(&json!("active")));
+    assert!(environment_lease_status_schema.is_valid(&json!("released")));
+    assert!(environment_lease_status_schema.is_valid(&json!("expired")));
+    assert!(environment_lease_status_schema.is_valid(&json!("revoked")));
+    assert!(environment_lease_schema.is_valid(&json!({
+        "id": "lease-1",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "run_id": "run-1",
+        "task_id": "task-1",
+        "capability_id": "capability-write-note-connector",
+        "environment_type": "mcp_tool_call",
+        "sandbox_tier": "ephemeral_restricted",
+        "status": "active",
+        "heartbeat_at": "2026-03-26T10:00:01Z",
+        "expires_at": "2026-03-26T10:01:01Z",
+        "resume_token": "lease:lease-1",
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:01Z"
+    })));
     assert!(capability_descriptor_schema.is_valid(&json!({
         "id": "capability-write-note",
         "slug": "capability-write-note",
+        "kind": "connector_backed",
+        "source": "mcp_server",
+        "platform": "desktop",
         "risk_level": "low",
         "requires_approval": false,
+        "input_schema_uri": "https://octopus.local/schemas/runtime/task.schema.json",
+        "output_schema_uri": "https://octopus.local/schemas/observe/artifact.schema.json",
+        "fallback_capability_id": "capability-write-note-local",
+        "trust_level": "external_untrusted",
         "created_at": "2026-03-26T10:00:00Z",
         "updated_at": "2026-03-26T10:00:00Z"
     })));
@@ -257,6 +329,11 @@ fn refined_slice1_examples_validate() {
         "task_id": "task-1",
         "artifact_type": "execution_output",
         "content": "hello",
+        "provenance_source": "mcp_connector",
+        "source_descriptor_id": "capability-write-note",
+        "source_invocation_id": "invocation-1",
+        "trust_level": "external_untrusted",
+        "knowledge_gate_status": "blocked_low_trust",
         "created_at": "2026-03-26T10:00:01Z",
         "updated_at": "2026-03-26T10:00:01Z"
     })));
@@ -333,6 +410,8 @@ fn refined_slice1_examples_validate() {
         "capability_id": "capability-write-note",
         "status": "candidate",
         "content": "hello",
+        "provenance_source": "builtin",
+        "source_trust_level": "trusted",
         "dedupe_key": "knowledge_candidate:artifact-1",
         "created_at": "2026-03-26T10:00:01Z",
         "updated_at": "2026-03-26T10:00:01Z"

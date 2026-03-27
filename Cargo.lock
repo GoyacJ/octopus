@@ -1242,6 +1242,7 @@ name = "octopus-execution"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 
@@ -1251,6 +1252,18 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "serde",
+ "sqlx",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "octopus-interop-mcp"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
  "sqlx",
  "thiserror 2.0.18",
  "uuid",
@@ -1288,6 +1301,7 @@ dependencies = [
  "octopus-domain-context",
  "octopus-execution",
  "octopus-governance",
+ "octopus-interop-mcp",
  "octopus-knowledge",
  "octopus-observe-artifact",
  "serde",

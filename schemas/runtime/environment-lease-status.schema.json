@@ -5,10 +5,11 @@
   "type": "string",
   "description": "Minimal GA environment lease status set preserving active, expiry, revocation, and resume semantics.",
   "enum": [
+    "requested",
+    "granted",
     "active",
     "expired",
     "released",
-    "revoked",
-    "resuming"
+    "revoked"
   ]
 }

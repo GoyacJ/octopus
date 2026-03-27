@@ -53,6 +53,24 @@
       },
       "required": ["kind", "message"],
       "additionalProperties": false
+    },
+    "connector_call_action": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "connector_call"
+        },
+        "tool_name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "arguments": {
+          "type": "object"
+        }
+      },
+      "required": ["kind", "tool_name", "arguments"],
+      "additionalProperties": false
     }
   },
   "properties": {
@@ -71,6 +89,7 @@
     "action": {
       "oneOf": [
         { "$ref": "#/$defs/emit_text_action" },
+        { "$ref": "#/$defs/connector_call_action" },
         { "$ref": "#/$defs/fail_once_then_emit_text_action" },
         { "$ref": "#/$defs/always_fail_action" }
       ]

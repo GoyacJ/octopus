@@ -1,0 +1,39 @@
+## Contract Change
+
+- Change Type:
+  - Cross-language Contract
+- New / Updated Schemas:
+  - Update `schemas/governance/capability-descriptor.schema.json`
+  - Update `schemas/runtime/environment-lease.schema.json`
+  - Update `schemas/runtime/environment-lease-status.schema.json`
+  - Update `schemas/runtime/task.schema.json`
+  - Update `schemas/runtime/automation.schema.json`
+  - Update `schemas/observe/artifact.schema.json`
+  - Update `schemas/observe/knowledge-candidate.schema.json`
+- New / Updated Commands:
+  - None as shared commands. Slice 5 still exposes a Rust library API only.
+- New / Updated Queries:
+  - None as shared queries. Capability visibility and lease/invocation query APIs remain local runtime concerns in this slice.
+- New / Updated Events:
+  - None as formal shared event contracts in this slice.
+- New / Updated DTOs:
+  - `CapabilityDescriptor` now fixes the minimum Slice 5 connector metadata: `kind`, `source`, `platform`, schema references, fallback reference, and trust label.
+  - `EnvironmentLease` now freezes the lifecycle fields needed for execution recovery: `environment_type`, `sandbox_tier`, `heartbeat_at`, `expires_at`, `resume_token`, and the strict lease-status enum.
+  - `Task` and `Automation` action payloads now include a connector-backed action shape for MCP tool invocation.
+  - `Artifact` now carries minimal provenance and trust-gate metadata for connector-backed outputs.
+  - `KnowledgeCandidate` now carries provenance / trust metadata derived from the source artifact so downstream promotion flows cannot pretend gated external output is trusted local knowledge.
+- Compatibility Impact:
+  - Existing built-in action payloads remain valid.
+  - Existing capability-descriptor, artifact, and knowledge-candidate consumers inside Rust must populate the newly required Slice 5 fields.
+  - Future TypeScript or app consumers must consume the refined Slice 5 object shapes instead of inventing local connector metadata variants.
+- Affected Consumers:
+  - Rust consumers under `crates/`
+  - Runtime contract tests in `crates/runtime/tests`
+  - Future TypeScript consumers under `packages/`
+- Migration Notes:
+  - Add SQLite migration `0005` for environment leases, MCP server registry, and MCP invocation persistence.
+  - Existing Slice 1 through Slice 4 databases must continue to migrate forward in place.
+- Generation Impact:
+  - None currently. The repo still does not generate Rust or TypeScript contract consumers from `schemas/`.
+- Open Questions:
+  - Later slices may need richer capability-schema references, more granular trust labels, real connector health probes, and approval-driven knowledge promotion rules, but Slice 5 freezes only the minimum MCP gateway contract set.

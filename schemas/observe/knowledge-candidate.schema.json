@@ -21,6 +21,14 @@
       "type": "string",
       "minLength": 1
     },
+    "provenance_source": {
+      "type": "string",
+      "enum": ["builtin", "mcp_connector"]
+    },
+    "source_trust_level": {
+      "type": "string",
+      "enum": ["trusted", "external_untrusted"]
+    },
     "dedupe_key": {
       "type": "string",
       "minLength": 1
@@ -37,6 +45,8 @@
     "capability_id",
     "status",
     "content",
+    "provenance_source",
+    "source_trust_level",
     "dedupe_key",
     "created_at",
     "updated_at"

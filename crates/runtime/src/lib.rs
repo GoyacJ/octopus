@@ -20,6 +20,7 @@ pub use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
     CapabilityDescriptorRecord, CapabilityGrantRecord,
 };
+pub use octopus_interop_mcp::{EnvironmentLeaseRecord, McpInvocationRecord, McpServerRecord};
 pub use octopus_knowledge::{KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeSpaceRecord};
 pub use octopus_observe_artifact::KnowledgeLineageRecord;
 
@@ -69,6 +70,8 @@ pub enum RuntimeError {
     #[error(transparent)]
     Governance(#[from] octopus_governance::GovernanceStoreError),
     #[error(transparent)]
+    Interop(#[from] octopus_interop_mcp::InteropStoreError),
+    #[error(transparent)]
     Knowledge(#[from] octopus_knowledge::KnowledgeStoreError),
     #[error(transparent)]
     Observation(#[from] octopus_observe_artifact::ObservationStoreError),
@@ -101,6 +104,7 @@ impl Slice2Runtime {
             run_orchestrator: RunOrchestrator::new(
                 database.pool().clone(),
                 database.governance_store().clone(),
+                database.interop_store().clone(),
                 knowledge_manager,
                 database.observation_store().clone(),
             ),
@@ -158,6 +162,10 @@ impl Slice2Runtime {
         record: BudgetPolicyRecord,
     ) -> Result<(), RuntimeError> {
         self.run_orchestrator.upsert_budget_policy(record).await
+    }
+
+    pub async fn upsert_mcp_server(&self, record: McpServerRecord) -> Result<(), RuntimeError> {
+        self.run_orchestrator.upsert_mcp_server(record).await
     }
 
     pub async fn create_task(&self, input: CreateTaskInput) -> Result<TaskRecord, RuntimeError> {
@@ -445,6 +453,78 @@ impl Slice2Runtime {
         run_id: &str,
     ) -> Result<Vec<ArtifactRecord>, RuntimeError> {
         self.run_orchestrator.list_artifacts_by_run(run_id).await
+    }
+
+    pub async fn list_visible_capabilities(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<CapabilityDescriptorRecord>, RuntimeError> {
+        self.run_orchestrator
+            .list_visible_capabilities(workspace_id, project_id)
+            .await
+    }
+
+    pub async fn list_mcp_servers(&self) -> Result<Vec<McpServerRecord>, RuntimeError> {
+        self.run_orchestrator.list_mcp_servers().await
+    }
+
+    pub async fn list_mcp_invocations_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<McpInvocationRecord>, RuntimeError> {
+        self.run_orchestrator
+            .list_mcp_invocations_by_run(run_id)
+            .await
+    }
+
+    pub async fn list_environment_leases_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<EnvironmentLeaseRecord>, RuntimeError> {
+        self.run_orchestrator
+            .list_environment_leases_by_run(run_id)
+            .await
+    }
+
+    pub async fn request_environment_lease(
+        &self,
+        run_id: &str,
+        task_id: &str,
+        capability_id: &str,
+        environment_type: &str,
+        sandbox_tier: &str,
+        ttl_seconds: i64,
+    ) -> Result<EnvironmentLeaseRecord, RuntimeError> {
+        self.run_orchestrator
+            .request_environment_lease(
+                run_id,
+                task_id,
+                capability_id,
+                environment_type,
+                sandbox_tier,
+                ttl_seconds,
+            )
+            .await
+    }
+
+    pub async fn heartbeat_environment_lease(
+        &self,
+        lease_id: &str,
+        ttl_seconds: i64,
+    ) -> Result<EnvironmentLeaseRecord, RuntimeError> {
+        self.run_orchestrator
+            .heartbeat_environment_lease(lease_id, ttl_seconds)
+            .await
+    }
+
+    pub async fn release_environment_lease(
+        &self,
+        lease_id: &str,
+    ) -> Result<EnvironmentLeaseRecord, RuntimeError> {
+        self.run_orchestrator
+            .release_environment_lease(lease_id)
+            .await
     }
 
     pub async fn list_inbox_items_by_workspace(

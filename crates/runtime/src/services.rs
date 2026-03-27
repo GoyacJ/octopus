@@ -1,11 +1,15 @@
 use octopus_domain_context::{
     ContextRepository, ProjectContext, ProjectRecord, SqliteContextStore, WorkspaceRecord,
 };
-use octopus_execution::{ExecutionEngine, ExecutionOutcome};
+use octopus_execution::{ExecutionAction, ExecutionEngine, ExecutionOutcome};
 use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
     CapabilityDescriptorRecord, CapabilityGrantRecord, GovernanceDecision, SqliteGovernanceStore,
     TaskGovernanceInput, DECISION_ALLOW, DECISION_DENY, DECISION_REQUIRE_APPROVAL,
+};
+use octopus_interop_mcp::{
+    EnvironmentLeaseRecord, GatewayExecutionOutcome, GatewayRequest, McpGateway,
+    McpInvocationRecord, McpServerRecord, SqliteInteropStore, KNOWLEDGE_GATE_ELIGIBLE,
 };
 use octopus_knowledge::{
     KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeCaptureRetryRecord,
@@ -18,13 +22,13 @@ use octopus_observe_artifact::{
     AUDIT_EVENT_APPROVAL_EXPIRED, AUDIT_EVENT_APPROVAL_REJECTED, AUDIT_EVENT_APPROVAL_REQUESTED,
     AUDIT_EVENT_ARTIFACT_CREATED, AUDIT_EVENT_KNOWLEDGE_ASSET_PROMOTED,
     AUDIT_EVENT_KNOWLEDGE_CANDIDATE_CREATED, AUDIT_EVENT_KNOWLEDGE_CAPTURE_FAILED,
-    AUDIT_EVENT_KNOWLEDGE_CAPTURE_RETRIED, AUDIT_EVENT_KNOWLEDGE_RECALLED,
-    AUDIT_EVENT_POLICY_DENIED, AUDIT_EVENT_RUN_BLOCKED, AUDIT_EVENT_RUN_COMPLETED,
-    AUDIT_EVENT_RUN_CREATED, AUDIT_EVENT_RUN_FAILED, AUDIT_EVENT_RUN_RETRY_REQUESTED,
-    AUDIT_EVENT_RUN_STARTED, AUDIT_EVENT_RUN_TERMINATED, TRACE_STAGE_ARTIFACT_STORE,
-    TRACE_STAGE_EXECUTION_ACTION, TRACE_STAGE_GOVERNANCE_EVALUATION, TRACE_STAGE_KNOWLEDGE_CAPTURE,
-    TRACE_STAGE_KNOWLEDGE_PROMOTION, TRACE_STAGE_KNOWLEDGE_RECALL, TRACE_STAGE_RUN_ORCHESTRATOR,
-    TRACE_STAGE_TRIGGER_DELIVERY,
+    AUDIT_EVENT_KNOWLEDGE_CAPTURE_GATED, AUDIT_EVENT_KNOWLEDGE_CAPTURE_RETRIED,
+    AUDIT_EVENT_KNOWLEDGE_RECALLED, AUDIT_EVENT_POLICY_DENIED, AUDIT_EVENT_RUN_BLOCKED,
+    AUDIT_EVENT_RUN_COMPLETED, AUDIT_EVENT_RUN_CREATED, AUDIT_EVENT_RUN_FAILED,
+    AUDIT_EVENT_RUN_RETRY_REQUESTED, AUDIT_EVENT_RUN_STARTED, AUDIT_EVENT_RUN_TERMINATED,
+    TRACE_STAGE_ARTIFACT_STORE, TRACE_STAGE_EXECUTION_ACTION, TRACE_STAGE_GOVERNANCE_EVALUATION,
+    TRACE_STAGE_KNOWLEDGE_CAPTURE, TRACE_STAGE_KNOWLEDGE_PROMOTION, TRACE_STAGE_KNOWLEDGE_RECALL,
+    TRACE_STAGE_RUN_ORCHESTRATOR, TRACE_STAGE_TRIGGER_DELIVERY,
 };
 use serde_json::Value;
 use sqlx::{Row, SqlitePool};
@@ -558,6 +562,38 @@ impl KnowledgeManager {
         task: &TaskRecord,
         artifact: &ArtifactRecord,
     ) -> Result<Option<KnowledgeCandidateRecord>, RuntimeError> {
+        if artifact.knowledge_gate_status != KNOWLEDGE_GATE_ELIGIBLE {
+            self.knowledge_store.resolve_capture_retry(&run.id).await?;
+            self.observation_store
+                .write_audit(&AuditRecord::new(
+                    &run.workspace_id,
+                    &run.project_id,
+                    &run.id,
+                    &run.task_id,
+                    AUDIT_EVENT_KNOWLEDGE_CAPTURE_GATED,
+                    format!(
+                        "Knowledge capture gated for artifact {}: {}",
+                        artifact.id, artifact.knowledge_gate_status
+                    ),
+                ))
+                .await?;
+            self.observation_store
+                .write_trace(&TraceRecord::new(
+                    &run.workspace_id,
+                    &run.project_id,
+                    &run.id,
+                    &run.task_id,
+                    TRACE_STAGE_KNOWLEDGE_CAPTURE,
+                    std::cmp::max(run.attempt_count, 1),
+                    format!(
+                        "Knowledge capture gated for artifact {}: {}",
+                        artifact.id, artifact.knowledge_gate_status
+                    ),
+                ))
+                .await?;
+            return Ok(None);
+        }
+
         let dedupe_key = format!("knowledge_candidate:artifact:{}", artifact.id);
         if let Some(existing) = self
             .knowledge_store
@@ -585,6 +621,8 @@ impl KnowledgeManager {
             &artifact.id,
             &task.capability_id,
             &artifact.content,
+            &artifact.provenance_source,
+            &artifact.trust_level,
             dedupe_key,
         );
         self.knowledge_store
@@ -784,6 +822,8 @@ impl KnowledgeManager {
 pub struct RunOrchestrator {
     pool: SqlitePool,
     governance_store: SqliteGovernanceStore,
+    interop_store: SqliteInteropStore,
+    mcp_gateway: McpGateway,
     knowledge_manager: KnowledgeManager,
     observation_store: SqliteObservationStore,
 }
@@ -792,12 +832,16 @@ impl RunOrchestrator {
     pub fn new(
         pool: SqlitePool,
         governance_store: SqliteGovernanceStore,
+        interop_store: SqliteInteropStore,
         knowledge_manager: KnowledgeManager,
         observation_store: SqliteObservationStore,
     ) -> Self {
+        let mcp_gateway = McpGateway::new(interop_store.clone());
         Self {
             pool,
             governance_store,
+            interop_store,
+            mcp_gateway,
             knowledge_manager,
             observation_store,
         }
@@ -839,6 +883,95 @@ impl RunOrchestrator {
     ) -> Result<(), RuntimeError> {
         self.governance_store.upsert_budget_policy(&record).await?;
         Ok(())
+    }
+
+    pub async fn upsert_mcp_server(&self, record: McpServerRecord) -> Result<(), RuntimeError> {
+        self.interop_store.upsert_mcp_server(&record).await?;
+        Ok(())
+    }
+
+    pub async fn list_visible_capabilities(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<CapabilityDescriptorRecord>, RuntimeError> {
+        Ok(self
+            .governance_store
+            .list_visible_capability_descriptors(workspace_id, project_id)
+            .await?)
+    }
+
+    pub async fn list_mcp_servers(&self) -> Result<Vec<McpServerRecord>, RuntimeError> {
+        Ok(self.interop_store.list_mcp_servers().await?)
+    }
+
+    pub async fn list_mcp_invocations_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<McpInvocationRecord>, RuntimeError> {
+        Ok(self
+            .interop_store
+            .list_mcp_invocations_by_run(run_id)
+            .await?)
+    }
+
+    pub async fn list_environment_leases_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<EnvironmentLeaseRecord>, RuntimeError> {
+        Ok(self
+            .interop_store
+            .list_environment_leases_by_run(run_id)
+            .await?)
+    }
+
+    pub async fn request_environment_lease(
+        &self,
+        run_id: &str,
+        task_id: &str,
+        capability_id: &str,
+        environment_type: &str,
+        sandbox_tier: &str,
+        ttl_seconds: i64,
+    ) -> Result<EnvironmentLeaseRecord, RuntimeError> {
+        let run = self
+            .fetch_run(run_id)
+            .await?
+            .ok_or_else(|| RuntimeError::RunNotFound(run_id.to_string()))?;
+        Ok(self
+            .interop_store
+            .request_environment_lease(
+                &run.workspace_id,
+                &run.project_id,
+                run_id,
+                task_id,
+                capability_id,
+                environment_type,
+                sandbox_tier,
+                ttl_seconds,
+            )
+            .await?)
+    }
+
+    pub async fn heartbeat_environment_lease(
+        &self,
+        lease_id: &str,
+        ttl_seconds: i64,
+    ) -> Result<EnvironmentLeaseRecord, RuntimeError> {
+        Ok(self
+            .interop_store
+            .heartbeat_environment_lease(lease_id, ttl_seconds)
+            .await?)
+    }
+
+    pub async fn release_environment_lease(
+        &self,
+        lease_id: &str,
+    ) -> Result<EnvironmentLeaseRecord, RuntimeError> {
+        Ok(self
+            .interop_store
+            .release_environment_lease(lease_id)
+            .await?)
     }
 
     pub async fn start_task(&self, task: &TaskRecord) -> Result<RunExecutionReport, RuntimeError> {
@@ -1411,8 +1544,32 @@ impl RunOrchestrator {
             .await?;
         let _ = self.knowledge_manager.apply_recall(&run, task).await?;
 
-        match ExecutionEngine::execute(&task.action, run.attempt_count as u32) {
-            ExecutionOutcome::Succeeded(success) => {
+        let action_outcome = match &task.action {
+            ExecutionAction::ConnectorCall {
+                tool_name,
+                arguments,
+            } => ActionExecutionOutcome::from_gateway(
+                self.mcp_gateway
+                    .execute(GatewayRequest {
+                        workspace_id: run.workspace_id.clone(),
+                        project_id: run.project_id.clone(),
+                        run_id: run.id.clone(),
+                        task_id: run.task_id.clone(),
+                        capability_id: task.capability_id.clone(),
+                        tool_name: tool_name.clone(),
+                        arguments: arguments.clone(),
+                        attempt: run.attempt_count,
+                    })
+                    .await?,
+            ),
+            _ => ActionExecutionOutcome::from_builtin(
+                ExecutionEngine::execute(&task.action, run.attempt_count as u32),
+                &task.capability_id,
+            ),
+        };
+
+        match action_outcome {
+            ActionExecutionOutcome::Succeeded(success) => {
                 self.observation_store
                     .write_trace(&TraceRecord::new(
                         &run.workspace_id,
@@ -1431,6 +1588,13 @@ impl RunOrchestrator {
                     &run.id,
                     &run.task_id,
                     success.content,
+                )
+                .with_provenance(
+                    success.artifact_provenance,
+                    success.source_descriptor_id,
+                    success.source_invocation_id,
+                    success.trust_level,
+                    success.knowledge_gate_status,
                 );
                 self.observation_store.insert_artifact(&artifact).await?;
                 self.observation_store
@@ -1477,7 +1641,7 @@ impl RunOrchestrator {
                     .capture_from_artifact(&run, task, &artifact)
                     .await?;
             }
-            ExecutionOutcome::Failed(failure) => {
+            ActionExecutionOutcome::Failed(failure) => {
                 self.observation_store
                     .write_trace(&TraceRecord::new(
                         &run.workspace_id,
@@ -1756,4 +1920,64 @@ fn run_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<RunRecord, RuntimeError
         completed_at: row.try_get("completed_at")?,
         terminated_at: row.try_get("terminated_at")?,
     })
+}
+
+#[derive(Debug, Clone)]
+struct ActionExecutionSuccess {
+    content: String,
+    artifact_provenance: String,
+    source_descriptor_id: String,
+    source_invocation_id: Option<String>,
+    trust_level: String,
+    knowledge_gate_status: String,
+}
+
+#[derive(Debug, Clone)]
+struct ActionExecutionFailure {
+    message: String,
+    retryable: bool,
+}
+
+#[derive(Debug, Clone)]
+enum ActionExecutionOutcome {
+    Succeeded(ActionExecutionSuccess),
+    Failed(ActionExecutionFailure),
+}
+
+impl ActionExecutionOutcome {
+    fn from_builtin(outcome: ExecutionOutcome, capability_id: &str) -> Self {
+        match outcome {
+            ExecutionOutcome::Succeeded(success) => Self::Succeeded(ActionExecutionSuccess {
+                content: success.content,
+                artifact_provenance: "builtin".to_string(),
+                source_descriptor_id: capability_id.to_string(),
+                source_invocation_id: None,
+                trust_level: "trusted".to_string(),
+                knowledge_gate_status: KNOWLEDGE_GATE_ELIGIBLE.to_string(),
+            }),
+            ExecutionOutcome::Failed(failure) => Self::Failed(ActionExecutionFailure {
+                message: failure.message,
+                retryable: failure.retryable,
+            }),
+        }
+    }
+
+    fn from_gateway(outcome: GatewayExecutionOutcome) -> Self {
+        match outcome {
+            GatewayExecutionOutcome::Succeeded(success) => {
+                Self::Succeeded(ActionExecutionSuccess {
+                    content: success.content,
+                    artifact_provenance: success.artifact_metadata.provenance_source,
+                    source_descriptor_id: success.artifact_metadata.source_descriptor_id,
+                    source_invocation_id: Some(success.artifact_metadata.source_invocation_id),
+                    trust_level: success.artifact_metadata.trust_level,
+                    knowledge_gate_status: success.artifact_metadata.knowledge_gate_status,
+                })
+            }
+            GatewayExecutionOutcome::Failed(failure) => Self::Failed(ActionExecutionFailure {
+                message: failure.message,
+                retryable: failure.retryable,
+            }),
+        }
+    }
 }

@@ -1,9 +1,12 @@
 [package]
-name = "octopus-execution"
+name = "octopus-interop-mcp"
 version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
+chrono.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
 thiserror.workspace = true
+uuid.workspace = true
