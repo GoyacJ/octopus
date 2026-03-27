@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/observe/knowledge-candidate-status.schema.json",
+  "title": "KnowledgeCandidateStatus",
+  "type": "string",
+  "description": "Minimal lifecycle states for knowledge captured from execution results. `promoted_org` is reserved as a contract placeholder and is not implemented in Slice 4 runtime behavior.",
+  "enum": [
+    "candidate",
+    "verified_shared",
+    "promoted_org",
+    "revoked_or_tombstoned"
+  ]
+}

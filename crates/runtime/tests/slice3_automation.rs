@@ -123,7 +123,10 @@ async fn manual_event_automation_creates_deduped_delivery_task_and_automation_ru
     assert_eq!(report.delivery.status.as_str(), "succeeded");
     assert_eq!(report.delivery.attempt_count, 1);
     assert_eq!(report.task.source_kind.as_str(), "automation");
-    assert_eq!(report.task.automation_id.as_deref(), Some(automation.id.as_str()));
+    assert_eq!(
+        report.task.automation_id.as_deref(),
+        Some(automation.id.as_str())
+    );
     assert_eq!(report.run_report.run.run_type.as_str(), "automation");
     assert_eq!(
         report.run_report.run.trigger_delivery_id.as_deref(),
@@ -282,12 +285,7 @@ async fn rejected_or_denied_automation_delivery_finishes_failed_without_artifact
 
     let runtime = Slice2Runtime::open_at(&db_path).await.unwrap();
 
-    seed_context(
-        &runtime,
-        "project-automation-reject",
-        "Automation Reject",
-    )
-    .await;
+    seed_context(&runtime, "project-automation-reject", "Automation Reject").await;
     seed_governance(
         &runtime,
         "project-automation-reject",

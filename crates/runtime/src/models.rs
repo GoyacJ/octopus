@@ -1,12 +1,13 @@
 use chrono::Utc;
 use octopus_execution::ExecutionAction;
 use octopus_governance::ApprovalRequestRecord;
+use octopus_knowledge::{KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeSpaceRecord};
 use octopus_observe_artifact::{
-    ArtifactRecord, AuditRecord, InboxItemRecord, NotificationRecord, PolicyDecisionLogRecord,
-    TraceRecord,
+    ArtifactRecord, AuditRecord, InboxItemRecord, KnowledgeLineageRecord, NotificationRecord,
+    PolicyDecisionLogRecord, TraceRecord,
 };
-use serde_json::Value;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CreateTaskInput {
@@ -140,6 +141,16 @@ pub struct RunExecutionReport {
     pub inbox_items: Vec<InboxItemRecord>,
     pub notifications: Vec<NotificationRecord>,
     pub policy_decisions: Vec<PolicyDecisionLogRecord>,
+    pub knowledge_candidates: Vec<KnowledgeCandidateRecord>,
+    pub recalled_knowledge_assets: Vec<KnowledgeAssetRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KnowledgePromotionReport {
+    pub knowledge_space: KnowledgeSpaceRecord,
+    pub candidate: KnowledgeCandidateRecord,
+    pub asset: KnowledgeAssetRecord,
+    pub lineage: KnowledgeLineageRecord,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

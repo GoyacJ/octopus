@@ -71,6 +71,7 @@ fn all_schema_files_parse_as_json() {
 fn refined_slice1_examples_validate() {
     let workspace_schema = compiled_schema("context/workspace.schema.json");
     let project_schema = compiled_schema("context/project.schema.json");
+    let knowledge_space_schema = compiled_schema("context/knowledge-space.schema.json");
     let task_schema = compiled_schema("runtime/task.schema.json");
     let run_schema = compiled_schema("runtime/run.schema.json");
     let automation_schema = compiled_schema("runtime/automation.schema.json");
@@ -88,6 +89,13 @@ fn refined_slice1_examples_validate() {
     let inbox_schema = compiled_schema("observe/inbox-item.schema.json");
     let notification_schema = compiled_schema("observe/notification.schema.json");
     let policy_decision_schema = compiled_schema("observe/policy-decision-log.schema.json");
+    let knowledge_candidate_status_schema =
+        compiled_schema("observe/knowledge-candidate-status.schema.json");
+    let knowledge_asset_status_schema =
+        compiled_schema("observe/knowledge-asset-status.schema.json");
+    let knowledge_candidate_schema = compiled_schema("observe/knowledge-candidate.schema.json");
+    let knowledge_asset_schema = compiled_schema("observe/knowledge-asset.schema.json");
+    let knowledge_lineage_schema = compiled_schema("observe/knowledge-lineage-record.schema.json");
 
     assert!(workspace_schema.is_valid(&json!({
         "id": "workspace-alpha",
@@ -101,6 +109,15 @@ fn refined_slice1_examples_validate() {
         "workspace_id": "workspace-alpha",
         "slug": "project-slice1",
         "display_name": "Project Slice 1",
+        "created_at": "2026-03-26T10:00:00Z",
+        "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(knowledge_space_schema.is_valid(&json!({
+        "id": "knowledge-space-1",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "owner_ref": "workspace_admin:alice",
+        "display_name": "Project Slice 1 Knowledge",
         "created_at": "2026-03-26T10:00:00Z",
         "updated_at": "2026-03-26T10:00:00Z"
     })));
@@ -304,5 +321,42 @@ fn refined_slice1_examples_validate() {
         "estimated_cost": 1,
         "approval_request_id": null,
         "created_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(knowledge_candidate_status_schema.is_valid(&json!("candidate")));
+    assert!(knowledge_asset_status_schema.is_valid(&json!("verified_shared")));
+    assert!(knowledge_candidate_schema.is_valid(&json!({
+        "id": "candidate-1",
+        "knowledge_space_id": "knowledge-space-1",
+        "source_run_id": "run-1",
+        "source_task_id": "task-1",
+        "source_artifact_id": "artifact-1",
+        "capability_id": "capability-write-note",
+        "status": "candidate",
+        "content": "hello",
+        "dedupe_key": "knowledge_candidate:artifact-1",
+        "created_at": "2026-03-26T10:00:01Z",
+        "updated_at": "2026-03-26T10:00:01Z"
+    })));
+    assert!(knowledge_asset_schema.is_valid(&json!({
+        "id": "asset-1",
+        "knowledge_space_id": "knowledge-space-1",
+        "source_candidate_id": "candidate-1",
+        "capability_id": "capability-write-note",
+        "status": "verified_shared",
+        "content": "hello",
+        "trust_level": "verified",
+        "created_at": "2026-03-26T10:00:02Z",
+        "updated_at": "2026-03-26T10:00:02Z"
+    })));
+    assert!(knowledge_lineage_schema.is_valid(&json!({
+        "id": "lineage-1",
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "run_id": "run-1",
+        "task_id": "task-1",
+        "source_ref": "artifact:artifact-1",
+        "target_ref": "knowledge_candidate:candidate-1",
+        "relation_type": "derived_from",
+        "created_at": "2026-03-26T10:00:01Z"
     })));
 }

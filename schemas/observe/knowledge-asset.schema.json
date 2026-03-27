@@ -3,13 +3,39 @@
   "$id": "https://octopus.local/schemas/observe/knowledge-asset.schema.json",
   "title": "KnowledgeAsset",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for shared knowledge assets.",
+  "description": "Slice 4 shared contract for promoted shared knowledge assets stored inside a KnowledgeSpace.",
   "properties": {
     "id": { "type": "string" },
     "knowledge_space_id": { "type": "string" },
+    "source_candidate_id": { "type": "string" },
+    "capability_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "$ref": "https://octopus.local/schemas/observe/knowledge-asset-status.schema.json"
+    },
+    "content": {
+      "type": "string",
+      "minLength": 1
+    },
+    "trust_level": {
+      "type": "string",
+      "enum": ["verified", "unverified"]
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id", "knowledge_space_id"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "knowledge_space_id",
+    "source_candidate_id",
+    "capability_id",
+    "status",
+    "content",
+    "trust_level",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
 }

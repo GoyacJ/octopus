@@ -102,6 +102,7 @@
 - 运行时核心能力优先放在 `crates/`
 - 核心领域对象应保持与基础设施解耦
 - crate 之间依赖必须符合分层与边界规则
+- 当前已落地并验证的 Rust 分组包括 `runtime/`、`domain-context/`、`governance/`、`knowledge/`、`observe-artifact/` 和 `execution/`；`interop-mcp/` 仍保留为后续切片边界
 
 ---
 

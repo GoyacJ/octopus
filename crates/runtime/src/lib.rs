@@ -8,18 +8,20 @@ use database::Slice1Database;
 use octopus_observe_artifact::{
     ArtifactRecord, InboxItemRecord, NotificationRecord, PolicyDecisionLogRecord,
 };
-use services::{AutomationIntake, RunOrchestrator, TaskIntake};
+use services::{AutomationIntake, KnowledgeManager, RunOrchestrator, TaskIntake};
 use thiserror::Error;
 
 pub use models::{
     AutomationRecord, CreateAutomationInput, CreateTaskInput, DispatchManualEventInput,
-    RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord, TriggerDeliveryReport,
-    TriggerRecord,
+    KnowledgePromotionReport, RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord,
+    TriggerDeliveryReport, TriggerRecord,
 };
 pub use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
     CapabilityDescriptorRecord, CapabilityGrantRecord,
 };
+pub use octopus_knowledge::{KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeSpaceRecord};
+pub use octopus_observe_artifact::KnowledgeLineageRecord;
 
 #[derive(Debug, Error)]
 pub enum RuntimeError {
@@ -42,13 +44,18 @@ pub enum RuntimeError {
     #[error("trigger delivery `{0}` not found")]
     TriggerDeliveryNotFound(String),
     #[error("trigger `{trigger_id}` has unsupported type `{trigger_type}`")]
-    InvalidTriggerType { trigger_id: String, trigger_type: String },
+    InvalidTriggerType {
+        trigger_id: String,
+        trigger_type: String,
+    },
     #[error("trigger delivery `{delivery_id}` cannot transition from `{from}` to `{to}`")]
     InvalidTriggerDeliveryTransition {
         delivery_id: String,
         from: String,
         to: String,
     },
+    #[error("knowledge candidate `{0}` not found")]
+    KnowledgeCandidateNotFound(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -62,6 +69,8 @@ pub enum RuntimeError {
     #[error(transparent)]
     Governance(#[from] octopus_governance::GovernanceStoreError),
     #[error(transparent)]
+    Knowledge(#[from] octopus_knowledge::KnowledgeStoreError),
+    #[error(transparent)]
     Observation(#[from] octopus_observe_artifact::ObservationStoreError),
 }
 
@@ -69,6 +78,7 @@ pub enum RuntimeError {
 pub struct Slice2Runtime {
     task_intake: TaskIntake,
     automation_intake: AutomationIntake,
+    knowledge_manager: KnowledgeManager,
     run_orchestrator: RunOrchestrator,
 }
 
@@ -77,15 +87,21 @@ pub type Slice1Runtime = Slice2Runtime;
 impl Slice2Runtime {
     pub async fn open_at(path: &Path) -> Result<Self, RuntimeError> {
         let database = Slice1Database::open_at(path).await?;
+        let knowledge_manager = KnowledgeManager::new(
+            database.knowledge_store().clone(),
+            database.observation_store().clone(),
+        );
         Ok(Self {
             task_intake: TaskIntake::new(database.pool().clone(), database.context_store().clone()),
             automation_intake: AutomationIntake::new(
                 database.pool().clone(),
                 database.context_store().clone(),
             ),
+            knowledge_manager: knowledge_manager.clone(),
             run_orchestrator: RunOrchestrator::new(
                 database.pool().clone(),
                 database.governance_store().clone(),
+                knowledge_manager,
                 database.observation_store().clone(),
             ),
         })
@@ -146,6 +162,18 @@ impl Slice2Runtime {
 
     pub async fn create_task(&self, input: CreateTaskInput) -> Result<TaskRecord, RuntimeError> {
         self.task_intake.create_task(input).await
+    }
+
+    pub async fn ensure_project_knowledge_space(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+        display_name: &str,
+        owner_ref: &str,
+    ) -> Result<KnowledgeSpaceRecord, RuntimeError> {
+        self.knowledge_manager
+            .ensure_project_knowledge_space(workspace_id, project_id, display_name, owner_ref)
+            .await
     }
 
     pub async fn create_automation(
@@ -371,6 +399,38 @@ impl Slice2Runtime {
         self.run_orchestrator.load_run_report(run_id).await
     }
 
+    pub async fn promote_knowledge_candidate(
+        &self,
+        candidate_id: &str,
+        actor_ref: &str,
+        note: &str,
+    ) -> Result<KnowledgePromotionReport, RuntimeError> {
+        self.knowledge_manager
+            .promote_knowledge_candidate(candidate_id, actor_ref, note)
+            .await
+    }
+
+    pub async fn retry_knowledge_capture(
+        &self,
+        run_id: &str,
+    ) -> Result<RunExecutionReport, RuntimeError> {
+        let run = self
+            .run_orchestrator
+            .fetch_run(run_id)
+            .await?
+            .ok_or_else(|| RuntimeError::RunNotFound(run_id.to_string()))?;
+        let task = self.task_intake.fetch_task(&run.task_id).await?;
+        let artifacts = self.run_orchestrator.list_artifacts_by_run(run_id).await?;
+        let artifact = artifacts
+            .into_iter()
+            .find(|artifact| artifact.artifact_type == "execution_output")
+            .ok_or_else(|| RuntimeError::RunNotFound(run_id.to_string()))?;
+        self.knowledge_manager
+            .retry_capture(&run, &task, &artifact)
+            .await?;
+        self.load_run_report(run_id).await
+    }
+
     pub async fn list_approval_requests_by_run(
         &self,
         run_id: &str,
@@ -411,6 +471,15 @@ impl Slice2Runtime {
     ) -> Result<Vec<PolicyDecisionLogRecord>, RuntimeError> {
         self.run_orchestrator
             .list_policy_decisions_by_run(run_id)
+            .await
+    }
+
+    pub async fn list_knowledge_lineage_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<KnowledgeLineageRecord>, RuntimeError> {
+        self.knowledge_manager
+            .list_knowledge_lineage_by_run(run_id)
             .await
     }
 

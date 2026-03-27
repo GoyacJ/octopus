@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/observe/knowledge-asset-status.schema.json",
+  "title": "KnowledgeAssetStatus",
+  "type": "string",
+  "description": "Minimal lifecycle states for shared knowledge assets. `promoted_org` is reserved as a contract placeholder and is not implemented in Slice 4 runtime behavior.",
+  "enum": [
+    "verified_shared",
+    "promoted_org",
+    "revoked_or_tombstoned"
+  ]
+}

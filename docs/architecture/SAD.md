@@ -1,6 +1,6 @@
 # Octopus · 软件架构设计说明书（SAD）
 
-**版本**: v2.2 | **状态**: 重构定稿版 | **日期**: 2026-03-26
+**版本**: v2.2 | **状态**: 重构定稿版 | **日期**: 2026-03-27
 **对应 PRD**: v2.2
 
 ---
@@ -74,10 +74,10 @@
 - `DiscussionSession`
 - `ResidentAgentSession`
 
-补充说明（截至 2026-03-26 的 tracked repository state）：
+补充说明（截至 2026-03-27 的 tracked repository state）：
 
-- 当前跟踪树仍处于 `doc-first rebuild` 状态，但已包含首批 monorepo 根 manifests、Slice 1 到 Slice 3 细化后的共享契约，以及本地 SQLite 驱动的首批 Rust runtime crates；
-- 当前已验证的实现范围是本地 `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Artifact -> Audit / Trace` 闭环，并包含持久化的 `ApprovalRequest`、`InboxItem`、`Notification`、`PolicyDecisionLog` 与 TriggerDelivery 去重/恢复记录；不得把这一步误写成已完成的 UI、远程 Hub、`cron` / `webhook` / `MCP event` 自动化、MCP 执行或知识系统实现。
+- 当前跟踪树仍处于 `doc-first rebuild` 状态，但已包含首批 monorepo 根 manifests、Slice 1 到 Slice 4 细化后的共享契约，以及本地 SQLite 驱动的首批 Rust runtime crates；
+- 当前已验证的实现范围是本地 `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Artifact -> KnowledgeCandidate -> Shared Knowledge recall -> Audit / Trace` 闭环，并包含持久化的 `ApprovalRequest`、`InboxItem`、`Notification`、`PolicyDecisionLog`、TriggerDelivery 去重/恢复记录、项目级 `KnowledgeSpace`、`KnowledgeCandidate`、`KnowledgeAsset`、知识写回重试记录与 knowledge lineage；不得把这一步误写成已完成的 UI、远程 Hub、`cron` / `webhook` / `MCP event` 自动化、MCP 执行、向量检索、知识审批流或 Org Graph 实现。
 
 ### 1.5 架构平面
 

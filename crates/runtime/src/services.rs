@@ -7,15 +7,23 @@ use octopus_governance::{
     CapabilityDescriptorRecord, CapabilityGrantRecord, GovernanceDecision, SqliteGovernanceStore,
     TaskGovernanceInput, DECISION_ALLOW, DECISION_DENY, DECISION_REQUIRE_APPROVAL,
 };
+use octopus_knowledge::{
+    KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeCaptureRetryRecord,
+    KnowledgeSpaceRecord, SqliteKnowledgeStore,
+};
 use octopus_observe_artifact::{
-    ArtifactRecord, ArtifactStore, AuditRecord, InboxItemRecord, NotificationRecord,
-    ObservationWriter, PolicyDecisionLogRecord, SqliteObservationStore, TraceRecord,
-    AUDIT_EVENT_APPROVAL_APPROVED, AUDIT_EVENT_APPROVAL_CANCELLED, AUDIT_EVENT_APPROVAL_EXPIRED,
-    AUDIT_EVENT_APPROVAL_REJECTED, AUDIT_EVENT_APPROVAL_REQUESTED, AUDIT_EVENT_ARTIFACT_CREATED,
+    ArtifactRecord, ArtifactStore, AuditRecord, InboxItemRecord, KnowledgeLineageRecord,
+    NotificationRecord, ObservationWriter, PolicyDecisionLogRecord, SqliteObservationStore,
+    TraceRecord, AUDIT_EVENT_APPROVAL_APPROVED, AUDIT_EVENT_APPROVAL_CANCELLED,
+    AUDIT_EVENT_APPROVAL_EXPIRED, AUDIT_EVENT_APPROVAL_REJECTED, AUDIT_EVENT_APPROVAL_REQUESTED,
+    AUDIT_EVENT_ARTIFACT_CREATED, AUDIT_EVENT_KNOWLEDGE_ASSET_PROMOTED,
+    AUDIT_EVENT_KNOWLEDGE_CANDIDATE_CREATED, AUDIT_EVENT_KNOWLEDGE_CAPTURE_FAILED,
+    AUDIT_EVENT_KNOWLEDGE_CAPTURE_RETRIED, AUDIT_EVENT_KNOWLEDGE_RECALLED,
     AUDIT_EVENT_POLICY_DENIED, AUDIT_EVENT_RUN_BLOCKED, AUDIT_EVENT_RUN_COMPLETED,
     AUDIT_EVENT_RUN_CREATED, AUDIT_EVENT_RUN_FAILED, AUDIT_EVENT_RUN_RETRY_REQUESTED,
     AUDIT_EVENT_RUN_STARTED, AUDIT_EVENT_RUN_TERMINATED, TRACE_STAGE_ARTIFACT_STORE,
-    TRACE_STAGE_EXECUTION_ACTION, TRACE_STAGE_GOVERNANCE_EVALUATION, TRACE_STAGE_RUN_ORCHESTRATOR,
+    TRACE_STAGE_EXECUTION_ACTION, TRACE_STAGE_GOVERNANCE_EVALUATION, TRACE_STAGE_KNOWLEDGE_CAPTURE,
+    TRACE_STAGE_KNOWLEDGE_PROMOTION, TRACE_STAGE_KNOWLEDGE_RECALL, TRACE_STAGE_RUN_ORCHESTRATOR,
     TRACE_STAGE_TRIGGER_DELIVERY,
 };
 use serde_json::Value;
@@ -24,7 +32,8 @@ use sqlx::{Row, SqlitePool};
 use crate::{
     models::{
         current_timestamp, AutomationRecord, CreateAutomationInput, CreateTaskInput,
-        RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord, TriggerRecord,
+        KnowledgePromotionReport, RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord,
+        TriggerRecord,
     },
     RuntimeError,
 };
@@ -228,7 +237,10 @@ impl AutomationIntake {
         row.map(|row| automation_from_row(&row)).transpose()
     }
 
-    pub async fn fetch_trigger(&self, trigger_id: &str) -> Result<Option<TriggerRecord>, RuntimeError> {
+    pub async fn fetch_trigger(
+        &self,
+        trigger_id: &str,
+    ) -> Result<Option<TriggerRecord>, RuntimeError> {
         let row = sqlx::query(
             r#"
             SELECT id, automation_id, trigger_type, created_at, updated_at
@@ -249,7 +261,8 @@ impl AutomationIntake {
         dedupe_key: &str,
         payload: Value,
     ) -> Result<TriggerDeliveryRecord, RuntimeError> {
-        let delivery = TriggerDeliveryRecord::new(trigger_id.to_string(), dedupe_key.to_string(), payload);
+        let delivery =
+            TriggerDeliveryRecord::new(trigger_id.to_string(), dedupe_key.to_string(), payload);
         sqlx::query(
             r#"
             INSERT INTO trigger_deliveries (
@@ -411,9 +424,367 @@ impl AutomationIntake {
 }
 
 #[derive(Debug, Clone)]
+pub struct KnowledgeManager {
+    knowledge_store: SqliteKnowledgeStore,
+    observation_store: SqliteObservationStore,
+}
+
+impl KnowledgeManager {
+    pub fn new(
+        knowledge_store: SqliteKnowledgeStore,
+        observation_store: SqliteObservationStore,
+    ) -> Self {
+        Self {
+            knowledge_store,
+            observation_store,
+        }
+    }
+
+    pub async fn ensure_project_knowledge_space(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+        display_name: &str,
+        owner_ref: &str,
+    ) -> Result<KnowledgeSpaceRecord, RuntimeError> {
+        Ok(self
+            .knowledge_store
+            .ensure_project_knowledge_space(workspace_id, project_id, display_name, owner_ref)
+            .await?)
+    }
+
+    pub async fn list_knowledge_candidates_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<KnowledgeCandidateRecord>, RuntimeError> {
+        Ok(self
+            .knowledge_store
+            .list_knowledge_candidates_by_run(run_id)
+            .await?)
+    }
+
+    pub async fn list_knowledge_lineage_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<KnowledgeLineageRecord>, RuntimeError> {
+        Ok(self
+            .observation_store
+            .list_knowledge_lineage_by_run(run_id)
+            .await?)
+    }
+
+    pub async fn list_recalled_knowledge_assets_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<KnowledgeAssetRecord>, RuntimeError> {
+        let lineage = self
+            .observation_store
+            .list_knowledge_lineage_by_run(run_id)
+            .await?;
+        let mut assets = Vec::new();
+        for record in lineage {
+            if record.relation_type != "recalled_by" {
+                continue;
+            }
+            let Some(asset_id) = record.source_ref.strip_prefix("knowledge_asset:") else {
+                continue;
+            };
+            if let Some(asset) = self.knowledge_store.fetch_knowledge_asset(asset_id).await? {
+                assets.push(asset);
+            }
+        }
+        Ok(assets)
+    }
+
+    pub async fn apply_recall(
+        &self,
+        run: &RunRecord,
+        task: &TaskRecord,
+    ) -> Result<Vec<KnowledgeAssetRecord>, RuntimeError> {
+        let assets = self
+            .knowledge_store
+            .list_shared_assets_for_project_capability(
+                &run.workspace_id,
+                &run.project_id,
+                &task.capability_id,
+            )
+            .await?;
+
+        if assets.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        for asset in &assets {
+            self.observation_store
+                .insert_knowledge_lineage(&KnowledgeLineageRecord::new(
+                    &run.workspace_id,
+                    &run.project_id,
+                    &run.id,
+                    &run.task_id,
+                    format!("knowledge_asset:{}", asset.id),
+                    format!("run:{}", run.id),
+                    "recalled_by",
+                ))
+                .await?;
+        }
+        self.observation_store
+            .write_audit(&AuditRecord::new(
+                &run.workspace_id,
+                &run.project_id,
+                &run.id,
+                &run.task_id,
+                AUDIT_EVENT_KNOWLEDGE_RECALLED,
+                format!("Recalled {} shared knowledge assets", assets.len()),
+            ))
+            .await?;
+        self.observation_store
+            .write_trace(&TraceRecord::new(
+                &run.workspace_id,
+                &run.project_id,
+                &run.id,
+                &run.task_id,
+                TRACE_STAGE_KNOWLEDGE_RECALL,
+                std::cmp::max(run.attempt_count, 1),
+                format!("Recalled {} shared knowledge assets", assets.len()),
+            ))
+            .await?;
+
+        Ok(assets)
+    }
+
+    pub async fn capture_from_artifact(
+        &self,
+        run: &RunRecord,
+        task: &TaskRecord,
+        artifact: &ArtifactRecord,
+    ) -> Result<Option<KnowledgeCandidateRecord>, RuntimeError> {
+        let dedupe_key = format!("knowledge_candidate:artifact:{}", artifact.id);
+        if let Some(existing) = self
+            .knowledge_store
+            .find_knowledge_candidate_by_dedupe_key(&dedupe_key)
+            .await?
+        {
+            self.knowledge_store.resolve_capture_retry(&run.id).await?;
+            return Ok(Some(existing));
+        }
+
+        let Some(space) = self
+            .knowledge_store
+            .fetch_project_knowledge_space(&run.workspace_id, &run.project_id)
+            .await?
+        else {
+            self.record_capture_failure(run, task, artifact, "project_knowledge_space_missing")
+                .await?;
+            return Ok(None);
+        };
+
+        let candidate = KnowledgeCandidateRecord::new(
+            &space.id,
+            &run.id,
+            &run.task_id,
+            &artifact.id,
+            &task.capability_id,
+            &artifact.content,
+            dedupe_key,
+        );
+        self.knowledge_store
+            .create_knowledge_candidate(&candidate)
+            .await?;
+        self.knowledge_store.resolve_capture_retry(&run.id).await?;
+        self.observation_store
+            .insert_knowledge_lineage(&KnowledgeLineageRecord::new(
+                &run.workspace_id,
+                &run.project_id,
+                &run.id,
+                &run.task_id,
+                format!("artifact:{}", artifact.id),
+                format!("knowledge_candidate:{}", candidate.id),
+                "derived_from",
+            ))
+            .await?;
+        self.observation_store
+            .write_audit(&AuditRecord::new(
+                &run.workspace_id,
+                &run.project_id,
+                &run.id,
+                &run.task_id,
+                AUDIT_EVENT_KNOWLEDGE_CANDIDATE_CREATED,
+                "Knowledge candidate captured from execution artifact",
+            ))
+            .await?;
+        self.observation_store
+            .write_trace(&TraceRecord::new(
+                &run.workspace_id,
+                &run.project_id,
+                &run.id,
+                &run.task_id,
+                TRACE_STAGE_KNOWLEDGE_CAPTURE,
+                std::cmp::max(run.attempt_count, 1),
+                "Knowledge candidate captured from execution artifact",
+            ))
+            .await?;
+
+        Ok(Some(candidate))
+    }
+
+    pub async fn retry_capture(
+        &self,
+        run: &RunRecord,
+        task: &TaskRecord,
+        artifact: &ArtifactRecord,
+    ) -> Result<(), RuntimeError> {
+        let existing_candidates = self
+            .knowledge_store
+            .list_knowledge_candidates_by_run(&run.id)
+            .await?;
+        if !existing_candidates.is_empty() {
+            return Ok(());
+        }
+
+        self.observation_store
+            .write_audit(&AuditRecord::new(
+                &run.workspace_id,
+                &run.project_id,
+                &run.id,
+                &run.task_id,
+                AUDIT_EVENT_KNOWLEDGE_CAPTURE_RETRIED,
+                "Knowledge capture retried explicitly",
+            ))
+            .await?;
+
+        let _ = self.capture_from_artifact(run, task, artifact).await?;
+        Ok(())
+    }
+
+    pub async fn promote_knowledge_candidate(
+        &self,
+        candidate_id: &str,
+        actor_ref: &str,
+        note: &str,
+    ) -> Result<KnowledgePromotionReport, RuntimeError> {
+        let mut candidate = self
+            .knowledge_store
+            .fetch_knowledge_candidate(candidate_id)
+            .await?
+            .ok_or_else(|| RuntimeError::KnowledgeCandidateNotFound(candidate_id.to_string()))?;
+        let space = self
+            .knowledge_store
+            .fetch_knowledge_space(&candidate.knowledge_space_id)
+            .await?
+            .ok_or_else(|| RuntimeError::KnowledgeCandidateNotFound(candidate_id.to_string()))?;
+
+        let asset = if let Some(existing) = self
+            .knowledge_store
+            .fetch_knowledge_asset_by_candidate(candidate_id)
+            .await?
+        {
+            existing
+        } else {
+            let created = KnowledgeAssetRecord::from_candidate(&candidate);
+            self.knowledge_store
+                .upsert_knowledge_asset(&created)
+                .await?;
+            created
+        };
+
+        if candidate.status != "verified_shared" {
+            self.knowledge_store
+                .update_knowledge_candidate_status(candidate_id, "verified_shared")
+                .await?;
+            candidate.status = "verified_shared".to_string();
+            candidate.updated_at = current_timestamp();
+        }
+
+        let lineage = KnowledgeLineageRecord::new(
+            &space.workspace_id,
+            space.project_id.as_deref().unwrap_or_default(),
+            &candidate.source_run_id,
+            &candidate.source_task_id,
+            format!("knowledge_candidate:{}", candidate.id),
+            format!("knowledge_asset:{}", asset.id),
+            "promoted_from",
+        );
+        self.observation_store
+            .insert_knowledge_lineage(&lineage)
+            .await?;
+        self.observation_store
+            .write_audit(&AuditRecord::new(
+                &space.workspace_id,
+                space.project_id.as_deref().unwrap_or_default(),
+                &candidate.source_run_id,
+                &candidate.source_task_id,
+                AUDIT_EVENT_KNOWLEDGE_ASSET_PROMOTED,
+                format!("Knowledge candidate promoted by {actor_ref}: {note}"),
+            ))
+            .await?;
+        self.observation_store
+            .write_trace(&TraceRecord::new(
+                &space.workspace_id,
+                space.project_id.as_deref().unwrap_or_default(),
+                &candidate.source_run_id,
+                &candidate.source_task_id,
+                TRACE_STAGE_KNOWLEDGE_PROMOTION,
+                1,
+                format!("Knowledge candidate promoted by {actor_ref}"),
+            ))
+            .await?;
+
+        Ok(KnowledgePromotionReport {
+            knowledge_space: space,
+            candidate,
+            asset,
+            lineage,
+        })
+    }
+
+    async fn record_capture_failure(
+        &self,
+        run: &RunRecord,
+        task: &TaskRecord,
+        artifact: &ArtifactRecord,
+        reason: &str,
+    ) -> Result<(), RuntimeError> {
+        self.knowledge_store
+            .upsert_capture_retry(&KnowledgeCaptureRetryRecord::pending(
+                &run.workspace_id,
+                &run.project_id,
+                &run.id,
+                &run.task_id,
+                &artifact.id,
+                &task.capability_id,
+                reason,
+            ))
+            .await?;
+        self.observation_store
+            .write_audit(&AuditRecord::new(
+                &run.workspace_id,
+                &run.project_id,
+                &run.id,
+                &run.task_id,
+                AUDIT_EVENT_KNOWLEDGE_CAPTURE_FAILED,
+                format!("Knowledge capture failed: {reason}"),
+            ))
+            .await?;
+        self.observation_store
+            .write_trace(&TraceRecord::new(
+                &run.workspace_id,
+                &run.project_id,
+                &run.id,
+                &run.task_id,
+                TRACE_STAGE_KNOWLEDGE_CAPTURE,
+                std::cmp::max(run.attempt_count, 1),
+                format!("Knowledge capture failed: {reason}"),
+            ))
+            .await?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct RunOrchestrator {
     pool: SqlitePool,
     governance_store: SqliteGovernanceStore,
+    knowledge_manager: KnowledgeManager,
     observation_store: SqliteObservationStore,
 }
 
@@ -421,11 +792,13 @@ impl RunOrchestrator {
     pub fn new(
         pool: SqlitePool,
         governance_store: SqliteGovernanceStore,
+        knowledge_manager: KnowledgeManager,
         observation_store: SqliteObservationStore,
     ) -> Self {
         Self {
             pool,
             governance_store,
+            knowledge_manager,
             observation_store,
         }
     }
@@ -860,6 +1233,14 @@ impl RunOrchestrator {
             .observation_store
             .list_policy_decisions_by_run(run_id)
             .await?;
+        let knowledge_candidates = self
+            .knowledge_manager
+            .list_knowledge_candidates_by_run(run_id)
+            .await?;
+        let recalled_knowledge_assets = self
+            .knowledge_manager
+            .list_recalled_knowledge_assets_by_run(run_id)
+            .await?;
 
         Ok(RunExecutionReport {
             run,
@@ -870,6 +1251,8 @@ impl RunOrchestrator {
             inbox_items,
             notifications,
             policy_decisions,
+            knowledge_candidates,
+            recalled_knowledge_assets,
         })
     }
 
@@ -1026,6 +1409,7 @@ impl RunOrchestrator {
                 "Run entered execution",
             ))
             .await?;
+        let _ = self.knowledge_manager.apply_recall(&run, task).await?;
 
         match ExecutionEngine::execute(&task.action, run.attempt_count as u32) {
             ExecutionOutcome::Succeeded(success) => {
@@ -1087,6 +1471,10 @@ impl RunOrchestrator {
                         AUDIT_EVENT_RUN_COMPLETED,
                         "Run completed successfully",
                     ))
+                    .await?;
+                let _ = self
+                    .knowledge_manager
+                    .capture_from_artifact(&run, task, &artifact)
                     .await?;
             }
             ExecutionOutcome::Failed(failure) => {

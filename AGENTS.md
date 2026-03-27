@@ -21,12 +21,14 @@ Current default allowed work:
 
 - document analysis
 - documentation governance
+- schema refinement
 - architecture refinement
 - schema and module planning
+- slice-scoped Rust implementation inside tracked crates
+- SQLite migration and automated verification work for tracked slices
 - repo layout design
 - slice planning
 - skeleton planning
-- skeleton initialization
 - repo-level review rules
 
 If implementation work begins later, it must follow the rules in this file and the linked owner docs.
@@ -114,8 +116,8 @@ Follow these owner docs:
 
 Current actual repository state note:
 
-- the tracked tree now includes root workspace manifests, refined Slice 1 through Slice 3 shared contracts in `schemas/`, and first real Rust workspace members under `crates/domain-context`, `crates/execution`, `crates/governance`, `crates/observe-artifact`, and `crates/runtime`
-- the current verified implementation scope is limited to the local SQLite-backed governed runtime slice for `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Artifact -> Audit / Trace`, with persistent `ApprovalRequest`, `InboxItem`, `Notification`, `PolicyDecisionLog`, and TriggerDelivery dedupe/retry records; app surfaces, non-manual-event automation types, MCP, shared knowledge, and remote transport remain out of scope unless later tracked files prove otherwise
+- the tracked tree now includes root workspace manifests, refined Slice 1 through Slice 4 shared contracts in `schemas/`, and first real Rust workspace members under `crates/domain-context`, `crates/execution`, `crates/governance`, `crates/knowledge`, `crates/observe-artifact`, and `crates/runtime`
+- the current verified implementation scope is limited to the local SQLite-backed governed runtime slice for `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Artifact -> KnowledgeCandidate -> Shared Knowledge recall -> Audit / Trace`, with persistent `ApprovalRequest`, `InboxItem`, `Notification`, `PolicyDecisionLog`, TriggerDelivery dedupe/retry records, project-scoped `KnowledgeSpace`, `KnowledgeCandidate`, `KnowledgeAsset`, capture-retry records, and lineage; app surfaces, non-manual-event automation types, MCP execution, approval-driven knowledge promotion, vector retrieval, Org Graph promotion, and remote transport remain out of scope unless later tracked files prove otherwise
 
 ---
 

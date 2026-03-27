@@ -3,13 +3,32 @@
   "$id": "https://octopus.local/schemas/context/knowledge-space.schema.json",
   "title": "KnowledgeSpace",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for KnowledgeSpace. Freezes the authority container for shared knowledge without final field design.",
+  "description": "Slice 4 shared contract for the project-scoped authority container that owns shared knowledge during the GA MVP.",
   "properties": {
     "id": { "type": "string" },
     "workspace_id": { "type": "string" },
+    "project_id": {
+      "type": ["string", "null"]
+    },
+    "owner_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1
+    },
     "created_at": { "type": "string", "format": "date-time" },
     "updated_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id", "workspace_id"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "workspace_id",
+    "project_id",
+    "owner_ref",
+    "display_name",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
 }

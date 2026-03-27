@@ -1,0 +1,50 @@
+## Implementation Summary
+
+- Goal:
+  - Implement the first verified Shared Knowledge runtime slice on top of the existing local governed automation path.
+- Files Added:
+  - `crates/knowledge/Cargo.toml`
+  - `crates/knowledge/src/lib.rs`
+  - `crates/runtime/migrations/0004_slice4_shared_knowledge.sql`
+  - `crates/runtime/tests/slice4_knowledge.rs`
+  - `schemas/observe/knowledge-candidate-status.schema.json`
+  - `schemas/observe/knowledge-asset-status.schema.json`
+  - `docs/decisions/0004-knowledge-crate-and-project-shared-knowledge-loop.md`
+  - `docs/tasks/2026/2026-03-27-slice-4-shared-knowledge/*`
+- Files Changed:
+  - Root workspace manifests and entry docs
+  - `crates/runtime/*`
+  - `crates/observe-artifact/src/lib.rs`
+  - `schemas/context/knowledge-space.schema.json`
+  - `schemas/observe/knowledge-candidate.schema.json`
+  - `schemas/observe/knowledge-asset.schema.json`
+  - `schemas/observe/knowledge-lineage-record.schema.json`
+  - `crates/runtime/tests/schema_contracts.rs`
+  - `docs/tasks/README.md`
+  - `docs/decisions/README.md`
+- Files Removed:
+  - None.
+- Structure Decision:
+  - Add `crates/knowledge` for knowledge persistence and local domain rules, keep lineage/audit/trace ownership in `crates/observe-artifact`, and keep recall/capture/promotion orchestration in `crates/runtime`.
+- Why This Structure:
+  - It avoids collapsing knowledge persistence into runtime orchestration or observation storage, while still preserving one execution path through Task / Run / Artifact.
+- Reused Patterns:
+  - Existing Slice 1 through Slice 3 migration and integration-test patterns
+  - Existing `RunOrchestrator` composition and runtime report loading pattern
+  - Existing schema-first contract tests and SQLite-backed file tests
+- New Dependencies:
+  - One new internal crate dependency: `octopus-knowledge`
+  - No new third-party dependencies beyond the existing workspace set
+- Error Handling Strategy:
+  - Knowledge capture dedupes by artifact-derived `dedupe_key`.
+  - Missing project knowledge space creates a pending retry record plus audit / trace evidence without failing the completed run.
+  - Explicit retry only re-attempts capture when the candidate is still absent.
+  - Promotion reuses the existing asset for the candidate and upgrades candidate status idempotently.
+- Deferred Items:
+  - `knowledge_promotion` approvals
+  - Vector retrieval, embeddings, and ranking
+  - Multi-space routing and KnowledgeSpace views
+  - Org Graph promotion and conflict propagation
+  - Background retry workers or UI surfaces
+- Non-goals Preserved:
+  - No app surfaces, remote transport, scheduler, MCP execution, or non-`manual_event` trigger work is introduced.

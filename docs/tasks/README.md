@@ -41,6 +41,7 @@ Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-d
 - [2026-03-26-slice-1-task-run-artifact-audit](2026/2026-03-26-slice-1-task-run-artifact-audit/README.md)
 - [2026-03-26-slice-2-approval-inbox-notification](2026/2026-03-26-slice-2-approval-inbox-notification/README.md)
 - [2026-03-26-slice-3-automation-manual-event](2026/2026-03-26-slice-3-automation-manual-event/README.md)
+- [2026-03-27-slice-4-shared-knowledge](2026/2026-03-27-slice-4-shared-knowledge/README.md)
 
 ## Relationship To ADRs
 

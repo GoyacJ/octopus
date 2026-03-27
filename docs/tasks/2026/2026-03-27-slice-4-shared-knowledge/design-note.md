@@ -1,0 +1,68 @@
+## Design Note
+
+- Problem:
+  - The repository already proves the governed `Task / Automation -> Run -> Artifact -> Audit / Trace` path, but it still cannot persist formal Shared Knowledge, record knowledge lineage, or feed promoted knowledge back into later runs.
+- Goal:
+  - Deliver a Rust-only Slice 4 runtime that adds the minimum project-scoped Shared Knowledge loop without changing the existing governed execution shell.
+- Acceptance Criteria:
+  - Successful runs capture one `KnowledgeCandidate` from the primary execution artifact.
+  - Explicit promotion converts a candidate into a shared `KnowledgeAsset` and records promotion lineage.
+  - Later runs with the same Workspace / Project and `capability_id` recall the promoted asset before execution.
+  - Missing writeback prerequisites create retryable knowledge-capture records instead of failing the run.
+  - Promotion and retry APIs are idempotent.
+- Non-functional Constraints:
+  - Keep SQLite as the authority store for the MVP.
+  - Keep crate boundaries explicit: dedicated knowledge persistence/domain logic belongs in `crates/knowledge`, observation remains in `crates/observe-artifact`, and orchestration remains in `crates/runtime`.
+  - Keep recall deterministic and minimal; no vector ranking, semantic search, or multi-space routing enters this slice.
+- MVP Boundary:
+  - One project knowledge space per Workspace / Project pair.
+  - Candidate capture only from successful `execution_output` artifacts.
+  - Promotion is explicit API-driven work with no approval or worker orchestration.
+  - `promoted_org` remains a schema placeholder only.
+- Layer Placement:
+  - Shared object shapes stay in `schemas/context` and `schemas/observe`.
+  - Knowledge persistence/domain helpers live in `crates/knowledge`.
+  - Knowledge lineage persistence stays in `crates/observe-artifact`.
+  - Recall, capture, retry, and promotion orchestration stay in `crates/runtime`.
+- Module Boundaries:
+  - `SqliteKnowledgeStore` owns knowledge-space, candidate, asset, and capture-retry persistence.
+  - `KnowledgeManager` owns runtime orchestration for recall, artifact-to-candidate capture, explicit promotion, and retry.
+  - `RunOrchestrator` remains the single execution shell and invokes recall before execution plus capture after successful artifact persistence.
+- Inputs:
+  - Existing `CreateTaskInput`, `CreateAutomationInput`, and `DispatchManualEventInput`.
+  - New explicit runtime calls `ensure_project_knowledge_space(...)`, `promote_knowledge_candidate(...)`, and `retry_knowledge_capture(...)`.
+- Outputs:
+  - `KnowledgeSpaceRecord`, `KnowledgeCandidateRecord`, `KnowledgeAssetRecord`, and `KnowledgePromotionReport`.
+  - `RunExecutionReport` extended with `knowledge_candidates` and `recalled_knowledge_assets`.
+- State Transitions:
+  - `KnowledgeCandidate`: `captured -> verified_shared`
+  - `KnowledgeAsset`: `verified_shared` as the active promoted state in Slice 4; `promoted_org` is reserved but not implemented.
+  - Capture retry record: `pending -> resolved`
+- Error Handling:
+  - Missing project knowledge space records a capture-retry row and writes audit / trace failure evidence, but the run still completes.
+  - Repeated candidate capture dedupes by artifact-based `dedupe_key`.
+  - Repeated promotion reuses the existing asset instead of creating duplicates.
+  - Repeated retry is a no-op once a candidate already exists or the retry record has been resolved.
+- Tech Stack Decision:
+  - None. Reuse existing Rust + SQLite + JSON Schema stack.
+- Visual Framework Impact:
+  - None. No UI work in this slice.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - Existing Task intake, Automation intake, Run orchestration, governance evaluation, artifact persistence, audit / trace infrastructure, and schema contract tests.
+- New Abstractions:
+  - `octopus-knowledge`
+  - `KnowledgeCaptureRetryRecord`
+  - `KnowledgePromotionReport`
+  - `KnowledgeLineageRecord` query / insert support
+- Trade-offs:
+  - Introducing a dedicated knowledge crate avoids mixing persistence rules into runtime orchestration, at the cost of one more workspace member.
+  - Using exact `capability_id` recall keeps the first retrieval rule simple and testable, but it intentionally underfits the target-state knowledge system.
+  - Requiring explicit promotion keeps the slice governed and reviewable, but later surfaces will need separate UX and workflow work.
+- Test Strategy:
+  - Add contract examples for the refined knowledge schemas and new status enums.
+  - Add integration tests for candidate capture, promotion + recall, missing-space retry, and idempotency across retry and promotion.
+  - Re-run the full workspace test suite to preserve Slice 1 through Slice 3 behavior.
+- ADR Needed:
+  - Yes. The dedicated knowledge crate and project-scoped Shared Knowledge closed loop are durable boundary decisions.

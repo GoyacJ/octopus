@@ -11,6 +11,9 @@ pub const TRACE_STAGE_GOVERNANCE_EVALUATION: &str = "governance_evaluation";
 pub const TRACE_STAGE_RUN_ORCHESTRATOR: &str = "run_orchestrator";
 pub const TRACE_STAGE_EXECUTION_ACTION: &str = "execution_action";
 pub const TRACE_STAGE_ARTIFACT_STORE: &str = "artifact_store";
+pub const TRACE_STAGE_KNOWLEDGE_RECALL: &str = "knowledge_recall";
+pub const TRACE_STAGE_KNOWLEDGE_CAPTURE: &str = "knowledge_capture";
+pub const TRACE_STAGE_KNOWLEDGE_PROMOTION: &str = "knowledge_promotion";
 
 pub const AUDIT_EVENT_TASK_CREATED: &str = "task_created";
 pub const AUDIT_EVENT_AUTOMATION_CREATED: &str = "automation_created";
@@ -32,6 +35,11 @@ pub const AUDIT_EVENT_APPROVAL_EXPIRED: &str = "approval_expired";
 pub const AUDIT_EVENT_APPROVAL_CANCELLED: &str = "approval_cancelled";
 pub const AUDIT_EVENT_RUN_BLOCKED: &str = "run_blocked";
 pub const AUDIT_EVENT_POLICY_DENIED: &str = "policy_denied";
+pub const AUDIT_EVENT_KNOWLEDGE_CANDIDATE_CREATED: &str = "knowledge_candidate_created";
+pub const AUDIT_EVENT_KNOWLEDGE_CAPTURE_FAILED: &str = "knowledge_capture_failed";
+pub const AUDIT_EVENT_KNOWLEDGE_CAPTURE_RETRIED: &str = "knowledge_capture_retried";
+pub const AUDIT_EVENT_KNOWLEDGE_ASSET_PROMOTED: &str = "knowledge_asset_promoted";
+pub const AUDIT_EVENT_KNOWLEDGE_RECALLED: &str = "knowledge_recalled";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ArtifactRecord {
@@ -278,6 +286,43 @@ impl PolicyDecisionLogRecord {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct KnowledgeLineageRecord {
+    pub id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub run_id: String,
+    pub task_id: String,
+    pub source_ref: String,
+    pub target_ref: String,
+    pub relation_type: String,
+    pub created_at: String,
+}
+
+impl KnowledgeLineageRecord {
+    pub fn new(
+        workspace_id: impl Into<String>,
+        project_id: impl Into<String>,
+        run_id: impl Into<String>,
+        task_id: impl Into<String>,
+        source_ref: impl Into<String>,
+        target_ref: impl Into<String>,
+        relation_type: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            workspace_id: workspace_id.into(),
+            project_id: project_id.into(),
+            run_id: run_id.into(),
+            task_id: task_id.into(),
+            source_ref: source_ref.into(),
+            target_ref: target_ref.into(),
+            relation_type: relation_type.into(),
+            created_at: current_timestamp(),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ObservationStoreError {
     #[error(transparent)]
@@ -335,6 +380,14 @@ pub trait ObservationWriter {
         &self,
         run_id: &str,
     ) -> Result<Vec<PolicyDecisionLogRecord>, ObservationStoreError>;
+    async fn insert_knowledge_lineage(
+        &self,
+        record: &KnowledgeLineageRecord,
+    ) -> Result<(), ObservationStoreError>;
+    async fn list_knowledge_lineage_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<KnowledgeLineageRecord>, ObservationStoreError>;
 }
 
 #[derive(Debug, Clone)]
@@ -438,6 +491,22 @@ impl SqliteObservationStore {
             reason: row.try_get("reason")?,
             estimated_cost: row.try_get("estimated_cost")?,
             approval_request_id: row.try_get("approval_request_id")?,
+            created_at: row.try_get("created_at")?,
+        })
+    }
+
+    fn knowledge_lineage_from_row(
+        row: &sqlx::sqlite::SqliteRow,
+    ) -> Result<KnowledgeLineageRecord, sqlx::Error> {
+        Ok(KnowledgeLineageRecord {
+            id: row.try_get("id")?,
+            workspace_id: row.try_get("workspace_id")?,
+            project_id: row.try_get("project_id")?,
+            run_id: row.try_get("run_id")?,
+            task_id: row.try_get("task_id")?,
+            source_ref: row.try_get("source_ref")?,
+            target_ref: row.try_get("target_ref")?,
+            relation_type: row.try_get("relation_type")?,
             created_at: row.try_get("created_at")?,
         })
     }
@@ -793,6 +862,57 @@ impl ObservationWriter for SqliteObservationStore {
 
         rows.iter()
             .map(Self::policy_decision_from_row)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(ObservationStoreError::from)
+    }
+
+    async fn insert_knowledge_lineage(
+        &self,
+        record: &KnowledgeLineageRecord,
+    ) -> Result<(), ObservationStoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO knowledge_lineage_records (
+                id, workspace_id, project_id, run_id, task_id, source_ref, target_ref,
+                relation_type, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            ON CONFLICT(run_id, source_ref, target_ref, relation_type) DO NOTHING
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.workspace_id)
+        .bind(&record.project_id)
+        .bind(&record.run_id)
+        .bind(&record.task_id)
+        .bind(&record.source_ref)
+        .bind(&record.target_ref)
+        .bind(&record.relation_type)
+        .bind(&record.created_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn list_knowledge_lineage_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<KnowledgeLineageRecord>, ObservationStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, workspace_id, project_id, run_id, task_id, source_ref, target_ref,
+                   relation_type, created_at
+            FROM knowledge_lineage_records
+            WHERE run_id = ?1
+            ORDER BY created_at, id
+            "#,
+        )
+        .bind(run_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(Self::knowledge_lineage_from_row)
             .collect::<Result<Vec<_>, _>>()
             .map_err(ObservationStoreError::from)
     }

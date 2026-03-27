@@ -1,0 +1,28 @@
+## Verification
+
+- Unit Tests:
+  - `cargo test --workspace` covers the knowledge crate plus existing execution, governance, observation, and runtime unit tests.
+- Integration Tests:
+  - `crates/runtime/tests/slice1_runtime.rs`
+  - `crates/runtime/tests/slice2_governance.rs`
+  - `crates/runtime/tests/slice3_automation.rs`
+  - `crates/runtime/tests/slice4_knowledge.rs`
+- Contract Tests:
+  - `crates/runtime/tests/schema_contracts.rs`
+- Failure Cases:
+  - missing project knowledge space does not block a completed run and creates retryable capture state
+  - explicit retry resolves the missing-space capture path once the knowledge space exists
+  - repeated promotion does not create duplicate knowledge assets
+- Boundary Cases:
+  - repeated retry after candidate creation is a no-op
+  - later manual-task and `manual_event` automation runs recall the same promoted asset for exact `capability_id` matches
+  - Slice 1 through Slice 3 runtime flows continue to pass unchanged in the full workspace suite
+- Manual Verification:
+  - None planned beyond automated checks.
+- Static Checks:
+  - `cargo fmt --all`
+  - `cargo test --workspace`
+- Remaining Gaps:
+  - No UI, approval workflow, vector retrieval, multi-space routing, or Org Graph behavior exists yet.
+- Confidence Level:
+  - High

@@ -1,0 +1,37 @@
+## Contract Change
+
+- Change Type:
+  - Cross-language Contract
+- New / Updated Schemas:
+  - Update `schemas/context/knowledge-space.schema.json`
+  - Update `schemas/observe/knowledge-candidate.schema.json`
+  - Update `schemas/observe/knowledge-asset.schema.json`
+  - Update `schemas/observe/knowledge-lineage-record.schema.json`
+  - Add `schemas/observe/knowledge-candidate-status.schema.json`
+  - Add `schemas/observe/knowledge-asset-status.schema.json`
+- New / Updated Commands:
+  - None as shared contracts. Slice 4 still exposes a Rust library API only.
+- New / Updated Queries:
+  - None as shared contracts. Runtime query/report APIs remain local implementation concerns.
+- New / Updated Events:
+  - None as formal shared event contracts in this slice.
+- New / Updated DTOs:
+  - `KnowledgeSpace` now fixes the MVP authority container shape with `workspace_id`, optional `project_id`, `owner_ref`, and `display_name`.
+  - `KnowledgeCandidate` now captures source run/task/artifact references, `capability_id`, `status`, `content`, and `dedupe_key`.
+  - `KnowledgeAsset` now captures `source_candidate_id`, `knowledge_space_id`, `capability_id`, `status`, `content`, and `trust_level`.
+  - `KnowledgeLineageRecord` now records `workspace_id`, `project_id`, `run_id`, `task_id`, and explicit `relation_type`.
+  - Candidate and asset lifecycle values are frozen into dedicated status-enum schemas.
+- Compatibility Impact:
+  - Existing placeholder knowledge contracts are refined into concrete Slice 4 contracts and become the required field set for Rust consumers under `crates/`.
+  - Future TypeScript or app consumers must consume the new status files and refined knowledge object shapes instead of inventing local variants.
+- Affected Consumers:
+  - Rust consumers under `crates/`
+  - Future TypeScript consumers under `packages/`
+  - Runtime contract tests in `crates/runtime/tests`
+- Migration Notes:
+  - Add SQLite migration `0004` for knowledge spaces, candidates, assets, capture retries, and lineage records.
+  - Existing Slice 1 through Slice 3 databases should remain readable and migrate forward in place.
+- Generation Impact:
+  - None currently. The repo still does not generate Rust or TypeScript contract consumers from `schemas/`.
+- Open Questions:
+  - Later slices may need additional fields for multi-space views, approval routing, or richer trust / retrieval metadata, but Slice 4 freezes the minimal MVP set only.

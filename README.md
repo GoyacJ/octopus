@@ -2,7 +2,7 @@
 
 Octopus is currently a **doc-first rebuild** of a unified Agent Runtime Platform.
 
-This repository now proves a **local, test-verified Slice 3 runtime** under `crates/`, including the first `manual_event` Automation path, but it does **not** yet prove a runnable UI surface, remote-hub transport, MCP, shared knowledge, or a full GA implementation tree.  
+This repository now proves a **local, test-verified Slice 4 runtime** under `crates/`, including the first Shared Knowledge MVP on top of the `manual_event` Automation path, but it does **not** yet prove a runnable UI surface, remote-hub transport, MCP execution, Org Knowledge Graph promotion, or a full GA implementation tree.  
 The tracked truth starts with the repository entry docs, the `docs/` directory, and any tracked manifests, source files, schemas, and verification results that actually exist in the tree. If code, manifests, commands, or verification results are not present in the tracked tree, they must not be described as if they already exist.
 
 ## Where To Start
@@ -32,11 +32,11 @@ The repository currently contains:
 - repository-level instructions in [AGENTS.md](AGENTS.md)
 - product, architecture, governance, decision, and reference docs under [docs/](docs/README.md)
 - monorepo root manifests in `Cargo.toml`, `package.json`, and `pnpm-workspace.yaml`
-- refined Slice 1, Slice 2, and Slice 3 shared contracts for runtime, governance, and observation objects under `schemas/`
-- first real Rust workspace members in `crates/domain-context`, `crates/execution`, `crates/governance`, `crates/observe-artifact`, and `crates/runtime`
-- task packages for the GA foundation skeleton, Slice 1 runtime startup, Slice 2 governance runtime, and Slice 3 automation runtime under [docs/tasks/](docs/tasks/README.md)
+- refined Slice 1 through Slice 4 shared contracts for runtime, governance, context, and observation objects under `schemas/`
+- first real Rust workspace members in `crates/domain-context`, `crates/execution`, `crates/governance`, `crates/knowledge`, `crates/observe-artifact`, and `crates/runtime`
+- task packages for the GA foundation skeleton and Slice 1 through Slice 4 runtime deliveries under [docs/tasks/](docs/tasks/README.md)
 
-The current tracked implementation proves a local SQLite-backed governed automation path through automated tests: `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Artifact -> Audit / Trace`, including persistent `ApprovalRequest`, `InboxItem`, `Notification`, and `PolicyDecisionLog` records plus delivery dedupe/retry state. It does **not** yet prove UI surfaces, remote transport, `cron`/`webhook`/`MCP event` trigger types, MCP execution, or shared knowledge slices.
+The current tracked implementation proves a local SQLite-backed governed automation and Shared Knowledge path through automated tests: `Automation(manual_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Artifact -> KnowledgeCandidate -> Shared Knowledge recall -> Audit / Trace`, including persistent `ApprovalRequest`, `InboxItem`, `Notification`, `PolicyDecisionLog`, TriggerDelivery dedupe/retry state, project-scoped `KnowledgeSpace`, `KnowledgeCandidate`, `KnowledgeAsset`, knowledge-capture retry records, and knowledge lineage. It does **not** yet prove UI surfaces, remote transport, `cron`/`webhook`/`MCP event` trigger types, MCP execution, approval-driven knowledge promotion, vector retrieval, or Org Knowledge Graph slices.
 
 ## Working Rule
 

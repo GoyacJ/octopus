@@ -3,13 +3,31 @@
   "$id": "https://octopus.local/schemas/observe/knowledge-lineage-record.schema.json",
   "title": "KnowledgeLineageRecord",
   "type": "object",
-  "description": "GA foundation placeholder shared contract for knowledge lineage records.",
+  "description": "Slice 4 shared contract for lineage records that connect artifacts, knowledge candidates, shared knowledge assets, and later recall links.",
   "properties": {
     "id": { "type": "string" },
+    "workspace_id": { "type": "string" },
+    "project_id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "task_id": { "type": "string" },
     "source_ref": { "type": "string" },
     "target_ref": { "type": "string" },
+    "relation_type": {
+      "type": "string",
+      "enum": ["derived_from", "promoted_from", "recalled_by"]
+    },
     "created_at": { "type": "string", "format": "date-time" }
   },
-  "required": ["id", "source_ref", "target_ref"],
-  "additionalProperties": true
+  "required": [
+    "id",
+    "workspace_id",
+    "project_id",
+    "run_id",
+    "task_id",
+    "source_ref",
+    "target_ref",
+    "relation_type",
+    "created_at"
+  ],
+  "additionalProperties": false
 }
