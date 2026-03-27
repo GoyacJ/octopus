@@ -2,6 +2,7 @@ use std::{env, net::SocketAddr, path::PathBuf, time::Duration};
 
 use axum::serve;
 use chrono::Utc;
+use octopus_access_auth::{RemoteAccessConfig, RemoteAccessService};
 use octopus_remote_hub::{app, AppState};
 use octopus_runtime::Slice1Runtime;
 use tokio::net::TcpListener;
@@ -18,8 +19,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .unwrap_or(60);
+    let mut access_config = RemoteAccessConfig::default();
+    if let Ok(value) = env::var("OCTOPUS_REMOTE_HUB_JWT_SECRET") {
+        access_config.jwt_secret = value;
+    }
+    if let Ok(value) = env::var("OCTOPUS_REMOTE_HUB_SESSION_TTL_SECONDS") {
+        if let Ok(ttl_seconds) = value.parse::<i64>() {
+            access_config.session_ttl_seconds = ttl_seconds;
+        }
+    }
+    if let Ok(value) = env::var("OCTOPUS_REMOTE_HUB_BOOTSTRAP_EMAIL") {
+        access_config.bootstrap_email = value;
+    }
+    if let Ok(value) = env::var("OCTOPUS_REMOTE_HUB_BOOTSTRAP_PASSWORD") {
+        access_config.bootstrap_password = value;
+    }
 
     let runtime = Slice1Runtime::open_at(&db_path).await?;
+    let auth = RemoteAccessService::open_at_with_config(&db_path, access_config).await?;
     if cron_tick_interval_seconds > 0 {
         let ticker_runtime = runtime.clone();
         tokio::spawn(async move {
@@ -33,6 +50,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
     let listener = TcpListener::bind(bind_addr).await?;
-    serve(listener, app(AppState::new(runtime))).await?;
+    serve(listener, app(AppState::new(runtime, auth))).await?;
     Ok(())
 }

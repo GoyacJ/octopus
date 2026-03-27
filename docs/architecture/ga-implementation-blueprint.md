@@ -1,4 +1,4 @@
-# Octopus · GA Implementation Blueprint v2.2
+# Octopus · GA Implementation Blueprint v2.3
 
 ## 1. 文档定位
 
@@ -78,7 +78,9 @@
 - 本地 SQLite 驱动的受治理 runtime 主闭环已覆盖 Slice 1 到 Slice 5
 - `apps/remote-hub`、`apps/desktop`、`packages/schema-ts`、`packages/hub-client` 的 minimum surface foundation 已落地
 - GA trigger expansion 已落地，当前 tracked tree 已验证 `manual event`、`cron`、`webhook`、`MCP event` 四类 trigger 进入同一 `TriggerDelivery -> Task -> Run` 主链
-- 真实凭证化 MCP transport、richer remote-hub persistence / auth、automation management surface 仍未落地
+- Slice 9 `real MCP transport / credentials` 已落地并通过验证
+- Slice 10 `remote-hub persistence / auth` 已落地并通过验证
+- `minimum automation surface` 仍未落地，且必须作为独立任务推进
 
 ---
 
@@ -160,12 +162,13 @@
 1. Slice 1 到 Slice 5 的本地 governed runtime
 2. minimum `desktop + remote-hub + schema-ts + hub-client` surface foundation
 3. trigger expansion foundation + Slice 6 `cron` + Slice 7 `webhook` + Slice 8 `MCP event`
+4. Slice 9 `real MCP transport / credentials`
+5. Slice 10 `remote-hub persistence / auth`
 
-在此之后，冻结的后续顺序为：
+在此之后，当前冻结的下一优先级为：
 
-1. real MCP transport / credentials
-2. richer remote-hub persistence / auth
-3. minimum automation surface，且必须作为独立任务推进，不与 transport/runtime 收敛工作混做
+1. minimum automation surface，且必须作为独立任务推进，不与 auth/runtime 收敛工作混做
+2. 其后的更深 remote admin / tenant / IdP 能力，必须等新的 task package 与 owner docs 明确后再启动
 
 ### 6.3 Shared Contract 先于实现
 
@@ -802,11 +805,37 @@ GA 必须支持最小执行环境语义：
 - 已在 tracked tree 中落地并通过验证
 - 该 slice 不包含真实凭证化 transport
 
-### 13.10 Trigger Expansion 之后的冻结顺序
+### 13.10 Slice 9：real MCP transport / credentials（已完成）
 
-1. real MCP transport / credentials
-2. richer remote-hub persistence / auth
-3. minimum automation surface 作为独立任务启动，并在那时再扩展相关 app/package surface
+#### 范围
+
+- 以真实 HTTP / JSON-RPC transport 驱动 credentialed MCP 调用
+- 引入 `McpCredentialRef` 与最小 credential lookup
+- 在 runtime 主链中记录真实 invocation、health、lease、retry 语义
+
+#### 当前状态
+
+- 已在 tracked tree 中落地并通过验证
+- 该 slice 不包含 remote-hub 远程身份、会话或成员鉴权
+
+### 13.11 Slice 10：remote-hub persistence / auth（已完成）
+
+#### 范围
+
+- 新增专门的 access/auth Rust 边界承载远程用户、工作区成员关系与 JWT 会话
+- 在 `remote-hub` SQLite 中持久化 remote user、membership、session 记录
+- 为 remote REST / SSE 路径增加登录、鉴权、登出、会话过期与 workspace membership 校验
+- 扩展 shared contracts、hub-client 与 desktop，使其可区分 `authenticated`、`auth_required`、`token_expired`
+
+#### 当前状态
+
+- 已在 tracked tree 中落地并通过验证
+- 当前是 bootstrap user + persisted membership + JWT session 的最小模型，不包含 full tenant / RBAC admin surface 或 external IdP
+
+### 13.12 当前冻结的下一优先级
+
+1. minimum automation surface 作为独立任务启动，并在那时再扩展相关 app/package surface
+2. 更深 remote admin / tenant / IdP 能力不在当前冻结顺序内，除非后续 tracked docs 明确纳入
 
 ---
 
@@ -1002,8 +1031,8 @@ Octopus 首版 GA 不是“把目标态平台全部做出来”，而是：
 - 以 PRD 定义的正式对象模型为产品边界
 - 以 SAD 定义的运行时、治理、恢复、互操作边界为架构约束
 - 以本蓝图定义的最小正式运行闭环为实施主线
-- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 的顺序稳步推进
-- 当前下一优先级是 real MCP transport / credentials，其后是 richer remote-hub persistence / auth，最后才是独立的 minimum automation surface
+- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 的顺序稳步推进
+- 当前下一优先级是独立的 minimum automation surface
 - 在每次模块推进前先完成局部设计包，再实现，再验证，再回写全局文档
 
 只有这样，Octopus 才能在不丢失整体方向的前提下，让 AI 主导开发同时保持可控、可审计、可维护。

@@ -6,6 +6,7 @@ use axum::{
 };
 use http_body_util::BodyExt;
 use jsonschema::JSONSchema;
+use octopus_access_auth::RemoteAccessService;
 use octopus_runtime::{
     BudgetPolicyRecord, CapabilityBindingRecord, CapabilityDescriptorRecord, CapabilityGrantRecord,
     Slice1Runtime,
@@ -120,12 +121,38 @@ async fn response_json(router: axum::Router, request: Request<Body>) -> Value {
     serde_json::from_slice(&body).unwrap()
 }
 
+async fn login_access_token(router: axum::Router, workspace_id: &str) -> String {
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "workspace_id": workspace_id,
+                        "email": "admin@octopus.local",
+                        "password": "octopus-bootstrap-password"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    serde_json::from_slice::<Value>(&body).unwrap()["access_token"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
 #[tokio::test]
 async fn completed_run_surface_matches_minimum_contracts() {
     let tempdir = tempfile::tempdir().unwrap();
-    let runtime = Slice1Runtime::open_at(&sample_db_path(tempdir.path(), "completed.sqlite"))
-        .await
-        .unwrap();
+    let db_path = sample_db_path(tempdir.path(), "completed.sqlite");
+    let runtime = Slice1Runtime::open_at(&db_path).await.unwrap();
     runtime
         .ensure_project_context(
             "workspace-alpha",
@@ -148,7 +175,10 @@ async fn completed_run_surface_matches_minimum_contracts() {
         .await
         .unwrap();
 
-    let router = app(AppState::new(runtime.clone()));
+    let auth = RemoteAccessService::open_at(&db_path).await.unwrap();
+    let router = app(AppState::new(runtime.clone(), auth));
+    let access_token = login_access_token(router.clone(), "workspace-alpha").await;
+    let authorization = format!("Bearer {access_token}");
     let task_schema = compile_schema("runtime/task.schema.json");
     let run_detail_schema = compile_schema("runtime/run-detail.schema.json");
     let artifact_schema = compile_schema("observe/artifact.schema.json");
@@ -162,6 +192,7 @@ async fn completed_run_surface_matches_minimum_contracts() {
             .method("POST")
             .uri("/api/tasks")
             .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
             .body(Body::from(
                 json!({
                     "workspace_id": "workspace-alpha",
@@ -189,6 +220,7 @@ async fn completed_run_surface_matches_minimum_contracts() {
         Request::builder()
             .method("POST")
             .uri(format!("/api/tasks/{task_id}/start"))
+            .header("authorization", authorization.as_str())
             .body(Body::empty())
             .unwrap(),
     )
@@ -200,6 +232,7 @@ async fn completed_run_surface_matches_minimum_contracts() {
         router.clone(),
         Request::builder()
             .uri(format!("/api/runs/{run_id}"))
+            .header("authorization", authorization.as_str())
             .body(Body::empty())
             .unwrap(),
     )
@@ -210,6 +243,7 @@ async fn completed_run_surface_matches_minimum_contracts() {
         router.clone(),
         Request::builder()
             .uri(format!("/api/runs/{run_id}/artifacts"))
+            .header("authorization", authorization.as_str())
             .body(Body::empty())
             .unwrap(),
     )
@@ -220,6 +254,7 @@ async fn completed_run_surface_matches_minimum_contracts() {
         router.clone(),
         Request::builder()
             .uri(format!("/api/runs/{run_id}/knowledge"))
+            .header("authorization", authorization.as_str())
             .body(Body::empty())
             .unwrap(),
     )
@@ -230,6 +265,7 @@ async fn completed_run_surface_matches_minimum_contracts() {
         router.clone(),
         Request::builder()
             .uri("/api/workspaces/workspace-alpha/projects/project-slice1/capabilities")
+            .header("authorization", authorization.as_str())
             .body(Body::empty())
             .unwrap(),
     )
@@ -257,6 +293,7 @@ async fn completed_run_surface_matches_minimum_contracts() {
                 .uri(format!(
                     "/api/events?workspace_id=workspace-alpha&run_id={run_id}"
                 ))
+                .header("authorization", authorization.as_str())
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -272,9 +309,8 @@ async fn completed_run_surface_matches_minimum_contracts() {
 #[tokio::test]
 async fn approval_and_knowledge_promotion_surface_round_trip() {
     let tempdir = tempfile::tempdir().unwrap();
-    let runtime = Slice1Runtime::open_at(&sample_db_path(tempdir.path(), "approval.sqlite"))
-        .await
-        .unwrap();
+    let db_path = sample_db_path(tempdir.path(), "approval.sqlite");
+    let runtime = Slice1Runtime::open_at(&db_path).await.unwrap();
     runtime
         .ensure_project_context(
             "workspace-alpha",
@@ -297,7 +333,10 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
         .await
         .unwrap();
 
-    let router = app(AppState::new(runtime.clone()));
+    let auth = RemoteAccessService::open_at(&db_path).await.unwrap();
+    let router = app(AppState::new(runtime.clone(), auth));
+    let access_token = login_access_token(router.clone(), "workspace-alpha").await;
+    let authorization = format!("Bearer {access_token}");
     let run_detail_schema = compile_schema("runtime/run-detail.schema.json");
     let inbox_item_schema = compile_schema("observe/inbox-item.schema.json");
     let notification_schema = compile_schema("observe/notification.schema.json");
@@ -309,6 +348,7 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
             .method("POST")
             .uri("/api/tasks")
             .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
             .body(Body::from(
                 json!({
                     "workspace_id": "workspace-alpha",
@@ -337,6 +377,7 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
                 "/api/tasks/{}/start",
                 created_task["id"].as_str().unwrap()
             ))
+            .header("authorization", authorization.as_str())
             .body(Body::empty())
             .unwrap(),
     )
@@ -351,6 +392,7 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
         router.clone(),
         Request::builder()
             .uri("/api/workspaces/workspace-alpha/inbox")
+            .header("authorization", authorization.as_str())
             .body(Body::empty())
             .unwrap(),
     )
@@ -365,6 +407,7 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
         router.clone(),
         Request::builder()
             .uri("/api/workspaces/workspace-alpha/notifications")
+            .header("authorization", authorization.as_str())
             .body(Body::empty())
             .unwrap(),
     )
@@ -381,6 +424,7 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
             .method("POST")
             .uri(format!("/api/approvals/{approval_id}/resolve"))
             .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
             .body(Body::from(
                 json!({
                     "approval_id": approval_id,
@@ -400,6 +444,7 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
         router.clone(),
         Request::builder()
             .uri(format!("/api/runs/{run_id}/knowledge"))
+            .header("authorization", authorization.as_str())
             .body(Body::empty())
             .unwrap(),
     )
@@ -417,6 +462,7 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
             .method("POST")
             .uri(format!("/api/knowledge/candidates/{candidate_id}/promote"))
             .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
             .body(Body::from(
                 json!({
                     "candidate_id": candidate_id,

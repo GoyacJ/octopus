@@ -66,6 +66,10 @@ export const useHubStore = defineStore("hub", () => {
   const activeCapability = computed(
     () => capabilityVisibilities.value[0]?.descriptor ?? null
   );
+  const authState = computed(
+    () => connectionStatus.value?.auth_state ?? "auth_required"
+  );
+  const readOnlyMode = computed(() => authState.value !== "authenticated");
 
   async function loadWorkspace(
     workspaceId: string,
@@ -176,6 +180,8 @@ export const useHubStore = defineStore("hub", () => {
     workspaceName,
     projectName,
     activeCapability,
+    authState,
+    readOnlyMode,
     loadWorkspace,
     createAndStartTask,
     loadRun

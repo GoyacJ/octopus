@@ -840,6 +840,16 @@ impl KnowledgeManager {
             .await?)
     }
 
+    pub async fn fetch_knowledge_candidate(
+        &self,
+        candidate_id: &str,
+    ) -> Result<Option<KnowledgeCandidateRecord>, RuntimeError> {
+        Ok(self
+            .knowledge_store
+            .fetch_knowledge_candidate(candidate_id)
+            .await?)
+    }
+
     pub async fn list_knowledge_lineage_by_run(
         &self,
         run_id: &str,

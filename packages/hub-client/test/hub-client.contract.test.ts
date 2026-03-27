@@ -179,6 +179,7 @@ const capabilityVisibilityFixture = [
 const hubConnectionStatusFixture = {
   mode: "local",
   state: "connected",
+  auth_state: "authenticated",
   active_server_count: 0,
   healthy_server_count: 0,
   servers: [],
@@ -391,4 +392,57 @@ runHubClientContractSuite("remote adapter", () => {
       eventSource.emit(event);
     }
   };
+});
+
+describe("remote auth-aware adapter behavior", () => {
+  it("injects bearer tokens into remote hub requests", async () => {
+    const client = createRemoteHubClient({
+      baseUrl: "http://hub.test",
+      getAccessToken: async () => "remote-token",
+      fetch: async (input, init) => {
+        expect(String(input)).toBe("http://hub.test/api/hub/connection");
+        expect(new Headers(init?.headers).get("authorization")).toBe(
+          "Bearer remote-token"
+        );
+
+        return Response.json({
+          ...hubConnectionStatusFixture,
+          mode: "remote",
+          auth_state: "authenticated"
+        });
+      }
+    } as any);
+
+    await expect(client.getHubConnectionStatus()).resolves.toMatchObject({
+      auth_state: "authenticated"
+    });
+  });
+
+  it("normalizes token expiry into an auth-aware client error", async () => {
+    const client = createRemoteHubClient({
+      baseUrl: "http://hub.test",
+      getAccessToken: async () => "remote-token",
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            error: "token expired",
+            error_code: "token_expired",
+            auth_state: "token_expired"
+          }),
+          {
+            status: 401,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        )
+    } as any);
+
+    await expect(client.listInboxItems("workspace-alpha")).rejects.toMatchObject({
+      name: "HubClientAuthError",
+      kind: "token_expired",
+      authState: "token_expired",
+      status: 401
+    });
+  });
 });

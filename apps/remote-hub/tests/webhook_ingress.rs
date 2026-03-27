@@ -5,6 +5,7 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
+use octopus_access_auth::RemoteAccessService;
 use octopus_execution::ExecutionAction;
 use octopus_runtime::{
     BudgetPolicyRecord, CapabilityBindingRecord, CapabilityDescriptorRecord, CapabilityGrantRecord,
@@ -69,9 +70,8 @@ async fn response_status_and_json(router: axum::Router, request: Request<Body>) 
 #[tokio::test]
 async fn webhook_route_enforces_headers_and_dedupes_duplicate_ingress() {
     let tempdir = tempfile::tempdir().unwrap();
-    let runtime = Slice1Runtime::open_at(&sample_db_path(tempdir.path(), "webhook.sqlite"))
-        .await
-        .unwrap();
+    let db_path = sample_db_path(tempdir.path(), "webhook.sqlite");
+    let runtime = Slice1Runtime::open_at(&db_path).await.unwrap();
     runtime
         .ensure_project_context(
             "workspace-alpha",
@@ -108,7 +108,8 @@ async fn webhook_route_enforces_headers_and_dedupes_duplicate_ingress() {
         .await
         .unwrap();
 
-    let router = app(AppState::new(runtime.clone()));
+    let auth = RemoteAccessService::open_at(&db_path).await.unwrap();
+    let router = app(AppState::new(runtime.clone(), auth));
     let trigger_id = created.automation.trigger_id;
     let secret = created.webhook_secret.unwrap();
 

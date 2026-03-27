@@ -10,8 +10,12 @@ import capabilityBindingSchema from "../../../schemas/governance/capability-bind
 import capabilityDescriptorSchema from "../../../schemas/governance/capability-descriptor.schema.json";
 import capabilityGrantSchema from "../../../schemas/governance/capability-grant.schema.json";
 import capabilityVisibilitySchema from "../../../schemas/governance/capability-visibility.schema.json";
+import hubAuthErrorSchema from "../../../schemas/interop/hub-auth-error.schema.json";
 import hubConnectionStatusSchema from "../../../schemas/interop/hub-connection-status.schema.json";
 import hubEventSchema from "../../../schemas/interop/hub-event.schema.json";
+import hubLoginCommandSchema from "../../../schemas/interop/hub-login-command.schema.json";
+import hubLoginResponseSchema from "../../../schemas/interop/hub-login-response.schema.json";
+import hubSessionSchema from "../../../schemas/interop/hub-session.schema.json";
 import knowledgeSpaceSchema from "../../../schemas/context/knowledge-space.schema.json";
 import projectContextSchema from "../../../schemas/context/project-context.schema.json";
 import projectSchema from "../../../schemas/context/project.schema.json";
@@ -53,8 +57,12 @@ import type {
   ArtifactSummary,
   AuditRecord,
   CapabilityVisibility,
+  HubAuthError,
   HubConnectionStatus,
   HubEvent,
+  HubLoginCommand,
+  HubLoginResponse,
+  HubSession,
   InboxItem,
   KnowledgeDetail,
   KnowledgePromoteCommand,
@@ -94,6 +102,7 @@ const schemaRegistry = {
   [capabilityDescriptorSchema.$id]: capabilityDescriptorSchema,
   [capabilityGrantSchema.$id]: capabilityGrantSchema,
   [capabilityVisibilitySchema.$id]: capabilityVisibilitySchema,
+  [hubAuthErrorSchema.$id]: hubAuthErrorSchema,
   [artifactSchema.$id]: artifactSchema,
   [artifactSummarySchema.$id]: artifactSummarySchema,
   [auditRecordSchema.$id]: auditRecordSchema,
@@ -111,6 +120,9 @@ const schemaRegistry = {
   [knowledgeSummarySchema.$id]: knowledgeSummarySchema,
   [knowledgeDetailSchema.$id]: knowledgeDetailSchema,
   [knowledgePromoteCommandSchema.$id]: knowledgePromoteCommandSchema,
+  [hubLoginCommandSchema.$id]: hubLoginCommandSchema,
+  [hubSessionSchema.$id]: hubSessionSchema,
+  [hubLoginResponseSchema.$id]: hubLoginResponseSchema,
   [hubConnectionStatusSchema.$id]: hubConnectionStatusSchema,
   [hubEventSchema.$id]: hubEventSchema
 } as const;
@@ -266,6 +278,22 @@ export function parseKnowledgePromoteCommand(
     knowledgePromoteCommandSchema.$id,
     value
   );
+}
+
+export function parseHubLoginCommand(value: unknown): HubLoginCommand {
+  return parseWithSchema<HubLoginCommand>(hubLoginCommandSchema.$id, value);
+}
+
+export function parseHubSession(value: unknown): HubSession {
+  return parseWithSchema<HubSession>(hubSessionSchema.$id, value);
+}
+
+export function parseHubLoginResponse(value: unknown): HubLoginResponse {
+  return parseWithSchema<HubLoginResponse>(hubLoginResponseSchema.$id, value);
+}
+
+export function parseHubAuthError(value: unknown): HubAuthError {
+  return parseWithSchema<HubAuthError>(hubAuthErrorSchema.$id, value);
 }
 
 export function parseHubConnectionStatus(value: unknown): HubConnectionStatus {

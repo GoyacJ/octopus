@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/interop/hub-auth-error.schema.json",
+  "title": "HubAuthError",
+  "description": "Structured remote-hub auth failure response used to distinguish auth state from transport failure.",
+  "type": "object",
+  "properties": {
+    "error": {
+      "type": "string",
+      "minLength": 1
+    },
+    "error_code": {
+      "type": "string",
+      "enum": ["auth_required", "token_expired", "workspace_forbidden"]
+    },
+    "auth_state": {
+      "type": "string",
+      "enum": ["authenticated", "auth_required", "token_expired"]
+    }
+  },
+  "required": ["error", "error_code", "auth_state"],
+  "additionalProperties": false
+}

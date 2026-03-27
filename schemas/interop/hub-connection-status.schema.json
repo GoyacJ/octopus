@@ -57,6 +57,10 @@
       "type": "string",
       "enum": ["connected", "degraded", "disconnected"]
     },
+    "auth_state": {
+      "type": "string",
+      "enum": ["authenticated", "auth_required", "token_expired"]
+    },
     "active_server_count": {
       "type": "integer",
       "minimum": 0
@@ -79,6 +83,7 @@
   "required": [
     "mode",
     "state",
+    "auth_state",
     "active_server_count",
     "healthy_server_count",
     "servers",

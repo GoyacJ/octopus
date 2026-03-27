@@ -34,7 +34,8 @@ const runRoute = computed(() => {
         <span class="status-label">Hub</span>
         <strong>
           {{ hub.connectionStatus?.mode ?? "local pending" }} /
-          {{ hub.connectionStatus?.state ?? "connecting" }}
+          {{ hub.connectionStatus?.state ?? "connecting" }} /
+          {{ hub.authState }}
         </strong>
         <span class="muted">
           Refreshed {{ hub.connectionStatus?.last_refreshed_at ?? "not yet loaded" }}

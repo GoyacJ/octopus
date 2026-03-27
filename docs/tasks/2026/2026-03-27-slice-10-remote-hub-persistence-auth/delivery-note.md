@@ -1,0 +1,32 @@
+## Delivery Note
+
+- What Changed:
+  - Added Slice 10 remote-hub persistence / auth across Rust, schemas, shared TypeScript consumers, desktop read-only behavior, and owner docs.
+- Why:
+  - Remote mode needed a minimum persisted auth boundary so clients can distinguish transport loss from session failure without moving execution truth out of the runtime.
+- User / System Impact:
+  - Remote users can log in with the bootstrap account, obtain a JWT-backed session, access protected hub routes within their workspace membership, and observe `authenticated` / `auth_required` / `token_expired` separately from transport health.
+- Risks:
+  - The slice still uses a bootstrap-user model and a single SQLite-backed auth shell, so it is not a substitute for a full tenant / RBAC / external-IdP design.
+- Rollback Notes:
+  - Revert the Slice 10 schema, auth crate, remote-hub route, and consumer changes together; partial rollback would leave shared contracts and owner docs inconsistent.
+- Follow-ups:
+  - Start `minimum automation surface` as the next independent GA task.
+  - Revisit tenant / RBAC / IdP design only through a new task package or ADR-backed scope decision.
+- Docs Updated:
+  - `README.md`
+  - `docs/README.md`
+  - `docs/architecture/ga-implementation-blueprint.md`
+  - `AGENTS.md`
+  - this task package
+- Tests Included:
+  - `cargo test -p octopus-remote-hub --test auth_surface`
+  - `cargo test -p octopus-runtime --test schema_contracts`
+  - `cargo test --workspace`
+  - `pnpm --filter @octopus/schema-ts test`
+  - `pnpm --filter @octopus/hub-client test`
+  - `pnpm --filter @octopus/desktop test`
+- ADR Updated:
+  - No. The new access/auth crate fit the existing owner-doc placement rules without requiring a new durable architecture decision.
+- Temporary Workarounds:
+  - Bootstrap credentials remain the minimum seeded model for this slice; no tenant-admin surface or external identity flow is included.

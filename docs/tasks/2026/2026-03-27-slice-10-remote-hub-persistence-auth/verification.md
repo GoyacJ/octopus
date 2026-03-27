@@ -1,0 +1,29 @@
+## Verification
+
+- Unit Tests:
+  - No standalone Rust unit-test module was added; coverage is carried by the remote-hub auth integration suite plus existing runtime and client contract tests.
+- Integration Tests:
+  - `cargo test -p octopus-remote-hub --test auth_surface`
+  - Covers login success, missing token, expired token, wrong-workspace access, logout / revocation, and authenticated task / approval / knowledge access.
+- Contract Tests:
+  - `cargo test -p octopus-runtime --test schema_contracts`
+  - `pnpm --filter @octopus/schema-ts test`
+  - `pnpm --filter @octopus/hub-client test`
+  - `pnpm --filter @octopus/desktop test`
+- Failure Cases:
+  - Missing bearer token returns `auth_required`.
+  - Expired token returns `token_expired`.
+  - Workspace mismatch returns `workspace_forbidden`.
+  - Revoked session token is no longer accepted after logout.
+- Boundary Cases:
+  - `HubConnectionStatus` now reports transport `state` separately from auth `auth_state`.
+  - Existing local-mode and webhook-ingress paths continue to pass their pre-existing tests.
+- Manual Verification:
+  - None planned.
+- Static Checks:
+  - `cargo test --workspace`
+- Remaining Gaps:
+  - Warnings remain for a few currently unused DTO/record fields carried by the minimum surface.
+  - No external IdP, refresh token, or tenant/RBAC admin surface is included in this slice.
+- Confidence Level:
+  - High. The full Rust workspace and targeted TypeScript consumer suites pass after the slice landed.

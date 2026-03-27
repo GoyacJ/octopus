@@ -104,11 +104,20 @@ onMounted(() => {
       </label>
       <button
         data-testid="create-start"
-        :disabled="hub.taskSubmitting || hub.workspaceLoading"
+        :disabled="hub.taskSubmitting || hub.workspaceLoading || hub.readOnlyMode"
         @click="createAndStart"
       >
-        {{ hub.taskSubmitting ? "Starting..." : "Create and Start" }}
+        {{
+          hub.taskSubmitting
+            ? "Starting..."
+            : hub.readOnlyMode
+              ? "Read-only"
+              : "Create and Start"
+        }}
       </button>
+      <p v-if="hub.readOnlyMode" class="muted">
+        Remote auth: {{ hub.authState }}
+      </p>
     </article>
 
     <article class="surface-card">
@@ -118,6 +127,7 @@ onMounted(() => {
         {{ hub.connectionStatus?.state ?? "unknown" }}
       </h2>
       <div class="meta-list">
+        <span>Auth state: {{ hub.authState }}</span>
         <span>Active servers: {{ hub.connectionStatus?.active_server_count ?? 0 }}</span>
         <span>Healthy servers: {{ hub.connectionStatus?.healthy_server_count ?? 0 }}</span>
         <span>Last refresh: {{ hub.connectionStatus?.last_refreshed_at ?? "n/a" }}</span>

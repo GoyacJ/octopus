@@ -678,6 +678,7 @@ fn refined_slice1_examples_validate() {
     assert!(hub_connection_status_schema.is_valid(&json!({
         "mode": "local",
         "state": "connected",
+        "auth_state": "authenticated",
         "active_server_count": 1,
         "healthy_server_count": 1,
         "servers": [{
@@ -699,6 +700,7 @@ fn refined_slice1_examples_validate() {
         "payload": {
             "mode": "local",
             "state": "connected",
+            "auth_state": "authenticated",
             "active_server_count": 1,
             "healthy_server_count": 1,
             "servers": [{

@@ -2,7 +2,7 @@ use std::convert::Infallible;
 
 use axum::{
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::{header::AUTHORIZATION, HeaderMap, StatusCode},
     response::{
         sse::{Event, Sse},
         IntoResponse, Response,
@@ -12,6 +12,7 @@ use axum::{
 };
 use chrono::Utc;
 use futures_util::stream;
+use octopus_access_auth::{AccessAuthError, HubLoginResponse, HubSession, RemoteAccessService};
 use octopus_execution::ExecutionAction;
 use octopus_runtime::{
     ApprovalDecision, ApprovalRequestRecord, ArtifactRecord, AuditRecord,
@@ -25,19 +26,23 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AppState {
     runtime: Slice1Runtime,
+    auth: RemoteAccessService,
 }
 
 impl AppState {
-    pub fn new(runtime: Slice1Runtime) -> Self {
-        Self { runtime }
+    pub fn new(runtime: Slice1Runtime, auth: RemoteAccessService) -> Self {
+        Self { runtime, auth }
     }
 }
 
 pub fn app(state: AppState) -> Router {
     Router::new()
+        .route("/api/auth/login", post(login))
+        .route("/api/auth/session", get(get_current_session))
+        .route("/api/auth/logout", post(logout_session))
         .route(
             "/api/workspaces/{workspace_id}/projects/{project_id}/context",
             get(get_project_context),
@@ -74,6 +79,8 @@ enum AppError {
     #[error("{0}")]
     NotFound(String),
     #[error(transparent)]
+    Auth(#[from] AccessAuthError),
+    #[error(transparent)]
     Runtime(#[from] RuntimeError),
 }
 
@@ -82,6 +89,7 @@ impl IntoResponse for AppError {
         let (status, message) = match self {
             Self::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             Self::NotFound(message) => (StatusCode::NOT_FOUND, message),
+            Self::Auth(error) => return auth_error_response(error),
             Self::Runtime(error) => match error {
                 RuntimeError::TaskNotFound(message)
                 | RuntimeError::RunNotFound(message)
@@ -162,6 +170,13 @@ struct SurfaceTaskCreateCommand {
 }
 
 #[derive(Debug, Deserialize)]
+struct SurfaceLoginCommand {
+    workspace_id: String,
+    email: String,
+    password: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct SurfaceApprovalResolveCommand {
     approval_id: String,
     decision: String,
@@ -180,6 +195,7 @@ struct SurfaceKnowledgePromoteCommand {
 struct EventsQuery {
     workspace_id: Option<String>,
     run_id: Option<String>,
+    access_token: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -251,6 +267,7 @@ struct HubConnectionServerSummary {
 struct HubConnectionStatusResponse {
     mode: String,
     state: String,
+    auth_state: String,
     active_server_count: usize,
     healthy_server_count: usize,
     servers: Vec<HubConnectionServerSummary>,
@@ -265,10 +282,53 @@ struct WebhookDispatchResponse {
     status: String,
 }
 
+#[derive(Debug, Serialize)]
+struct AuthErrorResponse {
+    error: String,
+    error_code: String,
+    auth_state: String,
+}
+
+async fn login(
+    State(state): State<AppState>,
+    Json(command): Json<SurfaceLoginCommand>,
+) -> Result<Json<HubLoginResponse>, AppError> {
+    Ok(Json(
+        state
+            .auth
+            .login(&command.workspace_id, &command.email, &command.password)
+            .await?,
+    ))
+}
+
+async fn get_current_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<HubSession>, AppError> {
+    let session = require_session(&state, &headers).await?;
+    Ok(Json(session))
+}
+
+async fn logout_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<StatusCode, AppError> {
+    let session = require_session(&state, &headers).await?;
+    state.auth.logout(&session.session_id).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 async fn get_project_context(
     State(state): State<AppState>,
     Path((workspace_id, project_id)): Path<(String, String)>,
+    headers: HeaderMap,
 ) -> AppResult<ProjectContext> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
     Ok(Json(
         state
             .runtime
@@ -279,8 +339,15 @@ async fn get_project_context(
 
 async fn create_task(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(command): Json<SurfaceTaskCreateCommand>,
 ) -> AppResult<TaskRecord> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &command.workspace_id)
+        .await?;
+
     Ok(Json(
         state
             .runtime
@@ -349,7 +416,15 @@ fn required_header(headers: &HeaderMap, name: &str) -> Result<String, AppError> 
 async fn start_task(
     State(state): State<AppState>,
     Path(task_id): Path<String>,
+    headers: HeaderMap,
 ) -> AppResult<RunDetailResponse> {
+    let session = require_session(&state, &headers).await?;
+    let task = state.runtime.fetch_task(&task_id).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &task.workspace_id)
+        .await?;
+
     let report = state.runtime.start_task(&task_id).await?;
     Ok(Json(build_run_detail_response(&state.runtime, report).await?))
 }
@@ -357,30 +432,54 @@ async fn start_task(
 async fn get_run_detail(
     State(state): State<AppState>,
     Path(run_id): Path<String>,
+    headers: HeaderMap,
 ) -> AppResult<RunDetailResponse> {
+    let session = require_session(&state, &headers).await?;
     let report = state.runtime.load_run_report(&run_id).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &report.run.workspace_id)
+        .await?;
     Ok(Json(build_run_detail_response(&state.runtime, report).await?))
 }
 
 async fn list_artifacts(
     State(state): State<AppState>,
     Path(run_id): Path<String>,
+    headers: HeaderMap,
 ) -> AppResult<Vec<ArtifactRecord>> {
+    let session = require_session(&state, &headers).await?;
+    let report = state.runtime.load_run_report(&run_id).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &report.run.workspace_id)
+        .await?;
+
     Ok(Json(state.runtime.list_artifacts_by_run(&run_id).await?))
 }
 
 async fn get_knowledge_detail(
     State(state): State<AppState>,
     Path(run_id): Path<String>,
+    headers: HeaderMap,
 ) -> AppResult<KnowledgeDetailResponse> {
+    let session = require_session(&state, &headers).await?;
+    let report = state.runtime.load_run_report(&run_id).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &report.run.workspace_id)
+        .await?;
+
     Ok(Json(build_knowledge_detail_response(&state.runtime, &run_id).await?))
 }
 
 async fn resolve_approval(
     State(state): State<AppState>,
     Path(approval_id): Path<String>,
+    headers: HeaderMap,
     Json(command): Json<SurfaceApprovalResolveCommand>,
 ) -> AppResult<RunDetailResponse> {
+    let session = require_session(&state, &headers).await?;
     if approval_id != command.approval_id {
         return Err(AppError::BadRequest(
             "approval_id path/body mismatch".to_string(),
@@ -399,9 +498,19 @@ async fn resolve_approval(
         }
     };
 
+    let approval = state
+        .runtime
+        .fetch_approval_request(&approval_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("approval `{approval_id}` not found")))?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &approval.workspace_id)
+        .await?;
+
     let report = state
         .runtime
-        .resolve_approval(&approval_id, decision, &command.actor_ref, &command.note)
+        .resolve_approval(&approval_id, decision, &session.actor_ref, &command.note)
         .await?;
     Ok(Json(build_run_detail_response(&state.runtime, report).await?))
 }
@@ -409,7 +518,14 @@ async fn resolve_approval(
 async fn list_inbox_items(
     State(state): State<AppState>,
     Path(workspace_id): Path<String>,
+    headers: HeaderMap,
 ) -> AppResult<Vec<InboxItemRecord>> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
     Ok(Json(
         state
             .runtime
@@ -421,7 +537,14 @@ async fn list_inbox_items(
 async fn list_notifications(
     State(state): State<AppState>,
     Path(workspace_id): Path<String>,
+    headers: HeaderMap,
 ) -> AppResult<Vec<NotificationRecord>> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
     Ok(Json(
         state
             .runtime
@@ -433,7 +556,14 @@ async fn list_notifications(
 async fn list_capability_visibility(
     State(state): State<AppState>,
     Path((workspace_id, project_id)): Path<(String, String)>,
+    headers: HeaderMap,
 ) -> AppResult<Vec<CapabilityVisibilityResponse>> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
     let descriptors = state
         .runtime
         .list_visible_capabilities(&workspace_id, &project_id)
@@ -457,17 +587,33 @@ async fn list_capability_visibility(
 async fn promote_knowledge(
     State(state): State<AppState>,
     Path(candidate_id): Path<String>,
+    headers: HeaderMap,
     Json(command): Json<SurfaceKnowledgePromoteCommand>,
 ) -> AppResult<KnowledgeDetailResponse> {
+    let session = require_session(&state, &headers).await?;
     if candidate_id != command.candidate_id {
         return Err(AppError::BadRequest(
             "candidate_id path/body mismatch".to_string(),
         ));
     }
 
+    let candidate = state
+        .runtime
+        .fetch_knowledge_candidate(&candidate_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("candidate `{candidate_id}` not found")))?;
     let report = state
         .runtime
-        .promote_knowledge_candidate(&candidate_id, &command.actor_ref, &command.note)
+        .load_run_report(&candidate.source_run_id)
+        .await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &report.run.workspace_id)
+        .await?;
+
+    let report = state
+        .runtime
+        .promote_knowledge_candidate(&candidate_id, &session.actor_ref, &command.note)
         .await?;
     let run_id = report.candidate.source_run_id;
     Ok(Json(build_knowledge_detail_response(&state.runtime, &run_id).await?))
@@ -475,18 +621,25 @@ async fn promote_knowledge(
 
 async fn get_hub_connection_status(
     State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> AppResult<HubConnectionStatusResponse> {
-    Ok(Json(build_hub_connection_status(&state.runtime).await?))
+    let auth_state = resolve_auth_state(&state, auth_header_value(&headers).map(str::to_owned)).await;
+    Ok(Json(
+        build_hub_connection_status(&state.runtime, auth_state.as_str()).await?,
+    ))
 }
 
 async fn stream_events(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(query): Query<EventsQuery>,
 ) -> Result<Sse<impl futures_util::Stream<Item = Result<Event, Infallible>>>, AppError> {
     let mut payloads = Vec::new();
     let mut sequence = 1_u64;
+    let auth_state = resolve_auth_state(&state, event_token(&headers, query.access_token.as_deref()))
+        .await;
 
-    let connection = build_hub_connection_status(&state.runtime).await?;
+    let connection = build_hub_connection_status(&state.runtime, auth_state.as_str()).await?;
     payloads.push(event_json(
         "hub.connection.updated",
         sequence,
@@ -494,7 +647,29 @@ async fn stream_events(
     ));
     sequence += 1;
 
+    let session = if query.workspace_id.is_some() || query.run_id.is_some() {
+        Some(
+            require_session_with_token(
+                &state,
+                &headers,
+                query.access_token.as_deref(),
+            )
+            .await?,
+        )
+    } else {
+        None
+    };
+
     if let Some(workspace_id) = query.workspace_id.as_deref() {
+        let session = session
+            .as_ref()
+            .ok_or(AccessAuthError::MissingBearerToken)
+            .map_err(AppError::from)?;
+        state
+            .auth
+            .ensure_workspace_access(session, workspace_id)
+            .await?;
+
         let inbox_items = state
             .runtime
             .list_inbox_items_by_workspace(workspace_id)
@@ -516,6 +691,14 @@ async fn stream_events(
 
     if let Some(run_id) = query.run_id.as_deref() {
         let report = state.runtime.load_run_report(run_id).await?;
+        let session = session
+            .as_ref()
+            .ok_or(AccessAuthError::MissingBearerToken)
+            .map_err(AppError::from)?;
+        state
+            .auth
+            .ensure_workspace_access(session, &report.run.workspace_id)
+            .await?;
         let task = state.runtime.fetch_task(&report.run.task_id).await?;
         payloads.push(event_json(
             "run.updated",
@@ -594,6 +777,7 @@ async fn build_knowledge_detail_response(
 
 async fn build_hub_connection_status(
     runtime: &Slice1Runtime,
+    auth_state: &str,
 ) -> Result<HubConnectionStatusResponse, AppError> {
     let servers = runtime.list_mcp_servers().await?;
     let healthy_server_count = servers
@@ -617,6 +801,7 @@ async fn build_hub_connection_status(
     Ok(HubConnectionStatusResponse {
         mode: "remote".to_string(),
         state: state.to_string(),
+        auth_state: auth_state.to_string(),
         active_server_count: servers.len(),
         healthy_server_count,
         servers: servers
@@ -643,6 +828,91 @@ fn event_json(event_type: &str, sequence: u64, payload: Value) -> Value {
         "occurred_at": current_timestamp(),
         "payload": payload
     })
+}
+
+async fn require_session(state: &AppState, headers: &HeaderMap) -> Result<HubSession, AppError> {
+    require_session_with_token(state, headers, None).await
+}
+
+async fn require_session_with_token(
+    state: &AppState,
+    headers: &HeaderMap,
+    access_token: Option<&str>,
+) -> Result<HubSession, AppError> {
+    let authorization = event_token(headers, access_token)
+        .ok_or(AccessAuthError::MissingBearerToken)
+        .map_err(AppError::from)?;
+    Ok(state.auth.authenticate_token(&authorization).await?)
+}
+
+fn auth_header_value(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(AUTHORIZATION)
+        .and_then(|value| value.to_str().ok())
+}
+
+fn event_token<'a>(headers: &'a HeaderMap, access_token: Option<&'a str>) -> Option<String> {
+    auth_header_value(headers)
+        .map(str::to_owned)
+        .or_else(|| access_token.map(|token| format!("Bearer {token}")))
+}
+
+async fn resolve_auth_state(state: &AppState, authorization: Option<String>) -> String {
+    let Some(authorization) = authorization else {
+        return "auth_required".to_string();
+    };
+
+    match state.auth.authenticate_token(&authorization).await {
+        Ok(_) => "authenticated".to_string(),
+        Err(AccessAuthError::TokenExpired) => "token_expired".to_string(),
+        Err(_) => "auth_required".to_string(),
+    }
+}
+
+fn auth_error_response(error: AccessAuthError) -> Response {
+    match error {
+        AccessAuthError::MissingBearerToken
+        | AccessAuthError::InvalidCredentials
+        | AccessAuthError::InvalidToken => (
+            StatusCode::UNAUTHORIZED,
+            Json(AuthErrorResponse {
+                error: "authentication required".to_string(),
+                error_code: "auth_required".to_string(),
+                auth_state: "auth_required".to_string(),
+            }),
+        )
+            .into_response(),
+        AccessAuthError::TokenExpired => (
+            StatusCode::UNAUTHORIZED,
+            Json(AuthErrorResponse {
+                error: "session token expired".to_string(),
+                error_code: "token_expired".to_string(),
+                auth_state: "token_expired".to_string(),
+            }),
+        )
+            .into_response(),
+        AccessAuthError::WorkspaceForbidden(workspace_id) => (
+            StatusCode::FORBIDDEN,
+            Json(AuthErrorResponse {
+                error: format!("workspace `{workspace_id}` is not available for this session"),
+                error_code: "workspace_forbidden".to_string(),
+                auth_state: "authenticated".to_string(),
+            }),
+        )
+            .into_response(),
+        AccessAuthError::WorkspaceNotFound(workspace_id) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "error": format!("workspace `{workspace_id}` not found")
+            })),
+        )
+            .into_response(),
+        other => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": other.to_string() })),
+        )
+            .into_response(),
+    }
 }
 
 fn current_timestamp() -> String {

@@ -154,6 +154,7 @@ const capabilityVisibilityFixture = [
 const hubConnectionStatusFixture = {
   mode: "local",
   state: "connected",
+  auth_state: "authenticated",
   active_server_count: 0,
   healthy_server_count: 0,
   servers: [],
@@ -214,5 +215,49 @@ describe("desktop local happy path", () => {
     expect(wrapper.text()).toContain("hello");
     expect(wrapper.text()).toContain("Project Slice 1 Knowledge");
     expect(wrapper.text()).toContain("candidate-1");
+  });
+
+  it("shows token expiry separately from disconnect and falls back to read-only mode", async () => {
+    const transport: LocalHubTransport = {
+      async invoke(command) {
+        switch (command) {
+          case "hub:get_project_context":
+            return projectContextFixture;
+          case "hub:list_capability_visibility":
+            return capabilityVisibilityFixture;
+          case "hub:get_connection_status":
+            return {
+              ...hubConnectionStatusFixture,
+              mode: "remote",
+              state: "connected",
+              auth_state: "token_expired"
+            };
+          case "hub:list_inbox_items":
+          case "hub:list_notifications":
+            return [];
+          default:
+            throw new Error(`unexpected command: ${command}`);
+        }
+      },
+      async listen() {
+        return () => undefined;
+      }
+    };
+
+    const client = createLocalHubClient(transport);
+    const { pinia, router } = createDesktopPlugins(client, true);
+    await router.push("/workspaces/workspace-alpha/projects/project-slice1");
+    await router.isReady();
+
+    const wrapper = mount(AppShell, {
+      global: {
+        plugins: [pinia, router]
+      }
+    });
+
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("token_expired");
+    expect(wrapper.get('[data-testid="create-start"]').attributes("disabled")).toBeDefined();
   });
 });

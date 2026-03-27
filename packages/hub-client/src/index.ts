@@ -2,10 +2,14 @@ import {
   parseApprovalResolveCommand,
   parseArtifacts,
   parseCapabilityVisibilities,
+  parseHubAuthError,
   parseHubConnectionStatus,
   parseHubEvent,
   parseInboxItems,
   parseKnowledgeDetail,
+  parseHubLoginCommand,
+  parseHubLoginResponse,
+  parseHubSession,
   parseKnowledgePromoteCommand,
   parseNotifications,
   parseProjectContext,
@@ -15,8 +19,12 @@ import {
   type ApprovalResolveCommand,
   type Artifact,
   type CapabilityVisibility,
+  type HubAuthError,
   type HubConnectionStatus,
   type HubEvent,
+  type HubLoginCommand,
+  type HubLoginResponse,
+  type HubSession,
   type InboxItem,
   type KnowledgeDetail,
   type KnowledgePromoteCommand,
@@ -90,6 +98,7 @@ export interface RemoteHubClientOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   createEventSource?: (url: string) => EventSourceLike;
+  getAccessToken?: () => string | null | undefined | Promise<string | null | undefined>;
 }
 
 export class HubClientTransportError extends Error {
@@ -101,6 +110,18 @@ export class HubClientTransportError extends Error {
     this.name = "HubClientTransportError";
     this.status = status;
     this.details = details;
+  }
+}
+
+export class HubClientAuthError extends HubClientTransportError {
+  readonly kind: HubAuthError["error_code"];
+  readonly authState: HubAuthError["auth_state"];
+
+  constructor(status: number, details: HubAuthError) {
+    super(details.error, status, details);
+    this.name = "HubClientAuthError";
+    this.kind = details.error_code;
+    this.authState = details.auth_state;
   }
 }
 
@@ -125,12 +146,19 @@ async function maybeReadJson(response: Response): Promise<unknown> {
 async function readRemoteJson(
   fetchImpl: typeof globalThis.fetch,
   url: string,
-  init?: RequestInit
+  init?: RequestInit,
+  getAccessToken?: RemoteHubClientOptions["getAccessToken"]
 ): Promise<unknown> {
-  const response = await fetchImpl(url, init);
+  const requestInit = await withAuthorization(init, getAccessToken);
+  const response = await fetchImpl(url, requestInit);
   const body = await maybeReadJson(response);
 
   if (!response.ok) {
+    const authError = normalizeAuthError(response.status, body);
+    if (authError) {
+      throw new HubClientAuthError(response.status, authError);
+    }
+
     throw new HubClientTransportError(
       `Hub request failed: ${response.status} ${response.statusText}`,
       response.status,
@@ -147,6 +175,36 @@ function encodePathSegment(value: string): string {
 
 function remotePath(baseUrl: string, path: string): string {
   return `${normalizeBaseUrl(baseUrl)}${path}`;
+}
+
+async function withAuthorization(
+  init: RequestInit | undefined,
+  getAccessToken: RemoteHubClientOptions["getAccessToken"]
+): Promise<RequestInit | undefined> {
+  const accessToken = await getAccessToken?.();
+  if (!accessToken) {
+    return init;
+  }
+
+  const headers = new Headers(init?.headers);
+  headers.set("authorization", `Bearer ${accessToken}`);
+
+  return {
+    ...init,
+    headers
+  };
+}
+
+function normalizeAuthError(status: number, body: unknown): HubAuthError | null {
+  if (status !== 401 && status !== 403) {
+    return null;
+  }
+
+  try {
+    return parseHubAuthError(body);
+  } catch {
+    return null;
+  }
 }
 
 export function createLocalHubClient(transport: LocalHubTransport): HubClient {
@@ -266,7 +324,9 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/context`
-          )
+          ),
+          undefined,
+          options.getAccessToken
         )
       );
     },
@@ -276,7 +336,7 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(parseTaskCreateCommand(command))
-        })
+        }, options.getAccessToken)
       );
     },
     async startTask(taskId) {
@@ -287,7 +347,8 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             options.baseUrl,
             `/api/tasks/${encodePathSegment(taskId)}/start`
           ),
-          { method: "POST" }
+          { method: "POST" },
+          options.getAccessToken
         )
       );
     },
@@ -295,7 +356,9 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
       return parseRunDetail(
         await readRemoteJson(
           fetchImpl,
-          remotePath(options.baseUrl, `/api/runs/${encodePathSegment(runId)}`)
+          remotePath(options.baseUrl, `/api/runs/${encodePathSegment(runId)}`),
+          undefined,
+          options.getAccessToken
         )
       );
     },
@@ -312,7 +375,8 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(parsed)
-          }
+          },
+          options.getAccessToken
         )
       );
     },
@@ -323,7 +387,9 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/inbox`
-          )
+          ),
+          undefined,
+          options.getAccessToken
         )
       );
     },
@@ -334,7 +400,9 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/notifications`
-          )
+          ),
+          undefined,
+          options.getAccessToken
         )
       );
     },
@@ -345,7 +413,9 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
           remotePath(
             options.baseUrl,
             `/api/runs/${encodePathSegment(runId)}/artifacts`
-          )
+          ),
+          undefined,
+          options.getAccessToken
         )
       );
     },
@@ -356,7 +426,9 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
           remotePath(
             options.baseUrl,
             `/api/runs/${encodePathSegment(runId)}/knowledge`
-          )
+          ),
+          undefined,
+          options.getAccessToken
         )
       );
     },
@@ -373,7 +445,8 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(parsed)
-          }
+          },
+          options.getAccessToken
         )
       );
     },
@@ -384,7 +457,9 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/capabilities`
-          )
+          ),
+          undefined,
+          options.getAccessToken
         )
       );
     },
@@ -392,14 +467,20 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
       return parseHubConnectionStatus(
         await readRemoteJson(
           fetchImpl,
-          remotePath(options.baseUrl, "/api/hub/connection")
+          remotePath(options.baseUrl, "/api/hub/connection"),
+          undefined,
+          options.getAccessToken
         )
       );
     },
     async subscribe(listener, onError) {
-      const eventSource = createEventSource(
-        remotePath(options.baseUrl, "/api/events")
-      );
+      const eventsUrl = new URL(remotePath(options.baseUrl, "/api/events"));
+      const accessToken = await options.getAccessToken?.();
+      if (accessToken) {
+        eventsUrl.searchParams.set("access_token", accessToken);
+      }
+
+      const eventSource = createEventSource(eventsUrl.toString());
       eventSource.onmessage = (event) => {
         try {
           listener(parseHubEvent(JSON.parse(event.data)));

@@ -410,6 +410,13 @@ impl Slice2Runtime {
         Ok(report)
     }
 
+    pub async fn fetch_approval_request(
+        &self,
+        approval_id: &str,
+    ) -> Result<Option<ApprovalRequestRecord>, RuntimeError> {
+        self.run_orchestrator.fetch_approval_request(approval_id).await
+    }
+
     pub async fn retry_run(&self, run_id: &str) -> Result<RunExecutionReport, RuntimeError> {
         let run = self
             .run_orchestrator
@@ -673,6 +680,15 @@ impl Slice2Runtime {
     ) -> Result<Option<KnowledgeSpaceRecord>, RuntimeError> {
         self.knowledge_manager
             .fetch_project_knowledge_space(workspace_id, project_id)
+            .await
+    }
+
+    pub async fn fetch_knowledge_candidate(
+        &self,
+        candidate_id: &str,
+    ) -> Result<Option<KnowledgeCandidateRecord>, RuntimeError> {
+        self.knowledge_manager
+            .fetch_knowledge_candidate(candidate_id)
             .await
     }
 

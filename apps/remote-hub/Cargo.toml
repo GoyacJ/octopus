@@ -7,6 +7,7 @@ edition.workspace = true
 axum.workspace = true
 chrono.workspace = true
 futures-util.workspace = true
+octopus-access-auth = { path = "../../crates/access-auth" }
 octopus-execution = { path = "../../crates/execution" }
 octopus-runtime = { path = "../../crates/runtime" }
 serde.workspace = true
@@ -16,6 +17,7 @@ tokio.workspace = true
 
 [dev-dependencies]
 http-body-util.workspace = true
+jsonwebtoken.workspace = true
 jsonschema.workspace = true
 tempfile.workspace = true
 tower.workspace = true

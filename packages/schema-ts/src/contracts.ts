@@ -25,6 +25,7 @@ export type NotificationStatus =
   | "dismissed";
 export type KnowledgeCandidateStatus = "candidate" | "promoted" | "rejected";
 export type KnowledgeAssetStatus = "verified_shared" | "deprecated";
+export type HubAuthState = "authenticated" | "auth_required" | "token_expired";
 
 export interface Workspace {
   id: string;
@@ -395,10 +396,38 @@ export interface HubConnectionServerSummary {
 export interface HubConnectionStatus {
   mode: "local" | "remote";
   state: "connected" | "degraded" | "disconnected";
+  auth_state: HubAuthState;
   active_server_count: number;
   healthy_server_count: number;
   servers: HubConnectionServerSummary[];
   last_refreshed_at: string;
+}
+
+export interface HubLoginCommand {
+  workspace_id: string;
+  email: string;
+  password: string;
+}
+
+export interface HubSession {
+  session_id: string;
+  user_id: string;
+  email: string;
+  workspace_id: string;
+  actor_ref: string;
+  issued_at: string;
+  expires_at: string;
+}
+
+export interface HubLoginResponse {
+  access_token: string;
+  session: HubSession;
+}
+
+export interface HubAuthError {
+  error: string;
+  error_code: "auth_required" | "token_expired" | "workspace_forbidden";
+  auth_state: HubAuthState;
 }
 
 export interface RunUpdatedEvent {
