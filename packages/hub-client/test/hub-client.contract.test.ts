@@ -42,6 +42,97 @@ const taskCreateCommandFixture = {
   idempotency_key: "task-1"
 } as const;
 
+const createAutomationCommandFixture = {
+  workspace_id: "workspace-alpha",
+  project_id: "project-slice1",
+  title: "Automation note",
+  instruction: "Run from manual event",
+  action: {
+    kind: "emit_text",
+    content: "hello"
+  },
+  capability_id: "capability-write-note",
+  estimated_cost: 1,
+  trigger: {
+    trigger_type: "manual_event",
+    config: {}
+  }
+} as const;
+
+const automationFixture = {
+  id: "automation-1",
+  workspace_id: "workspace-alpha",
+  project_id: "project-slice1",
+  trigger_id: "trigger-1",
+  status: "active",
+  title: "Automation note",
+  instruction: "Run from manual event",
+  action: {
+    kind: "emit_text",
+    content: "hello"
+  },
+  capability_id: "capability-write-note",
+  estimated_cost: 1,
+  created_at: "2026-03-26T10:00:00Z",
+  updated_at: "2026-03-26T10:00:00Z"
+} as const;
+
+const triggerFixture = {
+  id: "trigger-1",
+  automation_id: "automation-1",
+  trigger_type: "manual_event",
+  config: {},
+  created_at: "2026-03-26T10:00:00Z",
+  updated_at: "2026-03-26T10:00:00Z"
+} as const;
+
+const triggerDeliveryFixture = {
+  id: "delivery-1",
+  trigger_id: "trigger-1",
+  run_id: "run-1",
+  status: "succeeded",
+  dedupe_key: "delivery-1",
+  payload: {
+    source: "manual"
+  },
+  attempt_count: 1,
+  last_error: null,
+  created_at: "2026-03-26T10:00:00Z",
+  updated_at: "2026-03-26T10:00:01Z"
+} as const;
+
+const runSummaryFixture = {
+  id: "run-1",
+  task_id: "task-1",
+  workspace_id: "workspace-alpha",
+  project_id: "project-slice1",
+  title: "Automation note",
+  run_type: "automation",
+  status: "completed",
+  approval_request_id: null,
+  attempt_count: 1,
+  max_attempts: 2,
+  last_error: null,
+  created_at: "2026-03-26T10:00:00Z",
+  updated_at: "2026-03-26T10:00:01Z",
+  started_at: "2026-03-26T10:00:00Z",
+  completed_at: "2026-03-26T10:00:01Z",
+  terminated_at: null
+} as const;
+
+const createAutomationResponseFixture = {
+  automation: automationFixture,
+  trigger: triggerFixture,
+  webhook_secret: null
+} as const;
+
+const automationDetailFixture = {
+  automation: automationFixture,
+  trigger: triggerFixture,
+  recent_deliveries: [triggerDeliveryFixture],
+  last_run_summary: runSummaryFixture
+} as const;
+
 const taskFixture = {
   id: "task-1",
   ...taskCreateCommandFixture,
@@ -208,6 +299,44 @@ function runHubClientContractSuite(name: string, factory: SuiteFactory) {
       ).resolves.toMatchObject({
         project: { id: "project-slice1" }
       });
+      await expect(
+        client.listAutomations("workspace-alpha", "project-slice1")
+      ).resolves.toMatchObject([
+        { automation: { id: "automation-1", status: "active" } }
+      ]);
+      await expect(client.createAutomation(createAutomationCommandFixture)).resolves.toMatchObject({
+        automation: { id: "automation-1" },
+        trigger: { id: "trigger-1" }
+      });
+      await expect(client.getAutomationDetail("automation-1")).resolves.toMatchObject({
+        automation: { id: "automation-1" },
+        recent_deliveries: [{ id: "delivery-1" }]
+      });
+      await expect(client.pauseAutomation("automation-1")).resolves.toMatchObject({
+        automation: { id: "automation-1" }
+      });
+      await expect(client.activateAutomation("automation-1")).resolves.toMatchObject({
+        automation: { id: "automation-1" }
+      });
+      await expect(client.archiveAutomation("automation-1")).resolves.toMatchObject({
+        automation: { id: "automation-1" }
+      });
+      await expect(
+        client.manualDispatch({
+          trigger_id: "trigger-1",
+          dedupe_key: "manual-1",
+          payload: { source: "manual" }
+        })
+      ).resolves.toMatchObject({
+        automation: { id: "automation-1" }
+      });
+      await expect(
+        client.retryTriggerDelivery({
+          delivery_id: "delivery-1"
+        })
+      ).resolves.toMatchObject({
+        automation: { id: "automation-1" }
+      });
       await expect(client.createTask(taskCreateCommandFixture)).resolves.toMatchObject({
         id: "task-1"
       });
@@ -278,6 +407,22 @@ runHubClientContractSuite("local adapter", () => {
             projectId: "project-slice1"
           });
           return projectContextFixture;
+        case "hub:list_automations":
+          expect(payload).toEqual({
+            workspaceId: "workspace-alpha",
+            projectId: "project-slice1"
+          });
+          return [automationDetailFixture];
+        case "hub:create_automation":
+          expect(payload).toEqual(createAutomationCommandFixture);
+          return createAutomationResponseFixture;
+        case "hub:get_automation_detail":
+        case "hub:activate_automation":
+        case "hub:pause_automation":
+        case "hub:archive_automation":
+        case "hub:manual_dispatch":
+        case "hub:retry_trigger_delivery":
+          return automationDetailFixture;
         case "hub:create_task":
           expect(payload).toEqual(taskCreateCommandFixture);
           return taskFixture;
@@ -346,6 +491,30 @@ runHubClientContractSuite("remote adapter", () => {
 
         if (method === "GET" && url === "http://hub.test/api/workspaces/workspace-alpha/projects/project-slice1/context") {
           return Response.json(projectContextFixture);
+        }
+        if (method === "GET" && url === "http://hub.test/api/workspaces/workspace-alpha/projects/project-slice1/automations") {
+          return Response.json([automationDetailFixture]);
+        }
+        if (method === "POST" && url === "http://hub.test/api/workspaces/workspace-alpha/projects/project-slice1/automations") {
+          return Response.json(createAutomationResponseFixture);
+        }
+        if (method === "GET" && url === "http://hub.test/api/automations/automation-1") {
+          return Response.json(automationDetailFixture);
+        }
+        if (method === "POST" && url === "http://hub.test/api/automations/automation-1/activate") {
+          return Response.json(automationDetailFixture);
+        }
+        if (method === "POST" && url === "http://hub.test/api/automations/automation-1/pause") {
+          return Response.json(automationDetailFixture);
+        }
+        if (method === "POST" && url === "http://hub.test/api/automations/automation-1/archive") {
+          return Response.json(automationDetailFixture);
+        }
+        if (method === "POST" && url === "http://hub.test/api/triggers/trigger-1/manual-dispatch") {
+          return Response.json(automationDetailFixture);
+        }
+        if (method === "POST" && url === "http://hub.test/api/trigger-deliveries/delivery-1/retry") {
+          return Response.json(automationDetailFixture);
         }
         if (method === "POST" && url === "http://hub.test/api/tasks") {
           return Response.json(taskFixture);

@@ -42,10 +42,11 @@ use sqlx::{Row, SqlitePool};
 
 use crate::{
     models::{
-        current_timestamp, AutomationRecord, CreateAutomationInput, CreateAutomationReport,
-        CreateTaskInput, CreateTriggerInput, CronTriggerConfig, KnowledgePromotionReport,
-        McpEventTriggerConfig, RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord,
-        TriggerRecord, TriggerSpec, WebhookTriggerConfig,
+        current_timestamp, AutomationDetailRecord, AutomationRecord, AutomationSummaryRecord,
+        CreateAutomationInput, CreateAutomationReport, CreateTaskInput, CreateTriggerInput,
+        CronTriggerConfig, KnowledgePromotionReport, McpEventTriggerConfig, RunExecutionReport,
+        RunRecord, RunSummaryRecord, TaskRecord, TriggerDeliveryRecord, TriggerRecord,
+        TriggerSpec, WebhookTriggerConfig,
     },
     RuntimeError,
 };
@@ -205,15 +206,16 @@ impl AutomationIntake {
         sqlx::query(
             r#"
             INSERT INTO automations (
-                id, workspace_id, project_id, trigger_id, title, instruction, action_json,
-                capability_id, estimated_cost, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                id, workspace_id, project_id, trigger_id, status, title, instruction,
+                action_json, capability_id, estimated_cost, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             "#,
         )
         .bind(&automation.id)
         .bind(&automation.workspace_id)
         .bind(&automation.project_id)
         .bind(&automation.trigger_id)
+        .bind(&automation.status)
         .bind(&automation.title)
         .bind(&automation.instruction)
         .bind(serde_json::to_string(&automation.action)?)
@@ -455,8 +457,8 @@ impl AutomationIntake {
     ) -> Result<Option<AutomationRecord>, RuntimeError> {
         let row = sqlx::query(
             r#"
-            SELECT id, workspace_id, project_id, trigger_id, title, instruction, action_json,
-                   capability_id, estimated_cost, created_at, updated_at
+            SELECT id, workspace_id, project_id, trigger_id, status, title, instruction,
+                   action_json, capability_id, estimated_cost, created_at, updated_at
             FROM automations
             WHERE id = ?1
             "#,
@@ -466,6 +468,81 @@ impl AutomationIntake {
         .await?;
 
         row.map(|row| automation_from_row(&row)).transpose()
+    }
+
+    pub async fn list_automations(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<AutomationSummaryRecord>, RuntimeError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, workspace_id, project_id, trigger_id, status, title, instruction,
+                   action_json, capability_id, estimated_cost, created_at, updated_at
+            FROM automations
+            WHERE workspace_id = ?1 AND project_id = ?2
+            ORDER BY updated_at DESC, id DESC
+            "#,
+        )
+        .bind(workspace_id)
+        .bind(project_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut summaries = Vec::with_capacity(rows.len());
+        for row in rows {
+            let automation = automation_from_row(&row)?;
+            summaries.push(self.build_automation_summary(automation, 3).await?);
+        }
+        Ok(summaries)
+    }
+
+    pub async fn load_automation_detail(
+        &self,
+        automation_id: &str,
+    ) -> Result<AutomationDetailRecord, RuntimeError> {
+        let automation = self
+            .fetch_automation(automation_id)
+            .await?
+            .ok_or_else(|| RuntimeError::AutomationNotFound(automation_id.to_string()))?;
+        self.build_automation_summary(automation, 10).await
+    }
+
+    pub async fn transition_automation_status(
+        &self,
+        automation_id: &str,
+        next_status: &str,
+    ) -> Result<AutomationRecord, RuntimeError> {
+        let automation = self
+            .fetch_automation(automation_id)
+            .await?
+            .ok_or_else(|| RuntimeError::AutomationNotFound(automation_id.to_string()))?;
+        if !automation.can_transition_to(next_status) {
+            return Err(RuntimeError::InvalidAutomationLifecycleTransition {
+                automation_id: automation.id,
+                from: automation.status,
+                to: next_status.to_string(),
+            });
+        }
+
+        let updated_at = current_timestamp();
+        sqlx::query(
+            r#"
+            UPDATE automations
+            SET status = ?2,
+                updated_at = ?3
+            WHERE id = ?1
+            "#,
+        )
+        .bind(automation_id)
+        .bind(next_status)
+        .bind(&updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        self.fetch_automation(automation_id)
+            .await?
+            .ok_or_else(|| RuntimeError::AutomationNotFound(automation_id.to_string()))
     }
 
     pub async fn fetch_trigger(
@@ -569,7 +646,7 @@ impl AutomationIntake {
             FROM trigger_deliveries td
             JOIN triggers t ON t.id = td.trigger_id
             WHERE t.automation_id = ?1
-            ORDER BY td.created_at, td.id
+            ORDER BY td.updated_at DESC, td.id DESC
             "#,
         )
         .bind(automation_id)
@@ -653,6 +730,102 @@ impl AutomationIntake {
         delivery.updated_at = current_timestamp();
         self.update_trigger_delivery(&delivery).await?;
         Ok(delivery)
+    }
+
+    async fn list_recent_trigger_deliveries_by_automation(
+        &self,
+        automation_id: &str,
+        limit: i64,
+    ) -> Result<Vec<TriggerDeliveryRecord>, RuntimeError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT td.id, td.trigger_id, td.run_id, td.status, td.dedupe_key, td.payload_json,
+                   td.attempt_count, td.last_error, td.created_at, td.updated_at
+            FROM trigger_deliveries td
+            JOIN triggers t ON t.id = td.trigger_id
+            WHERE t.automation_id = ?1
+            ORDER BY td.updated_at DESC, td.id DESC
+            LIMIT ?2
+            "#,
+        )
+        .bind(automation_id)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(trigger_delivery_from_row)
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    async fn fetch_task_record(&self, task_id: &str) -> Result<Option<TaskRecord>, RuntimeError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, workspace_id, project_id, source_kind, automation_id, title, instruction,
+                   action_json, capability_id, estimated_cost, idempotency_key, created_at, updated_at
+            FROM tasks
+            WHERE id = ?1
+            "#,
+        )
+        .bind(task_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| task_from_row(&row)).transpose()
+    }
+
+    async fn fetch_run_record(&self, run_id: &str) -> Result<Option<RunRecord>, RuntimeError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, task_id, workspace_id, project_id, automation_id, trigger_delivery_id,
+                   run_type, status, approval_request_id, idempotency_key, attempt_count,
+                   max_attempts, checkpoint_seq, resume_token, last_error, created_at, updated_at,
+                   started_at, completed_at, terminated_at
+            FROM runs
+            WHERE id = ?1
+            "#,
+        )
+        .bind(run_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| run_from_row(&row)).transpose()
+    }
+
+    async fn build_automation_summary(
+        &self,
+        automation: AutomationRecord,
+        recent_limit: i64,
+    ) -> Result<AutomationSummaryRecord, RuntimeError> {
+        let trigger = self
+            .fetch_trigger(&automation.trigger_id)
+            .await?
+            .ok_or_else(|| RuntimeError::TriggerNotFound(automation.trigger_id.clone()))?;
+        let recent_deliveries = self
+            .list_recent_trigger_deliveries_by_automation(&automation.id, recent_limit)
+            .await?;
+        let last_run_summary = match recent_deliveries.first().and_then(|delivery| delivery.run_id.clone())
+        {
+            Some(run_id) => {
+                let run = self
+                    .fetch_run_record(&run_id)
+                    .await?
+                    .ok_or_else(|| RuntimeError::RunNotFound(run_id.clone()))?;
+                let task = self
+                    .fetch_task_record(&run.task_id)
+                    .await?
+                    .ok_or_else(|| RuntimeError::TaskNotFound(run.task_id.clone()))?;
+                Some(RunSummaryRecord::new(&run, &task))
+            }
+            None => None,
+        };
+
+        Ok(AutomationSummaryRecord {
+            automation,
+            trigger,
+            recent_deliveries,
+            last_run_summary,
+        })
     }
 }
 
@@ -2295,6 +2468,7 @@ fn automation_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<AutomationRecord
         workspace_id: row.try_get("workspace_id")?,
         project_id: row.try_get("project_id")?,
         trigger_id: row.try_get("trigger_id")?,
+        status: row.try_get("status")?,
         title: row.try_get("title")?,
         instruction: row.try_get("instruction")?,
         action: serde_json::from_str(&action_json)?,

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/runtime/trigger-delivery-retry-command.schema.json",
+  "title": "TriggerDeliveryRetryCommand",
+  "type": "object",
+  "description": "Minimum GA trigger-delivery retry command. Runtime enforces failed-only eligibility.",
+  "properties": {
+    "delivery_id": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["delivery_id"],
+  "additionalProperties": false
+}

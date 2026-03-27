@@ -7,6 +7,8 @@ import { useHubStore } from "../stores/hub";
 const route = useRoute();
 const router = useRouter();
 const hub = useHubStore();
+type AutomationTriggerType = "manual_event" | "cron" | "webhook" | "mcp_event";
+type CreateTriggerInput = Parameters<typeof hub.createAutomation>[0]["trigger"];
 
 const taskDraft = reactive({
   title: "Write note",
@@ -14,6 +16,25 @@ const taskDraft = reactive({
   actionContent: "hello",
   capabilityId: "",
   estimatedCost: 1
+});
+
+const automationDraft = reactive({
+  title: "Manual automation",
+  instruction: "Dispatch on demand",
+  actionContent: "manual artifact",
+  capabilityId: "",
+  estimatedCost: 1,
+  triggerType: "manual_event" as AutomationTriggerType,
+  cronSchedule: "0 * * * * * *",
+  cronTimezone: "UTC",
+  cronNextFireAt: "2026-03-27T10:00:00Z",
+  webhookIngressMode: "shared_secret_header",
+  webhookSecretHeaderName: "X-Octopus-Trigger-Secret",
+  webhookSecretHint: "hook",
+  webhookSecretPlaintext: "",
+  mcpServerId: "server-automation",
+  mcpEventName: "connector.output.ready",
+  mcpEventPattern: ""
 });
 
 const visibleCapability = computed(() => hub.activeCapability);
@@ -26,6 +47,9 @@ async function loadWorkspaceSurface(): Promise<void> {
 
   if (!taskDraft.capabilityId && visibleCapability.value) {
     taskDraft.capabilityId = visibleCapability.value.id;
+  }
+  if (!automationDraft.capabilityId && visibleCapability.value) {
+    automationDraft.capabilityId = visibleCapability.value.id;
   }
 }
 
@@ -53,6 +77,95 @@ async function createAndStart(): Promise<void> {
   });
 
   await router.push(`/runs/${runDetail.run.id}`);
+}
+
+async function handleCreateAndStart(): Promise<void> {
+  try {
+    await createAndStart();
+  } catch {
+    // The store already exposes the error banner for the shell.
+  }
+}
+
+async function openAutomation(automationId: string): Promise<void> {
+  const workspaceId = String(route.params.workspaceId);
+  const projectId = String(route.params.projectId);
+  await router.push(
+    `/workspaces/${workspaceId}/projects/${projectId}/automations/${automationId}`
+  );
+}
+
+function buildCreateTriggerInput(): CreateTriggerInput {
+  switch (automationDraft.triggerType) {
+    case "cron":
+      return {
+        trigger_type: "cron",
+        config: {
+          schedule: automationDraft.cronSchedule,
+          timezone: automationDraft.cronTimezone,
+          next_fire_at: automationDraft.cronNextFireAt
+        }
+      };
+    case "webhook":
+      return {
+        trigger_type: "webhook",
+        config: {
+          ingress_mode: automationDraft.webhookIngressMode,
+          secret_header_name: automationDraft.webhookSecretHeaderName,
+          secret_hint: automationDraft.webhookSecretHint || null,
+          secret_plaintext: automationDraft.webhookSecretPlaintext || null
+        }
+      };
+    case "mcp_event":
+      return {
+        trigger_type: "mcp_event",
+        config: {
+          server_id: automationDraft.mcpServerId,
+          event_name: automationDraft.mcpEventName || null,
+          event_pattern: automationDraft.mcpEventPattern || null
+        }
+      };
+    case "manual_event":
+    default:
+      return {
+        trigger_type: "manual_event",
+        config: {}
+      };
+  }
+}
+
+async function createAutomation(): Promise<void> {
+  const workspaceId = String(route.params.workspaceId);
+  const projectId = String(route.params.projectId);
+  const capabilityId = automationDraft.capabilityId || visibleCapability.value?.id;
+
+  if (!capabilityId) {
+    throw new Error("No visible capability is available for automation creation.");
+  }
+
+  const created = await hub.createAutomation({
+    workspace_id: workspaceId,
+    project_id: projectId,
+    title: automationDraft.title,
+    instruction: automationDraft.instruction,
+    action: {
+      kind: "emit_text",
+      content: automationDraft.actionContent
+    },
+    capability_id: capabilityId,
+    estimated_cost: automationDraft.estimatedCost,
+    trigger: buildCreateTriggerInput()
+  });
+
+  await openAutomation(created.automation.id);
+}
+
+async function handleCreateAutomation(): Promise<void> {
+  try {
+    await createAutomation();
+  } catch {
+    // The store already exposes the error banner for the shell.
+  }
 }
 
 watch(
@@ -105,7 +218,7 @@ onMounted(() => {
       <button
         data-testid="create-start"
         :disabled="hub.taskSubmitting || hub.workspaceLoading || hub.readOnlyMode"
-        @click="createAndStart"
+        @click="handleCreateAndStart"
       >
         {{
           hub.taskSubmitting
@@ -118,6 +231,99 @@ onMounted(() => {
       <p v-if="hub.readOnlyMode" class="muted">
         Remote auth: {{ hub.authState }}
       </p>
+    </article>
+
+    <article class="surface-card">
+      <p class="eyebrow">Automation Create</p>
+      <h2>Minimum automation manager</h2>
+      <label class="field">
+        <span>Title</span>
+        <input v-model="automationDraft.title" type="text" />
+      </label>
+      <label class="field">
+        <span>Instruction</span>
+        <textarea v-model="automationDraft.instruction" rows="3" />
+      </label>
+      <label class="field">
+        <span>Action content</span>
+        <textarea v-model="automationDraft.actionContent" rows="4" />
+      </label>
+      <label class="field">
+        <span>Trigger type</span>
+        <select v-model="automationDraft.triggerType">
+          <option value="manual_event">manual_event</option>
+          <option value="cron">cron</option>
+          <option value="webhook">webhook</option>
+          <option value="mcp_event">mcp_event</option>
+        </select>
+      </label>
+      <template v-if="automationDraft.triggerType === 'cron'">
+        <label class="field">
+          <span>Schedule</span>
+          <input v-model="automationDraft.cronSchedule" type="text" />
+        </label>
+        <label class="field">
+          <span>Timezone</span>
+          <input v-model="automationDraft.cronTimezone" type="text" />
+        </label>
+        <label class="field">
+          <span>Next fire at</span>
+          <input v-model="automationDraft.cronNextFireAt" type="text" />
+        </label>
+      </template>
+      <template v-else-if="automationDraft.triggerType === 'webhook'">
+        <label class="field">
+          <span>Ingress mode</span>
+          <input v-model="automationDraft.webhookIngressMode" type="text" />
+        </label>
+        <label class="field">
+          <span>Secret header name</span>
+          <input v-model="automationDraft.webhookSecretHeaderName" type="text" />
+        </label>
+        <label class="field">
+          <span>Secret hint</span>
+          <input v-model="automationDraft.webhookSecretHint" type="text" />
+        </label>
+        <label class="field">
+          <span>Secret plaintext</span>
+          <input v-model="automationDraft.webhookSecretPlaintext" type="text" />
+        </label>
+      </template>
+      <template v-else-if="automationDraft.triggerType === 'mcp_event'">
+        <label class="field">
+          <span>Server id</span>
+          <input v-model="automationDraft.mcpServerId" type="text" />
+        </label>
+        <label class="field">
+          <span>Event name</span>
+          <input v-model="automationDraft.mcpEventName" type="text" />
+        </label>
+        <label class="field">
+          <span>Event pattern</span>
+          <input v-model="automationDraft.mcpEventPattern" type="text" />
+        </label>
+      </template>
+      <label class="field">
+        <span>Capability</span>
+        <input v-model="automationDraft.capabilityId" type="text" />
+      </label>
+      <label class="field">
+        <span>Estimated cost</span>
+        <input v-model.number="automationDraft.estimatedCost" min="1" type="number" />
+      </label>
+      <button
+        data-testid="automation-create"
+        :disabled="hub.automationSubmitting || hub.workspaceLoading || hub.readOnlyMode"
+        @click="handleCreateAutomation"
+      >
+        {{
+          hub.automationSubmitting
+            ? "Creating..."
+            : hub.readOnlyMode
+              ? "Read-only"
+              : "Create Automation"
+        }}
+      </button>
     </article>
 
     <article class="surface-card">
@@ -145,6 +351,23 @@ onMounted(() => {
         <span>Risk: {{ visibleCapability.risk_level }}</span>
         <span>Source: {{ visibleCapability.source }}</span>
       </div>
+    </article>
+
+    <article class="surface-card">
+      <p class="eyebrow">Automations</p>
+      <h2>{{ hub.automations.length }} configured entries</h2>
+      <ul v-if="hub.automations.length > 0" class="stack-list">
+        <li v-for="automation in hub.automations" :key="automation.automation.id">
+          <button class="automation-link" @click="openAutomation(automation.automation.id)">
+            {{ automation.automation.title }}
+          </button>
+          <p class="muted">
+            {{ automation.automation.status }} / {{ automation.trigger.trigger_type }}
+          </p>
+          <p>{{ automation.automation.instruction }}</p>
+        </li>
+      </ul>
+      <p v-else class="muted">No automation has been configured for this project yet.</p>
     </article>
 
     <article class="surface-card">
@@ -226,7 +449,8 @@ p {
 }
 
 input,
-textarea {
+textarea,
+select {
   width: 100%;
   border: 1px solid rgba(125, 211, 252, 0.25);
   border-radius: 0.85rem;
@@ -250,6 +474,13 @@ button {
 button:disabled {
   cursor: progress;
   opacity: 0.75;
+}
+
+.automation-link {
+  padding: 0;
+  color: #f8fafc;
+  background: transparent;
+  text-align: left;
 }
 
 .stack-list {

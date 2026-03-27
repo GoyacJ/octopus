@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  parseAutomationDetail,
+  parseAutomationLifecycleCommand,
+  parseAutomationSummary,
+  parseCreateAutomationCommand,
+  parseCreateAutomationResponse,
   parseHubAuthError,
   parseHubConnectionStatus,
   parseHubEvent,
   parseHubLoginCommand,
   parseHubLoginResponse,
+  parseManualDispatchCommand,
   parseRunDetail,
-  parseTaskCreateCommand
+  parseTaskCreateCommand,
+  parseTriggerDeliveryRetryCommand
 } from "../src/index";
 
 describe("schema-ts contract parsers", () => {
@@ -30,6 +37,177 @@ describe("schema-ts contract parsers", () => {
       capability_id: "capability-write-note",
       workspace_id: "workspace-alpha"
     });
+  });
+
+  it("accepts the minimum automation surface contracts", () => {
+    expect(
+      parseCreateAutomationCommand({
+        workspace_id: "workspace-alpha",
+        project_id: "project-slice1",
+        title: "Automation note",
+        instruction: "Run from manual event",
+        action: {
+          kind: "emit_text",
+          content: "hello"
+        },
+        capability_id: "capability-write-note",
+        estimated_cost: 1,
+        trigger: {
+          trigger_type: "manual_event",
+          config: {}
+        }
+      }).trigger.trigger_type
+    ).toBe("manual_event");
+
+    expect(
+      parseCreateAutomationResponse({
+        automation: {
+          id: "automation-1",
+          workspace_id: "workspace-alpha",
+          project_id: "project-slice1",
+          trigger_id: "trigger-1",
+          status: "active",
+          title: "Automation note",
+          instruction: "Run from manual event",
+          action: {
+            kind: "emit_text",
+            content: "hello"
+          },
+          capability_id: "capability-write-note",
+          estimated_cost: 1,
+          created_at: "2026-03-26T10:00:00Z",
+          updated_at: "2026-03-26T10:00:00Z"
+        },
+        trigger: {
+          id: "trigger-1",
+          automation_id: "automation-1",
+          trigger_type: "manual_event",
+          config: {},
+          created_at: "2026-03-26T10:00:00Z",
+          updated_at: "2026-03-26T10:00:00Z"
+        },
+        webhook_secret: null
+      }).automation.status
+    ).toBe("active");
+
+    expect(
+      parseAutomationSummary({
+        automation: {
+          id: "automation-1",
+          workspace_id: "workspace-alpha",
+          project_id: "project-slice1",
+          trigger_id: "trigger-1",
+          status: "paused",
+          title: "Automation note",
+          instruction: "Run from manual event",
+          action: {
+            kind: "emit_text",
+            content: "hello"
+          },
+          capability_id: "capability-write-note",
+          estimated_cost: 1,
+          created_at: "2026-03-26T10:00:00Z",
+          updated_at: "2026-03-26T10:00:00Z"
+        },
+        trigger: {
+          id: "trigger-1",
+          automation_id: "automation-1",
+          trigger_type: "manual_event",
+          config: {},
+          created_at: "2026-03-26T10:00:00Z",
+          updated_at: "2026-03-26T10:00:00Z"
+        },
+        recent_deliveries: [],
+        last_run_summary: null
+      }).automation.status
+    ).toBe("paused");
+
+    expect(
+      parseAutomationDetail({
+        automation: {
+          id: "automation-1",
+          workspace_id: "workspace-alpha",
+          project_id: "project-slice1",
+          trigger_id: "trigger-1",
+          status: "active",
+          title: "Automation note",
+          instruction: "Run from manual event",
+          action: {
+            kind: "emit_text",
+            content: "hello"
+          },
+          capability_id: "capability-write-note",
+          estimated_cost: 1,
+          created_at: "2026-03-26T10:00:00Z",
+          updated_at: "2026-03-26T10:00:00Z"
+        },
+        trigger: {
+          id: "trigger-1",
+          automation_id: "automation-1",
+          trigger_type: "manual_event",
+          config: {},
+          created_at: "2026-03-26T10:00:00Z",
+          updated_at: "2026-03-26T10:00:00Z"
+        },
+        recent_deliveries: [
+          {
+            id: "delivery-1",
+            trigger_id: "trigger-1",
+            run_id: "run-1",
+            status: "succeeded",
+            dedupe_key: "delivery-1",
+            payload: {
+              source: "manual"
+            },
+            attempt_count: 1,
+            last_error: null,
+            created_at: "2026-03-26T10:00:00Z",
+            updated_at: "2026-03-26T10:00:01Z"
+          }
+        ],
+        last_run_summary: {
+          id: "run-1",
+          task_id: "task-1",
+          workspace_id: "workspace-alpha",
+          project_id: "project-slice1",
+          title: "Automation note",
+          run_type: "automation",
+          status: "completed",
+          approval_request_id: null,
+          attempt_count: 1,
+          max_attempts: 2,
+          last_error: null,
+          created_at: "2026-03-26T10:00:00Z",
+          updated_at: "2026-03-26T10:00:01Z",
+          started_at: "2026-03-26T10:00:00Z",
+          completed_at: "2026-03-26T10:00:01Z",
+          terminated_at: null
+        }
+      }).last_run_summary?.run_type
+    ).toBe("automation");
+
+    expect(
+      parseAutomationLifecycleCommand({
+        automation_id: "automation-1",
+        action: "archive"
+      }).action
+    ).toBe("archive");
+
+    expect(
+      parseManualDispatchCommand({
+        trigger_id: "trigger-1",
+        dedupe_key: "manual-1",
+        payload: {
+          source: "manual"
+        }
+      }).trigger_id
+    ).toBe("trigger-1");
+
+    expect(
+      parseTriggerDeliveryRetryCommand({
+        delivery_id: "delivery-1"
+      }).delivery_id
+    ).toBe("delivery-1");
   });
 
   it("rejects an invalid task create command", () => {

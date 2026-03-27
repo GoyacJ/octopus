@@ -78,7 +78,21 @@ fn refined_slice1_examples_validate() {
     let run_schema = compiled_schema("runtime/run.schema.json");
     let run_summary_schema = compiled_schema("runtime/run-summary.schema.json");
     let run_detail_schema = compiled_schema("runtime/run-detail.schema.json");
+    let automation_status_schema = compiled_schema("runtime/automation-status.schema.json");
     let automation_schema = compiled_schema("runtime/automation.schema.json");
+    let create_trigger_input_schema = compiled_schema("runtime/create-trigger-input.schema.json");
+    let create_automation_command_schema =
+        compiled_schema("runtime/create-automation-command.schema.json");
+    let create_automation_response_schema =
+        compiled_schema("runtime/create-automation-response.schema.json");
+    let automation_summary_schema = compiled_schema("runtime/automation-summary.schema.json");
+    let automation_detail_schema = compiled_schema("runtime/automation-detail.schema.json");
+    let automation_lifecycle_command_schema =
+        compiled_schema("runtime/automation-lifecycle-command.schema.json");
+    let manual_dispatch_command_schema =
+        compiled_schema("runtime/manual-dispatch-command.schema.json");
+    let trigger_delivery_retry_command_schema =
+        compiled_schema("runtime/trigger-delivery-retry-command.schema.json");
     let trigger_schema = compiled_schema("runtime/trigger.schema.json");
     let trigger_delivery_schema = compiled_schema("runtime/trigger-delivery.schema.json");
     let environment_lease_status_schema =
@@ -249,11 +263,13 @@ fn refined_slice1_examples_validate() {
         "completed_at": "2026-03-26T10:00:01Z",
         "terminated_at": null
     })));
+    assert!(automation_status_schema.is_valid(&json!("active")));
     assert!(automation_schema.is_valid(&json!({
         "id": "automation-1",
         "workspace_id": "workspace-alpha",
         "project_id": "project-slice1",
         "trigger_id": "trigger-1",
+        "status": "active",
         "title": "Automation note",
         "instruction": "Run from manual event",
         "action": {
@@ -270,6 +286,7 @@ fn refined_slice1_examples_validate() {
         "workspace_id": "workspace-alpha",
         "project_id": "project-slice1",
         "trigger_id": "trigger-connector-1",
+        "status": "active",
         "title": "Connector automation",
         "instruction": "Dispatch MCP-backed manual event automation",
         "action": {
@@ -283,6 +300,38 @@ fn refined_slice1_examples_validate() {
         "estimated_cost": 1,
         "created_at": "2026-03-26T10:00:00Z",
         "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(create_trigger_input_schema.is_valid(&json!({
+        "trigger_type": "manual_event",
+        "config": {}
+    })));
+    assert!(create_trigger_input_schema.is_valid(&json!({
+        "trigger_type": "cron",
+        "config": {
+            "schedule": "0 * * * * * *",
+            "timezone": "UTC",
+            "next_fire_at": "2026-03-27T10:00:00Z"
+        }
+    })));
+    assert!(create_automation_command_schema.is_valid(&json!({
+        "workspace_id": "workspace-alpha",
+        "project_id": "project-slice1",
+        "title": "Automation note",
+        "instruction": "Run from manual event",
+        "action": {
+            "kind": "emit_text",
+            "content": "hello"
+        },
+        "capability_id": "capability-write-note",
+        "estimated_cost": 1,
+        "trigger": {
+            "trigger_type": "webhook",
+            "config": {
+                "ingress_mode": "shared_secret_header",
+                "secret_header_name": "X-Octopus-Trigger-Secret",
+                "secret_hint": "hook"
+            }
+        }
     })));
     assert!(trigger_schema.is_valid(&json!({
         "id": "trigger-1",
@@ -340,6 +389,39 @@ fn refined_slice1_examples_validate() {
         "created_at": "2026-03-26T10:00:00Z",
         "updated_at": "2026-03-26T10:00:00Z"
     })));
+    assert!(create_automation_response_schema.is_valid(&json!({
+        "automation": {
+            "id": "automation-1",
+            "workspace_id": "workspace-alpha",
+            "project_id": "project-slice1",
+            "trigger_id": "trigger-1",
+            "status": "active",
+            "title": "Automation note",
+            "instruction": "Run from manual event",
+            "action": {
+                "kind": "emit_text",
+                "content": "hello"
+            },
+            "capability_id": "capability-write-note",
+            "estimated_cost": 1,
+            "created_at": "2026-03-26T10:00:00Z",
+            "updated_at": "2026-03-26T10:00:00Z"
+        },
+        "trigger": {
+            "id": "trigger-1",
+            "automation_id": "automation-1",
+            "trigger_type": "webhook",
+            "config": {
+                "ingress_mode": "shared_secret_header",
+                "secret_header_name": "X-Octopus-Trigger-Secret",
+                "secret_hint": "hook",
+                "secret_present": true
+            },
+            "created_at": "2026-03-26T10:00:00Z",
+            "updated_at": "2026-03-26T10:00:00Z"
+        },
+        "webhook_secret": "octopus-secret"
+    })));
     assert!(trigger_delivery_schema.is_valid(&json!({
         "id": "delivery-1",
         "trigger_id": "trigger-1",
@@ -390,6 +472,108 @@ fn refined_slice1_examples_validate() {
         "trust_level": "external_untrusted",
         "created_at": "2026-03-26T10:00:00Z",
         "updated_at": "2026-03-26T10:00:00Z"
+    })));
+    assert!(automation_summary_schema.is_valid(&json!({
+        "automation": {
+            "id": "automation-1",
+            "workspace_id": "workspace-alpha",
+            "project_id": "project-slice1",
+            "trigger_id": "trigger-1",
+            "status": "active",
+            "title": "Automation note",
+            "instruction": "Run from manual event",
+            "action": {
+                "kind": "emit_text",
+                "content": "hello"
+            },
+            "capability_id": "capability-write-note",
+            "estimated_cost": 1,
+            "created_at": "2026-03-26T10:00:00Z",
+            "updated_at": "2026-03-26T10:00:00Z"
+        },
+        "trigger": {
+            "id": "trigger-1",
+            "automation_id": "automation-1",
+            "trigger_type": "manual_event",
+            "config": {},
+            "created_at": "2026-03-26T10:00:00Z",
+            "updated_at": "2026-03-26T10:00:00Z"
+        },
+        "recent_deliveries": [],
+        "last_run_summary": null
+    })));
+    assert!(automation_detail_schema.is_valid(&json!({
+        "automation": {
+            "id": "automation-1",
+            "workspace_id": "workspace-alpha",
+            "project_id": "project-slice1",
+            "trigger_id": "trigger-1",
+            "status": "paused",
+            "title": "Automation note",
+            "instruction": "Run from manual event",
+            "action": {
+                "kind": "emit_text",
+                "content": "hello"
+            },
+            "capability_id": "capability-write-note",
+            "estimated_cost": 1,
+            "created_at": "2026-03-26T10:00:00Z",
+            "updated_at": "2026-03-26T10:00:00Z"
+        },
+        "trigger": {
+            "id": "trigger-1",
+            "automation_id": "automation-1",
+            "trigger_type": "manual_event",
+            "config": {},
+            "created_at": "2026-03-26T10:00:00Z",
+            "updated_at": "2026-03-26T10:00:00Z"
+        },
+        "recent_deliveries": [{
+            "id": "delivery-1",
+            "trigger_id": "trigger-1",
+            "run_id": "run-1",
+            "status": "succeeded",
+            "dedupe_key": "delivery-1",
+            "payload": {
+                "source": "manual"
+            },
+            "attempt_count": 1,
+            "last_error": null,
+            "created_at": "2026-03-26T10:00:00Z",
+            "updated_at": "2026-03-26T10:00:01Z"
+        }],
+        "last_run_summary": {
+            "id": "run-1",
+            "task_id": "task-1",
+            "workspace_id": "workspace-alpha",
+            "project_id": "project-slice1",
+            "title": "Automation note",
+            "run_type": "automation",
+            "status": "completed",
+            "approval_request_id": null,
+            "attempt_count": 1,
+            "max_attempts": 2,
+            "last_error": null,
+            "created_at": "2026-03-26T10:00:00Z",
+            "updated_at": "2026-03-26T10:00:01Z",
+            "started_at": "2026-03-26T10:00:00Z",
+            "completed_at": "2026-03-26T10:00:01Z",
+            "terminated_at": null
+        }
+    })));
+    assert!(automation_lifecycle_command_schema.is_valid(&json!({
+        "automation_id": "automation-1",
+        "action": "pause"
+    })));
+    assert!(manual_dispatch_command_schema.is_valid(&json!({
+        "trigger_id": "trigger-1",
+        "dedupe_key": "manual-1",
+        "payload": {
+            "source": "manual"
+        }
+    })));
+    assert!(trigger_delivery_retry_command_schema.is_valid(&json!({
+        "delivery_id": "delivery-1"
     })));
     assert!(capability_binding_schema.is_valid(&json!({
         "id": "binding-1",

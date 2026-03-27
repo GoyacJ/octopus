@@ -26,6 +26,7 @@ export type NotificationStatus =
 export type KnowledgeCandidateStatus = "candidate" | "promoted" | "rejected";
 export type KnowledgeAssetStatus = "verified_shared" | "deprecated";
 export type HubAuthState = "authenticated" | "auth_required" | "token_expired";
+export type AutomationStatus = "active" | "paused" | "archived";
 
 export interface Workspace {
   id: string;
@@ -86,6 +87,174 @@ export type TaskAction =
   | ConnectorCallAction
   | FailOnceThenEmitTextAction
   | AlwaysFailAction;
+
+export interface ManualEventCreateTriggerInput {
+  trigger_type: "manual_event";
+  config: Record<string, never>;
+}
+
+export interface CronCreateTriggerInput {
+  trigger_type: "cron";
+  config: {
+    schedule: string;
+    timezone: string;
+    next_fire_at: string;
+  };
+}
+
+export interface WebhookCreateTriggerInput {
+  trigger_type: "webhook";
+  config: {
+    ingress_mode: string;
+    secret_header_name: string;
+    secret_hint?: string | null;
+    secret_plaintext?: string | null;
+  };
+}
+
+export interface McpEventCreateTriggerInput {
+  trigger_type: "mcp_event";
+  config: {
+    server_id: string;
+    event_name: string | null;
+    event_pattern: string | null;
+  };
+}
+
+export type CreateTriggerInput =
+  | ManualEventCreateTriggerInput
+  | CronCreateTriggerInput
+  | WebhookCreateTriggerInput
+  | McpEventCreateTriggerInput;
+
+export interface CreateAutomationCommand {
+  workspace_id: string;
+  project_id: string;
+  title: string;
+  instruction: string;
+  action: TaskAction;
+  capability_id: string;
+  estimated_cost: number;
+  trigger: CreateTriggerInput;
+}
+
+export interface Automation {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  trigger_id: string;
+  status: AutomationStatus;
+  title: string;
+  instruction: string;
+  action: TaskAction;
+  capability_id: string;
+  estimated_cost: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ManualEventTrigger {
+  id: string;
+  automation_id: string;
+  trigger_type: "manual_event";
+  config: Record<string, never>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CronTrigger {
+  id: string;
+  automation_id: string;
+  trigger_type: "cron";
+  config: {
+    schedule: string;
+    timezone: string;
+    next_fire_at: string;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookTrigger {
+  id: string;
+  automation_id: string;
+  trigger_type: "webhook";
+  config: {
+    ingress_mode: string;
+    secret_header_name: string;
+    secret_hint: string | null;
+    secret_present: boolean;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface McpEventTrigger {
+  id: string;
+  automation_id: string;
+  trigger_type: "mcp_event";
+  config: {
+    server_id: string;
+    event_name: string | null;
+    event_pattern: string | null;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export type Trigger =
+  | ManualEventTrigger
+  | CronTrigger
+  | WebhookTrigger
+  | McpEventTrigger;
+
+export interface CreateAutomationResponse {
+  automation: Automation;
+  trigger: Trigger;
+  webhook_secret: string | null;
+}
+
+export interface TriggerDelivery {
+  id: string;
+  trigger_id: string;
+  run_id: string | null;
+  status:
+    | "pending"
+    | "delivering"
+    | "retry_scheduled"
+    | "succeeded"
+    | "failed";
+  dedupe_key: string;
+  payload: unknown;
+  attempt_count: number;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AutomationSummary {
+  automation: Automation;
+  trigger: Trigger;
+  recent_deliveries: TriggerDelivery[];
+  last_run_summary: RunSummary | null;
+}
+
+export type AutomationDetail = AutomationSummary;
+
+export interface AutomationLifecycleCommand {
+  automation_id: string;
+  action: "activate" | "pause" | "archive";
+}
+
+export interface ManualDispatchCommand {
+  trigger_id: string;
+  dedupe_key: string;
+  payload: unknown;
+}
+
+export interface TriggerDeliveryRetryCommand {
+  delivery_id: string;
+}
 
 export interface TaskCreateCommand {
   workspace_id: string;

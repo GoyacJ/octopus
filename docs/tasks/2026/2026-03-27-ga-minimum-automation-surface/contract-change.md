@@ -1,0 +1,42 @@
+## Contract Change
+
+- Change Type:
+  - Shared Schema
+  - Public API
+  - Internal Interface
+  - Cross-language Contract
+- New / Updated Schemas:
+  - Add shared runtime surface schemas for automation create, automation summary/detail, automation lifecycle command, manual dispatch command, trigger-delivery retry command, and create response with optional webhook secret reveal.
+  - Update `schemas/runtime/automation.schema.json` to include the minimum lifecycle status for this slice.
+  - Reuse existing `trigger.schema.json`, `trigger-delivery.schema.json`, and `run-summary.schema.json` where possible instead of redefining parallel DTO truth.
+- New / Updated Commands:
+  - `CreateAutomationCommand`
+  - `AutomationLifecycleCommand`
+  - `ManualDispatchCommand`
+  - `TriggerDeliveryRetryCommand`
+- New / Updated Queries:
+  - Project-scoped automation list query.
+  - Automation detail query.
+- New / Updated Events:
+  - None in MVP; the slice relies on existing hub connection/event behavior.
+- New / Updated DTOs:
+  - `AutomationSummary`
+  - `AutomationDetail`
+  - `CreateAutomationResponse`
+- Compatibility Impact:
+  - Existing task/run/knowledge/inbox/shared-client flows remain compatible.
+  - Automation record shape changes because lifecycle status becomes part of shared/runtime truth; existing consumers must accept the new required field.
+  - Trigger and delivery schemas remain compatible with existing runtime semantics.
+- Affected Consumers:
+  - `crates/runtime`
+  - `packages/schema-ts`
+  - `packages/hub-client`
+  - `apps/remote-hub`
+  - `apps/desktop`
+- Migration Notes:
+  - Add a runtime SQLite migration to persist the minimum automation lifecycle status.
+  - Existing automation rows must be backfilled to `active` because prior tracked slices treated created automations as immediately executable.
+- Generation Impact:
+  - `packages/schema-ts` must register and expose parsers/types for the new schemas.
+- Open Questions:
+  - Whether `draft` and `suspended` should remain absent from the shared GA-minimum schema or be reserved in a later contract evolution.

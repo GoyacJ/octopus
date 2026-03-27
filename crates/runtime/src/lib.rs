@@ -9,10 +9,11 @@ use services::{AutomationIntake, KnowledgeManager, RunOrchestrator, TaskIntake};
 use thiserror::Error;
 
 pub use models::{
-    AutomationRecord, CreateAutomationInput, CreateAutomationReport, CreateTaskInput,
-    CreateTriggerInput, CronTriggerConfig, DispatchManualEventInput, DispatchMcpEventInput,
-    DispatchWebhookEventInput, KnowledgePromotionReport, ManualEventTriggerConfig,
-    McpEventTriggerConfig, RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord,
+    AutomationDetailRecord, AutomationRecord, AutomationSummaryRecord, CreateAutomationInput,
+    CreateAutomationReport, CreateTaskInput, CreateTriggerInput, CronTriggerConfig,
+    DispatchManualEventInput, DispatchMcpEventInput, DispatchWebhookEventInput,
+    KnowledgePromotionReport, ManualEventTriggerConfig, McpEventTriggerConfig,
+    RunExecutionReport, RunRecord, RunSummaryRecord, TaskRecord, TriggerDeliveryRecord,
     TriggerDeliveryReport, TriggerRecord, TriggerSpec, WebhookTriggerConfig,
 };
 pub use octopus_domain_context::ProjectContext;
@@ -45,6 +46,12 @@ pub enum RuntimeError {
     ApprovalRequestNotFound(String),
     #[error("automation `{0}` not found")]
     AutomationNotFound(String),
+    #[error("automation `{automation_id}` cannot transition from `{from}` to `{to}`")]
+    InvalidAutomationLifecycleTransition {
+        automation_id: String,
+        from: String,
+        to: String,
+    },
     #[error("trigger `{0}` not found")]
     TriggerNotFound(String),
     #[error("trigger delivery `{0}` not found")]
@@ -257,11 +264,64 @@ impl Slice2Runtime {
         self.automation_intake.fetch_automation(automation_id).await
     }
 
+    pub async fn list_automations(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<AutomationSummaryRecord>, RuntimeError> {
+        self.automation_intake
+            .list_automations(workspace_id, project_id)
+            .await
+    }
+
+    pub async fn load_automation_detail(
+        &self,
+        automation_id: &str,
+    ) -> Result<AutomationDetailRecord, RuntimeError> {
+        self.automation_intake
+            .load_automation_detail(automation_id)
+            .await
+    }
+
+    pub async fn activate_automation(
+        &self,
+        automation_id: &str,
+    ) -> Result<AutomationRecord, RuntimeError> {
+        self.automation_intake
+            .transition_automation_status(automation_id, "active")
+            .await
+    }
+
+    pub async fn pause_automation(
+        &self,
+        automation_id: &str,
+    ) -> Result<AutomationRecord, RuntimeError> {
+        self.automation_intake
+            .transition_automation_status(automation_id, "paused")
+            .await
+    }
+
+    pub async fn archive_automation(
+        &self,
+        automation_id: &str,
+    ) -> Result<AutomationRecord, RuntimeError> {
+        self.automation_intake
+            .transition_automation_status(automation_id, "archived")
+            .await
+    }
+
     pub async fn fetch_trigger(
         &self,
         trigger_id: &str,
     ) -> Result<Option<TriggerRecord>, RuntimeError> {
         self.automation_intake.fetch_trigger(trigger_id).await
+    }
+
+    pub async fn fetch_trigger_delivery(
+        &self,
+        delivery_id: &str,
+    ) -> Result<Option<TriggerDeliveryRecord>, RuntimeError> {
+        self.automation_intake.fetch_trigger_delivery(delivery_id).await
     }
 
     pub async fn start_task(&self, task_id: &str) -> Result<RunExecutionReport, RuntimeError> {

@@ -477,3 +477,359 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
     assert_valid(&knowledge_detail_schema, &promoted);
     assert_eq!(promoted["assets"].as_array().unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn automation_manager_surface_round_trip_matches_minimum_contracts() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let db_path = sample_db_path(tempdir.path(), "automation-surface.sqlite");
+    let runtime = Slice1Runtime::open_at(&db_path).await.unwrap();
+    runtime
+        .ensure_project_context(
+            "workspace-alpha",
+            "workspace-alpha",
+            "Workspace Alpha",
+            "project-automation",
+            "project-automation",
+            "Automation Project",
+        )
+        .await
+        .unwrap();
+    seed_governance(&runtime, "project-automation", "capability-automation", false).await;
+
+    let auth = RemoteAccessService::open_at(&db_path).await.unwrap();
+    let router = app(AppState::new(runtime.clone(), auth));
+    let access_token = login_access_token(router.clone(), "workspace-alpha").await;
+    let authorization = format!("Bearer {access_token}");
+    let create_response_schema = compile_schema("runtime/create-automation-response.schema.json");
+    let summary_schema = compile_schema("runtime/automation-summary.schema.json");
+    let detail_schema = compile_schema("runtime/automation-detail.schema.json");
+
+    let manual_created = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/workspaces/workspace-alpha/projects/project-automation/automations")
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "workspace_id": "workspace-alpha",
+                    "project_id": "project-automation",
+                    "title": "Manual automation",
+                    "instruction": "Dispatch on demand",
+                    "action": {
+                        "kind": "emit_text",
+                        "content": "manual artifact"
+                    },
+                    "capability_id": "capability-automation",
+                    "estimated_cost": 1,
+                    "trigger": {
+                        "trigger_type": "manual_event",
+                        "config": {}
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&create_response_schema, &manual_created);
+
+    let cron_created = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/workspaces/workspace-alpha/projects/project-automation/automations")
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "workspace_id": "workspace-alpha",
+                    "project_id": "project-automation",
+                    "title": "Cron automation",
+                    "instruction": "Fire from schedule",
+                    "action": {
+                        "kind": "emit_text",
+                        "content": "cron artifact"
+                    },
+                    "capability_id": "capability-automation",
+                    "estimated_cost": 1,
+                    "trigger": {
+                        "trigger_type": "cron",
+                        "config": {
+                            "schedule": "0 * * * * * *",
+                            "timezone": "UTC",
+                            "next_fire_at": "2026-03-27T10:00:00Z"
+                        }
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&create_response_schema, &cron_created);
+
+    let webhook_created = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/workspaces/workspace-alpha/projects/project-automation/automations")
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "workspace_id": "workspace-alpha",
+                    "project_id": "project-automation",
+                    "title": "Webhook automation",
+                    "instruction": "Accept webhook",
+                    "action": {
+                        "kind": "emit_text",
+                        "content": "webhook artifact"
+                    },
+                    "capability_id": "capability-automation",
+                    "estimated_cost": 1,
+                    "trigger": {
+                        "trigger_type": "webhook",
+                        "config": {
+                            "ingress_mode": "shared_secret_header",
+                            "secret_header_name": "X-Octopus-Trigger-Secret",
+                            "secret_hint": "hook",
+                            "secret_plaintext": null
+                        }
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&create_response_schema, &webhook_created);
+    assert!(webhook_created["webhook_secret"].as_str().is_some());
+
+    let mcp_created = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/workspaces/workspace-alpha/projects/project-automation/automations")
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "workspace_id": "workspace-alpha",
+                    "project_id": "project-automation",
+                    "title": "MCP automation",
+                    "instruction": "React to MCP event",
+                    "action": {
+                        "kind": "emit_text",
+                        "content": "mcp artifact"
+                    },
+                    "capability_id": "capability-automation",
+                    "estimated_cost": 1,
+                    "trigger": {
+                        "trigger_type": "mcp_event",
+                        "config": {
+                            "server_id": "server-automation",
+                            "event_name": "connector.output.ready",
+                            "event_pattern": null
+                        }
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&create_response_schema, &mcp_created);
+
+    let manual_automation_id = manual_created["automation"]["id"].as_str().unwrap();
+    let manual_trigger_id = manual_created["trigger"]["id"].as_str().unwrap();
+
+    let listed = response_json(
+        router.clone(),
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/projects/project-automation/automations")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let listed = listed.as_array().unwrap();
+    assert_eq!(listed.len(), 4);
+    assert!(listed.iter().all(|item| summary_schema.is_valid(item)));
+
+    let manual_detail = response_json(
+        router.clone(),
+        Request::builder()
+            .uri(format!("/api/automations/{manual_automation_id}"))
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&detail_schema, &manual_detail);
+    assert_eq!(manual_detail["automation"]["status"], "active");
+
+    let already_active = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/automations/{manual_automation_id}/activate"))
+                .header("content-type", "application/json")
+                .header("authorization", authorization.as_str())
+                .body(Body::from(
+                    json!({
+                        "automation_id": manual_automation_id,
+                        "action": "activate"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(already_active.status(), StatusCode::BAD_REQUEST);
+
+    let paused = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/automations/{manual_automation_id}/pause"))
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "automation_id": manual_automation_id,
+                    "action": "pause"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&detail_schema, &paused);
+    assert_eq!(paused["automation"]["status"], "paused");
+
+    let reactivated = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/automations/{manual_automation_id}/activate"))
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "automation_id": manual_automation_id,
+                    "action": "activate"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&detail_schema, &reactivated);
+    assert_eq!(reactivated["automation"]["status"], "active");
+
+    let dispatched = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/triggers/{manual_trigger_id}/manual-dispatch"))
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "trigger_id": manual_trigger_id,
+                    "dedupe_key": "manual-dispatch-1",
+                    "payload": {
+                        "source": "test"
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&detail_schema, &dispatched);
+    assert_eq!(dispatched["recent_deliveries"][0]["status"], "succeeded");
+    assert_eq!(dispatched["last_run_summary"]["status"], "completed");
+
+    let failing_created = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/workspaces/workspace-alpha/projects/project-automation/automations")
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "workspace_id": "workspace-alpha",
+                    "project_id": "project-automation",
+                    "title": "Recovering automation",
+                    "instruction": "Fail once then recover",
+                    "action": {
+                        "kind": "fail_once_then_emit_text",
+                        "failure_message": "boom",
+                        "content": "recovered artifact"
+                    },
+                    "capability_id": "capability-automation",
+                    "estimated_cost": 1,
+                    "trigger": {
+                        "trigger_type": "manual_event",
+                        "config": {}
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&create_response_schema, &failing_created);
+
+    let failing_trigger_id = failing_created["trigger"]["id"].as_str().unwrap();
+    let dispatched_failed = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/triggers/{failing_trigger_id}/manual-dispatch"))
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "trigger_id": failing_trigger_id,
+                    "dedupe_key": "manual-dispatch-fail-1",
+                    "payload": {
+                        "source": "test"
+                    }
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&detail_schema, &dispatched_failed);
+    assert_eq!(dispatched_failed["recent_deliveries"][0]["status"], "failed");
+
+    let failed_delivery_id = dispatched_failed["recent_deliveries"][0]["id"].as_str().unwrap();
+    let retried = response_json(
+        router,
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/trigger-deliveries/{failed_delivery_id}/retry"))
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "delivery_id": failed_delivery_id
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&detail_schema, &retried);
+    assert_eq!(retried["recent_deliveries"][0]["id"], failed_delivery_id);
+    assert_eq!(retried["recent_deliveries"][0]["status"], "succeeded");
+    assert_eq!(retried["last_run_summary"]["status"], "completed");
+}

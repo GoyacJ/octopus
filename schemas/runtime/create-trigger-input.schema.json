@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/runtime/create-trigger-input.schema.json",
+  "title": "CreateTriggerInput",
+  "description": "Minimum GA trigger creation input supporting the four tracked automation trigger kinds.",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "trigger_type": {
+          "type": "string",
+          "const": "manual_event"
+        },
+        "config": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      "required": ["trigger_type", "config"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "trigger_type": {
+          "type": "string",
+          "const": "cron"
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "schedule": {
+              "type": "string",
+              "minLength": 1
+            },
+            "timezone": {
+              "type": "string",
+              "minLength": 1
+            },
+            "next_fire_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": ["schedule", "timezone", "next_fire_at"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["trigger_type", "config"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "trigger_type": {
+          "type": "string",
+          "const": "webhook"
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "ingress_mode": {
+              "type": "string",
+              "minLength": 1
+            },
+            "secret_header_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "secret_hint": {
+              "type": ["string", "null"]
+            },
+            "secret_plaintext": {
+              "type": ["string", "null"],
+              "minLength": 1
+            }
+          },
+          "required": ["ingress_mode", "secret_header_name"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["trigger_type", "config"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "trigger_type": {
+          "type": "string",
+          "const": "mcp_event"
+        },
+        "config": {
+          "type": "object",
+          "properties": {
+            "server_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "event_name": {
+              "type": ["string", "null"],
+              "minLength": 1
+            },
+            "event_pattern": {
+              "type": ["string", "null"],
+              "minLength": 1
+            }
+          },
+          "required": ["server_id", "event_name", "event_pattern"],
+          "anyOf": [
+            {
+              "properties": {
+                "event_name": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            {
+              "properties": {
+                "event_pattern": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": ["trigger_type", "config"],
+      "additionalProperties": false
+    }
+  ]
+}

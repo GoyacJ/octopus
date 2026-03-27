@@ -11,6 +11,7 @@ import {
 
 import AppShell from "./App.vue";
 import { configureHubClient } from "./stores/hub";
+import AutomationDetailView from "./views/AutomationDetailView.vue";
 import RunView from "./views/RunView.vue";
 import WorkspaceView from "./views/WorkspaceView.vue";
 
@@ -28,6 +29,10 @@ function createRoutes() {
     {
       path: "/workspaces/:workspaceId/projects/:projectId",
       component: WorkspaceView
+    },
+    {
+      path: "/workspaces/:workspaceId/projects/:projectId/automations/:automationId",
+      component: AutomationDetailView
     },
     {
       path: "/runs/:runId",

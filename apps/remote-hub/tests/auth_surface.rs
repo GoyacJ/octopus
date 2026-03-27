@@ -236,6 +236,69 @@ async fn protected_routes_require_authentication() {
 }
 
 #[tokio::test]
+async fn automation_routes_require_authentication_and_enforce_workspace_membership() {
+    let harness = TestHarness::seeded().await;
+
+    let (list_status, list_body) = harness
+        .response(
+            Request::builder()
+                .uri("/api/workspaces/workspace-alpha/projects/project-auth/automations")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(list_status, StatusCode::UNAUTHORIZED, "body={list_body}");
+    assert_eq!(list_body["error_code"], "auth_required");
+
+    let (alpha_authorization, _) = harness.login("workspace-alpha").await;
+    let (create_status, created) = harness
+        .response(
+            Request::builder()
+                .method("POST")
+                .uri("/api/workspaces/workspace-alpha/projects/project-auth/automations")
+                .header("content-type", "application/json")
+                .header("authorization", alpha_authorization.as_str())
+                .body(Body::from(
+                    json!({
+                        "workspace_id": "workspace-alpha",
+                        "project_id": "project-auth",
+                        "title": "Manual automation",
+                        "instruction": "Dispatch on demand",
+                        "action": {
+                            "kind": "emit_text",
+                            "content": "hello"
+                        },
+                        "capability_id": "capability-write-note",
+                        "estimated_cost": 1,
+                        "trigger": {
+                            "trigger_type": "manual_event",
+                            "config": {}
+                        }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(create_status, StatusCode::OK, "body={created}");
+
+    let automation_id = created["automation"]["id"].as_str().unwrap();
+    let (bravo_authorization, _) = harness.login("workspace-bravo").await;
+    let (detail_status, detail_body) = harness
+        .response(
+            Request::builder()
+                .uri(format!("/api/automations/{automation_id}"))
+                .header("authorization", bravo_authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(detail_status, StatusCode::FORBIDDEN, "body={detail_body}");
+    assert_eq!(detail_body["error_code"], "workspace_forbidden");
+    assert_eq!(detail_body["auth_state"], "authenticated");
+}
+
+#[tokio::test]
 async fn bootstrap_login_returns_a_remote_session() {
     let harness = TestHarness::seeded().await;
     let (status, body) = harness

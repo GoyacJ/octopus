@@ -131,6 +131,49 @@ impl RunRecord {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RunSummaryRecord {
+    pub id: String,
+    pub task_id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub title: String,
+    pub run_type: String,
+    pub status: String,
+    pub approval_request_id: Option<String>,
+    pub attempt_count: i64,
+    pub max_attempts: i64,
+    pub last_error: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub started_at: Option<String>,
+    pub completed_at: Option<String>,
+    pub terminated_at: Option<String>,
+}
+
+impl RunSummaryRecord {
+    pub fn new(run: &RunRecord, task: &TaskRecord) -> Self {
+        Self {
+            id: run.id.clone(),
+            task_id: run.task_id.clone(),
+            workspace_id: run.workspace_id.clone(),
+            project_id: run.project_id.clone(),
+            title: task.title.clone(),
+            run_type: run.run_type.clone(),
+            status: run.status.clone(),
+            approval_request_id: run.approval_request_id.clone(),
+            attempt_count: run.attempt_count,
+            max_attempts: run.max_attempts,
+            last_error: run.last_error.clone(),
+            created_at: run.created_at.clone(),
+            updated_at: run.updated_at.clone(),
+            started_at: run.started_at.clone(),
+            completed_at: run.completed_at.clone(),
+            terminated_at: run.terminated_at.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunExecutionReport {
     pub run: RunRecord,
@@ -170,6 +213,7 @@ pub struct AutomationRecord {
     pub workspace_id: String,
     pub project_id: String,
     pub trigger_id: String,
+    pub status: String,
     pub title: String,
     pub instruction: String,
     pub action: ExecutionAction,
@@ -187,6 +231,7 @@ impl AutomationRecord {
             workspace_id: input.workspace_id,
             project_id: input.project_id,
             trigger_id,
+            status: "active".to_string(),
             title: input.title,
             instruction: input.instruction,
             action: input.action,
@@ -196,7 +241,27 @@ impl AutomationRecord {
             updated_at: now,
         }
     }
+
+    pub fn can_transition_to(&self, next_status: &str) -> bool {
+        matches!(
+            (self.status.as_str(), next_status),
+            ("active", "paused")
+                | ("paused", "active")
+                | ("active", "archived")
+                | ("paused", "archived")
+        )
+    }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AutomationSummaryRecord {
+    pub automation: AutomationRecord,
+    pub trigger: TriggerRecord,
+    pub recent_deliveries: Vec<TriggerDeliveryRecord>,
+    pub last_run_summary: Option<RunSummaryRecord>,
+}
+
+pub type AutomationDetailRecord = AutomationSummaryRecord;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ManualEventTriggerConfig {}

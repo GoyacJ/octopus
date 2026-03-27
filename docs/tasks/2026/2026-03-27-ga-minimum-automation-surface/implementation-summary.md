@@ -1,0 +1,59 @@
+## Implementation Summary
+
+- Goal:
+  - Deliver the GA minimum automation manager surface across runtime, shared contracts, remote-hub, hub-client, and desktop without expanding into admin, tenant, IdP, vector retrieval, or broader dashboard work.
+- Files Added:
+  - `schemas/runtime/automation-status.schema.json`
+  - `schemas/runtime/create-trigger-input.schema.json`
+  - `schemas/runtime/create-automation-command.schema.json`
+  - `schemas/runtime/create-automation-response.schema.json`
+  - `schemas/runtime/automation-summary.schema.json`
+  - `schemas/runtime/automation-detail.schema.json`
+  - `schemas/runtime/automation-lifecycle-command.schema.json`
+  - `schemas/runtime/manual-dispatch-command.schema.json`
+  - `schemas/runtime/trigger-delivery-retry-command.schema.json`
+  - `crates/runtime/migrations/0008_ga_minimum_automation_surface.sql`
+  - `crates/runtime/tests/ga_minimum_automation_surface.rs`
+  - `apps/desktop/src/views/AutomationDetailView.vue`
+- Files Changed:
+  - `crates/runtime/src/lib.rs`
+  - `crates/runtime/src/models.rs`
+  - `crates/runtime/src/services.rs`
+  - `crates/runtime/tests/schema_contracts.rs`
+  - `packages/schema-ts/src/contracts.ts`
+  - `packages/schema-ts/src/index.ts`
+  - `packages/schema-ts/test/contracts.test.ts`
+  - `packages/hub-client/src/index.ts`
+  - `packages/hub-client/test/hub-client.contract.test.ts`
+  - `apps/remote-hub/src/lib.rs`
+  - `apps/remote-hub/tests/auth_surface.rs`
+  - `apps/remote-hub/tests/http_surface.rs`
+  - `apps/desktop/src/app.ts`
+  - `apps/desktop/src/App.vue`
+  - `apps/desktop/src/stores/hub.ts`
+  - `apps/desktop/src/views/WorkspaceView.vue`
+  - `apps/desktop/test/happy-path.test.ts`
+  - `schemas/runtime/automation.schema.json`
+- Files Removed:
+  - None.
+- Structure Decision:
+  - Keep the slice inside the already tracked minimum surfaces: shared schemas define the contract, runtime remains the source of automation truth, remote-hub exposes thin HTTP routes, hub-client preserves local/remote shape parity, and desktop adds only project list/create plus automation detail views.
+- Why This Structure:
+  - It preserves the repository's schema-first layering and reuses the existing governed runtime instead of introducing a new automation read model or UI-only state machine.
+- Reused Patterns:
+  - Reused runtime `dispatch_manual_event`, `retry_trigger_delivery`, and `list_trigger_deliveries_by_automation`.
+  - Reused hub-client parse-and-transport pattern so local `invoke` and remote HTTP stay contract-identical.
+  - Reused desktop shell/store banner and read-only handling rather than creating slice-specific error plumbing.
+- New Dependencies:
+  - None.
+- Error Handling Strategy:
+  - Invalid lifecycle transitions stay runtime-enforced and surface as explicit client errors.
+  - Manual dispatch remains restricted to `manual_event`, and delivery retry remains restricted to `failed` deliveries.
+  - Desktop continues to surface failures through the shared shell banner, with view handlers catching promise rejections to avoid unhandled test noise.
+- Deferred Items:
+  - Automation edit flows, secret rotation, bulk actions, automation dashboard aggregation, automation-level live SSE boards, and admin/tenant management remain deferred.
+- Non-goals Preserved:
+  - One automation still owns exactly one trigger.
+  - Lifecycle remains only `active | paused | archived`.
+  - Recent execution state remains derived from `TriggerDelivery + Run`.
+  - No ADR was added because this slice did not introduce a new durable repository-wide architecture rule.

@@ -15,12 +15,13 @@ use futures_util::stream;
 use octopus_access_auth::{AccessAuthError, HubLoginResponse, HubSession, RemoteAccessService};
 use octopus_execution::ExecutionAction;
 use octopus_runtime::{
-    ApprovalDecision, ApprovalRequestRecord, ArtifactRecord, AuditRecord,
+    ApprovalDecision, ApprovalRequestRecord, ArtifactRecord, AuditRecord, AutomationDetailRecord,
+    AutomationRecord, AutomationSummaryRecord, CreateAutomationInput, CreateTriggerInput,
     CapabilityDescriptorRecord, CreateTaskInput, InboxItemRecord, KnowledgeAssetRecord,
     KnowledgeCandidateRecord, KnowledgeLineageRecord, KnowledgeSpaceRecord, NotificationRecord,
     PolicyDecisionLogRecord, ProjectContext, RunExecutionReport, RunRecord,
-    RuntimeError, Slice1Runtime, TaskRecord, TraceRecord, TriggerSpec,
-    DispatchWebhookEventInput,
+    RuntimeError, Slice1Runtime, TaskRecord, TraceRecord, TriggerDeliveryRecord, TriggerRecord,
+    TriggerSpec, DispatchManualEventInput, DispatchWebhookEventInput,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -46,6 +47,31 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/api/workspaces/{workspace_id}/projects/{project_id}/context",
             get(get_project_context),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/projects/{project_id}/automations",
+            get(list_automations).post(create_automation),
+        )
+        .route("/api/automations/{automation_id}", get(get_automation_detail))
+        .route(
+            "/api/automations/{automation_id}/activate",
+            post(activate_automation),
+        )
+        .route(
+            "/api/automations/{automation_id}/pause",
+            post(pause_automation),
+        )
+        .route(
+            "/api/automations/{automation_id}/archive",
+            post(archive_automation),
+        )
+        .route(
+            "/api/triggers/{trigger_id}/manual-dispatch",
+            post(dispatch_manual_trigger),
+        )
+        .route(
+            "/api/trigger-deliveries/{delivery_id}/retry",
+            post(retry_trigger_delivery),
         )
         .route("/api/tasks", post(create_task))
         .route("/api/tasks/{task_id}/start", post(start_task))
@@ -103,6 +129,16 @@ impl IntoResponse for AppError {
                 RuntimeError::InvalidRunTransition { run_id, from, to } => (
                     StatusCode::BAD_REQUEST,
                     format!("invalid run transition for `{run_id}`: `{from}` -> `{to}`"),
+                ),
+                RuntimeError::InvalidAutomationLifecycleTransition {
+                    automation_id,
+                    from,
+                    to,
+                } => (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "automation `{automation_id}` cannot transition from `{from}` to `{to}`"
+                    ),
                 ),
                 RuntimeError::InvalidTriggerType {
                     trigger_id,
@@ -170,10 +206,93 @@ struct SurfaceTaskCreateCommand {
 }
 
 #[derive(Debug, Deserialize)]
+struct SurfaceCreateAutomationCommand {
+    workspace_id: String,
+    project_id: String,
+    title: String,
+    instruction: String,
+    action: ExecutionAction,
+    capability_id: String,
+    estimated_cost: i64,
+    trigger: SurfaceCreateTriggerInput,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceManualEventTriggerConfig {}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceCronTriggerConfig {
+    schedule: String,
+    timezone: String,
+    next_fire_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceWebhookTriggerConfig {
+    ingress_mode: String,
+    secret_header_name: String,
+    secret_hint: Option<String>,
+    secret_plaintext: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceMcpEventTriggerConfig {
+    server_id: String,
+    event_name: Option<String>,
+    event_pattern: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "trigger_type", content = "config", rename_all = "snake_case")]
+enum SurfaceCreateTriggerInput {
+    ManualEvent(SurfaceManualEventTriggerConfig),
+    Cron(SurfaceCronTriggerConfig),
+    Webhook(SurfaceWebhookTriggerConfig),
+    McpEvent(SurfaceMcpEventTriggerConfig),
+}
+
+impl SurfaceCreateTriggerInput {
+    fn into_runtime(self) -> CreateTriggerInput {
+        match self {
+            Self::ManualEvent(_) => CreateTriggerInput::ManualEvent,
+            Self::Cron(config) => CreateTriggerInput::Cron {
+                schedule: config.schedule,
+                timezone: config.timezone,
+                next_fire_at: config.next_fire_at,
+            },
+            Self::Webhook(config) => CreateTriggerInput::Webhook {
+                ingress_mode: config.ingress_mode,
+                secret_header_name: config.secret_header_name,
+                secret_hint: config.secret_hint,
+                secret_plaintext: config.secret_plaintext,
+            },
+            Self::McpEvent(config) => CreateTriggerInput::McpEvent {
+                server_id: config.server_id,
+                event_name: config.event_name,
+                event_pattern: config.event_pattern,
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct SurfaceCreateAutomationResponse {
+    automation: AutomationRecord,
+    trigger: TriggerRecord,
+    webhook_secret: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 struct SurfaceLoginCommand {
     workspace_id: String,
     email: String,
     password: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceAutomationLifecycleCommand {
+    automation_id: String,
+    action: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -189,6 +308,11 @@ struct SurfaceKnowledgePromoteCommand {
     candidate_id: String,
     actor_ref: String,
     note: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceTriggerDeliveryRetryCommand {
+    delivery_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -337,6 +461,112 @@ async fn get_project_context(
     ))
 }
 
+async fn list_automations(
+    State(state): State<AppState>,
+    Path((workspace_id, project_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> AppResult<Vec<AutomationSummaryRecord>> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
+    Ok(Json(
+        state
+            .runtime
+            .list_automations(&workspace_id, &project_id)
+            .await?,
+    ))
+}
+
+async fn create_automation(
+    State(state): State<AppState>,
+    Path((workspace_id, project_id)): Path<(String, String)>,
+    headers: HeaderMap,
+    Json(command): Json<SurfaceCreateAutomationCommand>,
+) -> AppResult<SurfaceCreateAutomationResponse> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+    if workspace_id != command.workspace_id {
+        return Err(AppError::BadRequest(
+            "workspace_id path/body mismatch".to_string(),
+        ));
+    }
+    if project_id != command.project_id {
+        return Err(AppError::BadRequest(
+            "project_id path/body mismatch".to_string(),
+        ));
+    }
+
+    let report = state
+        .runtime
+        .create_automation_with_trigger(
+            CreateAutomationInput {
+                workspace_id: command.workspace_id,
+                project_id: command.project_id,
+                title: command.title,
+                instruction: command.instruction,
+                action: command.action,
+                capability_id: command.capability_id,
+                estimated_cost: command.estimated_cost,
+            },
+            command.trigger.into_runtime(),
+        )
+        .await?;
+
+    Ok(Json(SurfaceCreateAutomationResponse {
+        automation: report.automation,
+        trigger: report.trigger,
+        webhook_secret: report.webhook_secret,
+    }))
+}
+
+async fn get_automation_detail(
+    State(state): State<AppState>,
+    Path(automation_id): Path<String>,
+    headers: HeaderMap,
+) -> AppResult<AutomationDetailRecord> {
+    let session = require_session(&state, &headers).await?;
+    load_authorized_automation(&state, &session, &automation_id).await?;
+    Ok(Json(
+        state
+            .runtime
+            .load_automation_detail(&automation_id)
+            .await?,
+    ))
+}
+
+async fn activate_automation(
+    State(state): State<AppState>,
+    Path(automation_id): Path<String>,
+    headers: HeaderMap,
+    Json(command): Json<SurfaceAutomationLifecycleCommand>,
+) -> AppResult<AutomationDetailRecord> {
+    transition_automation(state, headers, automation_id, command, "activate").await
+}
+
+async fn pause_automation(
+    State(state): State<AppState>,
+    Path(automation_id): Path<String>,
+    headers: HeaderMap,
+    Json(command): Json<SurfaceAutomationLifecycleCommand>,
+) -> AppResult<AutomationDetailRecord> {
+    transition_automation(state, headers, automation_id, command, "pause").await
+}
+
+async fn archive_automation(
+    State(state): State<AppState>,
+    Path(automation_id): Path<String>,
+    headers: HeaderMap,
+    Json(command): Json<SurfaceAutomationLifecycleCommand>,
+) -> AppResult<AutomationDetailRecord> {
+    transition_automation(state, headers, automation_id, command, "archive").await
+}
+
 async fn create_task(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -363,6 +593,29 @@ async fn create_task(
                 estimated_cost: command.estimated_cost,
                 idempotency_key: command.idempotency_key,
             })
+            .await?,
+    ))
+}
+
+async fn dispatch_manual_trigger(
+    State(state): State<AppState>,
+    Path(trigger_id): Path<String>,
+    headers: HeaderMap,
+    Json(command): Json<DispatchManualEventInput>,
+) -> AppResult<AutomationDetailRecord> {
+    let session = require_session(&state, &headers).await?;
+    let (_, automation) = load_authorized_trigger(&state, &session, &trigger_id).await?;
+    if trigger_id != command.trigger_id {
+        return Err(AppError::BadRequest(
+            "trigger_id path/body mismatch".to_string(),
+        ));
+    }
+
+    state.runtime.dispatch_manual_event(command).await?;
+    Ok(Json(
+        state
+            .runtime
+            .load_automation_detail(&automation.id)
             .await?,
     ))
 }
@@ -402,6 +655,29 @@ async fn dispatch_webhook(
         run_id: report.run_report.run.id,
         status: report.delivery.status,
     }))
+}
+
+async fn retry_trigger_delivery(
+    State(state): State<AppState>,
+    Path(delivery_id): Path<String>,
+    headers: HeaderMap,
+    Json(command): Json<SurfaceTriggerDeliveryRetryCommand>,
+) -> AppResult<AutomationDetailRecord> {
+    let session = require_session(&state, &headers).await?;
+    let (_, _, automation) = load_authorized_trigger_delivery(&state, &session, &delivery_id).await?;
+    if delivery_id != command.delivery_id {
+        return Err(AppError::BadRequest(
+            "delivery_id path/body mismatch".to_string(),
+        ));
+    }
+
+    state.runtime.retry_trigger_delivery(&delivery_id).await?;
+    Ok(Json(
+        state
+            .runtime
+            .load_automation_detail(&automation.id)
+            .await?,
+    ))
 }
 
 fn required_header(headers: &HeaderMap, name: &str) -> Result<String, AppError> {
@@ -775,6 +1051,51 @@ async fn build_knowledge_detail_response(
     })
 }
 
+async fn transition_automation(
+    state: AppState,
+    headers: HeaderMap,
+    automation_id: String,
+    command: SurfaceAutomationLifecycleCommand,
+    expected_action: &str,
+) -> AppResult<AutomationDetailRecord> {
+    let session = require_session(&state, &headers).await?;
+    let automation = load_authorized_automation(&state, &session, &automation_id).await?;
+    if automation_id != command.automation_id {
+        return Err(AppError::BadRequest(
+            "automation_id path/body mismatch".to_string(),
+        ));
+    }
+    if command.action != expected_action {
+        return Err(AppError::BadRequest(format!(
+            "action/body mismatch: expected `{expected_action}`"
+        )));
+    }
+
+    match expected_action {
+        "activate" => {
+            state.runtime.activate_automation(&automation.id).await?;
+        }
+        "pause" => {
+            state.runtime.pause_automation(&automation.id).await?;
+        }
+        "archive" => {
+            state.runtime.archive_automation(&automation.id).await?;
+        }
+        _ => {
+            return Err(AppError::BadRequest(format!(
+                "unsupported lifecycle action `{expected_action}`"
+            )))
+        }
+    }
+
+    Ok(Json(
+        state
+            .runtime
+            .load_automation_detail(&automation.id)
+            .await?,
+    ))
+}
+
 async fn build_hub_connection_status(
     runtime: &Slice1Runtime,
     auth_state: &str,
@@ -819,6 +1140,53 @@ async fn build_hub_connection_status(
             .collect(),
         last_refreshed_at,
     })
+}
+
+async fn load_authorized_automation(
+    state: &AppState,
+    session: &HubSession,
+    automation_id: &str,
+) -> Result<AutomationRecord, AppError> {
+    let automation = state
+        .runtime
+        .fetch_automation(automation_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("automation `{automation_id}` not found")))?;
+    state
+        .auth
+        .ensure_workspace_access(session, &automation.workspace_id)
+        .await?;
+    Ok(automation)
+}
+
+async fn load_authorized_trigger(
+    state: &AppState,
+    session: &HubSession,
+    trigger_id: &str,
+) -> Result<(TriggerRecord, AutomationRecord), AppError> {
+    let trigger = state
+        .runtime
+        .fetch_trigger(trigger_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("trigger `{trigger_id}` not found")))?;
+    let automation = load_authorized_automation(state, session, &trigger.automation_id).await?;
+    Ok((trigger, automation))
+}
+
+async fn load_authorized_trigger_delivery(
+    state: &AppState,
+    session: &HubSession,
+    delivery_id: &str,
+) -> Result<(TriggerDeliveryRecord, TriggerRecord, AutomationRecord), AppError> {
+    let delivery = state
+        .runtime
+        .fetch_trigger_delivery(delivery_id)
+        .await?
+        .ok_or_else(|| {
+            AppError::NotFound(format!("trigger delivery `{delivery_id}` not found"))
+        })?;
+    let (trigger, automation) = load_authorized_trigger(state, session, &delivery.trigger_id).await?;
+    Ok((delivery, trigger, automation))
 }
 
 fn event_json(event_type: &str, sequence: u64, payload: Value) -> Value {

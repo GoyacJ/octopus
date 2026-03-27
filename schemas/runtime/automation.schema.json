@@ -78,6 +78,9 @@
     "workspace_id": { "type": "string" },
     "project_id": { "type": "string" },
     "trigger_id": { "type": "string" },
+    "status": {
+      "$ref": "https://octopus.local/schemas/runtime/automation-status.schema.json"
+    },
     "title": {
       "type": "string",
       "minLength": 1
@@ -110,6 +113,7 @@
     "workspace_id",
     "project_id",
     "trigger_id",
+    "status",
     "title",
     "instruction",
     "action",

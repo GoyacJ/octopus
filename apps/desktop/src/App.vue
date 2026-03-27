@@ -21,6 +21,14 @@ const runRoute = computed(() => {
 
   return `/runs/${hub.currentRunId}`;
 });
+
+const automationRoute = computed(() => {
+  if (!hub.currentWorkspaceId || !hub.currentProjectId || !hub.currentAutomationId) {
+    return null;
+  }
+
+  return `/workspaces/${hub.currentWorkspaceId}/projects/${hub.currentProjectId}/automations/${hub.currentAutomationId}`;
+});
 </script>
 
 <template>
@@ -42,8 +50,13 @@ const runRoute = computed(() => {
         </span>
       </div>
 
+      <p v-if="hub.webhookSecretReveal" class="secret-banner">
+        Webhook secret reveal: {{ hub.webhookSecretReveal }}
+      </p>
+
       <nav class="nav-stack">
         <RouterLink v-if="workspaceRoute" :to="workspaceRoute">Workspace Shell</RouterLink>
+        <RouterLink v-if="automationRoute" :to="automationRoute">Automation Detail</RouterLink>
         <RouterLink v-if="runRoute" :to="runRoute">Current Run</RouterLink>
       </nav>
 
@@ -146,6 +159,15 @@ h1 {
   border-radius: 1rem;
   color: #fecaca;
   background: rgba(127, 29, 29, 0.55);
+}
+
+.secret-banner {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  border-radius: 1rem;
+  color: #fef3c7;
+  background: rgba(133, 77, 14, 0.45);
+  word-break: break-word;
 }
 
 @media (max-width: 900px) {

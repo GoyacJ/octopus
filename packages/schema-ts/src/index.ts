@@ -38,14 +38,23 @@ import notificationSchema from "../../../schemas/observe/notification.schema.jso
 import policyDecisionLogSchema from "../../../schemas/observe/policy-decision-log.schema.json";
 import traceRecordSchema from "../../../schemas/observe/trace-record.schema.json";
 import automationSchema from "../../../schemas/runtime/automation.schema.json";
+import automationDetailSchema from "../../../schemas/runtime/automation-detail.schema.json";
+import automationLifecycleCommandSchema from "../../../schemas/runtime/automation-lifecycle-command.schema.json";
+import automationStatusSchema from "../../../schemas/runtime/automation-status.schema.json";
+import automationSummarySchema from "../../../schemas/runtime/automation-summary.schema.json";
+import createAutomationCommandSchema from "../../../schemas/runtime/create-automation-command.schema.json";
+import createAutomationResponseSchema from "../../../schemas/runtime/create-automation-response.schema.json";
+import createTriggerInputSchema from "../../../schemas/runtime/create-trigger-input.schema.json";
 import environmentLeaseStatusSchema from "../../../schemas/runtime/environment-lease-status.schema.json";
 import environmentLeaseSchema from "../../../schemas/runtime/environment-lease.schema.json";
+import manualDispatchCommandSchema from "../../../schemas/runtime/manual-dispatch-command.schema.json";
 import runDetailSchema from "../../../schemas/runtime/run-detail.schema.json";
 import runSchema from "../../../schemas/runtime/run.schema.json";
 import runStatusSchema from "../../../schemas/runtime/run-status.schema.json";
 import runSummarySchema from "../../../schemas/runtime/run-summary.schema.json";
 import taskCreateCommandSchema from "../../../schemas/runtime/task-create-command.schema.json";
 import taskSchema from "../../../schemas/runtime/task.schema.json";
+import triggerDeliveryRetryCommandSchema from "../../../schemas/runtime/trigger-delivery-retry-command.schema.json";
 import triggerDeliveryStatusSchema from "../../../schemas/runtime/trigger-delivery-status.schema.json";
 import triggerDeliverySchema from "../../../schemas/runtime/trigger-delivery.schema.json";
 import triggerSchema from "../../../schemas/runtime/trigger.schema.json";
@@ -53,10 +62,15 @@ import triggerSchema from "../../../schemas/runtime/trigger.schema.json";
 import type {
   ApprovalRequest,
   ApprovalResolveCommand,
+  AutomationDetail,
+  AutomationLifecycleCommand,
+  AutomationSummary,
   Artifact,
   ArtifactSummary,
   AuditRecord,
   CapabilityVisibility,
+  CreateAutomationCommand,
+  CreateAutomationResponse,
   HubAuthError,
   HubConnectionStatus,
   HubEvent,
@@ -66,13 +80,15 @@ import type {
   InboxItem,
   KnowledgeDetail,
   KnowledgePromoteCommand,
+  ManualDispatchCommand,
   KnowledgeSummary,
   Notification,
   ProjectContext,
   RunDetail,
   RunSummary,
   Task,
-  TaskCreateCommand
+  TaskCreateCommand,
+  TriggerDeliveryRetryCommand
 } from "./contracts";
 
 export * from "./contracts";
@@ -88,7 +104,16 @@ const schemaRegistry = {
   [runSchema.$id]: runSchema,
   [runSummarySchema.$id]: runSummarySchema,
   [runDetailSchema.$id]: runDetailSchema,
+  [automationStatusSchema.$id]: automationStatusSchema,
   [automationSchema.$id]: automationSchema,
+  [createTriggerInputSchema.$id]: createTriggerInputSchema,
+  [createAutomationCommandSchema.$id]: createAutomationCommandSchema,
+  [createAutomationResponseSchema.$id]: createAutomationResponseSchema,
+  [automationSummarySchema.$id]: automationSummarySchema,
+  [automationDetailSchema.$id]: automationDetailSchema,
+  [automationLifecycleCommandSchema.$id]: automationLifecycleCommandSchema,
+  [manualDispatchCommandSchema.$id]: manualDispatchCommandSchema,
+  [triggerDeliveryRetryCommandSchema.$id]: triggerDeliveryRetryCommandSchema,
   [triggerSchema.$id]: triggerSchema,
   [triggerDeliveryStatusSchema.$id]: triggerDeliveryStatusSchema,
   [triggerDeliverySchema.$id]: triggerDeliverySchema,
@@ -200,6 +225,68 @@ export function parseProjectContext(value: unknown): ProjectContext {
 
 export function parseTaskCreateCommand(value: unknown): TaskCreateCommand {
   return parseWithSchema<TaskCreateCommand>(taskCreateCommandSchema.$id, value);
+}
+
+export function parseCreateAutomationCommand(
+  value: unknown
+): CreateAutomationCommand {
+  return parseWithSchema<CreateAutomationCommand>(
+    createAutomationCommandSchema.$id,
+    value
+  );
+}
+
+export function parseCreateAutomationResponse(
+  value: unknown
+): CreateAutomationResponse {
+  return parseWithSchema<CreateAutomationResponse>(
+    createAutomationResponseSchema.$id,
+    value
+  );
+}
+
+export function parseAutomationSummary(value: unknown): AutomationSummary {
+  return parseWithSchema<AutomationSummary>(automationSummarySchema.$id, value);
+}
+
+export function parseAutomationSummaries(
+  value: unknown
+): AutomationSummary[] {
+  return parseArrayWithItemSchema<AutomationSummary>(
+    automationSummarySchema.$id,
+    value
+  );
+}
+
+export function parseAutomationDetail(value: unknown): AutomationDetail {
+  return parseWithSchema<AutomationDetail>(automationDetailSchema.$id, value);
+}
+
+export function parseAutomationLifecycleCommand(
+  value: unknown
+): AutomationLifecycleCommand {
+  return parseWithSchema<AutomationLifecycleCommand>(
+    automationLifecycleCommandSchema.$id,
+    value
+  );
+}
+
+export function parseManualDispatchCommand(
+  value: unknown
+): ManualDispatchCommand {
+  return parseWithSchema<ManualDispatchCommand>(
+    manualDispatchCommandSchema.$id,
+    value
+  );
+}
+
+export function parseTriggerDeliveryRetryCommand(
+  value: unknown
+): TriggerDeliveryRetryCommand {
+  return parseWithSchema<TriggerDeliveryRetryCommand>(
+    triggerDeliveryRetryCommandSchema.$id,
+    value
+  );
 }
 
 export function parseTask(value: unknown): Task {

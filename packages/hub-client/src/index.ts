@@ -1,7 +1,12 @@
 import {
   parseApprovalResolveCommand,
+  parseAutomationDetail,
+  parseAutomationLifecycleCommand,
+  parseAutomationSummaries,
   parseArtifacts,
   parseCapabilityVisibilities,
+  parseCreateAutomationCommand,
+  parseCreateAutomationResponse,
   parseHubAuthError,
   parseHubConnectionStatus,
   parseHubEvent,
@@ -11,14 +16,20 @@ import {
   parseHubLoginResponse,
   parseHubSession,
   parseKnowledgePromoteCommand,
+  parseManualDispatchCommand,
   parseNotifications,
   parseProjectContext,
   parseRunDetail,
   parseTask,
   parseTaskCreateCommand,
+  parseTriggerDeliveryRetryCommand,
   type ApprovalResolveCommand,
+  type AutomationDetail,
+  type AutomationSummary,
   type Artifact,
   type CapabilityVisibility,
+  type CreateAutomationCommand,
+  type CreateAutomationResponse,
   type HubAuthError,
   type HubConnectionStatus,
   type HubEvent,
@@ -28,17 +39,27 @@ import {
   type InboxItem,
   type KnowledgeDetail,
   type KnowledgePromoteCommand,
+  type ManualDispatchCommand,
   type Notification,
   type ProjectContext,
   type RunDetail,
   type Task,
-  type TaskCreateCommand
+  type TaskCreateCommand,
+  type TriggerDeliveryRetryCommand
 } from "@octopus/schema-ts";
 
 export const HUB_EVENT_CHANNEL = "hub://events";
 
 export const LOCAL_HUB_COMMANDS = {
   getProjectContext: "hub:get_project_context",
+  listAutomations: "hub:list_automations",
+  createAutomation: "hub:create_automation",
+  getAutomationDetail: "hub:get_automation_detail",
+  activateAutomation: "hub:activate_automation",
+  pauseAutomation: "hub:pause_automation",
+  archiveAutomation: "hub:archive_automation",
+  manualDispatch: "hub:manual_dispatch",
+  retryTriggerDelivery: "hub:retry_trigger_delivery",
   createTask: "hub:create_task",
   startTask: "hub:start_task",
   getRunDetail: "hub:get_run_detail",
@@ -56,6 +77,21 @@ export type Unsubscribe = () => void | Promise<void>;
 
 export interface HubClient {
   getProjectContext(workspaceId: string, projectId: string): Promise<ProjectContext>;
+  listAutomations(
+    workspaceId: string,
+    projectId: string
+  ): Promise<AutomationSummary[]>;
+  createAutomation(
+    command: CreateAutomationCommand
+  ): Promise<CreateAutomationResponse>;
+  getAutomationDetail(automationId: string): Promise<AutomationDetail>;
+  activateAutomation(automationId: string): Promise<AutomationDetail>;
+  pauseAutomation(automationId: string): Promise<AutomationDetail>;
+  archiveAutomation(automationId: string): Promise<AutomationDetail>;
+  manualDispatch(command: ManualDispatchCommand): Promise<AutomationDetail>;
+  retryTriggerDelivery(
+    command: TriggerDeliveryRetryCommand
+  ): Promise<AutomationDetail>;
   createTask(command: TaskCreateCommand): Promise<Task>;
   startTask(taskId: string): Promise<RunDetail>;
   getRunDetail(runId: string): Promise<RunDetail>;
@@ -217,6 +253,78 @@ export function createLocalHubClient(transport: LocalHubTransport): HubClient {
         })
       );
     },
+    async listAutomations(workspaceId, projectId) {
+      return parseAutomationSummaries(
+        await transport.invoke(LOCAL_HUB_COMMANDS.listAutomations, {
+          workspaceId,
+          projectId
+        })
+      );
+    },
+    async createAutomation(command) {
+      return parseCreateAutomationResponse(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.createAutomation,
+          parseCreateAutomationCommand(command)
+        )
+      );
+    },
+    async getAutomationDetail(automationId) {
+      return parseAutomationDetail(
+        await transport.invoke(LOCAL_HUB_COMMANDS.getAutomationDetail, {
+          automationId
+        })
+      );
+    },
+    async activateAutomation(automationId) {
+      return parseAutomationDetail(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.activateAutomation,
+          parseAutomationLifecycleCommand({
+            automation_id: automationId,
+            action: "activate"
+          })
+        )
+      );
+    },
+    async pauseAutomation(automationId) {
+      return parseAutomationDetail(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.pauseAutomation,
+          parseAutomationLifecycleCommand({
+            automation_id: automationId,
+            action: "pause"
+          })
+        )
+      );
+    },
+    async archiveAutomation(automationId) {
+      return parseAutomationDetail(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.archiveAutomation,
+          parseAutomationLifecycleCommand({
+            automation_id: automationId,
+            action: "archive"
+          })
+        )
+      );
+    },
+    async manualDispatch(command) {
+      return parseAutomationDetail(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.manualDispatch,
+          parseManualDispatchCommand(command)
+        )
+      );
+    },
+    async retryTriggerDelivery(command) {
+      return parseAutomationDetail(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.retryTriggerDelivery,
+          parseTriggerDeliveryRetryCommand(command)
+        )
+      );
+    },
     async createTask(command) {
       return parseTask(
         await transport.invoke(
@@ -326,6 +434,152 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/context`
           ),
           undefined,
+          options.getAccessToken
+        )
+      );
+    },
+    async listAutomations(workspaceId, projectId) {
+      return parseAutomationSummaries(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/automations`
+          ),
+          undefined,
+          options.getAccessToken
+        )
+      );
+    },
+    async createAutomation(command) {
+      const parsed = parseCreateAutomationCommand(command);
+      return parseCreateAutomationResponse(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(parsed.workspace_id)}/projects/${encodePathSegment(parsed.project_id)}/automations`
+          ),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(parsed)
+          },
+          options.getAccessToken
+        )
+      );
+    },
+    async getAutomationDetail(automationId) {
+      return parseAutomationDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/automations/${encodePathSegment(automationId)}`
+          ),
+          undefined,
+          options.getAccessToken
+        )
+      );
+    },
+    async activateAutomation(automationId) {
+      return parseAutomationDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/automations/${encodePathSegment(automationId)}/activate`
+          ),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(
+              parseAutomationLifecycleCommand({
+                automation_id: automationId,
+                action: "activate"
+              })
+            )
+          },
+          options.getAccessToken
+        )
+      );
+    },
+    async pauseAutomation(automationId) {
+      return parseAutomationDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/automations/${encodePathSegment(automationId)}/pause`
+          ),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(
+              parseAutomationLifecycleCommand({
+                automation_id: automationId,
+                action: "pause"
+              })
+            )
+          },
+          options.getAccessToken
+        )
+      );
+    },
+    async archiveAutomation(automationId) {
+      return parseAutomationDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/automations/${encodePathSegment(automationId)}/archive`
+          ),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(
+              parseAutomationLifecycleCommand({
+                automation_id: automationId,
+                action: "archive"
+              })
+            )
+          },
+          options.getAccessToken
+        )
+      );
+    },
+    async manualDispatch(command) {
+      const parsed = parseManualDispatchCommand(command);
+      return parseAutomationDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/triggers/${encodePathSegment(parsed.trigger_id)}/manual-dispatch`
+          ),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(parsed)
+          },
+          options.getAccessToken
+        )
+      );
+    },
+    async retryTriggerDelivery(command) {
+      const parsed = parseTriggerDeliveryRetryCommand(command);
+      return parseAutomationDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/trigger-deliveries/${encodePathSegment(parsed.delivery_id)}/retry`
+          ),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(parsed)
+          },
           options.getAccessToken
         )
       );
