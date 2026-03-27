@@ -5,9 +5,6 @@ mod services;
 use std::path::Path;
 
 use database::Slice1Database;
-use octopus_observe_artifact::{
-    ArtifactRecord, InboxItemRecord, NotificationRecord, PolicyDecisionLogRecord,
-};
 use services::{AutomationIntake, KnowledgeManager, RunOrchestrator, TaskIntake};
 use thiserror::Error;
 
@@ -16,13 +13,17 @@ pub use models::{
     KnowledgePromotionReport, RunExecutionReport, RunRecord, TaskRecord, TriggerDeliveryRecord,
     TriggerDeliveryReport, TriggerRecord,
 };
+pub use octopus_domain_context::ProjectContext;
 pub use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
     CapabilityDescriptorRecord, CapabilityGrantRecord,
 };
 pub use octopus_interop_mcp::{EnvironmentLeaseRecord, McpInvocationRecord, McpServerRecord};
 pub use octopus_knowledge::{KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeSpaceRecord};
-pub use octopus_observe_artifact::KnowledgeLineageRecord;
+pub use octopus_observe_artifact::{
+    ArtifactRecord, AuditRecord, InboxItemRecord, KnowledgeLineageRecord, NotificationRecord,
+    PolicyDecisionLogRecord, TraceRecord,
+};
 
 #[derive(Debug, Error)]
 pub enum RuntimeError {
@@ -170,6 +171,20 @@ impl Slice2Runtime {
 
     pub async fn create_task(&self, input: CreateTaskInput) -> Result<TaskRecord, RuntimeError> {
         self.task_intake.create_task(input).await
+    }
+
+    pub async fn fetch_project_context(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<octopus_domain_context::ProjectContext, RuntimeError> {
+        self.task_intake
+            .fetch_project_context(workspace_id, project_id)
+            .await
+    }
+
+    pub async fn fetch_task(&self, task_id: &str) -> Result<TaskRecord, RuntimeError> {
+        self.task_intake.fetch_task(task_id).await
     }
 
     pub async fn ensure_project_knowledge_space(
@@ -561,6 +576,32 @@ impl Slice2Runtime {
         self.knowledge_manager
             .list_knowledge_lineage_by_run(run_id)
             .await
+    }
+
+    pub async fn fetch_project_knowledge_space(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Option<KnowledgeSpaceRecord>, RuntimeError> {
+        self.knowledge_manager
+            .fetch_project_knowledge_space(workspace_id, project_id)
+            .await
+    }
+
+    pub async fn list_knowledge_candidates_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<KnowledgeCandidateRecord>, RuntimeError> {
+        self.knowledge_manager
+            .list_knowledge_candidates_by_run(run_id)
+            .await
+    }
+
+    pub async fn list_knowledge_assets_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<KnowledgeAssetRecord>, RuntimeError> {
+        self.knowledge_manager.list_knowledge_assets_by_run(run_id).await
     }
 
     pub async fn list_trigger_deliveries_by_automation(

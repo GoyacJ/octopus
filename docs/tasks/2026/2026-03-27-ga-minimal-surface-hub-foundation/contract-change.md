@@ -1,0 +1,31 @@
+## Contract Change
+
+- Change Type:
+  - Cross-language Contract
+- New / Updated Schemas:
+  - New runtime command/query/DTO schemas for minimum Task and Run surface consumption.
+  - New governance command schema for approval resolution.
+  - New observe-side DTO schemas for Artifact detail, Knowledge summary/detail/promote, Capability visibility explanation, and Hub connection status/event presentation.
+- New / Updated Commands:
+  - Minimum create-task and start-task surface commands.
+  - Minimum approval-resolution and knowledge-promotion commands.
+- New / Updated Queries:
+  - Minimum run-detail, workspace-inbox, workspace-notifications, run-artifacts, run-knowledge, capability-visibility, and hub-connection-status queries.
+- New / Updated Events:
+  - Minimum run-status / inbox / notification / hub-status SSE event payloads.
+- New / Updated DTOs:
+  - Surface-facing summary/detail DTOs derived from existing runtime/governance/observe objects for desktop and remote-hub consumption.
+- Compatibility Impact:
+  - Additive only. Existing Rust runtime behavior remains unchanged; new consumers are introduced through new DTO/command/query schemas.
+- Affected Consumers:
+  - `packages/schema-ts`
+  - `packages/hub-client`
+  - `apps/remote-hub`
+  - `apps/desktop`
+- Migration Notes:
+  - None for persisted runtime data. New schemas are consumer-facing and additive.
+- Generation Impact:
+  - `packages/schema-ts` will consume the schemas directly and add validation/type helpers for TypeScript-side use.
+- Open Questions:
+  - None. This slice freezes the first minimum-surface payload set and defers broader API coverage.
+

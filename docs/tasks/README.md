@@ -43,6 +43,7 @@ Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-d
 - [2026-03-26-slice-3-automation-manual-event](2026/2026-03-26-slice-3-automation-manual-event/README.md)
 - [2026-03-27-slice-4-shared-knowledge](2026/2026-03-27-slice-4-shared-knowledge/README.md)
 - [2026-03-27-slice-5-mcp-gateway-environment-lease](2026/2026-03-27-slice-5-mcp-gateway-environment-lease/README.md)
+- [2026-03-27-ga-minimal-surface-hub-foundation](2026/2026-03-27-ga-minimal-surface-hub-foundation/README.md)
 
 ## Relationship To ADRs
 

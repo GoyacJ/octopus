@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/governance/approval-resolve-command.schema.json",
+  "title": "ApprovalResolveCommand",
+  "type": "object",
+  "description": "GA minimum-surface shared command for resolving an ApprovalRequest through the HubClient boundary.",
+  "properties": {
+    "approval_id": { "type": "string" },
+    "decision": {
+      "type": "string",
+      "enum": ["approve", "reject", "expire", "cancel"]
+    },
+    "actor_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "note": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["approval_id", "decision", "actor_ref", "note"],
+  "additionalProperties": false
+}

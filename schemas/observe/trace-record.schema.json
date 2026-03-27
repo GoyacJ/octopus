@@ -18,7 +18,10 @@
         "governance_evaluation",
         "run_orchestrator",
         "execution_action",
-        "artifact_store"
+        "artifact_store",
+        "knowledge_recall",
+        "knowledge_capture",
+        "knowledge_promotion"
       ]
     },
     "attempt": {

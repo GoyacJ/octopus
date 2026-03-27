@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/runtime/task-create-command.schema.json",
+  "title": "TaskCreateCommand",
+  "type": "object",
+  "description": "GA minimum-surface shared command for creating a manual Task through the formal HubClient boundary.",
+  "properties": {
+    "workspace_id": { "type": "string" },
+    "project_id": { "type": "string" },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "instruction": {
+      "type": "string",
+      "minLength": 1
+    },
+    "action": {
+      "oneOf": [
+        {
+          "$ref": "https://octopus.local/schemas/runtime/task.schema.json#/$defs/emit_text_action"
+        },
+        {
+          "$ref": "https://octopus.local/schemas/runtime/task.schema.json#/$defs/connector_call_action"
+        },
+        {
+          "$ref": "https://octopus.local/schemas/runtime/task.schema.json#/$defs/fail_once_then_emit_text_action"
+        },
+        {
+          "$ref": "https://octopus.local/schemas/runtime/task.schema.json#/$defs/always_fail_action"
+        }
+      ]
+    },
+    "capability_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "estimated_cost": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "idempotency_key": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "workspace_id",
+    "project_id",
+    "title",
+    "instruction",
+    "action",
+    "capability_id",
+    "estimated_cost",
+    "idempotency_key"
+  ],
+  "additionalProperties": false
+}

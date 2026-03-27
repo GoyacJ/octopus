@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/observe/knowledge-summary.schema.json",
+  "title": "KnowledgeSummary",
+  "description": "GA minimum-surface shared summary contract for candidate and promoted shared knowledge rows.",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "candidate"
+        },
+        "id": { "type": "string" },
+        "knowledge_space_id": { "type": "string" },
+        "capability_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "https://octopus.local/schemas/observe/knowledge-candidate-status.schema.json"
+        },
+        "source_run_id": { "type": "string" },
+        "source_artifact_id": { "type": "string" },
+        "source_candidate_id": {
+          "type": "null"
+        },
+        "provenance_source": {
+          "type": "string",
+          "enum": ["builtin", "mcp_connector"]
+        },
+        "trust_level": {
+          "type": "string",
+          "enum": ["trusted", "external_untrusted"]
+        },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "kind",
+        "id",
+        "knowledge_space_id",
+        "capability_id",
+        "status",
+        "source_run_id",
+        "source_artifact_id",
+        "source_candidate_id",
+        "provenance_source",
+        "trust_level",
+        "created_at"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "asset"
+        },
+        "id": { "type": "string" },
+        "knowledge_space_id": { "type": "string" },
+        "capability_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "$ref": "https://octopus.local/schemas/observe/knowledge-asset-status.schema.json"
+        },
+        "source_run_id": {
+          "type": "null"
+        },
+        "source_artifact_id": {
+          "type": "null"
+        },
+        "source_candidate_id": { "type": "string" },
+        "provenance_source": {
+          "type": "null"
+        },
+        "trust_level": {
+          "type": "string",
+          "const": "verified"
+        },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "kind",
+        "id",
+        "knowledge_space_id",
+        "capability_id",
+        "status",
+        "source_run_id",
+        "source_artifact_id",
+        "source_candidate_id",
+        "provenance_source",
+        "trust_level",
+        "created_at"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

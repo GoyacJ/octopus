@@ -14,6 +14,11 @@
       "type": "string",
       "enum": [
         "task_created",
+        "automation_created",
+        "trigger_delivery_created",
+        "trigger_delivery_retry_requested",
+        "trigger_delivery_succeeded",
+        "trigger_delivery_failed",
         "run_created",
         "run_started",
         "run_completed",
@@ -27,7 +32,13 @@
         "approval_expired",
         "approval_cancelled",
         "run_blocked",
-        "policy_denied"
+        "policy_denied",
+        "knowledge_candidate_created",
+        "knowledge_capture_gated",
+        "knowledge_capture_failed",
+        "knowledge_capture_retried",
+        "knowledge_asset_promoted",
+        "knowledge_recalled"
       ]
     },
     "message": {

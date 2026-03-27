@@ -1,0 +1,451 @@
+export type RunStatus =
+  | "created"
+  | "running"
+  | "waiting_approval"
+  | "blocked"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "terminated"
+  | "resuming";
+
+export type ApprovalRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "cancelled";
+
+export type InboxItemStatus = "open" | "in_progress" | "resolved" | "dismissed";
+export type NotificationStatus =
+  | "pending"
+  | "delivered"
+  | "read"
+  | "failed"
+  | "dismissed";
+export type KnowledgeCandidateStatus = "candidate" | "promoted" | "rejected";
+export type KnowledgeAssetStatus = "verified_shared" | "deprecated";
+
+export interface Workspace {
+  id: string;
+  slug: string;
+  display_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Project {
+  id: string;
+  workspace_id: string;
+  slug: string;
+  display_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectContext {
+  workspace: Workspace;
+  project: Project;
+}
+
+export interface KnowledgeSpace {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  owner_ref: string;
+  display_name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmitTextAction {
+  kind: "emit_text";
+  content: string;
+}
+
+export interface ConnectorCallAction {
+  kind: "connector_call";
+  tool_name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface FailOnceThenEmitTextAction {
+  kind: "fail_once_then_emit_text";
+  failure_message: string;
+  content: string;
+}
+
+export interface AlwaysFailAction {
+  kind: "always_fail";
+  message: string;
+}
+
+export type TaskAction =
+  | EmitTextAction
+  | ConnectorCallAction
+  | FailOnceThenEmitTextAction
+  | AlwaysFailAction;
+
+export interface TaskCreateCommand {
+  workspace_id: string;
+  project_id: string;
+  title: string;
+  instruction: string;
+  action: TaskAction;
+  capability_id: string;
+  estimated_cost: number;
+  idempotency_key: string;
+}
+
+export interface Task {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  source_kind: "manual" | "automation";
+  automation_id: string | null;
+  title: string;
+  instruction: string;
+  action: TaskAction;
+  capability_id: string;
+  estimated_cost: number;
+  idempotency_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Run {
+  id: string;
+  task_id: string;
+  workspace_id: string;
+  project_id: string;
+  automation_id: string | null;
+  trigger_delivery_id: string | null;
+  run_type: "task" | "automation";
+  status: RunStatus;
+  approval_request_id: string | null;
+  idempotency_key: string;
+  attempt_count: number;
+  max_attempts: number;
+  checkpoint_seq: number;
+  resume_token: string | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  terminated_at: string | null;
+}
+
+export interface RunSummary {
+  id: string;
+  task_id: string;
+  workspace_id: string;
+  project_id: string;
+  title: string;
+  run_type: "task" | "automation";
+  status: RunStatus;
+  approval_request_id: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  terminated_at: string | null;
+}
+
+export interface CapabilityDescriptor {
+  id: string;
+  slug: string;
+  kind: string;
+  source: string;
+  platform: string;
+  risk_level: string;
+  requires_approval: boolean;
+  input_schema_uri: string | null;
+  output_schema_uri: string | null;
+  fallback_capability_id: string | null;
+  trust_level: "trusted" | "external_untrusted";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApprovalRequest {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  run_id: string;
+  task_id: string;
+  approval_type: "execution";
+  status: ApprovalRequestStatus;
+  reason: string;
+  dedupe_key: string;
+  decided_by: string | null;
+  decision_note: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApprovalResolveCommand {
+  approval_id: string;
+  decision: "approve" | "reject" | "expire" | "cancel";
+  actor_ref: string;
+  note: string;
+}
+
+export interface CapabilityVisibility {
+  descriptor: CapabilityDescriptor;
+  scope_ref: string;
+  visibility: "visible";
+  reason_code: "project_scope_grant_active";
+  explanation: string;
+}
+
+export interface Artifact {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  run_id: string;
+  task_id: string;
+  artifact_type: "execution_output";
+  content: string;
+  provenance_source: "builtin" | "mcp_connector";
+  source_descriptor_id: string;
+  source_invocation_id: string | null;
+  trust_level: "trusted" | "external_untrusted";
+  knowledge_gate_status: "eligible" | "blocked_low_trust";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ArtifactSummary {
+  id: string;
+  run_id: string;
+  task_id: string;
+  artifact_type: "execution_output";
+  provenance_source: "builtin" | "mcp_connector";
+  trust_level: "trusted" | "external_untrusted";
+  knowledge_gate_status: "eligible" | "blocked_low_trust";
+  created_at: string;
+}
+
+export interface AuditRecord {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  run_id: string;
+  task_id: string;
+  event_type: string;
+  message: string;
+  created_at: string;
+}
+
+export interface TraceRecord {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  run_id: string;
+  task_id: string;
+  stage: string;
+  attempt: number;
+  message: string;
+  created_at: string;
+}
+
+export interface InboxItem {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  run_id: string;
+  approval_request_id: string;
+  item_type: "approval_request";
+  status: InboxItemStatus;
+  dedupe_key: string;
+  title: string;
+  message: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+}
+
+export interface Notification {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  run_id: string;
+  approval_request_id: string;
+  status: NotificationStatus;
+  dedupe_key: string;
+  title: string;
+  message: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PolicyDecisionLog {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  run_id: string;
+  task_id: string;
+  capability_id: string;
+  decision: "allow" | "require_approval" | "deny";
+  reason: string;
+  estimated_cost: number;
+  approval_request_id: string | null;
+  created_at: string;
+}
+
+export interface KnowledgeCandidate {
+  id: string;
+  knowledge_space_id: string;
+  source_run_id: string;
+  source_task_id: string;
+  source_artifact_id: string;
+  capability_id: string;
+  status: KnowledgeCandidateStatus;
+  content: string;
+  provenance_source: "builtin" | "mcp_connector";
+  source_trust_level: "trusted" | "external_untrusted";
+  dedupe_key: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeAsset {
+  id: string;
+  knowledge_space_id: string;
+  source_candidate_id: string;
+  capability_id: string;
+  status: KnowledgeAssetStatus;
+  content: string;
+  trust_level: "verified" | "unverified";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KnowledgeLineageRecord {
+  id: string;
+  workspace_id: string;
+  project_id: string;
+  run_id: string;
+  task_id: string;
+  source_ref: string;
+  target_ref: string;
+  relation_type: "derived_from" | "promoted_from" | "recalled_by";
+  created_at: string;
+}
+
+export interface CandidateKnowledgeSummary {
+  kind: "candidate";
+  id: string;
+  knowledge_space_id: string;
+  capability_id: string;
+  status: KnowledgeCandidateStatus;
+  source_run_id: string;
+  source_artifact_id: string;
+  source_candidate_id: null;
+  provenance_source: "builtin" | "mcp_connector";
+  trust_level: "trusted" | "external_untrusted";
+  created_at: string;
+}
+
+export interface AssetKnowledgeSummary {
+  kind: "asset";
+  id: string;
+  knowledge_space_id: string;
+  capability_id: string;
+  status: KnowledgeAssetStatus;
+  source_run_id: null;
+  source_artifact_id: null;
+  source_candidate_id: string;
+  provenance_source: null;
+  trust_level: "verified";
+  created_at: string;
+}
+
+export type KnowledgeSummary = CandidateKnowledgeSummary | AssetKnowledgeSummary;
+
+export interface KnowledgeDetail {
+  knowledge_space: KnowledgeSpace;
+  candidates: KnowledgeCandidate[];
+  assets: KnowledgeAsset[];
+  lineage: KnowledgeLineageRecord[];
+}
+
+export interface KnowledgePromoteCommand {
+  candidate_id: string;
+  actor_ref: string;
+  note: string;
+}
+
+export interface HubConnectionServerSummary {
+  id: string;
+  capability_id: string;
+  namespace: string;
+  platform: string;
+  trust_level: "trusted" | "external_untrusted";
+  health_status: "healthy" | "degraded" | "unreachable";
+  lease_ttl_seconds: number;
+  last_checked_at: string;
+}
+
+export interface HubConnectionStatus {
+  mode: "local" | "remote";
+  state: "connected" | "degraded" | "disconnected";
+  active_server_count: number;
+  healthy_server_count: number;
+  servers: HubConnectionServerSummary[];
+  last_refreshed_at: string;
+}
+
+export interface RunUpdatedEvent {
+  event_type: "run.updated";
+  sequence: number;
+  occurred_at: string;
+  payload: RunSummary;
+}
+
+export interface InboxUpdatedEvent {
+  event_type: "inbox.updated";
+  sequence: number;
+  occurred_at: string;
+  payload: InboxItem[];
+}
+
+export interface NotificationUpdatedEvent {
+  event_type: "notification.updated";
+  sequence: number;
+  occurred_at: string;
+  payload: Notification[];
+}
+
+export interface HubConnectionUpdatedEvent {
+  event_type: "hub.connection.updated";
+  sequence: number;
+  occurred_at: string;
+  payload: HubConnectionStatus;
+}
+
+export type HubEvent =
+  | RunUpdatedEvent
+  | InboxUpdatedEvent
+  | NotificationUpdatedEvent
+  | HubConnectionUpdatedEvent;
+
+export interface RunDetail {
+  run: Run;
+  task: Task;
+  artifacts: Artifact[];
+  audits: AuditRecord[];
+  traces: TraceRecord[];
+  approvals: ApprovalRequest[];
+  inbox_items: InboxItem[];
+  notifications: Notification[];
+  policy_decisions: PolicyDecisionLog[];
+  knowledge_candidates: KnowledgeCandidate[];
+  knowledge_assets: KnowledgeAsset[];
+  knowledge_lineage: KnowledgeLineageRecord[];
+}

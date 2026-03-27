@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/observe/knowledge-detail.schema.json",
+  "title": "KnowledgeDetail",
+  "type": "object",
+  "description": "GA minimum-surface shared detail contract for the minimum Shared Knowledge page.",
+  "properties": {
+    "knowledge_space": {
+      "$ref": "https://octopus.local/schemas/context/knowledge-space.schema.json"
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "https://octopus.local/schemas/observe/knowledge-candidate.schema.json"
+      }
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "https://octopus.local/schemas/observe/knowledge-asset.schema.json"
+      }
+    },
+    "lineage": {
+      "type": "array",
+      "items": {
+        "$ref": "https://octopus.local/schemas/observe/knowledge-lineage-record.schema.json"
+      }
+    }
+  },
+  "required": ["knowledge_space", "candidates", "assets", "lineage"],
+  "additionalProperties": false
+}

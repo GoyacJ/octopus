@@ -1,0 +1,67 @@
+## Design Note
+
+- Problem:
+  - The repository now proves the governed runtime loop through Slice 5, but there is still no frozen GA surface spec, no shared client boundary, and no tracked desktop or remote-hub assembly that consumes the runtime truth.
+- Goal:
+  - Establish the first GA minimum-surface baseline with one visual framework, one shared contract-consumption package, one shared `HubClient`, one thin remote-hub app, and one minimal desktop shell.
+- Acceptance Criteria:
+  - The surface spec is frozen before app code.
+  - Both local and remote transports use one shared client interface and one shared contract set.
+  - The remote-hub app delegates to the existing runtime instead of duplicating orchestration.
+  - The desktop shell can render the minimum GA pages and consume the same `HubClient`.
+- Non-functional Constraints:
+  - No parallel contract truth outside `schemas/`.
+  - No deep UI kit, no full design system, no remote auth/deployment stack, no new runtime semantics.
+  - Contract behavior must be testable in both Rust and TypeScript.
+- MVP Boundary:
+  - Minimum pages only: Task create, Run detail/trace, Inbox, Artifact, Knowledge, Workspace/Project context, Hub Connections, Notification.
+  - Remote hub is local SQLite-backed and parity-focused.
+  - Desktop shell focuses on routing, state flow, and shared-client consumption.
+- Layer Placement:
+  - New command/query/event/DTO schemas stay in `schemas/`.
+  - TypeScript validation and consumer mappings live in `packages/schema-ts`.
+  - Shared client transport abstraction lives in `packages/hub-client`.
+  - HTTP/SSE assembly lives in `apps/remote-hub`.
+  - Vue/Tauri-facing page assembly lives in `apps/desktop`.
+- Module Boundaries:
+  - `packages/schema-ts` may wrap schemas and expose validators/types, but it may not define new shared truth.
+  - `packages/hub-client` owns the transport-neutral client interface plus local/remote adapters.
+  - `apps/remote-hub` converts HTTP/SSE requests into runtime method calls and DTO mappings only.
+  - `apps/desktop` owns routes, stores, and surface composition only.
+- Inputs:
+  - Existing runtime APIs in `crates/runtime`.
+  - Existing workspace/project/runtime/governance/observation records.
+  - New shared command/query/event payloads for surface consumption.
+- Outputs:
+  - Frozen visual framework.
+  - Shared surface DTO validators and TS consumption layer.
+  - Remote hub router and desktop shell that both consume one `HubClient`.
+- State Transitions:
+  - No new core runtime state machines are introduced.
+  - Hub connection presentation adds display-only states such as `connected`, `disconnected`, and `degraded`, but these do not become authority runtime states.
+- Error Handling:
+  - HTTP handlers return structured JSON errors and never mask runtime failures as success.
+  - `HubClient` adapters normalize local/remote transport errors into one typed client error shape.
+  - Desktop pages must surface blocked/approval-required/error states explicitly instead of assuming success.
+- Tech Stack Decision:
+  - Keep the architecture-selected stack: `axum` for remote hub, `Vue 3 + TypeScript + Pinia + Vite` for the desktop UI shell, and a Tauri-facing seam for local mode.
+- Visual Framework Impact:
+  - This slice is the owner of the first real `VISUAL_FRAMEWORK.md` content and defines the first frozen GA minimum pages and visual grammar.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - Existing runtime methods, schemas, task-package structure, and Rust workspace layout.
+- New Abstractions:
+  - `HubClient` transport-neutral boundary.
+  - Shared surface DTO schemas and validation helpers.
+  - Thin remote-hub router layer and desktop app shell/store structure.
+- Trade-offs:
+  - The first TS consumer layer is intentionally narrow and contract-focused rather than introducing full code generation or a large UI library.
+  - Remote hub proves parity via local runtime assembly first rather than jumping to final production persistence/auth.
+- Test Strategy:
+  - Add failing TS tests first for schema consumption, adapter parity, and the desktop happy path.
+  - Add failing Rust integration tests first for remote-hub HTTP/SSE assembly.
+  - Keep `cargo test --workspace` as a regression gate and add a workspace-level pnpm test command.
+- ADR Needed:
+  - Yes. Local/remote transport parity and `HubClient` ownership are durable boundary rules that should not live only in the task package.
+

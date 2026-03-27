@@ -1,0 +1,32 @@
+## Delivery Note
+
+- What Changed:
+  - Froze the first GA minimum-surface visual framework and added ADR 0006 for shared Hub client ownership and transport parity.
+  - Added the first shared Hub surface schemas plus the `@octopus/schema-ts` and `@octopus/hub-client` workspace packages.
+  - Added `apps/remote-hub` as a thin `axum` parity shell over the existing runtime and expanded runtime wrapper reads only where the shell needed them.
+  - Added `apps/desktop` as the first consumer shell with workspace/task-create, connection/inbox/notification sections, and run detail/artifact/knowledge rendering through the shared client boundary.
+- Why:
+  - The runtime loop was already verified locally, but there was no formal GA-facing surface, no cross-language consumer contract package, and no shared client boundary for desktop or remote consumption.
+- User / System Impact:
+  - The repository now has one tracked path from shared schema contracts to TS consumers to app assembly, which gives the verified runtime a formal minimum desktop and remote-hub consumption surface.
+  - Desktop and remote-hub consumers now share one `HubClient` contract instead of inventing transport-specific APIs.
+- Risks:
+  - The desktop bootstrap still relies on a window-injected local Hub transport seam instead of a completed Tauri runtime bridge.
+  - The desktop shell is intentionally narrow and does not yet prove the full final page model or production desktop packaging behavior.
+  - Remote hub remains parity-focused and local-SQLite-backed; it should not be treated as the final deployment architecture.
+- Rollback Notes:
+  - Revert this task package, ADR 0006, shared schemas, new TS workspace packages, `apps/remote-hub`, and `apps/desktop` together to restore the prior runtime-only state.
+- Follow-ups:
+  - Replace the window-injected local transport seam with the tracked Tauri runtime bridge when desktop packaging work starts.
+  - Split workspace sections into richer routed surfaces only after GA minimum-surface scope is explicitly expanded.
+  - Continue the blueprint order: additional GA triggers, then real MCP transport/credentials, then richer remote-hub persistence/auth.
+- Docs Updated:
+  - `docs/architecture/VISUAL_FRAMEWORK.md`
+  - `docs/decisions/0006-hub-client-surface-contracts-and-transport-parity.md`
+  - `docs/tasks/2026/2026-03-27-ga-minimal-surface-hub-foundation/*`
+- Tests Included:
+  - Schema validation tests, hub-client local/remote parity tests, remote-hub HTTP/SSE integration tests, desktop happy-path test, and full `cargo test --workspace`.
+- ADR Updated:
+  - Added ADR 0006.
+- Temporary Workarounds:
+  - Desktop bootstrap uses `window.__OCTOPUS_LOCAL_HUB__` as the minimum local transport seam until the final Tauri runtime bridge is tracked and implemented.

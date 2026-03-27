@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/context/project-context.schema.json",
+  "title": "ProjectContext",
+  "type": "object",
+  "description": "GA minimum-surface shared contract for the workspace/project shell context consumed by desktop and hub clients.",
+  "properties": {
+    "workspace": {
+      "$ref": "https://octopus.local/schemas/context/workspace.schema.json"
+    },
+    "project": {
+      "$ref": "https://octopus.local/schemas/context/project.schema.json"
+    }
+  },
+  "required": ["workspace", "project"],
+  "additionalProperties": false
+}

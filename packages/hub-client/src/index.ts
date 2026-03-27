@@ -1,0 +1,419 @@
+import {
+  parseApprovalResolveCommand,
+  parseArtifacts,
+  parseCapabilityVisibilities,
+  parseHubConnectionStatus,
+  parseHubEvent,
+  parseInboxItems,
+  parseKnowledgeDetail,
+  parseKnowledgePromoteCommand,
+  parseNotifications,
+  parseProjectContext,
+  parseRunDetail,
+  parseTask,
+  parseTaskCreateCommand,
+  type ApprovalResolveCommand,
+  type Artifact,
+  type CapabilityVisibility,
+  type HubConnectionStatus,
+  type HubEvent,
+  type InboxItem,
+  type KnowledgeDetail,
+  type KnowledgePromoteCommand,
+  type Notification,
+  type ProjectContext,
+  type RunDetail,
+  type Task,
+  type TaskCreateCommand
+} from "@octopus/schema-ts";
+
+export const HUB_EVENT_CHANNEL = "hub://events";
+
+export const LOCAL_HUB_COMMANDS = {
+  getProjectContext: "hub:get_project_context",
+  createTask: "hub:create_task",
+  startTask: "hub:start_task",
+  getRunDetail: "hub:get_run_detail",
+  resolveApproval: "hub:resolve_approval",
+  listInboxItems: "hub:list_inbox_items",
+  listNotifications: "hub:list_notifications",
+  listArtifacts: "hub:list_artifacts",
+  getKnowledgeDetail: "hub:get_knowledge_detail",
+  promoteKnowledge: "hub:promote_knowledge",
+  listCapabilityVisibility: "hub:list_capability_visibility",
+  getConnectionStatus: "hub:get_connection_status"
+} as const;
+
+export type Unsubscribe = () => void | Promise<void>;
+
+export interface HubClient {
+  getProjectContext(workspaceId: string, projectId: string): Promise<ProjectContext>;
+  createTask(command: TaskCreateCommand): Promise<Task>;
+  startTask(taskId: string): Promise<RunDetail>;
+  getRunDetail(runId: string): Promise<RunDetail>;
+  resolveApproval(command: ApprovalResolveCommand): Promise<RunDetail>;
+  listInboxItems(workspaceId: string): Promise<InboxItem[]>;
+  listNotifications(workspaceId: string): Promise<Notification[]>;
+  listArtifacts(runId: string): Promise<Artifact[]>;
+  getKnowledgeDetail(runId: string): Promise<KnowledgeDetail>;
+  promoteKnowledge(command: KnowledgePromoteCommand): Promise<KnowledgeDetail>;
+  listCapabilityVisibility(
+    workspaceId: string,
+    projectId: string
+  ): Promise<CapabilityVisibility[]>;
+  getHubConnectionStatus(): Promise<HubConnectionStatus>;
+  subscribe(
+    listener: (event: HubEvent) => void,
+    onError?: (error: unknown) => void
+  ): Promise<Unsubscribe>;
+}
+
+export interface LocalHubTransport {
+  invoke(command: string, payload?: unknown): Promise<unknown>;
+  listen(
+    channel: string,
+    handler: (payload: unknown) => void
+  ): Unsubscribe | Promise<Unsubscribe>;
+}
+
+export interface EventSourceMessage {
+  data: string;
+}
+
+export interface EventSourceLike {
+  close(): void;
+  onmessage: ((event: EventSourceMessage) => void) | null;
+  onerror: ((error: unknown) => void) | null;
+}
+
+export interface RemoteHubClientOptions {
+  baseUrl: string;
+  fetch?: typeof globalThis.fetch;
+  createEventSource?: (url: string) => EventSourceLike;
+}
+
+export class HubClientTransportError extends Error {
+  readonly status: number | null;
+  readonly details: unknown;
+
+  constructor(message: string, status: number | null = null, details: unknown = null) {
+    super(message);
+    this.name = "HubClientTransportError";
+    this.status = status;
+    this.details = details;
+  }
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+async function maybeReadJson(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    return response.json();
+  }
+
+  const text = await response.text();
+  return text.length > 0 ? text : null;
+}
+
+async function readRemoteJson(
+  fetchImpl: typeof globalThis.fetch,
+  url: string,
+  init?: RequestInit
+): Promise<unknown> {
+  const response = await fetchImpl(url, init);
+  const body = await maybeReadJson(response);
+
+  if (!response.ok) {
+    throw new HubClientTransportError(
+      `Hub request failed: ${response.status} ${response.statusText}`,
+      response.status,
+      body
+    );
+  }
+
+  return body;
+}
+
+function encodePathSegment(value: string): string {
+  return encodeURIComponent(value);
+}
+
+function remotePath(baseUrl: string, path: string): string {
+  return `${normalizeBaseUrl(baseUrl)}${path}`;
+}
+
+export function createLocalHubClient(transport: LocalHubTransport): HubClient {
+  return {
+    async getProjectContext(workspaceId, projectId) {
+      return parseProjectContext(
+        await transport.invoke(LOCAL_HUB_COMMANDS.getProjectContext, {
+          workspaceId,
+          projectId
+        })
+      );
+    },
+    async createTask(command) {
+      return parseTask(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.createTask,
+          parseTaskCreateCommand(command)
+        )
+      );
+    },
+    async startTask(taskId) {
+      return parseRunDetail(
+        await transport.invoke(LOCAL_HUB_COMMANDS.startTask, { taskId })
+      );
+    },
+    async getRunDetail(runId) {
+      return parseRunDetail(
+        await transport.invoke(LOCAL_HUB_COMMANDS.getRunDetail, { runId })
+      );
+    },
+    async resolveApproval(command) {
+      return parseRunDetail(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.resolveApproval,
+          parseApprovalResolveCommand(command)
+        )
+      );
+    },
+    async listInboxItems(workspaceId) {
+      return parseInboxItems(
+        await transport.invoke(LOCAL_HUB_COMMANDS.listInboxItems, { workspaceId })
+      );
+    },
+    async listNotifications(workspaceId) {
+      return parseNotifications(
+        await transport.invoke(LOCAL_HUB_COMMANDS.listNotifications, { workspaceId })
+      );
+    },
+    async listArtifacts(runId) {
+      return parseArtifacts(
+        await transport.invoke(LOCAL_HUB_COMMANDS.listArtifacts, { runId })
+      );
+    },
+    async getKnowledgeDetail(runId) {
+      return parseKnowledgeDetail(
+        await transport.invoke(LOCAL_HUB_COMMANDS.getKnowledgeDetail, { runId })
+      );
+    },
+    async promoteKnowledge(command) {
+      return parseKnowledgeDetail(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.promoteKnowledge,
+          parseKnowledgePromoteCommand(command)
+        )
+      );
+    },
+    async listCapabilityVisibility(workspaceId, projectId) {
+      return parseCapabilityVisibilities(
+        await transport.invoke(LOCAL_HUB_COMMANDS.listCapabilityVisibility, {
+          workspaceId,
+          projectId
+        })
+      );
+    },
+    async getHubConnectionStatus() {
+      return parseHubConnectionStatus(
+        await transport.invoke(LOCAL_HUB_COMMANDS.getConnectionStatus)
+      );
+    },
+    async subscribe(listener, onError) {
+      const unsubscribe = await transport.listen(HUB_EVENT_CHANNEL, (payload) => {
+        try {
+          listener(parseHubEvent(payload));
+        } catch (error) {
+          onError?.(toError(error));
+        }
+      });
+
+      return async () => {
+        await unsubscribe();
+      };
+    }
+  };
+}
+
+export function createRemoteHubClient(options: RemoteHubClientOptions): HubClient {
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const createEventSource =
+    options.createEventSource ??
+    ((url: string) => {
+      const EventSourceCtor = globalThis.EventSource;
+      if (!EventSourceCtor) {
+        throw new Error("EventSource is not available in this environment.");
+      }
+      return new EventSourceCtor(url) as unknown as EventSourceLike;
+    });
+
+  if (!fetchImpl) {
+    throw new Error("fetch is not available in this environment.");
+  }
+
+  return {
+    async getProjectContext(workspaceId, projectId) {
+      return parseProjectContext(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/context`
+          )
+        )
+      );
+    },
+    async createTask(command) {
+      return parseTask(
+        await readRemoteJson(fetchImpl, remotePath(options.baseUrl, "/api/tasks"), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(parseTaskCreateCommand(command))
+        })
+      );
+    },
+    async startTask(taskId) {
+      return parseRunDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/tasks/${encodePathSegment(taskId)}/start`
+          ),
+          { method: "POST" }
+        )
+      );
+    },
+    async getRunDetail(runId) {
+      return parseRunDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(options.baseUrl, `/api/runs/${encodePathSegment(runId)}`)
+        )
+      );
+    },
+    async resolveApproval(command) {
+      const parsed = parseApprovalResolveCommand(command);
+      return parseRunDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/approvals/${encodePathSegment(parsed.approval_id)}/resolve`
+          ),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(parsed)
+          }
+        )
+      );
+    },
+    async listInboxItems(workspaceId) {
+      return parseInboxItems(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(workspaceId)}/inbox`
+          )
+        )
+      );
+    },
+    async listNotifications(workspaceId) {
+      return parseNotifications(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(workspaceId)}/notifications`
+          )
+        )
+      );
+    },
+    async listArtifacts(runId) {
+      return parseArtifacts(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/runs/${encodePathSegment(runId)}/artifacts`
+          )
+        )
+      );
+    },
+    async getKnowledgeDetail(runId) {
+      return parseKnowledgeDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/runs/${encodePathSegment(runId)}/knowledge`
+          )
+        )
+      );
+    },
+    async promoteKnowledge(command) {
+      const parsed = parseKnowledgePromoteCommand(command);
+      return parseKnowledgeDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/knowledge/candidates/${encodePathSegment(parsed.candidate_id)}/promote`
+          ),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(parsed)
+          }
+        )
+      );
+    },
+    async listCapabilityVisibility(workspaceId, projectId) {
+      return parseCapabilityVisibilities(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/capabilities`
+          )
+        )
+      );
+    },
+    async getHubConnectionStatus() {
+      return parseHubConnectionStatus(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(options.baseUrl, "/api/hub/connection")
+        )
+      );
+    },
+    async subscribe(listener, onError) {
+      const eventSource = createEventSource(
+        remotePath(options.baseUrl, "/api/events")
+      );
+      eventSource.onmessage = (event) => {
+        try {
+          listener(parseHubEvent(JSON.parse(event.data)));
+        } catch (error) {
+          onError?.(toError(error));
+        }
+      };
+      eventSource.onerror = (error) => {
+        onError?.(toError(error));
+      };
+
+      return () => {
+        eventSource.close();
+      };
+    }
+  };
+}

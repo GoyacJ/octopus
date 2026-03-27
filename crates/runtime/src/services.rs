@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use octopus_domain_context::{
     ContextRepository, ProjectContext, ProjectRecord, SqliteContextStore, WorkspaceRecord,
 };
@@ -114,6 +116,17 @@ impl TaskIntake {
         .await?;
 
         Ok(task)
+    }
+
+    pub async fn fetch_project_context(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<ProjectContext, RuntimeError> {
+        Ok(self
+            .context_store
+            .fetch_project_context(workspace_id, project_id)
+            .await?)
     }
 
     pub async fn fetch_task(&self, task_id: &str) -> Result<TaskRecord, RuntimeError> {
@@ -457,6 +470,17 @@ impl KnowledgeManager {
             .await?)
     }
 
+    pub async fn fetch_project_knowledge_space(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Option<KnowledgeSpaceRecord>, RuntimeError> {
+        Ok(self
+            .knowledge_store
+            .fetch_project_knowledge_space(workspace_id, project_id)
+            .await?)
+    }
+
     pub async fn list_knowledge_candidates_by_run(
         &self,
         run_id: &str,
@@ -497,6 +521,44 @@ impl KnowledgeManager {
                 assets.push(asset);
             }
         }
+        Ok(assets)
+    }
+
+    pub async fn list_knowledge_assets_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Vec<KnowledgeAssetRecord>, RuntimeError> {
+        let mut seen = HashSet::new();
+        let mut assets = Vec::new();
+
+        for asset in self.list_recalled_knowledge_assets_by_run(run_id).await? {
+            if seen.insert(asset.id.clone()) {
+                assets.push(asset);
+            }
+        }
+
+        for candidate in self
+            .knowledge_store
+            .list_knowledge_candidates_by_run(run_id)
+            .await?
+        {
+            if let Some(asset) = self
+                .knowledge_store
+                .fetch_knowledge_asset_by_candidate(&candidate.id)
+                .await?
+            {
+                if seen.insert(asset.id.clone()) {
+                    assets.push(asset);
+                }
+            }
+        }
+
+        assets.sort_by(|left, right| {
+            left.created_at
+                .cmp(&right.created_at)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+
         Ok(assets)
     }
 
