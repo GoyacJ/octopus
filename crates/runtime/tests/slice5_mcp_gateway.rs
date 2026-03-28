@@ -156,11 +156,15 @@ async fn connector_backed_task_executes_and_persists_invocation_artifact_and_rel
     );
 
     let visible = runtime
-        .list_visible_capabilities("workspace-alpha", "project-connector-success")
+        .list_capability_resolutions("workspace-alpha", "project-connector-success", 1)
         .await
         .unwrap();
     assert_eq!(visible.len(), 1);
-    assert_eq!(visible[0].id.as_str(), "capability-connector-success");
+    assert_eq!(
+        visible[0].descriptor.id.as_str(),
+        "capability-connector-success"
+    );
+    assert_eq!(visible[0].execution_state.as_str(), "executable");
 
     let servers = runtime.list_mcp_servers().await.unwrap();
     assert_eq!(servers.len(), 1);

@@ -183,7 +183,8 @@ async fn completed_run_surface_matches_minimum_contracts() {
     let run_detail_schema = compile_schema("runtime/run-detail.schema.json");
     let artifact_schema = compile_schema("observe/artifact.schema.json");
     let knowledge_detail_schema = compile_schema("observe/knowledge-detail.schema.json");
-    let capability_visibility_schema = compile_schema("governance/capability-visibility.schema.json");
+    let capability_resolution_schema =
+        compile_schema("governance/capability-resolution.schema.json");
     let hub_connection_schema = compile_schema("interop/hub-connection-status.schema.json");
 
     let created_task = response_json(
@@ -238,6 +239,7 @@ async fn completed_run_surface_matches_minimum_contracts() {
     )
     .await;
     assert_valid(&run_detail_schema, &loaded_run_detail);
+    assert!(loaded_run_detail["policy_decisions"].is_array());
 
     let artifacts = response_json(
         router.clone(),
@@ -248,7 +250,11 @@ async fn completed_run_surface_matches_minimum_contracts() {
             .unwrap(),
     )
     .await;
-    assert!(artifacts.as_array().unwrap().iter().all(|item| artifact_schema.is_valid(item)));
+    assert!(artifacts
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|item| artifact_schema.is_valid(item)));
 
     let knowledge_detail = response_json(
         router.clone(),
@@ -264,7 +270,7 @@ async fn completed_run_surface_matches_minimum_contracts() {
     let capabilities = response_json(
         router.clone(),
         Request::builder()
-            .uri("/api/workspaces/workspace-alpha/projects/project-slice1/capabilities")
+            .uri("/api/workspaces/workspace-alpha/projects/project-slice1/capabilities?estimated_cost=1")
             .header("authorization", authorization.as_str())
             .body(Body::empty())
             .unwrap(),
@@ -274,7 +280,7 @@ async fn completed_run_surface_matches_minimum_contracts() {
         .as_array()
         .unwrap()
         .iter()
-        .all(|item| capability_visibility_schema.is_valid(item)));
+        .all(|item| capability_resolution_schema.is_valid(item)));
 
     let connection = response_json(
         router.clone(),
@@ -300,10 +306,81 @@ async fn completed_run_surface_matches_minimum_contracts() {
         .await
         .unwrap();
     assert_eq!(events_response.status(), StatusCode::OK);
-    let events_body = events_response.into_body().collect().await.unwrap().to_bytes();
+    let events_body = events_response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
     let text = String::from_utf8(events_body.to_vec()).unwrap();
     assert!(text.contains("event: hub.connection.updated"));
     assert!(text.contains("event: run.updated"));
+}
+
+#[tokio::test]
+async fn capability_resolution_surface_tracks_estimated_cost() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let db_path = sample_db_path(tempdir.path(), "capability-resolution.sqlite");
+    let runtime = Slice1Runtime::open_at(&db_path).await.unwrap();
+    runtime
+        .ensure_project_context(
+            "workspace-alpha",
+            "workspace-alpha",
+            "Workspace Alpha",
+            "project-slice1",
+            "project-slice1",
+            "Project Slice 1",
+        )
+        .await
+        .unwrap();
+    seed_governance(&runtime, "project-slice1", "capability-write-note", false).await;
+
+    let auth = RemoteAccessService::open_at(&db_path).await.unwrap();
+    let router = app(AppState::new(runtime, auth));
+    let access_token = login_access_token(router.clone(), "workspace-alpha").await;
+    let authorization = format!("Bearer {access_token}");
+    let capability_resolution_schema =
+        compile_schema("governance/capability-resolution.schema.json");
+
+    let executable = response_json(
+        router.clone(),
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/projects/project-slice1/capabilities?estimated_cost=1")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&capability_resolution_schema, &executable[0]);
+    assert_eq!(executable[0]["execution_state"], "executable");
+    assert_eq!(executable[0]["reason_code"], "within_budget");
+
+    let approval_required = response_json(
+        router.clone(),
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/projects/project-slice1/capabilities?estimated_cost=7")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(approval_required[0]["execution_state"], "approval_required");
+    assert_eq!(
+        approval_required[0]["reason_code"],
+        "budget_soft_limit_exceeded"
+    );
+
+    let denied = response_json(
+        router,
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/projects/project-slice1/capabilities?estimated_cost=11")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(denied[0]["execution_state"], "denied");
+    assert_eq!(denied[0]["reason_code"], "budget_hard_limit_exceeded");
 }
 
 #[tokio::test]
@@ -386,7 +463,10 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
     assert_valid(&run_detail_schema, &run_detail);
     assert_eq!(run_detail["run"]["status"], "waiting_approval");
 
-    let approval_id = run_detail["approvals"][0]["id"].as_str().unwrap().to_string();
+    let approval_id = run_detail["approvals"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
     let run_id = run_detail["run"]["id"].as_str().unwrap().to_string();
 
     let approval_detail = response_json(
@@ -549,7 +629,13 @@ async fn automation_manager_surface_round_trip_matches_minimum_contracts() {
         )
         .await
         .unwrap();
-    seed_governance(&runtime, "project-automation", "capability-automation", false).await;
+    seed_governance(
+        &runtime,
+        "project-automation",
+        "capability-automation",
+        false,
+    )
+    .await;
 
     let auth = RemoteAccessService::open_at(&db_path).await.unwrap();
     let router = app(AppState::new(runtime.clone(), auth));
@@ -847,7 +933,9 @@ async fn automation_manager_surface_round_trip_matches_minimum_contracts() {
         router.clone(),
         Request::builder()
             .method("POST")
-            .uri(format!("/api/triggers/{failing_trigger_id}/manual-dispatch"))
+            .uri(format!(
+                "/api/triggers/{failing_trigger_id}/manual-dispatch"
+            ))
             .header("content-type", "application/json")
             .header("authorization", authorization.as_str())
             .body(Body::from(
@@ -864,14 +952,21 @@ async fn automation_manager_surface_round_trip_matches_minimum_contracts() {
     )
     .await;
     assert_valid(&detail_schema, &dispatched_failed);
-    assert_eq!(dispatched_failed["recent_deliveries"][0]["status"], "failed");
+    assert_eq!(
+        dispatched_failed["recent_deliveries"][0]["status"],
+        "failed"
+    );
 
-    let failed_delivery_id = dispatched_failed["recent_deliveries"][0]["id"].as_str().unwrap();
+    let failed_delivery_id = dispatched_failed["recent_deliveries"][0]["id"]
+        .as_str()
+        .unwrap();
     let retried = response_json(
         router,
         Request::builder()
             .method("POST")
-            .uri(format!("/api/trigger-deliveries/{failed_delivery_id}/retry"))
+            .uri(format!(
+                "/api/trigger-deliveries/{failed_delivery_id}/retry"
+            ))
             .header("content-type", "application/json")
             .header("authorization", authorization.as_str())
             .body(Body::from(

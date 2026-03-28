@@ -1,0 +1,54 @@
+## Implementation Summary
+
+- Goal:
+  - Deliver the minimum read-only GA governance explainability surface for project-bound capabilities and persisted run policy decisions without expanding into governance-management work.
+- Files Added:
+  - `schemas/governance/capability-resolution.schema.json`
+  - `crates/runtime/tests/slice12_governance_explainability.rs`
+- Files Changed:
+  - `packages/hub-client/test/hub-client.contract.test.ts`
+  - `packages/schema-ts/src/contracts.ts`
+  - `packages/schema-ts/src/index.ts`
+  - `packages/schema-ts/test/contracts.test.ts`
+  - `packages/hub-client/src/index.ts`
+  - `apps/remote-hub/src/lib.rs`
+  - `apps/remote-hub/tests/http_surface.rs`
+  - `crates/governance/src/lib.rs`
+  - `crates/runtime/src/lib.rs`
+  - `crates/runtime/src/services.rs`
+  - `crates/runtime/tests/schema_contracts.rs`
+  - `crates/runtime/tests/slice5_mcp_gateway.rs`
+  - `apps/desktop/src/stores/hub.ts`
+  - `apps/desktop/src/views/WorkspaceView.vue`
+  - `apps/desktop/src/views/RunView.vue`
+  - `apps/desktop/test/happy-path.test.ts`
+  - `README.md`
+  - `docs/README.md`
+  - `docs/architecture/SAD.md`
+  - `docs/architecture/ga-implementation-blueprint.md`
+  - `docs/tasks/README.md`
+  - task-package delivery artifacts in this directory
+- Files Removed:
+  - `schemas/governance/capability-visibility.schema.json`
+- Structure Decision:
+  - Keep governance explainability in the existing path: `schemas/` defines `CapabilityResolution`, `crates/governance` evaluates it, `crates/runtime` assembles project-bound responses, `remote-hub` keeps the existing `/capabilities` route, `hub-client` keeps local/remote parity, and `desktop` reuses current Workspace / Run surfaces.
+- Why This Structure:
+  - This keeps one contract truth, reuses the authoritative governance decision path, and avoids creating a parallel governance shell or expanding into tenant-admin / catalog work.
+- Reused Patterns:
+  - Reused the existing binding, grant, budget, and risk checks from `evaluate_task(...)`.
+  - Reused the existing `/capabilities` route shape and local `hub:list_capability_visibility` command string.
+  - Reused `RunDetail.policy_decisions` instead of redesigning the run-detail wire contract.
+- New Dependencies:
+  - None.
+- Error Handling Strategy:
+  - Missing grant or budget policy, inactive binding, hard-limit overage, and similar governance gaps resolve to explanatory `denied` or `approval_required` states without mutating existing runtime state machines.
+  - Remote auth and workspace membership errors continue through existing remote-hub and hub-client transport paths.
+  - Desktop remains read-only when auth is not fully authenticated.
+- Deferred Items:
+  - Grant and budget editing surfaces.
+  - Tenant / RBAC / IdP administration.
+  - Standalone Inbox / Notification center work.
+  - Vector retrieval and Org Graph promotion.
+  - Broader capability catalog or search-only directory work.
+- Non-goals Preserved:
+  - Tenant / RBAC / IdP, governance-management flows, vector retrieval, Org Graph, and broader capability-catalog work remain out of scope.

@@ -90,7 +90,21 @@ const runDetailFixture = {
   approvals: [],
   inbox_items: [],
   notifications: [],
-  policy_decisions: [],
+  policy_decisions: [
+    {
+      id: "policy-1",
+      workspace_id: "workspace-alpha",
+      project_id: "project-slice1",
+      run_id: "run-1",
+      task_id: "task-1",
+      capability_id: "capability-write-note",
+      decision: "allow",
+      reason: "within_budget",
+      estimated_cost: 1,
+      approval_request_id: null,
+      created_at: "2026-03-26T10:00:00Z"
+    }
+  ],
   knowledge_candidates: [
     {
       id: "candidate-1",
@@ -204,7 +218,7 @@ const approvedPromotionApprovalFixture = {
   updated_at: "2026-03-26T10:00:03Z"
 } as const;
 
-const capabilityVisibilityFixture = [
+const capabilityResolutionFixture = [
   {
     descriptor: {
       id: "capability-write-note",
@@ -221,10 +235,11 @@ const capabilityVisibilityFixture = [
       created_at: "2026-03-26T10:00:00Z",
       updated_at: "2026-03-26T10:00:00Z"
     },
-    scope_ref: "project:project-slice1",
-    visibility: "visible",
-    reason_code: "project_scope_grant_active",
-    explanation: "Visible because the project-scoped capability grant is active."
+    scope_ref: "workspace:workspace-alpha/project:project-slice1",
+    execution_state: "executable",
+    reason_code: "within_budget",
+    explanation:
+      "Executable because the capability is bound, granted, and within the current budget."
   }
 ];
 
@@ -381,7 +396,7 @@ describe("desktop local happy path", () => {
           case "hub:get_project_context":
             return projectContextFixture;
           case "hub:list_capability_visibility":
-            return capabilityVisibilityFixture;
+            return capabilityResolutionFixture;
           case "hub:get_connection_status":
             return hubConnectionStatusFixture;
           case "hub:list_automations":
@@ -429,6 +444,74 @@ describe("desktop local happy path", () => {
     expect(wrapper.text()).toContain("hello");
     expect(wrapper.text()).toContain("Project Slice 1 Knowledge");
     expect(wrapper.text()).toContain("candidate-1");
+    expect(wrapper.text()).toContain("within_budget");
+  });
+
+  it("refreshes workspace governance explainability when the task estimated cost changes", async () => {
+    const seenCosts: number[] = [];
+
+    const transport: LocalHubTransport = {
+      async invoke(command, payload) {
+        switch (command) {
+          case "hub:get_project_context":
+            return projectContextFixture;
+          case "hub:list_capability_visibility": {
+            const estimatedCost = (payload as { estimatedCost?: number } | undefined)
+              ?.estimatedCost ?? 0;
+            seenCosts.push(estimatedCost);
+            return [
+              {
+                ...capabilityResolutionFixture[0],
+                execution_state: estimatedCost > 5 ? "approval_required" : "executable",
+                reason_code:
+                  estimatedCost > 5 ? "budget_soft_limit_exceeded" : "within_budget",
+                explanation:
+                  estimatedCost > 5
+                    ? `Approval required because the estimated cost ${estimatedCost} exceeds the soft cost limit 5.`
+                    : `Executable because the estimated cost ${estimatedCost} is within the current budget.`
+              }
+            ];
+          }
+          case "hub:get_connection_status":
+            return hubConnectionStatusFixture;
+          case "hub:list_automations":
+          case "hub:list_inbox_items":
+          case "hub:list_notifications":
+            return [];
+          default:
+            throw new Error(`unexpected command: ${command}`);
+        }
+      },
+      async listen() {
+        return () => undefined;
+      }
+    };
+
+    const client = createLocalHubClient(transport);
+    const { pinia, router } = createDesktopPlugins(client, true);
+    await router.push("/workspaces/workspace-alpha/projects/project-slice1");
+    await router.isReady();
+
+    const wrapper = mount(AppShell, {
+      global: {
+        plugins: [pinia, router]
+      }
+    });
+
+    await flushPromises();
+    expect(wrapper.text()).toContain(
+      "Executable because the estimated cost 1 is within the current budget."
+    );
+
+    const taskCostInput = wrapper.findAll('input[type="number"]')[0];
+    await taskCostInput.setValue(7);
+    await flushPromises();
+
+    expect(seenCosts).toContain(1);
+    expect(seenCosts).toContain(7);
+    expect(wrapper.text()).toContain(
+      "Approval required because the estimated cost 7 exceeds the soft cost limit 5."
+    );
   });
 
   it("shows token expiry separately from disconnect and falls back to read-only mode", async () => {
@@ -438,7 +521,7 @@ describe("desktop local happy path", () => {
           case "hub:get_project_context":
             return projectContextFixture;
           case "hub:list_capability_visibility":
-            return capabilityVisibilityFixture;
+            return capabilityResolutionFixture;
           case "hub:get_connection_status":
             return {
               ...hubConnectionStatusFixture,
@@ -493,7 +576,7 @@ describe("desktop local happy path", () => {
           case "hub:get_project_context":
             return projectContextFixture;
           case "hub:list_capability_visibility":
-            return capabilityVisibilityFixture;
+            return capabilityResolutionFixture;
           case "hub:get_connection_status":
             return hubConnectionStatusFixture;
           case "hub:list_automations":
@@ -629,7 +712,7 @@ describe("desktop local happy path", () => {
           case "hub:get_project_context":
             return projectContextFixture;
           case "hub:list_capability_visibility":
-            return capabilityVisibilityFixture;
+            return capabilityResolutionFixture;
           case "hub:list_inbox_items":
           case "hub:list_notifications":
           case "hub:list_automations":
@@ -679,7 +762,7 @@ describe("desktop local happy path", () => {
           case "hub:get_project_context":
             return projectContextFixture;
           case "hub:list_capability_visibility":
-            return capabilityVisibilityFixture;
+            return capabilityResolutionFixture;
           case "hub:get_connection_status":
             return hubConnectionStatusFixture;
           case "hub:list_inbox_items":
@@ -750,7 +833,7 @@ describe("desktop local happy path", () => {
           case "hub:get_project_context":
             return projectContextFixture;
           case "hub:list_capability_visibility":
-            return capabilityVisibilityFixture;
+            return capabilityResolutionFixture;
           case "hub:get_connection_status":
             return hubConnectionStatusFixture;
           case "hub:list_inbox_items":

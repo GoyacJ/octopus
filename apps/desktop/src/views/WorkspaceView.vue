@@ -38,7 +38,34 @@ const automationDraft = reactive({
   mcpEventPattern: ""
 });
 
-const visibleCapability = computed(() => hub.activeCapability);
+const projectCapabilities = computed(() =>
+  hub.taskCapabilityResolutions.map((resolution) => resolution.descriptor)
+);
+
+const taskCapabilityResolution = computed(
+  () =>
+    hub.taskCapabilityResolutions.find(
+      (resolution) => resolution.descriptor.id === taskDraft.capabilityId
+    ) ??
+    hub.taskCapabilityResolutions[0] ??
+    null
+);
+
+const automationCapabilityResolution = computed(
+  () =>
+    hub.automationCapabilityResolutions.find(
+      (resolution) => resolution.descriptor.id === automationDraft.capabilityId
+    ) ??
+    hub.automationCapabilityResolutions[0] ??
+    null
+);
+
+const visibleCapability = computed(
+  () =>
+    taskCapabilityResolution.value?.descriptor ??
+    automationCapabilityResolution.value?.descriptor ??
+    hub.activeCapability
+);
 
 function approvalForItem(item: InboxItem) {
   return hub.approvalDetails[item.approval_request_id] ?? null;
@@ -65,11 +92,11 @@ async function loadWorkspaceSurface(): Promise<void> {
 
   await hub.loadWorkspace(workspaceId, projectId);
 
-  if (!taskDraft.capabilityId && visibleCapability.value) {
-    taskDraft.capabilityId = visibleCapability.value.id;
+  if (!taskDraft.capabilityId && taskCapabilityResolution.value) {
+    taskDraft.capabilityId = taskCapabilityResolution.value.descriptor.id;
   }
-  if (!automationDraft.capabilityId && visibleCapability.value) {
-    automationDraft.capabilityId = visibleCapability.value.id;
+  if (!automationDraft.capabilityId && automationCapabilityResolution.value) {
+    automationDraft.capabilityId = automationCapabilityResolution.value.descriptor.id;
   }
 }
 
@@ -79,7 +106,7 @@ async function createAndStart(): Promise<void> {
   const capabilityId = taskDraft.capabilityId || visibleCapability.value?.id;
 
   if (!capabilityId) {
-    throw new Error("No visible capability is available for task creation.");
+    throw new Error("No governed capability is available for task creation.");
   }
 
   const runDetail = await hub.createAndStartTask({
@@ -160,7 +187,7 @@ async function createAutomation(): Promise<void> {
   const capabilityId = automationDraft.capabilityId || visibleCapability.value?.id;
 
   if (!capabilityId) {
-    throw new Error("No visible capability is available for automation creation.");
+    throw new Error("No governed capability is available for automation creation.");
   }
 
   const created = await hub.createAutomation({
@@ -203,6 +230,32 @@ watch(
   () => [route.params.workspaceId, route.params.projectId],
   () => {
     void loadWorkspaceSurface();
+  }
+);
+
+watch(
+  () => taskDraft.estimatedCost,
+  (estimatedCost) => {
+    const workspaceId = String(route.params.workspaceId);
+    const projectId = String(route.params.projectId);
+    if (!workspaceId || !projectId) {
+      return;
+    }
+
+    void hub.loadTaskCapabilityResolutions(workspaceId, projectId, estimatedCost);
+  }
+);
+
+watch(
+  () => automationDraft.estimatedCost,
+  (estimatedCost) => {
+    const workspaceId = String(route.params.workspaceId);
+    const projectId = String(route.params.projectId);
+    if (!workspaceId || !projectId) {
+      return;
+    }
+
+    void hub.loadAutomationCapabilityResolutions(workspaceId, projectId, estimatedCost);
   }
 );
 
@@ -372,15 +425,49 @@ onMounted(() => {
     </article>
 
     <article class="surface-card">
-      <p class="eyebrow">Capability Visibility</p>
-      <h2>{{ visibleCapability?.slug ?? "No capability grant" }}</h2>
+      <p class="eyebrow">Project Capabilities</p>
+      <h2>{{ projectCapabilities.length }} bound entries</h2>
+      <ul v-if="projectCapabilities.length > 0" class="stack-list">
+        <li v-for="capability in projectCapabilities" :key="capability.id">
+          <strong>{{ capability.slug }}</strong>
+          <div class="meta-list">
+            <span>Trust: {{ capability.trust_level }}</span>
+            <span>Risk: {{ capability.risk_level }}</span>
+            <span>Source: {{ capability.source }}</span>
+          </div>
+        </li>
+      </ul>
+      <p v-else class="muted">No project-bound capability is available yet.</p>
+    </article>
+
+    <article class="surface-card">
+      <p class="eyebrow">Task Governance</p>
+      <h2>{{ taskCapabilityResolution?.descriptor.slug ?? "No task capability bound" }}</h2>
       <p class="muted">
-        {{ hub.capabilityVisibilities[0]?.explanation ?? "No capability explanation yet." }}
+        {{ taskCapabilityResolution?.explanation ?? "No task governance explanation yet." }}
       </p>
-      <div v-if="visibleCapability" class="meta-list">
-        <span>Trust: {{ visibleCapability.trust_level }}</span>
-        <span>Risk: {{ visibleCapability.risk_level }}</span>
-        <span>Source: {{ visibleCapability.source }}</span>
+      <div v-if="taskCapabilityResolution" class="meta-list">
+        <span>Execution: {{ taskCapabilityResolution.execution_state }}</span>
+        <span>Reason: {{ taskCapabilityResolution.reason_code }}</span>
+        <span>Estimated cost: {{ taskDraft.estimatedCost }}</span>
+      </div>
+    </article>
+
+    <article class="surface-card">
+      <p class="eyebrow">Automation Governance</p>
+      <h2>
+        {{ automationCapabilityResolution?.descriptor.slug ?? "No automation capability bound" }}
+      </h2>
+      <p class="muted">
+        {{
+          automationCapabilityResolution?.explanation ??
+            "No automation governance explanation yet."
+        }}
+      </p>
+      <div v-if="automationCapabilityResolution" class="meta-list">
+        <span>Execution: {{ automationCapabilityResolution.execution_state }}</span>
+        <span>Reason: {{ automationCapabilityResolution.reason_code }}</span>
+        <span>Estimated cost: {{ automationDraft.estimatedCost }}</span>
       </div>
     </article>
 

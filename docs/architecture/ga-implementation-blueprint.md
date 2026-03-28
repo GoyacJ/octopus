@@ -82,6 +82,7 @@
 - Slice 10 `remote-hub persistence / auth` 已落地并通过验证
 - `minimum automation surface` 已落地并通过验证
 - Slice 11 `GA governance interaction surface` 已落地并通过验证，补齐 approval detail / inbox action / approval-driven knowledge promotion
+- Slice 12 `GA governance explainability` 已落地并通过验证，补齐 project-bound capability execution-state explanations 与 Run policy-decision surface consumption
 
 ---
 
@@ -167,8 +168,9 @@
 5. Slice 10 `remote-hub persistence / auth`
 6. minimum automation surface
 7. Slice 11 `GA governance interaction surface`
+8. Slice 12 `GA governance explainability`
 
-在此之后，当前尚未冻结新的 post-Slice 11 下一优先级。
+在此之后，当前尚未冻结新的 post-Slice 12 下一优先级。
 
 更深 remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须等新的 task package 与 owner docs 明确后再启动。
 
@@ -280,7 +282,7 @@ GA 最小交互表面应覆盖：
 - Shared Knowledge 最小查看与管理页
 - Workspace / Project 最小上下文呈现
 - Hub Connection 的最小配置与连接状态呈现
-- Capability 可见性与审批结果的最小解释能力
+- Capability 执行性与审批结果的最小解释能力
 - Notification 的最小接收与处理入口
 
 GA 当前不要求：
@@ -551,7 +553,7 @@ GA 必须支持最小执行环境语义：
 - Budget 最小判定
 - ApprovalRequest 生命周期
 - 审批后的 Run 恢复
-- capability 可见性解释输出
+- capability 执行性解释输出
 - PolicyDecisionLog 的最小记录能力
 
 #### 当前不做
@@ -847,9 +849,22 @@ GA 必须支持最小执行环境语义：
 - 已在 tracked tree 中落地并通过验证
 - 当前是 approval-centric 的最小治理交互面，不包含独立 Inbox / Board 路由、full notification center、tenant / RBAC / IdP admin、vector retrieval 或 Org Graph promotion
 
-### 13.13 当前 post-Slice 11 状态
+### 13.13 Slice 12：GA governance explainability（已完成）
 
-- 当前 tracked docs 尚未冻结新的 post-Slice 11 下一优先级
+#### 范围
+
+- 用 `CapabilityResolution` 取代 visible-only capability explanation contract，并保持 project-bound capability surface，不扩成全局 catalog
+- 在 runtime / governance 中增加只读 capability resolution 求值入口，复用 binding、grant、budget、risk 的现有治理真值，并支持 `estimated_cost`
+- 扩展 `remote-hub`、`hub-client`、`desktop`，让 Workspace 页展示 project-bound capability execution-state explanations，让 Run 页展示已持久化的 `policy_decisions`
+
+#### 当前状态
+
+- 已在 tracked tree 中落地并通过验证
+- 当前是 read-only governance explainability slice，不包含 grant / budget 编辑、tenant / RBAC / IdP、独立 Inbox / Notification center、vector retrieval、Org Graph promotion 或更广泛 capability catalog
+
+### 13.14 当前 post-Slice 12 状态
+
+- 当前 tracked docs 尚未冻结新的 post-Slice 12 下一优先级
 - 更深 remote admin / tenant / IdP 能力不在当前冻结顺序内，除非后续 tracked docs 明确纳入
 
 ---
@@ -1046,8 +1061,8 @@ Octopus 首版 GA 不是“把目标态平台全部做出来”，而是：
 - 以 PRD 定义的正式对象模型为产品边界
 - 以 SAD 定义的运行时、治理、恢复、互操作边界为架构约束
 - 以本蓝图定义的最小正式运行闭环为实施主线
-- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 -> minimum automation surface -> Slice 11 的顺序稳步推进
-- 当前 tracked tree 已推进到 Slice 11；post-Slice 11 的下一优先级尚未在 owner docs 中冻结
+- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 -> minimum automation surface -> Slice 11 -> Slice 12 的顺序稳步推进
+- 当前 tracked tree 已推进到 Slice 12；post-Slice 12 的下一优先级尚未在 owner docs 中冻结
 - 在每次模块推进前先完成局部设计包，再实现，再验证，再回写全局文档
 
 只有这样，Octopus 才能在不丢失整体方向的前提下，让 AI 主导开发同时保持可控、可审计、可维护。

@@ -108,8 +108,8 @@ fn refined_slice1_examples_validate() {
     let capability_binding_schema = compiled_schema("governance/capability-binding.schema.json");
     let capability_grant_schema = compiled_schema("governance/capability-grant.schema.json");
     let budget_policy_schema = compiled_schema("governance/budget-policy.schema.json");
-    let capability_visibility_schema =
-        compiled_schema("governance/capability-visibility.schema.json");
+    let capability_resolution_schema =
+        compiled_schema("governance/capability-resolution.schema.json");
     let artifact_schema = compiled_schema("observe/artifact.schema.json");
     let artifact_summary_schema = compiled_schema("observe/artifact-summary.schema.json");
     let audit_schema = compiled_schema("observe/audit-record.schema.json");
@@ -128,8 +128,7 @@ fn refined_slice1_examples_validate() {
     let knowledge_detail_schema = compiled_schema("observe/knowledge-detail.schema.json");
     let knowledge_promote_command_schema =
         compiled_schema("observe/knowledge-promote-command.schema.json");
-    let hub_connection_status_schema =
-        compiled_schema("interop/hub-connection-status.schema.json");
+    let hub_connection_status_schema = compiled_schema("interop/hub-connection-status.schema.json");
     let hub_event_schema = compiled_schema("interop/hub-event.schema.json");
 
     assert!(workspace_schema.is_valid(&json!({
@@ -632,7 +631,7 @@ fn refined_slice1_examples_validate() {
         "actor_ref": "workspace_admin:alice",
         "note": "request review"
     })));
-    assert!(capability_visibility_schema.is_valid(&json!({
+    assert!(capability_resolution_schema.is_valid(&json!({
         "descriptor": {
             "id": "capability-write-note",
             "slug": "capability-write-note",
@@ -649,9 +648,9 @@ fn refined_slice1_examples_validate() {
             "updated_at": "2026-03-26T10:00:00Z"
         },
         "scope_ref": "workspace:workspace-alpha/project:project-slice1",
-        "visibility": "visible",
-        "reason_code": "project_scope_grant_active",
-        "explanation": "Capability is visible because the project scope has an active binding and grant."
+        "execution_state": "approval_required",
+        "reason_code": "budget_soft_limit_exceeded",
+        "explanation": "Approval required because the estimated cost 7 exceeds the soft cost limit 5."
     })));
     assert!(artifact_schema.is_valid(&json!({
         "id": "artifact-1",

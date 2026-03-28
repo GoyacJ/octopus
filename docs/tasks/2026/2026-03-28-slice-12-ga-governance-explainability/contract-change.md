@@ -1,0 +1,36 @@
+## Contract Change
+
+- Change Type:
+  - Shared Schema
+  - Public API
+  - Internal Interface
+  - Cross-language Contract
+- New / Updated Schemas:
+  - Replace `schemas/governance/capability-visibility.schema.json` with a `CapabilityResolution` contract that exposes `descriptor`, `scope_ref`, `execution_state`, `reason_code`, and `explanation`.
+- New / Updated Commands:
+  - None. This slice is read-only explainability.
+- New / Updated Queries:
+  - Upgrade project capability listing to accept `estimated_cost` and return `CapabilityResolution[]`.
+- New / Updated Events:
+  - None.
+- New / Updated DTOs:
+  - `CapabilityResolution`
+  - Existing `RunDetail` consumer behavior now surfaces already-present `policy_decisions`.
+- Compatibility Impact:
+  - The capability explainability response is intentionally breaking at the shared-contract level because the old visible-only model is replaced by a broader execution-state model.
+  - Consumers must switch from `visibility` to `execution_state`.
+  - `RunDetail` wire shape remains compatible; this slice changes only surface consumption of `policy_decisions`.
+- Affected Consumers:
+  - `crates/governance`
+  - `crates/runtime`
+  - `packages/schema-ts`
+  - `packages/hub-client`
+  - `apps/remote-hub`
+  - `apps/desktop`
+- Migration Notes:
+  - Rename TypeScript and Rust capability explainability consumers from visibility-only terminology to resolution terminology.
+  - Keep the route path `/api/workspaces/{workspace_id}/projects/{project_id}/capabilities`, but extend it with an `estimated_cost` query parameter.
+- Generation Impact:
+  - `packages/schema-ts` must register the updated schema and expose new parser/type names for capability resolution.
+- Open Questions:
+  - None for this slice. Broader capability catalogs and governance-management surfaces remain deferred.

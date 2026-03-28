@@ -1,0 +1,27 @@
+## Delivery Note
+
+- What Changed:
+  - Replaced the visible-only capability explanation contract with `CapabilityResolution`.
+  - Added runtime/governance capability resolution evaluation with cost-aware `execution_state`, `reason_code`, and `explanation`.
+  - Upgraded `remote-hub`, `hub-client`, and `desktop` so Workspace surfaces show governed capability execution state and Run surfaces show persisted policy decisions.
+  - Fixed the pre-existing TypeScript entry gate in `packages/hub-client/test/hub-client.contract.test.ts`.
+- Why:
+  - Slice 12 freezes the first post-Slice 11 priority as read-only governance explainability, so users can see why a bound capability executes immediately, requires approval, or is denied for the current estimated cost.
+- User / System Impact:
+  - Workspace users can now see project-bound capability execution state update as estimated cost changes.
+  - Run detail now exposes the existing policy-decision chain instead of hiding it.
+  - Local and remote transports remain aligned on one shared contract.
+- Risks:
+  - Explanations remain intentionally narrow and project-scoped; they do not yet explain unbound global capabilities or deeper connector-health detail.
+- Rollback Notes:
+  - Roll back the `CapabilityResolution` contract and its consumers together; partial rollback would break cross-language parity.
+- Follow-ups:
+  - If governance depth needs to expand next, freeze a separate slice for grant / budget management rather than mixing management into explainability.
+- Docs Updated:
+  - Yes: `README.md`, `docs/README.md`, `docs/architecture/SAD.md`, `docs/architecture/ga-implementation-blueprint.md`, `docs/tasks/README.md`, and this task package.
+- Tests Included:
+  - Yes: schema-ts, hub-client, desktop, runtime, and remote-hub tests plus full workspace verification.
+- ADR Updated:
+  - No.
+- Temporary Workarounds:
+  - None.

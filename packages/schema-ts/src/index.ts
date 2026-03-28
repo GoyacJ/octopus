@@ -9,7 +9,7 @@ import budgetPolicySchema from "../../../schemas/governance/budget-policy.schema
 import capabilityBindingSchema from "../../../schemas/governance/capability-binding.schema.json";
 import capabilityDescriptorSchema from "../../../schemas/governance/capability-descriptor.schema.json";
 import capabilityGrantSchema from "../../../schemas/governance/capability-grant.schema.json";
-import capabilityVisibilitySchema from "../../../schemas/governance/capability-visibility.schema.json";
+import capabilityResolutionSchema from "../../../schemas/governance/capability-resolution.schema.json";
 import hubAuthErrorSchema from "../../../schemas/interop/hub-auth-error.schema.json";
 import hubConnectionStatusSchema from "../../../schemas/interop/hub-connection-status.schema.json";
 import hubEventSchema from "../../../schemas/interop/hub-event.schema.json";
@@ -69,6 +69,7 @@ import type {
   Artifact,
   ArtifactSummary,
   AuditRecord,
+  CapabilityResolution,
   CapabilityVisibility,
   CreateAutomationCommand,
   CreateAutomationResponse,
@@ -128,7 +129,7 @@ const schemaRegistry = {
   [capabilityBindingSchema.$id]: capabilityBindingSchema,
   [capabilityDescriptorSchema.$id]: capabilityDescriptorSchema,
   [capabilityGrantSchema.$id]: capabilityGrantSchema,
-  [capabilityVisibilitySchema.$id]: capabilityVisibilitySchema,
+  [capabilityResolutionSchema.$id]: capabilityResolutionSchema,
   [hubAuthErrorSchema.$id]: hubAuthErrorSchema,
   [artifactSchema.$id]: artifactSchema,
   [artifactSummarySchema.$id]: artifactSummarySchema,
@@ -317,20 +318,30 @@ export function parseApprovalResolveCommand(
   );
 }
 
-export function parseCapabilityVisibility(value: unknown): CapabilityVisibility {
-  return parseWithSchema<CapabilityVisibility>(
-    capabilityVisibilitySchema.$id,
+export function parseCapabilityResolution(value: unknown): CapabilityResolution {
+  return parseWithSchema<CapabilityResolution>(
+    capabilityResolutionSchema.$id,
     value
   );
+}
+
+export function parseCapabilityResolutions(
+  value: unknown
+): CapabilityResolution[] {
+  return parseArrayWithItemSchema<CapabilityResolution>(
+    capabilityResolutionSchema.$id,
+    value
+  );
+}
+
+export function parseCapabilityVisibility(value: unknown): CapabilityVisibility {
+  return parseCapabilityResolution(value);
 }
 
 export function parseCapabilityVisibilities(
   value: unknown
 ): CapabilityVisibility[] {
-  return parseArrayWithItemSchema<CapabilityVisibility>(
-    capabilityVisibilitySchema.$id,
-    value
-  );
+  return parseCapabilityResolutions(value);
 }
 
 export function parseArtifact(value: unknown): Artifact {

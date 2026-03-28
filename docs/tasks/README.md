@@ -52,6 +52,7 @@ Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-d
 - [2026-03-27-slice-10-remote-hub-persistence-auth](2026/2026-03-27-slice-10-remote-hub-persistence-auth/README.md)
 - [2026-03-27-ga-minimum-automation-surface](2026/2026-03-27-ga-minimum-automation-surface/README.md)
 - [2026-03-28-slice-11-ga-governance-interaction-surface](2026/2026-03-28-slice-11-ga-governance-interaction-surface/README.md)
+- [2026-03-28-slice-12-ga-governance-explainability](2026/2026-03-28-slice-12-ga-governance-explainability/README.md)
 
 ## Relationship To ADRs
 

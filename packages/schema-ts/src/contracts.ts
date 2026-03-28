@@ -370,13 +370,30 @@ export interface ApprovalResolveCommand {
   note: string;
 }
 
-export interface CapabilityVisibility {
+export type CapabilityExecutionState =
+  | "executable"
+  | "approval_required"
+  | "denied";
+
+export type CapabilityResolutionReasonCode =
+  | "capability_not_registered"
+  | "capability_not_bound"
+  | "capability_not_granted"
+  | "budget_policy_missing"
+  | "budget_hard_limit_exceeded"
+  | "risk_level_high"
+  | "budget_soft_limit_exceeded"
+  | "within_budget";
+
+export interface CapabilityResolution {
   descriptor: CapabilityDescriptor;
   scope_ref: string;
-  visibility: "visible";
-  reason_code: "project_scope_grant_active";
+  execution_state: CapabilityExecutionState;
+  reason_code: CapabilityResolutionReasonCode;
   explanation: string;
 }
+
+export type CapabilityVisibility = CapabilityResolution;
 
 export interface Artifact {
   id: string;

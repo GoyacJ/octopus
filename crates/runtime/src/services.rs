@@ -10,9 +10,9 @@ use octopus_domain_context::{
 use octopus_execution::{ExecutionAction, ExecutionEngine, ExecutionOutcome};
 use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
-    CapabilityDescriptorRecord, CapabilityGrantRecord, GovernanceDecision, SqliteGovernanceStore,
-    TaskGovernanceInput, APPROVAL_TYPE_EXECUTION, APPROVAL_TYPE_KNOWLEDGE_PROMOTION,
-    DECISION_ALLOW, DECISION_DENY, DECISION_REQUIRE_APPROVAL,
+    CapabilityDescriptorRecord, CapabilityGrantRecord, CapabilityResolutionRecord,
+    GovernanceDecision, SqliteGovernanceStore, TaskGovernanceInput, APPROVAL_TYPE_EXECUTION,
+    APPROVAL_TYPE_KNOWLEDGE_PROMOTION, DECISION_ALLOW, DECISION_DENY, DECISION_REQUIRE_APPROVAL,
 };
 use octopus_interop_mcp::{
     EnvironmentLeaseRecord, GatewayExecutionOutcome, GatewayRequest, McpCredentialRecord,
@@ -46,8 +46,8 @@ use crate::{
         current_timestamp, AutomationDetailRecord, AutomationRecord, AutomationSummaryRecord,
         CreateAutomationInput, CreateAutomationReport, CreateTaskInput, CreateTriggerInput,
         CronTriggerConfig, KnowledgePromotionReport, McpEventTriggerConfig, RunExecutionReport,
-        RunRecord, RunSummaryRecord, TaskRecord, TriggerDeliveryRecord, TriggerRecord,
-        TriggerSpec, WebhookTriggerConfig,
+        RunRecord, RunSummaryRecord, TaskRecord, TriggerDeliveryRecord, TriggerRecord, TriggerSpec,
+        WebhookTriggerConfig,
     },
     RuntimeError,
 };
@@ -805,7 +805,9 @@ impl AutomationIntake {
         let recent_deliveries = self
             .list_recent_trigger_deliveries_by_automation(&automation.id, recent_limit)
             .await?;
-        let last_run_summary = match recent_deliveries.first().and_then(|delivery| delivery.run_id.clone())
+        let last_run_summary = match recent_deliveries
+            .first()
+            .and_then(|delivery| delivery.run_id.clone())
         {
             Some(run_id) => {
                 let run = self
@@ -1496,15 +1498,31 @@ impl RunOrchestrator {
         Ok(())
     }
 
-    pub async fn list_visible_capabilities(
+    pub async fn list_capability_resolutions(
         &self,
         workspace_id: &str,
         project_id: &str,
-    ) -> Result<Vec<CapabilityDescriptorRecord>, RuntimeError> {
-        Ok(self
+        estimated_cost: i64,
+    ) -> Result<Vec<CapabilityResolutionRecord>, RuntimeError> {
+        let descriptors = self
             .governance_store
-            .list_visible_capability_descriptors(workspace_id, project_id)
-            .await?)
+            .list_project_bound_capability_descriptors(workspace_id, project_id)
+            .await?;
+        let mut resolutions = Vec::with_capacity(descriptors.len());
+        for descriptor in descriptors {
+            resolutions.push(
+                self.governance_store
+                    .resolve_project_bound_capability(
+                        descriptor,
+                        workspace_id,
+                        project_id,
+                        estimated_cost,
+                    )
+                    .await?,
+            );
+        }
+
+        Ok(resolutions)
     }
 
     pub async fn list_mcp_servers(&self) -> Result<Vec<McpServerRecord>, RuntimeError> {
@@ -1812,7 +1830,8 @@ impl RunOrchestrator {
                 target_ref: approval.target_ref.clone(),
             })?;
 
-        self.resolve_inbox_for_approval(&run.id, &approval.id).await?;
+        self.resolve_inbox_for_approval(&run.id, &approval.id)
+            .await?;
 
         match approval.status.as_str() {
             "approved" => {

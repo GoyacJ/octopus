@@ -78,7 +78,7 @@
 
 - 当前跟踪树仍处于 `doc-first rebuild` 状态，但已包含首批 monorepo 根 manifests、当前 GA 运行时共享契约、首批 Rust runtime crates，以及最小 `apps/desktop + apps/remote-hub + packages/schema-ts + packages/hub-client` surface foundation；
 - 当前已验证的实现范围是本地 `Automation(manual_event | cron | webhook | mcp_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Execution Adapter / MCP Gateway -> EnvironmentLease -> Artifact -> KnowledgeCandidate gate -> Shared Knowledge recall -> Audit / Trace` 闭环，并包含持久化的 `ApprovalRequest`、`InboxItem`、`Notification`、`PolicyDecisionLog`、TriggerDelivery 去重/恢复记录、`McpServer`、`McpInvocation`、`EnvironmentLease`、项目级 `KnowledgeSpace`、`KnowledgeCandidate`、`KnowledgeAsset`、知识写回重试记录与 knowledge lineage；
-- 当前 tracked shell 已验证 thin remote-hub webhook ingress / cron tick shell、persisted remote user / membership / JWT session state、route-level auth enforcement、minimum automation-management surface，以及 approval detail / inbox handling / approval-driven knowledge promotion request-and-resolve 的最小治理交互面；低信任 connector 输出可入 Artifact，但不得绕过 gate 自动进入 Shared Knowledge；
+- 当前 tracked shell 已验证 thin remote-hub webhook ingress / cron tick shell、persisted remote user / membership / JWT session state、route-level auth enforcement、minimum automation-management surface，以及 approval detail / inbox handling / approval-driven knowledge promotion request-and-resolve 的最小治理交互面，并补齐 project-bound capability execution-state explainability 与 Run policy decision surface consumption；低信任 connector 输出可入 Artifact，但不得绕过 gate 自动进入 Shared Knowledge；
 - 不得把这一步误写成已完成的 full tenant / RBAC administration、external IdP、向量检索或 Org Graph 正式晋升实现。
 
 ### 1.5 架构平面

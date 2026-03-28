@@ -16,12 +16,12 @@ use octopus_access_auth::{AccessAuthError, HubLoginResponse, HubSession, RemoteA
 use octopus_execution::ExecutionAction;
 use octopus_runtime::{
     ApprovalDecision, ApprovalRequestRecord, ArtifactRecord, AuditRecord, AutomationDetailRecord,
-    AutomationRecord, AutomationSummaryRecord, CreateAutomationInput, CreateTriggerInput,
-    CapabilityDescriptorRecord, CreateTaskInput, InboxItemRecord, KnowledgeAssetRecord,
-    KnowledgeCandidateRecord, KnowledgeLineageRecord, KnowledgeSpaceRecord, NotificationRecord,
-    PolicyDecisionLogRecord, ProjectContext, RunExecutionReport, RunRecord,
-    RuntimeError, Slice1Runtime, TaskRecord, TraceRecord, TriggerDeliveryRecord, TriggerRecord,
-    TriggerSpec, DispatchManualEventInput, DispatchWebhookEventInput,
+    AutomationRecord, AutomationSummaryRecord, CapabilityResolutionRecord, CreateAutomationInput,
+    CreateTaskInput, CreateTriggerInput, DispatchManualEventInput, DispatchWebhookEventInput,
+    InboxItemRecord, KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeLineageRecord,
+    KnowledgeSpaceRecord, NotificationRecord, PolicyDecisionLogRecord, ProjectContext,
+    RunExecutionReport, RunRecord, RuntimeError, Slice1Runtime, TaskRecord, TraceRecord,
+    TriggerDeliveryRecord, TriggerRecord, TriggerSpec,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -52,7 +52,10 @@ pub fn app(state: AppState) -> Router {
             "/api/workspaces/{workspace_id}/projects/{project_id}/automations",
             get(list_automations).post(create_automation),
         )
-        .route("/api/automations/{automation_id}", get(get_automation_detail))
+        .route(
+            "/api/automations/{automation_id}",
+            get(get_automation_detail),
+        )
         .route(
             "/api/automations/{automation_id}/activate",
             post(activate_automation),
@@ -80,8 +83,14 @@ pub fn app(state: AppState) -> Router {
         .route("/api/runs/{run_id}/artifacts", get(list_artifacts))
         .route("/api/runs/{run_id}/knowledge", get(get_knowledge_detail))
         .route("/api/approvals/{approval_id}", get(get_approval_request))
-        .route("/api/approvals/{approval_id}/resolve", post(resolve_approval))
-        .route("/api/workspaces/{workspace_id}/inbox", get(list_inbox_items))
+        .route(
+            "/api/approvals/{approval_id}/resolve",
+            post(resolve_approval),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/inbox",
+            get(list_inbox_items),
+        )
         .route(
             "/api/workspaces/{workspace_id}/notifications",
             get(list_notifications),
@@ -269,6 +278,11 @@ struct SurfaceWebhookTriggerConfig {
 }
 
 #[derive(Debug, Deserialize)]
+struct CapabilityResolutionQuery {
+    estimated_cost: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
 struct SurfaceMcpEventTriggerConfig {
     server_id: String,
     event_name: Option<String>,
@@ -407,15 +421,6 @@ struct KnowledgeDetailResponse {
     candidates: Vec<KnowledgeCandidateRecord>,
     assets: Vec<KnowledgeAssetRecord>,
     lineage: Vec<KnowledgeLineageRecord>,
-}
-
-#[derive(Debug, Serialize)]
-struct CapabilityVisibilityResponse {
-    descriptor: CapabilityDescriptorRecord,
-    scope_ref: String,
-    visibility: String,
-    reason_code: String,
-    explanation: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -576,10 +581,7 @@ async fn get_automation_detail(
     let session = require_session(&state, &headers).await?;
     load_authorized_automation(&state, &session, &automation_id).await?;
     Ok(Json(
-        state
-            .runtime
-            .load_automation_detail(&automation_id)
-            .await?,
+        state.runtime.load_automation_detail(&automation_id).await?,
     ))
 }
 
@@ -656,10 +658,7 @@ async fn dispatch_manual_trigger(
 
     state.runtime.dispatch_manual_event(command).await?;
     Ok(Json(
-        state
-            .runtime
-            .load_automation_detail(&automation.id)
-            .await?,
+        state.runtime.load_automation_detail(&automation.id).await?,
     ))
 }
 
@@ -707,7 +706,8 @@ async fn retry_trigger_delivery(
     Json(command): Json<SurfaceTriggerDeliveryRetryCommand>,
 ) -> AppResult<AutomationDetailRecord> {
     let session = require_session(&state, &headers).await?;
-    let (_, _, automation) = load_authorized_trigger_delivery(&state, &session, &delivery_id).await?;
+    let (_, _, automation) =
+        load_authorized_trigger_delivery(&state, &session, &delivery_id).await?;
     if delivery_id != command.delivery_id {
         return Err(AppError::BadRequest(
             "delivery_id path/body mismatch".to_string(),
@@ -716,10 +716,7 @@ async fn retry_trigger_delivery(
 
     state.runtime.retry_trigger_delivery(&delivery_id).await?;
     Ok(Json(
-        state
-            .runtime
-            .load_automation_detail(&automation.id)
-            .await?,
+        state.runtime.load_automation_detail(&automation.id).await?,
     ))
 }
 
@@ -745,7 +742,9 @@ async fn start_task(
         .await?;
 
     let report = state.runtime.start_task(&task_id).await?;
-    Ok(Json(build_run_detail_response(&state.runtime, report).await?))
+    Ok(Json(
+        build_run_detail_response(&state.runtime, report).await?,
+    ))
 }
 
 async fn get_run_detail(
@@ -759,7 +758,9 @@ async fn get_run_detail(
         .auth
         .ensure_workspace_access(&session, &report.run.workspace_id)
         .await?;
-    Ok(Json(build_run_detail_response(&state.runtime, report).await?))
+    Ok(Json(
+        build_run_detail_response(&state.runtime, report).await?,
+    ))
 }
 
 async fn list_artifacts(
@@ -789,7 +790,9 @@ async fn get_knowledge_detail(
         .ensure_workspace_access(&session, &report.run.workspace_id)
         .await?;
 
-    Ok(Json(build_knowledge_detail_response(&state.runtime, &run_id).await?))
+    Ok(Json(
+        build_knowledge_detail_response(&state.runtime, &run_id).await?,
+    ))
 }
 
 async fn get_approval_request(
@@ -833,7 +836,9 @@ async fn resolve_approval(
         .runtime
         .resolve_approval(&approval_id, decision, &session.actor_ref, &command.note)
         .await?;
-    Ok(Json(build_run_detail_response(&state.runtime, report).await?))
+    Ok(Json(
+        build_run_detail_response(&state.runtime, report).await?,
+    ))
 }
 
 async fn list_inbox_items(
@@ -877,31 +882,27 @@ async fn list_notifications(
 async fn list_capability_visibility(
     State(state): State<AppState>,
     Path((workspace_id, project_id)): Path<(String, String)>,
+    Query(query): Query<CapabilityResolutionQuery>,
     headers: HeaderMap,
-) -> AppResult<Vec<CapabilityVisibilityResponse>> {
+) -> AppResult<Vec<CapabilityResolutionRecord>> {
     let session = require_session(&state, &headers).await?;
     state
         .auth
         .ensure_workspace_access(&session, &workspace_id)
         .await?;
 
-    let descriptors = state
-        .runtime
-        .list_visible_capabilities(&workspace_id, &project_id)
-        .await?;
+    let estimated_cost = query.estimated_cost.unwrap_or(1);
+    if estimated_cost < 0 {
+        return Err(AppError::BadRequest(
+            "estimated_cost must be greater than or equal to 0".to_string(),
+        ));
+    }
+
     Ok(Json(
-        descriptors
-            .into_iter()
-            .map(|descriptor| CapabilityVisibilityResponse {
-                descriptor,
-                scope_ref: format!("project:{project_id}"),
-                visibility: "visible".to_string(),
-                reason_code: "project_scope_grant_active".to_string(),
-                explanation: format!(
-                    "Visible because the project-scoped capability grant is active for `{project_id}`."
-                ),
-            })
-            .collect(),
+        state
+            .runtime
+            .list_capability_resolutions(&workspace_id, &project_id, estimated_cost)
+            .await?,
     ))
 }
 
@@ -947,14 +948,17 @@ async fn promote_knowledge(
         .promote_knowledge_candidate(&candidate_id, &session.actor_ref, &command.note)
         .await?;
     let run_id = report.candidate.source_run_id;
-    Ok(Json(build_knowledge_detail_response(&state.runtime, &run_id).await?))
+    Ok(Json(
+        build_knowledge_detail_response(&state.runtime, &run_id).await?,
+    ))
 }
 
 async fn get_hub_connection_status(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> AppResult<HubConnectionStatusResponse> {
-    let auth_state = resolve_auth_state(&state, auth_header_value(&headers).map(str::to_owned)).await;
+    let auth_state =
+        resolve_auth_state(&state, auth_header_value(&headers).map(str::to_owned)).await;
     Ok(Json(
         build_hub_connection_status(&state.runtime, auth_state.as_str()).await?,
     ))
@@ -967,8 +971,8 @@ async fn stream_events(
 ) -> Result<Sse<impl futures_util::Stream<Item = Result<Event, Infallible>>>, AppError> {
     let mut payloads = Vec::new();
     let mut sequence = 1_u64;
-    let auth_state = resolve_auth_state(&state, event_token(&headers, query.access_token.as_deref()))
-        .await;
+    let auth_state =
+        resolve_auth_state(&state, event_token(&headers, query.access_token.as_deref())).await;
 
     let connection = build_hub_connection_status(&state.runtime, auth_state.as_str()).await?;
     payloads.push(event_json(
@@ -979,14 +983,7 @@ async fn stream_events(
     sequence += 1;
 
     let session = if query.workspace_id.is_some() || query.run_id.is_some() {
-        Some(
-            require_session_with_token(
-                &state,
-                &headers,
-                query.access_token.as_deref(),
-            )
-            .await?,
-        )
+        Some(require_session_with_token(&state, &headers, query.access_token.as_deref()).await?)
     } else {
         None
     };
@@ -1070,7 +1067,9 @@ async fn build_run_detail_response(
 ) -> Result<RunDetailResponse, AppError> {
     let task = runtime.fetch_task(&report.run.task_id).await?;
     let knowledge_assets = runtime.list_knowledge_assets_by_run(&report.run.id).await?;
-    let knowledge_lineage = runtime.list_knowledge_lineage_by_run(&report.run.id).await?;
+    let knowledge_lineage = runtime
+        .list_knowledge_lineage_by_run(&report.run.id)
+        .await?;
 
     Ok(RunDetailResponse {
         run: report.run,
@@ -1144,10 +1143,7 @@ async fn transition_automation(
     }
 
     Ok(Json(
-        state
-            .runtime
-            .load_automation_detail(&automation.id)
-            .await?,
+        state.runtime.load_automation_detail(&automation.id).await?,
     ))
 }
 
@@ -1275,10 +1271,9 @@ async fn load_authorized_trigger_delivery(
         .runtime
         .fetch_trigger_delivery(delivery_id)
         .await?
-        .ok_or_else(|| {
-            AppError::NotFound(format!("trigger delivery `{delivery_id}` not found"))
-        })?;
-    let (trigger, automation) = load_authorized_trigger(state, session, &delivery.trigger_id).await?;
+        .ok_or_else(|| AppError::NotFound(format!("trigger delivery `{delivery_id}` not found")))?;
+    let (trigger, automation) =
+        load_authorized_trigger(state, session, &delivery.trigger_id).await?;
     Ok((delivery, trigger, automation))
 }
 

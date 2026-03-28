@@ -5,6 +5,8 @@ import {
   parseAutomationDetail,
   parseAutomationLifecycleCommand,
   parseAutomationSummary,
+  parseCapabilityResolution,
+  parseCapabilityResolutions,
   parseCreateAutomationCommand,
   parseCreateAutomationResponse,
   parseHubAuthError,
@@ -286,6 +288,60 @@ describe("schema-ts contract parsers", () => {
         knowledge_lineage: []
       }).run.status
     ).toBe("completed");
+  });
+
+  it("accepts capability resolutions with governance explainability", () => {
+    expect(
+      parseCapabilityResolution({
+        descriptor: {
+          id: "capability-write-note",
+          slug: "capability-write-note",
+          kind: "core",
+          source: "octopus-runtime",
+          platform: "local",
+          risk_level: "low",
+          requires_approval: false,
+          input_schema_uri: null,
+          output_schema_uri: null,
+          fallback_capability_id: null,
+          trust_level: "trusted",
+          created_at: "2026-03-28T10:00:00Z",
+          updated_at: "2026-03-28T10:00:00Z"
+        },
+        scope_ref: "workspace:workspace-alpha/project:project-slice1",
+        execution_state: "approval_required",
+        reason_code: "budget_soft_limit_exceeded",
+        explanation:
+          "Approval required because the estimated cost 7 exceeds the soft cost limit 5."
+      }).execution_state
+    ).toBe("approval_required");
+
+    expect(
+      parseCapabilityResolutions([
+        {
+          descriptor: {
+            id: "capability-write-note",
+            slug: "capability-write-note",
+            kind: "core",
+            source: "octopus-runtime",
+            platform: "local",
+            risk_level: "low",
+            requires_approval: false,
+            input_schema_uri: null,
+            output_schema_uri: null,
+            fallback_capability_id: null,
+            trust_level: "trusted",
+            created_at: "2026-03-28T10:00:00Z",
+            updated_at: "2026-03-28T10:00:00Z"
+          },
+          scope_ref: "workspace:workspace-alpha/project:project-slice1",
+          execution_state: "executable",
+          reason_code: "within_budget",
+          explanation:
+            "Executable because the capability is bound, granted, and within the current budget."
+        }
+      ])[0].reason_code
+    ).toBe("within_budget");
   });
 
   it("accepts a hub event payload", () => {

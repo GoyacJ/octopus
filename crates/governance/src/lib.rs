@@ -6,6 +6,9 @@ use thiserror::Error;
 pub const DECISION_ALLOW: &str = "allow";
 pub const DECISION_REQUIRE_APPROVAL: &str = "require_approval";
 pub const DECISION_DENY: &str = "deny";
+pub const EXECUTION_STATE_EXECUTABLE: &str = "executable";
+pub const EXECUTION_STATE_APPROVAL_REQUIRED: &str = "approval_required";
+pub const EXECUTION_STATE_DENIED: &str = "denied";
 
 pub const APPROVAL_TYPE_EXECUTION: &str = "execution";
 pub const APPROVAL_TYPE_KNOWLEDGE_PROMOTION: &str = "knowledge_promotion";
@@ -309,6 +312,15 @@ pub struct TaskGovernanceInput {
     pub estimated_cost: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CapabilityResolutionRecord {
+    pub descriptor: CapabilityDescriptorRecord,
+    pub scope_ref: String,
+    pub execution_state: String,
+    pub reason_code: String,
+    pub explanation: String,
+}
+
 #[derive(Debug, Error)]
 pub enum GovernanceStoreError {
     #[error("approval request `{0}` not found")]
@@ -480,70 +492,25 @@ impl SqliteGovernanceStore {
             });
         };
 
-        let Some(binding) = self
-            .fetch_active_binding(
-                input.capability_id.as_str(),
+        let resolution = self
+            .resolve_project_bound_capability(
+                descriptor,
                 input.workspace_id.as_str(),
                 input.project_id.as_str(),
+                input.estimated_cost,
             )
-            .await?
-        else {
-            return Ok(GovernanceDecision::Deny {
-                reason: "capability_not_bound".to_string(),
-            });
-        };
+            .await?;
 
-        if binding.binding_status != "active" {
-            return Ok(GovernanceDecision::Deny {
-                reason: "capability_not_bound".to_string(),
-            });
-        }
-
-        let subject_ref = project_scope_ref(input.workspace_id.as_str(), input.project_id.as_str());
-        let Some(grant) = self
-            .fetch_active_grant(input.capability_id.as_str(), subject_ref.as_str())
-            .await?
-        else {
-            return Ok(GovernanceDecision::Deny {
-                reason: "capability_not_granted".to_string(),
-            });
-        };
-
-        if grant.grant_status != "active" {
-            return Ok(GovernanceDecision::Deny {
-                reason: "capability_not_granted".to_string(),
-            });
-        }
-
-        let Some(policy) = self
-            .fetch_budget_policy(input.workspace_id.as_str(), input.project_id.as_str())
-            .await?
-        else {
-            return Ok(GovernanceDecision::Deny {
-                reason: "budget_policy_missing".to_string(),
-            });
-        };
-
-        if input.estimated_cost > policy.hard_cost_limit {
-            return Ok(GovernanceDecision::Deny {
-                reason: "budget_hard_limit_exceeded".to_string(),
-            });
-        }
-
-        if descriptor.requires_approval || descriptor.risk_level == "high" {
-            return Ok(GovernanceDecision::RequireApproval {
-                reason: "risk_level_high".to_string(),
-            });
-        }
-
-        if input.estimated_cost > policy.soft_cost_limit {
-            return Ok(GovernanceDecision::RequireApproval {
-                reason: "budget_soft_limit_exceeded".to_string(),
-            });
-        }
-
-        Ok(GovernanceDecision::Allow {
-            reason: "within_budget".to_string(),
+        Ok(match resolution.execution_state.as_str() {
+            EXECUTION_STATE_EXECUTABLE => GovernanceDecision::Allow {
+                reason: resolution.reason_code,
+            },
+            EXECUTION_STATE_APPROVAL_REQUIRED => GovernanceDecision::RequireApproval {
+                reason: resolution.reason_code,
+            },
+            _ => GovernanceDecision::Deny {
+                reason: resolution.reason_code,
+            },
         })
     }
 
@@ -748,7 +715,7 @@ impl SqliteGovernanceStore {
             .transpose()?)
     }
 
-    pub async fn list_visible_capability_descriptors(
+    pub async fn list_project_bound_capability_descriptors(
         &self,
         workspace_id: &str,
         project_id: &str,
@@ -761,19 +728,14 @@ impl SqliteGovernanceStore {
             FROM capability_descriptors d
             INNER JOIN capability_bindings b
                 ON b.capability_id = d.id
-            INNER JOIN capability_grants g
-                ON g.capability_id = d.id
             WHERE b.workspace_id = ?1
               AND b.project_id = ?2
               AND b.binding_status = 'active'
-              AND g.subject_ref = ?3
-              AND g.grant_status = 'active'
             ORDER BY d.slug ASC
             "#,
         )
         .bind(workspace_id)
         .bind(project_id)
-        .bind(project_scope_ref(workspace_id, project_id))
         .fetch_all(&self.pool)
         .await?;
 
@@ -781,6 +743,147 @@ impl SqliteGovernanceStore {
             .map(|row| capability_descriptor_from_row(&row))
             .collect::<Result<Vec<_>, _>>()
             .map_err(GovernanceStoreError::from)
+    }
+
+    pub async fn list_visible_capability_descriptors(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<CapabilityDescriptorRecord>, GovernanceStoreError> {
+        self.list_project_bound_capability_descriptors(workspace_id, project_id)
+            .await
+    }
+
+    pub async fn resolve_project_bound_capability(
+        &self,
+        descriptor: CapabilityDescriptorRecord,
+        workspace_id: &str,
+        project_id: &str,
+        estimated_cost: i64,
+    ) -> Result<CapabilityResolutionRecord, GovernanceStoreError> {
+        let default_scope_ref = project_scope_ref(workspace_id, project_id);
+        let Some(binding) = self
+            .fetch_active_binding(descriptor.id.as_str(), workspace_id, project_id)
+            .await?
+        else {
+            return Ok(build_capability_resolution(
+                descriptor,
+                default_scope_ref,
+                EXECUTION_STATE_DENIED,
+                "capability_not_bound",
+                project_id,
+                estimated_cost,
+                None,
+                None,
+            ));
+        };
+
+        if binding.binding_status != "active" {
+            return Ok(build_capability_resolution(
+                descriptor,
+                binding.scope_ref,
+                EXECUTION_STATE_DENIED,
+                "capability_not_bound",
+                project_id,
+                estimated_cost,
+                None,
+                None,
+            ));
+        }
+
+        let scope_ref = binding.scope_ref;
+        let subject_ref = project_scope_ref(workspace_id, project_id);
+        let Some(grant) = self
+            .fetch_active_grant(descriptor.id.as_str(), subject_ref.as_str())
+            .await?
+        else {
+            return Ok(build_capability_resolution(
+                descriptor,
+                scope_ref,
+                EXECUTION_STATE_DENIED,
+                "capability_not_granted",
+                project_id,
+                estimated_cost,
+                None,
+                None,
+            ));
+        };
+
+        if grant.grant_status != "active" {
+            return Ok(build_capability_resolution(
+                descriptor,
+                scope_ref,
+                EXECUTION_STATE_DENIED,
+                "capability_not_granted",
+                project_id,
+                estimated_cost,
+                None,
+                None,
+            ));
+        }
+
+        let Some(policy) = self.fetch_budget_policy(workspace_id, project_id).await? else {
+            return Ok(build_capability_resolution(
+                descriptor,
+                scope_ref,
+                EXECUTION_STATE_DENIED,
+                "budget_policy_missing",
+                project_id,
+                estimated_cost,
+                None,
+                None,
+            ));
+        };
+
+        if estimated_cost > policy.hard_cost_limit {
+            return Ok(build_capability_resolution(
+                descriptor,
+                scope_ref,
+                EXECUTION_STATE_DENIED,
+                "budget_hard_limit_exceeded",
+                project_id,
+                estimated_cost,
+                Some(policy.soft_cost_limit),
+                Some(policy.hard_cost_limit),
+            ));
+        }
+
+        if descriptor.requires_approval || descriptor.risk_level == "high" {
+            return Ok(build_capability_resolution(
+                descriptor,
+                scope_ref,
+                EXECUTION_STATE_APPROVAL_REQUIRED,
+                "risk_level_high",
+                project_id,
+                estimated_cost,
+                Some(policy.soft_cost_limit),
+                Some(policy.hard_cost_limit),
+            ));
+        }
+
+        if estimated_cost > policy.soft_cost_limit {
+            return Ok(build_capability_resolution(
+                descriptor,
+                scope_ref,
+                EXECUTION_STATE_APPROVAL_REQUIRED,
+                "budget_soft_limit_exceeded",
+                project_id,
+                estimated_cost,
+                Some(policy.soft_cost_limit),
+                Some(policy.hard_cost_limit),
+            ));
+        }
+
+        Ok(build_capability_resolution(
+            descriptor,
+            scope_ref,
+            EXECUTION_STATE_EXECUTABLE,
+            "within_budget",
+            project_id,
+            estimated_cost,
+            Some(policy.soft_cost_limit),
+            Some(policy.hard_cost_limit),
+        ))
     }
 
     async fn fetch_active_binding(
@@ -852,6 +955,107 @@ impl SqliteGovernanceStore {
 
 pub fn project_scope_ref(workspace_id: &str, project_id: &str) -> String {
     format!("workspace:{workspace_id}/project:{project_id}")
+}
+
+fn capability_resolution(
+    descriptor: CapabilityDescriptorRecord,
+    scope_ref: String,
+    execution_state: &str,
+    reason_code: &str,
+    explanation: String,
+) -> CapabilityResolutionRecord {
+    CapabilityResolutionRecord {
+        descriptor,
+        scope_ref,
+        execution_state: execution_state.to_string(),
+        reason_code: reason_code.to_string(),
+        explanation,
+    }
+}
+
+fn build_capability_resolution(
+    descriptor: CapabilityDescriptorRecord,
+    scope_ref: String,
+    execution_state: &str,
+    reason_code: &str,
+    project_id: &str,
+    estimated_cost: i64,
+    soft_limit: Option<i64>,
+    hard_limit: Option<i64>,
+) -> CapabilityResolutionRecord {
+    let explanation = capability_resolution_explanation(
+        reason_code,
+        &descriptor,
+        project_id,
+        estimated_cost,
+        soft_limit,
+        hard_limit,
+    );
+
+    capability_resolution(
+        descriptor,
+        scope_ref,
+        execution_state,
+        reason_code,
+        explanation,
+    )
+}
+
+fn capability_resolution_explanation(
+    reason_code: &str,
+    descriptor: &CapabilityDescriptorRecord,
+    project_id: &str,
+    estimated_cost: i64,
+    soft_limit: Option<i64>,
+    hard_limit: Option<i64>,
+) -> String {
+    match reason_code {
+        "capability_not_bound" => format!(
+            "Denied because capability `{}` is not actively bound to project `{project_id}`.",
+            descriptor.slug
+        ),
+        "capability_not_granted" => format!(
+            "Denied because capability `{}` does not have an active project grant for `{project_id}`.",
+            descriptor.slug
+        ),
+        "budget_policy_missing" => format!(
+            "Denied because project `{project_id}` does not have a budget policy for capability `{}`.",
+            descriptor.slug
+        ),
+        "budget_hard_limit_exceeded" => format!(
+            "Denied because the estimated cost {estimated_cost} exceeds the hard cost limit {}.",
+            hard_limit.unwrap_or_default()
+        ),
+        "risk_level_high" => {
+            if descriptor.requires_approval {
+                format!(
+                    "Approval required because capability `{}` is marked to require approval.",
+                    descriptor.slug
+                )
+            } else {
+                format!(
+                    "Approval required because capability `{}` is classified as high risk.",
+                    descriptor.slug
+                )
+            }
+        }
+        "budget_soft_limit_exceeded" => format!(
+            "Approval required because the estimated cost {estimated_cost} exceeds the soft cost limit {}.",
+            soft_limit.unwrap_or_default()
+        ),
+        "within_budget" => format!(
+            "Executable because capability `{}` is bound, granted, and the estimated cost {estimated_cost} is within the current budget.",
+            descriptor.slug
+        ),
+        "capability_not_registered" => format!(
+            "Denied because capability `{}` is not registered in the governed runtime.",
+            descriptor.id
+        ),
+        _ => format!(
+            "Capability `{}` resolved with governance reason `{reason_code}` for project `{project_id}`.",
+            descriptor.slug
+        ),
+    }
 }
 
 fn capability_descriptor_from_row(

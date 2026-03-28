@@ -255,7 +255,7 @@ const knowledgeDetailFixture = {
   lineage: []
 };
 
-const capabilityVisibilityFixture = [
+const capabilityResolutionFixture = [
   {
     descriptor: {
       id: "capability-write-note",
@@ -272,10 +272,10 @@ const capabilityVisibilityFixture = [
       created_at: "2026-03-26T10:00:00Z",
       updated_at: "2026-03-26T10:00:00Z"
     },
-    scope_ref: "project:project-slice1",
-    visibility: "visible",
-    reason_code: "project_scope_grant_active",
-    explanation: "Visible because the project-scoped capability grant is active."
+    scope_ref: "workspace:workspace-alpha/project:project-slice1",
+    execution_state: "approval_required",
+    reason_code: "budget_soft_limit_exceeded",
+    explanation: "Approval required because the estimated cost 7 exceeds the soft cost limit 5."
   }
 ];
 
@@ -364,8 +364,13 @@ function runHubClientContractSuite(name: string, factory: SuiteFactory) {
       });
       await expect(client.listArtifacts("run-1")).resolves.toHaveLength(1);
       await expect(
-        client.listCapabilityVisibility("workspace-alpha", "project-slice1")
-      ).resolves.toHaveLength(1);
+        client.listCapabilityResolutions("workspace-alpha", "project-slice1", 7)
+      ).resolves.toMatchObject([
+        {
+          execution_state: "approval_required",
+          reason_code: "budget_soft_limit_exceeded"
+        }
+      ]);
       await expect(client.listInboxItems("workspace-alpha")).resolves.toEqual([]);
       await expect(client.listNotifications("workspace-alpha")).resolves.toEqual([]);
       await expect(client.getKnowledgeDetail("run-1")).resolves.toMatchObject({
@@ -463,7 +468,12 @@ runHubClientContractSuite("local adapter", () => {
         case "hub:list_artifacts":
           return runDetailFixture.artifacts;
         case "hub:list_capability_visibility":
-          return capabilityVisibilityFixture;
+          expect(payload).toEqual({
+            workspaceId: "workspace-alpha",
+            projectId: "project-slice1",
+            estimatedCost: 7
+          });
+          return capabilityResolutionFixture;
         case "hub:list_inbox_items":
         case "hub:list_notifications":
           return [];
@@ -523,7 +533,7 @@ runHubClientContractSuite("remote adapter", () => {
   return {
     client: createRemoteHubClient({
       baseUrl: "http://hub.test",
-      fetch: async (input, init) => {
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
         const method = init?.method ?? "GET";
         const url = String(input);
 
@@ -578,8 +588,12 @@ runHubClientContractSuite("remote adapter", () => {
         if (method === "GET" && url === "http://hub.test/api/workspaces/workspace-alpha/notifications") {
           return Response.json([]);
         }
-        if (method === "GET" && url === "http://hub.test/api/workspaces/workspace-alpha/projects/project-slice1/capabilities") {
-          return Response.json(capabilityVisibilityFixture);
+        if (
+          method === "GET" &&
+          url ===
+            "http://hub.test/api/workspaces/workspace-alpha/projects/project-slice1/capabilities?estimated_cost=7"
+        ) {
+          return Response.json(capabilityResolutionFixture);
         }
         if (method === "GET" && url === "http://hub.test/api/runs/run-1/knowledge") {
           return Response.json(knowledgeDetailFixture);
@@ -616,7 +630,7 @@ describe("remote auth-aware adapter behavior", () => {
     const client = createRemoteHubClient({
       baseUrl: "http://hub.test",
       getAccessToken: async () => "remote-token",
-      fetch: async (input, init) => {
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
         expect(String(input)).toBe("http://hub.test/api/hub/connection");
         expect(new Headers(init?.headers).get("authorization")).toBe(
           "Bearer remote-token"

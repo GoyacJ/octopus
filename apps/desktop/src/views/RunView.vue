@@ -11,6 +11,7 @@ const runDetail = computed(() => hub.runDetail);
 const artifacts = computed(() => hub.artifacts);
 const knowledgeDetail = computed(() => hub.knowledgeDetail);
 const runApprovals = computed(() => runDetail.value?.approvals ?? []);
+const policyDecisions = computed(() => runDetail.value?.policy_decisions ?? []);
 
 function approvalForCandidate(candidateId: string) {
   return runApprovals.value.find(
@@ -80,6 +81,25 @@ onMounted(() => {
         <span>Attempts: {{ runDetail?.run.attempt_count ?? 0 }}/{{ runDetail?.run.max_attempts ?? 0 }}</span>
       </div>
       <p class="muted">{{ runDetail?.task.instruction ?? "Loading task instruction..." }}</p>
+    </article>
+
+    <article class="surface-card">
+      <p class="eyebrow">Policy Decisions</p>
+      <h2>{{ policyDecisions.length }} governance records</h2>
+      <div v-if="policyDecisions.length > 0" class="stack-list">
+        <div v-for="decision in policyDecisions" :key="decision.id">
+          <strong>{{ decision.decision }}</strong>
+          <p>{{ decision.reason }}</p>
+          <div class="meta-list">
+            <span>Capability: {{ decision.capability_id }}</span>
+            <span>Estimated cost: {{ decision.estimated_cost }}</span>
+            <span v-if="decision.approval_request_id">
+              Approval: {{ decision.approval_request_id }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <p v-else class="muted">No policy decision chain is recorded for this run yet.</p>
     </article>
 
     <article class="surface-card">

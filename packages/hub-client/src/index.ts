@@ -5,7 +5,7 @@ import {
   parseAutomationLifecycleCommand,
   parseAutomationSummaries,
   parseArtifacts,
-  parseCapabilityVisibilities,
+  parseCapabilityResolutions,
   parseCreateAutomationCommand,
   parseCreateAutomationResponse,
   parseHubAuthError,
@@ -30,7 +30,7 @@ import {
   type AutomationDetail,
   type AutomationSummary,
   type Artifact,
-  type CapabilityVisibility,
+  type CapabilityResolution,
   type CreateAutomationCommand,
   type CreateAutomationResponse,
   type HubAuthError,
@@ -111,10 +111,16 @@ export interface HubClient {
     command: RequestKnowledgePromotionCommand
   ): Promise<ApprovalRequest>;
   promoteKnowledge(command: KnowledgePromoteCommand): Promise<KnowledgeDetail>;
+  listCapabilityResolutions(
+    workspaceId: string,
+    projectId: string,
+    estimatedCost: number
+  ): Promise<CapabilityResolution[]>;
   listCapabilityVisibility(
     workspaceId: string,
-    projectId: string
-  ): Promise<CapabilityVisibility[]>;
+    projectId: string,
+    estimatedCost?: number
+  ): Promise<CapabilityResolution[]>;
   getHubConnectionStatus(): Promise<HubConnectionStatus>;
   subscribe(
     listener: (event: HubEvent) => void,
@@ -254,6 +260,20 @@ function normalizeAuthError(status: number, body: unknown): HubAuthError | null 
 }
 
 export function createLocalHubClient(transport: LocalHubTransport): HubClient {
+  async function listCapabilityResolutions(
+    workspaceId: string,
+    projectId: string,
+    estimatedCost: number
+  ): Promise<CapabilityResolution[]> {
+    return parseCapabilityResolutions(
+      await transport.invoke(LOCAL_HUB_COMMANDS.listCapabilityVisibility, {
+        workspaceId,
+        projectId,
+        estimatedCost
+      })
+    );
+  }
+
   return {
     async getProjectContext(workspaceId, projectId) {
       return parseProjectContext(
@@ -404,13 +424,11 @@ export function createLocalHubClient(transport: LocalHubTransport): HubClient {
         )
       );
     },
-    async listCapabilityVisibility(workspaceId, projectId) {
-      return parseCapabilityVisibilities(
-        await transport.invoke(LOCAL_HUB_COMMANDS.listCapabilityVisibility, {
-          workspaceId,
-          projectId
-        })
-      );
+    async listCapabilityResolutions(workspaceId, projectId, estimatedCost) {
+      return listCapabilityResolutions(workspaceId, projectId, estimatedCost);
+    },
+    async listCapabilityVisibility(workspaceId, projectId, estimatedCost = 1) {
+      return listCapabilityResolutions(workspaceId, projectId, estimatedCost);
     },
     async getHubConnectionStatus() {
       return parseHubConnectionStatus(
@@ -447,6 +465,29 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
 
   if (!fetchImpl) {
     throw new Error("fetch is not available in this environment.");
+  }
+
+  async function listCapabilityResolutions(
+    workspaceId: string,
+    projectId: string,
+    estimatedCost: number
+  ): Promise<CapabilityResolution[]> {
+    const capabilitiesUrl = new URL(
+      remotePath(
+        options.baseUrl,
+        `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/capabilities`
+      )
+    );
+    capabilitiesUrl.searchParams.set("estimated_cost", String(estimatedCost));
+
+    return parseCapabilityResolutions(
+      await readRemoteJson(
+        fetchImpl,
+        capabilitiesUrl.toString(),
+        undefined,
+        options.getAccessToken
+      )
+    );
   }
 
   return {
@@ -760,18 +801,11 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
         )
       );
     },
-    async listCapabilityVisibility(workspaceId, projectId) {
-      return parseCapabilityVisibilities(
-        await readRemoteJson(
-          fetchImpl,
-          remotePath(
-            options.baseUrl,
-            `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/capabilities`
-          ),
-          undefined,
-          options.getAccessToken
-        )
-      );
+    async listCapabilityResolutions(workspaceId, projectId, estimatedCost) {
+      return listCapabilityResolutions(workspaceId, projectId, estimatedCost);
+    },
+    async listCapabilityVisibility(workspaceId, projectId, estimatedCost = 1) {
+      return listCapabilityResolutions(workspaceId, projectId, estimatedCost);
     },
     async getHubConnectionStatus() {
       return parseHubConnectionStatus(

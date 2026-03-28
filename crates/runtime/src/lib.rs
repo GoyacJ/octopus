@@ -12,14 +12,14 @@ pub use models::{
     AutomationDetailRecord, AutomationRecord, AutomationSummaryRecord, CreateAutomationInput,
     CreateAutomationReport, CreateTaskInput, CreateTriggerInput, CronTriggerConfig,
     DispatchManualEventInput, DispatchMcpEventInput, DispatchWebhookEventInput,
-    KnowledgePromotionReport, ManualEventTriggerConfig, McpEventTriggerConfig,
-    RunExecutionReport, RunRecord, RunSummaryRecord, TaskRecord, TriggerDeliveryRecord,
-    TriggerDeliveryReport, TriggerRecord, TriggerSpec, WebhookTriggerConfig,
+    KnowledgePromotionReport, ManualEventTriggerConfig, McpEventTriggerConfig, RunExecutionReport,
+    RunRecord, RunSummaryRecord, TaskRecord, TriggerDeliveryRecord, TriggerDeliveryReport,
+    TriggerRecord, TriggerSpec, WebhookTriggerConfig,
 };
 pub use octopus_domain_context::ProjectContext;
 pub use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
-    CapabilityDescriptorRecord, CapabilityGrantRecord,
+    CapabilityDescriptorRecord, CapabilityGrantRecord, CapabilityResolutionRecord,
 };
 pub use octopus_interop_mcp::{
     EnvironmentLeaseRecord, McpCredentialRecord, McpInvocationRecord, McpServerRecord,
@@ -85,7 +85,9 @@ pub enum RuntimeError {
     },
     #[error("knowledge candidate `{0}` not found")]
     KnowledgeCandidateNotFound(String),
-    #[error("knowledge candidate `{candidate_id}` has invalid state `{status}`; expected `{expected}`")]
+    #[error(
+        "knowledge candidate `{candidate_id}` has invalid state `{status}`; expected `{expected}`"
+    )]
     InvalidKnowledgeCandidateState {
         candidate_id: String,
         status: String,
@@ -337,7 +339,9 @@ impl Slice2Runtime {
         &self,
         delivery_id: &str,
     ) -> Result<Option<TriggerDeliveryRecord>, RuntimeError> {
-        self.automation_intake.fetch_trigger_delivery(delivery_id).await
+        self.automation_intake
+            .fetch_trigger_delivery(delivery_id)
+            .await
     }
 
     pub async fn start_task(&self, task_id: &str) -> Result<RunExecutionReport, RuntimeError> {
@@ -490,7 +494,9 @@ impl Slice2Runtime {
         &self,
         approval_id: &str,
     ) -> Result<Option<ApprovalRequestRecord>, RuntimeError> {
-        self.run_orchestrator.fetch_approval_request(approval_id).await
+        self.run_orchestrator
+            .fetch_approval_request(approval_id)
+            .await
     }
 
     pub async fn request_knowledge_promotion(
@@ -648,13 +654,14 @@ impl Slice2Runtime {
         self.run_orchestrator.list_artifacts_by_run(run_id).await
     }
 
-    pub async fn list_visible_capabilities(
+    pub async fn list_capability_resolutions(
         &self,
         workspace_id: &str,
         project_id: &str,
-    ) -> Result<Vec<CapabilityDescriptorRecord>, RuntimeError> {
+        estimated_cost: i64,
+    ) -> Result<Vec<CapabilityResolutionRecord>, RuntimeError> {
         self.run_orchestrator
-            .list_visible_capabilities(workspace_id, project_id)
+            .list_capability_resolutions(workspace_id, project_id, estimated_cost)
             .await
     }
 

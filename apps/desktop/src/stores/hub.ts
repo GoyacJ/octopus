@@ -3,8 +3,8 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
 type ProjectContext = Awaited<ReturnType<HubClient["getProjectContext"]>>;
-type CapabilityVisibility = Awaited<
-  ReturnType<HubClient["listCapabilityVisibility"]>
+type CapabilityResolution = Awaited<
+  ReturnType<HubClient["listCapabilityResolutions"]>
 >[number];
 type HubConnectionStatus = Awaited<
   ReturnType<HubClient["getHubConnectionStatus"]>
@@ -56,7 +56,10 @@ export const useHubStore = defineStore("hub", () => {
   const currentRunId = ref<string | null>(null);
 
   const projectContext = ref<ProjectContext | null>(null);
-  const capabilityVisibilities = ref<CapabilityVisibility[]>([]);
+  const taskCapabilityResolutions = ref<CapabilityResolution[]>([]);
+  const automationCapabilityResolutions = ref<CapabilityResolution[]>([]);
+  const taskCapabilityEstimatedCost = ref(1);
+  const automationCapabilityEstimatedCost = ref(1);
   const connectionStatus = ref<HubConnectionStatus | null>(null);
   const inboxItems = ref<InboxItem[]>([]);
   const notifications = ref<Notification[]>([]);
@@ -85,7 +88,10 @@ export const useHubStore = defineStore("hub", () => {
     () => projectContext.value?.project.display_name ?? "Project"
   );
   const activeCapability = computed(
-    () => capabilityVisibilities.value[0]?.descriptor ?? null
+    () =>
+      taskCapabilityResolutions.value[0]?.descriptor ??
+      automationCapabilityResolutions.value[0]?.descriptor ??
+      null
   );
   const authState = computed(
     () => connectionStatus.value?.auth_state ?? "auth_required"
@@ -149,25 +155,31 @@ export const useHubStore = defineStore("hub", () => {
 
   async function loadWorkspace(
     workspaceId: string,
-    projectId: string
+    projectId: string,
+    taskEstimatedCost = taskCapabilityEstimatedCost.value,
+    automationEstimatedCost = automationCapabilityEstimatedCost.value
   ): Promise<void> {
     workspaceLoading.value = true;
     surfaceError.value = null;
     currentWorkspaceId.value = workspaceId;
     currentProjectId.value = projectId;
+    taskCapabilityEstimatedCost.value = taskEstimatedCost;
+    automationCapabilityEstimatedCost.value = automationEstimatedCost;
 
     try {
       const client = requireHubClient();
       const [
         nextProjectContext,
-        nextCapabilityVisibilities,
+        nextTaskCapabilityResolutions,
+        nextAutomationCapabilityResolutions,
         nextConnectionStatus,
         nextInboxItems,
         nextNotifications,
         nextAutomations
       ] = await Promise.all([
         client.getProjectContext(workspaceId, projectId),
-        client.listCapabilityVisibility(workspaceId, projectId),
+        client.listCapabilityResolutions(workspaceId, projectId, taskEstimatedCost),
+        client.listCapabilityResolutions(workspaceId, projectId, automationEstimatedCost),
         client.getHubConnectionStatus(),
         client.listInboxItems(workspaceId),
         client.listNotifications(workspaceId),
@@ -175,7 +187,8 @@ export const useHubStore = defineStore("hub", () => {
       ]);
 
       projectContext.value = nextProjectContext;
-      capabilityVisibilities.value = nextCapabilityVisibilities;
+      taskCapabilityResolutions.value = nextTaskCapabilityResolutions;
+      automationCapabilityResolutions.value = nextAutomationCapabilityResolutions;
       connectionStatus.value = nextConnectionStatus;
       inboxItems.value = nextInboxItems;
       notifications.value = nextNotifications;
@@ -188,6 +201,48 @@ export const useHubStore = defineStore("hub", () => {
       throw error;
     } finally {
       workspaceLoading.value = false;
+    }
+  }
+
+  async function loadTaskCapabilityResolutions(
+    workspaceId: string,
+    projectId: string,
+    estimatedCost: number
+  ): Promise<void> {
+    surfaceError.value = null;
+
+    try {
+      const client = requireHubClient();
+      taskCapabilityEstimatedCost.value = estimatedCost;
+      taskCapabilityResolutions.value = await client.listCapabilityResolutions(
+        workspaceId,
+        projectId,
+        estimatedCost
+      );
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    }
+  }
+
+  async function loadAutomationCapabilityResolutions(
+    workspaceId: string,
+    projectId: string,
+    estimatedCost: number
+  ): Promise<void> {
+    surfaceError.value = null;
+
+    try {
+      const client = requireHubClient();
+      automationCapabilityEstimatedCost.value = estimatedCost;
+      automationCapabilityResolutions.value = await client.listCapabilityResolutions(
+        workspaceId,
+        projectId,
+        estimatedCost
+      );
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
     }
   }
 
@@ -424,7 +479,10 @@ export const useHubStore = defineStore("hub", () => {
     currentAutomationId,
     currentRunId,
     projectContext,
-    capabilityVisibilities,
+    taskCapabilityResolutions,
+    automationCapabilityResolutions,
+    taskCapabilityEstimatedCost,
+    automationCapabilityEstimatedCost,
     connectionStatus,
     inboxItems,
     notifications,
@@ -450,6 +508,8 @@ export const useHubStore = defineStore("hub", () => {
     authState,
     readOnlyMode,
     loadWorkspace,
+    loadTaskCapabilityResolutions,
+    loadAutomationCapabilityResolutions,
     createAutomation,
     loadAutomation,
     activateAutomation,

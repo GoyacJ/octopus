@@ -1,0 +1,72 @@
+## Design Note
+
+- Problem:
+  - The current GA capability surface can only say that a capability is visible. It cannot explain whether the current workspace/project input would execute immediately, require approval, or be denied, and the desktop Run view does not expose the already-persisted policy decision chain.
+- Goal:
+  - Provide a minimum read-only governance explainability surface across runtime, shared contracts, remote-hub, hub-client, and desktop without expanding into governance-management features.
+- Acceptance Criteria:
+  - Project-bound capabilities return cost-aware execution-state explanations through one shared contract.
+  - Desktop workspace inputs reflect those explanations as estimated cost changes.
+  - Desktop run detail renders the persisted policy decision chain already carried in `RunDetail`.
+- Non-functional Constraints:
+  - No parallel contract truth outside `schemas/`.
+  - No new governance state machine in desktop or hub-client.
+  - No expansion into tenant / RBAC / IdP, grant editing, budget editing, vector retrieval, or Org Graph.
+  - Local and remote modes must remain transport-identical through the shared client boundary.
+- MVP Boundary:
+  - Only evaluate capabilities already visible in the current project scope.
+  - Only explain `executable | approval_required | denied`.
+  - Only add cost-aware evaluation to the existing `/capabilities` and workspace surface paths.
+- Layer Placement:
+  - Shared capability explainability contracts live in `schemas/governance`.
+  - TypeScript validation and parsing live in `packages/schema-ts`.
+  - Governance evaluation truth lives in `crates/governance` and is surfaced through `crates/runtime`.
+  - Transport-neutral access lives in `packages/hub-client`.
+  - HTTP assembly lives in `apps/remote-hub`.
+  - Workspace / Run rendering changes live in `apps/desktop`.
+- Module Boundaries:
+  - `crates/governance` owns mapping current binding, grant, budget, and risk truth into a read-only capability resolution.
+  - `crates/runtime` owns listing project-bound capabilities and joining them with governance evaluation input.
+  - `packages/hub-client` owns the local / remote request shape for capability explainability, including `estimated_cost`.
+  - `apps/remote-hub` keeps the existing capability route and upgrades its query/response contract.
+  - `apps/desktop` consumes the new read model and does not infer policy outcomes locally.
+- Inputs:
+  - `workspace_id`
+  - `project_id`
+  - `estimated_cost`
+  - Existing bound capability descriptors, grants, and budget policies in the governed runtime
+  - Existing `RunDetail.policy_decisions`
+- Outputs:
+  - `CapabilityResolution[]`
+  - Existing `RunDetail` with `policy_decisions` rendered in the desktop surface
+- State Transitions:
+  - None. This slice is read-only explainability and must not alter existing runtime state machines.
+- Error Handling:
+  - Missing or invalid capability governance inputs resolve to explanatory `denied` states where the runtime already does so.
+  - Transport and auth errors continue through existing hub-client / remote-hub paths.
+  - Desktop continues to respect read-only mode when auth is not fully authenticated.
+- Tech Stack Decision:
+  - None.
+- Visual Framework Impact:
+  - Reuse the existing workspace and run views. No new route tree or standalone governance center is introduced.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - Existing `evaluate_task(...)` governance rules.
+  - Existing `list_visible_capability_descriptors(...)` project scope filter.
+  - Existing remote-hub auth and workspace-membership enforcement.
+  - Existing desktop workspace task/automation estimated-cost inputs and run detail store.
+- New Abstractions:
+  - `CapabilityResolution` shared contract.
+  - A small read-only runtime/governance resolution path that wraps existing policy evaluation into a capability-level explanation response.
+- Trade-offs:
+  - Reusing existing governance reasons keeps transport and UI simple, but explanations stay intentionally narrow and project-scoped.
+  - Keeping the existing capability route avoids route sprawl, but the endpoint now has a cost-aware query input.
+- Test Strategy:
+  - Add Rust tests for missing grant, missing budget, within budget, soft-limit approval, hard-limit deny, and high-risk approval.
+  - Add schema-ts parser tests for the new contract.
+  - Add hub-client tests for local / remote parity and cost-aware requests.
+  - Add remote-hub auth/http tests for cost-aware capability responses and run detail stability.
+  - Add desktop tests for workspace explainability updates and run policy-decision rendering.
+- ADR Needed:
+  - No. The slice stays within the current GA governance boundary and does not change durable repository architecture.
