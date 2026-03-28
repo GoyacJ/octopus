@@ -146,19 +146,95 @@ const hubConnectionStatusFixture = {
   last_refreshed_at: "2026-03-26T10:00:01Z"
 };
 
-function buildTransport(): LocalHubTransport {
+const projectKnowledgeIndexFixture = {
+  knowledge_space: {
+    id: "knowledge-space-1",
+    workspace_id: "workspace-alpha",
+    project_id: "project-slice1",
+    owner_ref: "workspace_admin:alice",
+    display_name: "Project Slice 1 Knowledge",
+    created_at: "2026-03-26T10:00:00Z",
+    updated_at: "2026-03-26T10:00:00Z"
+  },
+  entries: [
+    {
+      kind: "candidate",
+      id: "candidate-1",
+      knowledge_space_id: "knowledge-space-1",
+      capability_id: "capability-write-note",
+      status: "candidate",
+      source_run_id: "run-1",
+      source_artifact_id: "artifact-1",
+      source_candidate_id: null,
+      provenance_source: "builtin",
+      trust_level: "trusted",
+      created_at: "2026-03-26T10:00:01Z"
+    },
+    {
+      kind: "asset",
+      id: "asset-1",
+      knowledge_space_id: "knowledge-space-1",
+      capability_id: "capability-write-note",
+      status: "verified_shared",
+      source_run_id: null,
+      source_artifact_id: null,
+      source_candidate_id: "candidate-1",
+      provenance_source: null,
+      trust_level: "verified",
+      created_at: "2026-03-26T10:00:02Z"
+    }
+  ]
+};
+
+function buildTransport(
+  overrides: Partial<Record<string, (payload: unknown) => unknown>> = {}
+): LocalHubTransport {
   return {
     async invoke(command, payload) {
+      const override = overrides[command];
+      if (override) {
+        return override(payload);
+      }
+
       switch (command) {
         case "hub:get_project_context": {
-          const workspaceId = (payload as { workspaceId?: string } | undefined)
-            ?.workspaceId;
-          return workspaceId === "demo" ? demoContextFixture : projectContextFixture;
+          const params = payload as
+            | { workspaceId?: string; projectId?: string }
+            | undefined;
+          if (params?.workspaceId === "demo") {
+            return demoContextFixture;
+          }
+          if (params?.projectId === "project-empty") {
+            return {
+              workspace: projectContextFixture.workspace,
+              project: {
+                ...projectContextFixture.project,
+                id: "project-empty",
+                slug: "project-empty",
+                display_name: "Project Empty"
+              }
+            };
+          }
+          return projectContextFixture;
         }
         case "hub:list_capability_visibility":
           return capabilityResolutionFixture;
         case "hub:list_runs":
           return [runSummaryFixture];
+        case "hub:get_project_knowledge": {
+          const projectId = (payload as { projectId?: string } | undefined)?.projectId;
+          if (projectId === "project-empty") {
+            return {
+              knowledge_space: {
+                ...projectKnowledgeIndexFixture.knowledge_space,
+                project_id: "project-empty",
+                display_name: "Project Empty Knowledge"
+              },
+              entries: []
+            };
+          }
+          return projectKnowledgeIndexFixture;
+        }
         case "hub:list_inbox_items":
           return [inboxApprovalFixture];
         case "hub:list_notifications":
@@ -179,8 +255,8 @@ function buildTransport(): LocalHubTransport {
   };
 }
 
-async function mountAt(path: string) {
-  const client = createLocalHubClient(buildTransport());
+async function mountAt(path: string, transport = buildTransport()) {
+  const client = createLocalHubClient(transport);
   const { pinia, router } = createDesktopPlugins(client, true);
   await router.push(path);
   await router.isReady();
@@ -223,6 +299,41 @@ describe("desktop task workbench routes", () => {
     expect(wrapper.text()).toContain("Recent Runs");
     expect(wrapper.text()).toContain("Write note");
     expect(wrapper.text()).toContain("completed");
+  });
+
+  it("renders the knowledge route from a dedicated project loader with traceability links", async () => {
+    const { wrapper } = await mountAt(
+      "/workspaces/workspace-alpha/projects/project-slice1/knowledge",
+      buildTransport({
+        "hub:get_run_detail": () => {
+          throw new Error("knowledge route must not hydrate run detail");
+        },
+        "hub:get_knowledge_detail": () => {
+          throw new Error("knowledge route must not reuse run-scoped knowledge detail");
+        }
+      })
+    );
+
+    expect(wrapper.text()).toContain("Project Knowledge");
+    expect(wrapper.text()).toContain("Project Slice 1 Knowledge");
+    expect(wrapper.text()).toContain("candidate");
+    expect(wrapper.text()).toContain("verified_shared");
+    expect(wrapper.text()).not.toContain("Request Promotion");
+    expect(wrapper.get('[data-testid="knowledge-open-run-run-1"]').attributes("href")).toContain(
+      "/runs/run-1"
+    );
+    expect(wrapper.get('[data-testid="knowledge-open-inbox"]').attributes("href")).toContain(
+      "/workspaces/workspace-alpha/inbox"
+    );
+  });
+
+  it("renders an empty knowledge state for a project with no visible entries", async () => {
+    const { wrapper } = await mountAt(
+      "/workspaces/workspace-alpha/projects/project-empty/knowledge"
+    );
+
+    expect(wrapper.text()).toContain("Project Empty Knowledge");
+    expect(wrapper.text()).toContain("No shared knowledge entries are visible for this project yet.");
   });
 
   it("renders the inbox route as the action surface", async () => {

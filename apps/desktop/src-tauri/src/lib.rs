@@ -16,8 +16,8 @@ use octopus_runtime::{
     CapabilityGrantRecord, CreateAutomationInput, CreateTaskInput, CreateTriggerInput,
     DispatchManualEventInput, InboxItemRecord, KnowledgeAssetRecord, KnowledgeCandidateRecord,
     KnowledgeLineageRecord, KnowledgeSpaceRecord, NotificationRecord, PolicyDecisionLogRecord,
-    RunExecutionReport, RunRecord, RunSummaryRecord, Slice2Runtime, TaskRecord, TraceRecord,
-    TriggerRecord,
+    ProjectKnowledgeIndexRecord, RunExecutionReport, RunRecord, RunSummaryRecord, Slice2Runtime,
+    TaskRecord, TraceRecord, TriggerRecord,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -42,6 +42,7 @@ const LOCAL_MODE_UNSUPPORTED_TRIGGER_MESSAGE: &str =
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LocalHubTransportCommands {
     pub get_project_context: String,
+    pub get_project_knowledge: String,
     pub list_automations: String,
     pub create_automation: String,
     pub get_automation_detail: String,
@@ -178,6 +179,8 @@ struct KnowledgeDetailResponse {
     assets: Vec<KnowledgeAssetRecord>,
     lineage: Vec<KnowledgeLineageRecord>,
 }
+
+type ProjectKnowledgeIndexResponse = ProjectKnowledgeIndexRecord;
 
 #[derive(Debug, Serialize)]
 struct HubConnectionServerSummary {
@@ -442,6 +445,22 @@ impl DesktopLocalHost {
                     .runtime
                     .fetch_project_context(&command.workspace_id, &command.project_id)
                     .await?
+            ));
+        }
+
+        if normalized_command
+            == normalize_tauri_invoke_command(commands.get_project_knowledge.as_str())
+        {
+            let command = self.parse_payload::<ProjectScopedCommand>(
+                commands.get_project_knowledge.as_str(),
+                payload,
+            )?;
+            return Ok(json!(
+                self.build_project_knowledge_index_response(
+                    &command.workspace_id,
+                    &command.project_id,
+                )
+                .await?
             ));
         }
 
@@ -984,8 +1003,20 @@ impl DesktopLocalHost {
                 .inner
                 .runtime
                 .list_knowledge_lineage_by_run(run_id)
-                .await?,
+            .await?,
         })
+    }
+
+    async fn build_project_knowledge_index_response(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<ProjectKnowledgeIndexResponse, LocalHostError> {
+        Ok(self
+            .inner
+            .runtime
+            .get_project_knowledge_index(workspace_id, project_id)
+            .await?)
     }
 
     async fn build_connection_status(&self) -> Result<HubConnectionStatusResponse, LocalHostError> {
@@ -1220,6 +1251,31 @@ async fn hub_get_project_context(
         local_hub_transport_contract()
             .commands
             .get_project_context
+            .as_str(),
+        json!({
+            "workspaceId": workspace_id,
+            "projectId": project_id,
+        }),
+    )
+    .await
+}
+
+#[allow(non_snake_case)]
+#[tauri::command]
+async fn hub_get_project_knowledge(
+    state: State<'_, DesktopLocalHostState>,
+    workspaceId: Option<String>,
+    workspace_id: Option<String>,
+    projectId: Option<String>,
+    project_id: Option<String>,
+) -> Result<Value, String> {
+    let workspace_id = require_string(workspaceId, workspace_id, "workspaceId")?;
+    let project_id = require_string(projectId, project_id, "projectId")?;
+    invoke_from_state(
+        &state,
+        local_hub_transport_contract()
+            .commands
+            .get_project_knowledge
             .as_str(),
         json!({
             "workspaceId": workspace_id,
@@ -1739,6 +1795,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             hub_get_project_context,
+            hub_get_project_knowledge,
             hub_list_automations,
             hub_create_automation,
             hub_get_automation_detail,

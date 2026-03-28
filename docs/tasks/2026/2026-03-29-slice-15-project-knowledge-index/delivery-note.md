@@ -1,0 +1,40 @@
+# Delivery Note
+
+- What Changed:
+  - Added the shared `ProjectKnowledgeIndex` contract and `HubClient.getProjectKnowledge(workspaceId, projectId)` read path.
+  - Wired the knowledge index through runtime, remote-hub, desktop local host, and the desktop workbench.
+  - Added a dedicated desktop `Knowledge` route and read-only view inside the frozen IA `Tasks / Runs / Knowledge / Inbox / Notifications / Connections`.
+  - Calibrated repository owner docs so Slice 14 is recorded as complete and Slice 15 is reflected as the new tracked baseline.
+- Why:
+  - The runtime already proved Shared Knowledge capture and promotion, but the product still lacked a project-level read surface and the owner docs still described Slice 14 as pending. This slice closes the visibility gap without turning knowledge into a new governance action center.
+- User / System Impact:
+  - Desktop and shared clients can now read project-scoped Shared Knowledge through both local and remote transports.
+  - Users can inspect candidate/asset entries, trust/provenance, and source-run traceability without leaving the workbench.
+  - Governance ownership stays stable: promotion requests remain on `RunView`, and approval resolution remains in `Inbox`.
+- Risks:
+  - The knowledge index is intentionally a single project-scoped read surface with no pagination or workspace-wide aggregation.
+  - Traceability for assets is intentionally minimal and derived from existing candidate refs.
+  - Future slices must avoid reintroducing a second knowledge-row DTO or moving governance actions onto the knowledge page.
+- Rollback Notes:
+  - Roll back the shared schema/transport additions, runtime aggregation, and desktop `Knowledge` route together; partial rollback would break local/remote parity.
+  - If the owner docs are rolled back, they must be rolled back with the slice code so repository state does not drift from tracked truth again.
+- Follow-ups:
+  - Freeze the next post-Slice-15 priority explicitly in owner docs before starting another GA surface slice.
+  - Promote workspace-wide knowledge boards, vector retrieval, Org Graph promotion, and richer governance actions only through separate task packages.
+- Docs Updated:
+  - `README.md`
+  - `docs/README.md`
+  - `docs/architecture/ga-implementation-blueprint.md`
+  - `docs/architecture/VISUAL_FRAMEWORK.md`
+  - Slice 15 task package (`README`, `implementation-summary`, `verification`, `delivery-note`)
+- Tests Included:
+  - Shared schema and hub-client contract coverage for `ProjectKnowledgeIndex`.
+  - Runtime scoping / ordering coverage.
+  - Remote-hub auth + HTTP route coverage.
+  - Desktop local-host and workbench route coverage.
+  - Full workspace Rust and TypeScript gate verification.
+- ADR Updated:
+  - No new ADR was required; the existing runtime / transport / desktop boundary decisions remained sufficient.
+- Temporary Workarounds:
+  - The knowledge page stays strictly read-only; authoritative governance actions remain one click away instead of inline.
+  - Asset-to-run traceability is derived client-side from existing entry references until a later tracked slice proves a richer read model is necessary.

@@ -1,4 +1,4 @@
-# Octopus · GA Implementation Blueprint v2.3
+# Octopus · GA Implementation Blueprint v2.4
 
 ## 1. 文档定位
 
@@ -84,7 +84,9 @@
 - Slice 11 `GA governance interaction surface` 已落地并通过验证，补齐 approval detail / inbox action / approval-driven knowledge promotion
 - Slice 12 `GA governance explainability` 已落地并通过验证，补齐 project-bound capability execution-state explanations 与 Run policy-decision surface consumption
 - Slice 13 `desktop local host foundation` 已落地并通过验证，补齐真实 Tauri/Rust 本地宿主、共享本地 transport 契约消费、以及受控 local-mode 引导路径
-- Slice 14 `desktop task workbench` 已冻结为当前 post-Slice-13 下一优先级，用于把 desktop surface 拆分为明确的 workbench 路由与读取面
+- Slice 14 `desktop task workbench` 已落地并通过验证，补齐 desktop workbench 的 route split、独立 loaders 与 `Tasks / Runs / Inbox / Notifications / Connections` IA
+- Slice 15 `project knowledge index` 已落地并通过验证，补齐 project-scoped Shared Knowledge 只读索引面与 local/remote transport parity
+- 当前 owner docs 尚未冻结 post-Slice-15 的下一优先级；后续切片不得在本文之外自行假定
 
 ---
 
@@ -172,9 +174,10 @@
 7. Slice 11 `GA governance interaction surface`
 8. Slice 12 `GA governance explainability`
 9. Slice 13 `desktop local host foundation`
-10. Slice 14 `desktop task workbench`（当前冻结中的下一优先级）
+10. Slice 14 `desktop task workbench`
+11. Slice 15 `project knowledge index`
 
-更深 remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须等新的 task package 与 owner docs 明确后再启动。
+更深 remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须等新的 task package 与 owner docs 明确后再启动；不得擅自假定 post-Slice-15 的下一优先级。
 
 ### 6.3 Shared Contract 先于实现
 
@@ -878,7 +881,7 @@ GA 必须支持最小执行环境语义：
 - 已在 tracked tree 中落地并通过验证
 - 当前是受控 local-host foundation，不包含 full local auth/session、tenant / RBAC admin、chat-first desktop redesign 或更深 local onboarding
 
-### 13.15 Slice 14：desktop task workbench（当前下一优先级）
+### 13.15 Slice 14：desktop task workbench（已完成）
 
 #### 范围
 
@@ -889,8 +892,22 @@ GA 必须支持最小执行环境语义：
 
 #### 当前状态
 
-- 已在 owner docs 中冻结为 post-Slice-13 的下一优先级
-- 当前 slice 仍处于 task-package + implementation 进行中状态，不包含 retry/terminate run、streaming/chat、DiscussionSession、Agent/Team onboarding、tenant / RBAC / IdP admin、vector retrieval 或 Org Graph promotion
+- 已在 tracked tree 中落地并通过验证
+- 当前 slice 不包含 retry/terminate run、streaming/chat、DiscussionSession、Agent/Team onboarding、tenant / RBAC / IdP admin、vector retrieval 或 Org Graph promotion
+
+### 13.16 Slice 15：project knowledge index（已完成）
+
+#### 范围
+
+- 新增 project-scoped 的 Shared Knowledge 只读索引面，复用 `KnowledgeSummary` 作为 mixed entry DTO
+- 在 `schemas/observe`、`schemas/interop`、`packages/schema-ts`、`packages/hub-client`、`crates/runtime`、`apps/remote-hub`、`apps/desktop/src-tauri`、`apps/desktop` 之间保持 contract-first 与 local/remote parity
+- 把 desktop workbench IA 扩展为 `Tasks`、`Runs`、`Knowledge`、`Inbox`、`Notifications`、`Connections`
+- 保持 `RunView` 作为 promotion request 的 authoritative surface，`Inbox` 作为 approval resolve 的 authoritative surface；知识页只负责读取与跳转
+
+#### 当前状态
+
+- 已在 tracked tree 中落地并通过验证
+- 当前 slice 是 project-scoped、read-only、pull-first 的 Shared Knowledge read surface，不包含 workspace-wide board、vector retrieval、Org Graph promotion、tenant / RBAC / IdP、retry/terminate run 或新的知识治理写路径
 
 ---
 
@@ -1086,8 +1103,8 @@ Octopus 首版 GA 不是“把目标态平台全部做出来”，而是：
 - 以 PRD 定义的正式对象模型为产品边界
 - 以 SAD 定义的运行时、治理、恢复、互操作边界为架构约束
 - 以本蓝图定义的最小正式运行闭环为实施主线
-- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 -> minimum automation surface -> Slice 11 -> Slice 12 -> Slice 13 的顺序稳步推进，并已冻结 Slice 14 为当前下一优先级
-- 当前 tracked tree 已推进到 Slice 13；当前冻结中的 post-Slice-13 下一优先级是 desktop-first 的 task workbench
+- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 -> minimum automation surface -> Slice 11 -> Slice 12 -> Slice 13 -> Slice 14 -> Slice 15 的顺序稳步推进
+- 当前 tracked tree 已推进到 Slice 15；post-Slice-15 的下一优先级尚未在 tracked owner docs 中冻结
 - 在每次模块推进前先完成局部设计包，再实现，再验证，再回写全局文档
 
 只有这样，Octopus 才能在不丢失整体方向的前提下，让 AI 主导开发同时保持可控、可审计、可维护。

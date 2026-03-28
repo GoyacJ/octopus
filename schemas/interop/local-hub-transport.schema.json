@@ -17,6 +17,7 @@
       "type": "object",
       "properties": {
         "get_project_context": { "type": "string", "minLength": 1 },
+        "get_project_knowledge": { "type": "string", "minLength": 1 },
         "list_automations": { "type": "string", "minLength": 1 },
         "create_automation": { "type": "string", "minLength": 1 },
         "get_automation_detail": { "type": "string", "minLength": 1 },
@@ -42,6 +43,7 @@
       },
       "required": [
         "get_project_context",
+        "get_project_knowledge",
         "list_automations",
         "create_automation",
         "get_automation_detail",

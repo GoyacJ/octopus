@@ -55,6 +55,7 @@ Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-d
 - [2026-03-28-slice-12-ga-governance-explainability](2026/2026-03-28-slice-12-ga-governance-explainability/README.md)
 - [2026-03-28-slice-13-desktop-local-host-foundation](2026/2026-03-28-slice-13-desktop-local-host-foundation/README.md)
 - [2026-03-28-slice-14-desktop-task-workbench](2026/2026-03-28-slice-14-desktop-task-workbench/README.md)
+- [2026-03-29-slice-15-project-knowledge-index](2026/2026-03-29-slice-15-project-knowledge-index/README.md)
 
 ## Relationship To ADRs
 

@@ -432,6 +432,21 @@ async fn governance_routes_require_authentication_and_enforce_workspace_membersh
         .await;
     assert_eq!(promotion_forbidden_status, StatusCode::FORBIDDEN);
     assert_eq!(promotion_forbidden_body["error_code"], "workspace_forbidden");
+
+    let (project_knowledge_forbidden_status, project_knowledge_forbidden_body) = harness
+        .response(
+            Request::builder()
+                .uri("/api/workspaces/workspace-alpha/projects/project-approval/knowledge")
+                .header("authorization", bravo_authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(project_knowledge_forbidden_status, StatusCode::FORBIDDEN);
+    assert_eq!(
+        project_knowledge_forbidden_body["error_code"],
+        "workspace_forbidden"
+    );
 }
 
 #[tokio::test]
@@ -666,6 +681,22 @@ async fn authenticated_session_can_access_task_approval_and_knowledge_routes() {
         .await;
     assert_eq!(knowledge_status, StatusCode::OK, "body={knowledge_detail}");
     assert_eq!(knowledge_detail["knowledge_space"]["project_id"], "project-approval");
+
+    let (project_knowledge_status, project_knowledge) = harness
+        .response(
+            Request::builder()
+                .uri("/api/workspaces/workspace-alpha/projects/project-approval/knowledge")
+                .header("authorization", authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(
+        project_knowledge_status,
+        StatusCode::OK,
+        "body={project_knowledge}"
+    );
+    assert_eq!(project_knowledge["knowledge_space"]["project_id"], "project-approval");
 
     let (inbox_status, inbox_items) = harness
         .response(

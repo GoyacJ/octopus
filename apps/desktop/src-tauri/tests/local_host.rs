@@ -147,6 +147,23 @@ async fn task_happy_path_round_trips_through_transport_and_records_knowledge() {
     assert_eq!(knowledge_detail["knowledge_space"]["workspace_id"], "demo");
     assert_eq!(knowledge_detail["candidates"][0]["content"], "local host artifact");
 
+    let project_knowledge = invoke(
+        &host,
+        &contract.commands.get_project_knowledge,
+        json!({
+            "workspaceId": "demo",
+            "projectId": "demo"
+        }),
+    )
+    .await;
+
+    assert_eq!(project_knowledge["knowledge_space"]["workspace_id"], "demo");
+    assert_eq!(project_knowledge["entries"][0]["kind"], "candidate");
+    assert_eq!(
+        project_knowledge["entries"][0]["source_run_id"],
+        run_detail["run"]["id"]
+    );
+
     let events = emitter.events_snapshot();
     assert!(events
         .iter()

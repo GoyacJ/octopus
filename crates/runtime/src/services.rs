@@ -43,10 +43,12 @@ use sqlx::{Row, SqlitePool};
 
 use crate::{
     models::{
-        current_timestamp, AutomationDetailRecord, AutomationRecord, AutomationSummaryRecord,
+        current_timestamp, AssetKnowledgeSummaryRecord, AutomationDetailRecord,
+        AutomationRecord, AutomationSummaryRecord, CandidateKnowledgeSummaryRecord,
         CreateAutomationInput, CreateAutomationReport, CreateTaskInput, CreateTriggerInput,
-        CronTriggerConfig, KnowledgePromotionReport, McpEventTriggerConfig, RunExecutionReport,
-        RunRecord, RunSummaryRecord, TaskRecord, TriggerDeliveryRecord, TriggerRecord, TriggerSpec,
+        CronTriggerConfig, KnowledgePromotionReport, KnowledgeSummaryRecord,
+        McpEventTriggerConfig, ProjectKnowledgeIndexRecord, RunExecutionReport, RunRecord,
+        RunSummaryRecord, TaskRecord, TriggerDeliveryRecord, TriggerRecord, TriggerSpec,
         WebhookTriggerConfig,
     },
     RuntimeError,
@@ -1006,6 +1008,56 @@ impl KnowledgeManager {
             .knowledge_store
             .fetch_project_knowledge_space(workspace_id, project_id)
             .await?)
+    }
+
+    pub async fn get_project_knowledge_index(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<ProjectKnowledgeIndexRecord, RuntimeError> {
+        let knowledge_space = self
+            .knowledge_store
+            .fetch_project_knowledge_space(workspace_id, project_id)
+            .await?
+            .ok_or_else(|| {
+                RuntimeError::KnowledgeSpaceNotFound(format!(
+                    "project knowledge space `{workspace_id}/{project_id}` not found"
+                ))
+            })?;
+
+        let mut entries = self
+            .knowledge_store
+            .list_knowledge_candidates_by_space(&knowledge_space.id)
+            .await?
+            .into_iter()
+            .map(|candidate| {
+                KnowledgeSummaryRecord::Candidate(
+                    CandidateKnowledgeSummaryRecord::from_candidate(&candidate),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        entries.extend(
+            self.knowledge_store
+                .list_knowledge_assets_by_space(&knowledge_space.id)
+                .await?
+                .into_iter()
+                .map(|asset| {
+                    KnowledgeSummaryRecord::Asset(AssetKnowledgeSummaryRecord::from_asset(&asset))
+                }),
+        );
+
+        entries.sort_by(|left, right| {
+            right
+                .created_at()
+                .cmp(left.created_at())
+                .then_with(|| right.entry_id().cmp(left.entry_id()))
+        });
+
+        Ok(ProjectKnowledgeIndexRecord {
+            knowledge_space,
+            entries,
+        })
     }
 
     pub async fn list_knowledge_candidates_by_run(

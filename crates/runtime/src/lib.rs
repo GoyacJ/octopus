@@ -9,12 +9,14 @@ use services::{AutomationIntake, KnowledgeManager, RunOrchestrator, TaskIntake};
 use thiserror::Error;
 
 pub use models::{
-    AutomationDetailRecord, AutomationRecord, AutomationSummaryRecord, CreateAutomationInput,
+    AssetKnowledgeSummaryRecord, AutomationDetailRecord, AutomationRecord,
+    AutomationSummaryRecord, CandidateKnowledgeSummaryRecord, CreateAutomationInput,
     CreateAutomationReport, CreateTaskInput, CreateTriggerInput, CronTriggerConfig,
     DispatchManualEventInput, DispatchMcpEventInput, DispatchWebhookEventInput,
-    KnowledgePromotionReport, ManualEventTriggerConfig, McpEventTriggerConfig, RunExecutionReport,
-    RunRecord, RunSummaryRecord, TaskRecord, TriggerDeliveryRecord, TriggerDeliveryReport,
-    TriggerRecord, TriggerSpec, WebhookTriggerConfig,
+    KnowledgePromotionReport, KnowledgeSummaryRecord, ManualEventTriggerConfig,
+    McpEventTriggerConfig, ProjectKnowledgeIndexRecord, RunExecutionReport, RunRecord,
+    RunSummaryRecord, TaskRecord, TriggerDeliveryRecord, TriggerDeliveryReport, TriggerRecord,
+    TriggerSpec, WebhookTriggerConfig,
 };
 pub use octopus_domain_context::ProjectContext;
 pub use octopus_governance::{
@@ -85,6 +87,8 @@ pub enum RuntimeError {
     },
     #[error("knowledge candidate `{0}` not found")]
     KnowledgeCandidateNotFound(String),
+    #[error("{0}")]
+    KnowledgeSpaceNotFound(String),
     #[error(
         "knowledge candidate `{candidate_id}` has invalid state `{status}`; expected `{expected}`"
     )]
@@ -784,6 +788,16 @@ impl Slice2Runtime {
     ) -> Result<Option<KnowledgeSpaceRecord>, RuntimeError> {
         self.knowledge_manager
             .fetch_project_knowledge_space(workspace_id, project_id)
+            .await
+    }
+
+    pub async fn get_project_knowledge_index(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<ProjectKnowledgeIndexRecord, RuntimeError> {
+        self.knowledge_manager
+            .get_project_knowledge_index(workspace_id, project_id)
             .await
     }
 

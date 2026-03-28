@@ -35,6 +35,14 @@ const runsRoute = computed(() => {
   return `/workspaces/${activeWorkspaceId.value}/projects/${activeProjectId.value}/runs`;
 });
 
+const knowledgeRoute = computed(() => {
+  if (!activeWorkspaceId.value || !activeProjectId.value) {
+    return null;
+  }
+
+  return `/workspaces/${activeWorkspaceId.value}/projects/${activeProjectId.value}/knowledge`;
+});
+
 const inboxRoute = computed(() => {
   if (!activeWorkspaceId.value) {
     return null;
@@ -102,6 +110,7 @@ const projectTitle = computed(
       <nav class="nav-stack">
         <RouterLink v-if="tasksRoute" :to="tasksRoute">Tasks</RouterLink>
         <RouterLink v-if="runsRoute" :to="runsRoute">Runs</RouterLink>
+        <RouterLink v-if="knowledgeRoute" :to="knowledgeRoute">Knowledge</RouterLink>
         <RouterLink v-if="inboxRoute" :to="inboxRoute">Inbox</RouterLink>
         <RouterLink v-if="notificationsRoute" :to="notificationsRoute">
           Notifications
