@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/interop/local-hub-transport.schema.json",
+  "title": "LocalHubTransportContract",
+  "description": "Interop-owned local desktop transport command directory and event channel shared by TypeScript consumers and the Tauri host.",
+  "type": "object",
+  "properties": {
+    "$id": {
+      "type": "string",
+      "format": "uri"
+    },
+    "event_channel": {
+      "type": "string",
+      "minLength": 1
+    },
+    "commands": {
+      "type": "object",
+      "properties": {
+        "get_project_context": { "type": "string", "minLength": 1 },
+        "list_automations": { "type": "string", "minLength": 1 },
+        "create_automation": { "type": "string", "minLength": 1 },
+        "get_automation_detail": { "type": "string", "minLength": 1 },
+        "activate_automation": { "type": "string", "minLength": 1 },
+        "pause_automation": { "type": "string", "minLength": 1 },
+        "archive_automation": { "type": "string", "minLength": 1 },
+        "manual_dispatch": { "type": "string", "minLength": 1 },
+        "retry_trigger_delivery": { "type": "string", "minLength": 1 },
+        "create_task": { "type": "string", "minLength": 1 },
+        "start_task": { "type": "string", "minLength": 1 },
+        "get_run_detail": { "type": "string", "minLength": 1 },
+        "get_approval_request": { "type": "string", "minLength": 1 },
+        "resolve_approval": { "type": "string", "minLength": 1 },
+        "list_inbox_items": { "type": "string", "minLength": 1 },
+        "list_notifications": { "type": "string", "minLength": 1 },
+        "list_artifacts": { "type": "string", "minLength": 1 },
+        "get_knowledge_detail": { "type": "string", "minLength": 1 },
+        "request_knowledge_promotion": { "type": "string", "minLength": 1 },
+        "promote_knowledge": { "type": "string", "minLength": 1 },
+        "list_capability_visibility": { "type": "string", "minLength": 1 },
+        "get_connection_status": { "type": "string", "minLength": 1 }
+      },
+      "required": [
+        "get_project_context",
+        "list_automations",
+        "create_automation",
+        "get_automation_detail",
+        "activate_automation",
+        "pause_automation",
+        "archive_automation",
+        "manual_dispatch",
+        "retry_trigger_delivery",
+        "create_task",
+        "start_task",
+        "get_run_detail",
+        "get_approval_request",
+        "resolve_approval",
+        "list_inbox_items",
+        "list_notifications",
+        "list_artifacts",
+        "get_knowledge_detail",
+        "request_knowledge_promotion",
+        "promote_knowledge",
+        "list_capability_visibility",
+        "get_connection_status"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": ["event_channel", "commands"],
+  "additionalProperties": false
+}

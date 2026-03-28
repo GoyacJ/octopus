@@ -66,6 +66,31 @@ const visibleCapability = computed(
     automationCapabilityResolution.value?.descriptor ??
     hub.activeCapability
 );
+const localMode = computed(() => hub.connectionStatus?.mode === "local");
+const unsupportedLocalTrigger = computed(
+  () =>
+    localMode.value &&
+    (automationDraft.triggerType === "webhook" ||
+      automationDraft.triggerType === "mcp_event")
+);
+const automationTriggerOptions = computed(() => [
+  {
+    value: "manual_event" as const,
+    disabled: false
+  },
+  {
+    value: "cron" as const,
+    disabled: false
+  },
+  {
+    value: "webhook" as const,
+    disabled: localMode.value
+  },
+  {
+    value: "mcp_event" as const,
+    disabled: localMode.value
+  }
+]);
 
 function approvalForItem(item: InboxItem) {
   return hub.approvalDetails[item.approval_request_id] ?? null;
@@ -186,6 +211,10 @@ async function createAutomation(): Promise<void> {
   const projectId = String(route.params.projectId);
   const capabilityId = automationDraft.capabilityId || visibleCapability.value?.id;
 
+  if (unsupportedLocalTrigger.value) {
+    throw new Error("Local host only supports manual_event and cron in this slice.");
+  }
+
   if (!capabilityId) {
     throw new Error("No governed capability is available for automation creation.");
   }
@@ -256,6 +285,19 @@ watch(
     }
 
     void hub.loadAutomationCapabilityResolutions(workspaceId, projectId, estimatedCost);
+  }
+);
+
+watch(
+  () => localMode.value,
+  (isLocalMode) => {
+    if (
+      isLocalMode &&
+      (automationDraft.triggerType === "webhook" ||
+        automationDraft.triggerType === "mcp_event")
+    ) {
+      automationDraft.triggerType = "manual_event";
+    }
   }
 );
 
@@ -335,12 +377,20 @@ onMounted(() => {
       <label class="field">
         <span>Trigger type</span>
         <select v-model="automationDraft.triggerType">
-          <option value="manual_event">manual_event</option>
-          <option value="cron">cron</option>
-          <option value="webhook">webhook</option>
-          <option value="mcp_event">mcp_event</option>
+          <option
+            v-for="option in automationTriggerOptions"
+            :key="option.value"
+            :value="option.value"
+            :disabled="option.disabled"
+          >
+            {{ option.value }}
+          </option>
         </select>
       </label>
+      <p v-if="localMode" class="muted">
+        Local host only supports manual_event and cron in this slice. webhook and
+        mcp_event require external ingress and are disabled.
+      </p>
       <template v-if="automationDraft.triggerType === 'cron'">
         <label class="field">
           <span>Schedule</span>
@@ -397,7 +447,12 @@ onMounted(() => {
       </label>
       <button
         data-testid="automation-create"
-        :disabled="hub.automationSubmitting || hub.workspaceLoading || hub.readOnlyMode"
+        :disabled="
+          hub.automationSubmitting ||
+          hub.workspaceLoading ||
+          hub.readOnlyMode ||
+          unsupportedLocalTrigger
+        "
         @click="handleCreateAutomation"
       >
         {{

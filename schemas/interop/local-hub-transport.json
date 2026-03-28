@@ -1,0 +1,28 @@
+{
+  "$id": "https://octopus.local/schemas/interop/local-hub-transport.json",
+  "event_channel": "hub://events",
+  "commands": {
+    "get_project_context": "hub:get_project_context",
+    "list_automations": "hub:list_automations",
+    "create_automation": "hub:create_automation",
+    "get_automation_detail": "hub:get_automation_detail",
+    "activate_automation": "hub:activate_automation",
+    "pause_automation": "hub:pause_automation",
+    "archive_automation": "hub:archive_automation",
+    "manual_dispatch": "hub:manual_dispatch",
+    "retry_trigger_delivery": "hub:retry_trigger_delivery",
+    "create_task": "hub:create_task",
+    "start_task": "hub:start_task",
+    "get_run_detail": "hub:get_run_detail",
+    "get_approval_request": "hub:get_approval_request",
+    "resolve_approval": "hub:resolve_approval",
+    "list_inbox_items": "hub:list_inbox_items",
+    "list_notifications": "hub:list_notifications",
+    "list_artifacts": "hub:list_artifacts",
+    "get_knowledge_detail": "hub:get_knowledge_detail",
+    "request_knowledge_promotion": "hub:request_knowledge_promotion",
+    "promote_knowledge": "hub:promote_knowledge",
+    "list_capability_visibility": "hub:list_capability_visibility",
+    "get_connection_status": "hub:get_connection_status"
+  }
+}

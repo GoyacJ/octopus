@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  LOCAL_HUB_TRANSPORT,
   parseApprovalRequest,
   parseAutomationDetail,
   parseAutomationLifecycleCommand,
@@ -15,6 +16,7 @@ import {
   parseHubLoginCommand,
   parseHubLoginResponse,
   parseKnowledgeDetail,
+  parseLocalHubTransportContract,
   parseManualDispatchCommand,
   parseRequestKnowledgePromotionCommand,
   parseRunDetail,
@@ -213,6 +215,15 @@ describe("schema-ts contract parsers", () => {
         delivery_id: "delivery-1"
       }).delivery_id
     ).toBe("delivery-1");
+  });
+
+  it("accepts the shared local hub transport owner contract", () => {
+    const contract = parseLocalHubTransportContract(LOCAL_HUB_TRANSPORT);
+
+    expect(contract.event_channel).toBe("hub://events");
+    expect(contract.commands.get_project_context).toBeTruthy();
+    expect(contract.commands.get_connection_status).toBeTruthy();
+    expect(Object.values(contract.commands)).toHaveLength(22);
   });
 
   it("rejects an invalid task create command", () => {

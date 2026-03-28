@@ -16,6 +16,8 @@ import hubEventSchema from "../../../schemas/interop/hub-event.schema.json";
 import hubLoginCommandSchema from "../../../schemas/interop/hub-login-command.schema.json";
 import hubLoginResponseSchema from "../../../schemas/interop/hub-login-response.schema.json";
 import hubSessionSchema from "../../../schemas/interop/hub-session.schema.json";
+import localHubTransportContractData from "../../../schemas/interop/local-hub-transport.json";
+import localHubTransportSchema from "../../../schemas/interop/local-hub-transport.schema.json";
 import knowledgeSpaceSchema from "../../../schemas/context/knowledge-space.schema.json";
 import projectContextSchema from "../../../schemas/context/project-context.schema.json";
 import projectSchema from "../../../schemas/context/project.schema.json";
@@ -79,6 +81,7 @@ import type {
   HubLoginCommand,
   HubLoginResponse,
   HubSession,
+  LocalHubTransportContract,
   InboxItem,
   KnowledgeDetail,
   KnowledgePromoteCommand,
@@ -153,7 +156,8 @@ const schemaRegistry = {
   [hubSessionSchema.$id]: hubSessionSchema,
   [hubLoginResponseSchema.$id]: hubLoginResponseSchema,
   [hubConnectionStatusSchema.$id]: hubConnectionStatusSchema,
-  [hubEventSchema.$id]: hubEventSchema
+  [hubEventSchema.$id]: hubEventSchema,
+  [localHubTransportSchema.$id]: localHubTransportSchema
 } as const;
 
 export const surfaceSchemas = schemaRegistry;
@@ -409,6 +413,19 @@ export function parseHubAuthError(value: unknown): HubAuthError {
 export function parseHubConnectionStatus(value: unknown): HubConnectionStatus {
   return parseWithSchema<HubConnectionStatus>(hubConnectionStatusSchema.$id, value);
 }
+
+export function parseLocalHubTransportContract(
+  value: unknown
+): LocalHubTransportContract {
+  return parseWithSchema<LocalHubTransportContract>(
+    localHubTransportSchema.$id,
+    value
+  );
+}
+
+export const LOCAL_HUB_TRANSPORT = parseLocalHubTransportContract(
+  localHubTransportContractData
+);
 
 export function parseHubEvent(value: unknown): HubEvent {
   return parseWithSchema<HubEvent>(hubEventSchema.$id, value);

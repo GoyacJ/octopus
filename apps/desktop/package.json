@@ -9,11 +9,14 @@
   "types": "./src/app.ts",
   "scripts": {
     "build": "vite build",
+    "smoke:local-host": "vitest run test/bootstrap-smoke.test.ts",
     "test": "vitest run",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@octopus/hub-client": "workspace:*",
+    "@octopus/schema-ts": "workspace:*",
+    "@tauri-apps/api": "^2.0.0",
     "pinia": "^3.0.3",
     "vue": "^3.5.22",
     "vue-router": "^4.6.3"

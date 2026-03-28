@@ -1,0 +1,23 @@
+[package]
+name = "octopus-desktop-host"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+name = "octopus_desktop_host"
+
+[dependencies]
+chrono.workspace = true
+octopus-execution = { path = "../../../crates/execution" }
+octopus-runtime = { path = "../../../crates/runtime" }
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2" }
+thiserror.workspace = true
+tokio.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2" }
+
+[dev-dependencies]
+tempfile.workspace = true

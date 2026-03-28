@@ -1,3 +1,4 @@
+import { LOCAL_HUB_TRANSPORT } from "@octopus/schema-ts";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -509,6 +510,28 @@ runHubClientContractSuite("local adapter", () => {
       eventHandler?.(event);
     }
   };
+});
+
+describe("local adapter transport ownership", () => {
+  it("reuses the interop-owned local transport command directory", async () => {
+    const commands: string[] = [];
+    const client = createLocalHubClient({
+      async invoke(command) {
+        commands.push(command);
+        return projectContextFixture;
+      },
+      async listen() {
+        return async () => {};
+      }
+    });
+
+    await client.getProjectContext("workspace-alpha", "project-slice1");
+
+    expect(commands).toEqual([
+      LOCAL_HUB_TRANSPORT.commands.get_project_context
+    ]);
+    expect(HUB_EVENT_CHANNEL).toBe(LOCAL_HUB_TRANSPORT.event_channel);
+  });
 });
 
 class FakeEventSource implements EventSourceLike {
