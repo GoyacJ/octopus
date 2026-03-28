@@ -629,6 +629,36 @@ export interface HubAuthError {
   auth_state: HubAuthState;
 }
 
+export interface LocalHubTransportCommands {
+  get_project_context: string;
+  list_automations: string;
+  create_automation: string;
+  get_automation_detail: string;
+  activate_automation: string;
+  pause_automation: string;
+  archive_automation: string;
+  manual_dispatch: string;
+  retry_trigger_delivery: string;
+  create_task: string;
+  start_task: string;
+  get_run_detail: string;
+  get_approval_request: string;
+  resolve_approval: string;
+  list_inbox_items: string;
+  list_notifications: string;
+  list_artifacts: string;
+  get_knowledge_detail: string;
+  request_knowledge_promotion: string;
+  promote_knowledge: string;
+  list_capability_visibility: string;
+  get_connection_status: string;
+}
+
+export interface LocalHubTransportContract {
+  event_channel: string;
+  commands: LocalHubTransportCommands;
+}
+
 export interface RunUpdatedEvent {
   event_type: "run.updated";
   sequence: number;

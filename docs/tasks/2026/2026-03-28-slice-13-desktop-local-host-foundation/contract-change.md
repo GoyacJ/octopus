@@ -1,0 +1,35 @@
+## Contract Change
+
+- Change Type:
+  - Cross-language Contract
+  - Internal Interface
+- New / Updated Schemas:
+  - Add a shared interop-owned local transport contract artifact under `schemas/interop` that defines the local invoke command directory and hub event channel.
+  - Keep existing task/run/automation/governance/observe schemas compatible; only additive transport-owner metadata is allowed in this slice.
+- New / Updated Commands:
+  - No new `HubClient` public methods.
+  - Local host command names may be normalized under the new shared transport owner contract so Rust and TypeScript consume one source.
+- New / Updated Queries:
+  - None at the `HubClient` surface level.
+- New / Updated Events:
+  - No new `HubEvent` payload variants.
+  - Local host must emit the existing `HubEvent` contract shape through the shared local event channel.
+- New / Updated DTOs:
+  - None at the app-public payload level.
+  - If thin host-side companion structs are needed, they must map directly to existing schema-owned payload shapes and not become the source of truth.
+- Compatibility Impact:
+  - `HubClient` signatures remain unchanged.
+  - Existing JSON payload schemas remain compatible.
+  - Desktop bootstrap changes from manual window injection to tracked Tauri registration, but the consumer-facing local-client shape stays the same.
+- Affected Consumers:
+  - `packages/schema-ts`
+  - `packages/hub-client`
+  - `apps/desktop`
+  - `apps/desktop/src-tauri`
+- Migration Notes:
+  - No schema/data migration is required beyond using the existing runtime migration path in the local host database.
+  - First host boot must seed deterministic local demo data when it is absent.
+- Generation Impact:
+  - `packages/schema-ts` must parse and export the shared local transport owner contract for TypeScript consumers.
+- Open Questions:
+  - Whether the shared local transport owner artifact should remain a pure manifest or also gain schema validation coverage. Prefer validation if it is cheap and does not create a second source of truth.

@@ -1,4 +1,5 @@
 import {
+  LOCAL_HUB_TRANSPORT,
   parseApprovalRequest,
   parseApprovalResolveCommand,
   parseAutomationDetail,
@@ -43,6 +44,7 @@ import {
   type KnowledgeDetail,
   type KnowledgePromoteCommand,
   type RequestKnowledgePromotionCommand,
+  type LocalHubTransportContract,
   type ManualDispatchCommand,
   type Notification,
   type ProjectContext,
@@ -52,31 +54,75 @@ import {
   type TriggerDeliveryRetryCommand
 } from "@octopus/schema-ts";
 
-export const HUB_EVENT_CHANNEL = "hub://events";
+function normalizeLocalCommandName(command: string): string {
+  return command;
+}
+
+export const HUB_EVENT_CHANNEL = LOCAL_HUB_TRANSPORT.event_channel;
 
 export const LOCAL_HUB_COMMANDS = {
-  getProjectContext: "hub:get_project_context",
-  listAutomations: "hub:list_automations",
-  createAutomation: "hub:create_automation",
-  getAutomationDetail: "hub:get_automation_detail",
-  activateAutomation: "hub:activate_automation",
-  pauseAutomation: "hub:pause_automation",
-  archiveAutomation: "hub:archive_automation",
-  manualDispatch: "hub:manual_dispatch",
-  retryTriggerDelivery: "hub:retry_trigger_delivery",
-  createTask: "hub:create_task",
-  startTask: "hub:start_task",
-  getRunDetail: "hub:get_run_detail",
-  getApprovalRequest: "hub:get_approval_request",
-  resolveApproval: "hub:resolve_approval",
-  listInboxItems: "hub:list_inbox_items",
-  listNotifications: "hub:list_notifications",
-  listArtifacts: "hub:list_artifacts",
-  getKnowledgeDetail: "hub:get_knowledge_detail",
-  requestKnowledgePromotion: "hub:request_knowledge_promotion",
-  promoteKnowledge: "hub:promote_knowledge",
-  listCapabilityVisibility: "hub:list_capability_visibility",
-  getConnectionStatus: "hub:get_connection_status"
+  getProjectContext: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.get_project_context
+  ),
+  listAutomations: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.list_automations
+  ),
+  createAutomation: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.create_automation
+  ),
+  getAutomationDetail: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.get_automation_detail
+  ),
+  activateAutomation: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.activate_automation
+  ),
+  pauseAutomation: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.pause_automation
+  ),
+  archiveAutomation: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.archive_automation
+  ),
+  manualDispatch: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.manual_dispatch
+  ),
+  retryTriggerDelivery: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.retry_trigger_delivery
+  ),
+  createTask: normalizeLocalCommandName(LOCAL_HUB_TRANSPORT.commands.create_task),
+  startTask: normalizeLocalCommandName(LOCAL_HUB_TRANSPORT.commands.start_task),
+  getRunDetail: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.get_run_detail
+  ),
+  getApprovalRequest: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.get_approval_request
+  ),
+  resolveApproval: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.resolve_approval
+  ),
+  listInboxItems: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.list_inbox_items
+  ),
+  listNotifications: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.list_notifications
+  ),
+  listArtifacts: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.list_artifacts
+  ),
+  getKnowledgeDetail: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.get_knowledge_detail
+  ),
+  requestKnowledgePromotion: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.request_knowledge_promotion
+  ),
+  promoteKnowledge: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.promote_knowledge
+  ),
+  listCapabilityVisibility: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.list_capability_visibility
+  ),
+  getConnectionStatus: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.get_connection_status
+  )
 } as const;
 
 export type Unsubscribe = () => void | Promise<void>;

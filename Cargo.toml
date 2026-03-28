@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "apps/desktop/src-tauri",
   "apps/remote-hub",
   "crates/access-auth",
   "crates/domain-context",
