@@ -1,0 +1,56 @@
+## Implementation Summary
+
+- Goal:
+  - Deliver the GA governance interaction surface across runtime, shared contracts, remote-hub, hub-client, desktop, and owner docs without expanding into tenant admin, IdP, vector retrieval, Org Graph, or broader dashboard work.
+- Files Added:
+  - `schemas/observe/request-knowledge-promotion-command.schema.json`
+  - `crates/runtime/migrations/0009_slice11_ga_governance_interaction_surface.sql`
+  - `crates/runtime/tests/slice11_governance_surface.rs`
+  - `docs/tasks/2026/2026-03-28-slice-11-ga-governance-interaction-surface/*`
+- Files Changed:
+  - `schemas/governance/approval-request.schema.json`
+  - `schemas/observe/inbox-item.schema.json`
+  - `schemas/observe/notification.schema.json`
+  - `crates/governance/src/lib.rs`
+  - `crates/observe-artifact/src/lib.rs`
+  - `crates/runtime/src/lib.rs`
+  - `crates/runtime/src/services.rs`
+  - `crates/runtime/tests/schema_contracts.rs`
+  - `packages/schema-ts/src/contracts.ts`
+  - `packages/schema-ts/src/index.ts`
+  - `packages/schema-ts/test/contracts.test.ts`
+  - `packages/hub-client/src/index.ts`
+  - `packages/hub-client/test/hub-client.contract.test.ts`
+  - `apps/remote-hub/src/lib.rs`
+  - `apps/remote-hub/tests/auth_surface.rs`
+  - `apps/remote-hub/tests/http_surface.rs`
+  - `apps/desktop/src/stores/hub.ts`
+  - `apps/desktop/src/views/WorkspaceView.vue`
+  - `apps/desktop/src/views/RunView.vue`
+  - `apps/desktop/test/happy-path.test.ts`
+  - `README.md`
+  - `docs/README.md`
+  - `docs/architecture/SAD.md`
+  - `docs/architecture/ga-implementation-blueprint.md`
+  - `docs/tasks/README.md`
+- Files Removed:
+  - None.
+- Structure Decision:
+  - Keep approval truth, promotion idempotency, and promotion side effects in the governed runtime; let `schemas/`, `packages/`, and `apps/` only expose and consume that truth.
+- Why This Structure:
+  - It preserves schema-first layering, avoids a second knowledge-governance state machine, and keeps local / remote surface behavior transport-identical through one shared client boundary.
+- Reused Patterns:
+  - Reused existing execution approval records, inbox / notification persistence, remote-hub auth helpers, hub-client parse-and-transport parity, and desktop workspace / run view composition.
+- New Dependencies:
+  - None.
+- Error Handling Strategy:
+  - Invalid approval type, invalid target reference, and invalid knowledge candidate state remain runtime-enforced and map to explicit HTTP 400 responses.
+  - Promotion requests are idempotent while a pending approval is open.
+  - Desktop continues to surface failures through the shared shell banner and shared read-only behavior.
+- Deferred Items:
+  - Standalone Inbox / Board routing, richer notification center behavior, tenant / RBAC / IdP admin, vector retrieval, Org Graph promotion, and a tracked local desktop bridge remain deferred.
+- Non-goals Preserved:
+  - `execution` approval semantics for Run resume / completion remain unchanged.
+  - `knowledge_promotion` approval does not mutate the Run state machine.
+  - `Notification` remains read-only in this slice.
+  - No ADR was added because this slice did not introduce a new durable repository-wide architecture rule.

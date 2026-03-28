@@ -1,4 +1,5 @@
 import {
+  parseApprovalRequest,
   parseApprovalResolveCommand,
   parseAutomationDetail,
   parseAutomationLifecycleCommand,
@@ -16,6 +17,7 @@ import {
   parseHubLoginResponse,
   parseHubSession,
   parseKnowledgePromoteCommand,
+  parseRequestKnowledgePromotionCommand,
   parseManualDispatchCommand,
   parseNotifications,
   parseProjectContext,
@@ -24,6 +26,7 @@ import {
   parseTaskCreateCommand,
   parseTriggerDeliveryRetryCommand,
   type ApprovalResolveCommand,
+  type ApprovalRequest,
   type AutomationDetail,
   type AutomationSummary,
   type Artifact,
@@ -39,6 +42,7 @@ import {
   type InboxItem,
   type KnowledgeDetail,
   type KnowledgePromoteCommand,
+  type RequestKnowledgePromotionCommand,
   type ManualDispatchCommand,
   type Notification,
   type ProjectContext,
@@ -63,11 +67,13 @@ export const LOCAL_HUB_COMMANDS = {
   createTask: "hub:create_task",
   startTask: "hub:start_task",
   getRunDetail: "hub:get_run_detail",
+  getApprovalRequest: "hub:get_approval_request",
   resolveApproval: "hub:resolve_approval",
   listInboxItems: "hub:list_inbox_items",
   listNotifications: "hub:list_notifications",
   listArtifacts: "hub:list_artifacts",
   getKnowledgeDetail: "hub:get_knowledge_detail",
+  requestKnowledgePromotion: "hub:request_knowledge_promotion",
   promoteKnowledge: "hub:promote_knowledge",
   listCapabilityVisibility: "hub:list_capability_visibility",
   getConnectionStatus: "hub:get_connection_status"
@@ -95,11 +101,15 @@ export interface HubClient {
   createTask(command: TaskCreateCommand): Promise<Task>;
   startTask(taskId: string): Promise<RunDetail>;
   getRunDetail(runId: string): Promise<RunDetail>;
+  getApprovalRequest(approvalId: string): Promise<ApprovalRequest>;
   resolveApproval(command: ApprovalResolveCommand): Promise<RunDetail>;
   listInboxItems(workspaceId: string): Promise<InboxItem[]>;
   listNotifications(workspaceId: string): Promise<Notification[]>;
   listArtifacts(runId: string): Promise<Artifact[]>;
   getKnowledgeDetail(runId: string): Promise<KnowledgeDetail>;
+  requestKnowledgePromotion(
+    command: RequestKnowledgePromotionCommand
+  ): Promise<ApprovalRequest>;
   promoteKnowledge(command: KnowledgePromoteCommand): Promise<KnowledgeDetail>;
   listCapabilityVisibility(
     workspaceId: string,
@@ -343,6 +353,13 @@ export function createLocalHubClient(transport: LocalHubTransport): HubClient {
         await transport.invoke(LOCAL_HUB_COMMANDS.getRunDetail, { runId })
       );
     },
+    async getApprovalRequest(approvalId) {
+      return parseApprovalRequest(
+        await transport.invoke(LOCAL_HUB_COMMANDS.getApprovalRequest, {
+          approvalId
+        })
+      );
+    },
     async resolveApproval(command) {
       return parseRunDetail(
         await transport.invoke(
@@ -369,6 +386,14 @@ export function createLocalHubClient(transport: LocalHubTransport): HubClient {
     async getKnowledgeDetail(runId) {
       return parseKnowledgeDetail(
         await transport.invoke(LOCAL_HUB_COMMANDS.getKnowledgeDetail, { runId })
+      );
+    },
+    async requestKnowledgePromotion(command) {
+      return parseApprovalRequest(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.requestKnowledgePromotion,
+          parseRequestKnowledgePromotionCommand(command)
+        )
       );
     },
     async promoteKnowledge(command) {
@@ -616,6 +641,19 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
         )
       );
     },
+    async getApprovalRequest(approvalId) {
+      return parseApprovalRequest(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/approvals/${encodePathSegment(approvalId)}`
+          ),
+          undefined,
+          options.getAccessToken
+        )
+      );
+    },
     async resolveApproval(command) {
       const parsed = parseApprovalResolveCommand(command);
       return parseRunDetail(
@@ -682,6 +720,24 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             `/api/runs/${encodePathSegment(runId)}/knowledge`
           ),
           undefined,
+          options.getAccessToken
+        )
+      );
+    },
+    async requestKnowledgePromotion(command) {
+      const parsed = parseRequestKnowledgePromotionCommand(command);
+      return parseApprovalRequest(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/knowledge/candidates/${encodePathSegment(parsed.candidate_id)}/request-promotion`
+          ),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(parsed)
+          },
           options.getAccessToken
         )
       );

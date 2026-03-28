@@ -299,6 +299,142 @@ async fn automation_routes_require_authentication_and_enforce_workspace_membersh
 }
 
 #[tokio::test]
+async fn governance_routes_require_authentication_and_enforce_workspace_membership() {
+    let harness = TestHarness::seeded().await;
+
+    let (alpha_authorization, _) = harness.login("workspace-alpha").await;
+    let (create_status, created_task) = harness
+        .response(
+            Request::builder()
+                .method("POST")
+                .uri("/api/tasks")
+                .header("content-type", "application/json")
+                .header("authorization", alpha_authorization.as_str())
+                .body(Body::from(
+                    json!({
+                        "workspace_id": "workspace-alpha",
+                        "project_id": "project-approval",
+                        "title": "Sensitive task",
+                        "instruction": "Emit a deterministic artifact",
+                        "action": {
+                            "kind": "emit_text",
+                            "content": "restricted"
+                        },
+                        "capability_id": "capability-approval",
+                        "estimated_cost": 1,
+                        "idempotency_key": "task-approval-auth"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(create_status, StatusCode::OK, "body={created_task}");
+
+    let task_id = created_task["id"].as_str().unwrap();
+    let (start_status, run_detail) = harness
+        .response(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/tasks/{task_id}/start"))
+                .header("authorization", alpha_authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(start_status, StatusCode::OK, "body={run_detail}");
+
+    let approval_id = run_detail["approvals"][0].get("id").and_then(Value::as_str).unwrap();
+    let run_id = run_detail["run"]["id"].as_str().unwrap();
+
+    let (approval_unauth_status, approval_unauth_body) = harness
+        .response(
+            Request::builder()
+                .uri(format!("/api/approvals/{approval_id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(approval_unauth_status, StatusCode::UNAUTHORIZED);
+    assert_eq!(approval_unauth_body["error_code"], "auth_required");
+
+    let (resolve_status, resolved_run) = harness
+        .response(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/approvals/{approval_id}/resolve"))
+                .header("content-type", "application/json")
+                .header("authorization", alpha_authorization.as_str())
+                .body(Body::from(
+                    json!({
+                        "approval_id": approval_id,
+                        "decision": "approve",
+                        "actor_ref": "workspace_admin:alice",
+                        "note": "approved"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(resolve_status, StatusCode::OK, "body={resolved_run}");
+
+    let knowledge_detail = {
+        let (status, body) = harness
+            .response(
+                Request::builder()
+                    .uri(format!("/api/runs/{run_id}/knowledge"))
+                    .header("authorization", alpha_authorization.as_str())
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK, "body={body}");
+        body
+    };
+    let candidate_id = knowledge_detail["candidates"][0]
+        .get("id")
+        .and_then(Value::as_str)
+        .unwrap();
+
+    let (bravo_authorization, _) = harness.login("workspace-bravo").await;
+    let (approval_forbidden_status, approval_forbidden_body) = harness
+        .response(
+            Request::builder()
+                .uri(format!("/api/approvals/{approval_id}"))
+                .header("authorization", bravo_authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(approval_forbidden_status, StatusCode::FORBIDDEN);
+    assert_eq!(approval_forbidden_body["error_code"], "workspace_forbidden");
+
+    let (promotion_forbidden_status, promotion_forbidden_body) = harness
+        .response(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/api/knowledge/candidates/{candidate_id}/request-promotion"
+                ))
+                .header("content-type", "application/json")
+                .header("authorization", bravo_authorization.as_str())
+                .body(Body::from(
+                    json!({
+                        "candidate_id": candidate_id,
+                        "actor_ref": "workspace_admin:alice",
+                        "note": "promote"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(promotion_forbidden_status, StatusCode::FORBIDDEN);
+    assert_eq!(promotion_forbidden_body["error_code"], "workspace_forbidden");
+}
+
+#[tokio::test]
 async fn bootstrap_login_returns_a_remote_session() {
     let harness = TestHarness::seeded().await;
     let (status, body) = harness

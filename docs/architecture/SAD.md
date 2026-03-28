@@ -1,6 +1,6 @@
 # Octopus · 软件架构设计说明书（SAD）
 
-**版本**: v2.2 | **状态**: 重构定稿版 | **日期**: 2026-03-27
+**版本**: v2.2 | **状态**: 重构定稿版 | **日期**: 2026-03-28
 **对应 PRD**: v2.2
 
 ---
@@ -74,10 +74,12 @@
 - `DiscussionSession`
 - `ResidentAgentSession`
 
-补充说明（截至 2026-03-27 的 tracked repository state）：
+补充说明（截至 2026-03-28 的 tracked repository state）：
 
 - 当前跟踪树仍处于 `doc-first rebuild` 状态，但已包含首批 monorepo 根 manifests、当前 GA 运行时共享契约、首批 Rust runtime crates，以及最小 `apps/desktop + apps/remote-hub + packages/schema-ts + packages/hub-client` surface foundation；
-- 当前已验证的实现范围是本地 `Automation(manual_event | cron | webhook | mcp_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Execution Adapter / MCP Gateway -> EnvironmentLease -> Artifact -> KnowledgeCandidate gate -> Shared Knowledge recall -> Audit / Trace` 闭环，并包含持久化的 `ApprovalRequest`、`InboxItem`、`Notification`、`PolicyDecisionLog`、TriggerDelivery 去重/恢复记录、`McpServer`、`McpInvocation`、`EnvironmentLease`、项目级 `KnowledgeSpace`、`KnowledgeCandidate`、`KnowledgeAsset`、知识写回重试记录与 knowledge lineage，以及 thin remote-hub webhook ingress / cron tick shell；低信任 connector 输出可入 Artifact，但不得绕过 gate 自动进入 Shared Knowledge。不得把这一步误写成已完成的真实凭证驱动 MCP 互通、richer remote-hub auth / persistence、automation management surface、向量检索、知识审批流或 Org Graph 实现。
+- 当前已验证的实现范围是本地 `Automation(manual_event | cron | webhook | mcp_event) -> TriggerDelivery -> Task -> Policy / Budget / Approval -> Run -> Execution Adapter / MCP Gateway -> EnvironmentLease -> Artifact -> KnowledgeCandidate gate -> Shared Knowledge recall -> Audit / Trace` 闭环，并包含持久化的 `ApprovalRequest`、`InboxItem`、`Notification`、`PolicyDecisionLog`、TriggerDelivery 去重/恢复记录、`McpServer`、`McpInvocation`、`EnvironmentLease`、项目级 `KnowledgeSpace`、`KnowledgeCandidate`、`KnowledgeAsset`、知识写回重试记录与 knowledge lineage；
+- 当前 tracked shell 已验证 thin remote-hub webhook ingress / cron tick shell、persisted remote user / membership / JWT session state、route-level auth enforcement、minimum automation-management surface，以及 approval detail / inbox handling / approval-driven knowledge promotion request-and-resolve 的最小治理交互面；低信任 connector 输出可入 Artifact，但不得绕过 gate 自动进入 Shared Knowledge；
+- 不得把这一步误写成已完成的 full tenant / RBAC administration、external IdP、向量检索或 Org Graph 正式晋升实现。
 
 ### 1.5 架构平面
 

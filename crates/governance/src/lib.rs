@@ -8,6 +8,7 @@ pub const DECISION_REQUIRE_APPROVAL: &str = "require_approval";
 pub const DECISION_DENY: &str = "deny";
 
 pub const APPROVAL_TYPE_EXECUTION: &str = "execution";
+pub const APPROVAL_TYPE_KNOWLEDGE_PROMOTION: &str = "knowledge_promotion";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CapabilityDescriptorRecord {
@@ -185,6 +186,7 @@ pub struct ApprovalRequestRecord {
     pub run_id: String,
     pub task_id: String,
     pub approval_type: String,
+    pub target_ref: String,
     pub status: String,
     pub reason: String,
     pub dedupe_key: String,
@@ -212,9 +214,40 @@ impl ApprovalRequestRecord {
             run_id: run_id.clone(),
             task_id: task_id.into(),
             approval_type: APPROVAL_TYPE_EXECUTION.to_string(),
+            target_ref: format!("run:{run_id}"),
             status: "pending".to_string(),
             reason: reason.into(),
             dedupe_key: format!("approval:{run_id}"),
+            decided_by: None,
+            decision_note: None,
+            decided_at: None,
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+
+    pub fn new_knowledge_promotion(
+        workspace_id: impl Into<String>,
+        project_id: impl Into<String>,
+        run_id: impl Into<String>,
+        task_id: impl Into<String>,
+        candidate_id: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Self {
+        let id = uuid::Uuid::new_v4().to_string();
+        let candidate_id = candidate_id.into();
+        let now = current_timestamp();
+        Self {
+            id: id.clone(),
+            workspace_id: workspace_id.into(),
+            project_id: project_id.into(),
+            run_id: run_id.into(),
+            task_id: task_id.into(),
+            approval_type: APPROVAL_TYPE_KNOWLEDGE_PROMOTION.to_string(),
+            target_ref: format!("knowledge_candidate:{candidate_id}"),
+            status: "pending".to_string(),
+            reason: reason.into(),
+            dedupe_key: format!("knowledge_promotion:{candidate_id}:{id}"),
             decided_by: None,
             decision_note: None,
             decided_at: None,
@@ -520,13 +553,40 @@ impl SqliteGovernanceStore {
     ) -> Result<Option<ApprovalRequestRecord>, GovernanceStoreError> {
         let row = sqlx::query(
             r#"
-            SELECT id, workspace_id, project_id, run_id, task_id, approval_type, status, reason,
-                   dedupe_key, decided_by, decision_note, decided_at, created_at, updated_at
+            SELECT id, workspace_id, project_id, run_id, task_id, approval_type, target_ref,
+                   status, reason, dedupe_key, decided_by, decision_note, decided_at,
+                   created_at, updated_at
             FROM approval_requests
             WHERE dedupe_key = ?1
             "#,
         )
         .bind(dedupe_key)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(row.map(|row| approval_request_from_row(&row)).transpose()?)
+    }
+
+    pub async fn find_open_approval_request_by_target_ref(
+        &self,
+        approval_type: &str,
+        target_ref: &str,
+    ) -> Result<Option<ApprovalRequestRecord>, GovernanceStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, workspace_id, project_id, run_id, task_id, approval_type, target_ref,
+                   status, reason, dedupe_key, decided_by, decision_note, decided_at,
+                   created_at, updated_at
+            FROM approval_requests
+            WHERE approval_type = ?1
+              AND target_ref = ?2
+              AND status = 'pending'
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(approval_type)
+        .bind(target_ref)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -540,9 +600,10 @@ impl SqliteGovernanceStore {
         sqlx::query(
             r#"
             INSERT INTO approval_requests (
-                id, workspace_id, project_id, run_id, task_id, approval_type, status, reason,
-                dedupe_key, decided_by, decision_note, decided_at, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                id, workspace_id, project_id, run_id, task_id, approval_type, target_ref,
+                status, reason, dedupe_key, decided_by, decision_note, decided_at, created_at,
+                updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
             "#,
         )
         .bind(&request.id)
@@ -551,6 +612,7 @@ impl SqliteGovernanceStore {
         .bind(&request.run_id)
         .bind(&request.task_id)
         .bind(&request.approval_type)
+        .bind(&request.target_ref)
         .bind(&request.status)
         .bind(&request.reason)
         .bind(&request.dedupe_key)
@@ -571,8 +633,9 @@ impl SqliteGovernanceStore {
     ) -> Result<Option<ApprovalRequestRecord>, GovernanceStoreError> {
         let row = sqlx::query(
             r#"
-            SELECT id, workspace_id, project_id, run_id, task_id, approval_type, status, reason,
-                   dedupe_key, decided_by, decision_note, decided_at, created_at, updated_at
+            SELECT id, workspace_id, project_id, run_id, task_id, approval_type, target_ref,
+                   status, reason, dedupe_key, decided_by, decision_note, decided_at,
+                   created_at, updated_at
             FROM approval_requests
             WHERE id = ?1
             "#,
@@ -590,8 +653,9 @@ impl SqliteGovernanceStore {
     ) -> Result<Vec<ApprovalRequestRecord>, GovernanceStoreError> {
         let rows = sqlx::query(
             r#"
-            SELECT id, workspace_id, project_id, run_id, task_id, approval_type, status, reason,
-                   dedupe_key, decided_by, decision_note, decided_at, created_at, updated_at
+            SELECT id, workspace_id, project_id, run_id, task_id, approval_type, target_ref,
+                   status, reason, dedupe_key, decided_by, decision_note, decided_at,
+                   created_at, updated_at
             FROM approval_requests
             WHERE run_id = ?1
             ORDER BY created_at, id
@@ -862,6 +926,7 @@ fn approval_request_from_row(
         run_id: row.try_get("run_id")?,
         task_id: row.try_get("task_id")?,
         approval_type: row.try_get("approval_type")?,
+        target_ref: row.try_get("target_ref")?,
         status: row.try_get("status")?,
         reason: row.try_get("reason")?,
         dedupe_key: row.try_get("dedupe_key")?,

@@ -32,6 +32,7 @@ import knowledgeCandidateSchema from "../../../schemas/observe/knowledge-candida
 import knowledgeDetailSchema from "../../../schemas/observe/knowledge-detail.schema.json";
 import knowledgeLineageRecordSchema from "../../../schemas/observe/knowledge-lineage-record.schema.json";
 import knowledgePromoteCommandSchema from "../../../schemas/observe/knowledge-promote-command.schema.json";
+import requestKnowledgePromotionCommandSchema from "../../../schemas/observe/request-knowledge-promotion-command.schema.json";
 import knowledgeSummarySchema from "../../../schemas/observe/knowledge-summary.schema.json";
 import notificationStatusSchema from "../../../schemas/observe/notification-status.schema.json";
 import notificationSchema from "../../../schemas/observe/notification.schema.json";
@@ -80,6 +81,7 @@ import type {
   InboxItem,
   KnowledgeDetail,
   KnowledgePromoteCommand,
+  RequestKnowledgePromotionCommand,
   ManualDispatchCommand,
   KnowledgeSummary,
   Notification,
@@ -145,6 +147,7 @@ const schemaRegistry = {
   [knowledgeSummarySchema.$id]: knowledgeSummarySchema,
   [knowledgeDetailSchema.$id]: knowledgeDetailSchema,
   [knowledgePromoteCommandSchema.$id]: knowledgePromoteCommandSchema,
+  [requestKnowledgePromotionCommandSchema.$id]: requestKnowledgePromotionCommandSchema,
   [hubLoginCommandSchema.$id]: hubLoginCommandSchema,
   [hubSessionSchema.$id]: hubSessionSchema,
   [hubLoginResponseSchema.$id]: hubLoginResponseSchema,
@@ -363,6 +366,15 @@ export function parseKnowledgePromoteCommand(
 ): KnowledgePromoteCommand {
   return parseWithSchema<KnowledgePromoteCommand>(
     knowledgePromoteCommandSchema.$id,
+    value
+  );
+}
+
+export function parseRequestKnowledgePromotionCommand(
+  value: unknown
+): RequestKnowledgePromotionCommand {
+  return parseWithSchema<RequestKnowledgePromotionCommand>(
+    requestKnowledgePromotionCommandSchema.$id,
     value
   );
 }

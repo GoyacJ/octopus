@@ -3,7 +3,7 @@
   "$id": "https://octopus.local/schemas/governance/approval-request.schema.json",
   "title": "ApprovalRequest",
   "type": "object",
-  "description": "Slice 2 shared contract for execution approval requests emitted by the governed runtime path.",
+  "description": "GA shared contract for approval requests emitted by the governed runtime path and governance interaction surface.",
   "properties": {
     "id": { "type": "string" },
     "workspace_id": { "type": "string" },
@@ -12,7 +12,11 @@
     "task_id": { "type": "string" },
     "approval_type": {
       "type": "string",
-      "const": "execution"
+      "enum": ["execution", "knowledge_promotion"]
+    },
+    "target_ref": {
+      "type": "string",
+      "minLength": 1
     },
     "status": { "$ref": "https://octopus.local/schemas/governance/approval-request-status.schema.json" },
     "reason": {
@@ -43,6 +47,7 @@
     "run_id",
     "task_id",
     "approval_type",
+    "target_ref",
     "status",
     "reason",
     "dedupe_key",

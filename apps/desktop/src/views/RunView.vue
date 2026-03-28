@@ -10,9 +10,51 @@ const hub = useHubStore();
 const runDetail = computed(() => hub.runDetail);
 const artifacts = computed(() => hub.artifacts);
 const knowledgeDetail = computed(() => hub.knowledgeDetail);
+const runApprovals = computed(() => runDetail.value?.approvals ?? []);
+
+function approvalForCandidate(candidateId: string) {
+  return runApprovals.value.find(
+    (approval) => approval.target_ref === `knowledge_candidate:${candidateId}`
+  );
+}
+
+function governanceActionLabel(
+  target: string,
+  idleLabel: string,
+  loadingLabel: string
+): string {
+  if (hub.governanceActionLoading && hub.governanceActionTarget === target) {
+    return loadingLabel;
+  }
+
+  if (hub.readOnlyMode) {
+    return "Read-only";
+  }
+
+  return idleLabel;
+}
 
 async function loadRunSurface(): Promise<void> {
   await hub.loadRun(String(route.params.runId));
+}
+
+async function handleResolveApproval(
+  approvalId: string,
+  decision: "approve" | "reject"
+): Promise<void> {
+  try {
+    await hub.resolveGovernanceApproval(approvalId, decision, decision);
+  } catch {
+    // The store already exposes the error banner for the shell.
+  }
+}
+
+async function handleRequestPromotion(candidateId: string): Promise<void> {
+  try {
+    await hub.requestKnowledgePromotion(candidateId, "request promotion");
+  } catch {
+    // The store already exposes the error banner for the shell.
+  }
 }
 
 watch(
@@ -57,12 +99,37 @@ onMounted(() => {
       <div class="stack-list">
         <div v-for="candidate in knowledgeDetail?.candidates ?? []" :key="candidate.id">
           <strong>{{ candidate.id }}</strong>
+          <p class="muted">Status: {{ candidate.status }}</p>
           <p>{{ candidate.content }}</p>
+          <div v-if="approvalForCandidate(candidate.id)" class="meta-list">
+            <span>{{ approvalForCandidate(candidate.id)?.approval_type }}</span>
+            <span>{{ approvalForCandidate(candidate.id)?.status }}</span>
+            <span>{{ approvalForCandidate(candidate.id)?.target_ref }}</span>
+          </div>
+          <button
+            :data-testid="`request-promotion-${candidate.id}`"
+            :disabled="hub.readOnlyMode || hub.governanceActionLoading"
+            @click="handleRequestPromotion(candidate.id)"
+          >
+            {{
+              governanceActionLabel(
+                candidate.id,
+                "Request Promotion",
+                "Requesting..."
+              )
+            }}
+          </button>
         </div>
       </div>
       <p v-if="(knowledgeDetail?.candidates.length ?? 0) === 0" class="muted">
         No candidates have been captured for this run.
       </p>
+      <div v-if="(knowledgeDetail?.assets.length ?? 0) > 0" class="stack-list">
+        <div v-for="asset in knowledgeDetail?.assets ?? []" :key="asset.id">
+          <strong>{{ asset.id }}</strong>
+          <p class="muted">{{ asset.status }}</p>
+        </div>
+      </div>
     </article>
 
     <article class="surface-card">
@@ -82,6 +149,42 @@ onMounted(() => {
         <span>Approvals: {{ runDetail?.approvals.length ?? 0 }}</span>
         <span>Inbox items: {{ runDetail?.inbox_items.length ?? 0 }}</span>
         <span>Notifications: {{ runDetail?.notifications.length ?? 0 }}</span>
+      </div>
+      <div v-if="(runDetail?.approvals.length ?? 0) > 0" class="stack-list">
+        <div v-for="approval in runDetail?.approvals ?? []" :key="approval.id">
+          <strong>{{ approval.approval_type }}</strong>
+          <p>{{ approval.target_ref }}</p>
+          <p class="muted">{{ approval.status }}</p>
+          <div class="action-row">
+            <button
+              :data-testid="`run-approve-${approval.id}`"
+              :disabled="hub.readOnlyMode || hub.governanceActionLoading"
+              @click="handleResolveApproval(approval.id, 'approve')"
+            >
+              {{
+                governanceActionLabel(
+                  approval.id,
+                  "Approve",
+                  "Approving..."
+                )
+              }}
+            </button>
+            <button
+              class="secondary-button"
+              :data-testid="`run-reject-${approval.id}`"
+              :disabled="hub.readOnlyMode || hub.governanceActionLoading"
+              @click="handleResolveApproval(approval.id, 'reject')"
+            >
+              {{
+                governanceActionLabel(
+                  approval.id,
+                  "Reject",
+                  "Rejecting..."
+                )
+              }}
+            </button>
+          </div>
+        </div>
       </div>
       <p class="muted">
         This minimum surface keeps the authoritative approval state visible from the run.
@@ -149,5 +252,33 @@ p {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+button {
+  border: none;
+  border-radius: 999px;
+  padding: 0.85rem 1.05rem;
+  font: inherit;
+  font-weight: 600;
+  color: #082f49;
+  background: linear-gradient(135deg, #67e8f9, #facc15);
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.secondary-button {
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(125, 211, 252, 0.25);
 }
 </style>

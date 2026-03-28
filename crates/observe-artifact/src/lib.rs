@@ -183,6 +183,7 @@ pub struct InboxItemRecord {
     pub run_id: String,
     pub approval_request_id: String,
     pub item_type: String,
+    pub target_ref: String,
     pub status: String,
     pub dedupe_key: String,
     pub title: String,
@@ -198,6 +199,7 @@ impl InboxItemRecord {
         project_id: impl Into<String>,
         run_id: impl Into<String>,
         approval_request_id: impl Into<String>,
+        target_ref: impl Into<String>,
         title: impl Into<String>,
         message: impl Into<String>,
     ) -> Self {
@@ -210,6 +212,7 @@ impl InboxItemRecord {
             run_id: run_id.into(),
             approval_request_id: approval_request_id.clone(),
             item_type: "approval_request".to_string(),
+            target_ref: target_ref.into(),
             status: "open".to_string(),
             dedupe_key: format!("inbox:{approval_request_id}"),
             title: title.into(),
@@ -235,6 +238,7 @@ pub struct NotificationRecord {
     pub project_id: String,
     pub run_id: String,
     pub approval_request_id: String,
+    pub target_ref: String,
     pub status: String,
     pub dedupe_key: String,
     pub title: String,
@@ -249,6 +253,7 @@ impl NotificationRecord {
         project_id: impl Into<String>,
         run_id: impl Into<String>,
         approval_request_id: impl Into<String>,
+        target_ref: impl Into<String>,
         title: impl Into<String>,
         message: impl Into<String>,
     ) -> Self {
@@ -260,6 +265,7 @@ impl NotificationRecord {
             project_id: project_id.into(),
             run_id: run_id.into(),
             approval_request_id: approval_request_id.clone(),
+            target_ref: target_ref.into(),
             status: "delivered".to_string(),
             dedupe_key: format!("notification:{approval_request_id}"),
             title: title.into(),
@@ -481,6 +487,7 @@ impl SqliteObservationStore {
             run_id: row.try_get("run_id")?,
             approval_request_id: row.try_get("approval_request_id")?,
             item_type: row.try_get("item_type")?,
+            target_ref: row.try_get("target_ref")?,
             status: row.try_get("status")?,
             dedupe_key: row.try_get("dedupe_key")?,
             title: row.try_get("title")?,
@@ -500,6 +507,7 @@ impl SqliteObservationStore {
             project_id: row.try_get("project_id")?,
             run_id: row.try_get("run_id")?,
             approval_request_id: row.try_get("approval_request_id")?,
+            target_ref: row.try_get("target_ref")?,
             status: row.try_get("status")?,
             dedupe_key: row.try_get("dedupe_key")?,
             title: row.try_get("title")?,
@@ -699,10 +707,11 @@ impl ObservationWriter for SqliteObservationStore {
         sqlx::query(
             r#"
             INSERT INTO inbox_items (
-                id, workspace_id, project_id, run_id, approval_request_id, item_type, status,
-                dedupe_key, title, message, created_at, updated_at, resolved_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                id, workspace_id, project_id, run_id, approval_request_id, item_type, target_ref,
+                status, dedupe_key, title, message, created_at, updated_at, resolved_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
             ON CONFLICT(dedupe_key) DO UPDATE SET
+                target_ref = excluded.target_ref,
                 status = excluded.status,
                 title = excluded.title,
                 message = excluded.message,
@@ -716,6 +725,7 @@ impl ObservationWriter for SqliteObservationStore {
         .bind(&item.run_id)
         .bind(&item.approval_request_id)
         .bind(&item.item_type)
+        .bind(&item.target_ref)
         .bind(&item.status)
         .bind(&item.dedupe_key)
         .bind(&item.title)
@@ -735,8 +745,9 @@ impl ObservationWriter for SqliteObservationStore {
     ) -> Result<Vec<InboxItemRecord>, ObservationStoreError> {
         let rows = sqlx::query(
             r#"
-            SELECT id, workspace_id, project_id, run_id, approval_request_id, item_type, status,
-                   dedupe_key, title, message, created_at, updated_at, resolved_at
+            SELECT id, workspace_id, project_id, run_id, approval_request_id, item_type,
+                   target_ref, status, dedupe_key, title, message, created_at, updated_at,
+                   resolved_at
             FROM inbox_items
             WHERE run_id = ?1
             ORDER BY created_at, id
@@ -758,8 +769,9 @@ impl ObservationWriter for SqliteObservationStore {
     ) -> Result<Vec<InboxItemRecord>, ObservationStoreError> {
         let rows = sqlx::query(
             r#"
-            SELECT id, workspace_id, project_id, run_id, approval_request_id, item_type, status,
-                   dedupe_key, title, message, created_at, updated_at, resolved_at
+            SELECT id, workspace_id, project_id, run_id, approval_request_id, item_type,
+                   target_ref, status, dedupe_key, title, message, created_at, updated_at,
+                   resolved_at
             FROM inbox_items
             WHERE workspace_id = ?1
             ORDER BY created_at, id
@@ -782,10 +794,11 @@ impl ObservationWriter for SqliteObservationStore {
         sqlx::query(
             r#"
             INSERT INTO notifications (
-                id, workspace_id, project_id, run_id, approval_request_id, status, dedupe_key,
-                title, message, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                id, workspace_id, project_id, run_id, approval_request_id, target_ref, status,
+                dedupe_key, title, message, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
             ON CONFLICT(dedupe_key) DO UPDATE SET
+                target_ref = excluded.target_ref,
                 status = excluded.status,
                 title = excluded.title,
                 message = excluded.message,
@@ -797,6 +810,7 @@ impl ObservationWriter for SqliteObservationStore {
         .bind(&notification.project_id)
         .bind(&notification.run_id)
         .bind(&notification.approval_request_id)
+        .bind(&notification.target_ref)
         .bind(&notification.status)
         .bind(&notification.dedupe_key)
         .bind(&notification.title)
@@ -815,8 +829,8 @@ impl ObservationWriter for SqliteObservationStore {
     ) -> Result<Vec<NotificationRecord>, ObservationStoreError> {
         let rows = sqlx::query(
             r#"
-            SELECT id, workspace_id, project_id, run_id, approval_request_id, status, dedupe_key,
-                   title, message, created_at, updated_at
+            SELECT id, workspace_id, project_id, run_id, approval_request_id, target_ref, status,
+                   dedupe_key, title, message, created_at, updated_at
             FROM notifications
             WHERE run_id = ?1
             ORDER BY created_at, id
@@ -838,8 +852,8 @@ impl ObservationWriter for SqliteObservationStore {
     ) -> Result<Vec<NotificationRecord>, ObservationStoreError> {
         let rows = sqlx::query(
             r#"
-            SELECT id, workspace_id, project_id, run_id, approval_request_id, status, dedupe_key,
-                   title, message, created_at, updated_at
+            SELECT id, workspace_id, project_id, run_id, approval_request_id, target_ref, status,
+                   dedupe_key, title, message, created_at, updated_at
             FROM notifications
             WHERE workspace_id = ?1
             ORDER BY created_at, id

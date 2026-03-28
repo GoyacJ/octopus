@@ -9,6 +9,7 @@ const router = useRouter();
 const hub = useHubStore();
 type AutomationTriggerType = "manual_event" | "cron" | "webhook" | "mcp_event";
 type CreateTriggerInput = Parameters<typeof hub.createAutomation>[0]["trigger"];
+type InboxItem = ReturnType<typeof useHubStore>["inboxItems"][number];
 
 const taskDraft = reactive({
   title: "Write note",
@@ -38,6 +39,25 @@ const automationDraft = reactive({
 });
 
 const visibleCapability = computed(() => hub.activeCapability);
+
+function approvalForItem(item: InboxItem) {
+  return hub.approvalDetails[item.approval_request_id] ?? null;
+}
+
+function governanceActionLabel(approvalId: string, decision: "approve" | "reject"): string {
+  if (
+    hub.governanceActionLoading &&
+    hub.governanceActionTarget === approvalId
+  ) {
+    return decision === "approve" ? "Approving..." : "Rejecting...";
+  }
+
+  if (hub.readOnlyMode) {
+    return "Read-only";
+  }
+
+  return decision === "approve" ? "Approve" : "Reject";
+}
 
 async function loadWorkspaceSurface(): Promise<void> {
   const workspaceId = String(route.params.workspaceId);
@@ -163,6 +183,17 @@ async function createAutomation(): Promise<void> {
 async function handleCreateAutomation(): Promise<void> {
   try {
     await createAutomation();
+  } catch {
+    // The store already exposes the error banner for the shell.
+  }
+}
+
+async function handleResolveApproval(
+  approvalId: string,
+  decision: "approve" | "reject"
+): Promise<void> {
+  try {
+    await hub.resolveGovernanceApproval(approvalId, decision, decision);
   } catch {
     // The store already exposes the error banner for the shell.
   }
@@ -377,6 +408,34 @@ onMounted(() => {
         <li v-for="item in hub.inboxItems" :key="item.id">
           <strong>{{ item.title }}</strong>
           <p>{{ item.message }}</p>
+          <div v-if="approvalForItem(item)" class="meta-list">
+            <span>{{ approvalForItem(item)?.approval_type }}</span>
+            <span>{{ approvalForItem(item)?.status }}</span>
+            <span>{{ approvalForItem(item)?.target_ref }}</span>
+          </div>
+          <div class="action-row">
+            <button
+              :data-testid="`workspace-approve-${item.approval_request_id}`"
+              :disabled="
+                hub.readOnlyMode ||
+                hub.governanceActionLoading
+              "
+              @click="handleResolveApproval(item.approval_request_id, 'approve')"
+            >
+              {{ governanceActionLabel(item.approval_request_id, 'approve') }}
+            </button>
+            <button
+              class="secondary-button"
+              :data-testid="`workspace-reject-${item.approval_request_id}`"
+              :disabled="
+                hub.readOnlyMode ||
+                hub.governanceActionLoading
+              "
+              @click="handleResolveApproval(item.approval_request_id, 'reject')"
+            >
+              {{ governanceActionLabel(item.approval_request_id, 'reject') }}
+            </button>
+          </div>
         </li>
       </ul>
       <p v-else class="muted">No approval requests are waiting.</p>
@@ -476,11 +535,23 @@ button:disabled {
   opacity: 0.75;
 }
 
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .automation-link {
   padding: 0;
   color: #f8fafc;
   background: transparent;
   text-align: left;
+}
+
+.secondary-button {
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(125, 211, 252, 0.25);
 }
 
 .stack-list {

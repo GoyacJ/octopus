@@ -101,6 +101,8 @@ fn refined_slice1_examples_validate() {
     let approval_schema = compiled_schema("governance/approval-request.schema.json");
     let approval_resolve_command_schema =
         compiled_schema("governance/approval-resolve-command.schema.json");
+    let request_knowledge_promotion_command_schema =
+        compiled_schema("observe/request-knowledge-promotion-command.schema.json");
     let capability_descriptor_schema =
         compiled_schema("governance/capability-descriptor.schema.json");
     let capability_binding_schema = compiled_schema("governance/capability-binding.schema.json");
@@ -609,6 +611,7 @@ fn refined_slice1_examples_validate() {
         "run_id": "run-1",
         "task_id": "task-1",
         "approval_type": "execution",
+        "target_ref": "run:run-1",
         "status": "pending",
         "reason": "risk_level_high",
         "dedupe_key": "approval:run-1",
@@ -623,6 +626,11 @@ fn refined_slice1_examples_validate() {
         "decision": "approve",
         "actor_ref": "reviewer-alpha",
         "note": "connector approved"
+    })));
+    assert!(request_knowledge_promotion_command_schema.is_valid(&json!({
+        "candidate_id": "candidate-1",
+        "actor_ref": "workspace_admin:alice",
+        "note": "request review"
     })));
     assert!(capability_visibility_schema.is_valid(&json!({
         "descriptor": {
@@ -720,6 +728,7 @@ fn refined_slice1_examples_validate() {
         "run_id": "run-1",
         "approval_request_id": "approval-1",
         "item_type": "approval_request",
+        "target_ref": "run:run-1",
         "status": "open",
         "dedupe_key": "inbox:approval-1",
         "title": "Approval required",
@@ -734,6 +743,7 @@ fn refined_slice1_examples_validate() {
         "project_id": "project-slice1",
         "run_id": "run-1",
         "approval_request_id": "approval-1",
+        "target_ref": "run:run-1",
         "status": "delivered",
         "dedupe_key": "notification:approval-1",
         "title": "Approval required",
@@ -755,6 +765,7 @@ fn refined_slice1_examples_validate() {
         "created_at": "2026-03-26T10:00:00Z"
     })));
     assert!(knowledge_candidate_status_schema.is_valid(&json!("candidate")));
+    assert!(knowledge_candidate_status_schema.is_valid(&json!("verified_shared")));
     assert!(knowledge_asset_status_schema.is_valid(&json!("verified_shared")));
     assert!(knowledge_candidate_schema.is_valid(&json!({
         "id": "candidate-1",

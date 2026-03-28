@@ -79,6 +79,7 @@ pub fn app(state: AppState) -> Router {
         .route("/api/runs/{run_id}", get(get_run_detail))
         .route("/api/runs/{run_id}/artifacts", get(list_artifacts))
         .route("/api/runs/{run_id}/knowledge", get(get_knowledge_detail))
+        .route("/api/approvals/{approval_id}", get(get_approval_request))
         .route("/api/approvals/{approval_id}/resolve", post(resolve_approval))
         .route("/api/workspaces/{workspace_id}/inbox", get(list_inbox_items))
         .route(
@@ -88,6 +89,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/api/workspaces/{workspace_id}/projects/{project_id}/capabilities",
             get(list_capability_visibility),
+        )
+        .route(
+            "/api/knowledge/candidates/{candidate_id}/request-promotion",
+            post(request_knowledge_promotion),
         )
         .route(
             "/api/knowledge/candidates/{candidate_id}/promote",
@@ -175,6 +180,34 @@ impl IntoResponse for AppError {
                     StatusCode::BAD_REQUEST,
                     format!(
                         "trigger delivery `{delivery_id}` cannot transition from `{from}` to `{to}`"
+                    ),
+                ),
+                RuntimeError::InvalidKnowledgeCandidateState {
+                    candidate_id,
+                    status,
+                    expected,
+                } => (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "knowledge candidate `{candidate_id}` has invalid status `{status}`; expected `{expected}`"
+                    ),
+                ),
+                RuntimeError::InvalidApprovalType {
+                    approval_id,
+                    approval_type,
+                } => (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "approval `{approval_id}` has unsupported type `{approval_type}`"
+                    ),
+                ),
+                RuntimeError::InvalidApprovalTargetRef {
+                    approval_id,
+                    target_ref,
+                } => (
+                    StatusCode::BAD_REQUEST,
+                    format!(
+                        "approval `{approval_id}` has invalid target_ref `{target_ref}`"
                     ),
                 ),
                 other => (StatusCode::INTERNAL_SERVER_ERROR, other.to_string()),
@@ -299,14 +332,24 @@ struct SurfaceAutomationLifecycleCommand {
 struct SurfaceApprovalResolveCommand {
     approval_id: String,
     decision: String,
-    actor_ref: String,
+    #[serde(rename = "actor_ref")]
+    _actor_ref: String,
+    note: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceRequestKnowledgePromotionCommand {
+    candidate_id: String,
+    #[serde(rename = "actor_ref")]
+    _actor_ref: String,
     note: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct SurfaceKnowledgePromoteCommand {
     candidate_id: String,
-    actor_ref: String,
+    #[serde(rename = "actor_ref")]
+    _actor_ref: String,
     note: String,
 }
 
@@ -749,6 +792,16 @@ async fn get_knowledge_detail(
     Ok(Json(build_knowledge_detail_response(&state.runtime, &run_id).await?))
 }
 
+async fn get_approval_request(
+    State(state): State<AppState>,
+    Path(approval_id): Path<String>,
+    headers: HeaderMap,
+) -> AppResult<ApprovalRequestRecord> {
+    let session = require_session(&state, &headers).await?;
+    let approval = load_authorized_approval(&state, &session, &approval_id).await?;
+    Ok(Json(approval))
+}
+
 async fn resolve_approval(
     State(state): State<AppState>,
     Path(approval_id): Path<String>,
@@ -774,15 +827,7 @@ async fn resolve_approval(
         }
     };
 
-    let approval = state
-        .runtime
-        .fetch_approval_request(&approval_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("approval `{approval_id}` not found")))?;
-    state
-        .auth
-        .ensure_workspace_access(&session, &approval.workspace_id)
-        .await?;
+    load_authorized_approval(&state, &session, &approval_id).await?;
 
     let report = state
         .runtime
@@ -860,6 +905,28 @@ async fn list_capability_visibility(
     ))
 }
 
+async fn request_knowledge_promotion(
+    State(state): State<AppState>,
+    Path(candidate_id): Path<String>,
+    headers: HeaderMap,
+    Json(command): Json<SurfaceRequestKnowledgePromotionCommand>,
+) -> AppResult<ApprovalRequestRecord> {
+    let session = require_session(&state, &headers).await?;
+    if candidate_id != command.candidate_id {
+        return Err(AppError::BadRequest(
+            "candidate_id path/body mismatch".to_string(),
+        ));
+    }
+
+    load_authorized_candidate(&state, &session, &candidate_id).await?;
+    Ok(Json(
+        state
+            .runtime
+            .request_knowledge_promotion(&candidate_id, &session.actor_ref, &command.note)
+            .await?,
+    ))
+}
+
 async fn promote_knowledge(
     State(state): State<AppState>,
     Path(candidate_id): Path<String>,
@@ -873,19 +940,7 @@ async fn promote_knowledge(
         ));
     }
 
-    let candidate = state
-        .runtime
-        .fetch_knowledge_candidate(&candidate_id)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("candidate `{candidate_id}` not found")))?;
-    let report = state
-        .runtime
-        .load_run_report(&candidate.source_run_id)
-        .await?;
-    state
-        .auth
-        .ensure_workspace_access(&session, &report.run.workspace_id)
-        .await?;
+    let _candidate = load_authorized_candidate(&state, &session, &candidate_id).await?;
 
     let report = state
         .runtime
@@ -1157,6 +1212,44 @@ async fn load_authorized_automation(
         .ensure_workspace_access(session, &automation.workspace_id)
         .await?;
     Ok(automation)
+}
+
+async fn load_authorized_approval(
+    state: &AppState,
+    session: &HubSession,
+    approval_id: &str,
+) -> Result<ApprovalRequestRecord, AppError> {
+    let approval = state
+        .runtime
+        .fetch_approval_request(approval_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("approval `{approval_id}` not found")))?;
+    state
+        .auth
+        .ensure_workspace_access(session, &approval.workspace_id)
+        .await?;
+    Ok(approval)
+}
+
+async fn load_authorized_candidate(
+    state: &AppState,
+    session: &HubSession,
+    candidate_id: &str,
+) -> Result<KnowledgeCandidateRecord, AppError> {
+    let candidate = state
+        .runtime
+        .fetch_knowledge_candidate(candidate_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("candidate `{candidate_id}` not found")))?;
+    let report = state
+        .runtime
+        .load_run_report(&candidate.source_run_id)
+        .await?;
+    state
+        .auth
+        .ensure_workspace_access(session, &report.run.workspace_id)
+        .await?;
+    Ok(candidate)
 }
 
 async fn load_authorized_trigger(

@@ -23,7 +23,11 @@ export type NotificationStatus =
   | "read"
   | "failed"
   | "dismissed";
-export type KnowledgeCandidateStatus = "candidate" | "promoted" | "rejected";
+export type KnowledgeCandidateStatus =
+  | "candidate"
+  | "verified_shared"
+  | "promoted_org"
+  | "revoked_or_tombstoned";
 export type KnowledgeAssetStatus = "verified_shared" | "deprecated";
 export type HubAuthState = "authenticated" | "auth_required" | "token_expired";
 export type AutomationStatus = "active" | "paused" | "archived";
@@ -347,7 +351,8 @@ export interface ApprovalRequest {
   project_id: string;
   run_id: string;
   task_id: string;
-  approval_type: "execution";
+  approval_type: "execution" | "knowledge_promotion";
+  target_ref: string;
   status: ApprovalRequestStatus;
   reason: string;
   dedupe_key: string;
@@ -431,6 +436,7 @@ export interface InboxItem {
   run_id: string;
   approval_request_id: string;
   item_type: "approval_request";
+  target_ref: string;
   status: InboxItemStatus;
   dedupe_key: string;
   title: string;
@@ -446,6 +452,7 @@ export interface Notification {
   project_id: string;
   run_id: string;
   approval_request_id: string;
+  target_ref: string;
   status: NotificationStatus;
   dedupe_key: string;
   title: string;
@@ -546,6 +553,12 @@ export interface KnowledgeDetail {
 }
 
 export interface KnowledgePromoteCommand {
+  candidate_id: string;
+  actor_ref: string;
+  note: string;
+}
+
+export interface RequestKnowledgePromotionCommand {
   candidate_id: string;
   actor_ref: string;
   note: string;

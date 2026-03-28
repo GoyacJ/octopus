@@ -80,7 +80,8 @@
 - GA trigger expansion 已落地，当前 tracked tree 已验证 `manual event`、`cron`、`webhook`、`MCP event` 四类 trigger 进入同一 `TriggerDelivery -> Task -> Run` 主链
 - Slice 9 `real MCP transport / credentials` 已落地并通过验证
 - Slice 10 `remote-hub persistence / auth` 已落地并通过验证
-- `minimum automation surface` 仍未落地，且必须作为独立任务推进
+- `minimum automation surface` 已落地并通过验证
+- Slice 11 `GA governance interaction surface` 已落地并通过验证，补齐 approval detail / inbox action / approval-driven knowledge promotion
 
 ---
 
@@ -164,11 +165,12 @@
 3. trigger expansion foundation + Slice 6 `cron` + Slice 7 `webhook` + Slice 8 `MCP event`
 4. Slice 9 `real MCP transport / credentials`
 5. Slice 10 `remote-hub persistence / auth`
+6. minimum automation surface
+7. Slice 11 `GA governance interaction surface`
 
-在此之后，当前冻结的下一优先级为：
+在此之后，当前尚未冻结新的 post-Slice 11 下一优先级。
 
-1. minimum automation surface，且必须作为独立任务推进，不与 auth/runtime 收敛工作混做
-2. 其后的更深 remote admin / tenant / IdP 能力，必须等新的 task package 与 owner docs 明确后再启动
+更深 remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须等新的 task package 与 owner docs 明确后再启动。
 
 ### 6.3 Shared Contract 先于实现
 
@@ -832,10 +834,23 @@ GA 必须支持最小执行环境语义：
 - 已在 tracked tree 中落地并通过验证
 - 当前是 bootstrap user + persisted membership + JWT session 的最小模型，不包含 full tenant / RBAC admin surface 或 external IdP
 
-### 13.12 当前冻结的下一优先级
+### 13.12 Slice 11：GA governance interaction surface（已完成）
 
-1. minimum automation surface 作为独立任务启动，并在那时再扩展相关 app/package surface
-2. 更深 remote admin / tenant / IdP 能力不在当前冻结顺序内，除非后续 tracked docs 明确纳入
+#### 范围
+
+- 扩展 `ApprovalRequest`、`InboxItem`、`Notification` 的共享契约，引入 `target_ref` 并把 `approval_type` 扩展到 `execution | knowledge_promotion`
+- 新增 `RequestKnowledgePromotionCommand`，让 `KnowledgeCandidate` 进入正式审批驱动的 shared-knowledge 晋升路径
+- 扩展 runtime / remote-hub / hub-client / desktop，使 Workspace / Run surface 可以查看审批详情、inline resolve approval、发起 knowledge promotion request
+
+#### 当前状态
+
+- 已在 tracked tree 中落地并通过验证
+- 当前是 approval-centric 的最小治理交互面，不包含独立 Inbox / Board 路由、full notification center、tenant / RBAC / IdP admin、vector retrieval 或 Org Graph promotion
+
+### 13.13 当前 post-Slice 11 状态
+
+- 当前 tracked docs 尚未冻结新的 post-Slice 11 下一优先级
+- 更深 remote admin / tenant / IdP 能力不在当前冻结顺序内，除非后续 tracked docs 明确纳入
 
 ---
 
@@ -1031,8 +1046,8 @@ Octopus 首版 GA 不是“把目标态平台全部做出来”，而是：
 - 以 PRD 定义的正式对象模型为产品边界
 - 以 SAD 定义的运行时、治理、恢复、互操作边界为架构约束
 - 以本蓝图定义的最小正式运行闭环为实施主线
-- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 的顺序稳步推进
-- 当前下一优先级是独立的 minimum automation surface
+- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 -> minimum automation surface -> Slice 11 的顺序稳步推进
+- 当前 tracked tree 已推进到 Slice 11；post-Slice 11 的下一优先级尚未在 owner docs 中冻结
 - 在每次模块推进前先完成局部设计包，再实现，再验证，再回写全局文档
 
 只有这样，Octopus 才能在不丢失整体方向的前提下，让 AI 主导开发同时保持可控、可审计、可维护。

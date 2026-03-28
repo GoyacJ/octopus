@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/observe/request-knowledge-promotion-command.schema.json",
+  "title": "RequestKnowledgePromotionCommand",
+  "type": "object",
+  "description": "GA governance interaction command for requesting approval-driven promotion of a knowledge candidate into shared knowledge.",
+  "properties": {
+    "candidate_id": { "type": "string" },
+    "actor_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "note": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": ["candidate_id", "actor_ref", "note"],
+  "additionalProperties": false
+}

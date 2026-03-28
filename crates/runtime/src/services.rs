@@ -11,7 +11,8 @@ use octopus_execution::{ExecutionAction, ExecutionEngine, ExecutionOutcome};
 use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
     CapabilityDescriptorRecord, CapabilityGrantRecord, GovernanceDecision, SqliteGovernanceStore,
-    TaskGovernanceInput, DECISION_ALLOW, DECISION_DENY, DECISION_REQUIRE_APPROVAL,
+    TaskGovernanceInput, APPROVAL_TYPE_EXECUTION, APPROVAL_TYPE_KNOWLEDGE_PROMOTION,
+    DECISION_ALLOW, DECISION_DENY, DECISION_REQUIRE_APPROVAL,
 };
 use octopus_interop_mcp::{
     EnvironmentLeaseRecord, GatewayExecutionOutcome, GatewayRequest, McpCredentialRecord,
@@ -1660,11 +1661,30 @@ impl RunOrchestrator {
             .governance_store
             .resolve_approval_request(approval_id, decision, actor_ref, note)
             .await?;
-        let mut run = self
+        let run = self
             .fetch_run(&approval.run_id)
             .await?
             .ok_or_else(|| RuntimeError::RunNotFound(approval.run_id.clone()))?;
 
+        match approval.approval_type.as_str() {
+            APPROVAL_TYPE_EXECUTION => self.resolve_execution_approval(approval, run, task).await,
+            APPROVAL_TYPE_KNOWLEDGE_PROMOTION => {
+                self.resolve_knowledge_promotion_approval(approval, run, actor_ref, note)
+                    .await
+            }
+            other => Err(RuntimeError::InvalidApprovalType {
+                approval_id: approval.id,
+                approval_type: other.to_string(),
+            }),
+        }
+    }
+
+    async fn resolve_execution_approval(
+        &self,
+        approval: ApprovalRequestRecord,
+        mut run: RunRecord,
+        task: &TaskRecord,
+    ) -> Result<RunExecutionReport, RuntimeError> {
         match approval.status.as_str() {
             "approved" => {
                 if run.status == "completed" {
@@ -1767,6 +1787,71 @@ impl RunOrchestrator {
                     ))
                     .await?;
 
+                self.load_run_report(&run.id).await
+            }
+            other => Err(RuntimeError::InvalidRunTransition {
+                run_id: run.id,
+                from: other.to_string(),
+                to: "resolve_approval".to_string(),
+            }),
+        }
+    }
+
+    async fn resolve_knowledge_promotion_approval(
+        &self,
+        approval: ApprovalRequestRecord,
+        run: RunRecord,
+        actor_ref: &str,
+        note: &str,
+    ) -> Result<RunExecutionReport, RuntimeError> {
+        let candidate_id = approval
+            .target_ref
+            .strip_prefix("knowledge_candidate:")
+            .ok_or_else(|| RuntimeError::InvalidApprovalTargetRef {
+                approval_id: approval.id.clone(),
+                target_ref: approval.target_ref.clone(),
+            })?;
+
+        self.resolve_inbox_for_approval(&run.id, &approval.id).await?;
+
+        match approval.status.as_str() {
+            "approved" => {
+                self.observation_store
+                    .write_audit(&AuditRecord::new(
+                        &run.workspace_id,
+                        &run.project_id,
+                        &run.id,
+                        &run.task_id,
+                        AUDIT_EVENT_APPROVAL_APPROVED,
+                        format!(
+                            "Knowledge promotion approval approved for candidate {candidate_id}"
+                        ),
+                    ))
+                    .await?;
+                self.knowledge_manager
+                    .promote_knowledge_candidate(candidate_id, actor_ref, note)
+                    .await?;
+                self.load_run_report(&run.id).await
+            }
+            "rejected" | "expired" | "cancelled" => {
+                let event_type = match approval.status.as_str() {
+                    "rejected" => AUDIT_EVENT_APPROVAL_REJECTED,
+                    "expired" => AUDIT_EVENT_APPROVAL_EXPIRED,
+                    _ => AUDIT_EVENT_APPROVAL_CANCELLED,
+                };
+                self.observation_store
+                    .write_audit(&AuditRecord::new(
+                        &run.workspace_id,
+                        &run.project_id,
+                        &run.id,
+                        &run.task_id,
+                        event_type,
+                        format!(
+                            "Knowledge promotion approval {} for candidate {}",
+                            approval.status, candidate_id
+                        ),
+                    ))
+                    .await?;
                 self.load_run_report(&run.id).await
             }
             other => Err(RuntimeError::InvalidRunTransition {
@@ -1904,6 +1989,80 @@ impl RunOrchestrator {
             .await?)
     }
 
+    pub async fn request_knowledge_promotion(
+        &self,
+        candidate_id: &str,
+        actor_ref: &str,
+        note: &str,
+    ) -> Result<ApprovalRequestRecord, RuntimeError> {
+        let target_ref = knowledge_candidate_target_ref(candidate_id);
+        if let Some(existing) = self
+            .governance_store
+            .find_open_approval_request_by_target_ref(
+                APPROVAL_TYPE_KNOWLEDGE_PROMOTION,
+                target_ref.as_str(),
+            )
+            .await?
+        {
+            self.sync_governance_surface_records(
+                &existing,
+                "Knowledge promotion approval required",
+                format!("Knowledge promotion requested by {actor_ref}: {note}").as_str(),
+            )
+            .await?;
+            return Ok(existing);
+        }
+
+        let candidate = self
+            .knowledge_manager
+            .fetch_knowledge_candidate(candidate_id)
+            .await?
+            .ok_or_else(|| RuntimeError::KnowledgeCandidateNotFound(candidate_id.to_string()))?;
+        if candidate.status != "candidate" {
+            return Err(RuntimeError::InvalidKnowledgeCandidateState {
+                candidate_id: candidate.id,
+                status: candidate.status,
+                expected: "candidate".to_string(),
+            });
+        }
+
+        let run = self
+            .fetch_run(&candidate.source_run_id)
+            .await?
+            .ok_or_else(|| RuntimeError::RunNotFound(candidate.source_run_id.clone()))?;
+        let approval = ApprovalRequestRecord::new_knowledge_promotion(
+            &run.workspace_id,
+            &run.project_id,
+            &run.id,
+            &run.task_id,
+            candidate_id,
+            "knowledge_promotion_requested",
+        );
+        self.governance_store
+            .create_approval_request(&approval)
+            .await?;
+        self.sync_governance_surface_records(
+            &approval,
+            "Knowledge promotion approval required",
+            format!("Knowledge promotion requested by {actor_ref}: {note}").as_str(),
+        )
+        .await?;
+        self.observation_store
+            .write_audit(&AuditRecord::new(
+                &run.workspace_id,
+                &run.project_id,
+                &run.id,
+                &run.task_id,
+                AUDIT_EVENT_APPROVAL_REQUESTED,
+                format!(
+                    "Knowledge promotion requested for candidate {candidate_id} by {actor_ref}: {note}"
+                ),
+            ))
+            .await?;
+
+        Ok(approval)
+    }
+
     pub async fn list_approval_requests_by_run(
         &self,
         run_id: &str,
@@ -2024,28 +2183,12 @@ impl RunOrchestrator {
             created
         };
 
-        let mut inbox = InboxItemRecord::approval_request(
-            &run.workspace_id,
-            &run.project_id,
-            &run.id,
-            &approval.id,
-            "Approval required",
-            "A run needs approval before execution",
-        );
-        inbox.status = "open".to_string();
-        self.observation_store.upsert_inbox_item(&inbox).await?;
-
-        let notification = NotificationRecord::approval_request(
-            &run.workspace_id,
-            &run.project_id,
-            &run.id,
-            &approval.id,
+        self.sync_governance_surface_records(
+            &approval,
             "Approval required",
             "A run is waiting for approval",
-        );
-        self.observation_store
-            .upsert_notification(&notification)
-            .await?;
+        )
+        .await?;
 
         self.record_policy_decision(
             &run,
@@ -2342,6 +2485,40 @@ impl RunOrchestrator {
         Ok(())
     }
 
+    async fn sync_governance_surface_records(
+        &self,
+        approval: &ApprovalRequestRecord,
+        title: &str,
+        message: &str,
+    ) -> Result<(), RuntimeError> {
+        let mut inbox = InboxItemRecord::approval_request(
+            &approval.workspace_id,
+            &approval.project_id,
+            &approval.run_id,
+            &approval.id,
+            &approval.target_ref,
+            title,
+            message,
+        );
+        inbox.status = "open".to_string();
+        self.observation_store.upsert_inbox_item(&inbox).await?;
+
+        let notification = NotificationRecord::approval_request(
+            &approval.workspace_id,
+            &approval.project_id,
+            &approval.run_id,
+            &approval.id,
+            &approval.target_ref,
+            title,
+            message,
+        );
+        self.observation_store
+            .upsert_notification(&notification)
+            .await?;
+
+        Ok(())
+    }
+
     async fn insert_run(&self, run: &RunRecord) -> Result<(), RuntimeError> {
         sqlx::query(
             r#"
@@ -2628,4 +2805,8 @@ impl ActionExecutionOutcome {
             }),
         }
     }
+}
+
+fn knowledge_candidate_target_ref(candidate_id: &str) -> String {
+    format!("knowledge_candidate:{candidate_id}")
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  parseApprovalRequest,
   parseAutomationDetail,
   parseAutomationLifecycleCommand,
   parseAutomationSummary,
@@ -11,7 +12,9 @@ import {
   parseHubEvent,
   parseHubLoginCommand,
   parseHubLoginResponse,
+  parseKnowledgeDetail,
   parseManualDispatchCommand,
+  parseRequestKnowledgePromotionCommand,
   parseRunDetail,
   parseTaskCreateCommand,
   parseTriggerDeliveryRetryCommand
@@ -351,5 +354,70 @@ describe("schema-ts contract parsers", () => {
         auth_state: "token_expired"
       }).error_code
     ).toBe("token_expired");
+  });
+
+  it("accepts governance interaction approval detail and request-promotion payloads", () => {
+    expect(
+      parseApprovalRequest({
+        id: "approval-knowledge-1",
+        workspace_id: "workspace-alpha",
+        project_id: "project-slice1",
+        run_id: "run-1",
+        task_id: "task-1",
+        approval_type: "knowledge_promotion",
+        target_ref: "knowledge_candidate:candidate-1",
+        status: "pending",
+        reason: "knowledge_promotion_requested",
+        dedupe_key: "knowledge_promotion:candidate-1:approval-knowledge-1",
+        decided_by: null,
+        decision_note: null,
+        decided_at: null,
+        created_at: "2026-03-28T10:00:00Z",
+        updated_at: "2026-03-28T10:00:00Z"
+      }).target_ref
+    ).toBe("knowledge_candidate:candidate-1");
+
+    expect(
+      parseRequestKnowledgePromotionCommand({
+        candidate_id: "candidate-1",
+        actor_ref: "workspace_admin:alice",
+        note: "request review"
+      }).candidate_id
+    ).toBe("candidate-1");
+  });
+
+  it("accepts verified_shared as the knowledge candidate lifecycle state", () => {
+    expect(
+      parseKnowledgeDetail({
+        knowledge_space: {
+          id: "knowledge-space-1",
+          workspace_id: "workspace-alpha",
+          project_id: "project-slice1",
+          owner_ref: "workspace_admin:alice",
+          display_name: "Project Slice 1 Knowledge",
+          created_at: "2026-03-26T10:00:00Z",
+          updated_at: "2026-03-26T10:00:00Z"
+        },
+        candidates: [
+          {
+            id: "candidate-1",
+            knowledge_space_id: "knowledge-space-1",
+            source_run_id: "run-1",
+            source_task_id: "task-1",
+            source_artifact_id: "artifact-1",
+            capability_id: "capability-write-note",
+            status: "verified_shared",
+            content: "hello",
+            provenance_source: "builtin",
+            source_trust_level: "trusted",
+            dedupe_key: "knowledge_candidate:artifact:artifact-1",
+            created_at: "2026-03-26T10:00:01Z",
+            updated_at: "2026-03-26T10:00:02Z"
+          }
+        ],
+        assets: [],
+        lineage: []
+      }).candidates[0].status
+    ).toBe("verified_shared");
   });
 });

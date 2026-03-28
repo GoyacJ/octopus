@@ -149,6 +149,7 @@ const approvalFixture = {
   run_id: "run-approval",
   task_id: "task-approval",
   approval_type: "execution",
+  target_ref: "run:run-approval",
   status: "pending",
   reason: "Needs approval",
   dedupe_key: "approval:1",
@@ -158,6 +159,17 @@ const approvalFixture = {
   created_at: "2026-03-26T10:00:00Z",
   updated_at: "2026-03-26T10:00:00Z"
 };
+
+const promotionApprovalFixture = {
+  ...approvalFixture,
+  id: "approval-promotion-1",
+  run_id: "run-1",
+  task_id: "task-1",
+  approval_type: "knowledge_promotion",
+  target_ref: "knowledge_candidate:candidate-1",
+  reason: "Promote candidate to verified shared knowledge",
+  dedupe_key: "knowledge_promotion:candidate-1:approval-promotion-1"
+} as const;
 
 const runDetailFixture = {
   run: {
@@ -346,6 +358,10 @@ function runHubClientContractSuite(name: string, factory: SuiteFactory) {
       await expect(client.getRunDetail("run-1")).resolves.toMatchObject({
         artifacts: [{ id: "artifact-1" }]
       });
+      await expect(client.getApprovalRequest("approval-1")).resolves.toMatchObject({
+        id: "approval-1",
+        target_ref: "run:run-approval"
+      });
       await expect(client.listArtifacts("run-1")).resolves.toHaveLength(1);
       await expect(
         client.listCapabilityVisibility("workspace-alpha", "project-slice1")
@@ -354,6 +370,17 @@ function runHubClientContractSuite(name: string, factory: SuiteFactory) {
       await expect(client.listNotifications("workspace-alpha")).resolves.toEqual([]);
       await expect(client.getKnowledgeDetail("run-1")).resolves.toMatchObject({
         knowledge_space: { id: "knowledge-space-1" }
+      });
+      await expect(
+        client.requestKnowledgePromotion({
+          candidate_id: "candidate-1",
+          actor_ref: "workspace_admin:alice",
+          note: "promote"
+        })
+      ).resolves.toMatchObject({
+        id: "approval-promotion-1",
+        approval_type: "knowledge_promotion",
+        target_ref: "knowledge_candidate:candidate-1"
       });
       await expect(
         client.promoteKnowledge({
@@ -430,6 +457,9 @@ runHubClientContractSuite("local adapter", () => {
         case "hub:get_run_detail":
         case "hub:resolve_approval":
           return runDetailFixture;
+        case "hub:get_approval_request":
+          expect(payload).toEqual({ approvalId: "approval-1" });
+          return approvalFixture;
         case "hub:list_artifacts":
           return runDetailFixture.artifacts;
         case "hub:list_capability_visibility":
@@ -438,6 +468,14 @@ runHubClientContractSuite("local adapter", () => {
         case "hub:list_notifications":
           return [];
         case "hub:get_knowledge_detail":
+          return knowledgeDetailFixture;
+        case "hub:request_knowledge_promotion":
+          expect(payload).toEqual({
+            candidate_id: "candidate-1",
+            actor_ref: "workspace_admin:alice",
+            note: "promote"
+          });
+          return promotionApprovalFixture;
         case "hub:promote_knowledge":
           return knowledgeDetailFixture;
         case "hub:get_connection_status":
@@ -525,6 +563,9 @@ runHubClientContractSuite("remote adapter", () => {
         if (method === "GET" && url === "http://hub.test/api/runs/run-1") {
           return Response.json(runDetailFixture);
         }
+        if (method === "GET" && url === "http://hub.test/api/approvals/approval-1") {
+          return Response.json(approvalFixture);
+        }
         if (method === "GET" && url === "http://hub.test/api/runs/run-1/artifacts") {
           return Response.json(runDetailFixture.artifacts);
         }
@@ -542,6 +583,13 @@ runHubClientContractSuite("remote adapter", () => {
         }
         if (method === "GET" && url === "http://hub.test/api/runs/run-1/knowledge") {
           return Response.json(knowledgeDetailFixture);
+        }
+        if (
+          method === "POST" &&
+          url ===
+            "http://hub.test/api/knowledge/candidates/candidate-1/request-promotion"
+        ) {
+          return Response.json(promotionApprovalFixture);
         }
         if (method === "POST" && url === "http://hub.test/api/knowledge/candidates/candidate-1/promote") {
           return Response.json(knowledgeDetailFixture);

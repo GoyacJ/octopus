@@ -85,6 +85,22 @@ pub enum RuntimeError {
     },
     #[error("knowledge candidate `{0}` not found")]
     KnowledgeCandidateNotFound(String),
+    #[error("knowledge candidate `{candidate_id}` has invalid state `{status}`; expected `{expected}`")]
+    InvalidKnowledgeCandidateState {
+        candidate_id: String,
+        status: String,
+        expected: String,
+    },
+    #[error("approval request `{approval_id}` has invalid approval type `{approval_type}`")]
+    InvalidApprovalType {
+        approval_id: String,
+        approval_type: String,
+    },
+    #[error("approval request `{approval_id}` has invalid target ref `{target_ref}`")]
+    InvalidApprovalTargetRef {
+        approval_id: String,
+        target_ref: String,
+    },
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -475,6 +491,17 @@ impl Slice2Runtime {
         approval_id: &str,
     ) -> Result<Option<ApprovalRequestRecord>, RuntimeError> {
         self.run_orchestrator.fetch_approval_request(approval_id).await
+    }
+
+    pub async fn request_knowledge_promotion(
+        &self,
+        candidate_id: &str,
+        actor_ref: &str,
+        note: &str,
+    ) -> Result<ApprovalRequestRecord, RuntimeError> {
+        self.run_orchestrator
+            .request_knowledge_promotion(candidate_id, actor_ref, note)
+            .await
     }
 
     pub async fn retry_run(&self, run_id: &str) -> Result<RunExecutionReport, RuntimeError> {

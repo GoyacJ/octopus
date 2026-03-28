@@ -9,6 +9,7 @@ type CapabilityVisibility = Awaited<
 type HubConnectionStatus = Awaited<
   ReturnType<HubClient["getHubConnectionStatus"]>
 >;
+type ApprovalRequest = Awaited<ReturnType<HubClient["getApprovalRequest"]>>;
 type InboxItem = Awaited<ReturnType<HubClient["listInboxItems"]>>[number];
 type Notification = Awaited<ReturnType<HubClient["listNotifications"]>>[number];
 type AutomationSummary = Awaited<ReturnType<HubClient["listAutomations"]>>[number];
@@ -22,6 +23,9 @@ type RunDetail = Awaited<ReturnType<HubClient["getRunDetail"]>>;
 type Artifact = Awaited<ReturnType<HubClient["listArtifacts"]>>[number];
 type KnowledgeDetail = Awaited<ReturnType<HubClient["getKnowledgeDetail"]>>;
 type TaskCreateCommand = Parameters<HubClient["createTask"]>[0];
+type ApprovalDecision = Parameters<HubClient["resolveApproval"]>[0]["decision"];
+
+const DESKTOP_ACTOR_REF = "workspace_admin:desktop_operator";
 
 let hubClient: HubClient | null = null;
 
@@ -56,6 +60,7 @@ export const useHubStore = defineStore("hub", () => {
   const connectionStatus = ref<HubConnectionStatus | null>(null);
   const inboxItems = ref<InboxItem[]>([]);
   const notifications = ref<Notification[]>([]);
+  const approvalDetails = ref<Record<string, ApprovalRequest>>({});
   const automations = ref<AutomationSummary[]>([]);
   const automationDetail = ref<AutomationDetail | null>(null);
   const webhookSecretReveal = ref<string | null>(null);
@@ -69,6 +74,8 @@ export const useHubStore = defineStore("hub", () => {
   const automationActionLoading = ref(false);
   const taskSubmitting = ref(false);
   const runLoading = ref(false);
+  const governanceActionLoading = ref(false);
+  const governanceActionTarget = ref<string | null>(null);
   const surfaceError = ref<string | null>(null);
 
   const workspaceName = computed(
@@ -108,6 +115,38 @@ export const useHubStore = defineStore("hub", () => {
     upsertAutomation(nextAutomation);
   }
 
+  function rememberApproval(approval: ApprovalRequest): void {
+    approvalDetails.value = {
+      ...approvalDetails.value,
+      [approval.id]: approval
+    };
+  }
+
+  function rememberApprovals(approvals: ApprovalRequest[]): void {
+    if (approvals.length === 0) {
+      return;
+    }
+
+    const nextApprovals = { ...approvalDetails.value };
+    for (const approval of approvals) {
+      nextApprovals[approval.id] = approval;
+    }
+    approvalDetails.value = nextApprovals;
+  }
+
+  async function hydrateApprovalDetails(approvalIds: string[]): Promise<void> {
+    const uniqueApprovalIds = [...new Set(approvalIds)].filter(Boolean);
+    if (uniqueApprovalIds.length === 0) {
+      return;
+    }
+
+    const client = requireHubClient();
+    const approvals = await Promise.all(
+      uniqueApprovalIds.map((approvalId) => client.getApprovalRequest(approvalId))
+    );
+    rememberApprovals(approvals);
+  }
+
   async function loadWorkspace(
     workspaceId: string,
     projectId: string
@@ -141,6 +180,9 @@ export const useHubStore = defineStore("hub", () => {
       inboxItems.value = nextInboxItems;
       notifications.value = nextNotifications;
       automations.value = nextAutomations;
+      await hydrateApprovalDetails(
+        nextInboxItems.map((item) => item.approval_request_id)
+      );
     } catch (error) {
       surfaceError.value = toErrorMessage(error);
       throw error;
@@ -257,6 +299,7 @@ export const useHubStore = defineStore("hub", () => {
       runDetail.value = nextRunDetail;
       artifacts.value = nextArtifacts;
       knowledgeDetail.value = nextKnowledgeDetail;
+      rememberApprovals(nextRunDetail.approvals);
 
       return nextRunDetail;
     } catch (error) {
@@ -273,22 +316,105 @@ export const useHubStore = defineStore("hub", () => {
 
     try {
       const client = requireHubClient();
-      const [nextRunDetail, nextArtifacts, nextKnowledgeDetail] =
+      const [nextRunDetail, nextArtifacts, nextKnowledgeDetail, nextConnectionStatus] =
         await Promise.all([
           client.getRunDetail(runId),
           client.listArtifacts(runId),
-          client.getKnowledgeDetail(runId)
+          client.getKnowledgeDetail(runId),
+          client.getHubConnectionStatus()
         ]);
 
       currentRunId.value = runId;
+      currentWorkspaceId.value = nextRunDetail.run.workspace_id;
+      currentProjectId.value = nextRunDetail.run.project_id;
       runDetail.value = nextRunDetail;
       artifacts.value = nextArtifacts;
       knowledgeDetail.value = nextKnowledgeDetail;
+      connectionStatus.value = nextConnectionStatus;
+      rememberApprovals(nextRunDetail.approvals);
     } catch (error) {
       surfaceError.value = toErrorMessage(error);
       throw error;
     } finally {
       runLoading.value = false;
+    }
+  }
+
+  async function resolveGovernanceApproval(
+    approvalId: string,
+    decision: ApprovalDecision,
+    note = decision
+  ): Promise<RunDetail> {
+    governanceActionLoading.value = true;
+    governanceActionTarget.value = approvalId;
+    surfaceError.value = null;
+
+    try {
+      const client = requireHubClient();
+      const nextRunDetail = await client.resolveApproval({
+        approval_id: approvalId,
+        decision,
+        actor_ref: DESKTOP_ACTOR_REF,
+        note
+      });
+      rememberApprovals(nextRunDetail.approvals);
+
+      if (
+        currentWorkspaceId.value &&
+        currentProjectId.value
+      ) {
+        await loadWorkspace(currentWorkspaceId.value, currentProjectId.value);
+      }
+
+      if (currentRunId.value === nextRunDetail.run.id) {
+        await loadRun(nextRunDetail.run.id);
+      }
+
+      return nextRunDetail;
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    } finally {
+      governanceActionLoading.value = false;
+      governanceActionTarget.value = null;
+    }
+  }
+
+  async function requestKnowledgePromotion(
+    candidateId: string,
+    note = "request knowledge promotion"
+  ): Promise<ApprovalRequest> {
+    governanceActionLoading.value = true;
+    governanceActionTarget.value = candidateId;
+    surfaceError.value = null;
+
+    try {
+      const client = requireHubClient();
+      const approval = await client.requestKnowledgePromotion({
+        candidate_id: candidateId,
+        actor_ref: DESKTOP_ACTOR_REF,
+        note
+      });
+      rememberApproval(approval);
+
+      if (
+        currentWorkspaceId.value &&
+        currentProjectId.value
+      ) {
+        await loadWorkspace(currentWorkspaceId.value, currentProjectId.value);
+      }
+
+      if (currentRunId.value) {
+        await loadRun(currentRunId.value);
+      }
+
+      return approval;
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    } finally {
+      governanceActionLoading.value = false;
+      governanceActionTarget.value = null;
     }
   }
 
@@ -302,6 +428,7 @@ export const useHubStore = defineStore("hub", () => {
     connectionStatus,
     inboxItems,
     notifications,
+    approvalDetails,
     automations,
     automationDetail,
     webhookSecretReveal,
@@ -314,6 +441,8 @@ export const useHubStore = defineStore("hub", () => {
     automationActionLoading,
     taskSubmitting,
     runLoading,
+    governanceActionLoading,
+    governanceActionTarget,
     surfaceError,
     workspaceName,
     projectName,
@@ -329,6 +458,8 @@ export const useHubStore = defineStore("hub", () => {
     manualDispatch,
     retryAutomationDelivery,
     createAndStartTask,
-    loadRun
+    loadRun,
+    resolveGovernanceApproval,
+    requestKnowledgePromotion
   };
 });

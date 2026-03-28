@@ -338,6 +338,7 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
     let access_token = login_access_token(router.clone(), "workspace-alpha").await;
     let authorization = format!("Bearer {access_token}");
     let run_detail_schema = compile_schema("runtime/run-detail.schema.json");
+    let approval_request_schema = compile_schema("governance/approval-request.schema.json");
     let inbox_item_schema = compile_schema("observe/inbox-item.schema.json");
     let notification_schema = compile_schema("observe/notification.schema.json");
     let knowledge_detail_schema = compile_schema("observe/knowledge-detail.schema.json");
@@ -387,6 +388,19 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
 
     let approval_id = run_detail["approvals"][0]["id"].as_str().unwrap().to_string();
     let run_id = run_detail["run"]["id"].as_str().unwrap().to_string();
+
+    let approval_detail = response_json(
+        router.clone(),
+        Request::builder()
+            .uri(format!("/api/approvals/{approval_id}"))
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&approval_request_schema, &approval_detail);
+    assert_eq!(approval_detail["approval_type"], "execution");
+    assert_eq!(approval_detail["target_ref"], format!("run:{run_id}"));
 
     let inbox = response_json(
         router.clone(),
@@ -456,11 +470,13 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
         .unwrap()
         .to_string();
 
-    let promoted = response_json(
-        router,
+    let promotion_approval = response_json(
+        router.clone(),
         Request::builder()
             .method("POST")
-            .uri(format!("/api/knowledge/candidates/{candidate_id}/promote"))
+            .uri(format!(
+                "/api/knowledge/candidates/{candidate_id}/request-promotion"
+            ))
             .header("content-type", "application/json")
             .header("authorization", authorization.as_str())
             .body(Body::from(
@@ -471,6 +487,45 @@ async fn approval_and_knowledge_promotion_surface_round_trip() {
                 })
                 .to_string(),
             ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&approval_request_schema, &promotion_approval);
+    assert_eq!(promotion_approval["approval_type"], "knowledge_promotion");
+    assert_eq!(
+        promotion_approval["target_ref"],
+        format!("knowledge_candidate:{candidate_id}")
+    );
+
+    let promotion_approval_id = promotion_approval["id"].as_str().unwrap().to_string();
+
+    let resolved_promotion = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/approvals/{promotion_approval_id}/resolve"))
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "approval_id": promotion_approval_id,
+                    "decision": "approve",
+                    "actor_ref": "workspace_admin:alice",
+                    "note": "promote"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&run_detail_schema, &resolved_promotion);
+
+    let promoted = response_json(
+        router,
+        Request::builder()
+            .uri(format!("/api/runs/{run_id}/knowledge"))
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
             .unwrap(),
     )
     .await;

@@ -127,6 +127,83 @@ const knowledgeDetailFixture = {
   lineage: []
 };
 
+const approvalFixture = {
+  id: "approval-1",
+  workspace_id: "workspace-alpha",
+  project_id: "project-slice1",
+  run_id: "run-approval",
+  task_id: "task-approval",
+  approval_type: "execution",
+  target_ref: "run:run-approval",
+  status: "pending",
+  reason: "Needs approval",
+  dedupe_key: "approval:1",
+  decided_by: null,
+  decision_note: null,
+  decided_at: null,
+  created_at: "2026-03-26T10:00:00Z",
+  updated_at: "2026-03-26T10:00:00Z"
+} as const;
+
+const inboxApprovalFixture = {
+  id: "inbox-approval-1",
+  workspace_id: "workspace-alpha",
+  project_id: "project-slice1",
+  run_id: "run-approval",
+  approval_request_id: "approval-1",
+  item_type: "approval_request",
+  target_ref: "run:run-approval",
+  status: "open",
+  dedupe_key: "inbox:approval-1",
+  title: "Execution approval required",
+  message: "A governed run needs approval before execution.",
+  created_at: "2026-03-26T10:00:00Z",
+  updated_at: "2026-03-26T10:00:00Z",
+  resolved_at: null
+} as const;
+
+const notificationFixture = {
+  id: "notification-1",
+  workspace_id: "workspace-alpha",
+  project_id: "project-slice1",
+  run_id: "run-approval",
+  approval_request_id: "approval-1",
+  target_ref: "run:run-approval",
+  status: "pending",
+  dedupe_key: "notification:approval-1",
+  title: "Approval pending",
+  message: "A run is waiting for approval.",
+  created_at: "2026-03-26T10:00:00Z",
+  updated_at: "2026-03-26T10:00:00Z"
+} as const;
+
+const promotionApprovalFixture = {
+  id: "approval-promotion-1",
+  workspace_id: "workspace-alpha",
+  project_id: "project-slice1",
+  run_id: "run-1",
+  task_id: "task-1",
+  approval_type: "knowledge_promotion",
+  target_ref: "knowledge_candidate:candidate-1",
+  status: "pending",
+  reason: "Promote candidate to verified shared knowledge",
+  dedupe_key: "knowledge_promotion:candidate-1:approval-promotion-1",
+  decided_by: null,
+  decision_note: null,
+  decided_at: null,
+  created_at: "2026-03-26T10:00:02Z",
+  updated_at: "2026-03-26T10:00:02Z"
+} as const;
+
+const approvedPromotionApprovalFixture = {
+  ...promotionApprovalFixture,
+  status: "approved",
+  decided_by: "workspace_admin:desktop_operator",
+  decision_note: "promoted",
+  decided_at: "2026-03-26T10:00:03Z",
+  updated_at: "2026-03-26T10:00:03Z"
+} as const;
+
 const capabilityVisibilityFixture = [
   {
     descriptor: {
@@ -372,8 +449,11 @@ describe("desktop local happy path", () => {
           case "hub:list_automations":
             return [];
           case "hub:list_inbox_items":
+            return [inboxApprovalFixture];
           case "hub:list_notifications":
-            return [];
+            return [notificationFixture];
+          case "hub:get_approval_request":
+            return approvalFixture;
           default:
             throw new Error(`unexpected command: ${command}`);
         }
@@ -398,6 +478,196 @@ describe("desktop local happy path", () => {
 
     expect(wrapper.text()).toContain("token_expired");
     expect(wrapper.get('[data-testid="create-start"]').attributes("disabled")).toBeDefined();
+    expect(
+      wrapper.get('[data-testid="workspace-approve-approval-1"]').attributes("disabled")
+    ).toBeDefined();
+  });
+
+  it("loads workspace governance approvals and resolves an inbox item inline", async () => {
+    let inboxOpen = true;
+    let resolveCount = 0;
+
+    const transport: LocalHubTransport = {
+      async invoke(command) {
+        switch (command) {
+          case "hub:get_project_context":
+            return projectContextFixture;
+          case "hub:list_capability_visibility":
+            return capabilityVisibilityFixture;
+          case "hub:get_connection_status":
+            return hubConnectionStatusFixture;
+          case "hub:list_automations":
+            return [];
+          case "hub:list_inbox_items":
+            return inboxOpen ? [inboxApprovalFixture] : [];
+          case "hub:list_notifications":
+            return inboxOpen ? [notificationFixture] : [];
+          case "hub:get_approval_request":
+            return approvalFixture;
+          case "hub:resolve_approval":
+            inboxOpen = false;
+            resolveCount += 1;
+            return {
+              ...runDetailFixture,
+              run: {
+                ...runDetailFixture.run,
+                id: "run-approval"
+              },
+              approvals: [
+                {
+                  ...approvalFixture,
+                  status: "approved",
+                  decided_by: "workspace_admin:desktop_operator",
+                  decision_note: "approved",
+                  decided_at: "2026-03-26T10:00:01Z",
+                  updated_at: "2026-03-26T10:00:01Z"
+                }
+              ]
+            };
+          default:
+            throw new Error(`unexpected command: ${command}`);
+        }
+      },
+      async listen() {
+        return () => undefined;
+      }
+    };
+
+    const client = createLocalHubClient(transport);
+    const { pinia, router } = createDesktopPlugins(client, true);
+    await router.push("/workspaces/workspace-alpha/projects/project-slice1");
+    await router.isReady();
+
+    const wrapper = mount(AppShell, {
+      global: {
+        plugins: [pinia, router]
+      }
+    });
+
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Execution approval required");
+    expect(wrapper.text()).toContain("run:run-approval");
+
+    await wrapper.get('[data-testid="workspace-approve-approval-1"]').trigger("click");
+    await flushPromises();
+
+    expect(resolveCount).toBe(1);
+    expect(wrapper.text()).toContain("No approval requests are waiting.");
+  });
+
+  it("requests knowledge promotion from the run view and reflects pending and approved state", async () => {
+    let promotionState: "idle" | "pending" | "approved" = "idle";
+
+    const promotionRunDetail = () => ({
+      ...runDetailFixture,
+      approvals:
+        promotionState === "idle"
+          ? []
+          : [promotionState === "pending" ? promotionApprovalFixture : approvedPromotionApprovalFixture]
+    });
+
+    const promotionKnowledgeDetail = () => ({
+      ...knowledgeDetailFixture,
+      candidates: [
+        {
+          ...knowledgeDetailFixture.candidates[0],
+          status: promotionState === "approved" ? "verified_shared" : "candidate"
+        }
+      ],
+      assets:
+        promotionState === "approved"
+          ? [
+              {
+                id: "asset-1",
+                knowledge_space_id: "knowledge-space-1",
+                source_candidate_id: "candidate-1",
+                capability_id: "capability-write-note",
+                status: "verified_shared",
+                content: "hello",
+                trust_level: "verified",
+                created_at: "2026-03-26T10:00:03Z",
+                updated_at: "2026-03-26T10:00:03Z"
+              }
+            ]
+          : [],
+      lineage:
+        promotionState === "approved"
+          ? [
+              {
+                id: "lineage-1",
+                workspace_id: "workspace-alpha",
+                project_id: "project-slice1",
+                run_id: "run-1",
+                task_id: "task-1",
+                source_ref: "knowledge_candidate:candidate-1",
+                target_ref: "knowledge_asset:asset-1",
+                relation_type: "promoted_from",
+                created_at: "2026-03-26T10:00:03Z"
+              }
+            ]
+          : []
+    });
+
+    const transport: LocalHubTransport = {
+      async invoke(command) {
+        switch (command) {
+          case "hub:get_run_detail":
+            return promotionRunDetail();
+          case "hub:list_artifacts":
+            return runDetailFixture.artifacts;
+          case "hub:get_knowledge_detail":
+            return promotionKnowledgeDetail();
+          case "hub:request_knowledge_promotion":
+            promotionState = "pending";
+            return promotionApprovalFixture;
+          case "hub:resolve_approval":
+            promotionState = "approved";
+            return promotionRunDetail();
+          case "hub:get_connection_status":
+            return hubConnectionStatusFixture;
+          case "hub:get_project_context":
+            return projectContextFixture;
+          case "hub:list_capability_visibility":
+            return capabilityVisibilityFixture;
+          case "hub:list_inbox_items":
+          case "hub:list_notifications":
+          case "hub:list_automations":
+            return [];
+          default:
+            throw new Error(`unexpected command: ${command}`);
+        }
+      },
+      async listen() {
+        return () => undefined;
+      }
+    };
+
+    const client = createLocalHubClient(transport);
+    const { pinia, router } = createDesktopPlugins(client, true);
+    await router.push("/runs/run-1");
+    await router.isReady();
+
+    const wrapper = mount(AppShell, {
+      global: {
+        plugins: [pinia, router]
+      }
+    });
+
+    await flushPromises();
+    expect(wrapper.text()).toContain("candidate");
+
+    await wrapper.get('[data-testid="request-promotion-candidate-1"]').trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("knowledge_promotion");
+    expect(wrapper.text()).toContain("pending");
+
+    await wrapper.get('[data-testid="run-approve-approval-promotion-1"]').trigger("click");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("verified_shared");
+    expect(wrapper.text()).toContain("asset-1");
   });
 
   it("creates an automation, opens detail, and shows manual dispatch state", async () => {
