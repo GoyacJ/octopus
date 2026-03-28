@@ -1,7 +1,7 @@
 # Visual Framework
 
-**Status**: Frozen for the first GA minimum surface plus Slice 14 workbench IA refinement
-**Last updated**: 2026-03-28
+**Status**: Frozen for the first GA minimum surface through Slice 15 project knowledge index
+**Last updated**: 2026-03-29
 
 ## Purpose
 
@@ -11,14 +11,14 @@ It does not expand PRD scope or architecture boundaries. It only defines how the
 
 ## Current Scope
 
-This frozen version covers only the minimum GA surfaces required by the blueprint plus the narrow Slice 14 route split needed to turn the desktop shell into a task workbench:
+This frozen version covers only the minimum GA surfaces required by the blueprint plus the tracked Slice 14 and Slice 15 desktop IA refinements:
 
 - Task creation entry
 - Recent project runs
 - Run detail and Trace replay
 - Approval Inbox
 - Artifact detail
-- Shared Knowledge minimum view and promote action
+- Project-scoped Shared Knowledge read index
 - Workspace / Project context presentation
 - Hub Connections status
 - Notification intake
@@ -38,7 +38,7 @@ The first tracked UI implementation must prioritize pages in this order:
 2. Task creation and recent run follow-up
 3. Run detail with status, policy, artifact, trace, and knowledge sections
 4. Approval Inbox and Notification entry
-5. Shared Knowledge minimum view and promote action
+5. Project-scoped Shared Knowledge read index
 
 If scope pressure appears, keep the order above. Do not drop Hub status, Task create, Runs, Run detail, or Approval Inbox in favor of richer secondary views.
 
@@ -157,19 +157,19 @@ Required data:
 - trust level
 - knowledge-gate status
 
-### 7. Shared Knowledge Minimum View
+### 7. Project Knowledge Index
 
 Purpose:
 
-- show the minimum knowledge loop without claiming a full knowledge-management product
+- show the minimum project-level Shared Knowledge loop without claiming a full knowledge-management product
 
 Required data:
 
 - project knowledge space label
-- run-related knowledge candidates
-- promoted shared assets relevant to the current flow
-- promote action where explicit promotion is available
-- lineage hint back to source run/artifact
+- mixed project-visible knowledge candidates and shared assets
+- trust / provenance state per entry
+- source run or candidate traceability hint
+- navigation back to `Run Detail` and `Inbox`
 
 ### 8. Notification Entry
 
@@ -201,6 +201,8 @@ The minimum desktop shell should use a stable two-level IA:
   - Connections
   - Notifications
   - Knowledge
+
+The stable desktop workbench IA is `Tasks / Runs / Knowledge / Inbox / Notifications / Connections`.
 
 The first tracked shell should prefer direct pages over nested modal flows. Approval decisions may use inline actions or simple dialogs, but the authoritative state must remain visible on the page after action completion.
 
@@ -259,7 +261,7 @@ Examples:
 
 - no inbox items
 - no notifications
-- no shared knowledge assets yet
+- no shared knowledge entries yet
 - hub disconnected
 
 Error states must preserve the user’s context and identify whether the failure came from:
@@ -274,7 +276,7 @@ Error states must preserve the user’s context and identify whether the failure
 - Task submission must remain explicit; do not auto-start tasks on field edit.
 - Approval actions must require deliberate user action and show the resulting run state after completion.
 - Trace is explanatory, not decorative. Do not hide it behind development-only affordances.
-- Knowledge promotion must remain explicit and reversible in wording, even if the current slice only proves promotion.
+- Knowledge index pages remain read-only; promotion requests stay on `Run Detail`, and approval resolution stays on `Inbox`.
 - Notification is a reminder surface; Inbox is the action surface. Do not collapse them into one list.
 - Connections is a dedicated visibility surface for hub mode, auth/session, and refresh state. Do not bury it only inside the mixed workspace body.
 

@@ -197,6 +197,97 @@ pub struct KnowledgePromotionReport {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CandidateKnowledgeSummaryRecord {
+    pub id: String,
+    pub knowledge_space_id: String,
+    pub capability_id: String,
+    pub status: String,
+    pub source_run_id: String,
+    pub source_artifact_id: String,
+    pub source_candidate_id: Option<String>,
+    pub provenance_source: String,
+    pub trust_level: String,
+    pub created_at: String,
+}
+
+impl CandidateKnowledgeSummaryRecord {
+    pub fn from_candidate(candidate: &KnowledgeCandidateRecord) -> Self {
+        Self {
+            id: candidate.id.clone(),
+            knowledge_space_id: candidate.knowledge_space_id.clone(),
+            capability_id: candidate.capability_id.clone(),
+            status: candidate.status.clone(),
+            source_run_id: candidate.source_run_id.clone(),
+            source_artifact_id: candidate.source_artifact_id.clone(),
+            source_candidate_id: None,
+            provenance_source: candidate.provenance_source.clone(),
+            trust_level: candidate.source_trust_level.clone(),
+            created_at: candidate.created_at.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AssetKnowledgeSummaryRecord {
+    pub id: String,
+    pub knowledge_space_id: String,
+    pub capability_id: String,
+    pub status: String,
+    pub source_run_id: Option<String>,
+    pub source_artifact_id: Option<String>,
+    pub source_candidate_id: String,
+    pub provenance_source: Option<String>,
+    pub trust_level: String,
+    pub created_at: String,
+}
+
+impl AssetKnowledgeSummaryRecord {
+    pub fn from_asset(asset: &KnowledgeAssetRecord) -> Self {
+        Self {
+            id: asset.id.clone(),
+            knowledge_space_id: asset.knowledge_space_id.clone(),
+            capability_id: asset.capability_id.clone(),
+            status: asset.status.clone(),
+            source_run_id: None,
+            source_artifact_id: None,
+            source_candidate_id: asset.source_candidate_id.clone(),
+            provenance_source: None,
+            trust_level: asset.trust_level.clone(),
+            created_at: asset.created_at.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum KnowledgeSummaryRecord {
+    Candidate(CandidateKnowledgeSummaryRecord),
+    Asset(AssetKnowledgeSummaryRecord),
+}
+
+impl KnowledgeSummaryRecord {
+    pub fn created_at(&self) -> &str {
+        match self {
+            Self::Candidate(candidate) => candidate.created_at.as_str(),
+            Self::Asset(asset) => asset.created_at.as_str(),
+        }
+    }
+
+    pub fn entry_id(&self) -> &str {
+        match self {
+            Self::Candidate(candidate) => candidate.id.as_str(),
+            Self::Asset(asset) => asset.id.as_str(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProjectKnowledgeIndexRecord {
+    pub knowledge_space: KnowledgeSpaceRecord,
+    pub entries: Vec<KnowledgeSummaryRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CreateAutomationInput {
     pub workspace_id: String,
     pub project_id: String,

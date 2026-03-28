@@ -16,6 +16,7 @@ import { configureHubClient } from "./stores/hub";
 import AutomationDetailView from "./views/AutomationDetailView.vue";
 import ConnectionsView from "./views/ConnectionsView.vue";
 import InboxView from "./views/InboxView.vue";
+import KnowledgeView from "./views/KnowledgeView.vue";
 import NotificationsView from "./views/NotificationsView.vue";
 import RunView from "./views/RunView.vue";
 import RunsView from "./views/RunsView.vue";
@@ -54,6 +55,10 @@ function createRoutes(): RouteRecordRaw[] {
     {
       path: "/workspaces/:workspaceId/projects/:projectId/runs",
       component: RunsView
+    },
+    {
+      path: "/workspaces/:workspaceId/projects/:projectId/knowledge",
+      component: KnowledgeView
     },
     {
       path: "/workspaces/:workspaceId/inbox",

@@ -18,6 +18,7 @@ import {
   parseHubLoginResponse,
   parseHubSession,
   parseKnowledgePromoteCommand,
+  parseProjectKnowledgeIndex,
   parseRequestKnowledgePromotionCommand,
   parseManualDispatchCommand,
   parseNotifications,
@@ -44,6 +45,7 @@ import {
   type InboxItem,
   type KnowledgeDetail,
   type KnowledgePromoteCommand,
+  type ProjectKnowledgeIndex,
   type RequestKnowledgePromotionCommand,
   type LocalHubTransportContract,
   type ManualDispatchCommand,
@@ -65,6 +67,9 @@ export const HUB_EVENT_CHANNEL = LOCAL_HUB_TRANSPORT.event_channel;
 export const LOCAL_HUB_COMMANDS = {
   getProjectContext: normalizeLocalCommandName(
     LOCAL_HUB_TRANSPORT.commands.get_project_context
+  ),
+  getProjectKnowledge: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.get_project_knowledge
   ),
   listAutomations: normalizeLocalCommandName(
     LOCAL_HUB_TRANSPORT.commands.list_automations
@@ -132,6 +137,10 @@ export type Unsubscribe = () => void | Promise<void>;
 
 export interface HubClient {
   getProjectContext(workspaceId: string, projectId: string): Promise<ProjectContext>;
+  getProjectKnowledge(
+    workspaceId: string,
+    projectId: string
+  ): Promise<ProjectKnowledgeIndex>;
   listAutomations(
     workspaceId: string,
     projectId: string
@@ -328,6 +337,14 @@ export function createLocalHubClient(transport: LocalHubTransport): HubClient {
     async getProjectContext(workspaceId, projectId) {
       return parseProjectContext(
         await transport.invoke(LOCAL_HUB_COMMANDS.getProjectContext, {
+          workspaceId,
+          projectId
+        })
+      );
+    },
+    async getProjectKnowledge(workspaceId, projectId) {
+      return parseProjectKnowledgeIndex(
+        await transport.invoke(LOCAL_HUB_COMMANDS.getProjectKnowledge, {
           workspaceId,
           projectId
         })
@@ -556,6 +573,19 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/context`
+          ),
+          undefined,
+          options.getAccessToken
+        )
+      );
+    },
+    async getProjectKnowledge(workspaceId, projectId) {
+      return parseProjectKnowledgeIndex(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/knowledge`
           ),
           undefined,
           options.getAccessToken

@@ -256,6 +256,38 @@ const knowledgeDetailFixture = {
   lineage: []
 };
 
+const projectKnowledgeIndexFixture = {
+  knowledge_space: knowledgeDetailFixture.knowledge_space,
+  entries: [
+    {
+      kind: "candidate",
+      id: "candidate-1",
+      knowledge_space_id: "knowledge-space-1",
+      capability_id: "capability-write-note",
+      status: "candidate",
+      source_run_id: "run-1",
+      source_artifact_id: "artifact-1",
+      source_candidate_id: null,
+      provenance_source: "builtin",
+      trust_level: "trusted",
+      created_at: "2026-03-26T10:00:01Z"
+    },
+    {
+      kind: "asset",
+      id: "asset-1",
+      knowledge_space_id: "knowledge-space-1",
+      capability_id: "capability-write-note",
+      status: "verified_shared",
+      source_run_id: null,
+      source_artifact_id: null,
+      source_candidate_id: "candidate-1",
+      provenance_source: null,
+      trust_level: "verified",
+      created_at: "2026-03-26T10:00:02Z"
+    }
+  ]
+} as const;
+
 const capabilityResolutionFixture = [
   {
     descriptor: {
@@ -381,6 +413,17 @@ function runHubClientContractSuite(name: string, factory: SuiteFactory) {
         knowledge_space: { id: "knowledge-space-1" }
       });
       await expect(
+        client.getProjectKnowledge("workspace-alpha", "project-slice1")
+      ).resolves.toEqual(
+        expect.objectContaining({
+          knowledge_space: expect.objectContaining({ id: "knowledge-space-1" }),
+          entries: expect.arrayContaining([
+            expect.objectContaining({ kind: "candidate", id: "candidate-1" }),
+            expect.objectContaining({ kind: "asset", id: "asset-1" })
+          ])
+        })
+      );
+      await expect(
         client.requestKnowledgePromotion({
           candidate_id: "candidate-1",
           actor_ref: "workspace_admin:alice",
@@ -489,6 +532,12 @@ runHubClientContractSuite("local adapter", () => {
           return [];
         case "hub:get_knowledge_detail":
           return knowledgeDetailFixture;
+        case "hub:get_project_knowledge":
+          expect(payload).toEqual({
+            workspaceId: "workspace-alpha",
+            projectId: "project-slice1"
+          });
+          return projectKnowledgeIndexFixture;
         case "hub:request_knowledge_promotion":
           expect(payload).toEqual({
             candidate_id: "candidate-1",
@@ -636,6 +685,13 @@ runHubClientContractSuite("remote adapter", () => {
         }
         if (method === "GET" && url === "http://hub.test/api/runs/run-1/knowledge") {
           return Response.json(knowledgeDetailFixture);
+        }
+        if (
+          method === "GET" &&
+          url ===
+            "http://hub.test/api/workspaces/workspace-alpha/projects/project-slice1/knowledge"
+        ) {
+          return Response.json(projectKnowledgeIndexFixture);
         }
         if (
           method === "POST" &&

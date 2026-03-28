@@ -23,6 +23,7 @@ type RunDetail = Awaited<ReturnType<HubClient["getRunDetail"]>>;
 type RunSummary = Awaited<ReturnType<HubClient["listRuns"]>>[number];
 type Artifact = Awaited<ReturnType<HubClient["listArtifacts"]>>[number];
 type KnowledgeDetail = Awaited<ReturnType<HubClient["getKnowledgeDetail"]>>;
+type ProjectKnowledgeIndex = Awaited<ReturnType<HubClient["getProjectKnowledge"]>>;
 type TaskCreateCommand = Parameters<HubClient["createTask"]>[0];
 type ApprovalDecision = Parameters<HubClient["resolveApproval"]>[0]["decision"];
 
@@ -72,6 +73,7 @@ export const useHubStore = defineStore("hub", () => {
   const runDetail = ref<RunDetail | null>(null);
   const artifacts = ref<Artifact[]>([]);
   const knowledgeDetail = ref<KnowledgeDetail | null>(null);
+  const projectKnowledgeIndex = ref<ProjectKnowledgeIndex | null>(null);
 
   const workspaceLoading = ref(false);
   const runsLoading = ref(false);
@@ -83,6 +85,7 @@ export const useHubStore = defineStore("hub", () => {
   const automationActionLoading = ref(false);
   const taskSubmitting = ref(false);
   const runLoading = ref(false);
+  const projectKnowledgeLoading = ref(false);
   const governanceActionLoading = ref(false);
   const governanceActionTarget = ref<string | null>(null);
   const surfaceError = ref<string | null>(null);
@@ -217,6 +220,28 @@ export const useHubStore = defineStore("hub", () => {
       throw error;
     } finally {
       runsLoading.value = false;
+    }
+  }
+
+  async function loadProjectKnowledge(
+    workspaceId: string,
+    projectId: string
+  ): Promise<void> {
+    projectKnowledgeLoading.value = true;
+    surfaceError.value = null;
+    setProjectScope(workspaceId, projectId);
+
+    try {
+      const client = requireHubClient();
+      projectKnowledgeIndex.value = await client.getProjectKnowledge(
+        workspaceId,
+        projectId
+      );
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    } finally {
+      projectKnowledgeLoading.value = false;
     }
   }
 
@@ -534,6 +559,9 @@ export const useHubStore = defineStore("hub", () => {
 
       if (currentWorkspaceId.value && currentProjectId.value) {
         refreshes.push(loadRuns(currentWorkspaceId.value, currentProjectId.value));
+        refreshes.push(
+          loadProjectKnowledge(currentWorkspaceId.value, currentProjectId.value)
+        );
       }
 
       if (currentRunId.value === nextRunDetail.run.id) {
@@ -610,6 +638,7 @@ export const useHubStore = defineStore("hub", () => {
     runDetail,
     artifacts,
     knowledgeDetail,
+    projectKnowledgeIndex,
     workspaceLoading,
     runsLoading,
     inboxLoading,
@@ -620,6 +649,7 @@ export const useHubStore = defineStore("hub", () => {
     automationActionLoading,
     taskSubmitting,
     runLoading,
+    projectKnowledgeLoading,
     governanceActionLoading,
     governanceActionTarget,
     surfaceError,
@@ -631,6 +661,7 @@ export const useHubStore = defineStore("hub", () => {
     loadProjectContext,
     loadConnectionStatus,
     loadRuns,
+    loadProjectKnowledge,
     loadInboxItems,
     loadNotifications,
     loadAutomations,

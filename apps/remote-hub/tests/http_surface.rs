@@ -184,6 +184,8 @@ async fn completed_run_surface_matches_minimum_contracts() {
     let run_summary_schema = compile_schema("runtime/run-summary.schema.json");
     let artifact_schema = compile_schema("observe/artifact.schema.json");
     let knowledge_detail_schema = compile_schema("observe/knowledge-detail.schema.json");
+    let project_knowledge_index_schema =
+        compile_schema("observe/project-knowledge-index.schema.json");
     let capability_resolution_schema =
         compile_schema("governance/capability-resolution.schema.json");
     let hub_connection_schema = compile_schema("interop/hub-connection-status.schema.json");
@@ -283,6 +285,18 @@ async fn completed_run_surface_matches_minimum_contracts() {
     )
     .await;
     assert_valid(&knowledge_detail_schema, &knowledge_detail);
+
+    let project_knowledge = response_json(
+        router.clone(),
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/projects/project-slice1/knowledge")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&project_knowledge_index_schema, &project_knowledge);
+    assert_eq!(project_knowledge["knowledge_space"]["project_id"], "project-slice1");
 
     let capabilities = response_json(
         router.clone(),

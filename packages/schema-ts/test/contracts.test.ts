@@ -16,6 +16,7 @@ import {
   parseHubLoginCommand,
   parseHubLoginResponse,
   parseKnowledgeDetail,
+  parseProjectKnowledgeIndex,
   parseLocalHubTransportContract,
   parseManualDispatchCommand,
   parseRequestKnowledgePromotionCommand,
@@ -223,9 +224,10 @@ describe("schema-ts contract parsers", () => {
 
     expect(contract.event_channel).toBe("hub://events");
     expect(contract.commands.get_project_context).toBeTruthy();
+    expect(contract.commands.get_project_knowledge).toBeTruthy();
     expect(contract.commands.list_runs).toBeTruthy();
     expect(contract.commands.get_connection_status).toBeTruthy();
-    expect(Object.values(contract.commands)).toHaveLength(23);
+    expect(Object.values(contract.commands)).toHaveLength(24);
   });
 
   it("accepts run summary arrays for the recent-runs workbench surface", () => {
@@ -531,5 +533,49 @@ describe("schema-ts contract parsers", () => {
         lineage: []
       }).candidates[0].status
     ).toBe("verified_shared");
+  });
+
+  it("accepts a project-scoped knowledge index that reuses KnowledgeSummary rows", () => {
+    expect(
+      parseProjectKnowledgeIndex({
+        knowledge_space: {
+          id: "knowledge-space-1",
+          workspace_id: "workspace-alpha",
+          project_id: "project-slice1",
+          owner_ref: "workspace_admin:alice",
+          display_name: "Project Slice 1 Knowledge",
+          created_at: "2026-03-29T10:00:00Z",
+          updated_at: "2026-03-29T10:00:00Z"
+        },
+        entries: [
+          {
+            kind: "candidate",
+            id: "candidate-2",
+            knowledge_space_id: "knowledge-space-1",
+            capability_id: "capability-write-note",
+            status: "candidate",
+            source_run_id: "run-2",
+            source_artifact_id: "artifact-2",
+            source_candidate_id: null,
+            provenance_source: "builtin",
+            trust_level: "trusted",
+            created_at: "2026-03-29T10:00:02Z"
+          },
+          {
+            kind: "asset",
+            id: "asset-1",
+            knowledge_space_id: "knowledge-space-1",
+            capability_id: "capability-write-note",
+            status: "verified_shared",
+            source_run_id: null,
+            source_artifact_id: null,
+            source_candidate_id: "candidate-1",
+            provenance_source: null,
+            trust_level: "verified",
+            created_at: "2026-03-29T10:00:01Z"
+          }
+        ]
+      }).entries[0].kind
+    ).toBe("candidate");
   });
 });

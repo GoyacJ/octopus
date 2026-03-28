@@ -3,6 +3,7 @@
   "event_channel": "hub://events",
   "commands": {
     "get_project_context": "hub:get_project_context",
+    "get_project_knowledge": "hub:get_project_knowledge",
     "list_automations": "hub:list_automations",
     "create_automation": "hub:create_automation",
     "get_automation_detail": "hub:get_automation_detail",

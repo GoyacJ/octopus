@@ -20,8 +20,8 @@ use octopus_runtime::{
     CreateTaskInput, CreateTriggerInput, DispatchManualEventInput, DispatchWebhookEventInput,
     InboxItemRecord, KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeLineageRecord,
     KnowledgeSpaceRecord, NotificationRecord, PolicyDecisionLogRecord, ProjectContext,
-    RunExecutionReport, RunRecord, RunSummaryRecord, RuntimeError, Slice1Runtime, TaskRecord, TraceRecord,
-    TriggerDeliveryRecord, TriggerRecord, TriggerSpec,
+    ProjectKnowledgeIndexRecord, RunExecutionReport, RunRecord, RunSummaryRecord, RuntimeError,
+    Slice1Runtime, TaskRecord, TraceRecord, TriggerDeliveryRecord, TriggerRecord, TriggerSpec,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -47,6 +47,10 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/api/workspaces/{workspace_id}/projects/{project_id}/context",
             get(get_project_context),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/projects/{project_id}/knowledge",
+            get(get_project_knowledge),
         )
         .route(
             "/api/workspaces/{workspace_id}/projects/{project_id}/automations",
@@ -139,6 +143,7 @@ impl IntoResponse for AppError {
                 | RuntimeError::RunNotFound(message)
                 | RuntimeError::ApprovalRequestNotFound(message)
                 | RuntimeError::KnowledgeCandidateNotFound(message)
+                | RuntimeError::KnowledgeSpaceNotFound(message)
                 | RuntimeError::AutomationNotFound(message)
                 | RuntimeError::TriggerNotFound(message)
                 | RuntimeError::TriggerDeliveryNotFound(message) => {
@@ -509,6 +514,25 @@ async fn get_project_context(
         state
             .runtime
             .fetch_project_context(&workspace_id, &project_id)
+            .await?,
+    ))
+}
+
+async fn get_project_knowledge(
+    State(state): State<AppState>,
+    Path((workspace_id, project_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> AppResult<ProjectKnowledgeIndexRecord> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
+    Ok(Json(
+        state
+            .runtime
+            .get_project_knowledge_index(&workspace_id, &project_id)
             .await?,
     ))
 }

@@ -1,0 +1,70 @@
+## Design Note
+
+- Problem:
+  - The tracked runtime already proves Shared Knowledge capture and promotion plus Slice 14 desktop workbench routing, but the product still lacks a project-level read index for Shared Knowledge and the owner docs still describe Slice 14 as if it were the next pending slice.
+- Goal:
+  - Add a project-scoped, read-only knowledge index surface that lets desktop and remote consumers see the current project knowledge space and its mixed knowledge entries without moving governance actions away from `RunView` and `Inbox`.
+- Acceptance Criteria:
+  - The knowledge index is project-scoped, read-only, and cross-transport consistent.
+  - The knowledge page surfaces existing Shared Knowledge truth with trust / provenance and minimal traceability.
+  - Desktop IA becomes `Tasks / Runs / Knowledge / Inbox / Notifications / Connections` without changing current GA product scope.
+- Non-functional Constraints:
+  - Runtime owns scoping, ordering, and aggregation semantics.
+  - Shared contracts remain schema-first and cross-language.
+  - UI remains pull-first and desktop-first.
+- MVP Boundary:
+  - Single project knowledge space lookup.
+  - One read DTO with `knowledge_space` and mixed `entries`.
+  - No new governance action entry point on the knowledge page.
+- Layer Placement:
+  - `schemas/observe` owns `ProjectKnowledgeIndex`.
+  - `schemas/interop` owns the new local command name.
+  - `packages/schema-ts` and `packages/hub-client` own parsing and transport-neutral client wiring.
+  - `crates/runtime` owns project knowledge aggregation and ordering.
+  - `apps/remote-hub` and `apps/desktop/src-tauri` only map the read query through their transport surfaces.
+  - `apps/desktop/src` owns routing, store loading, and read-only view composition.
+- Module Boundaries:
+  - `crates/runtime` may read from existing `KnowledgeSpace`, `KnowledgeCandidate`, and `KnowledgeAsset` truth but must not create a second knowledge store abstraction.
+  - `apps/remote-hub` may enforce auth and workspace membership, but may not rewrite knowledge index semantics.
+  - `apps/desktop/src-tauri` may dispatch the new local command, but may not introduce app-local DTO truth.
+  - `apps/desktop/src` may derive display-only traceability from existing entry references, but must not invent governance state or new write actions.
+- Inputs:
+  - Existing `KnowledgeSummary`, `KnowledgeDetail`, local transport contract, run-scoped knowledge detail route, and desktop workbench routing/store patterns.
+  - Existing project-scoped Shared Knowledge runtime truth from Slice 4.
+- Outputs:
+  - One new shared read method: `HubClient.getProjectKnowledge(workspaceId, projectId)`.
+  - One new shared DTO: `ProjectKnowledgeIndex`.
+  - One new local transport command: `hub:get_project_knowledge`.
+  - One new remote route: `GET /api/workspaces/:workspaceId/projects/:projectId/knowledge`.
+  - One new desktop route and read-only `Knowledge` view.
+- State Transitions:
+  - None beyond existing read-refresh flow. The page reads current project knowledge state and may be refreshed after existing run / approval mutations.
+- Error Handling:
+  - Missing or unauthorized workspace access follows existing transport auth errors.
+  - Missing project knowledge space remains a transport/runtime not-found error rather than being silently synthesized in the client.
+  - Empty project knowledge space returns a valid `ProjectKnowledgeIndex` with `entries=[]`.
+- Tech Stack Decision:
+  - No new stack. Reuse the current Rust + schema-ts + hub-client + Vue/Pinia/Tauri stack.
+- Visual Framework Impact:
+  - Yes. Slice 15 extends the workbench IA with a dedicated `Knowledge` read surface while keeping approval actions on `RunView` and `Inbox`.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - `KnowledgeSummary`
+  - `HubClient.listRuns(...)` transport parity pattern
+  - Existing run-scoped knowledge detail builders
+  - Existing desktop workbench store/view composition
+- New Abstractions:
+  - One lightweight project knowledge index DTO for cross-language read parity.
+  - One runtime-side summary enum / record for mixed candidate and asset entries.
+- Trade-offs:
+  - Reusing `KnowledgeSummary` keeps contract churn low, but the page must derive some traceability by correlating entries instead of receiving a richer dedicated view model.
+  - Keeping the page read-only avoids governance-surface sprawl, but means promotion and approval context remain one click away instead of inline.
+- Test Strategy:
+  - Contract parse tests for `ProjectKnowledgeIndex`.
+  - Hub-client contract tests for local / remote parity.
+  - Runtime tests for scoping, empty state, mixed ordering, and source traceability.
+  - Remote and local-host tests for route / command parity.
+  - Desktop workbench tests for navigation, loading, empty/populated state, read-only behavior, and navigation to `RunView` / `Inbox`.
+- ADR Needed:
+  - No, unless implementation reveals a durable repository-wide rule beyond the current slice boundary.

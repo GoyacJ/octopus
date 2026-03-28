@@ -378,6 +378,30 @@ impl SqliteKnowledgeStore {
             .map_err(KnowledgeStoreError::from)
     }
 
+    pub async fn list_knowledge_candidates_by_space(
+        &self,
+        knowledge_space_id: &str,
+    ) -> Result<Vec<KnowledgeCandidateRecord>, KnowledgeStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, knowledge_space_id, source_run_id, source_task_id, source_artifact_id,
+                   capability_id, status, content, provenance_source, source_trust_level,
+                   dedupe_key, created_at, updated_at
+            FROM knowledge_candidates
+            WHERE knowledge_space_id = ?1
+            ORDER BY created_at DESC, id DESC
+            "#,
+        )
+        .bind(knowledge_space_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(knowledge_candidate_from_row)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(KnowledgeStoreError::from)
+    }
+
     pub async fn upsert_knowledge_asset(
         &self,
         asset: &KnowledgeAssetRecord,
@@ -475,6 +499,29 @@ impl SqliteKnowledgeStore {
         .bind(workspace_id)
         .bind(project_id)
         .bind(capability_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(knowledge_asset_from_row)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(KnowledgeStoreError::from)
+    }
+
+    pub async fn list_knowledge_assets_by_space(
+        &self,
+        knowledge_space_id: &str,
+    ) -> Result<Vec<KnowledgeAssetRecord>, KnowledgeStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, knowledge_space_id, source_candidate_id, capability_id, status, content,
+                   trust_level, created_at, updated_at
+            FROM knowledge_assets
+            WHERE knowledge_space_id = ?1
+            ORDER BY created_at DESC, id DESC
+            "#,
+        )
+        .bind(knowledge_space_id)
         .fetch_all(&self.pool)
         .await?;
 

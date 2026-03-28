@@ -569,6 +569,11 @@ export interface KnowledgeDetail {
   lineage: KnowledgeLineageRecord[];
 }
 
+export interface ProjectKnowledgeIndex {
+  knowledge_space: KnowledgeSpace;
+  entries: KnowledgeSummary[];
+}
+
 export interface KnowledgePromoteCommand {
   candidate_id: string;
   actor_ref: string;
@@ -631,6 +636,7 @@ export interface HubAuthError {
 
 export interface LocalHubTransportCommands {
   get_project_context: string;
+  get_project_knowledge: string;
   list_automations: string;
   create_automation: string;
   get_automation_detail: string;
