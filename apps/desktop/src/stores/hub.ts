@@ -20,6 +20,7 @@ type CreateAutomationResponse = Awaited<
 >;
 type ManualDispatchCommand = Parameters<HubClient["manualDispatch"]>[0];
 type RunDetail = Awaited<ReturnType<HubClient["getRunDetail"]>>;
+type RunSummary = Awaited<ReturnType<HubClient["listRuns"]>>[number];
 type Artifact = Awaited<ReturnType<HubClient["listArtifacts"]>>[number];
 type KnowledgeDetail = Awaited<ReturnType<HubClient["getKnowledgeDetail"]>>;
 type TaskCreateCommand = Parameters<HubClient["createTask"]>[0];
@@ -61,6 +62,7 @@ export const useHubStore = defineStore("hub", () => {
   const taskCapabilityEstimatedCost = ref(1);
   const automationCapabilityEstimatedCost = ref(1);
   const connectionStatus = ref<HubConnectionStatus | null>(null);
+  const runs = ref<RunSummary[]>([]);
   const inboxItems = ref<InboxItem[]>([]);
   const notifications = ref<Notification[]>([]);
   const approvalDetails = ref<Record<string, ApprovalRequest>>({});
@@ -72,6 +74,10 @@ export const useHubStore = defineStore("hub", () => {
   const knowledgeDetail = ref<KnowledgeDetail | null>(null);
 
   const workspaceLoading = ref(false);
+  const runsLoading = ref(false);
+  const inboxLoading = ref(false);
+  const notificationsLoading = ref(false);
+  const connectionLoading = ref(false);
   const automationLoading = ref(false);
   const automationSubmitting = ref(false);
   const automationActionLoading = ref(false);
@@ -98,6 +104,15 @@ export const useHubStore = defineStore("hub", () => {
   );
   const readOnlyMode = computed(() => authState.value !== "authenticated");
 
+  function setProjectScope(workspaceId: string, projectId: string): void {
+    currentWorkspaceId.value = workspaceId;
+    currentProjectId.value = projectId;
+  }
+
+  function setWorkspaceScope(workspaceId: string): void {
+    currentWorkspaceId.value = workspaceId;
+  }
+
   function upsertAutomation(nextAutomation: AutomationSummary): void {
     const nextAutomations = [...automations.value];
     const index = nextAutomations.findIndex(
@@ -114,8 +129,10 @@ export const useHubStore = defineStore("hub", () => {
   }
 
   function setAutomationDetail(nextAutomation: AutomationDetail): void {
-    currentWorkspaceId.value = nextAutomation.automation.workspace_id;
-    currentProjectId.value = nextAutomation.automation.project_id;
+    setProjectScope(
+      nextAutomation.automation.workspace_id,
+      nextAutomation.automation.project_id
+    );
     currentAutomationId.value = nextAutomation.automation.id;
     automationDetail.value = nextAutomation;
     upsertAutomation(nextAutomation);
@@ -153,7 +170,109 @@ export const useHubStore = defineStore("hub", () => {
     rememberApprovals(approvals);
   }
 
-  async function loadWorkspace(
+  async function loadProjectContext(
+    workspaceId: string,
+    projectId: string
+  ): Promise<void> {
+    surfaceError.value = null;
+    setProjectScope(workspaceId, projectId);
+
+    try {
+      const client = requireHubClient();
+      projectContext.value = await client.getProjectContext(workspaceId, projectId);
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    }
+  }
+
+  async function loadConnectionStatus(): Promise<void> {
+    connectionLoading.value = true;
+    surfaceError.value = null;
+
+    try {
+      const client = requireHubClient();
+      connectionStatus.value = await client.getHubConnectionStatus();
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    } finally {
+      connectionLoading.value = false;
+    }
+  }
+
+  async function loadRuns(
+    workspaceId: string,
+    projectId: string
+  ): Promise<void> {
+    runsLoading.value = true;
+    surfaceError.value = null;
+    setProjectScope(workspaceId, projectId);
+
+    try {
+      const client = requireHubClient();
+      runs.value = await client.listRuns(workspaceId, projectId);
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    } finally {
+      runsLoading.value = false;
+    }
+  }
+
+  async function loadInboxItems(workspaceId: string): Promise<void> {
+    inboxLoading.value = true;
+    surfaceError.value = null;
+    setWorkspaceScope(workspaceId);
+
+    try {
+      const client = requireHubClient();
+      const nextInboxItems = await client.listInboxItems(workspaceId);
+      inboxItems.value = nextInboxItems;
+      await hydrateApprovalDetails(
+        nextInboxItems.map((item) => item.approval_request_id)
+      );
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    } finally {
+      inboxLoading.value = false;
+    }
+  }
+
+  async function loadNotifications(workspaceId: string): Promise<void> {
+    notificationsLoading.value = true;
+    surfaceError.value = null;
+    setWorkspaceScope(workspaceId);
+
+    try {
+      const client = requireHubClient();
+      notifications.value = await client.listNotifications(workspaceId);
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    } finally {
+      notificationsLoading.value = false;
+    }
+  }
+
+  async function loadAutomations(
+    workspaceId: string,
+    projectId: string
+  ): Promise<void> {
+    surfaceError.value = null;
+    setProjectScope(workspaceId, projectId);
+
+    try {
+      const client = requireHubClient();
+      automations.value = await client.listAutomations(workspaceId, projectId);
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    }
+  }
+
+  async function loadTaskSurface(
     workspaceId: string,
     projectId: string,
     taskEstimatedCost = taskCapabilityEstimatedCost.value,
@@ -161,8 +280,7 @@ export const useHubStore = defineStore("hub", () => {
   ): Promise<void> {
     workspaceLoading.value = true;
     surfaceError.value = null;
-    currentWorkspaceId.value = workspaceId;
-    currentProjectId.value = projectId;
+    setProjectScope(workspaceId, projectId);
     taskCapabilityEstimatedCost.value = taskEstimatedCost;
     automationCapabilityEstimatedCost.value = automationEstimatedCost;
 
@@ -173,16 +291,16 @@ export const useHubStore = defineStore("hub", () => {
         nextTaskCapabilityResolutions,
         nextAutomationCapabilityResolutions,
         nextConnectionStatus,
-        nextInboxItems,
-        nextNotifications,
         nextAutomations
       ] = await Promise.all([
         client.getProjectContext(workspaceId, projectId),
         client.listCapabilityResolutions(workspaceId, projectId, taskEstimatedCost),
-        client.listCapabilityResolutions(workspaceId, projectId, automationEstimatedCost),
+        client.listCapabilityResolutions(
+          workspaceId,
+          projectId,
+          automationEstimatedCost
+        ),
         client.getHubConnectionStatus(),
-        client.listInboxItems(workspaceId),
-        client.listNotifications(workspaceId),
         client.listAutomations(workspaceId, projectId)
       ]);
 
@@ -190,12 +308,7 @@ export const useHubStore = defineStore("hub", () => {
       taskCapabilityResolutions.value = nextTaskCapabilityResolutions;
       automationCapabilityResolutions.value = nextAutomationCapabilityResolutions;
       connectionStatus.value = nextConnectionStatus;
-      inboxItems.value = nextInboxItems;
-      notifications.value = nextNotifications;
       automations.value = nextAutomations;
-      await hydrateApprovalDetails(
-        nextInboxItems.map((item) => item.approval_request_id)
-      );
     } catch (error) {
       surfaceError.value = toErrorMessage(error);
       throw error;
@@ -257,10 +370,7 @@ export const useHubStore = defineStore("hub", () => {
       const response = await client.createAutomation(command);
       currentAutomationId.value = response.automation.id;
       webhookSecretReveal.value = response.webhook_secret;
-      automations.value = await client.listAutomations(
-        command.workspace_id,
-        command.project_id
-      );
+      await loadAutomations(command.workspace_id, command.project_id);
       return response;
     } catch (error) {
       surfaceError.value = toErrorMessage(error);
@@ -351,10 +461,12 @@ export const useHubStore = defineStore("hub", () => {
       ]);
 
       currentRunId.value = nextRunDetail.run.id;
+      setProjectScope(command.workspace_id, command.project_id);
       runDetail.value = nextRunDetail;
       artifacts.value = nextArtifacts;
       knowledgeDetail.value = nextKnowledgeDetail;
       rememberApprovals(nextRunDetail.approvals);
+      await loadRuns(command.workspace_id, command.project_id);
 
       return nextRunDetail;
     } catch (error) {
@@ -380,8 +492,7 @@ export const useHubStore = defineStore("hub", () => {
         ]);
 
       currentRunId.value = runId;
-      currentWorkspaceId.value = nextRunDetail.run.workspace_id;
-      currentProjectId.value = nextRunDetail.run.project_id;
+      setProjectScope(nextRunDetail.run.workspace_id, nextRunDetail.run.project_id);
       runDetail.value = nextRunDetail;
       artifacts.value = nextArtifacts;
       knowledgeDetail.value = nextKnowledgeDetail;
@@ -414,16 +525,22 @@ export const useHubStore = defineStore("hub", () => {
       });
       rememberApprovals(nextRunDetail.approvals);
 
-      if (
-        currentWorkspaceId.value &&
-        currentProjectId.value
-      ) {
-        await loadWorkspace(currentWorkspaceId.value, currentProjectId.value);
+      const refreshes: Promise<void>[] = [];
+
+      if (currentWorkspaceId.value) {
+        refreshes.push(loadInboxItems(currentWorkspaceId.value));
+        refreshes.push(loadNotifications(currentWorkspaceId.value));
+      }
+
+      if (currentWorkspaceId.value && currentProjectId.value) {
+        refreshes.push(loadRuns(currentWorkspaceId.value, currentProjectId.value));
       }
 
       if (currentRunId.value === nextRunDetail.run.id) {
-        await loadRun(nextRunDetail.run.id);
+        refreshes.push(loadRun(nextRunDetail.run.id));
       }
+
+      await Promise.all(refreshes);
 
       return nextRunDetail;
     } catch (error) {
@@ -452,16 +569,15 @@ export const useHubStore = defineStore("hub", () => {
       });
       rememberApproval(approval);
 
-      if (
-        currentWorkspaceId.value &&
-        currentProjectId.value
-      ) {
-        await loadWorkspace(currentWorkspaceId.value, currentProjectId.value);
+      const refreshes: Promise<void>[] = [];
+      if (currentWorkspaceId.value) {
+        refreshes.push(loadInboxItems(currentWorkspaceId.value));
+        refreshes.push(loadNotifications(currentWorkspaceId.value));
       }
-
       if (currentRunId.value) {
-        await loadRun(currentRunId.value);
+        refreshes.push(loadRun(currentRunId.value));
       }
+      await Promise.all(refreshes);
 
       return approval;
     } catch (error) {
@@ -484,6 +600,7 @@ export const useHubStore = defineStore("hub", () => {
     taskCapabilityEstimatedCost,
     automationCapabilityEstimatedCost,
     connectionStatus,
+    runs,
     inboxItems,
     notifications,
     approvalDetails,
@@ -494,6 +611,10 @@ export const useHubStore = defineStore("hub", () => {
     artifacts,
     knowledgeDetail,
     workspaceLoading,
+    runsLoading,
+    inboxLoading,
+    notificationsLoading,
+    connectionLoading,
     automationLoading,
     automationSubmitting,
     automationActionLoading,
@@ -507,7 +628,13 @@ export const useHubStore = defineStore("hub", () => {
     activeCapability,
     authState,
     readOnlyMode,
-    loadWorkspace,
+    loadProjectContext,
+    loadConnectionStatus,
+    loadRuns,
+    loadInboxItems,
+    loadNotifications,
+    loadAutomations,
+    loadTaskSurface,
     loadTaskCapabilityResolutions,
     loadAutomationCapabilityResolutions,
     createAutomation,

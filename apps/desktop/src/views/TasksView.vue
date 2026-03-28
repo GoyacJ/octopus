@@ -7,9 +7,9 @@ import { useHubStore } from "../stores/hub";
 const route = useRoute();
 const router = useRouter();
 const hub = useHubStore();
+
 type AutomationTriggerType = "manual_event" | "cron" | "webhook" | "mcp_event";
 type CreateTriggerInput = Parameters<typeof hub.createAutomation>[0]["trigger"];
-type InboxItem = ReturnType<typeof useHubStore>["inboxItems"][number];
 
 const taskDraft = reactive({
   title: "Write note",
@@ -92,30 +92,11 @@ const automationTriggerOptions = computed(() => [
   }
 ]);
 
-function approvalForItem(item: InboxItem) {
-  return hub.approvalDetails[item.approval_request_id] ?? null;
-}
-
-function governanceActionLabel(approvalId: string, decision: "approve" | "reject"): string {
-  if (
-    hub.governanceActionLoading &&
-    hub.governanceActionTarget === approvalId
-  ) {
-    return decision === "approve" ? "Approving..." : "Rejecting...";
-  }
-
-  if (hub.readOnlyMode) {
-    return "Read-only";
-  }
-
-  return decision === "approve" ? "Approve" : "Reject";
-}
-
-async function loadWorkspaceSurface(): Promise<void> {
+async function loadTaskSurface(): Promise<void> {
   const workspaceId = String(route.params.workspaceId);
   const projectId = String(route.params.projectId);
 
-  await hub.loadWorkspace(workspaceId, projectId);
+  await hub.loadTaskSurface(workspaceId, projectId);
 
   if (!taskDraft.capabilityId && taskCapabilityResolution.value) {
     taskDraft.capabilityId = taskCapabilityResolution.value.descriptor.id;
@@ -244,21 +225,10 @@ async function handleCreateAutomation(): Promise<void> {
   }
 }
 
-async function handleResolveApproval(
-  approvalId: string,
-  decision: "approve" | "reject"
-): Promise<void> {
-  try {
-    await hub.resolveGovernanceApproval(approvalId, decision, decision);
-  } catch {
-    // The store already exposes the error banner for the shell.
-  }
-}
-
 watch(
   () => [route.params.workspaceId, route.params.projectId],
   () => {
-    void loadWorkspaceSurface();
+    void loadTaskSurface();
   }
 );
 
@@ -302,19 +272,20 @@ watch(
 );
 
 onMounted(() => {
-  void loadWorkspaceSurface();
+  void loadTaskSurface();
 });
 </script>
 
 <template>
   <section class="surface-grid">
-    <article class="surface-card">
-      <p class="eyebrow">Workspace Context</p>
+    <article class="surface-card hero">
+      <p class="eyebrow">Task Workbench</p>
       <h1>{{ hub.workspaceName }}</h1>
       <p class="muted">{{ hub.projectName }}</p>
       <div class="meta-list">
         <span>Workspace: {{ hub.projectContext?.workspace.id ?? "loading" }}</span>
         <span>Project: {{ hub.projectContext?.project.id ?? "loading" }}</span>
+        <span>Auth: {{ hub.authState }}</span>
       </div>
     </article>
 
@@ -443,7 +414,11 @@ onMounted(() => {
       </label>
       <label class="field">
         <span>Estimated cost</span>
-        <input v-model.number="automationDraft.estimatedCost" min="1" type="number" />
+        <input
+          v-model.number="automationDraft.estimatedCost"
+          min="1"
+          type="number"
+        />
       </label>
       <button
         data-testid="automation-create"
@@ -463,20 +438,6 @@ onMounted(() => {
               : "Create Automation"
         }}
       </button>
-    </article>
-
-    <article class="surface-card">
-      <p class="eyebrow">Hub Connections</p>
-      <h2>
-        {{ hub.connectionStatus?.mode ?? "unknown" }} /
-        {{ hub.connectionStatus?.state ?? "unknown" }}
-      </h2>
-      <div class="meta-list">
-        <span>Auth state: {{ hub.authState }}</span>
-        <span>Active servers: {{ hub.connectionStatus?.active_server_count ?? 0 }}</span>
-        <span>Healthy servers: {{ hub.connectionStatus?.healthy_server_count ?? 0 }}</span>
-        <span>Last refresh: {{ hub.connectionStatus?.last_refreshed_at ?? "n/a" }}</span>
-      </div>
     </article>
 
     <article class="surface-card">
@@ -542,58 +503,6 @@ onMounted(() => {
       </ul>
       <p v-else class="muted">No automation has been configured for this project yet.</p>
     </article>
-
-    <article class="surface-card">
-      <p class="eyebrow">Approval Inbox</p>
-      <h2>{{ hub.inboxItems.length }} open items</h2>
-      <ul v-if="hub.inboxItems.length > 0" class="stack-list">
-        <li v-for="item in hub.inboxItems" :key="item.id">
-          <strong>{{ item.title }}</strong>
-          <p>{{ item.message }}</p>
-          <div v-if="approvalForItem(item)" class="meta-list">
-            <span>{{ approvalForItem(item)?.approval_type }}</span>
-            <span>{{ approvalForItem(item)?.status }}</span>
-            <span>{{ approvalForItem(item)?.target_ref }}</span>
-          </div>
-          <div class="action-row">
-            <button
-              :data-testid="`workspace-approve-${item.approval_request_id}`"
-              :disabled="
-                hub.readOnlyMode ||
-                hub.governanceActionLoading
-              "
-              @click="handleResolveApproval(item.approval_request_id, 'approve')"
-            >
-              {{ governanceActionLabel(item.approval_request_id, 'approve') }}
-            </button>
-            <button
-              class="secondary-button"
-              :data-testid="`workspace-reject-${item.approval_request_id}`"
-              :disabled="
-                hub.readOnlyMode ||
-                hub.governanceActionLoading
-              "
-              @click="handleResolveApproval(item.approval_request_id, 'reject')"
-            >
-              {{ governanceActionLabel(item.approval_request_id, 'reject') }}
-            </button>
-          </div>
-        </li>
-      </ul>
-      <p v-else class="muted">No approval requests are waiting.</p>
-    </article>
-
-    <article class="surface-card">
-      <p class="eyebrow">Notifications</p>
-      <h2>{{ hub.notifications.length }} pending signals</h2>
-      <ul v-if="hub.notifications.length > 0" class="stack-list">
-        <li v-for="notification in hub.notifications" :key="notification.id">
-          <strong>{{ notification.title }}</strong>
-          <p>{{ notification.message }}</p>
-        </li>
-      </ul>
-      <p v-else class="muted">No notifications are pending.</p>
-    </article>
   </section>
 </template>
 
@@ -613,6 +522,12 @@ onMounted(() => {
   border-radius: 1rem;
   background: rgba(15, 23, 42, 0.45);
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+}
+
+.hero {
+  background:
+    radial-gradient(circle at top right, rgba(34, 197, 94, 0.18), transparent 32%),
+    rgba(15, 23, 42, 0.56);
 }
 
 .eyebrow {
@@ -641,30 +556,41 @@ p {
   color: #cbd5e1;
 }
 
+.stack-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .field {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.92rem;
-  color: #cbd5e1;
+  gap: 0.45rem;
 }
 
 input,
 textarea,
 select {
   width: 100%;
-  border: 1px solid rgba(125, 211, 252, 0.25);
-  border-radius: 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 0.8rem;
   padding: 0.8rem 0.95rem;
   font: inherit;
   color: #e2e8f0;
-  background: rgba(15, 23, 42, 0.72);
+  background: rgba(2, 6, 23, 0.72);
+}
+
+textarea {
+  resize: vertical;
 }
 
 button {
   border: none;
   border-radius: 999px;
-  padding: 0.9rem 1.1rem;
+  padding: 0.85rem 1.05rem;
   font: inherit;
   font-weight: 600;
   color: #082f49;
@@ -677,30 +603,7 @@ button:disabled {
   opacity: 0.75;
 }
 
-.action-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-}
-
 .automation-link {
-  padding: 0;
-  color: #f8fafc;
-  background: transparent;
-  text-align: left;
-}
-
-.secondary-button {
-  color: #e2e8f0;
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(125, 211, 252, 0.25);
-}
-
-.stack-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  margin: 0;
-  padding-left: 1rem;
+  align-self: flex-start;
 }
 </style>

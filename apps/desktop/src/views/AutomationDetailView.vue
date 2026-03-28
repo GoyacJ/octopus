@@ -20,8 +20,11 @@ async function loadAutomationSurface(): Promise<void> {
   const projectId = String(route.params.projectId);
   const automationId = String(route.params.automationId);
 
-  await hub.loadWorkspace(workspaceId, projectId);
-  await hub.loadAutomation(automationId);
+  await Promise.all([
+    hub.loadProjectContext(workspaceId, projectId),
+    hub.loadConnectionStatus(),
+    hub.loadAutomation(automationId)
+  ]);
 }
 
 async function activateAutomation(): Promise<void> {

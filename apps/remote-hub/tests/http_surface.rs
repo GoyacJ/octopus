@@ -181,6 +181,7 @@ async fn completed_run_surface_matches_minimum_contracts() {
     let authorization = format!("Bearer {access_token}");
     let task_schema = compile_schema("runtime/task.schema.json");
     let run_detail_schema = compile_schema("runtime/run-detail.schema.json");
+    let run_summary_schema = compile_schema("runtime/run-summary.schema.json");
     let artifact_schema = compile_schema("observe/artifact.schema.json");
     let knowledge_detail_schema = compile_schema("observe/knowledge-detail.schema.json");
     let capability_resolution_schema =
@@ -240,6 +241,22 @@ async fn completed_run_surface_matches_minimum_contracts() {
     .await;
     assert_valid(&run_detail_schema, &loaded_run_detail);
     assert!(loaded_run_detail["policy_decisions"].is_array());
+
+    let recent_runs = response_json(
+        router.clone(),
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/projects/project-slice1/runs")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert!(recent_runs
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|item| run_summary_schema.is_valid(item)));
+    assert_eq!(recent_runs.as_array().unwrap()[0]["id"], run_id);
 
     let artifacts = response_json(
         router.clone(),
@@ -982,4 +999,191 @@ async fn automation_manager_surface_round_trip_matches_minimum_contracts() {
     assert_eq!(retried["recent_deliveries"][0]["id"], failed_delivery_id);
     assert_eq!(retried["recent_deliveries"][0]["status"], "succeeded");
     assert_eq!(retried["last_run_summary"]["status"], "completed");
+}
+
+#[tokio::test]
+async fn project_scoped_recent_runs_are_ordered_and_empty_when_no_runs_exist() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let db_path = sample_db_path(tempdir.path(), "recent-runs.sqlite");
+    let runtime = Slice1Runtime::open_at(&db_path).await.unwrap();
+    runtime
+        .ensure_project_context(
+            "workspace-alpha",
+            "workspace-alpha",
+            "Workspace Alpha",
+            "project-slice1",
+            "project-slice1",
+            "Project Slice 1",
+        )
+        .await
+        .unwrap();
+    runtime
+        .ensure_project_context(
+            "workspace-alpha",
+            "workspace-alpha",
+            "Workspace Alpha",
+            "project-empty",
+            "project-empty",
+            "Project Empty",
+        )
+        .await
+        .unwrap();
+    runtime
+        .ensure_project_context(
+            "workspace-alpha",
+            "workspace-alpha",
+            "Workspace Alpha",
+            "project-other",
+            "project-other",
+            "Project Other",
+        )
+        .await
+        .unwrap();
+    seed_governance(&runtime, "project-slice1", "capability-write-note", false).await;
+    seed_governance(&runtime, "project-other", "capability-write-note", false).await;
+
+    let auth = RemoteAccessService::open_at(&db_path).await.unwrap();
+    let router = app(AppState::new(runtime.clone(), auth));
+    let access_token = login_access_token(router.clone(), "workspace-alpha").await;
+    let authorization = format!("Bearer {access_token}");
+    let run_summary_schema = compile_schema("runtime/run-summary.schema.json");
+
+    let first_task = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/tasks")
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "workspace_id": "workspace-alpha",
+                    "project_id": "project-slice1",
+                    "title": "First project run",
+                    "instruction": "Emit first artifact",
+                    "action": {
+                        "kind": "emit_text",
+                        "content": "first"
+                    },
+                    "capability_id": "capability-write-note",
+                    "estimated_cost": 1,
+                    "idempotency_key": "task-project-1"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    let first_run = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/tasks/{}/start", first_task["id"].as_str().unwrap()))
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+
+    let second_task = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/tasks")
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "workspace_id": "workspace-alpha",
+                    "project_id": "project-slice1",
+                    "title": "Second project run",
+                    "instruction": "Emit second artifact",
+                    "action": {
+                        "kind": "emit_text",
+                        "content": "second"
+                    },
+                    "capability_id": "capability-write-note",
+                    "estimated_cost": 1,
+                    "idempotency_key": "task-project-2"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    let second_run = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/tasks/{}/start", second_task["id"].as_str().unwrap()))
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+
+    let other_task = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/tasks")
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "workspace_id": "workspace-alpha",
+                    "project_id": "project-other",
+                    "title": "Other project run",
+                    "instruction": "Emit other artifact",
+                    "action": {
+                        "kind": "emit_text",
+                        "content": "other"
+                    },
+                    "capability_id": "capability-write-note",
+                    "estimated_cost": 1,
+                    "idempotency_key": "task-project-other"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    let _other_run = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/tasks/{}/start", other_task["id"].as_str().unwrap()))
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+
+    let recent_runs = response_json(
+        router.clone(),
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/projects/project-slice1/runs")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let recent_runs = recent_runs.as_array().unwrap();
+    assert_eq!(recent_runs.len(), 2);
+    assert!(recent_runs.iter().all(|item| run_summary_schema.is_valid(item)));
+    assert_eq!(recent_runs[0]["id"], second_run["run"]["id"]);
+    assert_eq!(recent_runs[1]["id"], first_run["run"]["id"]);
+
+    let empty_runs = response_json(
+        router,
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/projects/project-empty/runs")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(empty_runs, json!([]));
 }

@@ -83,6 +83,8 @@
 - `minimum automation surface` 已落地并通过验证
 - Slice 11 `GA governance interaction surface` 已落地并通过验证，补齐 approval detail / inbox action / approval-driven knowledge promotion
 - Slice 12 `GA governance explainability` 已落地并通过验证，补齐 project-bound capability execution-state explanations 与 Run policy-decision surface consumption
+- Slice 13 `desktop local host foundation` 已落地并通过验证，补齐真实 Tauri/Rust 本地宿主、共享本地 transport 契约消费、以及受控 local-mode 引导路径
+- Slice 14 `desktop task workbench` 已冻结为当前 post-Slice-13 下一优先级，用于把 desktop surface 拆分为明确的 workbench 路由与读取面
 
 ---
 
@@ -169,8 +171,8 @@
 6. minimum automation surface
 7. Slice 11 `GA governance interaction surface`
 8. Slice 12 `GA governance explainability`
-
-在此之后，当前尚未冻结新的 post-Slice 12 下一优先级。
+9. Slice 13 `desktop local host foundation`
+10. Slice 14 `desktop task workbench`（当前冻结中的下一优先级）
 
 更深 remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须等新的 task package 与 owner docs 明确后再启动。
 
@@ -862,10 +864,33 @@ GA 必须支持最小执行环境语义：
 - 已在 tracked tree 中落地并通过验证
 - 当前是 read-only governance explainability slice，不包含 grant / budget 编辑、tenant / RBAC / IdP、独立 Inbox / Notification center、vector retrieval、Org Graph promotion 或更广泛 capability catalog
 
-### 13.14 当前 post-Slice 12 状态
+### 13.14 Slice 13：desktop local host foundation（已完成）
 
-- 当前 tracked docs 尚未冻结新的 post-Slice 12 下一优先级
-- 更深 remote admin / tenant / IdP 能力不在当前冻结顺序内，除非后续 tracked docs 明确纳入
+#### 范围
+
+- 在 `apps/desktop/src-tauri` 下落地真实 Tauri 2 Rust 本地宿主，并注册为 Cargo workspace member
+- 通过 `schemas/interop/local-hub-transport.*` 冻结本地 transport command / event 真值，并让 Rust 与 TypeScript 共用
+- 用 deterministic demo seed 与现有 runtime 真值打通 local desktop 启动路径
+- 保持 desktop 继续消费现有 `HubClient` 边界，而不是引入 app-local runtime 语义
+
+#### 当前状态
+
+- 已在 tracked tree 中落地并通过验证
+- 当前是受控 local-host foundation，不包含 full local auth/session、tenant / RBAC admin、chat-first desktop redesign 或更深 local onboarding
+
+### 13.15 Slice 14：desktop task workbench（当前下一优先级）
+
+#### 范围
+
+- 将当前 desktop 主入口收敛为明确的 workbench IA：`Tasks`、`Runs`、`Inbox`、`Notifications`、`Connections`
+- 保留现有 `RunView` 作为 run policy / artifact / trace / approval / knowledge follow-up 的 authoritative detail page
+- 仅新增一个共享读取面：`HubClient.listRuns(workspaceId, projectId)`，并在 local Tauri 与 remote-hub 两条 transport 上保持对等
+- 把当前过载的 mixed workspace page 拆成 focused route views 与独立 loaders，但不扩成 chat surface、board aggregation 或新的治理写路径
+
+#### 当前状态
+
+- 已在 owner docs 中冻结为 post-Slice-13 的下一优先级
+- 当前 slice 仍处于 task-package + implementation 进行中状态，不包含 retry/terminate run、streaming/chat、DiscussionSession、Agent/Team onboarding、tenant / RBAC / IdP admin、vector retrieval 或 Org Graph promotion
 
 ---
 
@@ -1061,8 +1086,8 @@ Octopus 首版 GA 不是“把目标态平台全部做出来”，而是：
 - 以 PRD 定义的正式对象模型为产品边界
 - 以 SAD 定义的运行时、治理、恢复、互操作边界为架构约束
 - 以本蓝图定义的最小正式运行闭环为实施主线
-- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 -> minimum automation surface -> Slice 11 -> Slice 12 的顺序稳步推进
-- 当前 tracked tree 已推进到 Slice 12；post-Slice 12 的下一优先级尚未在 owner docs 中冻结
+- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 -> minimum automation surface -> Slice 11 -> Slice 12 -> Slice 13 的顺序稳步推进，并已冻结 Slice 14 为当前下一优先级
+- 当前 tracked tree 已推进到 Slice 13；当前冻结中的 post-Slice-13 下一优先级是 desktop-first 的 task workbench
 - 在每次模块推进前先完成局部设计包，再实现，再验证，再回写全局文档
 
 只有这样，Octopus 才能在不丢失整体方向的前提下，让 AI 主导开发同时保持可控、可审计、可维护。

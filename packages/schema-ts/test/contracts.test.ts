@@ -20,6 +20,7 @@ import {
   parseManualDispatchCommand,
   parseRequestKnowledgePromotionCommand,
   parseRunDetail,
+  parseRunSummaries,
   parseTaskCreateCommand,
   parseTriggerDeliveryRetryCommand
 } from "../src/index";
@@ -222,8 +223,52 @@ describe("schema-ts contract parsers", () => {
 
     expect(contract.event_channel).toBe("hub://events");
     expect(contract.commands.get_project_context).toBeTruthy();
+    expect(contract.commands.list_runs).toBeTruthy();
     expect(contract.commands.get_connection_status).toBeTruthy();
-    expect(Object.values(contract.commands)).toHaveLength(22);
+    expect(Object.values(contract.commands)).toHaveLength(23);
+  });
+
+  it("accepts run summary arrays for the recent-runs workbench surface", () => {
+    expect(
+      parseRunSummaries([
+        {
+          id: "run-2",
+          task_id: "task-2",
+          workspace_id: "workspace-alpha",
+          project_id: "project-slice1",
+          title: "Follow up note",
+          run_type: "task",
+          status: "waiting_approval",
+          approval_request_id: "approval-1",
+          attempt_count: 1,
+          max_attempts: 2,
+          last_error: null,
+          created_at: "2026-03-26T10:02:00Z",
+          updated_at: "2026-03-26T10:02:01Z",
+          started_at: "2026-03-26T10:02:00Z",
+          completed_at: null,
+          terminated_at: null
+        },
+        {
+          id: "run-1",
+          task_id: "task-1",
+          workspace_id: "workspace-alpha",
+          project_id: "project-slice1",
+          title: "Write note",
+          run_type: "task",
+          status: "completed",
+          approval_request_id: null,
+          attempt_count: 1,
+          max_attempts: 2,
+          last_error: null,
+          created_at: "2026-03-26T10:00:00Z",
+          updated_at: "2026-03-26T10:00:01Z",
+          started_at: "2026-03-26T10:00:00Z",
+          completed_at: "2026-03-26T10:00:01Z",
+          terminated_at: null
+        }
+      ])[0].id
+    ).toBe("run-2");
   });
 
   it("rejects an invalid task create command", () => {

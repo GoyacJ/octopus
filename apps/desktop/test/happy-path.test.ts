@@ -191,6 +191,25 @@ const notificationFixture = {
   updated_at: "2026-03-26T10:00:00Z"
 } as const;
 
+const runSummaryFixture = {
+  id: "run-1",
+  task_id: "task-1",
+  workspace_id: "workspace-alpha",
+  project_id: "project-slice1",
+  title: "Write note",
+  run_type: "task",
+  status: "completed",
+  approval_request_id: null,
+  attempt_count: 1,
+  max_attempts: 2,
+  last_error: null,
+  created_at: "2026-03-26T10:00:00Z",
+  updated_at: "2026-03-26T10:00:01Z",
+  started_at: "2026-03-26T10:00:00Z",
+  completed_at: "2026-03-26T10:00:01Z",
+  terminated_at: null
+} as const;
+
 const promotionApprovalFixture = {
   id: "approval-promotion-1",
   workspace_id: "workspace-alpha",
@@ -401,6 +420,8 @@ describe("desktop local happy path", () => {
             return hubConnectionStatusFixture;
           case "hub:list_automations":
             return [];
+          case "hub:list_runs":
+            return [runSummaryFixture];
           case "hub:list_inbox_items":
           case "hub:list_notifications":
             return [];
@@ -424,7 +445,7 @@ describe("desktop local happy path", () => {
 
     const client = createLocalHubClient(transport);
     const { pinia, router } = createDesktopPlugins(client, true);
-    await router.push("/workspaces/workspace-alpha/projects/project-slice1");
+    await router.push("/workspaces/workspace-alpha/projects/project-slice1/tasks");
     await router.isReady();
 
     const wrapper = mount(AppShell, {
@@ -474,6 +495,8 @@ describe("desktop local happy path", () => {
           }
           case "hub:get_connection_status":
             return hubConnectionStatusFixture;
+          case "hub:list_runs":
+            return [runSummaryFixture];
           case "hub:list_automations":
           case "hub:list_inbox_items":
           case "hub:list_notifications":
@@ -489,7 +512,7 @@ describe("desktop local happy path", () => {
 
     const client = createLocalHubClient(transport);
     const { pinia, router } = createDesktopPlugins(client, true);
-    await router.push("/workspaces/workspace-alpha/projects/project-slice1");
+    await router.push("/workspaces/workspace-alpha/projects/project-slice1/tasks");
     await router.isReady();
 
     const wrapper = mount(AppShell, {
@@ -531,6 +554,8 @@ describe("desktop local happy path", () => {
             };
           case "hub:list_automations":
             return [];
+          case "hub:list_runs":
+            return [runSummaryFixture];
           case "hub:list_inbox_items":
             return [inboxApprovalFixture];
           case "hub:list_notifications":
@@ -548,7 +573,7 @@ describe("desktop local happy path", () => {
 
     const client = createLocalHubClient(transport);
     const { pinia, router } = createDesktopPlugins(client, true);
-    await router.push("/workspaces/workspace-alpha/projects/project-slice1");
+    await router.push("/workspaces/workspace-alpha/projects/project-slice1/tasks");
     await router.isReady();
 
     const wrapper = mount(AppShell, {
@@ -561,6 +586,10 @@ describe("desktop local happy path", () => {
 
     expect(wrapper.text()).toContain("token_expired");
     expect(wrapper.get('[data-testid="create-start"]').attributes("disabled")).toBeDefined();
+    await router.push("/workspaces/workspace-alpha/inbox");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Approval Inbox");
     expect(
       wrapper.get('[data-testid="workspace-approve-approval-1"]').attributes("disabled")
     ).toBeDefined();
@@ -581,6 +610,8 @@ describe("desktop local happy path", () => {
             return hubConnectionStatusFixture;
           case "hub:list_automations":
             return [];
+          case "hub:list_runs":
+            return [runSummaryFixture];
           case "hub:list_inbox_items":
             return inboxOpen ? [inboxApprovalFixture] : [];
           case "hub:list_notifications":
@@ -618,7 +649,7 @@ describe("desktop local happy path", () => {
 
     const client = createLocalHubClient(transport);
     const { pinia, router } = createDesktopPlugins(client, true);
-    await router.push("/workspaces/workspace-alpha/projects/project-slice1");
+    await router.push("/workspaces/workspace-alpha/projects/project-slice1/inbox");
     await router.isReady();
 
     const wrapper = mount(AppShell, {
@@ -768,6 +799,8 @@ describe("desktop local happy path", () => {
           case "hub:list_inbox_items":
           case "hub:list_notifications":
             return [];
+          case "hub:list_runs":
+            return [runSummaryFixture];
           case "hub:list_automations":
             return automationListFixture;
           case "hub:create_automation":
@@ -786,7 +819,7 @@ describe("desktop local happy path", () => {
 
     const client = createLocalHubClient(transport);
     const { pinia, router } = createDesktopPlugins(client, true);
-    await router.push("/workspaces/workspace-alpha/projects/project-slice1");
+    await router.push("/workspaces/workspace-alpha/projects/project-slice1/tasks");
     await router.isReady();
 
     const wrapper = mount(AppShell, {
@@ -839,6 +872,8 @@ describe("desktop local happy path", () => {
           case "hub:list_inbox_items":
           case "hub:list_notifications":
             return [];
+          case "hub:list_runs":
+            return [runSummaryFixture];
           case "hub:list_automations":
             return [
               manualAutomationDetailFixture,
@@ -917,7 +952,7 @@ describe("desktop local happy path", () => {
     expect(wrapper.text()).toContain(retryError.message);
     expect(router.currentRoute.value.fullPath).toContain("/automations/automation-failing-1");
 
-    await router.push("/workspaces/workspace-alpha/projects/project-slice1");
+    await router.push("/workspaces/workspace-alpha/projects/project-slice1/tasks");
     await flushPromises();
 
     await wrapper.get('[data-testid="automation-create"]').trigger("click");
@@ -926,7 +961,7 @@ describe("desktop local happy path", () => {
     expect(createAttempts).toBe(1);
     expect(wrapper.text()).toContain(schemaError.message);
     expect(router.currentRoute.value.fullPath).toBe(
-      "/workspaces/workspace-alpha/projects/project-slice1"
+      "/workspaces/workspace-alpha/projects/project-slice1/tasks"
     );
   });
 });

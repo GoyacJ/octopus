@@ -52,6 +52,8 @@ use crate::{
     RuntimeError,
 };
 
+const RECENT_RUN_WINDOW_LIMIT: i64 = 20;
+
 #[derive(Debug, Clone)]
 pub struct TaskIntake {
     pool: SqlitePool,
@@ -1996,6 +1998,59 @@ impl RunOrchestrator {
         .await?;
 
         row.map(|row| run_from_row(&row)).transpose()
+    }
+
+    async fn fetch_task_record(&self, task_id: &str) -> Result<Option<TaskRecord>, RuntimeError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, workspace_id, project_id, source_kind, automation_id, title, instruction,
+                   action_json, capability_id, estimated_cost, idempotency_key, created_at, updated_at
+            FROM tasks
+            WHERE id = ?1
+            "#,
+        )
+        .bind(task_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| task_from_row(&row)).transpose()
+    }
+
+    pub async fn list_runs(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<RunSummaryRecord>, RuntimeError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                id, task_id, workspace_id, project_id, automation_id, trigger_delivery_id,
+                run_type, status, approval_request_id, idempotency_key, attempt_count,
+                max_attempts, checkpoint_seq, resume_token, last_error, created_at, updated_at,
+                started_at, completed_at, terminated_at
+            FROM runs
+            WHERE workspace_id = ?1 AND project_id = ?2
+            ORDER BY updated_at DESC, id DESC
+            LIMIT ?3
+            "#,
+        )
+        .bind(workspace_id)
+        .bind(project_id)
+        .bind(RECENT_RUN_WINDOW_LIMIT)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut runs = Vec::with_capacity(rows.len());
+        for row in rows {
+            let run = run_from_row(&row)?;
+            let task = self
+                .fetch_task_record(&run.task_id)
+                .await?
+                .ok_or_else(|| RuntimeError::TaskNotFound(run.task_id.clone()))?;
+            runs.push(RunSummaryRecord::new(&run, &task));
+        }
+
+        Ok(runs)
     }
 
     pub async fn fetch_approval_request(

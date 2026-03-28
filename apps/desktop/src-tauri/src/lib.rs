@@ -52,6 +52,7 @@ pub struct LocalHubTransportCommands {
     pub retry_trigger_delivery: String,
     pub create_task: String,
     pub start_task: String,
+    pub list_runs: String,
     pub get_run_detail: String,
     pub get_approval_request: String,
     pub resolve_approval: String,
@@ -596,6 +597,17 @@ impl DesktopLocalHost {
             self.emit_run_updated(&response.run, &response.task).await?;
             self.emit_workspace_updates(&response.run.workspace_id).await?;
             return Ok(json!(response));
+        }
+
+        if normalized_command == normalize_tauri_invoke_command(commands.list_runs.as_str()) {
+            let command =
+                self.parse_payload::<ProjectScopedCommand>(commands.list_runs.as_str(), payload)?;
+            return Ok(json!(
+                self.inner
+                    .runtime
+                    .list_runs(&command.workspace_id, &command.project_id)
+                    .await?
+            ));
         }
 
         if normalized_command == normalize_tauri_invoke_command(commands.get_run_detail.as_str()) {
@@ -1441,6 +1453,28 @@ async fn hub_start_task(
 
 #[allow(non_snake_case)]
 #[tauri::command]
+async fn hub_list_runs(
+    state: State<'_, DesktopLocalHostState>,
+    workspaceId: Option<String>,
+    workspace_id: Option<String>,
+    projectId: Option<String>,
+    project_id: Option<String>,
+) -> Result<Value, String> {
+    let workspace_id = require_string(workspaceId, workspace_id, "workspaceId")?;
+    let project_id = require_string(projectId, project_id, "projectId")?;
+    invoke_from_state(
+        &state,
+        local_hub_transport_contract().commands.list_runs.as_str(),
+        json!({
+            "workspaceId": workspace_id,
+            "projectId": project_id,
+        }),
+    )
+    .await
+}
+
+#[allow(non_snake_case)]
+#[tauri::command]
 async fn hub_get_run_detail(
     state: State<'_, DesktopLocalHostState>,
     runId: Option<String>,
@@ -1715,6 +1749,7 @@ pub fn run() {
             hub_retry_trigger_delivery,
             hub_create_task,
             hub_start_task,
+            hub_list_runs,
             hub_get_run_detail,
             hub_get_approval_request,
             hub_resolve_approval,

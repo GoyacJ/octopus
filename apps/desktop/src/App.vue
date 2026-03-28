@@ -1,17 +1,54 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { RouterLink, RouterView } from "vue-router";
+import { RouterLink, RouterView, useRoute } from "vue-router";
 
 import { useHubStore } from "./stores/hub";
 
 const hub = useHubStore();
+const route = useRoute();
 
-const workspaceRoute = computed(() => {
-  if (!hub.currentWorkspaceId || !hub.currentProjectId) {
+function coerceRouteParam(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+const activeWorkspaceId = computed(
+  () => coerceRouteParam(route.params.workspaceId) ?? hub.currentWorkspaceId
+);
+
+const activeProjectId = computed(
+  () => coerceRouteParam(route.params.projectId) ?? hub.currentProjectId
+);
+
+const tasksRoute = computed(() => {
+  if (!activeWorkspaceId.value || !activeProjectId.value) {
     return null;
   }
 
-  return `/workspaces/${hub.currentWorkspaceId}/projects/${hub.currentProjectId}`;
+  return `/workspaces/${activeWorkspaceId.value}/projects/${activeProjectId.value}/tasks`;
+});
+
+const runsRoute = computed(() => {
+  if (!activeWorkspaceId.value || !activeProjectId.value) {
+    return null;
+  }
+
+  return `/workspaces/${activeWorkspaceId.value}/projects/${activeProjectId.value}/runs`;
+});
+
+const inboxRoute = computed(() => {
+  if (!activeWorkspaceId.value) {
+    return null;
+  }
+
+  return `/workspaces/${activeWorkspaceId.value}/inbox`;
+});
+
+const notificationsRoute = computed(() => {
+  if (!activeWorkspaceId.value) {
+    return null;
+  }
+
+  return `/workspaces/${activeWorkspaceId.value}/notifications`;
 });
 
 const runRoute = computed(() => {
@@ -23,20 +60,28 @@ const runRoute = computed(() => {
 });
 
 const automationRoute = computed(() => {
-  if (!hub.currentWorkspaceId || !hub.currentProjectId || !hub.currentAutomationId) {
+  if (!activeWorkspaceId.value || !activeProjectId.value || !hub.currentAutomationId) {
     return null;
   }
 
-  return `/workspaces/${hub.currentWorkspaceId}/projects/${hub.currentProjectId}/automations/${hub.currentAutomationId}`;
+  return `/workspaces/${activeWorkspaceId.value}/projects/${activeProjectId.value}/automations/${hub.currentAutomationId}`;
 });
+
+const workspaceTitle = computed(
+  () => hub.projectContext?.workspace.display_name ?? activeWorkspaceId.value ?? "Workspace"
+);
+
+const projectTitle = computed(
+  () => hub.projectContext?.project.display_name ?? activeProjectId.value ?? "Project"
+);
 </script>
 
 <template>
   <div class="app-shell">
     <aside class="shell-rail">
-      <p class="brand">Octopus GA Surface</p>
-      <h1>{{ hub.workspaceName }}</h1>
-      <p class="muted">{{ hub.projectName }}</p>
+      <p class="brand">Octopus Task Workbench</p>
+      <h1>{{ workspaceTitle }}</h1>
+      <p class="muted">{{ projectTitle }}</p>
 
       <div class="status-card">
         <span class="status-label">Hub</span>
@@ -55,7 +100,13 @@ const automationRoute = computed(() => {
       </p>
 
       <nav class="nav-stack">
-        <RouterLink v-if="workspaceRoute" :to="workspaceRoute">Workspace Shell</RouterLink>
+        <RouterLink v-if="tasksRoute" :to="tasksRoute">Tasks</RouterLink>
+        <RouterLink v-if="runsRoute" :to="runsRoute">Runs</RouterLink>
+        <RouterLink v-if="inboxRoute" :to="inboxRoute">Inbox</RouterLink>
+        <RouterLink v-if="notificationsRoute" :to="notificationsRoute">
+          Notifications
+        </RouterLink>
+        <RouterLink to="/connections">Connections</RouterLink>
         <RouterLink v-if="automationRoute" :to="automationRoute">Automation Detail</RouterLink>
         <RouterLink v-if="runRoute" :to="runRoute">Current Run</RouterLink>
       </nav>

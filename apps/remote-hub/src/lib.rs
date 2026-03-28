@@ -20,7 +20,7 @@ use octopus_runtime::{
     CreateTaskInput, CreateTriggerInput, DispatchManualEventInput, DispatchWebhookEventInput,
     InboxItemRecord, KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeLineageRecord,
     KnowledgeSpaceRecord, NotificationRecord, PolicyDecisionLogRecord, ProjectContext,
-    RunExecutionReport, RunRecord, RuntimeError, Slice1Runtime, TaskRecord, TraceRecord,
+    RunExecutionReport, RunRecord, RunSummaryRecord, RuntimeError, Slice1Runtime, TaskRecord, TraceRecord,
     TriggerDeliveryRecord, TriggerRecord, TriggerSpec,
 };
 use serde::{Deserialize, Serialize};
@@ -79,6 +79,10 @@ pub fn app(state: AppState) -> Router {
         .route("/api/tasks", post(create_task))
         .route("/api/tasks/{task_id}/start", post(start_task))
         .route("/api/triggers/{trigger_id}/webhook", post(dispatch_webhook))
+        .route(
+            "/api/workspaces/{workspace_id}/projects/{project_id}/runs",
+            get(list_runs),
+        )
         .route("/api/runs/{run_id}", get(get_run_detail))
         .route("/api/runs/{run_id}/artifacts", get(list_artifacts))
         .route("/api/runs/{run_id}/knowledge", get(get_knowledge_detail))
@@ -524,6 +528,25 @@ async fn list_automations(
         state
             .runtime
             .list_automations(&workspace_id, &project_id)
+            .await?,
+    ))
+}
+
+async fn list_runs(
+    State(state): State<AppState>,
+    Path((workspace_id, project_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> AppResult<Vec<RunSummaryRecord>> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
+    Ok(Json(
+        state
+            .runtime
+            .list_runs(&workspace_id, &project_id)
             .await?,
     ))
 }

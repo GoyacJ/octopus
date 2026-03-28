@@ -154,6 +154,95 @@ async fn task_happy_path_round_trips_through_transport_and_records_knowledge() {
 }
 
 #[tokio::test]
+async fn list_runs_is_project_scoped_empty_until_execution_and_sorted_latest_first() {
+    let (_tempdir, host, _emitter) = open_host().await;
+    let contract = local_hub_transport_contract();
+
+    let empty = invoke(
+        &host,
+        &contract.commands.list_runs,
+        json!({
+            "workspaceId": "demo",
+            "projectId": "other-project"
+        }),
+    )
+    .await;
+    assert_eq!(empty, json!([]));
+
+    let first_task = invoke(
+        &host,
+        &contract.commands.create_task,
+        json!({
+            "workspace_id": "demo",
+            "project_id": "demo",
+            "title": "First workbench run",
+            "instruction": "Emit first artifact",
+            "action": {
+                "kind": "emit_text",
+                "content": "first"
+            },
+            "capability_id": "capability-local-demo",
+            "estimated_cost": 1,
+            "idempotency_key": "task-local-runs-first"
+        }),
+    )
+    .await;
+    let first_run = invoke(
+        &host,
+        &contract.commands.start_task,
+        json!({
+            "taskId": first_task["id"].as_str().unwrap()
+        }),
+    )
+    .await;
+
+    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+
+    let second_task = invoke(
+        &host,
+        &contract.commands.create_task,
+        json!({
+            "workspace_id": "demo",
+            "project_id": "demo",
+            "title": "Second workbench run",
+            "instruction": "Emit second artifact",
+            "action": {
+                "kind": "emit_text",
+                "content": "second"
+            },
+            "capability_id": "capability-local-demo",
+            "estimated_cost": 1,
+            "idempotency_key": "task-local-runs-second"
+        }),
+    )
+    .await;
+    let second_run = invoke(
+        &host,
+        &contract.commands.start_task,
+        json!({
+            "taskId": second_task["id"].as_str().unwrap()
+        }),
+    )
+    .await;
+
+    let runs = invoke(
+        &host,
+        &contract.commands.list_runs,
+        json!({
+            "workspaceId": "demo",
+            "projectId": "demo"
+        }),
+    )
+    .await;
+
+    let summaries = runs.as_array().unwrap();
+    assert_eq!(summaries.len(), 2);
+    assert_eq!(summaries[0]["id"], second_run["run"]["id"]);
+    assert_eq!(summaries[1]["id"], first_run["run"]["id"]);
+    assert_eq!(summaries[0]["title"], "Second workbench run");
+}
+
+#[tokio::test]
 async fn approval_wait_and_resume_flow_updates_run_and_workspace_governance_state() {
     let (_tempdir, host, emitter) = open_host().await;
     let contract = local_hub_transport_contract();

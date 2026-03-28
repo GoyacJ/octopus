@@ -349,6 +349,16 @@ impl Slice2Runtime {
         self.run_orchestrator.start_task(&task).await
     }
 
+    pub async fn list_runs(
+        &self,
+        workspace_id: &str,
+        project_id: &str,
+    ) -> Result<Vec<RunSummaryRecord>, RuntimeError> {
+        self.run_orchestrator
+            .list_runs(workspace_id, project_id)
+            .await
+    }
+
     pub async fn dispatch_manual_event(
         &self,
         input: DispatchManualEventInput,

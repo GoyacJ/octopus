@@ -641,6 +641,7 @@ export interface LocalHubTransportCommands {
   retry_trigger_delivery: string;
   create_task: string;
   start_task: string;
+  list_runs: string;
   get_run_detail: string;
   get_approval_request: string;
   resolve_approval: string;

@@ -305,6 +305,10 @@ export function parseRunSummary(value: unknown): RunSummary {
   return parseWithSchema<RunSummary>(runSummarySchema.$id, value);
 }
 
+export function parseRunSummaries(value: unknown): RunSummary[] {
+  return parseArrayWithItemSchema<RunSummary>(runSummarySchema.$id, value);
+}
+
 export function parseRunDetail(value: unknown): RunDetail {
   return parseWithSchema<RunDetail>(runDetailSchema.$id, value);
 }

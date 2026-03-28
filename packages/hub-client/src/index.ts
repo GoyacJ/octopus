@@ -23,6 +23,7 @@ import {
   parseNotifications,
   parseProjectContext,
   parseRunDetail,
+  parseRunSummaries,
   parseTask,
   parseTaskCreateCommand,
   parseTriggerDeliveryRetryCommand,
@@ -49,6 +50,7 @@ import {
   type Notification,
   type ProjectContext,
   type RunDetail,
+  type RunSummary,
   type Task,
   type TaskCreateCommand,
   type TriggerDeliveryRetryCommand
@@ -90,6 +92,7 @@ export const LOCAL_HUB_COMMANDS = {
   ),
   createTask: normalizeLocalCommandName(LOCAL_HUB_TRANSPORT.commands.create_task),
   startTask: normalizeLocalCommandName(LOCAL_HUB_TRANSPORT.commands.start_task),
+  listRuns: normalizeLocalCommandName(LOCAL_HUB_TRANSPORT.commands.list_runs),
   getRunDetail: normalizeLocalCommandName(
     LOCAL_HUB_TRANSPORT.commands.get_run_detail
   ),
@@ -146,6 +149,7 @@ export interface HubClient {
   ): Promise<AutomationDetail>;
   createTask(command: TaskCreateCommand): Promise<Task>;
   startTask(taskId: string): Promise<RunDetail>;
+  listRuns(workspaceId: string, projectId: string): Promise<RunSummary[]>;
   getRunDetail(runId: string): Promise<RunDetail>;
   getApprovalRequest(approvalId: string): Promise<ApprovalRequest>;
   resolveApproval(command: ApprovalResolveCommand): Promise<RunDetail>;
@@ -414,6 +418,14 @@ export function createLocalHubClient(transport: LocalHubTransport): HubClient {
         await transport.invoke(LOCAL_HUB_COMMANDS.startTask, { taskId })
       );
     },
+    async listRuns(workspaceId, projectId) {
+      return parseRunSummaries(
+        await transport.invoke(LOCAL_HUB_COMMANDS.listRuns, {
+          workspaceId,
+          projectId
+        })
+      );
+    },
     async getRunDetail(runId) {
       return parseRunDetail(
         await transport.invoke(LOCAL_HUB_COMMANDS.getRunDetail, { runId })
@@ -577,6 +589,19 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             headers: { "content-type": "application/json" },
             body: JSON.stringify(parsed)
           },
+          options.getAccessToken
+        )
+      );
+    },
+    async listRuns(workspaceId, projectId) {
+      return parseRunSummaries(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/runs`
+          ),
+          undefined,
           options.getAccessToken
         )
       );

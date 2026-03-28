@@ -359,6 +359,9 @@ function runHubClientContractSuite(name: string, factory: SuiteFactory) {
       await expect(client.getRunDetail("run-1")).resolves.toMatchObject({
         artifacts: [{ id: "artifact-1" }]
       });
+      await expect(
+        client.listRuns("workspace-alpha", "project-slice1")
+      ).resolves.toMatchObject([{ id: "run-1", title: "Automation note" }]);
       await expect(client.getApprovalRequest("approval-1")).resolves.toMatchObject({
         id: "approval-1",
         target_ref: "run:run-approval"
@@ -459,6 +462,12 @@ runHubClientContractSuite("local adapter", () => {
         case "hub:create_task":
           expect(payload).toEqual(taskCreateCommandFixture);
           return taskFixture;
+        case "hub:list_runs":
+          expect(payload).toEqual({
+            workspaceId: "workspace-alpha",
+            projectId: "project-slice1"
+          });
+          return [runSummaryFixture];
         case "hub:start_task":
         case "hub:get_run_detail":
         case "hub:resolve_approval":
@@ -595,6 +604,13 @@ runHubClientContractSuite("remote adapter", () => {
         }
         if (method === "GET" && url === "http://hub.test/api/runs/run-1") {
           return Response.json(runDetailFixture);
+        }
+        if (
+          method === "GET" &&
+          url ===
+            "http://hub.test/api/workspaces/workspace-alpha/projects/project-slice1/runs"
+        ) {
+          return Response.json([runSummaryFixture]);
         }
         if (method === "GET" && url === "http://hub.test/api/approvals/approval-1") {
           return Response.json(approvalFixture);

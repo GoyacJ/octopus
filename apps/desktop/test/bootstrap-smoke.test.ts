@@ -151,7 +151,7 @@ describe("desktop bootstrap smoke", () => {
     document.body.innerHTML = "";
   });
 
-  it("boots into the demo workspace route through the tauri local bridge", async () => {
+  it("boots into the demo tasks route through the tauri local bridge", async () => {
     const { bootstrap } = await import("../src/main");
 
     await bootstrap();
@@ -165,7 +165,7 @@ describe("desktop bootstrap smoke", () => {
         projectId: "demo"
       }
     );
-    expect(window.location.pathname).toBe("/workspaces/demo/projects/demo");
+    expect(window.location.pathname).toBe("/workspaces/demo/projects/demo/tasks");
     expect(document.body.textContent).toContain("Demo Workspace");
     expect(document.body.textContent).not.toContain(
       "No local Hub transport bridge is registered"

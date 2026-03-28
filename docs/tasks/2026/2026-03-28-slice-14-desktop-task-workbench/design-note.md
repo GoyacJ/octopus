@@ -1,0 +1,49 @@
+## Design Note
+
+- Problem:
+  - The tracked tree already proves the governed runtime, shared client, minimum automation surface, governance interaction, governance explainability, and a real desktop local host, but the main desktop entry still overloads one workspace page with task creation, automation, inbox, notifications, capability explainability, and connection state.
+- Goal:
+  - Reframe the current desktop UI as a desktop-first workbench with explicit operational surfaces for task creation, run follow-up, inbox handling, notifications, and connections without changing GA product semantics.
+- Acceptance Criteria:
+  - Desktop local mode lands on the demo project `Tasks` page.
+  - The shell exposes explicit routes for `Tasks`, `Runs`, `Inbox`, `Notifications`, and `Connections`.
+  - `RunView` remains the authoritative detail page for run policy decisions, approvals, artifacts, trace, and knowledge follow-up.
+  - Both local and remote transports expose the same new project-scoped recent-runs read path through `HubClient.listRuns`.
+- Non-functional Constraints:
+  - No chat-first UX, no streaming surface, and no new onboarding object model.
+  - No new shared run-row DTO; `RunSummary` remains the only shared recent-run list contract.
+  - No new event shape; pull-first refetch remains the default behavior.
+  - No new runtime write path beyond existing task start and approval actions.
+- MVP Boundary:
+  - Narrow IA expansion only: `Tasks`, `Runs`, `Inbox`, `Notifications`, `Connections`.
+  - Recent runs return a small project-scoped window ordered by `updated_at DESC, id DESC`.
+  - Notifications remain readable but non-actionable in this slice.
+- Layer Placement:
+  - Shared `listRuns` contract ownership lives in `schemas/`.
+  - TypeScript parsing and shared client wiring live in `packages/schema-ts` and `packages/hub-client`.
+  - Runtime query truth stays in `crates/runtime`.
+  - Local transport dispatch stays in `apps/desktop/src-tauri`.
+  - Remote parity stays in `apps/remote-hub`.
+  - Route/view composition stays in `apps/desktop/src`.
+- Module Boundaries:
+  - `crates/runtime` owns run-list query semantics, scoping, ordering, and limits.
+  - `apps/remote-hub` may expose the project-scoped read endpoint but may not redefine list semantics.
+  - `apps/desktop/src-tauri` may map the shared local command to runtime APIs but may not introduce app-local DTO truth.
+  - `apps/desktop/src` may split surfaces and loaders but may not bypass `HubClient`.
+- Inputs:
+  - Existing `RunSummary`, `HubEvent`, and `HubClient` shared contracts.
+  - Existing desktop `RunView`, automation detail route, workspace shell, inbox/notification surfaces, and connection status reporting.
+  - Existing local-host and remote-hub parity patterns for project-scoped reads.
+- Outputs:
+  - One new shared read method: `HubClient.listRuns(workspaceId, projectId)`.
+  - One new local transport command: `hub:list_runs`.
+  - One new remote-hub project-scoped runs endpoint.
+  - Desktop route split and dedicated route views for the workbench surfaces.
+- State Transitions:
+  - No new runtime states are introduced.
+  - Existing `run.updated`, `inbox.updated`, and `notification.updated` events may only trigger refetch.
+  - Task creation still transitions users into the existing run-detail flow.
+- Verification Plan:
+  - Add parity tests for `listRuns` in local-host and remote-hub surfaces.
+  - Add shared TypeScript parsing/client coverage for `RunSummary[]`.
+  - Add desktop route tests for default landing and focused workbench surfaces.

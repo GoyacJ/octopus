@@ -1,7 +1,7 @@
 # Visual Framework
 
-**Status**: Frozen for the first GA minimum surface
-**Last updated**: 2026-03-27
+**Status**: Frozen for the first GA minimum surface plus Slice 14 workbench IA refinement
+**Last updated**: 2026-03-28
 
 ## Purpose
 
@@ -11,9 +11,10 @@ It does not expand PRD scope or architecture boundaries. It only defines how the
 
 ## Current Scope
 
-This first frozen version covers only the minimum GA surfaces required by the blueprint:
+This frozen version covers only the minimum GA surfaces required by the blueprint plus the narrow Slice 14 route split needed to turn the desktop shell into a task workbench:
 
 - Task creation entry
+- Recent project runs
 - Run detail and Trace replay
 - Approval Inbox
 - Artifact detail
@@ -34,12 +35,12 @@ This version does **not** define:
 The first tracked UI implementation must prioritize pages in this order:
 
 1. Workspace / Project shell and Hub Connection status
-2. Task creation
+2. Task creation and recent run follow-up
 3. Run detail with status, policy, artifact, trace, and knowledge sections
 4. Approval Inbox and Notification entry
 5. Shared Knowledge minimum view and promote action
 
-If scope pressure appears, keep the order above. Do not drop Hub status, Task create, Run detail, or Approval Inbox in favor of richer secondary views.
+If scope pressure appears, keep the order above. Do not drop Hub status, Task create, Runs, Run detail, or Approval Inbox in favor of richer secondary views.
 
 ## Minimum Page Set
 
@@ -49,7 +50,7 @@ Purpose:
 
 - present current workspace and project context
 - surface current hub mode and connection health
-- anchor navigation for all minimum GA pages
+- anchor navigation for all minimum GA workbench pages
 
 Required regions:
 
@@ -59,11 +60,12 @@ Required regions:
 - connection status badge
 - last synchronization / refresh hint
 
-### 2. Task Create
+### 2. Tasks
 
 Purpose:
 
 - let a user create and start a minimum task from a formal surface
+- act as the default local-mode landing page for the current demo project
 
 Required fields:
 
@@ -80,7 +82,28 @@ Required states:
 - validation error
 - success with navigation to the created run
 
-### 3. Run Detail
+### 3. Runs
+
+Purpose:
+
+- provide a focused recent-run follow-up surface for the current project
+
+Required data:
+
+- `RunSummary` rows only
+- run title
+- run status
+- capability identifier or task context summary
+- updated time
+- direct navigation to run detail
+
+Required states:
+
+- populated recent list
+- empty recent list
+- refetch after task creation or `run.updated`
+
+### 4. Run Detail
 
 Purpose:
 
@@ -105,7 +128,7 @@ Required states:
 - failed
 - terminated
 
-### 4. Approval Inbox
+### 5. Approval Inbox
 
 Purpose:
 
@@ -120,7 +143,7 @@ Required data:
 - current status
 - approve / reject actions where allowed
 
-### 5. Artifact Detail
+### 6. Artifact Detail
 
 Purpose:
 
@@ -134,7 +157,7 @@ Required data:
 - trust level
 - knowledge-gate status
 
-### 6. Shared Knowledge Minimum View
+### 7. Shared Knowledge Minimum View
 
 Purpose:
 
@@ -148,7 +171,7 @@ Required data:
 - promote action where explicit promotion is available
 - lineage hint back to source run/artifact
 
-### 7. Notification Entry
+### 8. Notification Entry
 
 Purpose:
 
@@ -171,11 +194,13 @@ The minimum desktop shell should use a stable two-level IA:
   - Hub status
   - Primary navigation
 - Content area
-  - Task Create
+  - Tasks
+  - Runs
   - Run Detail
   - Inbox
-  - Knowledge
   - Connections
+  - Notifications
+  - Knowledge
 
 The first tracked shell should prefer direct pages over nested modal flows. Approval decisions may use inline actions or simple dialogs, but the authoritative state must remain visible on the page after action completion.
 
@@ -192,6 +217,7 @@ The first tracked shell should prefer direct pages over nested modal flows. Appr
 - desktop-first composition with a persistent shell
 - one primary content column with optional secondary summary rail
 - avoid dashboard sprawl; each page should answer one operational question clearly
+- the default workbench route should be `Tasks`, not a mixed dashboard page
 
 ### 3. Hierarchy
 
@@ -250,6 +276,7 @@ Error states must preserve the user’s context and identify whether the failure
 - Trace is explanatory, not decorative. Do not hide it behind development-only affordances.
 - Knowledge promotion must remain explicit and reversible in wording, even if the current slice only proves promotion.
 - Notification is a reminder surface; Inbox is the action surface. Do not collapse them into one list.
+- Connections is a dedicated visibility surface for hub mode, auth/session, and refresh state. Do not bury it only inside the mixed workspace body.
 
 ## Out Of Scope
 
