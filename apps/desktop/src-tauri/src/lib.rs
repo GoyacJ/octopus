@@ -41,6 +41,7 @@ const LOCAL_MODE_UNSUPPORTED_TRIGGER_MESSAGE: &str =
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LocalHubTransportCommands {
+    pub list_projects: String,
     pub get_project_context: String,
     pub get_project_knowledge: String,
     pub list_automations: String,
@@ -245,6 +246,12 @@ struct ProjectScopedCommand {
 }
 
 #[derive(Debug, Deserialize)]
+struct WorkspaceScopedCommand {
+    #[serde(rename = "workspaceId", alias = "workspace_id")]
+    workspace_id: String,
+}
+
+#[derive(Debug, Deserialize)]
 struct AutomationIdCommand {
     #[serde(rename = "automationId", alias = "automation_id")]
     automation_id: String,
@@ -432,6 +439,16 @@ impl DesktopLocalHost {
         let normalized_command = normalize_tauri_invoke_command(command);
         let contract = local_hub_transport_contract();
         let commands = &contract.commands;
+
+        if normalized_command
+            == normalize_tauri_invoke_command(commands.list_projects.as_str())
+        {
+            let command = self
+                .parse_payload::<WorkspaceScopedCommand>(commands.list_projects.as_str(), payload)?;
+            return Ok(json!(
+                self.inner.runtime.list_projects(&command.workspace_id).await?
+            ));
+        }
 
         if normalized_command
             == normalize_tauri_invoke_command(commands.get_project_context.as_str())
@@ -1237,6 +1254,24 @@ fn require_string(
 
 #[allow(non_snake_case)]
 #[tauri::command]
+async fn hub_list_projects(
+    state: State<'_, DesktopLocalHostState>,
+    workspaceId: Option<String>,
+    workspace_id: Option<String>,
+) -> Result<Value, String> {
+    let workspace_id = require_string(workspaceId, workspace_id, "workspaceId")?;
+    invoke_from_state(
+        &state,
+        local_hub_transport_contract().commands.list_projects.as_str(),
+        json!({
+            "workspaceId": workspace_id,
+        }),
+    )
+    .await
+}
+
+#[allow(non_snake_case)]
+#[tauri::command]
 async fn hub_get_project_context(
     state: State<'_, DesktopLocalHostState>,
     workspaceId: Option<String>,
@@ -1794,6 +1829,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            hub_list_projects,
             hub_get_project_context,
             hub_get_project_knowledge,
             hub_list_automations,

@@ -4,7 +4,7 @@ import { useRouter } from "vue-router";
 
 import {
   DEFAULT_LOCAL_WORKBENCH_ROUTE,
-  buildWorkspaceInboxRoute,
+  resolveDesktopEntryRoute,
   useConnectionStore
 } from "../stores/connection";
 import { useHubStore } from "../stores/hub";
@@ -102,9 +102,9 @@ async function handleLogin(): Promise<void> {
       workspaceId: remoteDraft.workspaceId,
       email: remoteDraft.email
     });
-    const session = await connection.login(password);
+    await connection.login(password);
     syncDraftFromProfile();
-    await router.push(buildWorkspaceInboxRoute(session.workspace_id));
+    await router.push(resolveDesktopEntryRoute(connection.profile));
   } catch {
     // The store already exposes the auth error for the view.
   }

@@ -20,6 +20,7 @@ use octopus_runtime::{
     CreateTaskInput, CreateTriggerInput, DispatchManualEventInput, DispatchWebhookEventInput,
     InboxItemRecord, KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeLineageRecord,
     KnowledgeSpaceRecord, NotificationRecord, PolicyDecisionLogRecord, ProjectContext,
+    ProjectRecord,
     ProjectKnowledgeIndexRecord, RunExecutionReport, RunRecord, RunSummaryRecord, RuntimeError,
     Slice1Runtime, TaskRecord, TraceRecord, TriggerDeliveryRecord, TriggerRecord, TriggerSpec,
 };
@@ -44,6 +45,7 @@ pub fn app(state: AppState) -> Router {
         .route("/api/auth/login", post(login))
         .route("/api/auth/session", get(get_current_session))
         .route("/api/auth/logout", post(logout_session))
+        .route("/api/workspaces/{workspace_id}/projects", get(list_projects))
         .route(
             "/api/workspaces/{workspace_id}/projects/{project_id}/context",
             get(get_project_context),
@@ -516,6 +518,20 @@ async fn get_project_context(
             .fetch_project_context(&workspace_id, &project_id)
             .await?,
     ))
+}
+
+async fn list_projects(
+    State(state): State<AppState>,
+    Path(workspace_id): Path<String>,
+    headers: HeaderMap,
+) -> AppResult<Vec<ProjectRecord>> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
+    Ok(Json(state.runtime.list_projects(&workspace_id).await?))
 }
 
 async fn get_project_knowledge(

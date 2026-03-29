@@ -4,6 +4,7 @@ use octopus_desktop_host::{
     local_hub_transport_contract, normalize_tauri_invoke_command, CollectingEventEmitter,
     DesktopLocalHost, LocalHostConfig,
 };
+use octopus_runtime::Slice2Runtime;
 use serde_json::{json, Value};
 
 fn command(name: &str) -> String {
@@ -31,6 +32,29 @@ async fn invoke(host: &DesktopLocalHost, name: &str, payload: Value) -> Value {
     host.invoke_transport_command(&command(name), payload)
         .await
         .unwrap()
+}
+
+async fn seed_project(
+    tempdir: &tempfile::TempDir,
+    workspace_id: &str,
+    workspace_name: &str,
+    project_id: &str,
+    project_name: &str,
+) {
+    let runtime = Slice2Runtime::open_at(&tempdir.path().join("desktop-local-host.sqlite"))
+        .await
+        .unwrap();
+    runtime
+        .ensure_project_context(
+            workspace_id,
+            workspace_id,
+            workspace_name,
+            project_id,
+            project_id,
+            project_name,
+        )
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -257,6 +281,64 @@ async fn list_runs_is_project_scoped_empty_until_execution_and_sorted_latest_fir
     assert_eq!(summaries[0]["id"], second_run["run"]["id"]);
     assert_eq!(summaries[1]["id"], first_run["run"]["id"]);
     assert_eq!(summaries[0]["title"], "Second workbench run");
+}
+
+#[tokio::test]
+async fn list_projects_is_workspace_scoped_and_sorted_latest_first() {
+    let (tempdir, host, _emitter) = open_host().await;
+    let contract = local_hub_transport_contract();
+
+    seed_project(
+        &tempdir,
+        "demo",
+        "Demo Workspace",
+        "project-alpha",
+        "Project Alpha",
+    )
+    .await;
+    tokio::time::sleep(std::time::Duration::from_millis(2)).await;
+    seed_project(
+        &tempdir,
+        "demo",
+        "Demo Workspace",
+        "project-bravo",
+        "Project Bravo",
+    )
+    .await;
+    seed_project(
+        &tempdir,
+        "workspace-empty",
+        "Workspace Empty",
+        "project-empty",
+        "Project Empty",
+    )
+    .await;
+
+    let projects = invoke(
+        &host,
+        &contract.commands.list_projects,
+        json!({
+            "workspaceId": "demo"
+        }),
+    )
+    .await;
+    let ids = projects
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(ids, vec!["project-bravo", "project-alpha", "demo"]);
+
+    let empty = invoke(
+        &host,
+        &contract.commands.list_projects,
+        json!({
+            "workspaceId": "workspace-missing"
+        }),
+    )
+    .await;
+    assert_eq!(empty, json!([]));
 }
 
 #[tokio::test]

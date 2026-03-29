@@ -635,6 +635,7 @@ export interface HubAuthError {
 }
 
 export interface LocalHubTransportCommands {
+  list_projects: string;
   get_project_context: string;
   get_project_knowledge: string;
   list_automations: string;

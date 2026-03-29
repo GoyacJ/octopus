@@ -57,6 +57,7 @@ Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-d
 - [2026-03-28-slice-14-desktop-task-workbench](2026/2026-03-28-slice-14-desktop-task-workbench/README.md)
 - [2026-03-29-slice-15-project-knowledge-index](2026/2026-03-29-slice-15-project-knowledge-index/README.md)
 - [2026-03-29-slice-16-desktop-remote-connection-surface](2026/2026-03-29-slice-16-desktop-remote-connection-surface/README.md)
+- [2026-03-29-slice-17-desktop-project-scope-entry](2026/2026-03-29-slice-17-desktop-project-scope-entry/README.md)
 
 ## Relationship To ADRs
 

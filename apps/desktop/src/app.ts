@@ -18,6 +18,7 @@ import ConnectionsView from "./views/ConnectionsView.vue";
 import InboxView from "./views/InboxView.vue";
 import KnowledgeView from "./views/KnowledgeView.vue";
 import NotificationsView from "./views/NotificationsView.vue";
+import ProjectsView from "./views/ProjectsView.vue";
 import RunView from "./views/RunView.vue";
 import RunsView from "./views/RunsView.vue";
 import TasksView from "./views/TasksView.vue";
@@ -46,6 +47,14 @@ function createRoutes(defaultRoute: string): RouteRecordRaw[] {
     {
       path: "/",
       redirect: defaultRoute
+    },
+    {
+      path: "/workspaces/:workspaceId",
+      redirect: (to) => `/workspaces/${routeParam(to, "workspaceId")}/projects`
+    },
+    {
+      path: "/workspaces/:workspaceId/projects",
+      component: ProjectsView
     },
     {
       path: "/workspaces/:workspaceId/projects/:projectId",

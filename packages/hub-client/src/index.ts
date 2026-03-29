@@ -22,6 +22,7 @@ import {
   parseRequestKnowledgePromotionCommand,
   parseManualDispatchCommand,
   parseNotifications,
+  parseProjects,
   parseProjectContext,
   parseRunDetail,
   parseRunSummaries,
@@ -50,6 +51,7 @@ import {
   type LocalHubTransportContract,
   type ManualDispatchCommand,
   type Notification,
+  type Project,
   type ProjectContext,
   type RunDetail,
   type RunSummary,
@@ -65,6 +67,9 @@ function normalizeLocalCommandName(command: string): string {
 export const HUB_EVENT_CHANNEL = LOCAL_HUB_TRANSPORT.event_channel;
 
 export const LOCAL_HUB_COMMANDS = {
+  listProjects: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.list_projects
+  ),
   getProjectContext: normalizeLocalCommandName(
     LOCAL_HUB_TRANSPORT.commands.get_project_context
   ),
@@ -136,6 +141,7 @@ export const LOCAL_HUB_COMMANDS = {
 export type Unsubscribe = () => void | Promise<void>;
 
 export interface HubClient {
+  listProjects(workspaceId: string): Promise<Project[]>;
   getProjectContext(workspaceId: string, projectId: string): Promise<ProjectContext>;
   getProjectKnowledge(
     workspaceId: string,
@@ -357,6 +363,13 @@ export function createLocalHubClient(transport: LocalHubTransport): HubClient {
   }
 
   return {
+    async listProjects(workspaceId) {
+      return parseProjects(
+        await transport.invoke(LOCAL_HUB_COMMANDS.listProjects, {
+          workspaceId
+        })
+      );
+    },
     async getProjectContext(workspaceId, projectId) {
       return parseProjectContext(
         await transport.invoke(LOCAL_HUB_COMMANDS.getProjectContext, {
@@ -622,6 +635,19 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
   }
 
   return {
+    async listProjects(workspaceId) {
+      return parseProjects(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(workspaceId)}/projects`
+          ),
+          undefined,
+          options.getAccessToken
+        )
+      );
+    },
     async getProjectContext(workspaceId, projectId) {
       return parseProjectContext(
         await readRemoteJson(

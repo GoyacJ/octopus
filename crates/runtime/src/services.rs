@@ -88,6 +88,13 @@ impl TaskIntake {
             .await?)
     }
 
+    pub async fn list_projects(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<ProjectRecord>, RuntimeError> {
+        Ok(self.context_store.list_projects(workspace_id).await?)
+    }
+
     pub async fn create_task(&self, input: CreateTaskInput) -> Result<TaskRecord, RuntimeError> {
         self.context_store
             .fetch_project_context(&input.workspace_id, &input.project_id)

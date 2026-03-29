@@ -86,7 +86,9 @@
 - Slice 13 `desktop local host foundation` 已落地并通过验证，补齐真实 Tauri/Rust 本地宿主、共享本地 transport 契约消费、以及受控 local-mode 引导路径
 - Slice 14 `desktop task workbench` 已落地并通过验证，补齐 desktop workbench 的 route split、独立 loaders 与 `Tasks / Runs / Inbox / Notifications / Connections` IA
 - Slice 15 `project knowledge index` 已落地并通过验证，补齐 project-scoped Shared Knowledge 只读索引面与 local/remote transport parity
-- post-Slice-15 的下一优先级现已冻结为 Slice 16 `desktop remote connection & session surface`；该切片当前处于计划/实施中，尚未计入已验证基线
+- Slice 16 `desktop remote connection & session surface` 已落地并通过验证，补齐 desktop remote profile / session handling、auth-aware bootstrap 与 local/remote hub client rebinding
+- Slice 17 `desktop project scope entry` 已落地并通过验证，补齐 workspace-scoped project discovery、remembered project entry 与 `Projects` surface
+- post-Slice-17 的下一候选优先级回到 `run control surface`，其后才是 `session hardening`；两者当前都还没有冻结成新的 tracked slice
 
 ---
 
@@ -176,8 +178,10 @@
 9. Slice 13 `desktop local host foundation`
 10. Slice 14 `desktop task workbench`
 11. Slice 15 `project knowledge index`
+12. Slice 16 `desktop remote connection & session surface`
+13. Slice 17 `desktop project scope entry`
 
-更深 remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须等新的 task package 与 owner docs 明确后再启动；当前 post-Slice-15 的允许下一步仅冻结到 Slice 16 `desktop remote connection & session surface`。
+更深 remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须等新的 task package 与 owner docs 明确后再启动；当前 post-Slice-17 只记录下一候选方向为 `run control surface`，其后才是 `session hardening`，两者都还没有冻结成新的 task package。
 
 ### 6.3 Shared Contract 先于实现
 
@@ -1103,8 +1107,8 @@ Octopus 首版 GA 不是“把目标态平台全部做出来”，而是：
 - 以 PRD 定义的正式对象模型为产品边界
 - 以 SAD 定义的运行时、治理、恢复、互操作边界为架构约束
 - 以本蓝图定义的最小正式运行闭环为实施主线
-- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 -> minimum automation surface -> Slice 11 -> Slice 12 -> Slice 13 -> Slice 14 -> Slice 15 的顺序稳步推进
-- 当前 tracked tree 已推进到 Slice 15；post-Slice-15 的下一优先级尚未在 tracked owner docs 中冻结
+- 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 -> minimum automation surface -> Slice 11 -> Slice 12 -> Slice 13 -> Slice 14 -> Slice 15 -> Slice 16 -> Slice 17 的顺序稳步推进
+- 当前 tracked tree 已推进到 Slice 17；post-Slice-17 的下一候选优先级回到 `run control surface`，其后才是 `session hardening`，但二者尚未冻结成新的 tracked slice
 - 在每次模块推进前先完成局部设计包，再实现，再验证，再回写全局文档
 
 只有这样，Octopus 才能在不丢失整体方向的前提下，让 AI 主导开发同时保持可控、可审计、可维护。

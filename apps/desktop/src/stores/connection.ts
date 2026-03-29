@@ -20,6 +20,7 @@ export interface DesktopConnectionProfile {
   baseUrl: string;
   workspaceId: string;
   email: string;
+  projectId?: string;
 }
 
 export interface DesktopConnectionStorage {
@@ -80,11 +81,14 @@ function normalizeText(value: unknown): string {
 function normalizeDesktopConnectionProfile(
   value: Partial<DesktopConnectionProfile> | null | undefined
 ): DesktopConnectionProfile {
+  const projectId = normalizeText(value?.projectId);
+
   return {
     mode: isConnectionMode(value?.mode) ? value.mode : "local",
     baseUrl: normalizeText(value?.baseUrl) || DEFAULT_REMOTE_BASE_URL,
     workspaceId: normalizeText(value?.workspaceId),
-    email: normalizeText(value?.email)
+    email: normalizeText(value?.email),
+    projectId: projectId || undefined
   };
 }
 
@@ -128,6 +132,17 @@ function syncStoredProfile(
 
 export function buildWorkspaceInboxRoute(workspaceId: string): string {
   return `/workspaces/${encodePathSegment(workspaceId)}/inbox`;
+}
+
+export function buildWorkspaceProjectsRoute(workspaceId: string): string {
+  return `/workspaces/${encodePathSegment(workspaceId)}/projects`;
+}
+
+export function buildProjectTasksRoute(
+  workspaceId: string,
+  projectId: string
+): string {
+  return `/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/tasks`;
 }
 
 export function configureDesktopConnectionRuntime(
@@ -199,9 +214,14 @@ export function resolveDesktopEntryRoute(
     return "/connections";
   }
 
-  return buildWorkspaceInboxRoute(
-    remoteSessionState.value?.workspace_id || profile.workspaceId
-  );
+  const workspaceId = remoteSessionState.value?.workspace_id || profile.workspaceId;
+  const rememberedProjectId = profile.projectId?.trim() ?? "";
+
+  if (rememberedProjectId) {
+    return buildProjectTasksRoute(workspaceId, rememberedProjectId);
+  }
+
+  return buildWorkspaceProjectsRoute(workspaceId);
 }
 
 export function createConfiguredDesktopHubClient(
@@ -232,6 +252,17 @@ export const useConnectionStore = defineStore("connection", () => {
     return storedProfile;
   }
 
+  function rememberProject(projectId: string): DesktopConnectionProfile {
+    return rememberProfile({
+      ...profile.value,
+      projectId
+    });
+  }
+
+  function clearRememberedProject(): DesktopConnectionProfile {
+    return rememberProject("");
+  }
+
   async function reloadConnectionStatus(): Promise<void> {
     const hub = useHubStore();
     hub.resetWorkbenchState();
@@ -244,7 +275,19 @@ export const useConnectionStore = defineStore("connection", () => {
 
   async function applyProfile(nextProfile: Partial<DesktopConnectionProfile>): Promise<void> {
     authError.value = null;
-    const storedProfile = rememberProfile(nextProfile);
+    const normalized = normalizeDesktopConnectionProfile(nextProfile);
+    const preserveProjectId =
+      profile.value.mode === "remote" &&
+      normalized.mode === "remote" &&
+      profile.value.baseUrl === normalized.baseUrl &&
+      profile.value.workspaceId === normalized.workspaceId;
+    const rememberedProjectId = preserveProjectId
+      ? normalized.projectId ?? profile.value.projectId
+      : normalized.projectId;
+    const storedProfile = rememberProfile({
+      ...normalized,
+      projectId: rememberedProjectId
+    });
     clearRemoteSession();
     syncHubClient(storedProfile);
     await reloadConnectionStatus();
@@ -271,11 +314,16 @@ export const useConnectionStore = defineStore("connection", () => {
         password
       });
       setRemoteSession(response.access_token, response.session);
+      const rememberedProjectId =
+        profile.value.workspaceId === response.session.workspace_id
+          ? profile.value.projectId
+          : undefined;
       profile.value = rememberProfile({
         ...profile.value,
         mode: "remote",
         workspaceId: response.session.workspace_id,
-        email: response.session.email
+        email: response.session.email,
+        projectId: rememberedProjectId
       });
       syncHubClient(profile.value);
       await reloadConnectionStatus();
@@ -300,10 +348,15 @@ export const useConnectionStore = defineStore("connection", () => {
     try {
       const nextSession = await createRemoteAuthClientForProfile(profile.value).getCurrentSession();
       remoteSessionState.value = nextSession;
+      const rememberedProjectId =
+        profile.value.workspaceId === nextSession.workspace_id
+          ? profile.value.projectId
+          : undefined;
       profile.value = rememberProfile({
         ...profile.value,
         workspaceId: nextSession.workspace_id,
-        email: nextSession.email
+        email: nextSession.email,
+        projectId: rememberedProjectId
       });
       return nextSession;
     } catch (error) {
@@ -355,6 +408,8 @@ export const useConnectionStore = defineStore("connection", () => {
     login,
     refreshCurrentSession,
     logout,
-    clearAuthError
+    clearAuthError,
+    rememberProject,
+    clearRememberedProject
   };
 });

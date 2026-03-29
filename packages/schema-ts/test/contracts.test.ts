@@ -225,9 +225,10 @@ describe("schema-ts contract parsers", () => {
     expect(contract.event_channel).toBe("hub://events");
     expect(contract.commands.get_project_context).toBeTruthy();
     expect(contract.commands.get_project_knowledge).toBeTruthy();
+    expect(contract.commands.list_projects).toBeTruthy();
     expect(contract.commands.list_runs).toBeTruthy();
     expect(contract.commands.get_connection_status).toBeTruthy();
-    expect(Object.values(contract.commands)).toHaveLength(24);
+    expect(Object.values(contract.commands)).toHaveLength(25);
   });
 
   it("accepts run summary arrays for the recent-runs workbench surface", () => {

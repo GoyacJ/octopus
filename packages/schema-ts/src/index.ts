@@ -87,6 +87,7 @@ import type {
   KnowledgeDetail,
   KnowledgePromoteCommand,
   ProjectKnowledgeIndex,
+  Project,
   RequestKnowledgePromotionCommand,
   ManualDispatchCommand,
   KnowledgeSummary,
@@ -232,6 +233,14 @@ function parseArrayWithItemSchema<T>(schemaId: string, value: unknown): T[] {
 
 export function parseProjectContext(value: unknown): ProjectContext {
   return parseWithSchema<ProjectContext>(projectContextSchema.$id, value);
+}
+
+export function parseProject(value: unknown): Project {
+  return parseWithSchema<Project>(projectSchema.$id, value);
+}
+
+export function parseProjects(value: unknown): Project[] {
+  return parseArrayWithItemSchema<Project>(projectSchema.$id, value);
 }
 
 export function parseTaskCreateCommand(value: unknown): TaskCreateCommand {

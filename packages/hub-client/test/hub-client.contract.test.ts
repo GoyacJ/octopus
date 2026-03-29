@@ -30,6 +30,18 @@ const projectContextFixture = {
   }
 };
 
+const projectListFixture = [
+  {
+    id: "project-slice2",
+    workspace_id: "workspace-alpha",
+    slug: "project-slice2",
+    display_name: "Project Slice 2",
+    created_at: "2026-03-26T10:00:00Z",
+    updated_at: "2026-03-26T10:00:02Z"
+  },
+  projectContextFixture.project
+] as const;
+
 const taskCreateCommandFixture = {
   workspace_id: "workspace-alpha",
   project_id: "project-slice1",
@@ -345,6 +357,10 @@ function runHubClientContractSuite(name: string, factory: SuiteFactory) {
       ).resolves.toMatchObject({
         project: { id: "project-slice1" }
       });
+      await expect(client.listProjects("workspace-alpha")).resolves.toMatchObject([
+        { id: "project-slice2" },
+        { id: "project-slice1" }
+      ]);
       await expect(
         client.listAutomations("workspace-alpha", "project-slice1")
       ).resolves.toMatchObject([
@@ -487,6 +503,11 @@ runHubClientContractSuite("local adapter", () => {
             projectId: "project-slice1"
           });
           return projectContextFixture;
+        case "hub:list_projects":
+          expect(payload).toEqual({
+            workspaceId: "workspace-alpha"
+          });
+          return projectListFixture;
         case "hub:list_automations":
           expect(payload).toEqual({
             workspaceId: "workspace-alpha",
@@ -621,6 +642,9 @@ runHubClientContractSuite("remote adapter", () => {
 
         if (method === "GET" && url === "http://hub.test/api/workspaces/workspace-alpha/projects/project-slice1/context") {
           return Response.json(projectContextFixture);
+        }
+        if (method === "GET" && url === "http://hub.test/api/workspaces/workspace-alpha/projects") {
+          return Response.json(projectListFixture);
         }
         if (method === "GET" && url === "http://hub.test/api/workspaces/workspace-alpha/projects/project-slice1/automations") {
           return Response.json([automationDetailFixture]);

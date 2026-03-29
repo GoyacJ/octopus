@@ -19,6 +19,14 @@ const activeProjectId = computed(
   () => coerceRouteParam(route.params.projectId) ?? hub.currentProjectId
 );
 
+const projectsRoute = computed(() => {
+  if (!activeWorkspaceId.value) {
+    return null;
+  }
+
+  return `/workspaces/${activeWorkspaceId.value}/projects`;
+});
+
 const tasksRoute = computed(() => {
   if (!activeWorkspaceId.value || !activeProjectId.value) {
     return null;
@@ -80,7 +88,10 @@ const workspaceTitle = computed(
 );
 
 const projectTitle = computed(
-  () => hub.projectContext?.project.display_name ?? activeProjectId.value ?? "Project"
+  () =>
+    hub.projectContext?.project.display_name ??
+    activeProjectId.value ??
+    "Project Selection"
 );
 </script>
 
@@ -108,6 +119,7 @@ const projectTitle = computed(
       </p>
 
       <nav class="nav-stack">
+        <RouterLink v-if="projectsRoute" :to="projectsRoute">Projects</RouterLink>
         <RouterLink v-if="tasksRoute" :to="tasksRoute">Tasks</RouterLink>
         <RouterLink v-if="runsRoute" :to="runsRoute">Runs</RouterLink>
         <RouterLink v-if="knowledgeRoute" :to="knowledgeRoute">Knowledge</RouterLink>

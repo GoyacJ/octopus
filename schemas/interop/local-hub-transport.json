@@ -2,6 +2,7 @@
   "$id": "https://octopus.local/schemas/interop/local-hub-transport.json",
   "event_channel": "hub://events",
   "commands": {
+    "list_projects": "hub:list_projects",
     "get_project_context": "hub:get_project_context",
     "get_project_knowledge": "hub:get_project_knowledge",
     "list_automations": "hub:list_automations",

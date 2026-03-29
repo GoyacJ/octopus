@@ -2798,6 +2798,7 @@ dependencies = [
  "serde",
  "sqlx",
  "thiserror 2.0.18",
+ "tokio",
 ]
 
 [[package]]

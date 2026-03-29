@@ -3,6 +3,7 @@ import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
 type ProjectContext = Awaited<ReturnType<HubClient["getProjectContext"]>>;
+type Project = Awaited<ReturnType<HubClient["listProjects"]>>[number];
 type CapabilityResolution = Awaited<
   ReturnType<HubClient["listCapabilityResolutions"]>
 >[number];
@@ -58,6 +59,7 @@ export const useHubStore = defineStore("hub", () => {
   const currentRunId = ref<string | null>(null);
 
   const projectContext = ref<ProjectContext | null>(null);
+  const projects = ref<Project[]>([]);
   const taskCapabilityResolutions = ref<CapabilityResolution[]>([]);
   const automationCapabilityResolutions = ref<CapabilityResolution[]>([]);
   const taskCapabilityEstimatedCost = ref(1);
@@ -76,6 +78,7 @@ export const useHubStore = defineStore("hub", () => {
   const projectKnowledgeIndex = ref<ProjectKnowledgeIndex | null>(null);
 
   const workspaceLoading = ref(false);
+  const projectsLoading = ref(false);
   const runsLoading = ref(false);
   const inboxLoading = ref(false);
   const notificationsLoading = ref(false);
@@ -113,6 +116,7 @@ export const useHubStore = defineStore("hub", () => {
     currentAutomationId.value = null;
     currentRunId.value = null;
     projectContext.value = null;
+    projects.value = [];
     taskCapabilityResolutions.value = [];
     automationCapabilityResolutions.value = [];
     taskCapabilityEstimatedCost.value = 1;
@@ -139,6 +143,11 @@ export const useHubStore = defineStore("hub", () => {
 
   function setWorkspaceScope(workspaceId: string): void {
     currentWorkspaceId.value = workspaceId;
+  }
+
+  function clearProjectScope(): void {
+    currentProjectId.value = null;
+    projectContext.value = null;
   }
 
   function upsertAutomation(nextAutomation: AutomationSummary): void {
@@ -211,6 +220,23 @@ export const useHubStore = defineStore("hub", () => {
     } catch (error) {
       surfaceError.value = toErrorMessage(error);
       throw error;
+    }
+  }
+
+  async function loadProjects(workspaceId: string): Promise<void> {
+    projectsLoading.value = true;
+    surfaceError.value = null;
+    setWorkspaceScope(workspaceId);
+    clearProjectScope();
+
+    try {
+      const client = requireHubClient();
+      projects.value = await client.listProjects(workspaceId);
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    } finally {
+      projectsLoading.value = false;
     }
   }
 
@@ -648,6 +674,7 @@ export const useHubStore = defineStore("hub", () => {
     currentAutomationId,
     currentRunId,
     projectContext,
+    projects,
     taskCapabilityResolutions,
     automationCapabilityResolutions,
     taskCapabilityEstimatedCost,
@@ -665,6 +692,7 @@ export const useHubStore = defineStore("hub", () => {
     knowledgeDetail,
     projectKnowledgeIndex,
     workspaceLoading,
+    projectsLoading,
     runsLoading,
     inboxLoading,
     notificationsLoading,
@@ -684,6 +712,7 @@ export const useHubStore = defineStore("hub", () => {
     authState,
     readOnlyMode,
     resetWorkbenchState,
+    loadProjects,
     loadProjectContext,
     loadConnectionStatus,
     loadRuns,

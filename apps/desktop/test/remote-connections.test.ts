@@ -12,6 +12,7 @@ import AppShell from "../src/App.vue";
 import { createDesktopPlugins } from "../src/app";
 import {
   configureDesktopConnectionRuntime,
+  loadDesktopConnectionProfile,
   persistDesktopConnectionProfile,
   resetDesktopConnectionRuntime,
   resolveDesktopEntryRoute
@@ -51,6 +52,43 @@ const localProjectContextFixture = {
     updated_at: "2026-03-28T10:00:00Z"
   }
 } as const;
+
+const remoteProjectsFixture = [
+  {
+    id: "project-ops",
+    workspace_id: "workspace-alpha",
+    slug: "project-ops",
+    display_name: "Ops Project",
+    created_at: "2026-03-29T10:00:00Z",
+    updated_at: "2026-03-29T10:00:02Z"
+  },
+  {
+    id: "project-auth",
+    workspace_id: "workspace-alpha",
+    slug: "project-auth",
+    display_name: "Auth Project",
+    created_at: "2026-03-29T10:00:00Z",
+    updated_at: "2026-03-29T10:00:01Z"
+  }
+] as const;
+
+function remoteProjectContextFixture(projectId: string) {
+  const project = remoteProjectsFixture.find((item) => item.id === projectId);
+  if (!project) {
+    throw new Error(`unknown project fixture: ${projectId}`);
+  }
+
+  return {
+    workspace: {
+      id: "workspace-alpha",
+      slug: "workspace-alpha",
+      display_name: "Workspace Alpha",
+      created_at: "2026-03-29T10:00:00Z",
+      updated_at: "2026-03-29T10:00:00Z"
+    },
+    project
+  } as const;
+}
 
 const localCapabilityResolutionFixture = [
   {
@@ -115,10 +153,15 @@ const remoteInboxFixture = [
 
 function createLocalWorkbenchClient(): HubClient {
   const transport: LocalHubTransport = {
-    async invoke(command) {
+    async invoke(command, payload) {
       switch (command) {
         case "hub:get_project_context":
           return localProjectContextFixture;
+        case "hub:list_projects":
+          expect(payload).toEqual({
+            workspaceId: "demo"
+          });
+          return [localProjectContextFixture.project];
         case "hub:list_capability_visibility":
           return localCapabilityResolutionFixture;
         case "hub:get_connection_status":
@@ -148,11 +191,33 @@ function createLocalWorkbenchClient(): HubClient {
 }
 
 function createRemoteWorkbenchClient(
-  currentAuthState: () => "auth_required" | "authenticated" | "token_expired"
+  currentAuthState: () => "auth_required" | "authenticated" | "token_expired",
+  currentProjects: () => readonly (typeof remoteProjectsFixture)[number][]
 ): HubClient {
   const transport: LocalHubTransport = {
-    async invoke(command) {
+    async invoke(command, payload) {
       switch (command) {
+        case "hub:list_projects":
+          return currentProjects();
+        case "hub:get_project_context": {
+          const commandPayload = payload as {
+            workspaceId: string;
+            projectId: string;
+          };
+          const project = currentProjects().find(
+            (item) =>
+              item.workspace_id === commandPayload.workspaceId &&
+              item.id === commandPayload.projectId
+          );
+          if (!project) {
+            throw new Error(
+              `project \`${commandPayload.projectId}\` not found in workspace \`${commandPayload.workspaceId}\``
+            );
+          }
+          return remoteProjectContextFixture(project.id);
+        }
+        case "hub:list_capability_visibility":
+          return localCapabilityResolutionFixture;
         case "hub:get_connection_status":
           return {
             mode: "remote",
@@ -169,6 +234,7 @@ function createRemoteWorkbenchClient(
           return remoteApprovalFixture;
         case "hub:list_notifications":
         case "hub:list_automations":
+        case "hub:list_runs":
           return [];
         default:
           throw new Error(`unexpected remote command: ${command}`);
@@ -184,19 +250,25 @@ function createRemoteWorkbenchClient(
 
 async function mountRemoteShell(
   authState: () => "auth_required" | "authenticated" | "token_expired",
-  authClient: RemoteHubAuthClient
+  authClient: RemoteHubAuthClient,
+  currentProjects: () => readonly (typeof remoteProjectsFixture)[number][] = () =>
+    remoteProjectsFixture
 ) {
   persistDesktopConnectionProfile(remoteProfile);
   configureDesktopConnectionRuntime({
     storage: window.localStorage,
     createLocalClient: () => createLocalWorkbenchClient(),
-    createRemoteClient: () => createRemoteWorkbenchClient(authState),
+    createRemoteClient: () => createRemoteWorkbenchClient(authState, currentProjects),
     createRemoteAuthClient: () => authClient
   });
 
-  const { pinia, router } = createDesktopPlugins(createRemoteWorkbenchClient(authState), true, {
-    defaultRoute: resolveDesktopEntryRoute()
-  });
+  const { pinia, router } = createDesktopPlugins(
+    createRemoteWorkbenchClient(authState, currentProjects),
+    true,
+    {
+      defaultRoute: resolveDesktopEntryRoute()
+    }
+  );
 
   await router.push("/");
   await router.isReady();
@@ -272,9 +344,145 @@ describe("desktop remote connection surface", () => {
     await wrapper.get('[data-testid="remote-login"]').trigger("click");
     await flushPromises();
 
-    expect(router.currentRoute.value.fullPath).toBe("/workspaces/workspace-alpha/inbox");
-    expect(wrapper.text()).toContain("Approval Inbox");
-    expect(wrapper.text()).toContain("Execution approval required");
+    expect(router.currentRoute.value.fullPath).toBe("/workspaces/workspace-alpha/projects");
+    expect(wrapper.text()).toContain("Ops Project");
+    expect(wrapper.text()).toContain("Auth Project");
+  });
+
+  it("selects a project from ProjectsView and persists the remembered project id", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          authState = "authenticated";
+          return {
+            access_token: "remote-token",
+            session: remoteSessionFixture
+          };
+        },
+        async getCurrentSession() {
+          return remoteSessionFixture;
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      }
+    );
+
+    await wrapper.get('[data-testid="remote-password"]').setValue(
+      "octopus-bootstrap-password"
+    );
+    await wrapper.get('[data-testid="remote-login"]').trigger("click");
+    await flushPromises();
+
+    await wrapper.get('[data-testid="project-open-project-auth"]').trigger("click");
+    await flushPromises();
+
+    expect(router.currentRoute.value.fullPath).toBe(
+      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+    );
+    expect(loadDesktopConnectionProfile().projectId).toBe("project-auth");
+    expect(wrapper.text()).toContain("Task Create");
+  });
+
+  it("reuses the remembered project on a later remote login", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          authState = "authenticated";
+          return {
+            access_token: "remote-token",
+            session: remoteSessionFixture
+          };
+        },
+        async getCurrentSession() {
+          return remoteSessionFixture;
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      }
+    );
+
+    await wrapper.get('[data-testid="remote-password"]').setValue(
+      "octopus-bootstrap-password"
+    );
+    await wrapper.get('[data-testid="remote-login"]').trigger("click");
+    await flushPromises();
+    await wrapper.get('[data-testid="project-open-project-auth"]').trigger("click");
+    await flushPromises();
+
+    await router.push("/connections");
+    await flushPromises();
+    await wrapper.get('[data-testid="remote-logout"]').trigger("click");
+    await flushPromises();
+
+    await wrapper.get('[data-testid="remote-password"]').setValue(
+      "octopus-bootstrap-password"
+    );
+    await wrapper.get('[data-testid="remote-login"]').trigger("click");
+    await flushPromises();
+
+    expect(router.currentRoute.value.fullPath).toBe(
+      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+    );
+    expect(wrapper.text()).toContain("Task Create");
+  });
+
+  it("clears a stale remembered project and falls back to ProjectsView", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
+    let availableProjects: readonly (typeof remoteProjectsFixture)[number][] =
+      remoteProjectsFixture;
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          authState = "authenticated";
+          return {
+            access_token: "remote-token",
+            session: remoteSessionFixture
+          };
+        },
+        async getCurrentSession() {
+          return remoteSessionFixture;
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      },
+      () => availableProjects
+    );
+
+    await wrapper.get('[data-testid="remote-password"]').setValue(
+      "octopus-bootstrap-password"
+    );
+    await wrapper.get('[data-testid="remote-login"]').trigger("click");
+    await flushPromises();
+    await wrapper.get('[data-testid="project-open-project-auth"]').trigger("click");
+    await flushPromises();
+
+    await router.push("/connections");
+    await flushPromises();
+    await wrapper.get('[data-testid="remote-logout"]').trigger("click");
+    await flushPromises();
+
+    availableProjects = [remoteProjectsFixture[0]];
+
+    await wrapper.get('[data-testid="remote-password"]').setValue(
+      "octopus-bootstrap-password"
+    );
+    await wrapper.get('[data-testid="remote-login"]').trigger("click");
+    await flushPromises();
+
+    expect(router.currentRoute.value.fullPath).toBe("/workspaces/workspace-alpha/projects");
+    expect(loadDesktopConnectionProfile().projectId).toBeUndefined();
+    expect(wrapper.text()).toContain("Ops Project");
   });
 
   it("logs out from remote mode and returns to the read-only connections surface", async () => {

@@ -18,7 +18,7 @@ pub use models::{
     RunSummaryRecord, TaskRecord, TriggerDeliveryRecord, TriggerDeliveryReport, TriggerRecord,
     TriggerSpec, WebhookTriggerConfig,
 };
-pub use octopus_domain_context::ProjectContext;
+pub use octopus_domain_context::{ProjectContext, ProjectRecord};
 pub use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
     CapabilityDescriptorRecord, CapabilityGrantRecord, CapabilityResolutionRecord,
@@ -240,6 +240,13 @@ impl Slice2Runtime {
         self.task_intake
             .fetch_project_context(workspace_id, project_id)
             .await
+    }
+
+    pub async fn list_projects(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<octopus_domain_context::ProjectRecord>, RuntimeError> {
+        self.task_intake.list_projects(workspace_id).await
     }
 
     pub async fn fetch_task(&self, task_id: &str) -> Result<TaskRecord, RuntimeError> {

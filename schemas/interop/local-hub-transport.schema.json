@@ -16,6 +16,7 @@
     "commands": {
       "type": "object",
       "properties": {
+        "list_projects": { "type": "string", "minLength": 1 },
         "get_project_context": { "type": "string", "minLength": 1 },
         "get_project_knowledge": { "type": "string", "minLength": 1 },
         "list_automations": { "type": "string", "minLength": 1 },
@@ -42,6 +43,7 @@
         "get_connection_status": { "type": "string", "minLength": 1 }
       },
       "required": [
+        "list_projects",
         "get_project_context",
         "get_project_knowledge",
         "list_automations",

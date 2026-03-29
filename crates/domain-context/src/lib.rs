@@ -87,6 +87,11 @@ pub enum ContextStoreError {
 
 #[async_trait]
 pub trait ContextRepository {
+    async fn list_projects(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<ProjectRecord>, ContextStoreError>;
+
     async fn upsert_context(
         &self,
         workspace: WorkspaceRecord,
@@ -134,6 +139,30 @@ impl SqliteContextStore {
 
 #[async_trait]
 impl ContextRepository for SqliteContextStore {
+    async fn list_projects(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Vec<ProjectRecord>, ContextStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, workspace_id, slug, display_name, created_at, updated_at
+            FROM projects
+            WHERE workspace_id = ?1
+            ORDER BY updated_at DESC, id DESC
+            "#,
+        )
+        .bind(workspace_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut projects = Vec::with_capacity(rows.len());
+        for row in rows {
+            projects.push(Self::project_from_row(&row)?);
+        }
+
+        Ok(projects)
+    }
+
     async fn upsert_context(
         &self,
         workspace: WorkspaceRecord,

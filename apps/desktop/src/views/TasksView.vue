@@ -2,11 +2,16 @@
 import { computed, onMounted, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
+import {
+  buildWorkspaceProjectsRoute,
+  useConnectionStore
+} from "../stores/connection";
 import { useHubStore } from "../stores/hub";
 
 const route = useRoute();
 const router = useRouter();
 const hub = useHubStore();
+const connection = useConnectionStore();
 
 type AutomationTriggerType = "manual_event" | "cron" | "webhook" | "mcp_event";
 type CreateTriggerInput = Parameters<typeof hub.createAutomation>[0]["trigger"];
@@ -96,7 +101,27 @@ async function loadTaskSurface(): Promise<void> {
   const workspaceId = String(route.params.workspaceId);
   const projectId = String(route.params.projectId);
 
-  await hub.loadTaskSurface(workspaceId, projectId);
+  try {
+    await hub.loadTaskSurface(workspaceId, projectId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const rememberedProjectId = connection.profile.projectId ?? "";
+    if (
+      connection.remoteMode &&
+      rememberedProjectId === projectId &&
+      message.includes(`project \`${projectId}\` not found`)
+    ) {
+      connection.clearRememberedProject();
+      await router.replace(buildWorkspaceProjectsRoute(workspaceId));
+      return;
+    }
+
+    return;
+  }
+
+  if (connection.remoteMode) {
+    connection.rememberProject(projectId);
+  }
 
   if (!taskDraft.capabilityId && taskCapabilityResolution.value) {
     taskDraft.capabilityId = taskCapabilityResolution.value.descriptor.id;

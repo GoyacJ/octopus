@@ -236,6 +236,53 @@ async fn protected_routes_require_authentication() {
 }
 
 #[tokio::test]
+async fn project_list_route_requires_authentication_and_enforces_workspace_membership() {
+    let harness = TestHarness::seeded().await;
+
+    let (unauthorized_status, unauthorized_body) = harness
+        .response(
+            Request::builder()
+                .uri("/api/workspaces/workspace-alpha/projects")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(unauthorized_status, StatusCode::UNAUTHORIZED);
+    assert_eq!(unauthorized_body["error_code"], "auth_required");
+
+    let (alpha_authorization, _) = harness.login("workspace-alpha").await;
+    let (ok_status, ok_body) = harness
+        .response(
+            Request::builder()
+                .uri("/api/workspaces/workspace-alpha/projects")
+                .header("authorization", alpha_authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(ok_status, StatusCode::OK, "body={ok_body}");
+    let project_ids = ok_body
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["id"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(project_ids, vec!["project-approval", "project-auth"]);
+
+    let (forbidden_status, forbidden_body) = harness
+        .response(
+            Request::builder()
+                .uri("/api/workspaces/workspace-bravo/projects")
+                .header("authorization", alpha_authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(forbidden_status, StatusCode::FORBIDDEN, "body={forbidden_body}");
+    assert_eq!(forbidden_body["error_code"], "workspace_forbidden");
+}
+
+#[tokio::test]
 async fn automation_routes_require_authentication_and_enforce_workspace_membership() {
     let harness = TestHarness::seeded().await;
 
