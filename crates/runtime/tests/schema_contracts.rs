@@ -93,6 +93,9 @@ fn refined_slice1_examples_validate() {
         compiled_schema("runtime/manual-dispatch-command.schema.json");
     let trigger_delivery_retry_command_schema =
         compiled_schema("runtime/trigger-delivery-retry-command.schema.json");
+    let run_retry_command_schema = compiled_schema("runtime/run-retry-command.schema.json");
+    let run_terminate_command_schema =
+        compiled_schema("runtime/run-terminate-command.schema.json");
     let trigger_schema = compiled_schema("runtime/trigger.schema.json");
     let trigger_delivery_schema = compiled_schema("runtime/trigger-delivery.schema.json");
     let environment_lease_status_schema =
@@ -575,6 +578,13 @@ fn refined_slice1_examples_validate() {
     })));
     assert!(trigger_delivery_retry_command_schema.is_valid(&json!({
         "delivery_id": "delivery-1"
+    })));
+    assert!(run_retry_command_schema.is_valid(&json!({
+        "run_id": "run-1"
+    })));
+    assert!(run_terminate_command_schema.is_valid(&json!({
+        "run_id": "run-1",
+        "reason": "desktop_operator_stopped"
     })));
     assert!(capability_binding_schema.is_valid(&json!({
         "id": "binding-1",

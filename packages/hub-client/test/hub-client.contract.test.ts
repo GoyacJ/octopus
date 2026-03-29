@@ -409,6 +409,21 @@ function runHubClientContractSuite(name: string, factory: SuiteFactory) {
         artifacts: [{ id: "artifact-1" }]
       });
       await expect(
+        client.retryRun({
+          run_id: "run-1"
+        })
+      ).resolves.toMatchObject({
+        run: { id: "run-1" }
+      });
+      await expect(
+        client.terminateRun({
+          run_id: "run-1",
+          reason: "desktop_operator_stopped"
+        })
+      ).resolves.toMatchObject({
+        run: { id: "run-1" }
+      });
+      await expect(
         client.listRuns("workspace-alpha", "project-slice1")
       ).resolves.toMatchObject([{ id: "run-1", title: "Automation note" }]);
       await expect(client.getApprovalRequest("approval-1")).resolves.toMatchObject({
@@ -533,6 +548,17 @@ runHubClientContractSuite("local adapter", () => {
             projectId: "project-slice1"
           });
           return [runSummaryFixture];
+        case "hub:retry_run":
+          expect(payload).toEqual({
+            run_id: "run-1"
+          });
+          return runDetailFixture;
+        case "hub:terminate_run":
+          expect(payload).toEqual({
+            run_id: "run-1",
+            reason: "desktop_operator_stopped"
+          });
+          return runDetailFixture;
         case "hub:start_task":
         case "hub:get_run_detail":
         case "hub:resolve_approval":
@@ -677,6 +703,12 @@ runHubClientContractSuite("remote adapter", () => {
           return Response.json(runDetailFixture);
         }
         if (method === "GET" && url === "http://hub.test/api/runs/run-1") {
+          return Response.json(runDetailFixture);
+        }
+        if (method === "POST" && url === "http://hub.test/api/runs/run-1/retry") {
+          return Response.json(runDetailFixture);
+        }
+        if (method === "POST" && url === "http://hub.test/api/runs/run-1/terminate") {
           return Response.json(runDetailFixture);
         }
         if (

@@ -115,10 +115,18 @@ fn assert_valid(schema: &JSONSchema, value: &Value) {
 }
 
 async fn response_json(router: axum::Router, request: Request<Body>) -> Value {
+    let (status, body) = response(router, request).await;
+    assert_eq!(status, StatusCode::OK, "body={body}");
+    body
+}
+
+async fn response(router: axum::Router, request: Request<Body>) -> (StatusCode, Value) {
     let response = router.oneshot(request).await.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    let status = response.status();
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    serde_json::from_slice(&body).unwrap()
+    let raw_body = String::from_utf8_lossy(&body).to_string();
+    let json = serde_json::from_slice(&body).unwrap_or_else(|_| json!({ "raw": raw_body }));
+    (status, json)
 }
 
 async fn login_access_token(router: axum::Router, workspace_id: &str) -> String {
@@ -1013,6 +1021,211 @@ async fn automation_manager_surface_round_trip_matches_minimum_contracts() {
     assert_eq!(retried["recent_deliveries"][0]["id"], failed_delivery_id);
     assert_eq!(retried["recent_deliveries"][0]["status"], "succeeded");
     assert_eq!(retried["last_run_summary"]["status"], "completed");
+}
+
+#[tokio::test]
+async fn run_control_surface_round_trip_and_error_contracts() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let db_path = sample_db_path(tempdir.path(), "run-control-surface.sqlite");
+    let runtime = Slice1Runtime::open_at(&db_path).await.unwrap();
+    runtime
+        .ensure_project_context(
+            "workspace-alpha",
+            "workspace-alpha",
+            "Workspace Alpha",
+            "project-run-control",
+            "project-run-control",
+            "Run Control Project",
+        )
+        .await
+        .unwrap();
+    seed_governance(
+        &runtime,
+        "project-run-control",
+        "capability-run-control",
+        false,
+    )
+    .await;
+
+    let auth = RemoteAccessService::open_at(&db_path).await.unwrap();
+    let router = app(AppState::new(runtime.clone(), auth));
+    let access_token = login_access_token(router.clone(), "workspace-alpha").await;
+    let authorization = format!("Bearer {access_token}");
+    let run_detail_schema = compile_schema("runtime/run-detail.schema.json");
+
+    let retry_task = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/tasks")
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "workspace_id": "workspace-alpha",
+                    "project_id": "project-run-control",
+                    "title": "Retry once",
+                    "instruction": "Fail once then recover",
+                    "action": {
+                        "kind": "fail_once_then_emit_text",
+                        "failure_message": "network_glitch",
+                        "content": "Recovered artifact"
+                    },
+                    "capability_id": "capability-run-control",
+                    "estimated_cost": 1,
+                    "idempotency_key": "task-run-retry-1"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+
+    let failed_retryable = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!(
+                "/api/tasks/{}/start",
+                retry_task["id"].as_str().unwrap()
+            ))
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&run_detail_schema, &failed_retryable);
+    assert_eq!(failed_retryable["run"]["status"], "failed");
+
+    let retry_run_id = failed_retryable["run"]["id"].as_str().unwrap().to_string();
+    let retried = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/runs/{retry_run_id}/retry"))
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "run_id": retry_run_id
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&run_detail_schema, &retried);
+    assert_eq!(retried["run"]["status"], "completed");
+    assert_eq!(retried["run"]["attempt_count"], 2);
+    assert_eq!(retried["artifacts"].as_array().unwrap().len(), 1);
+
+    let (completed_terminate_status, completed_terminate_body) = response(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/runs/{retry_run_id}/terminate"))
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "run_id": retry_run_id,
+                    "reason": "desktop_operator_stopped"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(completed_terminate_status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        completed_terminate_body["error"],
+        format!(
+            "invalid run transition for `{retry_run_id}`: `completed` -> `terminated`"
+        )
+    );
+
+    let (mismatch_status, mismatch_body) = response(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/runs/{retry_run_id}/retry"))
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "run_id": "run-mismatch"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(mismatch_status, StatusCode::BAD_REQUEST);
+    assert_eq!(mismatch_body["error"], "run_id path/body mismatch");
+
+    let terminate_task = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri("/api/tasks")
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "workspace_id": "workspace-alpha",
+                    "project_id": "project-run-control",
+                    "title": "Terminate failed run",
+                    "instruction": "Always fail and terminate",
+                    "action": {
+                        "kind": "always_fail",
+                        "message": "irrecoverable"
+                    },
+                    "capability_id": "capability-run-control",
+                    "estimated_cost": 1,
+                    "idempotency_key": "task-run-terminate-1"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+
+    let failed_terminated = response_json(
+        router.clone(),
+        Request::builder()
+            .method("POST")
+            .uri(format!(
+                "/api/tasks/{}/start",
+                terminate_task["id"].as_str().unwrap()
+            ))
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(failed_terminated["run"]["status"], "failed");
+
+    let terminate_run_id = failed_terminated["run"]["id"].as_str().unwrap().to_string();
+    let terminated = response_json(
+        router,
+        Request::builder()
+            .method("POST")
+            .uri(format!("/api/runs/{terminate_run_id}/terminate"))
+            .header("content-type", "application/json")
+            .header("authorization", authorization.as_str())
+            .body(Body::from(
+                json!({
+                    "run_id": terminate_run_id,
+                    "reason": "desktop_operator_stopped"
+                })
+                .to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_valid(&run_detail_schema, &terminated);
+    assert_eq!(terminated["run"]["status"], "terminated");
+    assert!(terminated["run"]["terminated_at"].as_str().is_some());
 }
 
 #[tokio::test]

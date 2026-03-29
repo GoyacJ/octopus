@@ -32,7 +32,7 @@ const remoteSessionFixture = {
   workspace_id: "workspace-alpha",
   actor_ref: "workspace_admin:bootstrap_admin",
   issued_at: "2026-03-29T10:00:00Z",
-  expires_at: "2026-03-29T12:00:00Z"
+  expires_at: "2099-03-29T12:00:00Z"
 } as const;
 
 const localProjectContextFixture = {

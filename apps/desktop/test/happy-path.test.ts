@@ -141,6 +141,104 @@ const knowledgeDetailFixture = {
   lineage: []
 };
 
+const projectKnowledgeIndexFixture = {
+  knowledge_space: knowledgeDetailFixture.knowledge_space,
+  entries: [
+    {
+      kind: "candidate",
+      id: "candidate-1",
+      knowledge_space_id: "knowledge-space-1",
+      capability_id: "capability-write-note",
+      status: "candidate",
+      source_run_id: "run-1",
+      source_artifact_id: "artifact-1",
+      source_candidate_id: null,
+      provenance_source: "builtin",
+      trust_level: "trusted",
+      created_at: "2026-03-26T10:00:01Z"
+    }
+  ]
+};
+
+const emptyProjectKnowledgeIndexFixture = {
+  knowledge_space: knowledgeDetailFixture.knowledge_space,
+  entries: []
+};
+
+const retryableRunDetailFixture = {
+  ...runDetailFixture,
+  run: {
+    ...runDetailFixture.run,
+    status: "failed",
+    attempt_count: 1,
+    resume_token: "resume-1",
+    last_error: "network_glitch",
+    updated_at: "2026-03-26T10:00:02Z",
+    completed_at: null,
+    terminated_at: "2026-03-26T10:00:02Z"
+  },
+  artifacts: [],
+  knowledge_candidates: [],
+  knowledge_assets: [],
+  knowledge_lineage: []
+};
+
+const retryableKnowledgeDetailFixture = {
+  ...knowledgeDetailFixture,
+  candidates: [],
+  assets: [],
+  lineage: []
+};
+
+const recoveredRunDetailFixture = {
+  ...runDetailFixture,
+  run: {
+    ...runDetailFixture.run,
+    attempt_count: 2,
+    resume_token: null,
+    last_error: null,
+    updated_at: "2026-03-26T10:00:03Z",
+    completed_at: "2026-03-26T10:00:03Z",
+    terminated_at: null
+  }
+};
+
+const runningRunDetailFixture = {
+  ...runDetailFixture,
+  run: {
+    ...runDetailFixture.run,
+    status: "running",
+    checkpoint_seq: 1,
+    resume_token: null,
+    last_error: null,
+    updated_at: "2026-03-26T10:00:00Z",
+    completed_at: null,
+    terminated_at: null
+  },
+  artifacts: [],
+  knowledge_candidates: [],
+  knowledge_assets: [],
+  knowledge_lineage: []
+};
+
+const terminatedRunDetailFixture = {
+  ...runDetailFixture,
+  run: {
+    ...runDetailFixture.run,
+    status: "terminated",
+    checkpoint_seq: 1,
+    resume_token: null,
+    last_error: "desktop_operator_stopped",
+    updated_at: "2026-03-26T10:00:04Z",
+    completed_at: null,
+    terminated_at: "2026-03-26T10:00:04Z"
+  },
+  artifacts: [],
+  knowledge_candidates: [],
+  knowledge_assets: [],
+  knowledge_lineage: []
+};
+
 const approvalFixture = {
   id: "approval-1",
   workspace_id: "workspace-alpha",
@@ -209,6 +307,30 @@ const runSummaryFixture = {
   completed_at: "2026-03-26T10:00:01Z",
   terminated_at: null
 } as const;
+
+const retryableRunSummaryFixture = {
+  ...runSummaryFixture,
+  status: "failed",
+  last_error: "network_glitch",
+  completed_at: null,
+  terminated_at: "2026-03-26T10:00:02Z"
+};
+
+const recoveredRunSummaryFixture = {
+  ...runSummaryFixture,
+  attempt_count: 2,
+  updated_at: "2026-03-26T10:00:03Z",
+  completed_at: "2026-03-26T10:00:03Z"
+};
+
+const terminatedRunSummaryFixture = {
+  ...runSummaryFixture,
+  status: "terminated",
+  last_error: "desktop_operator_stopped",
+  updated_at: "2026-03-26T10:00:04Z",
+  completed_at: null,
+  terminated_at: "2026-03-26T10:00:04Z"
+};
 
 const promotionApprovalFixture = {
   id: "approval-promotion-1",
@@ -406,6 +528,47 @@ const automationListFixture = [
   manualAutomationDetailFixture,
   failingAutomationSummaryFixture
 ];
+
+function createRunViewTransport(
+  overrides: Partial<Record<string, () => unknown>> = {}
+): LocalHubTransport {
+  return {
+    async invoke(command) {
+      const override = overrides[command];
+      if (override) {
+        return override();
+      }
+
+      switch (command) {
+        case "hub:get_project_context":
+          return projectContextFixture;
+        case "hub:list_capability_visibility":
+          return capabilityResolutionFixture;
+        case "hub:get_connection_status":
+          return hubConnectionStatusFixture;
+        case "hub:list_runs":
+          return [runSummaryFixture];
+        case "hub:list_automations":
+        case "hub:list_inbox_items":
+        case "hub:list_notifications":
+          return [];
+        case "hub:get_run_detail":
+          return runDetailFixture;
+        case "hub:list_artifacts":
+          return runDetailFixture.artifacts;
+        case "hub:get_knowledge_detail":
+          return knowledgeDetailFixture;
+        case "hub:get_project_knowledge":
+          return projectKnowledgeIndexFixture;
+        default:
+          throw new Error(`unexpected command: ${command}`);
+      }
+    },
+    async listen() {
+      return () => undefined;
+    }
+  };
+}
 
 describe("desktop local happy path", () => {
   it("creates a task and shows run, artifact, and knowledge state", async () => {
@@ -782,6 +945,257 @@ describe("desktop local happy path", () => {
 
     expect(wrapper.text()).toContain("verified_shared");
     expect(wrapper.text()).toContain("asset-1");
+  });
+
+  it("retries a failed run from the run view and refreshes dependent surfaces", async () => {
+    let runPhase: "failed" | "completed" = "failed";
+    let retryCalls = 0;
+    let getRunDetailCalls = 0;
+    let listRunsCalls = 0;
+    let projectKnowledgeCalls = 0;
+    let inboxCalls = 0;
+    let notificationCalls = 0;
+
+    const transport = createRunViewTransport({
+      "hub:get_run_detail": () => {
+        getRunDetailCalls += 1;
+        return runPhase === "failed"
+          ? retryableRunDetailFixture
+          : recoveredRunDetailFixture;
+      },
+      "hub:list_artifacts": () =>
+        runPhase === "failed" ? [] : recoveredRunDetailFixture.artifacts,
+      "hub:get_knowledge_detail": () =>
+        runPhase === "failed"
+          ? retryableKnowledgeDetailFixture
+          : knowledgeDetailFixture,
+      "hub:list_runs": () => {
+        listRunsCalls += 1;
+        return [
+          runPhase === "failed"
+            ? retryableRunSummaryFixture
+            : recoveredRunSummaryFixture
+        ];
+      },
+      "hub:get_project_knowledge": () => {
+        projectKnowledgeCalls += 1;
+        return runPhase === "failed"
+          ? emptyProjectKnowledgeIndexFixture
+          : projectKnowledgeIndexFixture;
+      },
+      "hub:list_inbox_items": () => {
+        inboxCalls += 1;
+        return [];
+      },
+      "hub:list_notifications": () => {
+        notificationCalls += 1;
+        return [];
+      },
+      "hub:retry_run": () => {
+        retryCalls += 1;
+        runPhase = "completed";
+        return recoveredRunDetailFixture;
+      }
+    });
+
+    const client = createLocalHubClient(transport);
+    const { pinia, router } = createDesktopPlugins(client, true);
+    await router.push("/runs/run-1");
+    await router.isReady();
+
+    const wrapper = mount(AppShell, {
+      global: {
+        plugins: [pinia, router]
+      }
+    });
+
+    await flushPromises();
+    expect(wrapper.text()).toContain("failed");
+    expect(wrapper.get('[data-testid="retry-run"]').attributes("disabled")).toBeUndefined();
+
+    await wrapper.get('[data-testid="retry-run"]').trigger("click");
+    await flushPromises();
+
+    expect(retryCalls).toBe(1);
+    expect(getRunDetailCalls).toBe(2);
+    expect(listRunsCalls).toBe(1);
+    expect(projectKnowledgeCalls).toBe(1);
+    expect(inboxCalls).toBe(1);
+    expect(notificationCalls).toBe(1);
+    expect(wrapper.text()).toContain("completed");
+    expect(wrapper.text()).toContain("Attempts: 2/2");
+    expect(wrapper.find('[data-testid="retry-run"]').exists()).toBe(false);
+  });
+
+  it("terminates a running run from the run view and refreshes dependent surfaces", async () => {
+    let runPhase: "running" | "terminated" = "running";
+    let terminateCalls = 0;
+    let listRunsCalls = 0;
+    let projectKnowledgeCalls = 0;
+    let inboxCalls = 0;
+    let notificationCalls = 0;
+
+    const transport = createRunViewTransport({
+      "hub:get_run_detail": () =>
+        runPhase === "running" ? runningRunDetailFixture : terminatedRunDetailFixture,
+      "hub:list_artifacts": () => [],
+      "hub:get_knowledge_detail": () => retryableKnowledgeDetailFixture,
+      "hub:list_runs": () => {
+        listRunsCalls += 1;
+        return [
+          runPhase === "running" ? runSummaryFixture : terminatedRunSummaryFixture
+        ];
+      },
+      "hub:get_project_knowledge": () => {
+        projectKnowledgeCalls += 1;
+        return emptyProjectKnowledgeIndexFixture;
+      },
+      "hub:list_inbox_items": () => {
+        inboxCalls += 1;
+        return [];
+      },
+      "hub:list_notifications": () => {
+        notificationCalls += 1;
+        return [];
+      },
+      "hub:terminate_run": () => {
+        terminateCalls += 1;
+        runPhase = "terminated";
+        return terminatedRunDetailFixture;
+      }
+    });
+
+    const client = createLocalHubClient(transport);
+    const { pinia, router } = createDesktopPlugins(client, true);
+    await router.push("/runs/run-1");
+    await router.isReady();
+
+    const wrapper = mount(AppShell, {
+      global: {
+        plugins: [pinia, router]
+      }
+    });
+
+    await flushPromises();
+    expect(wrapper.text()).toContain("running");
+    expect(wrapper.get('[data-testid="terminate-run"]').attributes("disabled")).toBeUndefined();
+
+    await wrapper.get('[data-testid="terminate-run"]').trigger("click");
+    await flushPromises();
+
+    expect(terminateCalls).toBe(1);
+    expect(listRunsCalls).toBe(1);
+    expect(projectKnowledgeCalls).toBe(1);
+    expect(inboxCalls).toBe(1);
+    expect(notificationCalls).toBe(1);
+    expect(wrapper.text()).toContain("terminated");
+    expect(wrapper.find('[data-testid="terminate-run"]').exists()).toBe(false);
+  });
+
+  it("disables run control actions when the connection is read-only", async () => {
+    const retryTransport = createRunViewTransport({
+      "hub:get_run_detail": () => retryableRunDetailFixture,
+      "hub:list_artifacts": () => [],
+      "hub:get_knowledge_detail": () => retryableKnowledgeDetailFixture,
+      "hub:get_connection_status": () => ({
+        ...hubConnectionStatusFixture,
+        mode: "remote",
+        auth_state: "token_expired"
+      })
+    });
+
+    const retryClient = createLocalHubClient(retryTransport);
+    const retryPlugins = createDesktopPlugins(retryClient, true);
+    await retryPlugins.router.push("/runs/run-1");
+    await retryPlugins.router.isReady();
+
+    const retryWrapper = mount(AppShell, {
+      global: {
+        plugins: [retryPlugins.pinia, retryPlugins.router]
+      }
+    });
+
+    await flushPromises();
+    expect(retryWrapper.get('[data-testid="retry-run"]').attributes("disabled")).toBeDefined();
+
+    const terminateTransport = createRunViewTransport({
+      "hub:get_run_detail": () => runningRunDetailFixture,
+      "hub:list_artifacts": () => [],
+      "hub:get_knowledge_detail": () => retryableKnowledgeDetailFixture,
+      "hub:get_connection_status": () => ({
+        ...hubConnectionStatusFixture,
+        mode: "remote",
+        auth_state: "auth_required"
+      })
+    });
+
+    const terminateClient = createLocalHubClient(terminateTransport);
+    const terminatePlugins = createDesktopPlugins(terminateClient, true);
+    await terminatePlugins.router.push("/runs/run-1");
+    await terminatePlugins.router.isReady();
+
+    const terminateWrapper = mount(AppShell, {
+      global: {
+        plugins: [terminatePlugins.pinia, terminatePlugins.router]
+      }
+    });
+
+    await flushPromises();
+    expect(
+      terminateWrapper.get('[data-testid="terminate-run"]').attributes("disabled")
+    ).toBeDefined();
+  });
+
+  it("shows a run control error banner without faking refreshed state", async () => {
+    const retryError = new Error("retry rejected by runtime");
+    let retryCalls = 0;
+    let getRunDetailCalls = 0;
+    let listRunsCalls = 0;
+    let projectKnowledgeCalls = 0;
+
+    const transport = createRunViewTransport({
+      "hub:get_run_detail": () => {
+        getRunDetailCalls += 1;
+        return retryableRunDetailFixture;
+      },
+      "hub:list_artifacts": () => [],
+      "hub:get_knowledge_detail": () => retryableKnowledgeDetailFixture,
+      "hub:list_runs": () => {
+        listRunsCalls += 1;
+        return [retryableRunSummaryFixture];
+      },
+      "hub:get_project_knowledge": () => {
+        projectKnowledgeCalls += 1;
+        return emptyProjectKnowledgeIndexFixture;
+      },
+      "hub:retry_run": () => {
+        retryCalls += 1;
+        throw retryError;
+      }
+    });
+
+    const client = createLocalHubClient(transport);
+    const { pinia, router } = createDesktopPlugins(client, true);
+    await router.push("/runs/run-1");
+    await router.isReady();
+
+    const wrapper = mount(AppShell, {
+      global: {
+        plugins: [pinia, router]
+      }
+    });
+
+    await flushPromises();
+    await wrapper.get('[data-testid="retry-run"]').trigger("click");
+    await flushPromises();
+
+    expect(retryCalls).toBe(1);
+    expect(getRunDetailCalls).toBe(1);
+    expect(listRunsCalls).toBe(0);
+    expect(projectKnowledgeCalls).toBe(0);
+    expect(wrapper.text()).toContain(retryError.message);
+    expect(wrapper.text()).toContain("failed");
+    expect(wrapper.find('[data-testid="retry-run"]').exists()).toBe(true);
   });
 
   it("creates an automation, opens detail, and shows manual dispatch state", async () => {

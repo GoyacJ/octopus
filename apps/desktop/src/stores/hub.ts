@@ -27,8 +27,10 @@ type KnowledgeDetail = Awaited<ReturnType<HubClient["getKnowledgeDetail"]>>;
 type ProjectKnowledgeIndex = Awaited<ReturnType<HubClient["getProjectKnowledge"]>>;
 type TaskCreateCommand = Parameters<HubClient["createTask"]>[0];
 type ApprovalDecision = Parameters<HubClient["resolveApproval"]>[0]["decision"];
+type RunActionKind = "retry" | "terminate";
 
 const DESKTOP_ACTOR_REF = "workspace_admin:desktop_operator";
+const DESKTOP_TERMINATE_REASON = "desktop_operator_stopped";
 
 let hubClient: HubClient | null = null;
 
@@ -91,6 +93,8 @@ export const useHubStore = defineStore("hub", () => {
   const projectKnowledgeLoading = ref(false);
   const governanceActionLoading = ref(false);
   const governanceActionTarget = ref<string | null>(null);
+  const runActionLoading = ref(false);
+  const runActionKind = ref<RunActionKind | null>(null);
   const surfaceError = ref<string | null>(null);
 
   const workspaceName = computed(
@@ -582,6 +586,67 @@ export const useHubStore = defineStore("hub", () => {
     }
   }
 
+  async function refreshRunMutation(nextRunDetail: RunDetail): Promise<void> {
+    const workspaceId = nextRunDetail.run.workspace_id;
+    const projectId = nextRunDetail.run.project_id;
+    const runId = nextRunDetail.run.id;
+
+    setProjectScope(workspaceId, projectId);
+    currentRunId.value = runId;
+    rememberApprovals(nextRunDetail.approvals);
+
+    await Promise.all([
+      loadRun(runId),
+      loadRuns(workspaceId, projectId),
+      loadProjectKnowledge(workspaceId, projectId),
+      loadInboxItems(workspaceId),
+      loadNotifications(workspaceId)
+    ]);
+  }
+
+  async function mutateRun(
+    kind: RunActionKind,
+    load: () => Promise<RunDetail>
+  ): Promise<RunDetail> {
+    runActionLoading.value = true;
+    runActionKind.value = kind;
+    surfaceError.value = null;
+
+    try {
+      const nextRunDetail = await load();
+      await refreshRunMutation(nextRunDetail);
+      return nextRunDetail;
+    } catch (error) {
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    } finally {
+      runActionLoading.value = false;
+      runActionKind.value = null;
+    }
+  }
+
+  async function retryRun(runId: string): Promise<RunDetail> {
+    const client = requireHubClient();
+    return mutateRun("retry", () =>
+      client.retryRun({
+        run_id: runId
+      })
+    );
+  }
+
+  async function terminateRun(
+    runId: string,
+    reason = DESKTOP_TERMINATE_REASON
+  ): Promise<RunDetail> {
+    const client = requireHubClient();
+    return mutateRun("terminate", () =>
+      client.terminateRun({
+        run_id: runId,
+        reason
+      })
+    );
+  }
+
   async function resolveGovernanceApproval(
     approvalId: string,
     decision: ApprovalDecision,
@@ -705,6 +770,8 @@ export const useHubStore = defineStore("hub", () => {
     projectKnowledgeLoading,
     governanceActionLoading,
     governanceActionTarget,
+    runActionLoading,
+    runActionKind,
     surfaceError,
     workspaceName,
     projectName,
@@ -732,6 +799,8 @@ export const useHubStore = defineStore("hub", () => {
     retryAutomationDelivery,
     createAndStartTask,
     loadRun,
+    retryRun,
+    terminateRun,
     resolveGovernanceApproval,
     requestKnowledgePromotion
   };

@@ -90,6 +90,8 @@ pub fn app(state: AppState) -> Router {
             get(list_runs),
         )
         .route("/api/runs/{run_id}", get(get_run_detail))
+        .route("/api/runs/{run_id}/retry", post(retry_run))
+        .route("/api/runs/{run_id}/terminate", post(terminate_run))
         .route("/api/runs/{run_id}/artifacts", get(list_artifacts))
         .route("/api/runs/{run_id}/knowledge", get(get_knowledge_detail))
         .route("/api/approvals/{approval_id}", get(get_approval_request))
@@ -381,6 +383,17 @@ struct SurfaceKnowledgePromoteCommand {
 #[derive(Debug, Deserialize)]
 struct SurfaceTriggerDeliveryRetryCommand {
     delivery_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceRunRetryCommand {
+    run_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceRunTerminateCommand {
+    run_id: String,
+    reason: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -821,6 +834,42 @@ async fn get_run_detail(
         .auth
         .ensure_workspace_access(&session, &report.run.workspace_id)
         .await?;
+    Ok(Json(
+        build_run_detail_response(&state.runtime, report).await?,
+    ))
+}
+
+async fn retry_run(
+    State(state): State<AppState>,
+    Path(run_id): Path<String>,
+    headers: HeaderMap,
+    Json(command): Json<SurfaceRunRetryCommand>,
+) -> AppResult<RunDetailResponse> {
+    let session = require_session(&state, &headers).await?;
+    if run_id != command.run_id {
+        return Err(AppError::BadRequest("run_id path/body mismatch".to_string()));
+    }
+
+    load_authorized_run(&state, &session, &run_id).await?;
+    let report = state.runtime.retry_run(&run_id).await?;
+    Ok(Json(
+        build_run_detail_response(&state.runtime, report).await?,
+    ))
+}
+
+async fn terminate_run(
+    State(state): State<AppState>,
+    Path(run_id): Path<String>,
+    headers: HeaderMap,
+    Json(command): Json<SurfaceRunTerminateCommand>,
+) -> AppResult<RunDetailResponse> {
+    let session = require_session(&state, &headers).await?;
+    if run_id != command.run_id {
+        return Err(AppError::BadRequest("run_id path/body mismatch".to_string()));
+    }
+
+    load_authorized_run(&state, &session, &run_id).await?;
+    let report = state.runtime.terminate_run(&run_id, &command.reason).await?;
     Ok(Json(
         build_run_detail_response(&state.runtime, report).await?,
     ))
@@ -1288,6 +1337,23 @@ async fn load_authorized_approval(
         .ensure_workspace_access(session, &approval.workspace_id)
         .await?;
     Ok(approval)
+}
+
+async fn load_authorized_run(
+    state: &AppState,
+    session: &HubSession,
+    run_id: &str,
+) -> Result<RunRecord, AppError> {
+    let run = state
+        .runtime
+        .fetch_run(run_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("run `{run_id}` not found")))?;
+    state
+        .auth
+        .ensure_workspace_access(session, &run.workspace_id)
+        .await?;
+    Ok(run)
 }
 
 async fn load_authorized_candidate(

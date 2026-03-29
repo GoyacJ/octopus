@@ -260,6 +260,15 @@ export interface TriggerDeliveryRetryCommand {
   delivery_id: string;
 }
 
+export interface RunRetryCommand {
+  run_id: string;
+}
+
+export interface RunTerminateCommand {
+  run_id: string;
+  reason: string;
+}
+
 export interface TaskCreateCommand {
   workspace_id: string;
   project_id: string;
@@ -650,6 +659,8 @@ export interface LocalHubTransportCommands {
   start_task: string;
   list_runs: string;
   get_run_detail: string;
+  retry_run: string;
+  terminate_run: string;
   get_approval_request: string;
   resolve_approval: string;
   list_inbox_items: string;

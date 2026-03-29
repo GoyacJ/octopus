@@ -53,9 +53,11 @@ import environmentLeaseStatusSchema from "../../../schemas/runtime/environment-l
 import environmentLeaseSchema from "../../../schemas/runtime/environment-lease.schema.json";
 import manualDispatchCommandSchema from "../../../schemas/runtime/manual-dispatch-command.schema.json";
 import runDetailSchema from "../../../schemas/runtime/run-detail.schema.json";
+import runRetryCommandSchema from "../../../schemas/runtime/run-retry-command.schema.json";
 import runSchema from "../../../schemas/runtime/run.schema.json";
 import runStatusSchema from "../../../schemas/runtime/run-status.schema.json";
 import runSummarySchema from "../../../schemas/runtime/run-summary.schema.json";
+import runTerminateCommandSchema from "../../../schemas/runtime/run-terminate-command.schema.json";
 import taskCreateCommandSchema from "../../../schemas/runtime/task-create-command.schema.json";
 import taskSchema from "../../../schemas/runtime/task.schema.json";
 import triggerDeliveryRetryCommandSchema from "../../../schemas/runtime/trigger-delivery-retry-command.schema.json";
@@ -94,7 +96,9 @@ import type {
   Notification,
   ProjectContext,
   RunDetail,
+  RunRetryCommand,
   RunSummary,
+  RunTerminateCommand,
   Task,
   TaskCreateCommand,
   TriggerDeliveryRetryCommand
@@ -123,9 +127,11 @@ const schemaRegistry = {
   [automationLifecycleCommandSchema.$id]: automationLifecycleCommandSchema,
   [manualDispatchCommandSchema.$id]: manualDispatchCommandSchema,
   [triggerDeliveryRetryCommandSchema.$id]: triggerDeliveryRetryCommandSchema,
+  [runRetryCommandSchema.$id]: runRetryCommandSchema,
   [triggerSchema.$id]: triggerSchema,
   [triggerDeliveryStatusSchema.$id]: triggerDeliveryStatusSchema,
   [triggerDeliverySchema.$id]: triggerDeliverySchema,
+  [runTerminateCommandSchema.$id]: runTerminateCommandSchema,
   [environmentLeaseStatusSchema.$id]: environmentLeaseStatusSchema,
   [environmentLeaseSchema.$id]: environmentLeaseSchema,
   [approvalRequestStatusSchema.$id]: approvalRequestStatusSchema,
@@ -309,6 +315,10 @@ export function parseTriggerDeliveryRetryCommand(
   );
 }
 
+export function parseRunRetryCommand(value: unknown): RunRetryCommand {
+  return parseWithSchema<RunRetryCommand>(runRetryCommandSchema.$id, value);
+}
+
 export function parseTask(value: unknown): Task {
   return parseWithSchema<Task>(taskSchema.$id, value);
 }
@@ -323,6 +333,13 @@ export function parseRunSummaries(value: unknown): RunSummary[] {
 
 export function parseRunDetail(value: unknown): RunDetail {
   return parseWithSchema<RunDetail>(runDetailSchema.$id, value);
+}
+
+export function parseRunTerminateCommand(value: unknown): RunTerminateCommand {
+  return parseWithSchema<RunTerminateCommand>(
+    runTerminateCommandSchema.$id,
+    value
+  );
 }
 
 export function parseApprovalRequest(value: unknown): ApprovalRequest {

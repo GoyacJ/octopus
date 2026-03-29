@@ -10,8 +10,29 @@ const hub = useHubStore();
 const runDetail = computed(() => hub.runDetail);
 const artifacts = computed(() => hub.artifacts);
 const knowledgeDetail = computed(() => hub.knowledgeDetail);
+const currentRun = computed(() => runDetail.value?.run ?? null);
 const runApprovals = computed(() => runDetail.value?.approvals ?? []);
 const policyDecisions = computed(() => runDetail.value?.policy_decisions ?? []);
+const canRetryRun = computed(() => {
+  const run = currentRun.value;
+  return Boolean(
+    run &&
+      run.status === "failed" &&
+      run.resume_token &&
+      run.attempt_count < run.max_attempts
+  );
+});
+const canTerminateRun = computed(() => {
+  const status = currentRun.value?.status;
+  return (
+    status === "created" ||
+    status === "running" ||
+    status === "failed" ||
+    status === "resuming" ||
+    status === "blocked" ||
+    status === "waiting_approval"
+  );
+});
 
 function approvalForCandidate(candidateId: string) {
   return runApprovals.value.find(
@@ -35,8 +56,48 @@ function governanceActionLabel(
   return idleLabel;
 }
 
+function runActionLabel(
+  kind: "retry" | "terminate",
+  idleLabel: string,
+  loadingLabel: string
+): string {
+  if (hub.runActionLoading && hub.runActionKind === kind) {
+    return loadingLabel;
+  }
+
+  if (hub.readOnlyMode) {
+    return "Read-only";
+  }
+
+  return idleLabel;
+}
+
 async function loadRunSurface(): Promise<void> {
   await hub.loadRun(String(route.params.runId));
+}
+
+async function handleRetryRun(): Promise<void> {
+  if (!currentRun.value) {
+    return;
+  }
+
+  try {
+    await hub.retryRun(currentRun.value.id);
+  } catch {
+    // The store already exposes the error banner for the shell.
+  }
+}
+
+async function handleTerminateRun(): Promise<void> {
+  if (!currentRun.value) {
+    return;
+  }
+
+  try {
+    await hub.terminateRun(currentRun.value.id);
+  } catch {
+    // The store already exposes the error banner for the shell.
+  }
 }
 
 async function handleResolveApproval(
@@ -81,6 +142,25 @@ onMounted(() => {
         <span>Attempts: {{ runDetail?.run.attempt_count ?? 0 }}/{{ runDetail?.run.max_attempts ?? 0 }}</span>
       </div>
       <p class="muted">{{ runDetail?.task.instruction ?? "Loading task instruction..." }}</p>
+      <div v-if="canRetryRun || canTerminateRun" class="action-row">
+        <button
+          v-if="canRetryRun"
+          data-testid="retry-run"
+          :disabled="hub.readOnlyMode || hub.runLoading || hub.runActionLoading"
+          @click="handleRetryRun"
+        >
+          {{ runActionLabel("retry", "Retry Run", "Retrying...") }}
+        </button>
+        <button
+          v-if="canTerminateRun"
+          data-testid="terminate-run"
+          class="secondary-button"
+          :disabled="hub.readOnlyMode || hub.runLoading || hub.runActionLoading"
+          @click="handleTerminateRun"
+        >
+          {{ runActionLabel("terminate", "Terminate Run", "Terminating...") }}
+        </button>
+      </div>
     </article>
 
     <article class="surface-card">

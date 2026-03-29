@@ -497,6 +497,117 @@ async fn governance_routes_require_authentication_and_enforce_workspace_membersh
 }
 
 #[tokio::test]
+async fn run_control_routes_require_authentication_and_enforce_workspace_membership() {
+    let harness = TestHarness::seeded().await;
+
+    let (alpha_authorization, _) = harness.login("workspace-alpha").await;
+    let (create_status, created_task) = harness
+        .response(
+            Request::builder()
+                .method("POST")
+                .uri("/api/tasks")
+                .header("content-type", "application/json")
+                .header("authorization", alpha_authorization.as_str())
+                .body(Body::from(
+                    json!({
+                        "workspace_id": "workspace-alpha",
+                        "project_id": "project-auth",
+                        "title": "Retryable task",
+                        "instruction": "Fail once then recover",
+                        "action": {
+                            "kind": "fail_once_then_emit_text",
+                            "failure_message": "network_glitch",
+                            "content": "Recovered artifact"
+                        },
+                        "capability_id": "capability-write-note",
+                        "estimated_cost": 1,
+                        "idempotency_key": "task-run-control-auth"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(create_status, StatusCode::OK, "body={created_task}");
+
+    let task_id = created_task["id"].as_str().unwrap();
+    let (start_status, run_detail) = harness
+        .response(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/tasks/{task_id}/start"))
+                .header("authorization", alpha_authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(start_status, StatusCode::OK, "body={run_detail}");
+    assert_eq!(run_detail["run"]["status"], "failed");
+
+    let run_id = run_detail["run"]["id"].as_str().unwrap();
+
+    let (unauthorized_retry_status, unauthorized_retry_body) = harness
+        .response(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/runs/{run_id}/retry"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "run_id": run_id
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(unauthorized_retry_status, StatusCode::UNAUTHORIZED);
+    assert_eq!(unauthorized_retry_body["error_code"], "auth_required");
+
+    let (bravo_authorization, _) = harness.login("workspace-bravo").await;
+    let (retry_status, retry_body) = harness
+        .response(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/runs/{run_id}/retry"))
+                .header("content-type", "application/json")
+                .header("authorization", bravo_authorization.as_str())
+                .body(Body::from(
+                    json!({
+                        "run_id": run_id
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(retry_status, StatusCode::FORBIDDEN, "body={retry_body}");
+    assert_eq!(retry_body["error_code"], "workspace_forbidden");
+    assert_eq!(retry_body["auth_state"], "authenticated");
+
+    let (terminate_status, terminate_body) = harness
+        .response(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/runs/{run_id}/terminate"))
+                .header("content-type", "application/json")
+                .header("authorization", bravo_authorization.as_str())
+                .body(Body::from(
+                    json!({
+                        "run_id": run_id,
+                        "reason": "desktop_operator_stopped"
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(terminate_status, StatusCode::FORBIDDEN, "body={terminate_body}");
+    assert_eq!(terminate_body["error_code"], "workspace_forbidden");
+    assert_eq!(terminate_body["auth_state"], "authenticated");
+}
+
+#[tokio::test]
 async fn bootstrap_login_returns_a_remote_session() {
     let harness = TestHarness::seeded().await;
     let (status, body) = harness

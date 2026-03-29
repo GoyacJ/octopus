@@ -25,7 +25,9 @@ import {
   parseProjects,
   parseProjectContext,
   parseRunDetail,
+  parseRunRetryCommand,
   parseRunSummaries,
+  parseRunTerminateCommand,
   parseTask,
   parseTaskCreateCommand,
   parseTriggerDeliveryRetryCommand,
@@ -54,7 +56,9 @@ import {
   type Project,
   type ProjectContext,
   type RunDetail,
+  type RunRetryCommand,
   type RunSummary,
+  type RunTerminateCommand,
   type Task,
   type TaskCreateCommand,
   type TriggerDeliveryRetryCommand
@@ -105,6 +109,10 @@ export const LOCAL_HUB_COMMANDS = {
   listRuns: normalizeLocalCommandName(LOCAL_HUB_TRANSPORT.commands.list_runs),
   getRunDetail: normalizeLocalCommandName(
     LOCAL_HUB_TRANSPORT.commands.get_run_detail
+  ),
+  retryRun: normalizeLocalCommandName(LOCAL_HUB_TRANSPORT.commands.retry_run),
+  terminateRun: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.terminate_run
   ),
   getApprovalRequest: normalizeLocalCommandName(
     LOCAL_HUB_TRANSPORT.commands.get_approval_request
@@ -166,6 +174,8 @@ export interface HubClient {
   startTask(taskId: string): Promise<RunDetail>;
   listRuns(workspaceId: string, projectId: string): Promise<RunSummary[]>;
   getRunDetail(runId: string): Promise<RunDetail>;
+  retryRun(command: RunRetryCommand): Promise<RunDetail>;
+  terminateRun(command: RunTerminateCommand): Promise<RunDetail>;
   getApprovalRequest(approvalId: string): Promise<ApprovalRequest>;
   resolveApproval(command: ApprovalResolveCommand): Promise<RunDetail>;
   listInboxItems(workspaceId: string): Promise<InboxItem[]>;
@@ -482,6 +492,22 @@ export function createLocalHubClient(transport: LocalHubTransport): HubClient {
     async getRunDetail(runId) {
       return parseRunDetail(
         await transport.invoke(LOCAL_HUB_COMMANDS.getRunDetail, { runId })
+      );
+    },
+    async retryRun(command) {
+      return parseRunDetail(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.retryRun,
+          parseRunRetryCommand(command)
+        )
+      );
+    },
+    async terminateRun(command) {
+      return parseRunDetail(
+        await transport.invoke(
+          LOCAL_HUB_COMMANDS.terminateRun,
+          parseRunTerminateCommand(command)
+        )
       );
     },
     async getApprovalRequest(approvalId) {
@@ -861,6 +887,42 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
           fetchImpl,
           remotePath(options.baseUrl, `/api/runs/${encodePathSegment(runId)}`),
           undefined,
+          options.getAccessToken
+        )
+      );
+    },
+    async retryRun(command) {
+      const parsed = parseRunRetryCommand(command);
+      return parseRunDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/runs/${encodePathSegment(parsed.run_id)}/retry`
+          ),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(parsed)
+          },
+          options.getAccessToken
+        )
+      );
+    },
+    async terminateRun(command) {
+      const parsed = parseRunTerminateCommand(command);
+      return parseRunDetail(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(
+            options.baseUrl,
+            `/api/runs/${encodePathSegment(parsed.run_id)}/terminate`
+          ),
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(parsed)
+          },
           options.getAccessToken
         )
       );

@@ -210,7 +210,7 @@ async fn failed_run_can_be_explicitly_terminated() {
         .terminate_run(failed.run.id.as_str(), "operator_stopped")
         .await
         .unwrap();
-    assert_eq!(terminated.status.as_str(), "terminated");
+    assert_eq!(terminated.run.status.as_str(), "terminated");
 }
 
 #[tokio::test]

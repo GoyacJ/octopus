@@ -615,8 +615,14 @@ impl Slice2Runtime {
         &self,
         run_id: &str,
         reason: &str,
-    ) -> Result<RunRecord, RuntimeError> {
-        self.run_orchestrator.terminate_run(run_id, reason).await
+    ) -> Result<RunExecutionReport, RuntimeError> {
+        let run = self.run_orchestrator.terminate_run(run_id, reason).await?;
+        if let Some(trigger_delivery_id) = run.trigger_delivery_id.clone() {
+            self.automation_intake
+                .sync_delivery_from_run(&trigger_delivery_id, &run)
+                .await?;
+        }
+        self.run_orchestrator.load_run_report(&run.id).await
     }
 
     pub async fn fetch_run(&self, run_id: &str) -> Result<Option<RunRecord>, RuntimeError> {

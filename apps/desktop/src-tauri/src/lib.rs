@@ -56,6 +56,8 @@ pub struct LocalHubTransportCommands {
     pub start_task: String,
     pub list_runs: String,
     pub get_run_detail: String,
+    pub retry_run: String,
+    pub terminate_run: String,
     pub get_approval_request: String,
     pub resolve_approval: String,
     pub list_inbox_items: String,
@@ -328,6 +330,17 @@ struct SurfaceKnowledgePromoteCommand {
 #[derive(Debug, Deserialize)]
 struct SurfaceTriggerDeliveryRetryCommand {
     delivery_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceRunRetryCommand {
+    run_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SurfaceRunTerminateCommand {
+    run_id: String,
+    reason: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -652,6 +665,35 @@ impl DesktopLocalHost {
             let response = self
                 .build_run_detail_response(self.inner.runtime.load_run_report(&command.run_id).await?)
                 .await?;
+            return Ok(json!(response));
+        }
+
+        if normalized_command == normalize_tauri_invoke_command(commands.retry_run.as_str()) {
+            let command =
+                self.parse_payload::<SurfaceRunRetryCommand>(commands.retry_run.as_str(), payload)?;
+            let response = self
+                .build_run_detail_response(self.inner.runtime.retry_run(&command.run_id).await?)
+                .await?;
+            self.emit_run_updated(&response.run, &response.task).await?;
+            self.emit_workspace_updates(&response.run.workspace_id).await?;
+            return Ok(json!(response));
+        }
+
+        if normalized_command == normalize_tauri_invoke_command(commands.terminate_run.as_str()) {
+            let command = self.parse_payload::<SurfaceRunTerminateCommand>(
+                commands.terminate_run.as_str(),
+                payload,
+            )?;
+            let response = self
+                .build_run_detail_response(
+                    self.inner
+                        .runtime
+                        .terminate_run(&command.run_id, &command.reason)
+                        .await?,
+                )
+                .await?;
+            self.emit_run_updated(&response.run, &response.task).await?;
+            self.emit_workspace_updates(&response.run.workspace_id).await?;
             return Ok(json!(response));
         }
 
@@ -1584,6 +1626,44 @@ async fn hub_get_run_detail(
 
 #[allow(non_snake_case)]
 #[tauri::command]
+async fn hub_retry_run(
+    state: State<'_, DesktopLocalHostState>,
+    runId: Option<String>,
+    run_id: Option<String>,
+) -> Result<Value, String> {
+    let run_id = require_string(runId, run_id, "runId")?;
+    invoke_from_state(
+        &state,
+        local_hub_transport_contract().commands.retry_run.as_str(),
+        json!({
+            "run_id": run_id,
+        }),
+    )
+    .await
+}
+
+#[allow(non_snake_case)]
+#[tauri::command]
+async fn hub_terminate_run(
+    state: State<'_, DesktopLocalHostState>,
+    runId: Option<String>,
+    run_id: Option<String>,
+    reason: String,
+) -> Result<Value, String> {
+    let run_id = require_string(runId, run_id, "runId")?;
+    invoke_from_state(
+        &state,
+        local_hub_transport_contract().commands.terminate_run.as_str(),
+        json!({
+            "run_id": run_id,
+            "reason": reason,
+        }),
+    )
+    .await
+}
+
+#[allow(non_snake_case)]
+#[tauri::command]
 async fn hub_get_approval_request(
     state: State<'_, DesktopLocalHostState>,
     approvalId: Option<String>,
@@ -1844,6 +1924,8 @@ pub fn run() {
             hub_start_task,
             hub_list_runs,
             hub_get_run_detail,
+            hub_retry_run,
+            hub_terminate_run,
             hub_get_approval_request,
             hub_resolve_approval,
             hub_list_inbox_items,

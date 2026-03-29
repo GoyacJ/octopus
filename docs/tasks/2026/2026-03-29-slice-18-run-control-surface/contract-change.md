@@ -1,0 +1,42 @@
+## Contract Change
+
+- Change Type:
+  - Public API
+  - Internal Interface
+  - Cross-language Contract
+- New / Updated Schemas:
+  - Add `schemas/runtime/run-retry-command.schema.json`
+  - Add `schemas/runtime/run-terminate-command.schema.json`
+  - Extend `schemas/interop/local-hub-transport.json`
+  - Extend `schemas/interop/local-hub-transport.schema.json`
+- New / Updated Commands:
+  - Add two interop-owned local transport commands:
+    - `retry_run`
+    - `terminate_run`
+- New / Updated Queries:
+  - None.
+- New / Updated Mutations:
+  - Add `HubClient.retryRun(command): Promise<RunDetail>`
+  - Add `HubClient.terminateRun(command): Promise<RunDetail>`
+- New / Updated Events:
+  - None. Existing hub refresh events remain sufficient.
+- New / Updated DTOs:
+  - None. Reuse the existing `RunDetail` as the only authoritative post-action return shape.
+- Compatibility Impact:
+  - Additive. Existing run DTOs, task flows, approval flows, and run list consumers remain unchanged.
+- Affected Consumers:
+  - `schemas/runtime`
+  - `schemas/interop`
+  - `packages/schema-ts`
+  - `packages/hub-client`
+  - `crates/runtime`
+  - `apps/remote-hub`
+  - `apps/desktop/src-tauri`
+  - `apps/desktop`
+- Migration Notes:
+  - No SQLite migration expected.
+  - Runtime public surface must ensure terminate now returns or reloads an authoritative `RunDetail`-compatible report and synchronizes any linked trigger delivery.
+- Generation Impact:
+  - None. Existing schema-ts import / parser patterns are sufficient.
+- Open Questions:
+  - None at task freeze time. Session hardening, batch control, and richer terminate UX remain future slices.

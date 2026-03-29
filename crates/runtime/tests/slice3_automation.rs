@@ -437,6 +437,70 @@ async fn failed_delivery_can_retry_without_creating_second_delivery_record() {
 }
 
 #[tokio::test]
+async fn terminating_waiting_automation_run_keeps_delivery_state_synchronized() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let db_path = sample_db_path(tempdir.path());
+
+    let runtime = Slice2Runtime::open_at(&db_path).await.unwrap();
+    seed_context(
+        &runtime,
+        "project-automation-terminate",
+        "Automation Terminate",
+    )
+    .await;
+    seed_governance(
+        &runtime,
+        "project-automation-terminate",
+        "capability-automation-terminate",
+        "high",
+        5,
+        10,
+    )
+    .await;
+
+    let automation = runtime
+        .create_automation(CreateAutomationInput {
+            workspace_id: "workspace-alpha".into(),
+            project_id: "project-automation-terminate".into(),
+            title: "Automation terminate".into(),
+            instruction: "Wait for approval and terminate".into(),
+            action: ExecutionAction::EmitText {
+                content: "pending".into(),
+            },
+            capability_id: "capability-automation-terminate".into(),
+            estimated_cost: 1,
+        })
+        .await
+        .unwrap();
+
+    let waiting = runtime
+        .dispatch_manual_event(DispatchManualEventInput {
+            trigger_id: automation.trigger_id.clone(),
+            dedupe_key: "delivery-terminate-1".into(),
+            payload: json!({"source": "terminate"}),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(waiting.delivery.status.as_str(), "delivering");
+    assert_eq!(waiting.run_report.run.status.as_str(), "waiting_approval");
+
+    let terminated = runtime
+        .terminate_run(waiting.run_report.run.id.as_str(), "operator_stopped")
+        .await
+        .unwrap();
+
+    assert_eq!(terminated.run.status.as_str(), "terminated");
+
+    let deliveries = runtime
+        .list_trigger_deliveries_by_automation(automation.id.as_str())
+        .await
+        .unwrap();
+    assert_eq!(deliveries.len(), 1);
+    assert_eq!(deliveries[0].status.as_str(), "failed");
+}
+
+#[tokio::test]
 async fn pending_delivery_survives_reopen_and_duplicate_dispatch() {
     let tempdir = tempfile::tempdir().unwrap();
     let db_path = sample_db_path(tempdir.path());

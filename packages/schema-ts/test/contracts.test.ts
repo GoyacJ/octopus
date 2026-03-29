@@ -21,7 +21,9 @@ import {
   parseManualDispatchCommand,
   parseRequestKnowledgePromotionCommand,
   parseRunDetail,
+  parseRunRetryCommand,
   parseRunSummaries,
+  parseRunTerminateCommand,
   parseTaskCreateCommand,
   parseTriggerDeliveryRetryCommand
 } from "../src/index";
@@ -217,6 +219,19 @@ describe("schema-ts contract parsers", () => {
         delivery_id: "delivery-1"
       }).delivery_id
     ).toBe("delivery-1");
+
+    expect(
+      parseRunRetryCommand({
+        run_id: "run-1"
+      }).run_id
+    ).toBe("run-1");
+
+    expect(
+      parseRunTerminateCommand({
+        run_id: "run-1",
+        reason: "desktop_operator_stopped"
+      }).reason
+    ).toBe("desktop_operator_stopped");
   });
 
   it("accepts the shared local hub transport owner contract", () => {
@@ -227,8 +242,10 @@ describe("schema-ts contract parsers", () => {
     expect(contract.commands.get_project_knowledge).toBeTruthy();
     expect(contract.commands.list_projects).toBeTruthy();
     expect(contract.commands.list_runs).toBeTruthy();
+    expect(contract.commands.retry_run).toBeTruthy();
+    expect(contract.commands.terminate_run).toBeTruthy();
     expect(contract.commands.get_connection_status).toBeTruthy();
-    expect(Object.values(contract.commands)).toHaveLength(25);
+    expect(Object.values(contract.commands)).toHaveLength(27);
   });
 
   it("accepts run summary arrays for the recent-runs workbench surface", () => {

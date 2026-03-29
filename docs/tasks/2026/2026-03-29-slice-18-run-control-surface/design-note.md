@@ -1,0 +1,71 @@
+## Design Note
+
+- Problem:
+  - The tracked runtime already supports internal `retry_run(...)` and `terminate_run(...)`, but the cross-language contracts, local / remote transports, and desktop surfaces still expose no formal run control path.
+- Goal:
+  - Freeze and implement one minimum run control slice that carries `retry` and `terminate` through shared schemas, `HubClient`, remote-hub, Tauri local host, and the desktop `RunView`.
+- Acceptance Criteria:
+  - Both run control commands validate through shared schema parsers and return the authoritative `RunDetail`.
+  - Automation-origin runs keep `TriggerDelivery` state synchronized after both retry and terminate.
+  - Desktop actions refresh the same surfaces already treated as authoritative for run, inbox, notifications, and project knowledge.
+- Non-functional Constraints:
+  - No new run DTOs.
+  - No list-level or bulk run controls.
+  - No session-hardening work in this slice.
+- MVP Boundary:
+  - `retry` on failed retryable runs only.
+  - `terminate` on runtime-allowed states only.
+  - Fixed desktop terminate reason `desktop_operator_stopped`.
+- Layer Placement:
+  - `schemas/runtime` owns formal run control command shapes.
+  - `schemas/interop` owns the additive local command directory changes.
+  - `packages/schema-ts` owns command parsing and transport constant typing.
+  - `packages/hub-client` owns local / remote parity and shared return-shape parsing.
+  - `crates/runtime` owns retry / terminate semantics and delivery synchronization.
+  - `apps/remote-hub` and `apps/desktop/src-tauri` remain thin assembly layers over runtime truth.
+  - `apps/desktop/src` owns button gating and refresh orchestration, but not run-transition rules.
+- Module Boundaries:
+  - `RunView` remains the authoritative surface for run policy, artifacts, trace, approvals, and knowledge follow-up, and now also hosts the minimum run control actions.
+  - `RunsView` remains read-only in this slice to avoid changing `RunSummary`.
+  - Remote and local transports must consume the same command schemas and return the same `RunDetail` shape.
+- Inputs:
+  - Existing `RunDetail`, `RunSummary`, `HubClient`, remote auth / membership enforcement, Tauri hub command dispatch, and desktop shell refresh patterns.
+  - Existing runtime `retry_run(...)`, `terminate_run(...)`, `load_run_report(...)`, and automation delivery synchronization logic.
+- Outputs:
+  - Two shared runtime command schemas.
+  - Two additive local transport commands.
+  - Two `HubClient` mutation methods.
+  - Two remote-hub run action routes.
+  - Two Tauri hub commands.
+  - One desktop `RunView` control block.
+- State Transitions:
+  - `failed + retryable -> retry -> updated RunDetail`
+  - `created|running|failed|resuming|blocked|waiting_approval -> terminate -> updated RunDetail`
+  - Invalid state transitions stay explicit errors and must not mutate desktop local state optimistically.
+- Error Handling:
+  - Path/body id mismatches return `400`.
+  - Auth or workspace-membership failures preserve existing remote-hub auth semantics.
+  - Invalid retry / terminate transitions return explicit surface errors and leave current desktop state unchanged until a successful refresh occurs.
+- Tech Stack Decision:
+  - No new stack. Reuse the existing Rust + schema-ts + hub-client + Vue/Pinia/Tauri stack.
+- Visual Framework Impact:
+  - Yes. Slice 18 adds a small action row in `RunView`, but keeps `Runs` list layout unchanged.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - Existing `RunDetail` schema and loader
+  - Existing `HubClient` transport boundary
+  - Existing remote-hub session and workspace access checks
+  - Existing Tauri event emission and desktop refresh patterns
+- New Abstractions:
+  - Shared run control command schemas
+  - Shared run control client methods
+- Trade-offs:
+  - Reusing `RunDetail` keeps the return shape authoritative and avoids contract sprawl, but requires terminate to reload the run report after the runtime state change.
+  - Keeping actions only in `RunView` avoids `RunSummary` churn, but means list surfaces stay passive until a detail page is opened.
+- Test Strategy:
+  - Red-first schema, client, runtime, remote-hub, and desktop tests for both commands.
+  - Explicit coverage for automation-origin delivery synchronization on terminate.
+  - Desktop tests for action visibility / disablement and refresh-on-success behavior.
+- ADR Needed:
+  - No, unless implementation forces a durable change to run/detail authority or delivery synchronization ownership.
