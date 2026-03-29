@@ -1,12 +1,17 @@
 import { createDesktopApp } from "./app";
 import {
+  configureDesktopConnectionRuntime,
   createConfiguredDesktopHubClient,
+  initializeDesktopConnection,
   resolveDesktopEntryRoute
 } from "./stores/connection";
 import { registerTauriLocalHubTransport } from "./tauri-local-bridge";
+import { createTauriRemoteSessionCacheRuntime } from "./tauri-remote-session-cache";
 
 export async function bootstrap() {
   await registerTauriLocalHubTransport();
+  configureDesktopConnectionRuntime(createTauriRemoteSessionCacheRuntime());
+  await initializeDesktopConnection();
 
   const { app, router } = createDesktopApp(createConfiguredDesktopHubClient(), false, {
     defaultRoute: resolveDesktopEntryRoute()

@@ -8,6 +8,7 @@ name = "octopus_desktop_host"
 
 [dependencies]
 chrono.workspace = true
+keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "linux-native-sync-persistent", "crypto-rust", "vendored"] }
 octopus-execution = { path = "../../../crates/execution" }
 octopus-runtime = { path = "../../../crates/runtime" }
 serde.workspace = true

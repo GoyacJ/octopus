@@ -35,6 +35,8 @@ Example:
 
 Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-delivery-templates.md).
 
+Current tracked task packages now cover the GA foundation and slice sequence through Slice 19 `session hardening`.
+
 ## Current Task Packages
 
 - [2026-03-26-ga-foundation-repo-skeleton](2026/2026-03-26-ga-foundation-repo-skeleton/README.md)
@@ -59,6 +61,7 @@ Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-d
 - [2026-03-29-slice-16-desktop-remote-connection-surface](2026/2026-03-29-slice-16-desktop-remote-connection-surface/README.md)
 - [2026-03-29-slice-17-desktop-project-scope-entry](2026/2026-03-29-slice-17-desktop-project-scope-entry/README.md)
 - [2026-03-29-slice-18-run-control-surface](2026/2026-03-29-slice-18-run-control-surface/README.md)
+- [2026-03-29-slice-19-session-hardening](2026/2026-03-29-slice-19-session-hardening/README.md)
 
 ## Relationship To ADRs
 

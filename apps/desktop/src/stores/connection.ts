@@ -34,16 +34,45 @@ export interface DesktopConnectionRuntimeOptions {
   createLocalClient?: () => HubClient;
   createRemoteClient?: (options: RemoteHubClientOptions) => HubClient;
   createRemoteAuthClient?: (options: RemoteHubClientOptions) => RemoteHubAuthClient;
+  loadPersistedRemoteSession?: (
+    profile: DesktopConnectionProfile
+  ) => Promise<PersistedRemoteSessionLoadResult>;
+  savePersistedRemoteSession?: (
+    session: PersistedRemoteSession
+  ) => Promise<PersistedRemoteSessionOperationResult>;
+  clearPersistedRemoteSession?: () => Promise<PersistedRemoteSessionOperationResult>;
+}
+
+export interface PersistedRemoteSession {
+  baseUrl: string;
+  workspaceId: string;
+  email: string;
+  accessToken: string;
+  session: HubSession;
+}
+
+export interface PersistedRemoteSessionLoadResult {
+  session: PersistedRemoteSession | null;
+  storageAvailable: boolean;
+  warning?: string;
+}
+
+export interface PersistedRemoteSessionOperationResult {
+  storageAvailable: boolean;
+  warning?: string;
 }
 
 const CONNECTION_PROFILE_STORAGE_KEY = "octopus.desktop.connection-profile.v1";
 const DEFAULT_REMOTE_BASE_URL = "http://127.0.0.1:4000";
+const DEFAULT_SECURE_SESSION_WARNING =
+  "Secure session storage is unavailable. Remote sign-in will stay memory-only.";
 
 export const DEFAULT_LOCAL_WORKBENCH_ROUTE = "/workspaces/demo/projects/demo/tasks";
 
 let runtimeOptions: DesktopConnectionRuntimeOptions = {};
 const remoteAccessToken = ref<string | null>(null);
 const remoteSessionState = ref<HubSession | null>(null);
+const secureSessionWarningState = ref<string | null>(null);
 
 function encodePathSegment(value: string): string {
   return encodeURIComponent(value);
@@ -107,6 +136,97 @@ function clearRemoteSession(): void {
   remoteSessionState.value = null;
 }
 
+function toPersistedRemoteSession(
+  profile: DesktopConnectionProfile,
+  accessToken: string,
+  session: HubSession
+): PersistedRemoteSession {
+  return {
+    baseUrl: profile.baseUrl,
+    workspaceId: session.workspace_id,
+    email: session.email,
+    accessToken,
+    session
+  };
+}
+
+function normalizeWarning(value: string | null | undefined): string | null {
+  const warning = typeof value === "string" ? value.trim() : "";
+  return warning.length > 0 ? warning : null;
+}
+
+function warningFromError(error: unknown): string {
+  return normalizeWarning(error instanceof Error ? error.message : String(error))
+    ?? DEFAULT_SECURE_SESSION_WARNING;
+}
+
+function applySecureSessionOperationResult(
+  result: PersistedRemoteSessionLoadResult | PersistedRemoteSessionOperationResult | null | undefined
+): void {
+  if (!result) {
+    secureSessionWarningState.value = null;
+    return;
+  }
+
+  secureSessionWarningState.value =
+    normalizeWarning(result.warning) ??
+    (result.storageAvailable ? null : DEFAULT_SECURE_SESSION_WARNING);
+}
+
+async function loadPersistedRemoteSession(
+  profile: DesktopConnectionProfile
+): Promise<PersistedRemoteSession | null> {
+  const load = runtimeOptions.loadPersistedRemoteSession;
+  if (!load) {
+    secureSessionWarningState.value = null;
+    return null;
+  }
+
+  try {
+    const result = await load(profile);
+    applySecureSessionOperationResult(result);
+    return result.session;
+  } catch (error) {
+    secureSessionWarningState.value = warningFromError(error);
+    return null;
+  }
+}
+
+async function savePersistedRemoteSession(session: PersistedRemoteSession): Promise<void> {
+  const save = runtimeOptions.savePersistedRemoteSession;
+  if (!save) {
+    secureSessionWarningState.value = null;
+    return;
+  }
+
+  try {
+    applySecureSessionOperationResult(await save(session));
+  } catch (error) {
+    secureSessionWarningState.value = warningFromError(error);
+  }
+}
+
+async function clearPersistedRemoteSession(): Promise<void> {
+  const clear = runtimeOptions.clearPersistedRemoteSession;
+  if (!clear) {
+    secureSessionWarningState.value = null;
+    return;
+  }
+
+  try {
+    applySecureSessionOperationResult(await clear());
+  } catch (error) {
+    secureSessionWarningState.value = warningFromError(error);
+  }
+}
+
+function authStateRequiresReauthentication(error: unknown): boolean {
+  return (
+    error instanceof HubClientAuthError &&
+    (error.authState === "auth_required" || error.authState === "token_expired")
+  );
+}
+
 function createRemoteAuthClientForProfile(
   profile: DesktopConnectionProfile
 ): RemoteHubAuthClient {
@@ -157,6 +277,7 @@ export function configureDesktopConnectionRuntime(
 export function resetDesktopConnectionRuntime(): void {
   runtimeOptions = {};
   clearRemoteSession();
+  secureSessionWarningState.value = null;
 }
 
 export function loadDesktopConnectionProfile(): DesktopConnectionProfile {
@@ -236,6 +357,58 @@ export function createConfiguredDesktopHubClient(
   return createLocalClient();
 }
 
+export async function initializeDesktopConnection(): Promise<DesktopConnectionProfile> {
+  const profile = loadDesktopConnectionProfile();
+
+  if (profile.mode !== "remote") {
+    clearRemoteSession();
+    secureSessionWarningState.value = null;
+    return profile;
+  }
+
+  const persistedSession = await loadPersistedRemoteSession(profile);
+  if (!persistedSession) {
+    clearRemoteSession();
+    return loadDesktopConnectionProfile();
+  }
+
+  setRemoteSession(persistedSession.accessToken, persistedSession.session);
+  const restoredProfile = persistDesktopConnectionProfile({
+    ...profile,
+    workspaceId: persistedSession.session.workspace_id,
+    email: persistedSession.session.email,
+    projectId:
+      profile.workspaceId === persistedSession.session.workspace_id
+        ? profile.projectId
+        : undefined
+  });
+
+  try {
+    const verifiedSession = await createRemoteAuthClientForProfile(restoredProfile).getCurrentSession();
+    setRemoteSession(persistedSession.accessToken, verifiedSession);
+    const verifiedProfile = persistDesktopConnectionProfile({
+      ...restoredProfile,
+      workspaceId: verifiedSession.workspace_id,
+      email: verifiedSession.email,
+      projectId:
+        restoredProfile.workspaceId === verifiedSession.workspace_id
+          ? restoredProfile.projectId
+          : undefined
+    });
+    await savePersistedRemoteSession(
+      toPersistedRemoteSession(verifiedProfile, persistedSession.accessToken, verifiedSession)
+    );
+    return verifiedProfile;
+  } catch (error) {
+    if (authStateRequiresReauthentication(error)) {
+      clearRemoteSession();
+      await clearPersistedRemoteSession();
+    }
+
+    return loadDesktopConnectionProfile();
+  }
+}
+
 export const useConnectionStore = defineStore("connection", () => {
   const profile = ref(loadDesktopConnectionProfile());
   const authLoading = ref(false);
@@ -245,6 +418,7 @@ export const useConnectionStore = defineStore("connection", () => {
   const session = computed(() => remoteSessionState.value);
   const hasRemoteAccessToken = computed(() => remoteAccessToken.value !== null);
   const sessionActive = computed(() => hasActiveRemoteSession(profile.value));
+  const secureSessionWarning = computed(() => secureSessionWarningState.value);
 
   function rememberProfile(nextProfile: Partial<DesktopConnectionProfile>): DesktopConnectionProfile {
     const storedProfile = persistDesktopConnectionProfile(nextProfile);
@@ -289,6 +463,7 @@ export const useConnectionStore = defineStore("connection", () => {
       projectId: rememberedProjectId
     });
     clearRemoteSession();
+    await clearPersistedRemoteSession();
     syncHubClient(storedProfile);
     await reloadConnectionStatus();
   }
@@ -325,6 +500,9 @@ export const useConnectionStore = defineStore("connection", () => {
         email: response.session.email,
         projectId: rememberedProjectId
       });
+      await savePersistedRemoteSession(
+        toPersistedRemoteSession(profile.value, response.access_token, response.session)
+      );
       syncHubClient(profile.value);
       await reloadConnectionStatus();
       return response.session;
@@ -358,8 +536,15 @@ export const useConnectionStore = defineStore("connection", () => {
         email: nextSession.email,
         projectId: rememberedProjectId
       });
+      await savePersistedRemoteSession(
+        toPersistedRemoteSession(profile.value, remoteAccessToken.value, nextSession)
+      );
       return nextSession;
     } catch (error) {
+      if (authStateRequiresReauthentication(error)) {
+        clearRemoteSession();
+        await clearPersistedRemoteSession();
+      }
       authError.value = error instanceof Error ? error.message : String(error);
       throw error;
     } finally {
@@ -382,6 +567,7 @@ export const useConnectionStore = defineStore("connection", () => {
         }
       }
       clearRemoteSession();
+      await clearPersistedRemoteSession();
       syncHubClient(profile.value);
       await reloadConnectionStatus();
     } catch (error) {
@@ -404,6 +590,7 @@ export const useConnectionStore = defineStore("connection", () => {
     session,
     hasRemoteAccessToken,
     sessionActive,
+    secureSessionWarning,
     applyProfile,
     login,
     refreshCurrentSession,

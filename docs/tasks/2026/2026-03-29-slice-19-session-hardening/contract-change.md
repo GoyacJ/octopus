@@ -1,0 +1,32 @@
+## Contract Change
+
+- Change Type:
+  - Internal Interface
+  - App-local API
+- New / Updated Schemas:
+  - None.
+- New / Updated Commands:
+  - Add three desktop/Tauri app-local commands:
+    - `load_remote_session_cache`
+    - `save_remote_session_cache`
+    - `clear_remote_session_cache`
+- New / Updated Queries:
+  - None.
+- New / Updated Mutations:
+  - None in shared `HubClient` or remote-hub APIs.
+- New / Updated Events:
+  - None.
+- New / Updated DTOs:
+  - Add app-local `PersistedRemoteSession` and operation-result types on the desktop/Tauri boundary only.
+- Compatibility Impact:
+  - Additive and app-local only. Existing `schemas/`, `packages/schema-ts`, `packages/hub-client`, and remote-hub clients remain unchanged.
+- Affected Consumers:
+  - `apps/desktop/src`
+  - `apps/desktop/src-tauri`
+- Migration Notes:
+  - No SQLite migration.
+  - Existing local profile persistence remains authoritative for non-secret metadata such as `projectId`.
+- Generation Impact:
+  - None.
+- Open Questions:
+  - None at task freeze time. Refresh-token support, rotation, and multi-profile secure storage remain future work and require new task packages if approved.

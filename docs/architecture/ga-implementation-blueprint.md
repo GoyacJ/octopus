@@ -88,7 +88,8 @@
 - Slice 15 `project knowledge index` 已落地并通过验证，补齐 project-scoped Shared Knowledge 只读索引面与 local/remote transport parity
 - Slice 16 `desktop remote connection & session surface` 已落地并通过验证，补齐 desktop remote profile / session handling、auth-aware bootstrap 与 local/remote hub client rebinding
 - Slice 17 `desktop project scope entry` 已落地并通过验证，补齐 workspace-scoped project discovery、remembered project entry 与 `Projects` surface
-- Slice 18 `run control surface` 已冻结为当前 tracked delivery，范围限定为 `retry / terminate` 的 shared contract、transport parity 与 `RunView` 最小控制面；`session hardening` 顺延为下一候选 slice
+- Slice 18 `run control surface` 已落地并通过验证，范围限定为 `retry / terminate` 的 shared contract、transport parity 与 `RunView` 最小控制面
+- Slice 19 `session hardening` 已冻结为下一项 tracked delivery，范围限定为 desktop/Tauri app-local secure session vault、启动恢复、失效清理与断连降级；不引入新的 shared contract、remote-hub auth 契约、RBAC / IdP 或其它扩 scope 工作
 
 ---
 
@@ -181,8 +182,9 @@
 12. Slice 16 `desktop remote connection & session surface`
 13. Slice 17 `desktop project scope entry`
 14. Slice 18 `run control surface`
+15. Slice 19 `session hardening` 作为下一候选 slice，仅允许 desktop/Tauri app-local secure session persistence、restore、cleanup 与 degraded-mode 收口
 
-更深 remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须等新的 task package 与 owner docs 明确后再启动；当前已冻结的 post-Slice-17 任务为 `run control surface`，其后才是 `session hardening`。
+更深 remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须等新的 task package 与 owner docs 明确后再启动；当前已冻结的 post-Slice-18 任务为 `session hardening`，其后是否继续扩展 secure storage、refresh token 或其它 remote admin 能力，必须由后续 task package 单独定义。
 
 ### 6.3 Shared Contract 先于实现
 
@@ -1109,7 +1111,7 @@ Octopus 首版 GA 不是“把目标态平台全部做出来”，而是：
 - 以 SAD 定义的运行时、治理、恢复、互操作边界为架构约束
 - 以本蓝图定义的最小正式运行闭环为实施主线
 - 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 -> minimum automation surface -> Slice 11 -> Slice 12 -> Slice 13 -> Slice 14 -> Slice 15 -> Slice 16 -> Slice 17 的顺序稳步推进
-- 当前 tracked tree 已推进到 Slice 17，并已冻结 Slice 18 `run control surface` 作为下一项 tracked delivery；`session hardening` 顺延到 Slice 18 之后
+- 当前 tracked tree 已推进到 Slice 18，并已冻结 Slice 19 `session hardening` 作为下一项 tracked delivery，范围仅限 desktop/Tauri app-local secure session persistence、restore、cleanup 与 degraded-mode
 - 在每次模块推进前先完成局部设计包，再实现，再验证，再回写全局文档
 
 只有这样，Octopus 才能在不丢失整体方向的前提下，让 AI 主导开发同时保持可控、可审计、可维护。

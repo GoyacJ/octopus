@@ -21,8 +21,15 @@ use octopus_runtime::{
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
+mod session_vault;
 use tauri::{Emitter, Manager, Runtime, State};
 use thiserror::Error;
+
+pub use session_vault::{
+    KeyringRemoteSessionSecretStore, MemoryRemoteSessionSecretStore, PersistedHubSession,
+    PersistedRemoteSession, RemoteSessionCacheLoadRequest, RemoteSessionCacheLoadResult,
+    RemoteSessionCacheOperationResult, RemoteSessionCacheService,
+};
 
 const DEFAULT_WORKSPACE_ID: &str = "demo";
 const DEFAULT_WORKSPACE_SLUG: &str = "demo";
@@ -1270,6 +1277,7 @@ impl<R: Runtime> LocalHubEventEmitter for TauriEventEmitterHandle<R> {
 
 struct DesktopLocalHostState {
     host: DesktopLocalHost,
+    remote_session_cache: RemoteSessionCacheService<KeyringRemoteSessionSecretStore>,
 }
 
 async fn invoke_from_state(
@@ -1875,6 +1883,49 @@ async fn hub_get_connection_status(
     .await
 }
 
+#[allow(non_snake_case)]
+#[tauri::command]
+async fn load_remote_session_cache(
+    state: State<'_, DesktopLocalHostState>,
+    baseUrl: Option<String>,
+    base_url: Option<String>,
+    workspaceId: Option<String>,
+    workspace_id: Option<String>,
+    email: String,
+) -> Result<RemoteSessionCacheLoadResult, String> {
+    let base_url = require_string(baseUrl, base_url, "baseUrl")?;
+    let workspace_id = require_string(workspaceId, workspace_id, "workspaceId")?;
+    state
+        .remote_session_cache
+        .load(&RemoteSessionCacheLoadRequest {
+            base_url,
+            workspace_id,
+            email,
+        })
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn save_remote_session_cache(
+    state: State<'_, DesktopLocalHostState>,
+    session: PersistedRemoteSession,
+) -> Result<RemoteSessionCacheOperationResult, String> {
+    state
+        .remote_session_cache
+        .save(&session)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn clear_remote_session_cache(
+    state: State<'_, DesktopLocalHostState>,
+) -> Result<RemoteSessionCacheOperationResult, String> {
+    state
+        .remote_session_cache
+        .clear()
+        .map_err(|error| error.to_string())
+}
+
 async fn cron_ticker_loop(host: DesktopLocalHost) {
     loop {
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -1905,7 +1956,12 @@ pub fn run() {
                 cron_ticker_loop(ticker_host).await;
             });
 
-            app.manage(DesktopLocalHostState { host });
+            app.manage(DesktopLocalHostState {
+                host,
+                remote_session_cache: RemoteSessionCacheService::new(
+                    KeyringRemoteSessionSecretStore::default(),
+                ),
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1935,7 +1991,10 @@ pub fn run() {
             hub_request_knowledge_promotion,
             hub_promote_knowledge,
             hub_list_capability_visibility,
-            hub_get_connection_status
+            hub_get_connection_status,
+            load_remote_session_cache,
+            save_remote_session_cache,
+            clear_remote_session_cache
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Octopus desktop local host");

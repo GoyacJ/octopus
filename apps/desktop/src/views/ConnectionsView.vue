@@ -37,12 +37,16 @@ const authMessage = computed(() => {
     return "Local host stays available through the existing Tauri bridge and demo workspace seed.";
   }
 
-  if (hub.connectionStatus?.state === "disconnected") {
-    return "Remote hub is disconnected. Check the base URL and retry once the host is reachable.";
-  }
-
   if (hub.connectionStatus?.auth_state === "token_expired") {
     return "Session expired. Sign in again to restore read/write access.";
+  }
+
+  if (connection.session && hub.authState !== "authenticated") {
+    return `Cached session restored for ${connection.session.email} in ${connection.session.workspace_id}, but the remote hub is read-only until the connection recovers.`;
+  }
+
+  if (hub.connectionStatus?.state === "disconnected") {
+    return "Remote hub is disconnected. Check the base URL and retry once the host is reachable.";
   }
 
   if (hub.connectionStatus?.auth_state === "authenticated") {
@@ -201,6 +205,9 @@ onMounted(() => {
       </div>
 
       <p v-if="connection.authError" class="error-copy">{{ connection.authError }}</p>
+      <p v-if="connection.secureSessionWarning" class="warning-copy">
+        {{ connection.secureSessionWarning }}
+      </p>
     </article>
 
     <article v-if="selectedMode === 'remote'" class="surface-card">
@@ -392,5 +399,10 @@ button:disabled {
 .error-copy {
   margin: 0;
   color: #fecaca;
+}
+
+.warning-copy {
+  margin: 0;
+  color: #fbbf24;
 }
 </style>
