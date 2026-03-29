@@ -1,0 +1,68 @@
+## Design Note
+
+- Problem:
+  - Slice 19 proved secure restore and degraded remote-session handling, but the degraded explanation still lives primarily in `ConnectionsView`. Workbench routes can therefore be read-only without a consistent shell-level reason.
+- Goal:
+  - Add one desktop-local degraded-state model plus one global shell explanation path so any workbench route can explain why the session is read-only and when the state clears.
+- Acceptance Criteria:
+  - A restored-but-disconnected session shows a global degraded banner on workbench routes.
+  - A memory-only secure-storage warning remains visible outside `ConnectionsView`.
+  - Auth-invalid restore still redirects to `/connections`.
+  - A later healthy route refresh clears degraded UI state without changing shared contracts.
+- Non-functional Constraints:
+  - No shared contract or remote-hub route changes.
+  - Keep store responsibilities explicit and avoid route-by-route duplicated refresh policy.
+  - Preserve existing read-only gating rules and only improve state visibility.
+- MVP Boundary:
+  - One store-owned degraded-state/view-model.
+  - One router-level refresh orchestrator.
+  - One app-shell banner surface.
+- Layer Placement:
+  - `apps/desktop/src/stores/connection.ts` owns degraded-state derivation and shared refresh orchestration.
+  - `apps/desktop/src/app.ts` owns route-entry orchestration wiring.
+  - `apps/desktop/src/App.vue` owns the global banner presentation.
+  - Existing route views keep loading their domain data but stop deciding independently when connection status should refresh.
+- Module Boundaries:
+  - `hub` store remains the source for fetched connection status and read-only gating.
+  - `connection` store becomes the source for app-local degraded semantics and cross-cutting refresh entrypoints.
+  - Views consume the shell/store state; they do not create their own degraded-state interpretation.
+- Inputs:
+  - Existing desktop profile persistence, restored session state, secure-session warning state, and hub connection-status loading.
+  - Existing route split for `Projects / Tasks / Runs / Knowledge / Inbox / Notifications / Automation Detail / RunView`.
+- Outputs:
+  - A normalized desktop degraded-state kind and banner copy.
+  - A route-safe connection-status refresh function reused by bootstrap-affecting flows and route entry.
+  - Shell-wide warning visibility for degraded and memory-only states.
+- State Transitions:
+  - `remote + valid live connection -> authenticated`
+  - `remote + auth_required without restored session -> auth_required`
+  - `remote + token_expired -> token_expired`
+  - `remote + restored session + disconnected connection state -> restored_but_disconnected`
+  - `remote + secure store unavailable warning -> memory_only_storage`
+  - `profile/workspace change or logout -> clear degraded state owned by prior remote session`
+- Error Handling:
+  - Connection-status refresh failures remain non-throwing at the orchestration layer and continue surfacing through existing shell error handling.
+  - Profile changes clear stale remote session state before the next refresh.
+  - Auth-invalid restore keeps the current Slice 19 fallback behavior.
+- Tech Stack Decision:
+  - Reuse existing Vue 3 Composition API, Pinia, and Vue Router; no new dependency is needed.
+- Visual Framework Impact:
+  - Yes. This slice adds one shell-level warning/banner component state but preserves the existing workbench visual language.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - Existing `initializeDesktopConnection()` restore semantics.
+  - Existing `HubClientAuthError` / `HubClientTransportError` normalization.
+  - Existing app shell rail and `hub.readOnlyMode` gating.
+- New Abstractions:
+  - One desktop degraded-state kind union.
+  - One banner view-model computed from local session state, secure-session warning state, and fetched hub connection status.
+  - One shared `refreshConnectionStatus` orchestration action reused by router entry and auth/profile flows.
+- Trade-offs:
+  - Centralizing refresh orchestration reduces drift but adds router/store coupling that must stay app-local.
+  - Keeping degraded semantics separate from `hub` store avoids changing shared read-only rules, but it means both stores participate in the final UX state.
+- Test Strategy:
+  - Red-first desktop tests for global degraded banner visibility on workbench routes, memory-only global warning visibility, reconnect-clears-banner behavior, and profile/workspace isolation.
+  - Full TypeScript and Rust workspace gates after the targeted desktop test passes.
+- ADR Needed:
+  - No. The decision remains a local desktop-shell convergence choice.

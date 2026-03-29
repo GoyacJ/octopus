@@ -62,6 +62,20 @@ export interface PersistedRemoteSessionOperationResult {
   warning?: string;
 }
 
+export type DesktopConnectionStateKind =
+  | "authenticated"
+  | "auth_required"
+  | "token_expired"
+  | "restored_but_disconnected"
+  | "memory_only_storage";
+
+export interface DesktopConnectionBanner {
+  kind: Exclude<DesktopConnectionStateKind, "authenticated">;
+  title: string;
+  message: string;
+  tone: "warning" | "danger";
+}
+
 const CONNECTION_PROFILE_STORAGE_KEY = "octopus.desktop.connection-profile.v1";
 const DEFAULT_REMOTE_BASE_URL = "http://127.0.0.1:4000";
 const DEFAULT_SECURE_SESSION_WARNING =
@@ -72,6 +86,7 @@ export const DEFAULT_LOCAL_WORKBENCH_ROUTE = "/workspaces/demo/projects/demo/tas
 let runtimeOptions: DesktopConnectionRuntimeOptions = {};
 const remoteAccessToken = ref<string | null>(null);
 const remoteSessionState = ref<HubSession | null>(null);
+const remoteSessionOriginState = ref<"none" | "live" | "restored">("none");
 const secureSessionWarningState = ref<string | null>(null);
 
 function encodePathSegment(value: string): string {
@@ -126,14 +141,20 @@ function sessionExpired(session: HubSession): boolean {
   return Number.isFinite(expiresAt) && expiresAt <= Date.now();
 }
 
-function setRemoteSession(accessToken: string, session: HubSession): void {
+function setRemoteSession(
+  accessToken: string,
+  session: HubSession,
+  origin: "live" | "restored" = "live"
+): void {
   remoteAccessToken.value = accessToken;
   remoteSessionState.value = session;
+  remoteSessionOriginState.value = origin;
 }
 
 function clearRemoteSession(): void {
   remoteAccessToken.value = null;
   remoteSessionState.value = null;
+  remoteSessionOriginState.value = "none";
 }
 
 function toPersistedRemoteSession(
@@ -372,7 +393,7 @@ export async function initializeDesktopConnection(): Promise<DesktopConnectionPr
     return loadDesktopConnectionProfile();
   }
 
-  setRemoteSession(persistedSession.accessToken, persistedSession.session);
+  setRemoteSession(persistedSession.accessToken, persistedSession.session, "restored");
   const restoredProfile = persistDesktopConnectionProfile({
     ...profile,
     workspaceId: persistedSession.session.workspace_id,
@@ -385,7 +406,7 @@ export async function initializeDesktopConnection(): Promise<DesktopConnectionPr
 
   try {
     const verifiedSession = await createRemoteAuthClientForProfile(restoredProfile).getCurrentSession();
-    setRemoteSession(persistedSession.accessToken, verifiedSession);
+    setRemoteSession(persistedSession.accessToken, verifiedSession, "live");
     const verifiedProfile = persistDesktopConnectionProfile({
       ...restoredProfile,
       workspaceId: verifiedSession.workspace_id,
@@ -410,6 +431,7 @@ export async function initializeDesktopConnection(): Promise<DesktopConnectionPr
 }
 
 export const useConnectionStore = defineStore("connection", () => {
+  const hub = useHubStore();
   const profile = ref(loadDesktopConnectionProfile());
   const authLoading = ref(false);
   const authError = ref<string | null>(null);
@@ -418,7 +440,74 @@ export const useConnectionStore = defineStore("connection", () => {
   const session = computed(() => remoteSessionState.value);
   const hasRemoteAccessToken = computed(() => remoteAccessToken.value !== null);
   const sessionActive = computed(() => hasActiveRemoteSession(profile.value));
+  const sessionOrigin = computed(() => remoteSessionOriginState.value);
   const secureSessionWarning = computed(() => secureSessionWarningState.value);
+
+  const connectionState = computed<DesktopConnectionStateKind>(() => {
+    if (!remoteMode.value) {
+      return "authenticated";
+    }
+
+    if (hub.authState === "token_expired") {
+      return "token_expired";
+    }
+
+    if (
+      session.value &&
+      sessionOrigin.value === "restored" &&
+      hub.connectionStatus?.state === "disconnected"
+    ) {
+      return "restored_but_disconnected";
+    }
+
+    if (hub.authState === "auth_required") {
+      return "auth_required";
+    }
+
+    if (secureSessionWarning.value) {
+      return "memory_only_storage";
+    }
+
+    return "authenticated";
+  });
+
+  const connectionBanner = computed<DesktopConnectionBanner | null>(() => {
+    switch (connectionState.value) {
+      case "restored_but_disconnected":
+        return {
+          kind: "restored_but_disconnected",
+          tone: "warning",
+          title: "Remote session restored in degraded mode",
+          message:
+            "The cached remote session was restored, but the hub is currently disconnected. The workbench stays read-only until connectivity recovers."
+        };
+      case "memory_only_storage":
+        return {
+          kind: "memory_only_storage",
+          tone: "warning",
+          title: "Remote session storage is memory-only",
+          message:
+            secureSessionWarning.value ??
+            DEFAULT_SECURE_SESSION_WARNING
+        };
+      case "token_expired":
+        return {
+          kind: "token_expired",
+          tone: "danger",
+          title: "Remote session expired",
+          message: "Sign in again to restore read/write access across the workbench."
+        };
+      case "auth_required":
+        return {
+          kind: "auth_required",
+          tone: "danger",
+          title: "Remote sign-in required",
+          message: "This workbench is read-only until the current remote profile is authenticated."
+        };
+      default:
+        return null;
+    }
+  });
 
   function rememberProfile(nextProfile: Partial<DesktopConnectionProfile>): DesktopConnectionProfile {
     const storedProfile = persistDesktopConnectionProfile(nextProfile);
@@ -437,9 +526,11 @@ export const useConnectionStore = defineStore("connection", () => {
     return rememberProject("");
   }
 
-  async function reloadConnectionStatus(): Promise<void> {
-    const hub = useHubStore();
-    hub.resetWorkbenchState();
+  async function refreshConnectionStatus(options: { resetWorkbench?: boolean } = {}): Promise<void> {
+    if (options.resetWorkbench) {
+      hub.resetWorkbenchState();
+    }
+
     try {
       await hub.loadConnectionStatus();
     } catch {
@@ -465,7 +556,9 @@ export const useConnectionStore = defineStore("connection", () => {
     clearRemoteSession();
     await clearPersistedRemoteSession();
     syncHubClient(storedProfile);
-    await reloadConnectionStatus();
+    await refreshConnectionStatus({
+      resetWorkbench: true
+    });
   }
 
   async function login(password: string): Promise<HubSession> {
@@ -488,7 +581,7 @@ export const useConnectionStore = defineStore("connection", () => {
         email,
         password
       });
-      setRemoteSession(response.access_token, response.session);
+      setRemoteSession(response.access_token, response.session, "live");
       const rememberedProjectId =
         profile.value.workspaceId === response.session.workspace_id
           ? profile.value.projectId
@@ -504,7 +597,9 @@ export const useConnectionStore = defineStore("connection", () => {
         toPersistedRemoteSession(profile.value, response.access_token, response.session)
       );
       syncHubClient(profile.value);
-      await reloadConnectionStatus();
+      await refreshConnectionStatus({
+        resetWorkbench: true
+      });
       return response.session;
     } catch (error) {
       authError.value = error instanceof Error ? error.message : String(error);
@@ -525,7 +620,7 @@ export const useConnectionStore = defineStore("connection", () => {
 
     try {
       const nextSession = await createRemoteAuthClientForProfile(profile.value).getCurrentSession();
-      remoteSessionState.value = nextSession;
+      setRemoteSession(remoteAccessToken.value, nextSession, "live");
       const rememberedProjectId =
         profile.value.workspaceId === nextSession.workspace_id
           ? profile.value.projectId
@@ -569,7 +664,9 @@ export const useConnectionStore = defineStore("connection", () => {
       clearRemoteSession();
       await clearPersistedRemoteSession();
       syncHubClient(profile.value);
-      await reloadConnectionStatus();
+      await refreshConnectionStatus({
+        resetWorkbench: true
+      });
     } catch (error) {
       authError.value = error instanceof Error ? error.message : String(error);
       throw error;
@@ -590,10 +687,14 @@ export const useConnectionStore = defineStore("connection", () => {
     session,
     hasRemoteAccessToken,
     sessionActive,
+    sessionOrigin,
+    connectionState,
+    connectionBanner,
     secureSessionWarning,
     applyProfile,
     login,
     refreshCurrentSession,
+    refreshConnectionStatus,
     logout,
     clearAuthError,
     rememberProject,

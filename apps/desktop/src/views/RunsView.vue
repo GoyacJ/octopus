@@ -14,7 +14,6 @@ async function loadRunsSurface(): Promise<void> {
 
   await Promise.all([
     hub.loadProjectContext(workspaceId, projectId),
-    hub.loadConnectionStatus(),
     hub.loadRuns(workspaceId, projectId)
   ]);
 }

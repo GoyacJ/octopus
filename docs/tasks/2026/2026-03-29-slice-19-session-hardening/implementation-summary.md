@@ -19,4 +19,4 @@
   - shows memory-only fallback warnings when secure storage is unavailable
   - distinguishes a cached restored session in degraded/read-only mode from a live authenticated session
 - Expanded `apps/desktop/test/remote-connections.test.ts` to cover login persistence, restart restore, remembered-project reuse, auth-invalid restore cleanup, transport-only degraded restore, and secure-store-unavailable fallback.
-- Corrected owner docs so the tracked baseline is truthful through Slice 18 and the next frozen slice is Slice 19 `session hardening`.
+- Corrected owner docs so the tracked baseline was truthful through Slice 18 while Slice 19 was being delivered, and established the verified secure-restore baseline later consumed by Slice 20 `desktop degraded-state convergence`.

@@ -31,10 +31,7 @@ function governanceActionLabel(
 async function loadInboxSurface(): Promise<void> {
   const workspaceId = String(route.params.workspaceId);
 
-  await Promise.all([
-    hub.loadConnectionStatus(),
-    hub.loadInboxItems(workspaceId)
-  ]);
+  await hub.loadInboxItems(workspaceId);
 }
 
 async function handleResolveApproval(

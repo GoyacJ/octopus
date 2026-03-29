@@ -2,9 +2,11 @@
 import { computed } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 
+import { useConnectionStore } from "./stores/connection";
 import { useHubStore } from "./stores/hub";
 
 const hub = useHubStore();
+const connection = useConnectionStore();
 const route = useRoute();
 
 function coerceRouteParam(value: unknown): string | null {
@@ -93,6 +95,8 @@ const projectTitle = computed(
     activeProjectId.value ??
     "Project Selection"
 );
+
+const connectionBanner = computed(() => connection.connectionBanner);
 </script>
 
 <template>
@@ -113,6 +117,16 @@ const projectTitle = computed(
           Refreshed {{ hub.connectionStatus?.last_refreshed_at ?? "not yet loaded" }}
         </span>
       </div>
+
+      <section
+        v-if="connectionBanner"
+        :data-kind="connectionBanner.kind"
+        :class="['connection-banner', `connection-banner--${connectionBanner.tone}`]"
+        data-testid="connection-banner"
+      >
+        <strong>{{ connectionBanner.title }}</strong>
+        <p>{{ connectionBanner.message }}</p>
+      </section>
 
       <p v-if="hub.webhookSecretReveal" class="secret-banner">
         Webhook secret reveal: {{ hub.webhookSecretReveal }}
@@ -203,6 +217,31 @@ h1 {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #facc15;
+}
+
+.connection-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.95rem 1rem;
+  border-radius: 1rem;
+}
+
+.connection-banner strong,
+.connection-banner p {
+  margin: 0;
+}
+
+.connection-banner--warning {
+  color: #fef3c7;
+  background: rgba(120, 53, 15, 0.5);
+  border: 1px solid rgba(251, 191, 36, 0.35);
+}
+
+.connection-banner--danger {
+  color: #fecaca;
+  background: rgba(127, 29, 29, 0.52);
+  border: 1px solid rgba(248, 113, 113, 0.3);
 }
 
 .nav-stack {

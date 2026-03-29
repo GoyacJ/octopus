@@ -38,7 +38,6 @@ async function loadKnowledgeSurface(): Promise<void> {
 
   await Promise.all([
     hub.loadProjectContext(workspaceId, projectId),
-    hub.loadConnectionStatus(),
     hub.loadProjectKnowledge(workspaceId, projectId)
   ]);
 }

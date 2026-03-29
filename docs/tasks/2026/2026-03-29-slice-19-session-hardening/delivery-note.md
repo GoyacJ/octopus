@@ -31,7 +31,7 @@ By the end of Slice 18, the repository already proved remote desktop login, reme
 
 - If refresh tokens or token rotation are later approved, they must be defined as a new slice with explicit remote-hub auth and contract scope.
 - If secure-session policy becomes common across more surfaces, promote the rule via ADR instead of duplicating app-local conventions.
-- If degraded remote mode later needs finer UX beyond the current connection surface, introduce it as a separate slice rather than widening Slice 19 retroactively.
+- Degraded remote mode UX beyond the connection surface now continues in [Slice 20: Desktop Degraded-State Convergence](../2026-03-29-slice-20-desktop-degraded-state-convergence/README.md) rather than widening Slice 19 retroactively.
 
 ## Docs Updated
 

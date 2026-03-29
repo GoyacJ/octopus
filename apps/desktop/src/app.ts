@@ -11,7 +11,10 @@ import {
 } from "vue-router";
 
 import AppShell from "./App.vue";
-import { DEFAULT_LOCAL_WORKBENCH_ROUTE } from "./stores/connection";
+import {
+  DEFAULT_LOCAL_WORKBENCH_ROUTE,
+  useConnectionStore
+} from "./stores/connection";
 import { configureHubClient } from "./stores/hub";
 import AutomationDetailView from "./views/AutomationDetailView.vue";
 import ConnectionsView from "./views/ConnectionsView.vue";
@@ -115,6 +118,16 @@ export function createDesktopPlugins(
   const router = createRouter({
     history: useMemoryHistory ? createMemoryHistory() : createWebHistory(),
     routes: createRoutes(options.defaultRoute ?? DEFAULT_LOCAL_WORKBENCH_ROUTE)
+  });
+  const connection = useConnectionStore(pinia);
+
+  router.beforeResolve(async (to) => {
+    if (to.path === "/") {
+      return true;
+    }
+
+    await connection.refreshConnectionStatus();
+    return true;
   });
 
   return { pinia, router };

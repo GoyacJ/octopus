@@ -22,7 +22,6 @@ async function loadAutomationSurface(): Promise<void> {
 
   await Promise.all([
     hub.loadProjectContext(workspaceId, projectId),
-    hub.loadConnectionStatus(),
     hub.loadAutomation(automationId)
   ]);
 }

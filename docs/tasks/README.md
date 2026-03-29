@@ -35,7 +35,9 @@ Example:
 
 Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-delivery-templates.md).
 
-Current tracked task packages now cover the GA foundation and slice sequence through Slice 19 `session hardening`.
+Current tracked task packages now cover the GA foundation and slice sequence through Slice 20 `desktop degraded-state convergence`.
+
+Post-Slice-19 follow-on work must start by creating a new task package before implementation.
 
 ## Current Task Packages
 
@@ -62,6 +64,7 @@ Current tracked task packages now cover the GA foundation and slice sequence thr
 - [2026-03-29-slice-17-desktop-project-scope-entry](2026/2026-03-29-slice-17-desktop-project-scope-entry/README.md)
 - [2026-03-29-slice-18-run-control-surface](2026/2026-03-29-slice-18-run-control-surface/README.md)
 - [2026-03-29-slice-19-session-hardening](2026/2026-03-29-slice-19-session-hardening/README.md)
+- [2026-03-29-slice-20-desktop-degraded-state-convergence](2026/2026-03-29-slice-20-desktop-degraded-state-convergence/README.md)
 
 ## Relationship To ADRs
 

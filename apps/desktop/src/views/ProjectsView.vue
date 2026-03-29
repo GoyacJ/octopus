@@ -17,7 +17,7 @@ async function loadProjectsSurface(): Promise<void> {
   const workspaceId = String(route.params.workspaceId);
 
   try {
-    await Promise.all([hub.loadConnectionStatus(), hub.loadProjects(workspaceId)]);
+    await hub.loadProjects(workspaceId);
   } catch {
     // The shell already surfaces the shared error state.
   }

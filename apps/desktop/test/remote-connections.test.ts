@@ -22,6 +22,7 @@ import {
   persistDesktopConnectionProfile,
   resetDesktopConnectionRuntime,
   resolveDesktopEntryRoute,
+  useConnectionStore,
   type DesktopConnectionProfile,
   type DesktopConnectionRuntimeOptions,
   type PersistedRemoteSession
@@ -311,7 +312,7 @@ async function mountRemoteShell(
 
   await flushPromises();
 
-  return { wrapper, router };
+  return { wrapper, router, pinia };
 }
 
 function createAuthError(details: Partial<HubAuthError>): HubClientAuthError {
@@ -978,6 +979,286 @@ describe("desktop remote connection surface", () => {
 
     expect(wrapper.text()).toContain("read-only");
     expect(persistedSession).not.toBeNull();
+  });
+
+  it("shows a global degraded banner after cached restore lands on a workbench route", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
+    let persistedSession: PersistedRemoteSession | null = {
+      baseUrl: remoteProfile.baseUrl,
+      workspaceId: remoteProfile.workspaceId,
+      email: remoteProfile.email,
+      accessToken: "remote-token",
+      session: remoteSessionFixture
+    };
+
+    persistDesktopConnectionProfile({
+      ...remoteProfile,
+      projectId: "project-auth"
+    });
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          authState = "authenticated";
+          return {
+            access_token: "remote-token",
+            session: remoteSessionFixture
+          };
+        },
+        async getCurrentSession() {
+          throw new HubClientTransportError("remote hub unavailable");
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      },
+      {
+        initializeConnection: true,
+        currentConnectionState: () => "disconnected",
+        runtime: {
+          async loadPersistedRemoteSession() {
+            return {
+              session: persistedSession,
+              storageAvailable: true
+            };
+          },
+          async savePersistedRemoteSession(session) {
+            persistedSession = session;
+            return {
+              storageAvailable: true
+            };
+          },
+          async clearPersistedRemoteSession() {
+            persistedSession = null;
+            return {
+              storageAvailable: true
+            };
+          }
+        },
+        seedProfile: null
+      }
+    );
+
+    expect(router.currentRoute.value.fullPath).toBe(
+      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+    );
+    expect(
+      wrapper.get('[data-testid="connection-banner"]').attributes("data-kind")
+    ).toBe("restored_but_disconnected");
+  });
+
+  it("shows the memory-only warning in the global shell after remote login", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          authState = "authenticated";
+          return {
+            access_token: "remote-token",
+            session: remoteSessionFixture
+          };
+        },
+        async getCurrentSession() {
+          return remoteSessionFixture;
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      },
+      {
+        runtime: {
+          async loadPersistedRemoteSession() {
+            return {
+              session: null,
+              storageAvailable: false,
+              warning:
+                "Secure session storage is unavailable. Remote sign-in will stay memory-only."
+            };
+          },
+          async savePersistedRemoteSession() {
+            return {
+              storageAvailable: false,
+              warning:
+                "Secure session storage is unavailable. Remote sign-in will stay memory-only."
+            };
+          },
+          async clearPersistedRemoteSession() {
+            return {
+              storageAvailable: false,
+              warning:
+                "Secure session storage is unavailable. Remote sign-in will stay memory-only."
+            };
+          }
+        }
+      }
+    );
+
+    await wrapper.get('[data-testid="remote-password"]').setValue(
+      "octopus-bootstrap-password"
+    );
+    await wrapper.get('[data-testid="remote-login"]').trigger("click");
+    await flushPromises();
+
+    expect(router.currentRoute.value.fullPath).toBe("/workspaces/workspace-alpha/projects");
+    expect(
+      wrapper.get('[data-testid="connection-banner"]').attributes("data-kind")
+    ).toBe("memory_only_storage");
+  });
+
+  it("clears the global degraded banner after route-entry refresh sees the connection recover", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
+    let connectionState: "connected" | "disconnected" = "disconnected";
+    let persistedSession: PersistedRemoteSession | null = {
+      baseUrl: remoteProfile.baseUrl,
+      workspaceId: remoteProfile.workspaceId,
+      email: remoteProfile.email,
+      accessToken: "remote-token",
+      session: remoteSessionFixture
+    };
+
+    persistDesktopConnectionProfile({
+      ...remoteProfile,
+      projectId: "project-auth"
+    });
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          authState = "authenticated";
+          return {
+            access_token: "remote-token",
+            session: remoteSessionFixture
+          };
+        },
+        async getCurrentSession() {
+          throw new HubClientTransportError("remote hub unavailable");
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      },
+      {
+        initializeConnection: true,
+        currentConnectionState: () => connectionState,
+        runtime: {
+          async loadPersistedRemoteSession() {
+            return {
+              session: persistedSession,
+              storageAvailable: true
+            };
+          },
+          async savePersistedRemoteSession(session) {
+            persistedSession = session;
+            return {
+              storageAvailable: true
+            };
+          },
+          async clearPersistedRemoteSession() {
+            persistedSession = null;
+            return {
+              storageAvailable: true
+            };
+          }
+        },
+        seedProfile: null
+      }
+    );
+
+    expect(
+      wrapper.get('[data-testid="connection-banner"]').attributes("data-kind")
+    ).toBe("restored_but_disconnected");
+
+    authState = "authenticated";
+    connectionState = "connected";
+
+    await router.push("/workspaces/workspace-alpha/projects");
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="connection-banner"]').exists()).toBe(false);
+  });
+
+  it("clears degraded session context when switching to a different remote workspace", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
+    let persistedSession: PersistedRemoteSession | null = {
+      baseUrl: remoteProfile.baseUrl,
+      workspaceId: remoteProfile.workspaceId,
+      email: remoteProfile.email,
+      accessToken: "remote-token",
+      session: remoteSessionFixture
+    };
+
+    persistDesktopConnectionProfile({
+      ...remoteProfile,
+      projectId: "project-auth"
+    });
+
+    const { wrapper, router, pinia } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          authState = "authenticated";
+          return {
+            access_token: "remote-token",
+            session: remoteSessionFixture
+          };
+        },
+        async getCurrentSession() {
+          throw new HubClientTransportError("remote hub unavailable");
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      },
+      {
+        initializeConnection: true,
+        currentConnectionState: () => "disconnected",
+        runtime: {
+          async loadPersistedRemoteSession() {
+            return {
+              session: persistedSession,
+              storageAvailable: true
+            };
+          },
+          async savePersistedRemoteSession(session) {
+            persistedSession = session;
+            return {
+              storageAvailable: true
+            };
+          },
+          async clearPersistedRemoteSession() {
+            persistedSession = null;
+            return {
+              storageAvailable: true
+            };
+          }
+        },
+        seedProfile: null
+      }
+    );
+
+    expect(
+      wrapper.get('[data-testid="connection-banner"]').attributes("data-kind")
+    ).toBe("restored_but_disconnected");
+
+    const connection = useConnectionStore(pinia);
+    await connection.applyProfile({
+      mode: "remote",
+      baseUrl: remoteProfile.baseUrl,
+      workspaceId: "workspace-beta",
+      email: "ops@octopus.local"
+    });
+    await router.push("/workspaces/workspace-beta/projects");
+    await flushPromises();
+
+    expect(loadDesktopConnectionProfile().workspaceId).toBe("workspace-beta");
+    expect(loadDesktopConnectionProfile().projectId).toBeUndefined();
+    expect(
+      wrapper.get('[data-testid="connection-banner"]').attributes("data-kind")
+    ).toBe("auth_required");
   });
 
   it("falls back to memory-only login when the secure session store is unavailable", async () => {

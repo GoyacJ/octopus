@@ -10,10 +10,7 @@ const hub = useHubStore();
 async function loadNotificationSurface(): Promise<void> {
   const workspaceId = String(route.params.workspaceId);
 
-  await Promise.all([
-    hub.loadConnectionStatus(),
-    hub.loadNotifications(workspaceId)
-  ]);
+  await hub.loadNotifications(workspaceId);
 }
 
 watch(

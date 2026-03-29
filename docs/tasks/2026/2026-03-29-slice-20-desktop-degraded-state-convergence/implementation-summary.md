@@ -1,0 +1,48 @@
+# Implementation Summary
+
+- Goal:
+  - Converge desktop degraded remote-session semantics into one app-shell-visible state model without widening shared contracts or remote-hub scope.
+- Files Added:
+  - `docs/tasks/2026/2026-03-29-slice-20-desktop-degraded-state-convergence/implementation-summary.md`
+  - `docs/tasks/2026/2026-03-29-slice-20-desktop-degraded-state-convergence/verification.md`
+  - `docs/tasks/2026/2026-03-29-slice-20-desktop-degraded-state-convergence/delivery-note.md`
+  - `docs/tasks/2026/2026-03-29-slice-20-desktop-degraded-state-convergence/ga-acceptance-matrix.md`
+- Files Changed:
+  - `apps/desktop/src/stores/connection.ts`
+  - `apps/desktop/src/app.ts`
+  - `apps/desktop/src/App.vue`
+  - `apps/desktop/src/views/ConnectionsView.vue`
+  - `apps/desktop/src/views/ProjectsView.vue`
+  - `apps/desktop/src/views/InboxView.vue`
+  - `apps/desktop/src/views/NotificationsView.vue`
+  - `apps/desktop/src/views/KnowledgeView.vue`
+  - `apps/desktop/src/views/AutomationDetailView.vue`
+  - `apps/desktop/src/views/RunsView.vue`
+  - `apps/desktop/test/remote-connections.test.ts`
+  - `docs/tasks/2026/2026-03-29-slice-19-session-hardening/README.md`
+  - `docs/tasks/2026/2026-03-29-slice-19-session-hardening/implementation-summary.md`
+  - `docs/tasks/2026/2026-03-29-slice-19-session-hardening/delivery-note.md`
+- Files Removed:
+  - None.
+- Structure Decision:
+  - Keep the convergence slice entirely app-local by adding one `connection`-store state model, one route-entry refresh hook in `app.ts`, and one global shell banner in `App.vue`.
+- Why This Structure:
+  - The change is cross-cutting inside desktop, but it does not justify shared DTO or remote-hub expansion. Store-local semantics plus router orchestration preserve current hub/store layering while removing route-level refresh drift.
+- Reused Patterns:
+  - Existing remote profile persistence and secure-session restore flow.
+  - Existing `hub.readOnlyMode` gating for write controls.
+  - Existing route-split shell and Pinia setup-store structure.
+- New Dependencies:
+  - None.
+- Error Handling Strategy:
+  - Route-entry connection refresh uses the existing shell error surface and stays non-throwing.
+  - Auth-invalid restore behavior remains delegated to Slice 19 restore logic.
+  - Profile switches clear remote session and remembered-project context through the existing `applyProfile()` path.
+- Deferred Items:
+  - Refresh token / token rotation.
+  - Remote admin / tenant / IdP surfaces.
+  - Any deeper desktop remote UX work beyond the explicit degraded-state convergence scope.
+- Non-goals Preserved:
+  - No `schemas/`, `packages/schema-ts`, `packages/hub-client`, or remote-hub route changes.
+  - No new write paths.
+  - No RBAC, tenant admin, IdP, vector retrieval, or Org Graph expansion.

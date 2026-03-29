@@ -2,6 +2,11 @@
 
 This task package freezes Slice 19 as the desktop-only session hardening slice, limited to secure remote-session persistence, startup restore, invalidation cleanup, and disconnected degradation for the existing remote connection surface.
 
+## Closeout Status
+
+- Slice 19 is the verified secure-restore baseline for desktop remote session hardening.
+- The post-Slice-19 follow-on is [Slice 20: Desktop Degraded-State Convergence](../2026-03-29-slice-20-desktop-degraded-state-convergence/README.md).
+
 ## Package Files
 
 - [design-note.md](design-note.md)

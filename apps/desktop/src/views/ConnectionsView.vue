@@ -66,14 +66,6 @@ function syncDraftFromProfile(): void {
   remoteDraft.password = "";
 }
 
-async function loadConnectionSurface(): Promise<void> {
-  try {
-    await hub.loadConnectionStatus();
-  } catch {
-    // The shell already surfaces connection errors.
-  }
-}
-
 async function applyProfile(): Promise<void> {
   connection.clearAuthError();
 
@@ -134,7 +126,6 @@ watch(
 
 onMounted(() => {
   syncDraftFromProfile();
-  void loadConnectionSurface();
   if (
     connection.remoteMode &&
     connection.hasRemoteAccessToken &&
