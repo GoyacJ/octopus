@@ -212,6 +212,20 @@ export interface RemoteHubClientOptions {
   getAccessToken?: () => string | null | undefined | Promise<string | null | undefined>;
 }
 
+export interface RemoteHubAuthClient {
+  login(command: HubLoginCommand): Promise<HubLoginResponse>;
+  getCurrentSession(): Promise<HubSession>;
+  logout(): Promise<void>;
+}
+
+export type {
+  HubAuthError,
+  HubConnectionStatus,
+  HubLoginCommand,
+  HubLoginResponse,
+  HubSession
+};
+
 export class HubClientTransportError extends Error {
   readonly status: number | null;
   readonly details: unknown;
@@ -316,6 +330,15 @@ function normalizeAuthError(status: number, body: unknown): HubAuthError | null 
   } catch {
     return null;
   }
+}
+
+function resolveRemoteFetch(options: RemoteHubClientOptions): typeof globalThis.fetch {
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  if (!fetchImpl) {
+    throw new Error("fetch is not available in this environment.");
+  }
+
+  return fetchImpl;
 }
 
 export function createLocalHubClient(transport: LocalHubTransport): HubClient {
@@ -526,8 +549,45 @@ export function createLocalHubClient(transport: LocalHubTransport): HubClient {
   };
 }
 
+export function createRemoteHubAuthClient(
+  options: RemoteHubClientOptions
+): RemoteHubAuthClient {
+  const fetchImpl = resolveRemoteFetch(options);
+
+  return {
+    async login(command) {
+      const parsed = parseHubLoginCommand(command);
+      return parseHubLoginResponse(
+        await readRemoteJson(fetchImpl, remotePath(options.baseUrl, "/api/auth/login"), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(parsed)
+        })
+      );
+    },
+    async getCurrentSession() {
+      return parseHubSession(
+        await readRemoteJson(
+          fetchImpl,
+          remotePath(options.baseUrl, "/api/auth/session"),
+          { method: "GET" },
+          options.getAccessToken
+        )
+      );
+    },
+    async logout() {
+      await readRemoteJson(
+        fetchImpl,
+        remotePath(options.baseUrl, "/api/auth/logout"),
+        { method: "POST" },
+        options.getAccessToken
+      );
+    }
+  };
+}
+
 export function createRemoteHubClient(options: RemoteHubClientOptions): HubClient {
-  const fetchImpl = options.fetch ?? globalThis.fetch;
+  const fetchImpl = resolveRemoteFetch(options);
   const createEventSource =
     options.createEventSource ??
     ((url: string) => {
@@ -537,10 +597,6 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
       }
       return new EventSourceCtor(url) as unknown as EventSourceLike;
     });
-
-  if (!fetchImpl) {
-    throw new Error("fetch is not available in this environment.");
-  }
 
   async function listCapabilityResolutions(
     workspaceId: string,

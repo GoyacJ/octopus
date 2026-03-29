@@ -1,5 +1,4 @@
 import type { HubClient, LocalHubTransport } from "@octopus/hub-client";
-import { createLocalHubClient } from "@octopus/hub-client";
 import { createPinia } from "pinia";
 import { createApp } from "vue";
 import {
@@ -12,6 +11,7 @@ import {
 } from "vue-router";
 
 import AppShell from "./App.vue";
+import { DEFAULT_LOCAL_WORKBENCH_ROUTE } from "./stores/connection";
 import { configureHubClient } from "./stores/hub";
 import AutomationDetailView from "./views/AutomationDetailView.vue";
 import ConnectionsView from "./views/ConnectionsView.vue";
@@ -27,6 +27,10 @@ export interface DesktopPlugins {
   router: Router;
 }
 
+export interface DesktopRouterOptions {
+  defaultRoute?: string;
+}
+
 function routeParam(to: RouteLocationGeneric, key: string): string {
   const value = to.params[key];
 
@@ -37,11 +41,11 @@ function routeParam(to: RouteLocationGeneric, key: string): string {
   return value ?? "";
 }
 
-function createRoutes(): RouteRecordRaw[] {
+function createRoutes(defaultRoute: string): RouteRecordRaw[] {
   return [
     {
       path: "/",
-      redirect: "/workspaces/demo/projects/demo/tasks"
+      redirect: defaultRoute
     },
     {
       path: "/workspaces/:workspaceId/projects/:projectId",
@@ -93,14 +97,15 @@ function createRoutes(): RouteRecordRaw[] {
 
 export function createDesktopPlugins(
   client: HubClient,
-  useMemoryHistory = false
+  useMemoryHistory = false,
+  options: DesktopRouterOptions = {}
 ): DesktopPlugins {
   configureHubClient(client);
 
   const pinia = createPinia();
   const router = createRouter({
     history: useMemoryHistory ? createMemoryHistory() : createWebHistory(),
-    routes: createRoutes()
+    routes: createRoutes(options.defaultRoute ?? DEFAULT_LOCAL_WORKBENCH_ROUTE)
   });
 
   return { pinia, router };
@@ -108,27 +113,16 @@ export function createDesktopPlugins(
 
 export function createDesktopApp(
   client: HubClient,
-  useMemoryHistory = false
+  useMemoryHistory = false,
+  options: DesktopRouterOptions = {}
 ): DesktopPlugins & { app: ReturnType<typeof createApp> } {
   const app = createApp(AppShell);
-  const { pinia, router } = createDesktopPlugins(client, useMemoryHistory);
+  const { pinia, router } = createDesktopPlugins(client, useMemoryHistory, options);
 
   app.use(pinia);
   app.use(router);
 
   return { app, pinia, router };
 }
-
-export function createWindowLocalHubClient(): HubClient {
-  const transport = window.__OCTOPUS_LOCAL_HUB__;
-
-  if (!transport) {
-    throw new Error(
-      "No local Hub transport bridge is registered on window.__OCTOPUS_LOCAL_HUB__."
-    );
-  }
-
-  return createLocalHubClient(transport);
-}
-
 export type { HubClient, LocalHubTransport };
+export { createWindowLocalHubClient } from "./hub-client-runtime";

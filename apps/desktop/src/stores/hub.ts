@@ -107,6 +107,31 @@ export const useHubStore = defineStore("hub", () => {
   );
   const readOnlyMode = computed(() => authState.value !== "authenticated");
 
+  function resetWorkbenchState(): void {
+    currentWorkspaceId.value = null;
+    currentProjectId.value = null;
+    currentAutomationId.value = null;
+    currentRunId.value = null;
+    projectContext.value = null;
+    taskCapabilityResolutions.value = [];
+    automationCapabilityResolutions.value = [];
+    taskCapabilityEstimatedCost.value = 1;
+    automationCapabilityEstimatedCost.value = 1;
+    connectionStatus.value = null;
+    runs.value = [];
+    inboxItems.value = [];
+    notifications.value = [];
+    approvalDetails.value = {};
+    automations.value = [];
+    automationDetail.value = null;
+    webhookSecretReveal.value = null;
+    runDetail.value = null;
+    artifacts.value = [];
+    knowledgeDetail.value = null;
+    projectKnowledgeIndex.value = null;
+    surfaceError.value = null;
+  }
+
   function setProjectScope(workspaceId: string, projectId: string): void {
     currentWorkspaceId.value = workspaceId;
     currentProjectId.value = projectId;
@@ -658,6 +683,7 @@ export const useHubStore = defineStore("hub", () => {
     activeCapability,
     authState,
     readOnlyMode,
+    resetWorkbenchState,
     loadProjectContext,
     loadConnectionStatus,
     loadRuns,

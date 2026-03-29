@@ -86,7 +86,7 @@
 - Slice 13 `desktop local host foundation` 已落地并通过验证，补齐真实 Tauri/Rust 本地宿主、共享本地 transport 契约消费、以及受控 local-mode 引导路径
 - Slice 14 `desktop task workbench` 已落地并通过验证，补齐 desktop workbench 的 route split、独立 loaders 与 `Tasks / Runs / Inbox / Notifications / Connections` IA
 - Slice 15 `project knowledge index` 已落地并通过验证，补齐 project-scoped Shared Knowledge 只读索引面与 local/remote transport parity
-- 当前 owner docs 尚未冻结 post-Slice-15 的下一优先级；后续切片不得在本文之外自行假定
+- post-Slice-15 的下一优先级现已冻结为 Slice 16 `desktop remote connection & session surface`；该切片当前处于计划/实施中，尚未计入已验证基线
 
 ---
 
@@ -177,7 +177,7 @@
 10. Slice 14 `desktop task workbench`
 11. Slice 15 `project knowledge index`
 
-更深 remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须等新的 task package 与 owner docs 明确后再启动；不得擅自假定 post-Slice-15 的下一优先级。
+更深 remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须等新的 task package 与 owner docs 明确后再启动；当前 post-Slice-15 的允许下一步仅冻结到 Slice 16 `desktop remote connection & session surface`。
 
 ### 6.3 Shared Contract 先于实现
 

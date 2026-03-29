@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   HUB_EVENT_CHANNEL,
   createLocalHubClient,
+  createRemoteHubAuthClient,
   createRemoteHubClient,
   type EventSourceLike,
   type EventSourceMessage,
@@ -721,6 +722,100 @@ runHubClientContractSuite("remote adapter", () => {
 });
 
 describe("remote auth-aware adapter behavior", () => {
+  it("logs in through the remote auth surface and parses the session response", async () => {
+    const authClient = createRemoteHubAuthClient({
+      baseUrl: "http://hub.test",
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe("http://hub.test/api/auth/login");
+        expect(init?.method).toBe("POST");
+        expect(new Headers(init?.headers).get("content-type")).toBe("application/json");
+        expect(init?.body).toBe(
+          JSON.stringify({
+            workspace_id: "workspace-alpha",
+            email: "admin@octopus.local",
+            password: "octopus-bootstrap-password"
+          })
+        );
+
+        return Response.json({
+          access_token: "remote-token",
+          session: {
+            session_id: "session-1",
+            user_id: "user-1",
+            email: "admin@octopus.local",
+            workspace_id: "workspace-alpha",
+            actor_ref: "workspace_admin:bootstrap_admin",
+            issued_at: "2026-03-29T10:00:00Z",
+            expires_at: "2026-03-29T12:00:00Z"
+          }
+        });
+      }
+    } as any);
+
+    await expect(
+      authClient.login({
+        workspace_id: "workspace-alpha",
+        email: "admin@octopus.local",
+        password: "octopus-bootstrap-password"
+      })
+    ).resolves.toMatchObject({
+      access_token: "remote-token",
+      session: {
+        workspace_id: "workspace-alpha",
+        email: "admin@octopus.local"
+      }
+    });
+  });
+
+  it("injects bearer tokens when reading the current remote session", async () => {
+    const authClient = createRemoteHubAuthClient({
+      baseUrl: "http://hub.test",
+      getAccessToken: async () => "remote-token",
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe("http://hub.test/api/auth/session");
+        expect(init?.method).toBe("GET");
+        expect(new Headers(init?.headers).get("authorization")).toBe(
+          "Bearer remote-token"
+        );
+
+        return Response.json({
+          session_id: "session-1",
+          user_id: "user-1",
+          email: "admin@octopus.local",
+          workspace_id: "workspace-alpha",
+          actor_ref: "workspace_admin:bootstrap_admin",
+          issued_at: "2026-03-29T10:00:00Z",
+          expires_at: "2026-03-29T12:00:00Z"
+        });
+      }
+    } as any);
+
+    await expect(authClient.getCurrentSession()).resolves.toMatchObject({
+      session_id: "session-1",
+      workspace_id: "workspace-alpha"
+    });
+  });
+
+  it("logs out through the remote auth surface with bearer auth", async () => {
+    const authClient = createRemoteHubAuthClient({
+      baseUrl: "http://hub.test",
+      getAccessToken: async () => "remote-token",
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe("http://hub.test/api/auth/logout");
+        expect(init?.method).toBe("POST");
+        expect(new Headers(init?.headers).get("authorization")).toBe(
+          "Bearer remote-token"
+        );
+
+        return new Response(null, {
+          status: 204
+        });
+      }
+    } as any);
+
+    await expect(authClient.logout()).resolves.toBeUndefined();
+  });
+
   it("injects bearer tokens into remote hub requests", async () => {
     const client = createRemoteHubClient({
       baseUrl: "http://hub.test",
@@ -769,6 +864,36 @@ describe("remote auth-aware adapter behavior", () => {
       kind: "token_expired",
       authState: "token_expired",
       status: 401
+    });
+  });
+
+  it("normalizes workspace mismatch into an auth-aware client error", async () => {
+    const client = createRemoteHubClient({
+      baseUrl: "http://hub.test",
+      getAccessToken: async () => "remote-token",
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            error: "workspace membership required",
+            error_code: "workspace_forbidden",
+            auth_state: "authenticated"
+          }),
+          {
+            status: 403,
+            headers: {
+              "content-type": "application/json"
+            }
+          }
+        )
+    } as any);
+
+    await expect(
+      client.listRuns("workspace-alpha", "project-slice1")
+    ).rejects.toMatchObject({
+      name: "HubClientAuthError",
+      kind: "workspace_forbidden",
+      authState: "authenticated",
+      status: 403
     });
   });
 });

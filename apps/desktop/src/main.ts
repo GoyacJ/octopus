@@ -1,10 +1,16 @@
-import { createDesktopApp, createWindowLocalHubClient } from "./app";
+import { createDesktopApp } from "./app";
+import {
+  createConfiguredDesktopHubClient,
+  resolveDesktopEntryRoute
+} from "./stores/connection";
 import { registerTauriLocalHubTransport } from "./tauri-local-bridge";
 
 export async function bootstrap() {
   await registerTauriLocalHubTransport();
 
-  const { app, router } = createDesktopApp(createWindowLocalHubClient());
+  const { app, router } = createDesktopApp(createConfiguredDesktopHubClient(), false, {
+    defaultRoute: resolveDesktopEntryRoute()
+  });
 
   await router.isReady();
   app.mount("#app");
