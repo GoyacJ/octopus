@@ -28,6 +28,8 @@ pub struct PersistedRemoteSession {
     pub workspace_id: String,
     pub email: String,
     pub access_token: String,
+    pub refresh_token: String,
+    pub refresh_token_expires_at: String,
     pub session: PersistedHubSession,
 }
 
@@ -204,7 +206,10 @@ where
             Err(_) => return Ok(self.clear_invalid_entry()),
         };
 
-        if session_expired(&parsed.session.expires_at) || !binding_matches(request, &parsed) {
+        if !binding_matches(request, &parsed)
+            || !timestamps_are_valid(&parsed)
+            || timestamp_expired(&parsed.refresh_token_expires_at)
+        {
             return Ok(self.clear_invalid_entry());
         }
 
@@ -259,7 +264,17 @@ fn normalize_text(value: &str) -> String {
     value.trim().to_string()
 }
 
-fn session_expired(expires_at: &str) -> bool {
+fn timestamps_are_valid(session: &PersistedRemoteSession) -> bool {
+    timestamp_is_valid(&session.session.issued_at)
+        && timestamp_is_valid(&session.session.expires_at)
+        && timestamp_is_valid(&session.refresh_token_expires_at)
+}
+
+fn timestamp_is_valid(value: &str) -> bool {
+    DateTime::parse_from_rfc3339(value).is_ok()
+}
+
+fn timestamp_expired(expires_at: &str) -> bool {
     DateTime::parse_from_rfc3339(expires_at)
         .map(|parsed| parsed.with_timezone(&Utc) <= Utc::now())
         .unwrap_or(true)

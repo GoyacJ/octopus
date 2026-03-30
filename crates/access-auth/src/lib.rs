@@ -4,15 +4,16 @@ use argon2::{
     password_hash::{PasswordHash, SaltString},
     Argon2, PasswordHasher, PasswordVerifier,
 };
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use jsonwebtoken::{
     decode, encode, errors::ErrorKind as JwtErrorKind, DecodingKey, EncodingKey, Header,
     Validation,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqlitePoolOptions},
-    Row, SqlitePool,
+    Row, Sqlite, SqlitePool, Transaction,
 };
 use thiserror::Error;
 
@@ -21,6 +22,7 @@ pub const DEFAULT_BOOTSTRAP_PASSWORD: &str = "octopus-bootstrap-password";
 pub const DEFAULT_BOOTSTRAP_ACTOR_REF: &str = "workspace_admin:bootstrap_admin";
 pub const DEFAULT_JWT_SECRET: &str = "octopus-slice10-remote-hub-dev-secret";
 pub const DEFAULT_SESSION_TTL_SECONDS: i64 = 60 * 60;
+pub const DEFAULT_REFRESH_TOKEN_TTL_SECONDS: i64 = 60 * 60 * 24 * 7;
 
 #[derive(Debug, Clone)]
 pub struct RemoteAccessConfig {
@@ -30,6 +32,7 @@ pub struct RemoteAccessConfig {
     pub bootstrap_actor_ref: String,
     pub jwt_secret: String,
     pub session_ttl_seconds: i64,
+    pub refresh_token_ttl_seconds: i64,
 }
 
 impl Default for RemoteAccessConfig {
@@ -41,6 +44,7 @@ impl Default for RemoteAccessConfig {
             bootstrap_actor_ref: DEFAULT_BOOTSTRAP_ACTOR_REF.to_string(),
             jwt_secret: DEFAULT_JWT_SECRET.to_string(),
             session_ttl_seconds: DEFAULT_SESSION_TTL_SECONDS,
+            refresh_token_ttl_seconds: DEFAULT_REFRESH_TOKEN_TTL_SECONDS,
         }
     }
 }
@@ -59,6 +63,21 @@ pub struct HubSession {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct HubLoginResponse {
     pub access_token: String,
+    pub refresh_token: String,
+    pub refresh_expires_at: String,
+    pub session: HubSession,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HubRefreshCommand {
+    pub refresh_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct HubRefreshResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub refresh_expires_at: String,
     pub session: HubSession,
 }
 
@@ -139,6 +158,59 @@ struct AuthSessionRecord {
     updated_at: String,
 }
 
+#[derive(Debug, Clone)]
+struct AuthRefreshTokenRecord {
+    id: String,
+    family_id: String,
+    session_id: String,
+    user_id: String,
+    workspace_id: String,
+    token_hash: String,
+    issued_at: String,
+    expires_at: String,
+    rotated_at: Option<String>,
+    replaced_by_token_id: Option<String>,
+    revoked_at: Option<String>,
+    created_at: String,
+    updated_at: String,
+}
+
+#[derive(Debug, Clone)]
+struct IssuedSessionTokens {
+    access_token: String,
+    refresh_token: String,
+    refresh_expires_at: String,
+    session: HubSession,
+}
+
+#[derive(Debug, Clone)]
+struct ParsedRefreshToken {
+    token_id: String,
+    secret: String,
+}
+
+impl From<IssuedSessionTokens> for HubLoginResponse {
+    fn from(value: IssuedSessionTokens) -> Self {
+        Self {
+            access_token: value.access_token,
+            refresh_token: value.refresh_token,
+            refresh_expires_at: value.refresh_expires_at,
+            session: value.session,
+        }
+    }
+}
+
+impl From<IssuedSessionTokens> for HubRefreshResponse {
+    fn from(value: IssuedSessionTokens) -> Self {
+        Self {
+            access_token: value.access_token,
+            refresh_token: value.refresh_token,
+            refresh_expires_at: value.refresh_expires_at,
+            session: value.session,
+        }
+    }
+}
+
 impl RemoteAccessService {
     pub async fn open_at(path: &Path) -> Result<Self, AccessAuthError> {
         Self::open_at_with_config(path, RemoteAccessConfig::default()).await
@@ -161,6 +233,9 @@ impl RemoteAccessService {
             .connect_with(options)
             .await?;
         sqlx::raw_sql(include_str!("../migrations/0010_remote_access_auth.sql"))
+            .execute(&pool)
+            .await?;
+        sqlx::raw_sql(include_str!("../migrations/0011_remote_access_refresh_tokens.sql"))
             .execute(&pool)
             .await?;
 
@@ -189,15 +264,14 @@ impl RemoteAccessService {
         let membership = self
             .ensure_workspace_membership_for_login(&user, workspace_id)
             .await?;
-        let session = self.create_session(&user, &membership).await?;
-        let claims = SessionTokenClaims::from_session(&session);
-        let access_token = encode(&Header::default(), &claims, &self.encoding_key)
-            .map_err(|error| AccessAuthError::JwtEncode(error.to_string()))?;
+        let mut tx = self.pool.begin().await?;
+        let session = self.create_session_tx(&mut tx, &user, &membership).await?;
+        let credentials = self
+            .issue_session_tokens_tx(&mut tx, &session, &session.session_id)
+            .await?;
+        tx.commit().await?;
 
-        Ok(HubLoginResponse {
-            access_token,
-            session,
-        })
+        Ok(credentials.into())
     }
 
     pub async fn authenticate_token(&self, raw_token: &str) -> Result<HubSession, AccessAuthError> {
@@ -219,7 +293,7 @@ impl RemoteAccessService {
         {
             return Err(AccessAuthError::InvalidToken);
         }
-        if session.expires_at <= current_timestamp() {
+        if timestamp_expired(&session.expires_at) {
             return Err(AccessAuthError::TokenExpired);
         }
 
@@ -243,19 +317,59 @@ impl RemoteAccessService {
         self.authenticate_token(authorization).await
     }
 
+    pub async fn refresh_session(
+        &self,
+        refresh_token: &str,
+    ) -> Result<HubRefreshResponse, AccessAuthError> {
+        let parsed = parse_refresh_token(refresh_token)?;
+        let mut tx = self.pool.begin().await?;
+        let refresh = self
+            .fetch_refresh_token_tx(&mut tx, &parsed.token_id)
+            .await?
+            .ok_or(AccessAuthError::InvalidToken)?;
+        if hash_refresh_token_secret(&parsed.secret) != refresh.token_hash {
+            return Err(AccessAuthError::InvalidToken);
+        }
+        if refresh.revoked_at.is_some() {
+            return Err(AccessAuthError::InvalidToken);
+        }
+        if timestamp_expired(&refresh.expires_at) {
+            return Err(AccessAuthError::TokenExpired);
+        }
+        if refresh.rotated_at.is_some() || refresh.replaced_by_token_id.is_some() {
+            self.revoke_session_family_tx(&mut tx, &refresh.family_id)
+                .await?;
+            tx.commit().await?;
+            return Err(AccessAuthError::InvalidToken);
+        }
+
+        let session = self
+            .fetch_session_tx(&mut tx, &refresh.session_id)
+            .await?
+            .ok_or(AccessAuthError::InvalidToken)?;
+        if session.revoked_at.is_some() {
+            return Err(AccessAuthError::InvalidToken);
+        }
+
+        let user = self
+            .fetch_user_by_id_tx(&mut tx, &session.user_id)
+            .await?
+            .ok_or(AccessAuthError::InvalidToken)?;
+        let next_session = self
+            .rotate_session_tx(&mut tx, &session, &user.email)
+            .await?;
+        let credentials = self
+            .rotate_refresh_token_tx(&mut tx, &refresh, &next_session)
+            .await?;
+        tx.commit().await?;
+
+        Ok(credentials.into())
+    }
+
     pub async fn logout(&self, session_id: &str) -> Result<(), AccessAuthError> {
-        let now = current_timestamp();
-        sqlx::query(
-            r#"
-            UPDATE auth_sessions
-            SET revoked_at = COALESCE(revoked_at, ?2), updated_at = ?2
-            WHERE id = ?1
-            "#,
-        )
-        .bind(session_id)
-        .bind(&now)
-        .execute(&self.pool)
-        .await?;
+        let mut tx = self.pool.begin().await?;
+        self.revoke_session_family_tx(&mut tx, session_id).await?;
+        tx.commit().await?;
         Ok(())
     }
 
@@ -361,8 +475,9 @@ impl RemoteAccessService {
         Ok(membership)
     }
 
-    async fn create_session(
+    async fn create_session_tx(
         &self,
+        tx: &mut Transaction<'_, Sqlite>,
         user: &RemoteUserRecord,
         membership: &WorkspaceMembershipRecord,
     ) -> Result<HubSession, AccessAuthError> {
@@ -389,7 +504,7 @@ impl RemoteAccessService {
         .bind(&now)
         .bind(&now)
         .bind(&now)
-        .execute(&self.pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(HubSession {
@@ -416,6 +531,26 @@ impl RemoteAccessService {
         )
         .bind(email)
         .fetch_optional(&self.pool)
+        .await?
+        .map(remote_user_from_row)
+        .transpose()
+        .map_err(AccessAuthError::from)
+    }
+
+    async fn fetch_user_by_id_tx(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        user_id: &str,
+    ) -> Result<Option<RemoteUserRecord>, AccessAuthError> {
+        sqlx::query(
+            r#"
+            SELECT id, email, display_name, password_hash, is_bootstrap
+            FROM remote_users
+            WHERE id = ?1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_optional(&mut **tx)
         .await?
         .map(remote_user_from_row)
         .transpose()
@@ -463,6 +598,224 @@ impl RemoteAccessService {
         .map_err(AccessAuthError::from)
     }
 
+    async fn fetch_session_tx(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        session_id: &str,
+    ) -> Result<Option<AuthSessionRecord>, AccessAuthError> {
+        sqlx::query(
+            r#"
+            SELECT id, user_id, workspace_id, actor_ref, issued_at, expires_at, revoked_at,
+                   last_seen_at, created_at, updated_at
+            FROM auth_sessions
+            WHERE id = ?1
+            "#,
+        )
+        .bind(session_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .map(auth_session_from_row)
+        .transpose()
+        .map_err(AccessAuthError::from)
+    }
+
+    async fn fetch_refresh_token_tx(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        refresh_token_id: &str,
+    ) -> Result<Option<AuthRefreshTokenRecord>, AccessAuthError> {
+        sqlx::query(
+            r#"
+            SELECT id, family_id, session_id, user_id, workspace_id, token_hash, issued_at,
+                   expires_at, rotated_at, replaced_by_token_id, revoked_at, created_at, updated_at
+            FROM auth_refresh_tokens
+            WHERE id = ?1
+            "#,
+        )
+        .bind(refresh_token_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .map(auth_refresh_token_from_row)
+        .transpose()
+        .map_err(AccessAuthError::from)
+    }
+
+    async fn issue_session_tokens_tx(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        session: &HubSession,
+        family_id: &str,
+    ) -> Result<IssuedSessionTokens, AccessAuthError> {
+        let access_token = self.encode_access_token(session)?;
+        let refresh = self
+            .create_refresh_token_record_tx(tx, family_id, session)
+            .await?;
+
+        Ok(IssuedSessionTokens {
+            access_token,
+            refresh_token: refresh.raw_token,
+            refresh_expires_at: refresh.record.expires_at,
+            session: session.clone(),
+        })
+    }
+
+    async fn create_refresh_token_record_tx(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        family_id: &str,
+        session: &HubSession,
+    ) -> Result<CreatedRefreshToken, AccessAuthError> {
+        let issued_at = current_timestamp();
+        let expires_at = (Utc::now() + Duration::seconds(self.config.refresh_token_ttl_seconds))
+            .to_rfc3339();
+        let token_id = uuid::Uuid::new_v4().to_string();
+        let secret = format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple());
+        let now = current_timestamp();
+        let record = AuthRefreshTokenRecord {
+            id: token_id.clone(),
+            family_id: family_id.to_string(),
+            session_id: session.session_id.clone(),
+            user_id: session.user_id.clone(),
+            workspace_id: session.workspace_id.clone(),
+            token_hash: hash_refresh_token_secret(&secret),
+            issued_at,
+            expires_at,
+            rotated_at: None,
+            replaced_by_token_id: None,
+            revoked_at: None,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+
+        sqlx::query(
+            r#"
+            INSERT INTO auth_refresh_tokens (
+                id, family_id, session_id, user_id, workspace_id, token_hash, issued_at,
+                expires_at, rotated_at, replaced_by_token_id, revoked_at, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, NULL, NULL, ?9, ?10)
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.family_id)
+        .bind(&record.session_id)
+        .bind(&record.user_id)
+        .bind(&record.workspace_id)
+        .bind(&record.token_hash)
+        .bind(&record.issued_at)
+        .bind(&record.expires_at)
+        .bind(&record.created_at)
+        .bind(&record.updated_at)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(CreatedRefreshToken {
+            raw_token: format!("{}.{}", token_id, secret),
+            record,
+        })
+    }
+
+    async fn rotate_session_tx(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        session: &AuthSessionRecord,
+        email: &str,
+    ) -> Result<HubSession, AccessAuthError> {
+        let issued_at = current_timestamp();
+        let refresh_session_ttl_seconds = self.config.session_ttl_seconds.max(1);
+        let expires_at = (Utc::now() + Duration::seconds(refresh_session_ttl_seconds))
+            .to_rfc3339();
+        let now = current_timestamp();
+
+        sqlx::query(
+            r#"
+            UPDATE auth_sessions
+            SET issued_at = ?2, expires_at = ?3, last_seen_at = ?4, updated_at = ?4
+            WHERE id = ?1
+            "#,
+        )
+        .bind(&session.id)
+        .bind(&issued_at)
+        .bind(&expires_at)
+        .bind(&now)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(HubSession {
+            session_id: session.id.clone(),
+            user_id: session.user_id.clone(),
+            email: email.to_string(),
+            workspace_id: session.workspace_id.clone(),
+            actor_ref: session.actor_ref.clone(),
+            issued_at,
+            expires_at,
+        })
+    }
+
+    async fn rotate_refresh_token_tx(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        current_refresh: &AuthRefreshTokenRecord,
+        session: &HubSession,
+    ) -> Result<IssuedSessionTokens, AccessAuthError> {
+        let next_credentials = self
+            .issue_session_tokens_tx(tx, session, &current_refresh.family_id)
+            .await?;
+        let now = current_timestamp();
+        let next_refresh = parse_refresh_token(&next_credentials.refresh_token)?;
+
+        sqlx::query(
+            r#"
+            UPDATE auth_refresh_tokens
+            SET rotated_at = ?2, replaced_by_token_id = ?3, updated_at = ?2
+            WHERE id = ?1
+            "#,
+        )
+        .bind(&current_refresh.id)
+        .bind(&now)
+        .bind(&next_refresh.token_id)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(next_credentials)
+    }
+
+    async fn revoke_session_family_tx(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        family_id: &str,
+    ) -> Result<(), AccessAuthError> {
+        let now = current_timestamp();
+        sqlx::query(
+            r#"
+            UPDATE auth_sessions
+            SET revoked_at = COALESCE(revoked_at, ?2), updated_at = ?2
+            WHERE id = ?1
+            "#,
+        )
+        .bind(family_id)
+        .bind(&now)
+        .execute(&mut **tx)
+        .await?;
+        sqlx::query(
+            r#"
+            UPDATE auth_refresh_tokens
+            SET revoked_at = COALESCE(revoked_at, ?2), updated_at = ?2
+            WHERE family_id = ?1
+            "#,
+        )
+        .bind(family_id)
+        .bind(&now)
+        .execute(&mut **tx)
+        .await?;
+        Ok(())
+    }
+
+    fn encode_access_token(&self, session: &HubSession) -> Result<String, AccessAuthError> {
+        let claims = SessionTokenClaims::from_session(session);
+        encode(&Header::default(), &claims, &self.encoding_key)
+            .map_err(|error| AccessAuthError::JwtEncode(error.to_string()))
+    }
+
     async fn touch_session(&self, session_id: &str) -> Result<(), AccessAuthError> {
         let now = current_timestamp();
         sqlx::query(
@@ -478,6 +831,12 @@ impl RemoteAccessService {
         .await?;
         Ok(())
     }
+}
+
+#[derive(Debug, Clone)]
+struct CreatedRefreshToken {
+    raw_token: String,
+    record: AuthRefreshTokenRecord,
 }
 
 impl SessionTokenClaims {
@@ -533,6 +892,26 @@ fn auth_session_from_row(row: sqlx::sqlite::SqliteRow) -> Result<AuthSessionReco
     })
 }
 
+fn auth_refresh_token_from_row(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<AuthRefreshTokenRecord, sqlx::Error> {
+    Ok(AuthRefreshTokenRecord {
+        id: row.try_get("id")?,
+        family_id: row.try_get("family_id")?,
+        session_id: row.try_get("session_id")?,
+        user_id: row.try_get("user_id")?,
+        workspace_id: row.try_get("workspace_id")?,
+        token_hash: row.try_get("token_hash")?,
+        issued_at: row.try_get("issued_at")?,
+        expires_at: row.try_get("expires_at")?,
+        rotated_at: row.try_get("rotated_at")?,
+        replaced_by_token_id: row.try_get("replaced_by_token_id")?,
+        revoked_at: row.try_get("revoked_at")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
 fn hash_password(password: &str) -> Result<String, AccessAuthError> {
     let salt =
         SaltString::encode_b64(b"octopus-slice10-bootstrap-salt").map_err(password_hash_error)?;
@@ -557,6 +936,26 @@ fn extract_bearer_token(header: &str) -> Result<&str, AccessAuthError> {
         .ok_or(AccessAuthError::MissingBearerToken)
 }
 
+fn parse_refresh_token(raw_token: &str) -> Result<ParsedRefreshToken, AccessAuthError> {
+    let trimmed = raw_token.trim();
+    let (token_id, secret) = trimmed
+        .split_once('.')
+        .ok_or(AccessAuthError::InvalidToken)?;
+    if token_id.trim().is_empty() || secret.trim().is_empty() {
+        return Err(AccessAuthError::InvalidToken);
+    }
+
+    Ok(ParsedRefreshToken {
+        token_id: token_id.to_string(),
+        secret: secret.to_string(),
+    })
+}
+
+fn hash_refresh_token_secret(secret: &str) -> String {
+    let digest = Sha256::digest(secret.as_bytes());
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 fn password_hash_error(error: impl std::fmt::Display) -> AccessAuthError {
     AccessAuthError::PasswordHash(error.to_string())
 }
@@ -571,6 +970,12 @@ fn map_jwt_decode_error(error: jsonwebtoken::errors::Error) -> AccessAuthError {
 
 fn current_timestamp() -> String {
     Utc::now().to_rfc3339()
+}
+
+fn timestamp_expired(timestamp: &str) -> bool {
+    DateTime::parse_from_rfc3339(timestamp)
+        .map(|parsed| parsed.with_timezone(&Utc) <= Utc::now())
+        .unwrap_or(true)
 }
 
 fn parse_timestamp_seconds(timestamp: &str) -> usize {

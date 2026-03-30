@@ -15,6 +15,8 @@ import {
   parseHubEvent,
   parseHubLoginCommand,
   parseHubLoginResponse,
+  parseHubRefreshCommand,
+  parseHubRefreshResponse,
   parseKnowledgeDetail,
   parseProjectKnowledgeIndex,
   parseLocalHubTransportContract,
@@ -465,6 +467,8 @@ describe("schema-ts contract parsers", () => {
     expect(
       parseHubLoginResponse({
         access_token: "jwt-token",
+        refresh_token: "refresh-token",
+        refresh_expires_at: "2026-04-05T10:00:00Z",
         session: {
           session_id: "session-1",
           user_id: "remote-user-bootstrap-admin",
@@ -474,8 +478,33 @@ describe("schema-ts contract parsers", () => {
           issued_at: "2026-03-26T10:00:00Z",
           expires_at: "2026-03-26T11:00:00Z"
         }
-      }).session.actor_ref
-    ).toBe("workspace_admin:bootstrap_admin");
+      }).refresh_token
+    ).toBe("refresh-token");
+  });
+
+  it("accepts remote refresh command and response contracts", () => {
+    expect(
+      parseHubRefreshCommand({
+        refresh_token: "refresh-token"
+      }).refresh_token
+    ).toBe("refresh-token");
+
+    expect(
+      parseHubRefreshResponse({
+        access_token: "jwt-token-next",
+        refresh_token: "refresh-token-next",
+        refresh_expires_at: "2026-04-05T10:00:00Z",
+        session: {
+          session_id: "session-1",
+          user_id: "remote-user-bootstrap-admin",
+          email: "admin@octopus.local",
+          workspace_id: "workspace-alpha",
+          actor_ref: "workspace_admin:bootstrap_admin",
+          issued_at: "2026-03-26T10:00:00Z",
+          expires_at: "2026-03-26T11:00:00Z"
+        }
+      }).refresh_expires_at
+    ).toBe("2026-04-05T10:00:00Z");
   });
 
   it("accepts a structured auth failure payload", () => {

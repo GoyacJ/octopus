@@ -16,6 +16,8 @@ import {
   parseKnowledgeDetail,
   parseHubLoginCommand,
   parseHubLoginResponse,
+  parseHubRefreshCommand,
+  parseHubRefreshResponse,
   parseHubSession,
   parseKnowledgePromoteCommand,
   parseProjectKnowledgeIndex,
@@ -44,6 +46,7 @@ import {
   type HubEvent,
   type HubLoginCommand,
   type HubLoginResponse,
+  type HubRefreshResponse,
   type HubSession,
   type InboxItem,
   type KnowledgeDetail,
@@ -226,10 +229,14 @@ export interface RemoteHubClientOptions {
   fetch?: typeof globalThis.fetch;
   createEventSource?: (url: string) => EventSourceLike;
   getAccessToken?: () => string | null | undefined | Promise<string | null | undefined>;
+  getRefreshToken?: () => string | null | undefined | Promise<string | null | undefined>;
+  onRefreshTokens?: (response: HubRefreshResponse) => void | Promise<void>;
+  clearSessionTokens?: () => void | Promise<void>;
 }
 
 export interface RemoteHubAuthClient {
   login(command: HubLoginCommand): Promise<HubLoginResponse>;
+  refreshSession(): Promise<HubRefreshResponse>;
   getCurrentSession(): Promise<HubSession>;
   logout(): Promise<void>;
 }
@@ -239,6 +246,7 @@ export type {
   HubConnectionStatus,
   HubLoginCommand,
   HubLoginResponse,
+  HubRefreshResponse,
   HubSession
 };
 
@@ -308,6 +316,79 @@ async function readRemoteJson(
   }
 
   return body;
+}
+
+function createAuthRequiredError(message = "authentication required"): HubClientAuthError {
+  return new HubClientAuthError(401, {
+    error: message,
+    error_code: "auth_required",
+    auth_state: "auth_required"
+  });
+}
+
+function isTokenExpiredAuthError(error: unknown): error is HubClientAuthError {
+  return error instanceof HubClientAuthError && error.kind === "token_expired";
+}
+
+function authErrorRequiresReauthentication(
+  error: unknown
+): error is HubClientAuthError {
+  return (
+    error instanceof HubClientAuthError &&
+    (error.authState === "auth_required" || error.authState === "token_expired")
+  );
+}
+
+async function performRefreshSession(
+  fetchImpl: typeof globalThis.fetch,
+  options: RemoteHubClientOptions
+): Promise<HubRefreshResponse> {
+  const refreshToken = await options.getRefreshToken?.();
+  if (!refreshToken) {
+    throw createAuthRequiredError();
+  }
+
+  return parseHubRefreshResponse(
+    await readRemoteJson(fetchImpl, remotePath(options.baseUrl, "/api/auth/refresh"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        parseHubRefreshCommand({
+          refresh_token: refreshToken
+        })
+      )
+    })
+  );
+}
+
+function createRefreshCoordinator(
+  fetchImpl: typeof globalThis.fetch,
+  options: RemoteHubClientOptions
+): () => Promise<HubRefreshResponse> {
+  let refreshInFlight: Promise<HubRefreshResponse> | null = null;
+
+  return async () => {
+    if (refreshInFlight) {
+      return refreshInFlight;
+    }
+
+    refreshInFlight = (async () => {
+      try {
+        const response = await performRefreshSession(fetchImpl, options);
+        await options.onRefreshTokens?.(response);
+        return response;
+      } catch (error) {
+        if (authErrorRequiresReauthentication(error)) {
+          await options.clearSessionTokens?.();
+        }
+        throw error;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
+
+    return refreshInFlight;
+  };
 }
 
 function encodePathSegment(value: string): string {
@@ -604,6 +685,9 @@ export function createRemoteHubAuthClient(
         })
       );
     },
+    async refreshSession() {
+      return performRefreshSession(fetchImpl, options);
+    },
     async getCurrentSession() {
       return parseHubSession(
         await readRemoteJson(
@@ -627,6 +711,25 @@ export function createRemoteHubAuthClient(
 
 export function createRemoteHubClient(options: RemoteHubClientOptions): HubClient {
   const fetchImpl = resolveRemoteFetch(options);
+  let currentAccessToken: string | null | undefined;
+  let currentRefreshToken: string | null | undefined;
+  const getAccessToken = async () => currentAccessToken ?? options.getAccessToken?.();
+  const getRefreshToken = async () => currentRefreshToken ?? options.getRefreshToken?.();
+  const clearSessionTokens = async () => {
+    currentAccessToken = null;
+    currentRefreshToken = null;
+    await options.clearSessionTokens?.();
+  };
+  const refreshSession = createRefreshCoordinator(fetchImpl, {
+    ...options,
+    getRefreshToken,
+    clearSessionTokens,
+    onRefreshTokens: async (response) => {
+      currentAccessToken = response.access_token;
+      currentRefreshToken = response.refresh_token;
+      await options.onRefreshTokens?.(response);
+    }
+  });
   const createEventSource =
     options.createEventSource ??
     ((url: string) => {
@@ -636,6 +739,31 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
       }
       return new EventSourceCtor(url) as unknown as EventSourceLike;
     });
+
+  async function readAuthenticatedJson(
+    url: string,
+    init?: RequestInit,
+    allowRefresh = true
+  ): Promise<unknown> {
+    try {
+      return await readRemoteJson(fetchImpl, url, init, getAccessToken);
+    } catch (error) {
+      if (!allowRefresh || !isTokenExpiredAuthError(error) || !options.getRefreshToken) {
+        throw error;
+      }
+
+      await refreshSession();
+
+      try {
+        return await readRemoteJson(fetchImpl, url, init, getAccessToken);
+      } catch (replayError) {
+        if (authErrorRequiresReauthentication(replayError)) {
+          await clearSessionTokens();
+        }
+        throw replayError;
+      }
+    }
+  }
 
   async function listCapabilityResolutions(
     workspaceId: string,
@@ -650,74 +778,54 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
     );
     capabilitiesUrl.searchParams.set("estimated_cost", String(estimatedCost));
 
-    return parseCapabilityResolutions(
-      await readRemoteJson(
-        fetchImpl,
-        capabilitiesUrl.toString(),
-        undefined,
-        options.getAccessToken
-      )
-    );
+    return parseCapabilityResolutions(await readAuthenticatedJson(capabilitiesUrl.toString()));
   }
 
   return {
     async listProjects(workspaceId) {
       return parseProjects(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/projects`
-          ),
-          undefined,
-          options.getAccessToken
+          )
         )
       );
     },
     async getProjectContext(workspaceId, projectId) {
       return parseProjectContext(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/context`
-          ),
-          undefined,
-          options.getAccessToken
+          )
         )
       );
     },
     async getProjectKnowledge(workspaceId, projectId) {
       return parseProjectKnowledgeIndex(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/knowledge`
-          ),
-          undefined,
-          options.getAccessToken
+          )
         )
       );
     },
     async listAutomations(workspaceId, projectId) {
       return parseAutomationSummaries(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/automations`
-          ),
-          undefined,
-          options.getAccessToken
+          )
         )
       );
     },
     async createAutomation(command) {
       const parsed = parseCreateAutomationCommand(command);
       return parseCreateAutomationResponse(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(parsed.workspace_id)}/projects/${encodePathSegment(parsed.project_id)}/automations`
@@ -726,41 +834,33 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(parsed)
-          },
-          options.getAccessToken
+          }
         )
       );
     },
     async listRuns(workspaceId, projectId) {
       return parseRunSummaries(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/runs`
-          ),
-          undefined,
-          options.getAccessToken
+          )
         )
       );
     },
     async getAutomationDetail(automationId) {
       return parseAutomationDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/automations/${encodePathSegment(automationId)}`
-          ),
-          undefined,
-          options.getAccessToken
+          )
         )
       );
     },
     async activateAutomation(automationId) {
       return parseAutomationDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/automations/${encodePathSegment(automationId)}/activate`
@@ -774,15 +874,13 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
                 action: "activate"
               })
             )
-          },
-          options.getAccessToken
+          }
         )
       );
     },
     async pauseAutomation(automationId) {
       return parseAutomationDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/automations/${encodePathSegment(automationId)}/pause`
@@ -796,15 +894,13 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
                 action: "pause"
               })
             )
-          },
-          options.getAccessToken
+          }
         )
       );
     },
     async archiveAutomation(automationId) {
       return parseAutomationDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/automations/${encodePathSegment(automationId)}/archive`
@@ -818,16 +914,14 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
                 action: "archive"
               })
             )
-          },
-          options.getAccessToken
+          }
         )
       );
     },
     async manualDispatch(command) {
       const parsed = parseManualDispatchCommand(command);
       return parseAutomationDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/triggers/${encodePathSegment(parsed.trigger_id)}/manual-dispatch`
@@ -836,16 +930,14 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(parsed)
-          },
-          options.getAccessToken
+          }
         )
       );
     },
     async retryTriggerDelivery(command) {
       const parsed = parseTriggerDeliveryRetryCommand(command);
       return parseAutomationDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/trigger-deliveries/${encodePathSegment(parsed.delivery_id)}/retry`
@@ -854,48 +946,41 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(parsed)
-          },
-          options.getAccessToken
+          }
         )
       );
     },
     async createTask(command) {
       return parseTask(
-        await readRemoteJson(fetchImpl, remotePath(options.baseUrl, "/api/tasks"), {
+        await readAuthenticatedJson(remotePath(options.baseUrl, "/api/tasks"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(parseTaskCreateCommand(command))
-        }, options.getAccessToken)
+        })
       );
     },
     async startTask(taskId) {
       return parseRunDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/tasks/${encodePathSegment(taskId)}/start`
           ),
-          { method: "POST" },
-          options.getAccessToken
+          { method: "POST" }
         )
       );
     },
     async getRunDetail(runId) {
       return parseRunDetail(
-        await readRemoteJson(
-          fetchImpl,
-          remotePath(options.baseUrl, `/api/runs/${encodePathSegment(runId)}`),
-          undefined,
-          options.getAccessToken
+        await readAuthenticatedJson(
+          remotePath(options.baseUrl, `/api/runs/${encodePathSegment(runId)}`)
         )
       );
     },
     async retryRun(command) {
       const parsed = parseRunRetryCommand(command);
       return parseRunDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/runs/${encodePathSegment(parsed.run_id)}/retry`
@@ -904,16 +989,14 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(parsed)
-          },
-          options.getAccessToken
+          }
         )
       );
     },
     async terminateRun(command) {
       const parsed = parseRunTerminateCommand(command);
       return parseRunDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/runs/${encodePathSegment(parsed.run_id)}/terminate`
@@ -922,29 +1005,24 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(parsed)
-          },
-          options.getAccessToken
+          }
         )
       );
     },
     async getApprovalRequest(approvalId) {
       return parseApprovalRequest(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/approvals/${encodePathSegment(approvalId)}`
-          ),
-          undefined,
-          options.getAccessToken
+          )
         )
       );
     },
     async resolveApproval(command) {
       const parsed = parseApprovalResolveCommand(command);
       return parseRunDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/approvals/${encodePathSegment(parsed.approval_id)}/resolve`
@@ -953,68 +1031,54 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(parsed)
-          },
-          options.getAccessToken
+          }
         )
       );
     },
     async listInboxItems(workspaceId) {
       return parseInboxItems(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/inbox`
-          ),
-          undefined,
-          options.getAccessToken
+          )
         )
       );
     },
     async listNotifications(workspaceId) {
       return parseNotifications(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/workspaces/${encodePathSegment(workspaceId)}/notifications`
-          ),
-          undefined,
-          options.getAccessToken
+          )
         )
       );
     },
     async listArtifacts(runId) {
       return parseArtifacts(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/runs/${encodePathSegment(runId)}/artifacts`
-          ),
-          undefined,
-          options.getAccessToken
+          )
         )
       );
     },
     async getKnowledgeDetail(runId) {
       return parseKnowledgeDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/runs/${encodePathSegment(runId)}/knowledge`
-          ),
-          undefined,
-          options.getAccessToken
+          )
         )
       );
     },
     async requestKnowledgePromotion(command) {
       const parsed = parseRequestKnowledgePromotionCommand(command);
       return parseApprovalRequest(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/knowledge/candidates/${encodePathSegment(parsed.candidate_id)}/request-promotion`
@@ -1023,16 +1087,14 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(parsed)
-          },
-          options.getAccessToken
+          }
         )
       );
     },
     async promoteKnowledge(command) {
       const parsed = parseKnowledgePromoteCommand(command);
       return parseKnowledgeDetail(
-        await readRemoteJson(
-          fetchImpl,
+        await readAuthenticatedJson(
           remotePath(
             options.baseUrl,
             `/api/knowledge/candidates/${encodePathSegment(parsed.candidate_id)}/promote`
@@ -1041,8 +1103,7 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(parsed)
-          },
-          options.getAccessToken
+          }
         )
       );
     },
@@ -1054,35 +1115,70 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
     },
     async getHubConnectionStatus() {
       return parseHubConnectionStatus(
-        await readRemoteJson(
-          fetchImpl,
-          remotePath(options.baseUrl, "/api/hub/connection"),
-          undefined,
-          options.getAccessToken
-        )
+        await readAuthenticatedJson(remotePath(options.baseUrl, "/api/hub/connection"))
       );
     },
     async subscribe(listener, onError) {
-      const eventsUrl = new URL(remotePath(options.baseUrl, "/api/events"));
-      const accessToken = await options.getAccessToken?.();
-      if (accessToken) {
-        eventsUrl.searchParams.set("access_token", accessToken);
-      }
+      let activeEventSource: EventSourceLike | null = null;
+      let closed = false;
+      let reconnectedAfterRefresh = false;
 
-      const eventSource = createEventSource(eventsUrl.toString());
-      eventSource.onmessage = (event) => {
-        try {
-          listener(parseHubEvent(JSON.parse(event.data)));
-        } catch (error) {
-          onError?.(toError(error));
+      const connect = async () => {
+        const eventsUrl = new URL(remotePath(options.baseUrl, "/api/events"));
+        const accessToken = await getAccessToken();
+        if (accessToken) {
+          eventsUrl.searchParams.set("access_token", accessToken);
         }
+
+        const eventSource = createEventSource(eventsUrl.toString());
+        activeEventSource = eventSource;
+        eventSource.onmessage = (event) => {
+          try {
+            listener(parseHubEvent(JSON.parse(event.data)));
+          } catch (error) {
+            onError?.(toError(error));
+          }
+        };
+        eventSource.onerror = (error) => {
+          void handleError(eventSource, error);
+        };
       };
-      eventSource.onerror = (error) => {
+
+      const handleError = async (
+        eventSource: EventSourceLike,
+        error: unknown
+      ): Promise<void> => {
+        if (closed || activeEventSource !== eventSource) {
+          return;
+        }
+
+        if (!reconnectedAfterRefresh && isTokenExpiredAuthError(error)) {
+          reconnectedAfterRefresh = true;
+          eventSource.close();
+
+          try {
+            await refreshSession();
+            if (!closed) {
+              await connect();
+            }
+            return;
+          } catch (refreshError) {
+            onError?.(toError(refreshError));
+            return;
+          }
+        }
+
+        if (authErrorRequiresReauthentication(error)) {
+          await clearSessionTokens();
+        }
         onError?.(toError(error));
       };
 
+      await connect();
+
       return () => {
-        eventSource.close();
+        closed = true;
+        activeEventSource?.close();
       };
     }
   };

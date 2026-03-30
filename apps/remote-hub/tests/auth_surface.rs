@@ -183,6 +183,23 @@ impl TestHarness {
         let access_token = body["access_token"].as_str().unwrap().to_string();
         (format!("Bearer {access_token}"), body)
     }
+
+    async fn refresh(&self, refresh_token: &str) -> (StatusCode, Value) {
+        self.response(
+            Request::builder()
+                .method("POST")
+                .uri("/api/auth/refresh")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "refresh_token": refresh_token
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+    }
 }
 
 #[tokio::test]
@@ -630,8 +647,77 @@ async fn bootstrap_login_returns_a_remote_session() {
 
     assert_eq!(status, StatusCode::OK, "body={body}");
     assert!(body["access_token"].as_str().is_some());
+    assert!(body["refresh_token"].as_str().is_some());
+    assert!(body["refresh_expires_at"].as_str().is_some());
     assert_eq!(body["session"]["workspace_id"], "workspace-alpha");
     assert_eq!(body["session"]["actor_ref"], "workspace_admin:bootstrap_admin");
+}
+
+#[tokio::test]
+async fn expired_access_tokens_can_be_refreshed_with_a_valid_refresh_token() {
+    let harness = TestHarness::seeded_with_auth_config(RemoteAccessConfig {
+        session_ttl_seconds: -60,
+        ..RemoteAccessConfig::default()
+    })
+    .await;
+    let (_, login_body) = harness.login("workspace-alpha").await;
+    let refresh_token = login_body["refresh_token"].as_str().unwrap();
+
+    let (refresh_status, refresh_body) = harness.refresh(refresh_token).await;
+    assert_eq!(refresh_status, StatusCode::OK, "body={refresh_body}");
+    assert!(refresh_body["access_token"].as_str().is_some());
+    assert!(refresh_body["refresh_token"].as_str().is_some());
+    assert_eq!(refresh_body["session"]["workspace_id"], "workspace-alpha");
+
+    let refreshed_authorization = format!(
+        "Bearer {}",
+        refresh_body["access_token"].as_str().unwrap()
+    );
+    let (session_status, session_body) = harness
+        .response(
+            Request::builder()
+                .uri("/api/auth/session")
+                .header("authorization", refreshed_authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(session_status, StatusCode::OK, "body={session_body}");
+    assert_eq!(session_body["workspace_id"], "workspace-alpha");
+}
+
+#[tokio::test]
+async fn rotated_refresh_token_reuse_revokes_the_session_family() {
+    let harness = TestHarness::seeded_with_auth_config(RemoteAccessConfig {
+        session_ttl_seconds: -60,
+        ..RemoteAccessConfig::default()
+    })
+    .await;
+    let (_, login_body) = harness.login("workspace-alpha").await;
+    let original_refresh_token = login_body["refresh_token"].as_str().unwrap();
+
+    let (first_refresh_status, first_refresh_body) = harness.refresh(original_refresh_token).await;
+    assert_eq!(first_refresh_status, StatusCode::OK, "body={first_refresh_body}");
+    let refreshed_authorization = format!(
+        "Bearer {}",
+        first_refresh_body["access_token"].as_str().unwrap()
+    );
+
+    let (replay_status, replay_body) = harness.refresh(original_refresh_token).await;
+    assert_eq!(replay_status, StatusCode::UNAUTHORIZED, "body={replay_body}");
+    assert_eq!(replay_body["error_code"], "auth_required");
+
+    let (session_status, session_body) = harness
+        .response(
+            Request::builder()
+                .uri("/api/auth/session")
+                .header("authorization", refreshed_authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(session_status, StatusCode::UNAUTHORIZED, "body={session_body}");
+    assert_eq!(session_body["error_code"], "auth_required");
 }
 
 #[tokio::test]
@@ -693,7 +779,8 @@ async fn workspace_membership_is_enforced_after_login() {
 #[tokio::test]
 async fn logout_revokes_the_current_session() {
     let harness = TestHarness::seeded().await;
-    let (authorization, _) = harness.login("workspace-alpha").await;
+    let (authorization, login_body) = harness.login("workspace-alpha").await;
+    let refresh_token = login_body["refresh_token"].as_str().unwrap();
 
     let (logout_status, logout_body) = harness
         .response(
@@ -718,6 +805,10 @@ async fn logout_revokes_the_current_session() {
         .await;
     assert_eq!(session_status, StatusCode::UNAUTHORIZED, "body={session_body}");
     assert_eq!(session_body["error_code"], "auth_required");
+
+    let (refresh_status, refresh_body) = harness.refresh(refresh_token).await;
+    assert_eq!(refresh_status, StatusCode::UNAUTHORIZED, "body={refresh_body}");
+    assert_eq!(refresh_body["error_code"], "auth_required");
 
     let (connection_status, connection_body) = harness
         .response(

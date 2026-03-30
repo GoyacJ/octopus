@@ -15,6 +15,8 @@ import hubConnectionStatusSchema from "../../../schemas/interop/hub-connection-s
 import hubEventSchema from "../../../schemas/interop/hub-event.schema.json";
 import hubLoginCommandSchema from "../../../schemas/interop/hub-login-command.schema.json";
 import hubLoginResponseSchema from "../../../schemas/interop/hub-login-response.schema.json";
+import hubRefreshCommandSchema from "../../../schemas/interop/hub-refresh-command.schema.json";
+import hubRefreshResponseSchema from "../../../schemas/interop/hub-refresh-response.schema.json";
 import hubSessionSchema from "../../../schemas/interop/hub-session.schema.json";
 import localHubTransportContractData from "../../../schemas/interop/local-hub-transport.json";
 import localHubTransportSchema from "../../../schemas/interop/local-hub-transport.schema.json";
@@ -83,6 +85,8 @@ import type {
   HubEvent,
   HubLoginCommand,
   HubLoginResponse,
+  HubRefreshCommand,
+  HubRefreshResponse,
   HubSession,
   LocalHubTransportContract,
   InboxItem,
@@ -165,6 +169,8 @@ const schemaRegistry = {
   [hubLoginCommandSchema.$id]: hubLoginCommandSchema,
   [hubSessionSchema.$id]: hubSessionSchema,
   [hubLoginResponseSchema.$id]: hubLoginResponseSchema,
+  [hubRefreshCommandSchema.$id]: hubRefreshCommandSchema,
+  [hubRefreshResponseSchema.$id]: hubRefreshResponseSchema,
   [hubConnectionStatusSchema.$id]: hubConnectionStatusSchema,
   [hubEventSchema.$id]: hubEventSchema,
   [localHubTransportSchema.$id]: localHubTransportSchema
@@ -446,6 +452,14 @@ export function parseHubSession(value: unknown): HubSession {
 
 export function parseHubLoginResponse(value: unknown): HubLoginResponse {
   return parseWithSchema<HubLoginResponse>(hubLoginResponseSchema.$id, value);
+}
+
+export function parseHubRefreshCommand(value: unknown): HubRefreshCommand {
+  return parseWithSchema<HubRefreshCommand>(hubRefreshCommandSchema.$id, value);
+}
+
+export function parseHubRefreshResponse(value: unknown): HubRefreshResponse {
+  return parseWithSchema<HubRefreshResponse>(hubRefreshResponseSchema.$id, value);
 }
 
 export function parseHubAuthError(value: unknown): HubAuthError {

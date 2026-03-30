@@ -9,6 +9,8 @@ fn fixture_session() -> PersistedRemoteSession {
         workspace_id: "workspace-alpha".into(),
         email: "admin@octopus.local".into(),
         access_token: "remote-token".into(),
+        refresh_token: "refresh-token".into(),
+        refresh_token_expires_at: "2099-04-05T12:00:00Z".into(),
         session: octopus_desktop_host::PersistedHubSession {
             session_id: "session-1".into(),
             user_id: "user-1".into(),
@@ -53,6 +55,20 @@ fn load_clears_expired_session_cache() {
     let service = RemoteSessionCacheService::new(store.clone());
     let mut expired = fixture_session();
     expired.session.expires_at = "2020-03-29T12:00:00Z".into();
+
+    service.save(&expired).unwrap();
+
+    let loaded = service.load(&matching_request()).unwrap();
+    assert_eq!(loaded.session, Some(expired));
+    assert_eq!(store.stored_secret().is_some(), true);
+}
+
+#[test]
+fn load_clears_expired_refresh_session_cache() {
+    let store = MemoryRemoteSessionSecretStore::default();
+    let service = RemoteSessionCacheService::new(store.clone());
+    let mut expired = fixture_session();
+    expired.refresh_token_expires_at = "2020-04-05T12:00:00Z".into();
 
     service.save(&expired).unwrap();
 

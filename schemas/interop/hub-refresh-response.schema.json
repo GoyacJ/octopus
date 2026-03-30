@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://octopus.local/schemas/interop/hub-login-response.schema.json",
-  "title": "HubLoginResponse",
-  "description": "Minimum remote-hub login response carrying an access token plus session summary.",
+  "$id": "https://octopus.local/schemas/interop/hub-refresh-response.schema.json",
+  "title": "HubRefreshResponse",
+  "description": "Remote-hub refresh-token exchange response carrying the next token pair plus session summary.",
   "type": "object",
   "properties": {
     "access_token": {

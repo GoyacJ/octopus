@@ -3118,6 +3118,7 @@ dependencies = [
  "chrono",
  "jsonwebtoken",
  "serde",
+ "sha2",
  "sqlx",
  "thiserror 2.0.18",
  "uuid",

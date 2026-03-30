@@ -622,6 +622,10 @@ export interface HubLoginCommand {
   password: string;
 }
 
+export interface HubRefreshCommand {
+  refresh_token: string;
+}
+
 export interface HubSession {
   session_id: string;
   user_id: string;
@@ -634,6 +638,15 @@ export interface HubSession {
 
 export interface HubLoginResponse {
   access_token: string;
+  refresh_token: string;
+  refresh_expires_at: string;
+  session: HubSession;
+}
+
+export interface HubRefreshResponse {
+  access_token: string;
+  refresh_token: string;
+  refresh_expires_at: string;
   session: HubSession;
 }
 

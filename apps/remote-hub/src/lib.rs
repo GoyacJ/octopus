@@ -12,7 +12,10 @@ use axum::{
 };
 use chrono::Utc;
 use futures_util::stream;
-use octopus_access_auth::{AccessAuthError, HubLoginResponse, HubSession, RemoteAccessService};
+use octopus_access_auth::{
+    AccessAuthError, HubLoginResponse, HubRefreshCommand, HubRefreshResponse, HubSession,
+    RemoteAccessService,
+};
 use octopus_execution::ExecutionAction;
 use octopus_runtime::{
     ApprovalDecision, ApprovalRequestRecord, ArtifactRecord, AuditRecord, AutomationDetailRecord,
@@ -47,6 +50,7 @@ impl AppState {
 pub fn app(state: AppState) -> Router {
     Router::new()
         .route("/api/auth/login", post(login))
+        .route("/api/auth/refresh", post(refresh_session))
         .route("/api/auth/session", get(get_current_session))
         .route("/api/auth/logout", post(logout_session))
         .route("/api/workspaces/{workspace_id}/projects", get(list_projects))
@@ -499,6 +503,13 @@ async fn login(
             .login(&command.workspace_id, &command.email, &command.password)
             .await?,
     ))
+}
+
+async fn refresh_session(
+    State(state): State<AppState>,
+    Json(command): Json<HubRefreshCommand>,
+) -> Result<Json<HubRefreshResponse>, AppError> {
+    Ok(Json(state.auth.refresh_session(&command.refresh_token).await?))
 }
 
 async fn get_current_session(

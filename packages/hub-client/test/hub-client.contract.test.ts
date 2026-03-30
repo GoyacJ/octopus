@@ -3,12 +3,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   HUB_EVENT_CHANNEL,
+  HubClientAuthError,
   createLocalHubClient,
   createRemoteHubAuthClient,
   createRemoteHubClient,
   type EventSourceLike,
   type EventSourceMessage,
   type HubClient,
+  type HubRefreshResponse,
   type LocalHubTransport
 } from "../src/index";
 
@@ -795,6 +797,8 @@ describe("remote auth-aware adapter behavior", () => {
 
         return Response.json({
           access_token: "remote-token",
+          refresh_token: "refresh-token",
+          refresh_expires_at: "2026-04-05T10:00:00Z",
           session: {
             session_id: "session-1",
             user_id: "user-1",
@@ -816,10 +820,49 @@ describe("remote auth-aware adapter behavior", () => {
       })
     ).resolves.toMatchObject({
       access_token: "remote-token",
+      refresh_token: "refresh-token",
       session: {
         workspace_id: "workspace-alpha",
         email: "admin@octopus.local"
       }
+    });
+  });
+
+  it("refreshes the remote auth session through the shared auth client", async () => {
+    const authClient = createRemoteHubAuthClient({
+      baseUrl: "http://hub.test",
+      getRefreshToken: async () => "refresh-token",
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe("http://hub.test/api/auth/refresh");
+        expect(init?.method).toBe("POST");
+        expect(new Headers(init?.headers).get("content-type")).toBe("application/json");
+        expect(init?.body).toBe(
+          JSON.stringify({
+            refresh_token: "refresh-token"
+          })
+        );
+
+        return Response.json({
+          access_token: "remote-token-next",
+          refresh_token: "refresh-token-next",
+          refresh_expires_at: "2026-04-05T10:00:00Z",
+          session: {
+            session_id: "session-1",
+            user_id: "user-1",
+            email: "admin@octopus.local",
+            workspace_id: "workspace-alpha",
+            actor_ref: "workspace_admin:bootstrap_admin",
+            issued_at: "2026-03-29T10:00:00Z",
+            expires_at: "2026-03-29T12:00:00Z"
+          }
+        });
+      }
+    } as any);
+
+    await expect(authClient.refreshSession()).resolves.toMatchObject({
+      access_token: "remote-token-next",
+      refresh_token: "refresh-token-next",
+      refresh_expires_at: "2026-04-05T10:00:00Z"
     });
   });
 
@@ -951,5 +994,241 @@ describe("remote auth-aware adapter behavior", () => {
       authState: "authenticated",
       status: 403
     });
+  });
+
+  it("refreshes once and replays one remote request after token expiry", async () => {
+    let accessToken = "remote-token";
+    let refreshToken = "refresh-token";
+    let requestCalls = 0;
+    let refreshCalls = 0;
+
+    const client = createRemoteHubClient({
+      baseUrl: "http://hub.test",
+      getAccessToken: async () => accessToken,
+      getRefreshToken: async () => refreshToken,
+      async onRefreshTokens(response: HubRefreshResponse) {
+        accessToken = response.access_token;
+        refreshToken = response.refresh_token;
+      },
+      async clearSessionTokens() {
+        accessToken = "";
+        refreshToken = "";
+      },
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const authorization = new Headers(init?.headers).get("authorization");
+
+        if (url === "http://hub.test/api/workspaces/workspace-alpha/inbox") {
+          requestCalls += 1;
+          if (requestCalls === 1) {
+            expect(authorization).toBe("Bearer remote-token");
+            return new Response(
+              JSON.stringify({
+                error: "token expired",
+                error_code: "token_expired",
+                auth_state: "token_expired"
+              }),
+              {
+                status: 401,
+                headers: {
+                  "content-type": "application/json"
+                }
+              }
+            );
+          }
+
+          expect(authorization).toBe("Bearer remote-token-next");
+          return Response.json([]);
+        }
+
+        if (url === "http://hub.test/api/auth/refresh") {
+          refreshCalls += 1;
+          expect(init?.method).toBe("POST");
+          expect(init?.body).toBe(
+            JSON.stringify({
+              refresh_token: "refresh-token"
+            })
+          );
+          return Response.json({
+            access_token: "remote-token-next",
+            refresh_token: "refresh-token-next",
+            refresh_expires_at: "2026-04-05T10:00:00Z",
+            session: {
+              session_id: "session-1",
+              user_id: "user-1",
+              email: "admin@octopus.local",
+              workspace_id: "workspace-alpha",
+              actor_ref: "workspace_admin:bootstrap_admin",
+              issued_at: "2026-03-29T10:00:00Z",
+              expires_at: "2026-03-29T12:00:00Z"
+            }
+          });
+        }
+
+        throw new Error(`unexpected request: ${url}`);
+      }
+    } as any);
+
+    await expect(client.listInboxItems("workspace-alpha")).resolves.toEqual([]);
+    expect(requestCalls).toBe(2);
+    expect(refreshCalls).toBe(1);
+    expect(accessToken).toBe("remote-token-next");
+    expect(refreshToken).toBe("refresh-token-next");
+  });
+
+  it("clears remote auth state when refresh fails after token expiry", async () => {
+    let accessToken = "remote-token";
+    let refreshToken = "refresh-token";
+    let requestCalls = 0;
+    let refreshCalls = 0;
+    let cleared = 0;
+
+    const client = createRemoteHubClient({
+      baseUrl: "http://hub.test",
+      getAccessToken: async () => accessToken,
+      getRefreshToken: async () => refreshToken,
+      async onRefreshTokens() {
+        throw new Error("refresh should not succeed");
+      },
+      async clearSessionTokens() {
+        cleared += 1;
+        accessToken = "";
+        refreshToken = "";
+      },
+      fetch: async (input: RequestInfo | URL) => {
+        const url = String(input);
+
+        if (url === "http://hub.test/api/workspaces/workspace-alpha/inbox") {
+          requestCalls += 1;
+          return new Response(
+            JSON.stringify({
+              error: "token expired",
+              error_code: "token_expired",
+              auth_state: "token_expired"
+            }),
+            {
+              status: 401,
+              headers: {
+                "content-type": "application/json"
+              }
+            }
+          );
+        }
+
+        if (url === "http://hub.test/api/auth/refresh") {
+          refreshCalls += 1;
+          return new Response(
+            JSON.stringify({
+              error: "refresh expired",
+              error_code: "token_expired",
+              auth_state: "token_expired"
+            }),
+            {
+              status: 401,
+              headers: {
+                "content-type": "application/json"
+              }
+            }
+          );
+        }
+
+        throw new Error(`unexpected request: ${url}`);
+      }
+    } as any);
+
+    await expect(client.listInboxItems("workspace-alpha")).rejects.toMatchObject({
+      name: "HubClientAuthError",
+      kind: "token_expired",
+      authState: "token_expired"
+    });
+    expect(requestCalls).toBe(1);
+    expect(refreshCalls).toBe(1);
+    expect(cleared).toBe(1);
+    expect(accessToken).toBe("");
+    expect(refreshToken).toBe("");
+  });
+
+  it("refreshes once and reconnects the event stream on auth expiry", async () => {
+    let accessToken = "remote-token";
+    let refreshToken = "refresh-token";
+    let refreshCalls = 0;
+    const createdUrls: string[] = [];
+    const firstSource = new FakeEventSource();
+    const secondSource = new FakeEventSource();
+    let sourceCount = 0;
+
+    const client = createRemoteHubClient({
+      baseUrl: "http://hub.test",
+      getAccessToken: async () => accessToken,
+      getRefreshToken: async () => refreshToken,
+      async onRefreshTokens(response: HubRefreshResponse) {
+        accessToken = response.access_token;
+        refreshToken = response.refresh_token;
+      },
+      async clearSessionTokens() {
+        accessToken = "";
+        refreshToken = "";
+      },
+      fetch: async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === "http://hub.test/api/auth/refresh") {
+          refreshCalls += 1;
+          return Response.json({
+            access_token: "remote-token-next",
+            refresh_token: "refresh-token-next",
+            refresh_expires_at: "2026-04-05T10:00:00Z",
+            session: {
+              session_id: "session-1",
+              user_id: "user-1",
+              email: "admin@octopus.local",
+              workspace_id: "workspace-alpha",
+              actor_ref: "workspace_admin:bootstrap_admin",
+              issued_at: "2026-03-29T10:00:00Z",
+              expires_at: "2026-03-29T12:00:00Z"
+            }
+          });
+        }
+
+        throw new Error(`unexpected request: ${url}`);
+      },
+      createEventSource(url: string) {
+        createdUrls.push(url);
+        sourceCount += 1;
+        return sourceCount === 1 ? firstSource : secondSource;
+      }
+    } as any);
+
+    const seenEvents: string[] = [];
+    const seenErrors: unknown[] = [];
+    const unsubscribe = await client.subscribe(
+      (event) => {
+        seenEvents.push(event.event_type);
+      },
+      (error) => {
+        seenErrors.push(error);
+      }
+    );
+
+    firstSource.onerror?.(
+      new HubClientAuthError(401, {
+        error: "token expired",
+        error_code: "token_expired",
+        auth_state: "token_expired"
+      })
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    secondSource.emit(hubEventFixture);
+
+    expect(refreshCalls).toBe(1);
+    expect(createdUrls).toEqual([
+      "http://hub.test/api/events?access_token=remote-token",
+      "http://hub.test/api/events?access_token=remote-token-next"
+    ]);
+    expect(seenEvents).toEqual(["hub.connection.updated"]);
+    expect(seenErrors).toEqual([]);
+
+    await unsubscribe();
+    expect(firstSource.closed).toBe(true);
+    expect(secondSource.closed).toBe(true);
   });
 });

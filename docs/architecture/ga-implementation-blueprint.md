@@ -188,6 +188,8 @@
 
 基于 Slice 20 的 GA acceptance matrix，当前 tracked implementation 已满足 PRD 首版 GA 的 scoped baseline。post-GA backlog 默认冻结；更深 desktop remote UX、refresh token / token rotation、remote admin / tenant / IdP 能力，以及任何新的 Beta / 扩 scope 工作，必须先创建新的 task package 并更新 owner docs 后再启动。
 
+当前已批准并建包的 post-GA 下一优先项是 `2026-03-30-post-ga-session-token-lifecycle`，范围严格限定为 remote session token lifecycle hardening，不扩到 RBAC、tenant admin、external IdP、SSO 或新的 Beta surface。
+
 ### 6.3 Shared Contract 先于实现
 
 跨语言共享对象、正式命令、事件、DTO、状态、审批对象、知识对象，必须优先进入 `schemas/`，再进入实现。
@@ -1113,7 +1115,7 @@ Octopus 首版 GA 不是“把目标态平台全部做出来”，而是：
 - 以 SAD 定义的运行时、治理、恢复、互操作边界为架构约束
 - 以本蓝图定义的最小正式运行闭环为实施主线
 - 通过 Slice 1 -> Slice 2 -> Slice 3 -> Slice 4 -> Slice 5 -> minimum surface foundation -> trigger expansion foundation -> Slice 6 -> Slice 7 -> Slice 8 -> Slice 9 -> Slice 10 -> minimum automation surface -> Slice 11 -> Slice 12 -> Slice 13 -> Slice 14 -> Slice 15 -> Slice 16 -> Slice 17 的顺序稳步推进
-- 当前 tracked tree 已推进并验证到 Slice 20，已形成 Slice 20 GA acceptance matrix，并默认冻结 post-GA backlog；任何后续扩面必须先建新 task package 再进入实现
+- 当前 tracked tree 已推进并验证到 Slice 20，已形成 Slice 20 GA acceptance matrix，并默认冻结 post-GA backlog；任何后续扩面必须先建新 task package 再进入实现；当前已登记的 post-GA follow-on 为 `2026-03-30-post-ga-session-token-lifecycle`
 - 在每次模块推进前先完成局部设计包，再实现，再验证，再回写全局文档
 
 只有这样，Octopus 才能在不丢失整体方向的前提下，让 AI 主导开发同时保持可控、可审计、可维护。

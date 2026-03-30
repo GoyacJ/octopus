@@ -28,6 +28,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             access_config.session_ttl_seconds = ttl_seconds;
         }
     }
+    if let Ok(value) = env::var("OCTOPUS_REMOTE_HUB_REFRESH_TOKEN_TTL_SECONDS") {
+        if let Ok(ttl_seconds) = value.parse::<i64>() {
+            access_config.refresh_token_ttl_seconds = ttl_seconds;
+        }
+    }
     if let Ok(value) = env::var("OCTOPUS_REMOTE_HUB_BOOTSTRAP_EMAIL") {
         access_config.bootstrap_email = value;
     }

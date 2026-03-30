@@ -48,6 +48,8 @@ export interface PersistedRemoteSession {
   workspaceId: string;
   email: string;
   accessToken: string;
+  refreshToken: string;
+  refreshTokenExpiresAt: string;
   session: HubSession;
 }
 
@@ -85,6 +87,8 @@ export const DEFAULT_LOCAL_WORKBENCH_ROUTE = "/workspaces/demo/projects/demo/tas
 
 let runtimeOptions: DesktopConnectionRuntimeOptions = {};
 const remoteAccessToken = ref<string | null>(null);
+const remoteRefreshToken = ref<string | null>(null);
+const remoteRefreshTokenExpiresAt = ref<string | null>(null);
 const remoteSessionState = ref<HubSession | null>(null);
 const remoteSessionOriginState = ref<"none" | "live" | "restored">("none");
 const secureSessionWarningState = ref<string | null>(null);
@@ -98,7 +102,41 @@ function buildRemoteClientOptions(
 ): RemoteHubClientOptions {
   return {
     baseUrl: profile.baseUrl,
-    getAccessToken: () => remoteAccessToken.value
+    getAccessToken: () => remoteAccessToken.value,
+    getRefreshToken: () => remoteRefreshToken.value,
+    async onRefreshTokens(response) {
+      const storedProfile = persistDesktopConnectionProfile({
+        ...loadDesktopConnectionProfile(),
+        mode: "remote",
+        baseUrl: profile.baseUrl,
+        workspaceId: response.session.workspace_id,
+        email: response.session.email,
+        projectId:
+          loadDesktopConnectionProfile().workspaceId === response.session.workspace_id
+            ? loadDesktopConnectionProfile().projectId
+            : undefined
+      });
+      setRemoteSession(
+        response.access_token,
+        response.refresh_token,
+        response.refresh_expires_at,
+        response.session,
+        "live"
+      );
+      await savePersistedRemoteSession(
+        toPersistedRemoteSession(
+          storedProfile,
+          response.access_token,
+          response.refresh_token,
+          response.refresh_expires_at,
+          response.session
+        )
+      );
+    },
+    async clearSessionTokens() {
+      clearRemoteSession();
+      await clearPersistedRemoteSession();
+    }
   };
 }
 
@@ -141,18 +179,36 @@ function sessionExpired(session: HubSession): boolean {
   return Number.isFinite(expiresAt) && expiresAt <= Date.now();
 }
 
+function refreshTokenExpired(expiresAt: string | null | undefined): boolean {
+  const parsed = Date.parse(expiresAt ?? "");
+  return !Number.isFinite(parsed) || parsed <= Date.now();
+}
+
+function hasRefreshRecoveryState(): boolean {
+  return (
+    Boolean(remoteRefreshToken.value) &&
+    !refreshTokenExpired(remoteRefreshTokenExpiresAt.value)
+  );
+}
+
 function setRemoteSession(
   accessToken: string,
+  refreshToken: string,
+  refreshTokenExpiresAt: string,
   session: HubSession,
   origin: "live" | "restored" = "live"
 ): void {
   remoteAccessToken.value = accessToken;
+  remoteRefreshToken.value = refreshToken;
+  remoteRefreshTokenExpiresAt.value = refreshTokenExpiresAt;
   remoteSessionState.value = session;
   remoteSessionOriginState.value = origin;
 }
 
 function clearRemoteSession(): void {
   remoteAccessToken.value = null;
+  remoteRefreshToken.value = null;
+  remoteRefreshTokenExpiresAt.value = null;
   remoteSessionState.value = null;
   remoteSessionOriginState.value = "none";
 }
@@ -160,6 +216,8 @@ function clearRemoteSession(): void {
 function toPersistedRemoteSession(
   profile: DesktopConnectionProfile,
   accessToken: string,
+  refreshToken: string,
+  refreshTokenExpiresAt: string,
   session: HubSession
 ): PersistedRemoteSession {
   return {
@@ -167,6 +225,8 @@ function toPersistedRemoteSession(
     workspaceId: session.workspace_id,
     email: session.email,
     accessToken,
+    refreshToken,
+    refreshTokenExpiresAt,
     session
   };
 }
@@ -271,6 +331,26 @@ function syncStoredProfile(
   return normalized;
 }
 
+function rememberableProjectId(
+  profile: DesktopConnectionProfile,
+  session: HubSession
+): string | undefined {
+  return profile.workspaceId === session.workspace_id ? profile.projectId : undefined;
+}
+
+function profileForSession(
+  profile: DesktopConnectionProfile,
+  session: HubSession
+): DesktopConnectionProfile {
+  return normalizeDesktopConnectionProfile({
+    ...profile,
+    mode: "remote",
+    workspaceId: session.workspace_id,
+    email: session.email,
+    projectId: rememberableProjectId(profile, session)
+  });
+}
+
 export function buildWorkspaceInboxRoute(workspaceId: string): string {
   return `/workspaces/${encodePathSegment(workspaceId)}/inbox`;
 }
@@ -331,18 +411,26 @@ export function persistDesktopConnectionProfile(
 export function hasActiveRemoteSession(
   profile: DesktopConnectionProfile = loadDesktopConnectionProfile()
 ): boolean {
-  if (profile.mode !== "remote" || !remoteAccessToken.value || !remoteSessionState.value) {
+  if (
+    profile.mode !== "remote" ||
+    !remoteAccessToken.value ||
+    !remoteSessionState.value
+  ) {
     return false;
   }
 
-  if (sessionExpired(remoteSessionState.value)) {
-    return false;
-  }
-
-  return (
+  const workspaceMatches =
     profile.workspaceId.length === 0 ||
-    remoteSessionState.value.workspace_id === profile.workspaceId
-  );
+    remoteSessionState.value.workspace_id === profile.workspaceId;
+  if (!workspaceMatches) {
+    return false;
+  }
+
+  if (!sessionExpired(remoteSessionState.value)) {
+    return true;
+  }
+
+  return hasRefreshRecoveryState();
 }
 
 export function resolveDesktopEntryRoute(
@@ -393,40 +481,72 @@ export async function initializeDesktopConnection(): Promise<DesktopConnectionPr
     return loadDesktopConnectionProfile();
   }
 
-  setRemoteSession(persistedSession.accessToken, persistedSession.session, "restored");
-  const restoredProfile = persistDesktopConnectionProfile({
-    ...profile,
-    workspaceId: persistedSession.session.workspace_id,
-    email: persistedSession.session.email,
-    projectId:
-      profile.workspaceId === persistedSession.session.workspace_id
-        ? profile.projectId
-        : undefined
-  });
+  setRemoteSession(
+    persistedSession.accessToken,
+    persistedSession.refreshToken,
+    persistedSession.refreshTokenExpiresAt,
+    persistedSession.session,
+    "restored"
+  );
+  const restoredProfile = persistDesktopConnectionProfile(
+    profileForSession(profile, persistedSession.session)
+  );
+  const authClient = createRemoteAuthClientForProfile(restoredProfile);
 
   try {
-    const verifiedSession = await createRemoteAuthClientForProfile(restoredProfile).getCurrentSession();
-    setRemoteSession(persistedSession.accessToken, verifiedSession, "live");
-    const verifiedProfile = persistDesktopConnectionProfile({
-      ...restoredProfile,
-      workspaceId: verifiedSession.workspace_id,
-      email: verifiedSession.email,
-      projectId:
-        restoredProfile.workspaceId === verifiedSession.workspace_id
-          ? restoredProfile.projectId
-          : undefined
-    });
+    if (sessionExpired(persistedSession.session) && hasRefreshRecoveryState()) {
+      const refreshed = await authClient.refreshSession();
+      setRemoteSession(
+        refreshed.access_token,
+        refreshed.refresh_token,
+        refreshed.refresh_expires_at,
+        refreshed.session,
+        "live"
+      );
+      const refreshedProfile = persistDesktopConnectionProfile(
+        profileForSession(restoredProfile, refreshed.session)
+      );
+      await savePersistedRemoteSession(
+        toPersistedRemoteSession(
+          refreshedProfile,
+          refreshed.access_token,
+          refreshed.refresh_token,
+          refreshed.refresh_expires_at,
+          refreshed.session
+        )
+      );
+      return refreshedProfile;
+    }
+
+    const verifiedSession = await authClient.getCurrentSession();
+    setRemoteSession(
+      persistedSession.accessToken,
+      persistedSession.refreshToken,
+      persistedSession.refreshTokenExpiresAt,
+      verifiedSession,
+      "live"
+    );
+    const verifiedProfile = persistDesktopConnectionProfile(
+      profileForSession(restoredProfile, verifiedSession)
+    );
     await savePersistedRemoteSession(
-      toPersistedRemoteSession(verifiedProfile, persistedSession.accessToken, verifiedSession)
+      toPersistedRemoteSession(
+        verifiedProfile,
+        persistedSession.accessToken,
+        persistedSession.refreshToken,
+        persistedSession.refreshTokenExpiresAt,
+        verifiedSession
+      )
     );
     return verifiedProfile;
   } catch (error) {
     if (authStateRequiresReauthentication(error)) {
       clearRemoteSession();
       await clearPersistedRemoteSession();
+      return loadDesktopConnectionProfile();
     }
 
-    return loadDesktopConnectionProfile();
+    return restoredProfile;
   }
 }
 
@@ -581,20 +701,22 @@ export const useConnectionStore = defineStore("connection", () => {
         email,
         password
       });
-      setRemoteSession(response.access_token, response.session, "live");
-      const rememberedProjectId =
-        profile.value.workspaceId === response.session.workspace_id
-          ? profile.value.projectId
-          : undefined;
-      profile.value = rememberProfile({
-        ...profile.value,
-        mode: "remote",
-        workspaceId: response.session.workspace_id,
-        email: response.session.email,
-        projectId: rememberedProjectId
-      });
+      setRemoteSession(
+        response.access_token,
+        response.refresh_token,
+        response.refresh_expires_at,
+        response.session,
+        "live"
+      );
+      profile.value = rememberProfile(profileForSession(profile.value, response.session));
       await savePersistedRemoteSession(
-        toPersistedRemoteSession(profile.value, response.access_token, response.session)
+        toPersistedRemoteSession(
+          profile.value,
+          response.access_token,
+          response.refresh_token,
+          response.refresh_expires_at,
+          response.session
+        )
       );
       syncHubClient(profile.value);
       await refreshConnectionStatus({
@@ -610,8 +732,8 @@ export const useConnectionStore = defineStore("connection", () => {
   }
 
   async function refreshCurrentSession(): Promise<HubSession | null> {
-    if (!remoteMode.value || !remoteAccessToken.value) {
-      remoteSessionState.value = null;
+    if (!remoteMode.value || !remoteAccessToken.value || !remoteSessionState.value) {
+      clearRemoteSession();
       return null;
     }
 
@@ -619,20 +741,50 @@ export const useConnectionStore = defineStore("connection", () => {
     authError.value = null;
 
     try {
-      const nextSession = await createRemoteAuthClientForProfile(profile.value).getCurrentSession();
-      setRemoteSession(remoteAccessToken.value, nextSession, "live");
-      const rememberedProjectId =
-        profile.value.workspaceId === nextSession.workspace_id
-          ? profile.value.projectId
-          : undefined;
-      profile.value = rememberProfile({
-        ...profile.value,
-        workspaceId: nextSession.workspace_id,
-        email: nextSession.email,
-        projectId: rememberedProjectId
-      });
+      const authClient = createRemoteAuthClientForProfile(profile.value);
+      let nextSession: HubSession;
+      let accessToken = remoteAccessToken.value;
+      let refreshToken = remoteRefreshToken.value;
+      let refreshTokenExpiresAt = remoteRefreshTokenExpiresAt.value;
+
+      if (sessionExpired(remoteSessionState.value)) {
+        if (!hasRefreshRecoveryState()) {
+          clearRemoteSession();
+          await clearPersistedRemoteSession();
+          return null;
+        }
+
+        const refreshed = await authClient.refreshSession();
+        accessToken = refreshed.access_token;
+        refreshToken = refreshed.refresh_token;
+        refreshTokenExpiresAt = refreshed.refresh_expires_at;
+        nextSession = refreshed.session;
+      } else {
+        nextSession = await authClient.getCurrentSession();
+      }
+
+      if (!accessToken || !refreshToken || !refreshTokenExpiresAt) {
+        clearRemoteSession();
+        await clearPersistedRemoteSession();
+        return null;
+      }
+
+      setRemoteSession(
+        accessToken,
+        refreshToken,
+        refreshTokenExpiresAt,
+        nextSession,
+        "live"
+      );
+      profile.value = rememberProfile(profileForSession(profile.value, nextSession));
       await savePersistedRemoteSession(
-        toPersistedRemoteSession(profile.value, remoteAccessToken.value, nextSession)
+        toPersistedRemoteSession(
+          profile.value,
+          accessToken,
+          refreshToken,
+          refreshTokenExpiresAt,
+          nextSession
+        )
       );
       return nextSession;
     } catch (error) {

@@ -45,6 +45,45 @@ const remoteSessionFixture = {
   expires_at: "2099-03-29T12:00:00Z"
 } as const;
 
+const remoteRefreshTokenFixture = "refresh-token" as const;
+const remoteRefreshExpiresAtFixture = "2099-04-05T12:00:00Z" as const;
+
+function createRemoteLoginResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    access_token: "remote-token",
+    refresh_token: remoteRefreshTokenFixture,
+    refresh_expires_at: remoteRefreshExpiresAtFixture,
+    session: remoteSessionFixture,
+    ...overrides
+  };
+}
+
+function createRemoteRefreshResponse(overrides: Record<string, unknown> = {}) {
+  return {
+    access_token: "remote-token-next",
+    refresh_token: "refresh-token-next",
+    refresh_expires_at: "2099-04-06T12:00:00Z",
+    session: remoteSessionFixture,
+    ...overrides
+  };
+}
+
+function createPersistedRemoteSession(
+  overrides: Partial<PersistedRemoteSession> = {}
+): PersistedRemoteSession {
+  const session = overrides.session ?? remoteSessionFixture;
+  return {
+    baseUrl: remoteProfile.baseUrl,
+    workspaceId: remoteProfile.workspaceId,
+    email: remoteProfile.email,
+    accessToken: "remote-token",
+    refreshToken: remoteRefreshTokenFixture,
+    refreshTokenExpiresAt: remoteRefreshExpiresAtFixture,
+    session,
+    ...overrides
+  };
+}
+
 const localProjectContextFixture = {
   workspace: {
     id: "demo",
@@ -273,7 +312,8 @@ interface MountRemoteShellOptions {
 
 async function mountRemoteShell(
   authState: () => "auth_required" | "authenticated" | "token_expired",
-  authClient: RemoteHubAuthClient,
+  authClient: Partial<RemoteHubAuthClient> &
+    Pick<RemoteHubAuthClient, "login" | "getCurrentSession" | "logout">,
   options: MountRemoteShellOptions = {}
 ) {
   if (options.seedProfile !== null) {
@@ -289,7 +329,12 @@ async function mountRemoteShell(
         options.currentProjects ?? (() => remoteProjectsFixture),
         options.currentConnectionState
       ),
-    createRemoteAuthClient: () => authClient,
+    createRemoteAuthClient: () => ({
+      async refreshSession() {
+        throw new Error("refreshSession not configured for this test");
+      },
+      ...authClient
+    }),
     ...options.runtime
   });
 
@@ -340,10 +385,7 @@ describe("desktop remote connection surface", () => {
     const { wrapper, router } = await mountRemoteShell(() => authState, {
       async login() {
         authState = "authenticated";
-        return {
-          access_token: "remote-token",
-          session: remoteSessionFixture
-        };
+        return createRemoteLoginResponse();
       },
       async getCurrentSession() {
         return remoteSessionFixture;
@@ -364,10 +406,7 @@ describe("desktop remote connection surface", () => {
     const { wrapper, router } = await mountRemoteShell(() => authState, {
       async login() {
         authState = "authenticated";
-        return {
-          access_token: "remote-token",
-          session: remoteSessionFixture
-        };
+        return createRemoteLoginResponse();
       },
       async getCurrentSession() {
         return remoteSessionFixture;
@@ -397,10 +436,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           return remoteSessionFixture;
@@ -439,13 +475,12 @@ describe("desktop remote connection surface", () => {
     await wrapper.get('[data-testid="remote-login"]').trigger("click");
     await flushPromises();
 
-    expect(persistedSession).toEqual({
-      baseUrl: remoteProfile.baseUrl,
-      workspaceId: remoteSessionFixture.workspace_id,
-      email: remoteSessionFixture.email,
-      accessToken: "remote-token",
-      session: remoteSessionFixture
-    });
+    expect(persistedSession).toEqual(
+      createPersistedRemoteSession({
+        workspaceId: remoteSessionFixture.workspace_id,
+        email: remoteSessionFixture.email
+      })
+    );
   });
 
   it("selects a project from ProjectsView and persists the remembered project id", async () => {
@@ -456,10 +491,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           return remoteSessionFixture;
@@ -494,10 +526,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           return remoteSessionFixture;
@@ -542,10 +571,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           return remoteSessionFixture;
@@ -594,10 +620,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           return remoteSessionFixture;
@@ -639,6 +662,208 @@ describe("desktop remote connection surface", () => {
     expect(restartedShell.wrapper.text()).toContain("Task Create");
   });
 
+  it("refreshes expired cached access before resolving the remote entry route", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "authenticated";
+    let persistedSession: PersistedRemoteSession | null = createPersistedRemoteSession({
+      session: {
+        ...remoteSessionFixture,
+        expires_at: "2020-03-29T12:00:00Z"
+      }
+    });
+
+    persistDesktopConnectionProfile({
+      ...remoteProfile,
+      projectId: "project-auth"
+    });
+
+    const refreshed = createRemoteRefreshResponse();
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          return createRemoteLoginResponse();
+        },
+        async refreshSession() {
+          return refreshed;
+        },
+        async getCurrentSession() {
+          throw new Error("startup restore should refresh before session validation");
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      },
+      {
+        initializeConnection: true,
+        runtime: {
+          async loadPersistedRemoteSession() {
+            return {
+              session: persistedSession,
+              storageAvailable: true
+            };
+          },
+          async savePersistedRemoteSession(session) {
+            persistedSession = session;
+            return {
+              storageAvailable: true
+            };
+          },
+          async clearPersistedRemoteSession() {
+            persistedSession = null;
+            return {
+              storageAvailable: true
+            };
+          }
+        },
+        seedProfile: null
+      }
+    );
+
+    expect(router.currentRoute.value.fullPath).toBe(
+      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+    );
+    expect(wrapper.text()).toContain("Task Create");
+    expect(persistedSession).toEqual(
+      createPersistedRemoteSession({
+        accessToken: "remote-token-next",
+        refreshToken: "refresh-token-next",
+        refreshTokenExpiresAt: "2099-04-06T12:00:00Z"
+      })
+    );
+  });
+
+  it("clears cached auth state when startup refresh fails with a hard auth error", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
+    let persistedSession: PersistedRemoteSession | null = createPersistedRemoteSession({
+      session: {
+        ...remoteSessionFixture,
+        expires_at: "2020-03-29T12:00:00Z"
+      }
+    });
+
+    persistDesktopConnectionProfile({
+      ...remoteProfile,
+      projectId: "project-auth"
+    });
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          return createRemoteLoginResponse();
+        },
+        async refreshSession() {
+          authState = "token_expired";
+          throw createAuthError({
+            error: "refresh expired",
+            error_code: "token_expired",
+            auth_state: "token_expired"
+          });
+        },
+        async getCurrentSession() {
+          throw new Error("startup restore should not use access-session validation");
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      },
+      {
+        initializeConnection: true,
+        runtime: {
+          async loadPersistedRemoteSession() {
+            return {
+              session: persistedSession,
+              storageAvailable: true
+            };
+          },
+          async savePersistedRemoteSession(session) {
+            persistedSession = session;
+            return {
+              storageAvailable: true
+            };
+          },
+          async clearPersistedRemoteSession() {
+            persistedSession = null;
+            return {
+              storageAvailable: true
+            };
+          }
+        },
+        seedProfile: null
+      }
+    );
+
+    expect(router.currentRoute.value.fullPath).toBe("/connections");
+    expect(wrapper.text()).toContain("token_expired");
+    expect(persistedSession).toBeNull();
+  });
+
+  it("preserves cached refresh state when startup refresh only hits a transport failure", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
+    let persistedSession: PersistedRemoteSession | null = createPersistedRemoteSession({
+      session: {
+        ...remoteSessionFixture,
+        expires_at: "2020-03-29T12:00:00Z"
+      }
+    });
+
+    persistDesktopConnectionProfile({
+      ...remoteProfile,
+      projectId: "project-auth"
+    });
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          return createRemoteLoginResponse();
+        },
+        async refreshSession() {
+          throw new HubClientTransportError("remote hub unavailable");
+        },
+        async getCurrentSession() {
+          throw new Error("startup restore should not use access-session validation");
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      },
+      {
+        initializeConnection: true,
+        currentConnectionState: () => "disconnected",
+        runtime: {
+          async loadPersistedRemoteSession() {
+            return {
+              session: persistedSession,
+              storageAvailable: true
+            };
+          },
+          async savePersistedRemoteSession(session) {
+            persistedSession = session;
+            return {
+              storageAvailable: true
+            };
+          },
+          async clearPersistedRemoteSession() {
+            persistedSession = null;
+            return {
+              storageAvailable: true
+            };
+          }
+        },
+        seedProfile: null
+      }
+    );
+
+    expect(router.currentRoute.value.fullPath).toBe(
+      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+    );
+    await router.push("/connections");
+    await flushPromises();
+    expect(wrapper.text()).toContain("read-only");
+    expect(persistedSession).not.toBeNull();
+  });
+
   it("clears a stale remembered project and falls back to ProjectsView", async () => {
     let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
     let availableProjects: readonly (typeof remoteProjectsFixture)[number][] =
@@ -649,10 +874,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           return remoteSessionFixture;
@@ -701,10 +923,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           return remoteSessionFixture;
@@ -760,10 +979,7 @@ describe("desktop remote connection surface", () => {
     const { wrapper, router } = await mountRemoteShell(() => authState, {
       async login() {
         authState = "authenticated";
-        return {
-          access_token: "remote-token",
-          session: remoteSessionFixture
-        };
+        return createRemoteLoginResponse();
       },
       async getCurrentSession() {
         if (authState === "token_expired") {
@@ -796,10 +1012,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           return remoteSessionFixture;
@@ -852,23 +1065,14 @@ describe("desktop remote connection surface", () => {
 
   it("clears the cached remote session when restore hits an auth-required response", async () => {
     let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
-    let persistedSession: PersistedRemoteSession | null = {
-      baseUrl: remoteProfile.baseUrl,
-      workspaceId: remoteProfile.workspaceId,
-      email: remoteProfile.email,
-      accessToken: "remote-token",
-      session: remoteSessionFixture
-    };
+    let persistedSession: PersistedRemoteSession | null = createPersistedRemoteSession();
 
     const { wrapper, router } = await mountRemoteShell(
       () => authState,
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           authState = "token_expired";
@@ -914,13 +1118,7 @@ describe("desktop remote connection surface", () => {
 
   it("keeps the cached session summary when restore only hits a transport failure", async () => {
     let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
-    let persistedSession: PersistedRemoteSession | null = {
-      baseUrl: remoteProfile.baseUrl,
-      workspaceId: remoteProfile.workspaceId,
-      email: remoteProfile.email,
-      accessToken: "remote-token",
-      session: remoteSessionFixture
-    };
+    let persistedSession: PersistedRemoteSession | null = createPersistedRemoteSession();
 
     persistDesktopConnectionProfile({
       ...remoteProfile,
@@ -932,10 +1130,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           throw new HubClientTransportError("remote hub unavailable");
@@ -983,13 +1178,7 @@ describe("desktop remote connection surface", () => {
 
   it("shows a global degraded banner after cached restore lands on a workbench route", async () => {
     let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
-    let persistedSession: PersistedRemoteSession | null = {
-      baseUrl: remoteProfile.baseUrl,
-      workspaceId: remoteProfile.workspaceId,
-      email: remoteProfile.email,
-      accessToken: "remote-token",
-      session: remoteSessionFixture
-    };
+    let persistedSession: PersistedRemoteSession | null = createPersistedRemoteSession();
 
     persistDesktopConnectionProfile({
       ...remoteProfile,
@@ -1001,10 +1190,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           throw new HubClientTransportError("remote hub unavailable");
@@ -1056,10 +1242,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           return remoteSessionFixture;
@@ -1111,13 +1294,7 @@ describe("desktop remote connection surface", () => {
   it("clears the global degraded banner after route-entry refresh sees the connection recover", async () => {
     let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
     let connectionState: "connected" | "disconnected" = "disconnected";
-    let persistedSession: PersistedRemoteSession | null = {
-      baseUrl: remoteProfile.baseUrl,
-      workspaceId: remoteProfile.workspaceId,
-      email: remoteProfile.email,
-      accessToken: "remote-token",
-      session: remoteSessionFixture
-    };
+    let persistedSession: PersistedRemoteSession | null = createPersistedRemoteSession();
 
     persistDesktopConnectionProfile({
       ...remoteProfile,
@@ -1129,10 +1306,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           throw new HubClientTransportError("remote hub unavailable");
@@ -1183,13 +1357,7 @@ describe("desktop remote connection surface", () => {
 
   it("clears degraded session context when switching to a different remote workspace", async () => {
     let authState: "auth_required" | "authenticated" | "token_expired" = "auth_required";
-    let persistedSession: PersistedRemoteSession | null = {
-      baseUrl: remoteProfile.baseUrl,
-      workspaceId: remoteProfile.workspaceId,
-      email: remoteProfile.email,
-      accessToken: "remote-token",
-      session: remoteSessionFixture
-    };
+    let persistedSession: PersistedRemoteSession | null = createPersistedRemoteSession();
 
     persistDesktopConnectionProfile({
       ...remoteProfile,
@@ -1201,10 +1369,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           throw new HubClientTransportError("remote hub unavailable");
@@ -1269,10 +1434,7 @@ describe("desktop remote connection surface", () => {
       {
         async login() {
           authState = "authenticated";
-          return {
-            access_token: "remote-token",
-            session: remoteSessionFixture
-          };
+          return createRemoteLoginResponse();
         },
         async getCurrentSession() {
           return remoteSessionFixture;
