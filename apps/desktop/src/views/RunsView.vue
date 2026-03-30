@@ -1,8 +1,16 @@
 <script setup lang="ts">
 import { onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { PlayCircle, ChevronRight, Clock, Hash, AlertTriangle } from "lucide-vue-next";
 
 import { useHubStore } from "../stores/hub";
+
+// UI Components
+import OPill from "../components/ui/OPill.vue";
+import OCard from "../components/ui/OCard.vue";
+import OStatPill from "../components/ui/OStatPill.vue";
+import PageHeader from "../components/layout/PageHeader.vue";
+import PageContainer from "../components/layout/PageContainer.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -35,119 +43,173 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="runs-layout">
-    <article class="surface-card hero">
-      <p class="eyebrow">Recent Runs</p>
-      <h1>{{ hub.projectName }}</h1>
-      <p class="muted">Project-scoped execution history ordered by latest activity.</p>
-    </article>
+  <PageContainer>
+    <PageHeader
+      eyebrow="Execution History"
+      :title="hub.projectName || 'All Runs'"
+      subtitle="Project-scoped execution history ordered by latest activity."
+    >
+      <template #stats>
+        <OStatPill label="Total Runs" :value="hub.runs.length" />
+      </template>
+    </PageHeader>
 
-    <article class="surface-card">
-      <div class="header-row">
-        <div>
-          <p class="eyebrow">Runs</p>
-          <h2>{{ hub.runs.length }} recent records</h2>
-        </div>
+    <div class="runs-content">
+      <div v-if="hub.runs.length > 0" class="runs-list">
+        <OCard
+          v-for="run in hub.runs"
+          :key="run.id"
+          hover
+          @click="openRun(run.id)"
+        >
+          <div class="run-card-inner">
+            <div class="run-main">
+              <div class="run-header">
+                <h2 class="run-title">{{ run.title }}</h2>
+                <div class="run-pills">
+                  <OPill :variant="run.status === 'completed' ? 'success' : run.status === 'running' ? 'info' : 'danger'">
+                    {{ run.status }}
+                  </OPill>
+                  <OPill outline>{{ run.run_type }}</OPill>
+                </div>
+              </div>
+              
+              <div class="run-meta">
+                <span class="meta-item">
+                  <Hash :size="12" />
+                  {{ run.id.slice(0, 8) }}
+                </span>
+                <span class="meta-item">
+                  <Clock :size="12" />
+                  {{ run.updated_at }}
+                </span>
+              </div>
+
+              <div v-if="run.last_error" class="error-msg">
+                <AlertTriangle :size="14" />
+                <span>{{ run.last_error }}</span>
+              </div>
+            </div>
+            <div class="run-chevron">
+              <ChevronRight :size="20" />
+            </div>
+          </div>
+        </OCard>
       </div>
 
-      <ul v-if="hub.runs.length > 0" class="stack-list">
-        <li v-for="run in hub.runs" :key="run.id" class="run-card">
-          <button class="run-link" @click="openRun(run.id)">{{ run.title }}</button>
-          <div class="meta-list">
-            <span>Status: {{ run.status }}</span>
-            <span>Type: {{ run.run_type }}</span>
-            <span>Updated: {{ run.updated_at }}</span>
-          </div>
-          <p class="muted">Run ID: {{ run.id }}</p>
-          <p v-if="run.last_error" class="error-copy">{{ run.last_error }}</p>
-        </li>
-      </ul>
-
-      <p v-else class="muted">No runs have been recorded for this project yet.</p>
-    </article>
-  </section>
+      <div v-else class="empty-state">
+        <div class="empty-icon"><PlayCircle :size="32" /></div>
+        <h2 class="empty-title">No Runs Yet</h2>
+        <p class="empty-text">When you start a task or automation, it will appear here.</p>
+      </div>
+    </div>
+  </PageContainer>
 </template>
 
 <style scoped>
-.runs-layout {
-  display: grid;
+.runs-list {
+  display: flex;
+  flex-direction: column;
   gap: 1rem;
 }
 
-.surface-card {
+.run-card-inner {
   display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  padding: 1.2rem;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 1rem;
-  background: rgba(15, 23, 42, 0.45);
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
-}
-
-.hero {
-  background:
-    radial-gradient(circle at top right, rgba(34, 197, 94, 0.18), transparent 32%),
-    rgba(15, 23, 42, 0.56);
-}
-
-.eyebrow {
-  margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #67e8f9;
-}
-
-h1,
-h2,
-p {
-  margin: 0;
-}
-
-.muted {
-  color: #94a3b8;
-}
-
-.stack-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.run-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  padding: 0.95rem;
-  border-radius: 0.9rem;
-  background: rgba(2, 6, 23, 0.6);
-}
-
-.run-link {
-  align-self: flex-start;
-  border: none;
-  border-radius: 999px;
-  padding: 0.7rem 0.95rem;
-  font: inherit;
-  font-weight: 600;
-  color: #082f49;
-  background: linear-gradient(135deg, #67e8f9, #facc15);
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1.25rem 1.5rem;
   cursor: pointer;
 }
 
-.meta-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  font-size: 0.92rem;
-  color: #cbd5e1;
+.run-main {
+  flex: 1;
 }
 
-.error-copy {
-  color: #fecaca;
+.run-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.run-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.run-pills {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.run-meta {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-subtle);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.error-msg {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--color-danger-soft);
+  color: var(--color-danger);
+  font-size: 0.8125rem;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.run-chevron {
+  color: var(--text-subtle);
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: var(--transition);
+}
+
+.o-card:hover .run-chevron {
+  opacity: 1;
+  color: var(--color-accent);
+  transform: translateX(0);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  background-color: var(--bg-surface);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-2xl);
+}
+
+.empty-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1.5rem;
+  background-color: var(--bg-app);
+  color: var(--text-subtle);
+  border-radius: 50%;
+}
+
+.empty-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.empty-text {
+  color: var(--text-muted);
+  font-size: 0.9375rem;
 }
 </style>

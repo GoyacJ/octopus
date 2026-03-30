@@ -13,12 +13,12 @@ octopus-execution = { path = "../../../crates/execution" }
 octopus-runtime = { path = "../../../crates/runtime" }
 serde.workspace = true
 serde_json.workspace = true
-tauri = { version = "2" }
+tauri = { version = "2", features = [] }
 thiserror.workspace = true
 tokio.workspace = true
 
 [build-dependencies]
-tauri-build = { version = "2" }
+tauri-build = { version = "2", features = [] }
 
 [dev-dependencies]
 tempfile.workspace = true

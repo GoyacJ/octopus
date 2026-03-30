@@ -1,8 +1,27 @@
 <script setup lang="ts">
 import { computed, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
+import { 
+  Brain, 
+  Cpu, 
+  ShieldCheck, 
+  Zap, 
+  ArrowRight,
+  AlertTriangle
+} from "lucide-vue-next";
 
 import { useHubStore } from "../stores/hub";
+
+// UI Components
+import OButton from "../components/ui/OButton.vue";
+import OPill from "../components/ui/OPill.vue";
+import OCard from "../components/ui/OCard.vue";
+import OCardHeader from "../components/ui/OCardHeader.vue";
+import OCardContent from "../components/ui/OCardContent.vue";
+import OStatPill from "../components/ui/OStatPill.vue";
+import PageHeader from "../components/layout/PageHeader.vue";
+import PageContainer from "../components/layout/PageContainer.vue";
+import PageGrid from "../components/layout/PageGrid.vue";
 
 const route = useRoute();
 const hub = useHubStore();
@@ -56,187 +75,212 @@ watch(
 </script>
 
 <template>
-  <section class="models-layout">
-    <article class="surface-card hero">
-      <p class="eyebrow">Models</p>
-      <h1>Models</h1>
-      <p class="read-only">Read-only</p>
-      <p class="muted">
-        Workspace model governance is visible here without exposing edit, approval, or provider-management actions.
-      </p>
-      <p v-if="hub.workspaceModelsLoading" class="muted">
-        Loading workspace model governance...
-      </p>
-      <p v-else-if="stateMessage" class="status-message">{{ stateMessage }}</p>
-    </article>
+  <PageContainer>
+    <PageHeader
+      eyebrow="Governance"
+      title="Models & Intelligence"
+      subtitle="Workspace model governance and provider configuration."
+    >
+      <template #stats>
+        <OStatPill label="Providers" :value="providers.length" highlight />
+        <OStatPill label="Profiles" :value="profiles.length" />
+      </template>
+    </PageHeader>
 
-    <article class="surface-card">
-      <p class="eyebrow">Providers</p>
-      <div v-if="providers.length > 0" class="stack-list">
-        <div v-for="provider in providers" :key="provider.id">
-          <strong>{{ provider.display_name }}</strong>
-          <p class="muted">{{ provider.provider_family }} / {{ provider.status }}</p>
-          <p class="muted">
-            Base URL: {{ provider.default_base_url ?? "not recorded" }}
-          </p>
-        </div>
-      </div>
-      <p v-else class="muted">No model providers are recorded</p>
-    </article>
+    <div v-if="hub.workspaceModelsLoading" class="loading-state">
+      <div class="skeleton-banner"></div>
+      <div class="skeleton-grid"></div>
+    </div>
 
-    <article class="surface-card">
-      <p class="eyebrow">Catalog</p>
-      <div v-if="catalogItems.length > 0" class="stack-list">
-        <div v-for="item in catalogItems" :key="item.id">
-          <strong>{{ item.model_key }}</strong>
-          <div class="meta-list">
-            <span>Provider: {{ item.provider_id }}</span>
-            <span>Channel: {{ item.release_channel }}</span>
-            <span>Context window: {{ item.context_window }}</span>
+    <div v-else-if="stateMessage" class="alert warning">
+      <AlertTriangle :size="20" />
+      <span>{{ stateMessage }}</span>
+    </div>
+
+    <PageGrid v-else cols="1-side">
+      <template #main>
+        <OCard>
+          <OCardHeader title="Providers">
+            <template #icon><Brain :size="20" /></template>
+          </OCardHeader>
+          <OCardContent>
+            <div v-if="providers.length > 0" class="entity-list">
+              <div v-for="provider in providers" :key="provider.id" class="entity-item">
+                <div class="entity-main">
+                  <span class="entity-name">{{ provider.display_name }}</span>
+                  <div class="entity-pills">
+                    <OPill size="sm">{{ provider.provider_family }}</OPill>
+                    <OPill size="sm" :variant="provider.status === 'active' ? 'success' : 'default'">
+                      {{ provider.status }}
+                    </OPill>
+                  </div>
+                </div>
+                <div class="entity-meta">
+                  URL: {{ provider.default_base_url ?? "Standard" }}
+                </div>
+              </div>
+            </div>
+            <p v-else class="empty-msg">No providers configured.</p>
+          </OCardContent>
+        </OCard>
+
+        <OCard>
+          <OCardHeader title="Model Catalog">
+            <template #icon><Cpu :size="20" /></template>
+          </OCardHeader>
+          <OCardContent>
+            <div v-if="catalogItems.length > 0" class="entity-list">
+              <div v-for="item in catalogItems" :key="item.id" class="entity-item">
+                <div class="entity-main">
+                  <span class="entity-name mono">{{ item.model_key }}</span>
+                  <OPill size="sm">{{ item.release_channel }}</OPill>
+                </div>
+                <div class="entity-meta">
+                  <span>Provider: {{ item.provider_id }}</span>
+                  <span class="divider"></span>
+                  <span>Context: {{ item.context_window }}</span>
+                </div>
+              </div>
+            </div>
+            <p v-else class="empty-msg">Catalog is empty.</p>
+          </OCardContent>
+        </OCard>
+      </template>
+
+      <template #side>
+        <OCard padding>
+          <h3 class="side-title"><Zap :size="16" class="inline-icon" /> Active Profiles</h3>
+          <div v-if="profiles.length > 0" class="profile-list">
+            <div v-for="profile in profiles" :key="profile.id" class="profile-item">
+              <div class="profile-name">{{ profile.display_name }}</div>
+              <div class="profile-model">Primary: {{ profile.primary_model_key }}</div>
+              <div v-if="profile.fallback_model_keys.length" class="profile-fallback">
+                Fallback: {{ profile.fallback_model_keys.join(", ") }}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-      <p v-else class="muted">No model catalog items are recorded</p>
-    </article>
+          <p v-else class="empty-msg">No profiles found.</p>
+        </OCard>
 
-    <article class="surface-card">
-      <p class="eyebrow">Profiles</p>
-      <div v-if="profiles.length > 0" class="stack-list">
-        <div v-for="profile in profiles" :key="profile.id">
-          <strong>{{ profile.display_name }}</strong>
-          <p class="muted">Primary model: {{ profile.primary_model_key }}</p>
-          <p class="muted">
-            Fallbacks:
-            {{ profile.fallback_model_keys.join(", ") || "none recorded" }}
-          </p>
-        </div>
-      </div>
-      <p v-else class="muted">No model profiles are recorded</p>
-    </article>
+        <OCard padding variant="highlight">
+          <h3 class="side-title"><ShieldCheck :size="16" class="inline-icon" /> Workspace Policy</h3>
+          <div v-if="workspacePolicy" class="policy-info">
+            <div class="policy-row">
+              <span class="label">ID</span>
+              <span class="val mono">{{ workspacePolicy.id.slice(0, 8) }}</span>
+            </div>
+            <div class="policy-row">
+              <span class="label">Preview Approv.</span>
+              <OPill size="sm" :variant="workspacePolicy.require_approval_for_preview ? 'danger' : 'success'">
+                {{ workspacePolicy.require_approval_for_preview ? "Required" : "Not Required" }}
+              </OPill>
+            </div>
+            <div class="policy-section">
+              <span class="label">Allowed Models</span>
+              <div class="tag-cloud">
+                <span v-for="key in workspacePolicy.allowed_model_keys" :key="key" class="tag">{{ key }}</span>
+              </div>
+            </div>
+          </div>
+          <p v-else class="empty-msg">No active policy.</p>
+        </OCard>
 
-    <article class="surface-card">
-      <p class="eyebrow">Workspace Policy</p>
-      <template v-if="workspacePolicy">
-        <h2>{{ workspacePolicy.id }}</h2>
-        <div class="meta-list">
-          <span>Tenant: {{ workspacePolicy.tenant_id }}</span>
-          <span>
-            Preview models require approval:
-            {{ workspacePolicy.require_approval_for_preview ? "yes" : "no" }}
-          </span>
-        </div>
-        <p v-if="workspacePolicy.require_approval_for_preview">
-          Preview models require approval
-        </p>
-        <div class="meta-list">
-          <span>
-            Allowed models:
-            {{ workspacePolicy.allowed_model_keys.join(", ") || "none recorded" }}
-          </span>
-          <span>
-            Allowed providers:
-            {{ workspacePolicy.allowed_provider_ids.join(", ") || "none recorded" }}
-          </span>
-        </div>
+        <OCard v-if="currentRunRoute" padding>
+          <h3 class="side-title">Active Run Intelligence</h3>
+          <div v-if="modelSelectionDecision" class="decision-mini">
+            <div class="decision-intent">{{ modelSelectionDecision.requested_intent }}</div>
+            <OPill variant="info">{{ modelSelectionDecision.selected_model_key }}</OPill>
+          </div>
+          <OButton variant="primary" :to="currentRunRoute" class="full-width">
+            View Current Run
+            <template #icon-right><ArrowRight :size="16" /></template>
+          </OButton>
+        </OCard>
       </template>
-      <p v-else class="muted">No workspace model policy is recorded</p>
-    </article>
-
-    <article class="surface-card">
-      <p class="eyebrow">Run Link</p>
-      <template v-if="modelSelectionDecision">
-        <strong>{{ modelSelectionDecision.requested_intent }}</strong>
-        <p>{{ modelSelectionDecision.decision_reason }}</p>
-        <p class="muted">
-          Selected model:
-          {{ modelSelectionDecision.selected_model_key ?? "not recorded" }}
-        </p>
-      </template>
-      <p v-else class="muted">
-        Run-scoped model selection remains authoritative on the run detail surface.
-      </p>
-      <RouterLink
-        v-if="currentRunRoute"
-        :to="currentRunRoute"
-        data-testid="models-open-current-run"
-      >
-        Open current run
-      </RouterLink>
-    </article>
-  </section>
+    </PageGrid>
+  </PageContainer>
 </template>
 
 <style scoped>
-.models-layout {
-  display: grid;
-  gap: 1rem;
+.entity-list { display: flex; flex-direction: column; gap: 1rem; }
+
+.entity-item {
+  padding: 1rem;
+  background-color: var(--bg-app);
+  border-radius: var(--radius-lg);
 }
 
-.surface-card {
+.entity-main {
   display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  padding: 1.2rem;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 1rem;
-  background: rgba(15, 23, 42, 0.45);
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
 }
 
-.hero {
-  background:
-    radial-gradient(circle at top right, rgba(56, 189, 248, 0.18), transparent 32%),
-    rgba(15, 23, 42, 0.56);
+.entity-name { font-weight: 700; color: var(--text-primary); }
+.entity-name.mono { font-family: monospace; font-size: 0.875rem; }
+
+.entity-pills { display: flex; gap: 0.5rem; }
+
+.entity-meta {
+  font-size: 0.75rem;
+  color: var(--text-subtle);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.eyebrow {
-  margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
+.entity-meta .divider { width: 3px; height: 3px; border-radius: 50%; background: var(--color-border-hover); }
+
+.side-title {
+  font-size: 0.875rem;
+  font-weight: 700;
   text-transform: uppercase;
-  color: #67e8f9;
-}
-
-h1,
-h2,
-p {
-  margin: 0;
-}
-
-.read-only {
-  font-weight: 600;
-  color: #facc15;
-}
-
-.muted {
-  color: #94a3b8;
-}
-
-.status-message {
-  color: #f8fafc;
-}
-
-.stack-list {
+  color: var(--text-subtle);
+  margin-bottom: 1rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-.meta-list {
+.profile-item {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.profile-item:last-child { border: none; }
+
+.profile-name { font-weight: 700; font-size: 0.875rem; margin-bottom: 0.25rem; color: var(--text-primary); }
+.profile-model, .profile-fallback { font-size: 0.75rem; color: var(--text-muted); }
+
+.policy-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+.policy-row .label { font-size: 0.75rem; color: var(--text-muted); }
+.policy-row .val { font-size: 0.8125rem; font-weight: 600; }
+
+.policy-section { margin-top: 1rem; }
+.policy-section .label { font-size: 0.75rem; color: var(--text-muted); display: block; margin-bottom: 0.5rem; }
+
+.tag-cloud { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.tag { font-size: 0.625rem; font-weight: 700; background: var(--color-border); padding: 0.125rem 0.375rem; border-radius: 4px; color: var(--text-muted); }
+
+.decision-mini { margin-bottom: 1rem; }
+.decision-intent { font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary); }
+
+.alert {
+  padding: 1rem;
+  margin-bottom: 2rem;
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  font-size: 0.92rem;
-  color: #cbd5e1;
+  gap: 0.75rem;
+  align-items: center;
 }
 
-a {
-  width: fit-content;
-  border: 1px solid rgba(103, 232, 249, 0.25);
-  border-radius: 999px;
-  padding: 0.75rem 1rem;
-  color: inherit;
-  text-decoration: none;
-  background: rgba(15, 23, 42, 0.72);
-}
+.alert.warning { background-color: var(--color-warning-soft); color: #92400e; border: 1px solid rgba(245, 158, 11, 0.2); }
+
+.empty-msg { font-size: 0.8125rem; color: var(--text-subtle); font-style: italic; }
+
+.inline-icon { vertical-align: middle; margin-top: -2px; }
+
+.full-width { width: 100%; }
 </style>

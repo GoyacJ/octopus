@@ -1,8 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
+import { 
+  FileText, 
+  Database, 
+  Activity, 
+  Cpu, 
+  ShieldAlert, 
+  CheckCircle2,
+  RefreshCw,
+  StopCircle,
+  ArrowUpRight
+} from "lucide-vue-next";
 
 import { useHubStore } from "../stores/hub";
+
+// UI Components
+import OButton from "../components/ui/OButton.vue";
+import OPill from "../components/ui/OPill.vue";
+import OCard from "../components/ui/OCard.vue";
+import OCardHeader from "../components/ui/OCardHeader.vue";
+import OCardContent from "../components/ui/OCardContent.vue";
+import OStatPill from "../components/ui/OStatPill.vue";
+import PageHeader from "../components/layout/PageHeader.vue";
+import PageContainer from "../components/layout/PageContainer.vue";
+import PageGrid from "../components/layout/PageGrid.vue";
 
 const route = useRoute();
 const hub = useHubStore();
@@ -135,290 +157,314 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="run-layout">
-    <article class="surface-card hero">
-      <p class="eyebrow">Run Detail</p>
-      <h1>{{ runDetail?.task.title ?? "Run loading" }}</h1>
-      <div class="meta-list">
-        <span>Run: {{ runDetail?.run.id ?? "loading" }}</span>
-        <span>Status: {{ runDetail?.run.status ?? "loading" }}</span>
-        <span>Attempts: {{ runDetail?.run.attempt_count ?? 0 }}/{{ runDetail?.run.max_attempts ?? 0 }}</span>
-      </div>
-      <p class="muted">{{ runDetail?.task.instruction ?? "Loading task instruction..." }}</p>
-      <div v-if="canRetryRun || canTerminateRun" class="action-row">
-        <button
+  <PageContainer>
+    <PageHeader
+      eyebrow="Run Detail"
+      :title="runDetail?.task.title ?? 'Run Detail'"
+      :subtitle="runDetail?.task.instruction"
+    >
+      <template #stats>
+        <OStatPill label="Run ID" :value="runDetail?.run.id ?? '...'" mono />
+        <OStatPill label="Status" highlight>
+          <span class="status-dot" :class="runDetail?.run.status"></span>
+          {{ runDetail?.run.status ?? "..." }}
+        </OStatPill>
+        <OStatPill label="Attempts" :value="`${runDetail?.run.attempt_count ?? 0} / ${runDetail?.run.max_attempts ?? 0}`" />
+      </template>
+      <template #actions>
+        <OButton
           v-if="canRetryRun"
-          data-testid="retry-run"
+          variant="primary"
           :disabled="hub.readOnlyMode || hub.runLoading || hub.runActionLoading"
+          :loading="hub.runActionLoading && hub.runActionKind === 'retry'"
           @click="handleRetryRun"
         >
-          {{ runActionLabel("retry", "Retry Run", "Retrying...") }}
-        </button>
-        <button
+          <template #icon-left><RefreshCw :size="16" /></template>
+          Retry Run
+        </OButton>
+        <OButton
           v-if="canTerminateRun"
-          data-testid="terminate-run"
-          class="secondary-button"
+          variant="danger"
           :disabled="hub.readOnlyMode || hub.runLoading || hub.runActionLoading"
+          :loading="hub.runActionLoading && hub.runActionKind === 'terminate'"
           @click="handleTerminateRun"
         >
-          {{ runActionLabel("terminate", "Terminate Run", "Terminating...") }}
-        </button>
-      </div>
-    </article>
-
-    <article class="surface-card">
-      <p class="eyebrow">Model Selection Decision</p>
-      <template v-if="modelSelectionDecision">
-        <h2>{{ modelSelectionDecision.requested_intent }}</h2>
-        <div class="meta-list">
-          <span>Outcome: {{ modelSelectionDecision.decision_outcome }}</span>
-          <span v-if="modelSelectionDecision.model_profile_id">
-            Profile: {{ modelSelectionDecision.model_profile_id }}
-          </span>
-          <span v-if="modelSelectionDecision.selected_model_key">
-            Model: {{ modelSelectionDecision.selected_model_key }}
-          </span>
-          <span v-if="modelSelectionDecision.selected_provider_id">
-            Provider: {{ modelSelectionDecision.selected_provider_id }}
-          </span>
-        </div>
-        <p>{{ modelSelectionDecision.decision_reason }}</p>
-        <div class="meta-list">
-          <span>
-            Required features:
-            {{ modelSelectionDecision.required_feature_tags.join(", ") || "none" }}
-          </span>
-          <span>
-            Missing features:
-            {{ modelSelectionDecision.missing_feature_tags.join(", ") || "none" }}
-          </span>
-          <span>
-            Approval:
-            {{ modelSelectionDecision.requires_approval ? "required" : "not required" }}
-          </span>
-        </div>
+          <template #icon-left><StopCircle :size="16" /></template>
+          Terminate
+        </OButton>
       </template>
-      <p v-else class="muted">
-        No run-scoped model selection decision is recorded for this run yet.
-      </p>
-    </article>
+    </PageHeader>
 
-    <article class="surface-card">
-      <p class="eyebrow">Policy Decisions</p>
-      <h2>{{ policyDecisions.length }} governance records</h2>
-      <div v-if="policyDecisions.length > 0" class="stack-list">
-        <div v-for="decision in policyDecisions" :key="decision.id">
-          <strong>{{ decision.decision }}</strong>
-          <p>{{ decision.reason }}</p>
-          <div class="meta-list">
-            <span>Capability: {{ decision.capability_id }}</span>
-            <span>Estimated cost: {{ decision.estimated_cost }}</span>
-            <span v-if="decision.approval_request_id">
-              Approval: {{ decision.approval_request_id }}
-            </span>
+    <PageGrid cols="1-side">
+      <template #main>
+        <OCard>
+          <OCardHeader title="Artifacts">
+            <template #icon><FileText :size="20" /></template>
+          </OCardHeader>
+          <OCardContent>
+            <div v-if="artifacts.length > 0" class="artifact-list">
+              <div v-for="art in artifacts" :key="art.id" class="artifact-item">
+                <div class="artifact-header">
+                  <span class="artifact-type">{{ art.artifact_type }}</span>
+                  <OPill size="sm" :variant="art.trust_level === 'trusted' ? 'success' : 'default'">
+                    {{ art.trust_level }}
+                  </OPill>
+                </div>
+                <pre class="artifact-content">{{ art.content }}</pre>
+                <div class="artifact-meta">
+                  <span>Gate: {{ art.knowledge_gate_status }}</span>
+                  <span>Source: {{ art.provenance_source }}</span>
+                </div>
+              </div>
+            </div>
+            <p v-else class="empty-msg">No artifacts generated yet.</p>
+          </OCardContent>
+        </OCard>
+
+        <OCard>
+          <OCardHeader title="Shared Knowledge">
+            <template #icon><Database :size="20" /></template>
+          </OCardHeader>
+          <OCardContent>
+            <div class="knowledge-section">
+              <div v-if="knowledgeDetail?.candidates.length" class="candidate-list">
+                <div v-for="cand in knowledgeDetail.candidates" :key="cand.id" class="candidate-item">
+                  <div class="item-header">
+                    <span class="item-id">{{ cand.id }}</span>
+                    <OPill size="sm" variant="warning">{{ cand.status }}</OPill>
+                  </div>
+                  <p class="item-content">{{ cand.content }}</p>
+                  <div class="item-actions">
+                    <OButton
+                      size="sm"
+                      variant="secondary"
+                      :disabled="hub.readOnlyMode || hub.governanceActionLoading"
+                      @click="handleRequestPromotion(cand.id)"
+                    >
+                      <template #icon-left><ArrowUpRight :size="14" /></template>
+                      Promote
+                    </OButton>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="empty-msg">No candidates captured.</p>
+            </div>
+          </OCardContent>
+        </OCard>
+
+        <OCard>
+          <OCardHeader title="Trace Replay">
+            <template #icon><Activity :size="20" /></template>
+          </OCardHeader>
+          <OCardContent>
+            <div v-if="runDetail?.traces.length" class="timeline">
+              <div v-for="trace in runDetail.traces" :key="trace.id" class="timeline-item">
+                <div class="timeline-point"></div>
+                <div class="timeline-content">
+                  <span class="timeline-stage">{{ trace.stage }}</span>
+                  <p class="timeline-msg">{{ trace.message }}</p>
+                </div>
+              </div>
+            </div>
+            <p v-else class="empty-msg">No trace recorded.</p>
+          </OCardContent>
+        </OCard>
+      </template>
+
+      <template #side>
+        <OCard padding>
+          <h3 class="side-title"><Cpu :size="16" class="inline-icon" /> Model Selection</h3>
+          <div v-if="modelSelectionDecision" class="model-info">
+            <div class="info-row">
+              <span class="info-label">Outcome</span>
+              <OPill variant="info">{{ modelSelectionDecision.decision_outcome }}</OPill>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Provider</span>
+              <span class="info-val">{{ modelSelectionDecision.selected_provider_id }}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Model</span>
+              <span class="info-val">{{ modelSelectionDecision.selected_model_key }}</span>
+            </div>
+            <p class="info-reason">{{ modelSelectionDecision.decision_reason }}</p>
           </div>
-        </div>
-      </div>
-      <p v-else class="muted">No policy decision chain is recorded for this run yet.</p>
-    </article>
+          <p v-else class="empty-msg">No model decision.</p>
+        </OCard>
 
-    <article class="surface-card">
-      <p class="eyebrow">Artifact View</p>
-      <h2>{{ artifacts[0]?.artifact_type ?? "No artifact yet" }}</h2>
-      <p class="artifact-content">{{ artifacts[0]?.content ?? "No artifact content recorded." }}</p>
-      <div v-if="artifacts[0]" class="meta-list">
-        <span>Trust: {{ artifacts[0].trust_level }}</span>
-        <span>Knowledge gate: {{ artifacts[0].knowledge_gate_status }}</span>
-        <span>Provenance: {{ artifacts[0].provenance_source }}</span>
-      </div>
-    </article>
-
-    <article class="surface-card">
-      <p class="eyebrow">Shared Knowledge</p>
-      <h2>{{ knowledgeDetail?.knowledge_space.display_name ?? "Knowledge loading" }}</h2>
-      <div class="stack-list">
-        <div v-for="candidate in knowledgeDetail?.candidates ?? []" :key="candidate.id">
-          <strong>{{ candidate.id }}</strong>
-          <p class="muted">Status: {{ candidate.status }}</p>
-          <p>{{ candidate.content }}</p>
-          <div v-if="approvalForCandidate(candidate.id)" class="meta-list">
-            <span>{{ approvalForCandidate(candidate.id)?.approval_type }}</span>
-            <span>{{ approvalForCandidate(candidate.id)?.status }}</span>
-            <span>{{ approvalForCandidate(candidate.id)?.target_ref }}</span>
+        <OCard padding>
+          <h3 class="side-title"><ShieldAlert :size="16" class="inline-icon" /> Governance</h3>
+          <div v-if="policyDecisions.length" class="policy-list">
+            <div v-for="dec in policyDecisions" :key="dec.id" class="policy-item">
+              <div class="policy-header">
+                <OPill size="sm" :variant="dec.decision === 'allowed' ? 'success' : 'danger'">
+                  {{ dec.decision }}
+                </OPill>
+                <span class="policy-cap">{{ dec.capability_id }}</span>
+              </div>
+              <p class="policy-reason">{{ dec.reason }}</p>
+            </div>
           </div>
-          <button
-            :data-testid="`request-promotion-${candidate.id}`"
-            :disabled="hub.readOnlyMode || hub.governanceActionLoading"
-            @click="handleRequestPromotion(candidate.id)"
-          >
-            {{
-              governanceActionLabel(
-                candidate.id,
-                "Request Promotion",
-                "Requesting..."
-              )
-            }}
-          </button>
-        </div>
-      </div>
-      <p v-if="(knowledgeDetail?.candidates.length ?? 0) === 0" class="muted">
-        No candidates have been captured for this run.
-      </p>
-      <div v-if="(knowledgeDetail?.assets.length ?? 0) > 0" class="stack-list">
-        <div v-for="asset in knowledgeDetail?.assets ?? []" :key="asset.id">
-          <strong>{{ asset.id }}</strong>
-          <p class="muted">{{ asset.status }}</p>
-        </div>
-      </div>
-    </article>
+          <p v-else class="empty-msg">No policy records.</p>
+        </OCard>
 
-    <article class="surface-card">
-      <p class="eyebrow">Trace Replay</p>
-      <div v-if="(runDetail?.traces.length ?? 0) > 0" class="stack-list">
-        <div v-for="trace in runDetail?.traces ?? []" :key="trace.id">
-          <strong>{{ trace.stage }}</strong>
-          <p>{{ trace.message }}</p>
-        </div>
-      </div>
-      <p v-else class="muted">No trace replay is recorded for this run yet.</p>
-    </article>
-
-    <article class="surface-card">
-      <p class="eyebrow">Approval / Notification State</p>
-      <div class="meta-list">
-        <span>Approvals: {{ runDetail?.approvals.length ?? 0 }}</span>
-        <span>Inbox items: {{ runDetail?.inbox_items.length ?? 0 }}</span>
-        <span>Notifications: {{ runDetail?.notifications.length ?? 0 }}</span>
-      </div>
-      <div v-if="(runDetail?.approvals.length ?? 0) > 0" class="stack-list">
-        <div v-for="approval in runDetail?.approvals ?? []" :key="approval.id">
-          <strong>{{ approval.approval_type }}</strong>
-          <p>{{ approval.target_ref }}</p>
-          <p class="muted">{{ approval.status }}</p>
-          <div class="action-row">
-            <button
-              :data-testid="`run-approve-${approval.id}`"
-              :disabled="hub.readOnlyMode || hub.governanceActionLoading"
-              @click="handleResolveApproval(approval.id, 'approve')"
-            >
-              {{
-                governanceActionLabel(
-                  approval.id,
-                  "Approve",
-                  "Approving..."
-                )
-              }}
-            </button>
-            <button
-              class="secondary-button"
-              :data-testid="`run-reject-${approval.id}`"
-              :disabled="hub.readOnlyMode || hub.governanceActionLoading"
-              @click="handleResolveApproval(approval.id, 'reject')"
-            >
-              {{
-                governanceActionLabel(
-                  approval.id,
-                  "Reject",
-                  "Rejecting..."
-                )
-              }}
-            </button>
+        <OCard padding variant="highlight">
+          <h3 class="side-title"><CheckCircle2 :size="16" class="inline-icon" /> Approvals</h3>
+          <div v-if="runApprovals.length" class="approval-mini-list">
+            <div v-for="app in runApprovals" :key="app.id" class="app-mini-item">
+              <div class="app-info">
+                <span class="app-type">{{ app.approval_type }}</span>
+                <OPill size="sm" :variant="app.status === 'pending' ? 'warning' : 'success'">
+                  {{ app.status }}
+                </OPill>
+              </div>
+              <div v-if="app.status === 'pending'" class="app-actions">
+                <OButton size="sm" variant="primary" @click="handleResolveApproval(app.id, 'approve')">Approve</OButton>
+                <OButton size="sm" variant="danger" @click="handleResolveApproval(app.id, 'reject')">Reject</OButton>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-      <p class="muted">
-        This minimum surface keeps the authoritative approval state visible from the run.
-      </p>
-    </article>
-  </section>
+          <p v-else class="empty-msg">No active approvals.</p>
+        </OCard>
+      </template>
+    </PageGrid>
+  </PageContainer>
 </template>
 
 <style scoped>
-.run-layout {
-  display: grid;
-  gap: 1rem;
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--text-subtle);
+}
+.status-dot.running { background-color: var(--color-accent); animation: pulse 2s infinite; }
+.status-dot.completed { background-color: var(--color-success); }
+.status-dot.failed { background-color: var(--color-danger); }
+
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+.artifact-item {
+  background-color: var(--bg-app);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  margin-bottom: 1rem;
 }
 
-.surface-card {
+.artifact-header {
   display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  padding: 1.2rem;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 1rem;
-  background: rgba(15, 23, 42, 0.45);
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
 }
 
-.hero {
-  background:
-    radial-gradient(circle at top right, rgba(34, 197, 94, 0.18), transparent 32%),
-    rgba(15, 23, 42, 0.56);
-}
-
-.eyebrow {
-  margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #67e8f9;
-}
-
-h1,
-h2,
-p {
-  margin: 0;
-}
+.artifact-type { font-weight: 700; font-size: 0.875rem; color: var(--text-primary); }
 
 .artifact-content {
+  background-color: #1e293b;
+  color: #e2e8f0;
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  font-family: monospace;
+  font-size: 0.875rem;
+  overflow-x: auto;
   white-space: pre-wrap;
-  font-size: 1.02rem;
-  color: #e2e8f0;
 }
 
-.muted {
-  color: #94a3b8;
-}
-
-.meta-list {
+.artifact-meta {
+  margin-top: 0.75rem;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  font-size: 0.92rem;
-  color: #cbd5e1;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: var(--text-subtle);
 }
 
-.stack-list {
+.candidate-item {
+  border-left: 3px solid var(--color-warning);
+  background-color: var(--bg-app);
+  padding: 1rem;
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  margin-bottom: 1rem;
+}
+
+.item-header {
   display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
 }
 
-.action-row {
+.item-id { font-family: monospace; font-size: 0.8125rem; font-weight: 600; }
+.item-content { font-size: 0.9375rem; color: var(--text-primary); margin-bottom: 0.75rem; }
+
+.timeline {
+  padding-left: 0.5rem;
+}
+
+.timeline-item {
+  position: relative;
+  padding-left: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-left: 1px solid var(--color-border);
+}
+
+.timeline-item:last-child { border-left: none; padding-bottom: 0; }
+
+.timeline-point {
+  position: absolute;
+  left: -4.5px;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-border-hover);
+  border: 2px solid white;
+}
+
+.timeline-stage { font-size: 0.75rem; font-weight: 700; color: var(--color-accent); text-transform: uppercase; }
+.timeline-msg { font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+.side-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  margin-bottom: 1rem;
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-button {
-  border: none;
-  border-radius: 999px;
-  padding: 0.85rem 1.05rem;
-  font: inherit;
-  font-weight: 600;
-  color: #082f49;
-  background: linear-gradient(135deg, #67e8f9, #facc15);
-  cursor: pointer;
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
 }
 
-button:disabled {
-  cursor: progress;
-  opacity: 0.75;
+.info-label { font-size: 0.75rem; color: var(--text-muted); }
+.info-val { font-size: 0.8125rem; font-weight: 600; }
+.info-reason { font-size: 0.75rem; color: var(--text-muted); line-height: 1.4; margin-top: 0.75rem; }
+
+.policy-item {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.secondary-button {
-  color: #e2e8f0;
-  background: rgba(15, 23, 42, 0.72);
-  border: 1px solid rgba(125, 211, 252, 0.25);
+.policy-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.375rem; }
+.policy-cap { font-size: 0.75rem; font-weight: 600; }
+.policy-reason { font-size: 0.75rem; color: var(--text-muted); }
+
+.app-mini-item {
+  padding: 0.75rem;
+  background-color: var(--bg-app);
+  border-radius: var(--radius-lg);
+  margin-bottom: 0.75rem;
 }
+
+.app-info { display: flex; justify-content: space-between; margin-bottom: 0.75rem; }
+.app-type { font-size: 0.8125rem; font-weight: 600; }
+.app-actions { display: flex; gap: 0.5rem; }
+
+.empty-msg { font-size: 0.8125rem; color: var(--text-subtle); font-style: italic; }
+
+.inline-icon { vertical-align: middle; margin-top: -2px; }
 </style>

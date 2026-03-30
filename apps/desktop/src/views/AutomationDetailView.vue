@@ -1,8 +1,30 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
+import { 
+  Settings, 
+  Play, 
+  Pause, 
+  Archive, 
+  Zap, 
+  Clock, 
+  Activity, 
+  RefreshCw,
+  Hash
+} from "lucide-vue-next";
 
 import { useHubStore } from "../stores/hub";
+
+// UI Components
+import OButton from "../components/ui/OButton.vue";
+import OPill from "../components/ui/OPill.vue";
+import OCard from "../components/ui/OCard.vue";
+import OCardHeader from "../components/ui/OCardHeader.vue";
+import OCardContent from "../components/ui/OCardContent.vue";
+import OStatPill from "../components/ui/OStatPill.vue";
+import PageHeader from "../components/layout/PageHeader.vue";
+import PageContainer from "../components/layout/PageContainer.vue";
+import PageGrid from "../components/layout/PageGrid.vue";
 
 const route = useRoute();
 const hub = useHubStore();
@@ -110,206 +132,230 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="detail-grid">
-    <article class="surface-card hero">
-      <p class="eyebrow">Automation Detail</p>
-      <h1>{{ automationDetail?.automation.title ?? "Automation loading" }}</h1>
-      <div class="meta-list">
-        <span>ID: {{ automationDetail?.automation.id ?? "loading" }}</span>
-        <span>Status: {{ automationDetail?.automation.status ?? "loading" }}</span>
-        <span>Trigger: {{ automationDetail?.trigger.trigger_type ?? "loading" }}</span>
-      </div>
-      <p class="muted">
-        {{ automationDetail?.automation.instruction ?? "Loading automation instruction..." }}
-      </p>
-    </article>
-
-    <article class="surface-card">
-      <p class="eyebrow">Lifecycle</p>
-      <h2>Minimum state machine</h2>
-      <div class="button-row">
-        <button
-          data-testid="automation-activate"
+  <PageContainer>
+    <PageHeader
+      eyebrow="Automation Detail"
+      :title="automationDetail?.automation.title ?? 'Automation'"
+      :subtitle="automationDetail?.automation.instruction"
+    >
+      <template #stats>
+        <OStatPill label="Status" highlight>
+          <span class="status-dot" :class="automationDetail?.automation.status"></span>
+          {{ automationDetail?.automation.status ?? "..." }}
+        </OStatPill>
+        <OStatPill label="Trigger" :value="automationDetail?.trigger.trigger_type ?? '...'" />
+        <OStatPill label="ID" :value="automationDetail?.automation.id.slice(0, 8) ?? '...'" mono />
+      </template>
+      <template #actions>
+        <OButton
+          v-if="manualDispatchAvailable"
+          variant="primary"
           :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
-          @click="handleActivateAutomation"
+          @click="handleManualDispatch"
         >
-          Activate
-        </button>
-        <button
-          data-testid="automation-pause"
-          :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
-          @click="handlePauseAutomation"
-        >
-          Pause
-        </button>
-        <button
-          data-testid="automation-archive"
-          :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
-          @click="handleArchiveAutomation"
-        >
-          Archive
-        </button>
-      </div>
-    </article>
+          <template #icon-left><Zap :size="16" /></template>
+          Dispatch Now
+        </OButton>
+      </template>
+    </PageHeader>
 
-    <article class="surface-card">
-      <p class="eyebrow">Trigger Config</p>
-      <h2>{{ automationDetail?.trigger.trigger_type ?? "trigger loading" }}</h2>
-      <pre class="code-block">{{ triggerConfig }}</pre>
-    </article>
+    <PageGrid cols="1-side">
+      <template #main>
+        <OCard>
+          <OCardHeader title="Lifecycle & Actions">
+            <template #icon><Settings :size="20" /></template>
+          </OCardHeader>
+          <OCardContent>
+            <div class="lifecycle-actions">
+              <button
+                class="btn-action"
+                :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
+                @click="handleActivateAutomation"
+              >
+                <Play :size="20" />
+                <span>Activate</span>
+              </button>
+              <button
+                class="btn-action"
+                :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
+                @click="handlePauseAutomation"
+              >
+                <Pause :size="20" />
+                <span>Pause</span>
+              </button>
+              <button
+                class="btn-action danger"
+                :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
+                @click="handleArchiveAutomation"
+              >
+                <Archive :size="20" />
+                <span>Archive</span>
+              </button>
+            </div>
+          </OCardContent>
+        </OCard>
 
-    <article class="surface-card">
-      <p class="eyebrow">Manual Dispatch</p>
-      <h2>{{ manualDispatchAvailable ? "manual_event" : "non-manual trigger" }}</h2>
-      <p class="muted">
-        {{
-          manualDispatchAvailable
-            ? "Use the runtime-backed dispatch flow for on-demand execution."
-            : "Only manual_event triggers expose dispatch in this minimum surface."
-        }}
-      </p>
-      <button
-        v-if="manualDispatchAvailable"
-        data-testid="manual-dispatch"
-        :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
-        @click="handleManualDispatch"
-      >
-        Dispatch Now
-      </button>
-    </article>
+        <OCard>
+          <OCardHeader title="Trigger Configuration">
+            <template #icon><Clock :size="20" /></template>
+          </OCardHeader>
+          <OCardContent>
+            <pre class="code-block">{{ triggerConfig }}</pre>
+          </OCardContent>
+        </OCard>
 
-    <article class="surface-card">
-      <p class="eyebrow">Recent Deliveries</p>
-      <h2>{{ automationDetail?.recent_deliveries.length ?? 0 }} recent records</h2>
-      <div v-if="(automationDetail?.recent_deliveries.length ?? 0) > 0" class="stack-list">
-        <div
-          v-for="delivery in automationDetail?.recent_deliveries ?? []"
-          :key="delivery.id"
-          class="delivery-card"
-        >
-          <strong>{{ delivery.id }}</strong>
-          <div class="meta-list">
-            <span>Status: {{ delivery.status }}</span>
-            <span>Attempts: {{ delivery.attempt_count }}</span>
+        <OCard>
+          <OCardHeader title="Recent Deliveries">
+            <template #icon><Activity :size="20" /></template>
+          </OCardHeader>
+          <OCardContent>
+            <div v-if="automationDetail?.recent_deliveries.length" class="delivery-list">
+              <div v-for="del in automationDetail.recent_deliveries" :key="del.id" class="delivery-item">
+                <div class="delivery-main">
+                  <span class="delivery-id"><Hash :size="12" /> {{ del.id.slice(0, 12) }}</span>
+                  <OPill size="sm" :variant="del.status === 'succeeded' ? 'success' : 'danger'">
+                    {{ del.status }}
+                  </OPill>
+                </div>
+                <div class="delivery-meta">
+                  <span>Attempts: {{ del.attempt_count }}</span>
+                  <span v-if="del.last_error" class="error-text">• {{ del.last_error }}</span>
+                </div>
+                <div class="delivery-actions">
+                  <OButton
+                    size="sm"
+                    variant="secondary"
+                    :disabled="hub.readOnlyMode || hub.automationActionLoading"
+                    @click="handleRetryDelivery(del.id)"
+                  >
+                    <template #icon-left><RefreshCw :size="12" /></template>
+                    Retry
+                  </OButton>
+                </div>
+              </div>
+            </div>
+            <p v-else class="empty-msg">No deliveries recorded yet.</p>
+          </OCardContent>
+        </OCard>
+      </template>
+
+      <template #side>
+        <OCard padding variant="highlight">
+          <h3 class="side-title"><Zap :size="16" class="inline-icon" /> Last Execution</h3>
+          <div v-if="automationDetail?.last_run_summary" class="run-summary">
+            <div class="summary-row">
+              <span class="label">Status</span>
+              <OPill :variant="automationDetail.last_run_summary.status === 'completed' ? 'success' : 'info'">
+                {{ automationDetail.last_run_summary.status }}
+              </OPill>
+            </div>
+            <div class="summary-row">
+              <span class="label">Run ID</span>
+              <span class="val mono">{{ automationDetail.last_run_summary.id.slice(0, 8) }}</span>
+            </div>
+            <div class="summary-row">
+              <span class="label">Type</span>
+              <span class="val">{{ automationDetail.last_run_summary.run_type }}</span>
+            </div>
+            <div class="summary-title">{{ automationDetail.last_run_summary.title }}</div>
           </div>
-          <p v-if="delivery.last_error" class="muted">{{ delivery.last_error }}</p>
-          <button
-            :data-testid="`retry-delivery-${delivery.id}`"
-            :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
-            @click="handleRetryDelivery(delivery.id)"
-          >
-            Retry Delivery
-          </button>
-        </div>
-      </div>
-      <p v-else class="muted">No delivery has been recorded for this automation yet.</p>
-    </article>
-
-    <article class="surface-card">
-      <p class="eyebrow">Last Run</p>
-      <h2>{{ automationDetail?.last_run_summary?.status ?? "No run yet" }}</h2>
-      <div v-if="automationDetail?.last_run_summary" class="meta-list">
-        <span>Run: {{ automationDetail.last_run_summary.id }}</span>
-        <span>Type: {{ automationDetail.last_run_summary.run_type }}</span>
-        <span>Title: {{ automationDetail.last_run_summary.title }}</span>
-      </div>
-      <p v-else class="muted">The automation has not produced a run summary yet.</p>
-    </article>
-  </section>
+          <p v-else class="empty-msg">No run summary available.</p>
+        </OCard>
+      </template>
+    </PageGrid>
+  </PageContainer>
 </template>
 
 <style scoped>
-.detail-grid {
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--text-subtle);
+}
+.status-dot.active { background-color: var(--color-success); }
+.status-dot.paused { background-color: var(--color-warning); }
+
+.lifecycle-actions {
   display: grid;
-  gap: 1rem;
-}
-
-.surface-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  padding: 1.2rem;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 1rem;
-  background: rgba(15, 23, 42, 0.45);
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
-}
-
-.hero {
-  background:
-    radial-gradient(circle at top right, rgba(250, 204, 21, 0.16), transparent 32%),
-    rgba(15, 23, 42, 0.56);
-}
-
-.eyebrow {
-  margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #67e8f9;
-}
-
-h1,
-h2,
-p,
-pre {
-  margin: 0;
-}
-
-.muted {
-  color: #94a3b8;
-}
-
-.meta-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  font-size: 0.92rem;
-  color: #cbd5e1;
-}
-
-.button-row {
-  display: flex;
-  flex-wrap: wrap;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 0.75rem;
 }
 
-button {
-  border: none;
-  border-radius: 999px;
-  padding: 0.9rem 1.1rem;
-  font: inherit;
+.btn-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  background-color: var(--bg-app);
+  border-radius: var(--radius-lg);
+  font-size: 0.875rem;
   font-weight: 600;
-  color: #082f49;
-  background: linear-gradient(135deg, #67e8f9, #facc15);
-  cursor: pointer;
+  color: var(--text-primary);
+  transition: var(--transition);
+  border: 1px solid transparent;
 }
 
-button:disabled {
-  cursor: progress;
-  opacity: 0.75;
+.btn-action:hover:not(:disabled) {
+  background-color: var(--color-accent-soft);
+  color: var(--color-accent);
+  border-color: var(--color-accent-soft);
 }
 
-.stack-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.8rem;
+.btn-action.danger:hover:not(:disabled) {
+  background-color: var(--color-danger-soft);
+  color: var(--color-danger);
+  border-color: var(--color-danger-soft);
 }
 
-.delivery-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
-  padding: 0.9rem;
-  border-radius: 0.9rem;
-  background: rgba(15, 23, 42, 0.55);
+.btn-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .code-block {
-  overflow: auto;
-  border-radius: 0.9rem;
-  padding: 0.9rem;
+  background-color: #1e293b;
   color: #e2e8f0;
-  background: rgba(2, 6, 23, 0.8);
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  font-family: monospace;
+  font-size: 0.8125rem;
+  overflow-x: auto;
+  margin: 0;
 }
+
+.delivery-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.delivery-item {
+  padding: 1rem;
+  background-color: var(--bg-app);
+  border-radius: var(--radius-lg);
+}
+
+.delivery-main { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
+.delivery-id { font-family: monospace; font-size: 0.8125rem; font-weight: 600; display: flex; align-items: center; gap: 0.375rem; color: var(--text-primary); }
+
+.delivery-meta { font-size: 0.75rem; color: var(--text-subtle); margin-bottom: 0.75rem; }
+.error-text { color: var(--color-danger); }
+
+.summary-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+.summary-row .label { font-size: 0.75rem; color: var(--text-muted); }
+.summary-row .val { font-size: 0.8125rem; font-weight: 600; }
+.summary-title { font-size: 0.8125rem; color: var(--text-primary); margin-top: 0.5rem; line-height: 1.4; font-weight: 600; }
+
+.side-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.empty-msg { font-size: 0.8125rem; color: var(--text-subtle); font-style: italic; }
+
+.inline-icon { vertical-align: middle; margin-top: -2px; }
 </style>
