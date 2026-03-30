@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/governance/model-provider.schema.json",
+  "title": "ModelProvider",
+  "type": "object",
+  "description": "Post-GA model-center foundation shared contract for provider-level model governance records.",
+  "properties": {
+    "id": { "type": "string" },
+    "display_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provider_family": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "preview", "deprecated", "disabled"]
+    },
+    "default_base_url": {
+      "type": ["string", "null"]
+    },
+    "protocol_families": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": [
+    "id",
+    "display_name",
+    "provider_family",
+    "status",
+    "default_base_url",
+    "protocol_families",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
+}

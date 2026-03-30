@@ -107,7 +107,10 @@ async fn trigger_substrate_persists_all_ga_trigger_variants_and_keeps_manual_eve
         .await
         .unwrap()
         .unwrap();
-    assert!(matches!(manual_trigger.spec, TriggerSpec::ManualEvent { .. }));
+    assert!(matches!(
+        manual_trigger.spec,
+        TriggerSpec::ManualEvent { .. }
+    ));
 
     let manual_report = runtime
         .dispatch_manual_event(DispatchManualEventInput {

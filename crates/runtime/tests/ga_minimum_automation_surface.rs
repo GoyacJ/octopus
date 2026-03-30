@@ -224,7 +224,10 @@ async fn automation_list_and_detail_cover_all_supported_trigger_types() {
         .load_automation_detail(mcp_event.automation.id.as_str())
         .await
         .unwrap();
-    assert!(matches!(mcp_detail.trigger.spec, TriggerSpec::McpEvent { .. }));
+    assert!(matches!(
+        mcp_detail.trigger.spec,
+        TriggerSpec::McpEvent { .. }
+    ));
 }
 
 #[tokio::test]

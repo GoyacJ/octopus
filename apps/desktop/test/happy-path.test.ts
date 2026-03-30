@@ -43,6 +43,21 @@ const taskFixture = {
   updated_at: "2026-03-26T10:00:00Z"
 };
 
+const modelSelectionDecisionFixture = {
+  id: "selection-1",
+  run_id: "run-1",
+  model_profile_id: "profile-default-reasoning",
+  requested_intent: "web_research",
+  decision_outcome: "selected",
+  selected_model_key: "openai:gpt-5.4",
+  selected_provider_id: "provider-openai",
+  required_feature_tags: ["supports_structured_output", "supports_builtin_web_search"],
+  missing_feature_tags: [],
+  requires_approval: false,
+  decision_reason: "best matching features within tenant policy",
+  created_at: "2026-03-30T10:00:00Z"
+} as const;
+
 const runDetailFixture = {
   run: {
     id: "run-1",
@@ -105,6 +120,7 @@ const runDetailFixture = {
       created_at: "2026-03-26T10:00:00Z"
     }
   ],
+  model_selection_decision: modelSelectionDecisionFixture,
   knowledge_candidates: [
     {
       id: "candidate-1",
@@ -945,6 +961,29 @@ describe("desktop local happy path", () => {
 
     expect(wrapper.text()).toContain("verified_shared");
     expect(wrapper.text()).toContain("asset-1");
+  });
+
+  it("shows the run-scoped model selection decision on the authoritative run surface", async () => {
+    const client = createLocalHubClient(createRunViewTransport());
+    const { pinia, router } = createDesktopPlugins(client, true);
+    await router.push("/runs/run-1");
+    await router.isReady();
+
+    const wrapper = mount(AppShell, {
+      global: {
+        plugins: [pinia, router]
+      }
+    });
+
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Model Selection Decision");
+    expect(wrapper.text()).toContain("web_research");
+    expect(wrapper.text()).toContain("openai:gpt-5.4");
+    expect(wrapper.text()).toContain("provider-openai");
+    expect(wrapper.text()).toContain(
+      "best matching features within tenant policy"
+    );
   });
 
   it("retries a failed run from the run view and refreshes dependent surfaces", async () => {

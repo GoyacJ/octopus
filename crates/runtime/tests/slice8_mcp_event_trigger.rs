@@ -343,12 +343,7 @@ async fn mcp_event_trigger_preserves_low_trust_artifact_gate() {
     let db_path = sample_db_path(tempdir.path());
     let runtime = Slice2Runtime::open_at(&db_path).await.unwrap();
 
-    seed_context(
-        &runtime,
-        "project-mcp-low-trust",
-        "MCP Low Trust Event",
-    )
-    .await;
+    seed_context(&runtime, "project-mcp-low-trust", "MCP Low Trust Event").await;
     seed_connector_governance(
         &runtime,
         "project-mcp-low-trust",
@@ -418,7 +413,9 @@ async fn mcp_event_trigger_preserves_low_trust_artifact_gate() {
         "external_untrusted"
     );
     assert_eq!(
-        report.run_report.artifacts[0].knowledge_gate_status.as_str(),
+        report.run_report.artifacts[0]
+            .knowledge_gate_status
+            .as_str(),
         "blocked_low_trust"
     );
     assert!(report.run_report.knowledge_candidates.is_empty());

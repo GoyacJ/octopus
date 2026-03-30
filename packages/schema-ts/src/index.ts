@@ -10,6 +10,11 @@ import capabilityBindingSchema from "../../../schemas/governance/capability-bind
 import capabilityDescriptorSchema from "../../../schemas/governance/capability-descriptor.schema.json";
 import capabilityGrantSchema from "../../../schemas/governance/capability-grant.schema.json";
 import capabilityResolutionSchema from "../../../schemas/governance/capability-resolution.schema.json";
+import modelCatalogItemSchema from "../../../schemas/governance/model-catalog-item.schema.json";
+import modelProfileSchema from "../../../schemas/governance/model-profile.schema.json";
+import modelProviderSchema from "../../../schemas/governance/model-provider.schema.json";
+import modelSelectionDecisionSchema from "../../../schemas/governance/model-selection-decision.schema.json";
+import tenantModelPolicySchema from "../../../schemas/governance/tenant-model-policy.schema.json";
 import hubAuthErrorSchema from "../../../schemas/interop/hub-auth-error.schema.json";
 import hubConnectionStatusSchema from "../../../schemas/interop/hub-connection-status.schema.json";
 import hubEventSchema from "../../../schemas/interop/hub-event.schema.json";
@@ -76,6 +81,11 @@ import type {
   Artifact,
   ArtifactSummary,
   AuditRecord,
+  ModelCatalogItem,
+  ModelProfile,
+  ModelProvider,
+  ModelSelectionDecision,
+  TenantModelPolicy,
   CapabilityResolution,
   CapabilityVisibility,
   CreateAutomationCommand,
@@ -146,6 +156,11 @@ const schemaRegistry = {
   [capabilityDescriptorSchema.$id]: capabilityDescriptorSchema,
   [capabilityGrantSchema.$id]: capabilityGrantSchema,
   [capabilityResolutionSchema.$id]: capabilityResolutionSchema,
+  [modelProviderSchema.$id]: modelProviderSchema,
+  [modelCatalogItemSchema.$id]: modelCatalogItemSchema,
+  [modelProfileSchema.$id]: modelProfileSchema,
+  [tenantModelPolicySchema.$id]: tenantModelPolicySchema,
+  [modelSelectionDecisionSchema.$id]: modelSelectionDecisionSchema,
   [hubAuthErrorSchema.$id]: hubAuthErrorSchema,
   [artifactSchema.$id]: artifactSchema,
   [artifactSummarySchema.$id]: artifactSummarySchema,
@@ -385,6 +400,49 @@ export function parseCapabilityVisibilities(
   value: unknown
 ): CapabilityVisibility[] {
   return parseCapabilityResolutions(value);
+}
+
+export function parseModelProvider(value: unknown): ModelProvider {
+  return parseWithSchema<ModelProvider>(modelProviderSchema.$id, value);
+}
+
+export function parseModelProviders(value: unknown): ModelProvider[] {
+  return parseArrayWithItemSchema<ModelProvider>(modelProviderSchema.$id, value);
+}
+
+export function parseModelCatalogItem(value: unknown): ModelCatalogItem {
+  return parseWithSchema<ModelCatalogItem>(modelCatalogItemSchema.$id, value);
+}
+
+export function parseModelCatalogItems(value: unknown): ModelCatalogItem[] {
+  return parseArrayWithItemSchema<ModelCatalogItem>(
+    modelCatalogItemSchema.$id,
+    value
+  );
+}
+
+export function parseModelProfile(value: unknown): ModelProfile {
+  return parseWithSchema<ModelProfile>(modelProfileSchema.$id, value);
+}
+
+export function parseModelProfiles(value: unknown): ModelProfile[] {
+  return parseArrayWithItemSchema<ModelProfile>(modelProfileSchema.$id, value);
+}
+
+export function parseTenantModelPolicy(value: unknown): TenantModelPolicy {
+  return parseWithSchema<TenantModelPolicy>(
+    tenantModelPolicySchema.$id,
+    value
+  );
+}
+
+export function parseModelSelectionDecision(
+  value: unknown
+): ModelSelectionDecision {
+  return parseWithSchema<ModelSelectionDecision>(
+    modelSelectionDecisionSchema.$id,
+    value
+  );
 }
 
 export function parseArtifact(value: unknown): Artifact {

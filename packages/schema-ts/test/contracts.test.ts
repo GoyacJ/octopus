@@ -18,6 +18,11 @@ import {
   parseHubRefreshCommand,
   parseHubRefreshResponse,
   parseKnowledgeDetail,
+  parseModelCatalogItem,
+  parseModelProfile,
+  parseModelProvider,
+  parseModelSelectionDecision,
+  parseTenantModelPolicy,
   parseProjectKnowledgeIndex,
   parseLocalHubTransportContract,
   parseManualDispatchCommand,
@@ -246,8 +251,92 @@ describe("schema-ts contract parsers", () => {
     expect(contract.commands.list_runs).toBeTruthy();
     expect(contract.commands.retry_run).toBeTruthy();
     expect(contract.commands.terminate_run).toBeTruthy();
+    expect(contract.commands.list_model_providers).toBeTruthy();
+    expect(contract.commands.list_model_catalog_items).toBeTruthy();
+    expect(contract.commands.list_model_profiles).toBeTruthy();
+    expect(contract.commands.get_workspace_model_policy).toBeTruthy();
     expect(contract.commands.get_connection_status).toBeTruthy();
-    expect(Object.values(contract.commands)).toHaveLength(27);
+    expect(Object.values(contract.commands)).toHaveLength(31);
+  });
+
+  it("accepts the model governance foundation contracts", () => {
+    expect(
+      parseModelProvider({
+        id: "provider-openai",
+        display_name: "OpenAI",
+        provider_family: "openai",
+        status: "active",
+        default_base_url: "https://api.openai.com/v1",
+        protocol_families: ["openai_responses_compatible"],
+        created_at: "2026-03-30T10:00:00Z",
+        updated_at: "2026-03-30T10:00:00Z"
+      }).provider_family
+    ).toBe("openai");
+
+    expect(
+      parseModelCatalogItem({
+        id: "model-openai-gpt-5-4",
+        provider_id: "provider-openai",
+        model_key: "openai:gpt-5.4",
+        provider_model_id: "gpt-5.4",
+        release_channel: "ga",
+        modality_tags: ["text_in", "text_out", "image_in"],
+        feature_tags: [
+          "supports_structured_output",
+          "supports_builtin_web_search"
+        ],
+        context_window: 1050000,
+        max_output_tokens: 128000,
+        created_at: "2026-03-30T10:00:00Z",
+        updated_at: "2026-03-30T10:00:00Z"
+      }).model_key
+    ).toBe("openai:gpt-5.4");
+
+    expect(
+      parseModelProfile({
+        id: "profile-default-reasoning",
+        display_name: "Default Reasoning",
+        scope_ref: "tenant:tenant-alpha",
+        primary_model_key: "openai:gpt-5.4",
+        fallback_model_keys: ["openai:gpt-5.4-mini"],
+        created_at: "2026-03-30T10:00:00Z",
+        updated_at: "2026-03-30T10:00:00Z"
+      }).primary_model_key
+    ).toBe("openai:gpt-5.4");
+
+    expect(
+      parseTenantModelPolicy({
+        id: "tenant-policy-default",
+        tenant_id: "tenant-alpha",
+        allowed_model_keys: ["openai:gpt-5.4", "openai:gpt-5.4-mini"],
+        denied_model_keys: [],
+        allowed_provider_ids: ["provider-openai"],
+        denied_release_channels: ["experimental"],
+        require_approval_for_preview: true,
+        created_at: "2026-03-30T10:00:00Z",
+        updated_at: "2026-03-30T10:00:00Z"
+      }).tenant_id
+    ).toBe("tenant-alpha");
+
+    expect(
+      parseModelSelectionDecision({
+        id: "selection-1",
+        run_id: "run-1",
+        model_profile_id: "profile-default-reasoning",
+        requested_intent: "web_research",
+        decision_outcome: "selected",
+        selected_model_key: "openai:gpt-5.4",
+        selected_provider_id: "provider-openai",
+        required_feature_tags: [
+          "supports_structured_output",
+          "supports_builtin_web_search"
+        ],
+        missing_feature_tags: [],
+        requires_approval: false,
+        decision_reason: "best matching features within tenant policy",
+        created_at: "2026-03-30T10:00:00Z"
+      }).selected_provider_id
+    ).toBe("provider-openai");
   });
 
   it("accepts run summary arrays for the recent-runs workbench surface", () => {
@@ -312,60 +401,80 @@ describe("schema-ts contract parsers", () => {
   });
 
   it("accepts a run detail payload composed from shared schemas", () => {
-    expect(
-      parseRunDetail({
-        run: {
-          id: "run-1",
-          task_id: "task-1",
-          workspace_id: "workspace-alpha",
-          project_id: "project-slice1",
-          automation_id: null,
-          trigger_delivery_id: null,
-          run_type: "task",
-          status: "completed",
-          approval_request_id: null,
-          idempotency_key: "run-task-1",
-          attempt_count: 1,
-          max_attempts: 2,
-          checkpoint_seq: 3,
-          resume_token: null,
-          last_error: null,
-          created_at: "2026-03-26T10:00:00Z",
-          updated_at: "2026-03-26T10:00:01Z",
-          started_at: "2026-03-26T10:00:00Z",
-          completed_at: "2026-03-26T10:00:01Z",
-          terminated_at: null
+    const runDetail = parseRunDetail({
+      run: {
+        id: "run-1",
+        task_id: "task-1",
+        workspace_id: "workspace-alpha",
+        project_id: "project-slice1",
+        automation_id: null,
+        trigger_delivery_id: null,
+        run_type: "task",
+        status: "completed",
+        approval_request_id: null,
+        idempotency_key: "run-task-1",
+        attempt_count: 1,
+        max_attempts: 2,
+        checkpoint_seq: 3,
+        resume_token: null,
+        last_error: null,
+        created_at: "2026-03-26T10:00:00Z",
+        updated_at: "2026-03-26T10:00:01Z",
+        started_at: "2026-03-26T10:00:00Z",
+        completed_at: "2026-03-26T10:00:01Z",
+        terminated_at: null
+      },
+      task: {
+        id: "task-1",
+        workspace_id: "workspace-alpha",
+        project_id: "project-slice1",
+        source_kind: "manual",
+        automation_id: null,
+        title: "Write note",
+        instruction: "Emit a deterministic artifact",
+        action: {
+          kind: "emit_text",
+          content: "hello"
         },
-        task: {
-          id: "task-1",
-          workspace_id: "workspace-alpha",
-          project_id: "project-slice1",
-          source_kind: "manual",
-          automation_id: null,
-          title: "Write note",
-          instruction: "Emit a deterministic artifact",
-          action: {
-            kind: "emit_text",
-            content: "hello"
-          },
-          capability_id: "capability-write-note",
-          estimated_cost: 1,
-          idempotency_key: "task-1",
-          created_at: "2026-03-26T10:00:00Z",
-          updated_at: "2026-03-26T10:00:00Z"
-        },
-        artifacts: [],
-        audits: [],
-        traces: [],
-        approvals: [],
-        inbox_items: [],
-        notifications: [],
-        policy_decisions: [],
-        knowledge_candidates: [],
-        knowledge_assets: [],
-        knowledge_lineage: []
-      }).run.status
-    ).toBe("completed");
+        capability_id: "capability-write-note",
+        estimated_cost: 1,
+        idempotency_key: "task-1",
+        created_at: "2026-03-26T10:00:00Z",
+        updated_at: "2026-03-26T10:00:00Z"
+      },
+      artifacts: [],
+      audits: [],
+      traces: [],
+      approvals: [],
+      inbox_items: [],
+      notifications: [],
+      policy_decisions: [],
+      model_selection_decision: {
+        id: "selection-1",
+        run_id: "run-1",
+        model_profile_id: "profile-default-reasoning",
+        requested_intent: "web_research",
+        decision_outcome: "selected",
+        selected_model_key: "openai:gpt-5.4",
+        selected_provider_id: "provider-openai",
+        required_feature_tags: [
+          "supports_structured_output",
+          "supports_builtin_web_search"
+        ],
+        missing_feature_tags: [],
+        requires_approval: false,
+        decision_reason: "best matching features within tenant policy",
+        created_at: "2026-03-30T10:00:00Z"
+      },
+      knowledge_candidates: [],
+      knowledge_assets: [],
+      knowledge_lineage: []
+    });
+
+    expect(runDetail.run.status).toBe("completed");
+    expect(runDetail.model_selection_decision?.selected_model_key).toBe(
+      "openai:gpt-5.4"
+    );
   });
 
   it("accepts capability resolutions with governance explainability", () => {

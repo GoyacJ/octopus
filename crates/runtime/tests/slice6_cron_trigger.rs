@@ -309,7 +309,10 @@ async fn high_risk_cron_trigger_waits_for_approval_and_then_completes() {
         .unwrap();
     assert_eq!(waiting.len(), 1);
     assert_eq!(waiting[0].delivery.status.as_str(), "delivering");
-    assert_eq!(waiting[0].run_report.run.status.as_str(), "waiting_approval");
+    assert_eq!(
+        waiting[0].run_report.run.status.as_str(),
+        "waiting_approval"
+    );
 
     runtime
         .resolve_approval(

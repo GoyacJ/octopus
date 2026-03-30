@@ -186,6 +186,53 @@ const projectKnowledgeIndexFixture = {
   ]
 };
 
+const modelProviderFixture = {
+  id: "provider-openai",
+  display_name: "OpenAI",
+  provider_family: "openai",
+  status: "active",
+  default_base_url: "https://api.openai.com/v1",
+  protocol_families: ["openai_responses_compatible"],
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
+const modelCatalogItemFixture = {
+  id: "catalog-openai-gpt-5-4",
+  provider_id: "provider-openai",
+  model_key: "openai:gpt-5.4",
+  provider_model_id: "gpt-5.4",
+  release_channel: "ga",
+  modality_tags: ["text_in", "text_out", "image_in"],
+  feature_tags: ["supports_structured_output", "supports_builtin_web_search"],
+  context_window: 1050000,
+  max_output_tokens: 128000,
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
+const modelProfileFixture = {
+  id: "profile-default-reasoning",
+  display_name: "Default Reasoning",
+  scope_ref: "tenant:workspace-alpha",
+  primary_model_key: "openai:gpt-5.4",
+  fallback_model_keys: ["openai:gpt-5.4-mini"],
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
+const workspaceModelPolicyFixture = {
+  id: "tenant-policy-workspace-alpha",
+  tenant_id: "workspace-alpha",
+  allowed_model_keys: ["openai:gpt-5.4", "openai:gpt-5.4-mini"],
+  denied_model_keys: [],
+  allowed_provider_ids: ["provider-openai"],
+  denied_release_channels: ["experimental"],
+  require_approval_for_preview: true,
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
 function buildTransport(
   overrides: Partial<Record<string, (payload: unknown) => unknown>> = {}
 ): LocalHubTransport {
@@ -245,6 +292,14 @@ function buildTransport(
           return hubConnectionStatusFixture;
         case "hub:list_automations":
           return [];
+        case "hub:list_model_providers":
+          return [modelProviderFixture];
+        case "hub:list_model_catalog_items":
+          return [modelCatalogItemFixture];
+        case "hub:list_model_profiles":
+          return [modelProfileFixture];
+        case "hub:get_workspace_model_policy":
+          return workspaceModelPolicyFixture;
         default:
           throw new Error(`unexpected command: ${command}`);
       }
@@ -299,6 +354,34 @@ describe("desktop task workbench routes", () => {
     expect(wrapper.text()).toContain("Recent Runs");
     expect(wrapper.text()).toContain("Write note");
     expect(wrapper.text()).toContain("completed");
+  });
+
+  it("renders the workspace models route as a read-only governance surface", async () => {
+    const { wrapper } = await mountAt("/workspaces/workspace-alpha/models");
+
+    expect(wrapper.text()).toContain("Models");
+    expect(wrapper.text()).toContain("Read-only");
+    expect(wrapper.text()).toContain("OpenAI");
+    expect(wrapper.text()).toContain("openai:gpt-5.4");
+    expect(wrapper.text()).toContain("Default Reasoning");
+    expect(wrapper.text()).toContain("Preview models require approval");
+  });
+
+  it("renders explicit empty-state copy when no workspace model governance truth exists", async () => {
+    const { wrapper } = await mountAt(
+      "/workspaces/workspace-alpha/models",
+      buildTransport({
+        "hub:list_model_providers": () => [],
+        "hub:list_model_catalog_items": () => [],
+        "hub:list_model_profiles": () => [],
+        "hub:get_workspace_model_policy": () => null
+      })
+    );
+
+    expect(wrapper.text()).toContain("Models");
+    expect(wrapper.text()).toContain("No model providers are recorded");
+    expect(wrapper.text()).toContain("No workspace model policy is recorded");
+    expect(wrapper.text()).toContain("Read-only");
   });
 
   it("renders the knowledge route from a dedicated project loader with traceability links", async () => {

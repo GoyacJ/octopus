@@ -1,0 +1,34 @@
+# Contract Change
+
+- Change Type:
+  - Persistence Model
+  - Internal Interface
+- New / Updated Schemas:
+  - None. This slice reuses the existing tracked model-governance contracts:
+    - `ModelProvider`
+    - `ModelCatalogItem`
+    - `ModelProfile`
+    - `TenantModelPolicy`
+    - `ModelSelectionDecision`
+- New / Updated Commands:
+  - None
+- New / Updated Queries:
+  - None
+- New / Updated Events:
+  - None
+- New / Updated DTOs:
+  - None across the cross-language surface.
+  - Rust-only persistence consumer records are added in `crates/governance` and `crates/runtime`.
+- Compatibility Impact:
+  - No cross-language compatibility change. This slice extends only the Rust persistence layer and internal runtime surface.
+- Affected Consumers:
+  - `crates/governance`
+  - `crates/runtime`
+  - Existing schema-ts contract tests as non-regression coverage
+- Migration Notes:
+  - Add one new runtime migration for model-governance persistence tables and the run-scoped decision table.
+  - No data backfill is required because the slice introduces new post-GA tables only.
+- Generation Impact:
+  - None. `packages/schema-ts` already registers the model-governance contracts from Phase 1.
+- Open Questions:
+  - None for this slice. If read-only transport later needs summary/detail DTOs, that must happen in a separate bounded contract-change step.

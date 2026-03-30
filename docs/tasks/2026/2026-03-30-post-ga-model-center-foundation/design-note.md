@@ -1,0 +1,60 @@
+## Design Note
+
+- Problem:
+  - Before this slice, PRD already defined `ModelProvider`, `ModelCatalogItem`, `ModelProfile`, and `TenantModelPolicy`, but the tracked repository lacked shared contracts for them, SAD still treated Model Center as a thin placeholder, and the March 27 supplement proposed a richer design with divergent overlapping terminology.
+- Goal:
+  - Deliver a governance-first foundation slice that freezes canonical terminology, minimal shared contracts, and document ownership for Model Center work without widening into provider-adapter implementation or runtime refactors.
+- Acceptance Criteria:
+  - The first model-governance contracts exist in `schemas/governance` and are consumable from `packages/schema-ts`.
+  - Owner docs and ADRs describe one canonical terminology set.
+  - The supplement remains available as reference input, not as a root-level normative document.
+- Non-functional Constraints:
+  - Keep `schemas/` as the only cross-language contract truth.
+  - Avoid new Rust or TypeScript runtime behavior in this slice.
+  - Keep the slice doc/schema-only and leave later runtime / provider / transport consumers to a separate task package.
+- MVP Boundary:
+  - Minimal provider/catalog/profile/policy/selection objects only.
+  - Flat `feature_tags` on `ModelCatalogItem` instead of introducing a separate `ModelFeatureSet`.
+  - No provider endpoint, routing-policy, built-in-tool, or adapter SPI contracts yet.
+- Layer Placement:
+  - `schemas/governance` owns the new cross-language model governance contracts.
+  - `packages/schema-ts` owns TypeScript validation and parsing for those contracts.
+  - `docs/decisions` owns the durable model-center boundary and terminology decision.
+  - `docs/tasks` owns the local slice scope and deferral list.
+  - `docs/references` stores the non-normative supplement.
+- Module Boundaries:
+  - Model Center owns provider, catalog, profile, and tenant-policy truth.
+  - `ModelSelectionDecision` is the per-run model-choice record consumed by runtime, not a replacement for capability truth.
+  - `CapabilityResolver`, `ToolSearch`, `ExecutionProfile`, and `SkillPack` keep their current documented boundaries in this slice.
+  - `ProviderAdapter`, provider built-in tools, and deeper runtime/capability rewiring remain deferred to later task packages.
+- Inputs:
+  - PRD model-center terms and policy rules.
+  - SAD Governance Plane / Capability Management boundaries.
+  - The March 27 supplement as non-normative design input.
+- Outputs:
+  - ADR 0007.
+  - This task package.
+  - Five new governance schemas.
+  - `packages/schema-ts` type/parser registration.
+  - Owner-doc and index updates.
+- Error Handling:
+  - Divergent supplement terms must be mapped to canonical PRD terms before they can appear in tracked contracts.
+  - Missing future details such as routing, endpoint profiles, and built-in tool semantics must stay explicitly deferred rather than being guessed into the first schema set.
+- Tech Stack Decision:
+  - Use JSON Schema plus the existing `packages/schema-ts` AJV consumer path only.
+- Visual Framework Impact:
+  - None.
+- Human Approval Points:
+  - None for this registration slice; later runtime/provider slices still require separate task packages.
+- Reused Components:
+  - Existing `schemas/governance` layout and `packages/schema-ts` registry/parsing pattern.
+- New Abstractions:
+  - Minimal model-governance shared contracts only.
+- Trade-offs:
+  - This slice intentionally prefers a smaller contract set over the fuller supplement object model to avoid widening beyond post-GA scope control.
+  - `feature_tags` remain simple strings for now so the first slice does not commit to a full `ModelFeatureSet` structure prematurely.
+- Test Strategy:
+  - Add targeted `packages/schema-ts` parser coverage for the new contracts.
+  - Re-run `schema-ts` typecheck after schema registration.
+- ADR Needed:
+  - Yes. The slice fixes durable terminology, object boundaries, and document ownership rules for future Model Center work.

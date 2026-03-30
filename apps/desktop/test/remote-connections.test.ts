@@ -121,6 +121,53 @@ const remoteProjectsFixture = [
   }
 ] as const;
 
+const remoteModelProviderFixture = {
+  id: "provider-openai",
+  display_name: "OpenAI",
+  provider_family: "openai",
+  status: "active",
+  default_base_url: "https://api.openai.com/v1",
+  protocol_families: ["openai_responses_compatible"],
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
+const remoteModelCatalogItemFixture = {
+  id: "catalog-openai-gpt-5-4",
+  provider_id: "provider-openai",
+  model_key: "openai:gpt-5.4",
+  provider_model_id: "gpt-5.4",
+  release_channel: "ga",
+  modality_tags: ["text_in", "text_out", "image_in"],
+  feature_tags: ["supports_structured_output", "supports_builtin_web_search"],
+  context_window: 1050000,
+  max_output_tokens: 128000,
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
+const remoteModelProfileFixture = {
+  id: "profile-default-reasoning",
+  display_name: "Default Reasoning",
+  scope_ref: "tenant:workspace-alpha",
+  primary_model_key: "openai:gpt-5.4",
+  fallback_model_keys: ["openai:gpt-5.4-mini"],
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
+const remoteWorkspaceModelPolicyFixture = {
+  id: "tenant-policy-workspace-alpha",
+  tenant_id: "workspace-alpha",
+  allowed_model_keys: ["openai:gpt-5.4", "openai:gpt-5.4-mini"],
+  denied_model_keys: [],
+  allowed_provider_ids: ["provider-openai"],
+  denied_release_channels: ["experimental"],
+  require_approval_for_preview: true,
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
 function remoteProjectContextFixture(projectId: string) {
   const project = remoteProjectsFixture.find((item) => item.id === projectId);
   if (!project) {
@@ -242,8 +289,33 @@ function createLocalWorkbenchClient(): HubClient {
 function createRemoteWorkbenchClient(
   currentAuthState: () => "auth_required" | "authenticated" | "token_expired",
   currentProjects: () => readonly (typeof remoteProjectsFixture)[number][],
-  currentConnectionState: () => "connected" | "disconnected" = () => "connected"
+  currentConnectionState: () => "connected" | "disconnected" = () => "connected",
+  currentModelReadBehavior: () =>
+    "ok" | "empty" | "forbidden" | "transport_error" | "auth_required" = () => "ok"
 ): HubClient {
+  function modelReadResult<T>(value: T): T {
+    switch (currentModelReadBehavior()) {
+      case "ok":
+        return value;
+      case "empty":
+        return ([] as T[])[0] as T;
+      case "forbidden":
+        throw new HubClientAuthError(403, {
+          error: "workspace model governance is forbidden",
+          error_code: "workspace_forbidden",
+          auth_state: "authenticated"
+        } satisfies HubAuthError);
+      case "transport_error":
+        throw new HubClientTransportError("remote hub unavailable");
+      case "auth_required":
+        throw new HubClientAuthError(401, {
+          error: "authentication required",
+          error_code: "auth_required",
+          auth_state: "auth_required"
+        } satisfies HubAuthError);
+    }
+  }
+
   const transport: LocalHubTransport = {
     async invoke(command, payload) {
       switch (command) {
@@ -290,6 +362,22 @@ function createRemoteWorkbenchClient(
         case "hub:list_automations":
         case "hub:list_runs":
           return [];
+        case "hub:list_model_providers":
+          return currentModelReadBehavior() === "empty"
+            ? []
+            : modelReadResult([remoteModelProviderFixture]);
+        case "hub:list_model_catalog_items":
+          return currentModelReadBehavior() === "empty"
+            ? []
+            : modelReadResult([remoteModelCatalogItemFixture]);
+        case "hub:list_model_profiles":
+          return currentModelReadBehavior() === "empty"
+            ? []
+            : modelReadResult([remoteModelProfileFixture]);
+        case "hub:get_workspace_model_policy":
+          return currentModelReadBehavior() === "empty"
+            ? null
+            : modelReadResult(remoteWorkspaceModelPolicyFixture);
         default:
           throw new Error(`unexpected remote command: ${command}`);
       }
@@ -305,6 +393,8 @@ function createRemoteWorkbenchClient(
 interface MountRemoteShellOptions {
   currentProjects?: () => readonly (typeof remoteProjectsFixture)[number][];
   currentConnectionState?: () => "connected" | "disconnected";
+  currentModelReadBehavior?: () =>
+    "ok" | "empty" | "forbidden" | "transport_error" | "auth_required";
   initializeConnection?: boolean;
   runtime?: Partial<DesktopConnectionRuntimeOptions>;
   seedProfile?: Partial<DesktopConnectionProfile> | null;
@@ -327,7 +417,8 @@ async function mountRemoteShell(
       createRemoteWorkbenchClient(
         authState,
         options.currentProjects ?? (() => remoteProjectsFixture),
-        options.currentConnectionState
+        options.currentConnectionState,
+        options.currentModelReadBehavior
       ),
     createRemoteAuthClient: () => ({
       async refreshSession() {
@@ -1481,5 +1572,125 @@ describe("desktop remote connection surface", () => {
     await router.push("/connections");
     await flushPromises();
     expect(wrapper.text()).toContain("memory-only");
+  });
+
+  it("renders the remote models page when authenticated and connected", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "authenticated";
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          return createRemoteLoginResponse();
+        },
+        async getCurrentSession() {
+          return remoteSessionFixture;
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      }
+    );
+
+    await router.push("/workspaces/workspace-alpha/models");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Models");
+    expect(wrapper.text()).toContain("OpenAI");
+    expect(wrapper.text()).toContain("Preview models require approval");
+  });
+
+  it("shows explicit remote offline copy on the models page when transport is unavailable", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "authenticated";
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          return createRemoteLoginResponse();
+        },
+        async getCurrentSession() {
+          return remoteSessionFixture;
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      },
+      {
+        currentConnectionState: () => "disconnected",
+        currentModelReadBehavior: () => "transport_error"
+      }
+    );
+
+    await router.push("/workspaces/workspace-alpha/models");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Models");
+    expect(wrapper.text()).toContain("Remote hub is offline");
+    expect(wrapper.text()).toContain("Read-only");
+  });
+
+  it("shows forbidden copy on the models page when workspace model governance is not accessible", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "authenticated";
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          return createRemoteLoginResponse();
+        },
+        async getCurrentSession() {
+          return remoteSessionFixture;
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      },
+      {
+        currentModelReadBehavior: () => "forbidden"
+      }
+    );
+
+    await router.push("/workspaces/workspace-alpha/models");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Models");
+    expect(wrapper.text()).toContain(
+      "You do not have permission to read workspace model governance"
+    );
+    expect(wrapper.text()).toContain("Read-only");
+  });
+
+  it("shows auth-required read-only copy on the models page when the remote session expires", async () => {
+    let authState: "auth_required" | "authenticated" | "token_expired" = "token_expired";
+
+    const { wrapper, router } = await mountRemoteShell(
+      () => authState,
+      {
+        async login() {
+          return createRemoteLoginResponse();
+        },
+        async getCurrentSession() {
+          throw new HubClientAuthError(401, {
+            error: "token expired",
+            error_code: "token_expired",
+            auth_state: "token_expired"
+          });
+        },
+        async logout() {
+          authState = "auth_required";
+        }
+      },
+      {
+        currentModelReadBehavior: () => "auth_required"
+      }
+    );
+
+    await router.push("/workspaces/workspace-alpha/models");
+    await flushPromises();
+
+    expect(wrapper.text()).toContain("Models");
+    expect(wrapper.text()).toContain("Sign in again to load workspace model governance");
+    expect(wrapper.text()).toContain("Read-only");
   });
 });

@@ -94,8 +94,7 @@ fn refined_slice1_examples_validate() {
     let trigger_delivery_retry_command_schema =
         compiled_schema("runtime/trigger-delivery-retry-command.schema.json");
     let run_retry_command_schema = compiled_schema("runtime/run-retry-command.schema.json");
-    let run_terminate_command_schema =
-        compiled_schema("runtime/run-terminate-command.schema.json");
+    let run_terminate_command_schema = compiled_schema("runtime/run-terminate-command.schema.json");
     let trigger_schema = compiled_schema("runtime/trigger.schema.json");
     let trigger_delivery_schema = compiled_schema("runtime/trigger-delivery.schema.json");
     let environment_lease_status_schema =

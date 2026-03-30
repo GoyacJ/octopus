@@ -31,6 +31,7 @@ Do **not** use an ADR for temporary task notes, local implementation details, or
 - [0004-knowledge-crate-and-project-shared-knowledge-loop.md](0004-knowledge-crate-and-project-shared-knowledge-loop.md)
 - [0005-centralized-capability-invocation-and-gated-mcp-interop.md](0005-centralized-capability-invocation-and-gated-mcp-interop.md)
 - [0006-hub-client-surface-contracts-and-transport-parity.md](0006-hub-client-surface-contracts-and-transport-parity.md)
+- [0007-model-center-governance-boundary-and-terminology.md](0007-model-center-governance-boundary-and-terminology.md)
 
 ## Minimal Structure
 

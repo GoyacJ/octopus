@@ -959,3 +959,45 @@ async fn authenticated_session_can_access_task_approval_and_knowledge_routes() {
     assert_eq!(inbox_status, StatusCode::OK, "body={inbox_items}");
     assert!(inbox_items.as_array().is_some());
 }
+
+#[tokio::test]
+async fn workspace_model_routes_require_authentication_and_enforce_workspace_membership() {
+    let harness = TestHarness::seeded().await;
+
+    let (unauthorized_status, unauthorized_body) = harness
+        .response(
+            Request::builder()
+                .uri("/api/workspaces/workspace-alpha/models/providers")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(unauthorized_status, StatusCode::UNAUTHORIZED);
+    assert_eq!(unauthorized_body["error_code"], "auth_required");
+
+    let (alpha_authorization, _) = harness.login("workspace-alpha").await;
+    let (providers_status, providers_body) = harness
+        .response(
+            Request::builder()
+                .uri("/api/workspaces/workspace-alpha/models/providers")
+                .header("authorization", alpha_authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(providers_status, StatusCode::OK, "body={providers_body}");
+    assert_eq!(providers_body, json!([]));
+
+    let (bravo_authorization, _) = harness.login("workspace-bravo").await;
+    let (forbidden_status, forbidden_body) = harness
+        .response(
+            Request::builder()
+                .uri("/api/workspaces/workspace-alpha/models/providers")
+                .header("authorization", bravo_authorization.as_str())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(forbidden_status, StatusCode::FORBIDDEN, "body={forbidden_body}");
+    assert_eq!(forbidden_body["error_code"], "workspace_forbidden");
+}

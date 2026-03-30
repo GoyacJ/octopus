@@ -9,11 +9,7 @@ async fn open_runtime() -> (tempfile::TempDir, std::path::PathBuf, Slice1Runtime
     (tempdir, db_path, runtime)
 }
 
-async fn update_project_timestamp(
-    db_path: &std::path::Path,
-    project_id: &str,
-    updated_at: &str,
-) {
+async fn update_project_timestamp(db_path: &std::path::Path, project_id: &str, updated_at: &str) {
     let pool = SqlitePool::connect_with(
         SqliteConnectOptions::new()
             .filename(db_path)

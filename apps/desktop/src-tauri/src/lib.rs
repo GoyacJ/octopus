@@ -15,9 +15,9 @@ use octopus_runtime::{
     AutomationRecord, BudgetPolicyRecord, CapabilityBindingRecord, CapabilityDescriptorRecord,
     CapabilityGrantRecord, CreateAutomationInput, CreateTaskInput, CreateTriggerInput,
     DispatchManualEventInput, InboxItemRecord, KnowledgeAssetRecord, KnowledgeCandidateRecord,
-    KnowledgeLineageRecord, KnowledgeSpaceRecord, NotificationRecord, PolicyDecisionLogRecord,
-    ProjectKnowledgeIndexRecord, RunExecutionReport, RunRecord, RunSummaryRecord, Slice2Runtime,
-    TaskRecord, TraceRecord, TriggerRecord,
+    KnowledgeLineageRecord, KnowledgeSpaceRecord, ModelSelectionDecisionRecord,
+    NotificationRecord, PolicyDecisionLogRecord, ProjectKnowledgeIndexRecord, RunExecutionReport,
+    RunRecord, RunSummaryRecord, Slice2Runtime, TaskRecord, TraceRecord, TriggerRecord,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -51,6 +51,10 @@ pub struct LocalHubTransportCommands {
     pub list_projects: String,
     pub get_project_context: String,
     pub get_project_knowledge: String,
+    pub list_model_providers: String,
+    pub list_model_catalog_items: String,
+    pub list_model_profiles: String,
+    pub get_workspace_model_policy: String,
     pub list_automations: String,
     pub create_automation: String,
     pub get_automation_detail: String,
@@ -177,6 +181,7 @@ struct RunDetailResponse {
     inbox_items: Vec<InboxItemRecord>,
     notifications: Vec<NotificationRecord>,
     policy_decisions: Vec<PolicyDecisionLogRecord>,
+    model_selection_decision: Option<ModelSelectionDecisionRecord>,
     knowledge_candidates: Vec<KnowledgeCandidateRecord>,
     knowledge_assets: Vec<KnowledgeAssetRecord>,
     knowledge_lineage: Vec<KnowledgeLineageRecord>,
@@ -498,6 +503,53 @@ impl DesktopLocalHost {
                     &command.project_id,
                 )
                 .await?
+            ));
+        }
+
+        if normalized_command
+            == normalize_tauri_invoke_command(commands.list_model_providers.as_str())
+        {
+            let _command = self.parse_payload::<WorkspaceScopedCommand>(
+                commands.list_model_providers.as_str(),
+                payload,
+            )?;
+            return Ok(json!(self.inner.runtime.list_model_providers().await?));
+        }
+
+        if normalized_command
+            == normalize_tauri_invoke_command(commands.list_model_catalog_items.as_str())
+        {
+            let _command = self.parse_payload::<WorkspaceScopedCommand>(
+                commands.list_model_catalog_items.as_str(),
+                payload,
+            )?;
+            return Ok(json!(
+                self.inner.runtime.list_model_catalog_items().await?
+            ));
+        }
+
+        if normalized_command
+            == normalize_tauri_invoke_command(commands.list_model_profiles.as_str())
+        {
+            let _command = self.parse_payload::<WorkspaceScopedCommand>(
+                commands.list_model_profiles.as_str(),
+                payload,
+            )?;
+            return Ok(json!(self.inner.runtime.list_model_profiles().await?));
+        }
+
+        if normalized_command
+            == normalize_tauri_invoke_command(commands.get_workspace_model_policy.as_str())
+        {
+            let command = self.parse_payload::<WorkspaceScopedCommand>(
+                commands.get_workspace_model_policy.as_str(),
+                payload,
+            )?;
+            return Ok(json!(
+                self.inner
+                    .runtime
+                    .get_workspace_model_policy(&command.workspace_id)
+                    .await?
             ));
         }
 
@@ -1033,6 +1085,7 @@ impl DesktopLocalHost {
             inbox_items: report.inbox_items,
             notifications: self.normalize_notifications(report.notifications).await?,
             policy_decisions: report.policy_decisions,
+            model_selection_decision: report.model_selection_decision,
             knowledge_candidates: report.knowledge_candidates,
             knowledge_assets,
             knowledge_lineage,
@@ -1365,6 +1418,90 @@ async fn hub_get_project_knowledge(
         json!({
             "workspaceId": workspace_id,
             "projectId": project_id,
+        }),
+    )
+    .await
+}
+
+#[allow(non_snake_case)]
+#[tauri::command]
+async fn hub_list_model_providers(
+    state: State<'_, DesktopLocalHostState>,
+    workspaceId: Option<String>,
+    workspace_id: Option<String>,
+) -> Result<Value, String> {
+    let workspace_id = require_string(workspaceId, workspace_id, "workspaceId")?;
+    invoke_from_state(
+        &state,
+        local_hub_transport_contract()
+            .commands
+            .list_model_providers
+            .as_str(),
+        json!({
+            "workspaceId": workspace_id,
+        }),
+    )
+    .await
+}
+
+#[allow(non_snake_case)]
+#[tauri::command]
+async fn hub_list_model_catalog_items(
+    state: State<'_, DesktopLocalHostState>,
+    workspaceId: Option<String>,
+    workspace_id: Option<String>,
+) -> Result<Value, String> {
+    let workspace_id = require_string(workspaceId, workspace_id, "workspaceId")?;
+    invoke_from_state(
+        &state,
+        local_hub_transport_contract()
+            .commands
+            .list_model_catalog_items
+            .as_str(),
+        json!({
+            "workspaceId": workspace_id,
+        }),
+    )
+    .await
+}
+
+#[allow(non_snake_case)]
+#[tauri::command]
+async fn hub_list_model_profiles(
+    state: State<'_, DesktopLocalHostState>,
+    workspaceId: Option<String>,
+    workspace_id: Option<String>,
+) -> Result<Value, String> {
+    let workspace_id = require_string(workspaceId, workspace_id, "workspaceId")?;
+    invoke_from_state(
+        &state,
+        local_hub_transport_contract()
+            .commands
+            .list_model_profiles
+            .as_str(),
+        json!({
+            "workspaceId": workspace_id,
+        }),
+    )
+    .await
+}
+
+#[allow(non_snake_case)]
+#[tauri::command]
+async fn hub_get_workspace_model_policy(
+    state: State<'_, DesktopLocalHostState>,
+    workspaceId: Option<String>,
+    workspace_id: Option<String>,
+) -> Result<Value, String> {
+    let workspace_id = require_string(workspaceId, workspace_id, "workspaceId")?;
+    invoke_from_state(
+        &state,
+        local_hub_transport_contract()
+            .commands
+            .get_workspace_model_policy
+            .as_str(),
+        json!({
+            "workspaceId": workspace_id,
         }),
     )
     .await
@@ -1968,6 +2105,10 @@ pub fn run() {
             hub_list_projects,
             hub_get_project_context,
             hub_get_project_knowledge,
+            hub_list_model_providers,
+            hub_list_model_catalog_items,
+            hub_list_model_profiles,
+            hub_get_workspace_model_policy,
             hub_list_automations,
             hub_create_automation,
             hub_get_automation_detail,

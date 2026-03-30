@@ -1,0 +1,46 @@
+## Contract Change
+
+- Change Type:
+  - Public API
+  - Internal Interface
+  - Cross-language Contract
+- New / Updated Schemas:
+  - Extend `schemas/runtime/run-detail.schema.json` with optional `model_selection_decision`
+  - Extend `schemas/interop/local-hub-transport.schema.json`
+  - Extend `schemas/interop/local-hub-transport.json`
+- New / Updated Commands:
+  - Add four interop-owned local transport commands:
+    - `list_model_providers`
+    - `list_model_catalog_items`
+    - `list_model_profiles`
+    - `get_workspace_model_policy`
+- New / Updated Queries:
+  - Add `HubClient.listModelProviders(workspaceId): Promise<ModelProvider[]>`
+  - Add `HubClient.listModelCatalogItems(workspaceId): Promise<ModelCatalogItem[]>`
+  - Add `HubClient.listModelProfiles(workspaceId): Promise<ModelProfile[]>`
+  - Add `HubClient.getWorkspaceModelPolicy(workspaceId): Promise<TenantModelPolicy | null>`
+- New / Updated Mutations:
+  - None.
+- New / Updated Events:
+  - None. Existing workspace/run refresh paths remain sufficient.
+- New / Updated DTOs:
+  - Extend `RunDetail` additively with optional `model_selection_decision?: ModelSelectionDecision | null`
+  - Reuse existing `ModelProvider`, `ModelCatalogItem`, `ModelProfile`, `TenantModelPolicy`, and `ModelSelectionDecision` as the only model-governance DTOs
+- Compatibility Impact:
+  - Additive. Existing `RunDetail` consumers remain valid and existing local/remote transport commands remain unchanged.
+- Affected Consumers:
+  - `schemas/runtime`
+  - `schemas/interop`
+  - `packages/schema-ts`
+  - `packages/hub-client`
+  - `crates/runtime`
+  - `apps/remote-hub`
+  - `apps/desktop/src-tauri`
+  - `apps/desktop`
+- Migration Notes:
+  - No new SQLite migration is expected in this slice.
+  - Remote/local transport paths must both source provider/catalog/profile/policy truth from the existing persistence APIs and run decision truth from the existing runtime read path.
+- Generation Impact:
+  - None. Existing schema-ts parser/export patterns remain sufficient.
+- Open Questions:
+  - None at task freeze time. Provider connectivity, admin enumeration, and richer run-decision browsing remain deferred.

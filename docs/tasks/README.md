@@ -37,9 +37,11 @@ Use the templates in [../governance/ai-delivery-templates.md](../governance/ai-d
 
 Current tracked task packages now cover the GA foundation and slice sequence through Slice 20 `desktop degraded-state convergence`.
 
-The current approved post-GA follow-on is [2026-03-30-post-ga-session-token-lifecycle](2026/2026-03-30-post-ga-session-token-lifecycle/README.md).
+The completed post-GA closeout slices are [2026-03-30-post-ga-session-token-lifecycle](2026/2026-03-30-post-ga-session-token-lifecycle/README.md), [2026-03-30-post-ga-model-center-foundation](2026/2026-03-30-post-ga-model-center-foundation/README.md), and [2026-03-30-post-ga-model-governance-persistence](2026/2026-03-30-post-ga-model-governance-persistence/README.md).
 
-Post-Slice-20 follow-on work must start by creating a new task package before implementation.
+The queued next design-only candidate is [2026-03-30-post-ga-model-governance-read-transport](2026/2026-03-30-post-ga-model-governance-read-transport/README.md).
+
+Post-Slice-20 follow-on work must start by creating a new task package before implementation. The current queue is persistence complete, read-only transport design-only, and any later transport/UI implementation must explicitly promote that design package first.
 
 ## Current Task Packages
 
@@ -68,6 +70,10 @@ Post-Slice-20 follow-on work must start by creating a new task package before im
 - [2026-03-29-slice-19-session-hardening](2026/2026-03-29-slice-19-session-hardening/README.md)
 - [2026-03-29-slice-20-desktop-degraded-state-convergence](2026/2026-03-29-slice-20-desktop-degraded-state-convergence/README.md)
 - [2026-03-30-post-ga-session-token-lifecycle](2026/2026-03-30-post-ga-session-token-lifecycle/README.md)
+- [2026-03-30-post-ga-model-center-foundation](2026/2026-03-30-post-ga-model-center-foundation/README.md)
+- [2026-03-30-post-ga-model-governance-consumers](2026/2026-03-30-post-ga-model-governance-consumers/README.md)
+- [2026-03-30-post-ga-model-governance-persistence](2026/2026-03-30-post-ga-model-governance-persistence/README.md)
+- [2026-03-30-post-ga-model-governance-read-transport](2026/2026-03-30-post-ga-model-governance-read-transport/README.md)
 - [2026-03-30-desktop-launch-entry-fix](2026/2026-03-30-desktop-launch-entry-fix/README.md)
 - [2026-03-30-desktop-dev-workflow](2026/2026-03-30-desktop-dev-workflow/README.md)
 

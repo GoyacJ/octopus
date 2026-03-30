@@ -11,6 +11,9 @@ const runDetail = computed(() => hub.runDetail);
 const artifacts = computed(() => hub.artifacts);
 const knowledgeDetail = computed(() => hub.knowledgeDetail);
 const currentRun = computed(() => runDetail.value?.run ?? null);
+const modelSelectionDecision = computed(
+  () => runDetail.value?.model_selection_decision ?? null
+);
 const runApprovals = computed(() => runDetail.value?.approvals ?? []);
 const policyDecisions = computed(() => runDetail.value?.policy_decisions ?? []);
 const canRetryRun = computed(() => {
@@ -161,6 +164,43 @@ onMounted(() => {
           {{ runActionLabel("terminate", "Terminate Run", "Terminating...") }}
         </button>
       </div>
+    </article>
+
+    <article class="surface-card">
+      <p class="eyebrow">Model Selection Decision</p>
+      <template v-if="modelSelectionDecision">
+        <h2>{{ modelSelectionDecision.requested_intent }}</h2>
+        <div class="meta-list">
+          <span>Outcome: {{ modelSelectionDecision.decision_outcome }}</span>
+          <span v-if="modelSelectionDecision.model_profile_id">
+            Profile: {{ modelSelectionDecision.model_profile_id }}
+          </span>
+          <span v-if="modelSelectionDecision.selected_model_key">
+            Model: {{ modelSelectionDecision.selected_model_key }}
+          </span>
+          <span v-if="modelSelectionDecision.selected_provider_id">
+            Provider: {{ modelSelectionDecision.selected_provider_id }}
+          </span>
+        </div>
+        <p>{{ modelSelectionDecision.decision_reason }}</p>
+        <div class="meta-list">
+          <span>
+            Required features:
+            {{ modelSelectionDecision.required_feature_tags.join(", ") || "none" }}
+          </span>
+          <span>
+            Missing features:
+            {{ modelSelectionDecision.missing_feature_tags.join(", ") || "none" }}
+          </span>
+          <span>
+            Approval:
+            {{ modelSelectionDecision.requires_approval ? "required" : "not required" }}
+          </span>
+        </div>
+      </template>
+      <p v-else class="muted">
+        No run-scoped model selection decision is recorded for this run yet.
+      </p>
     </article>
 
     <article class="surface-card">

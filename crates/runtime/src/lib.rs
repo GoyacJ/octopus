@@ -9,12 +9,12 @@ use services::{AutomationIntake, KnowledgeManager, RunOrchestrator, TaskIntake};
 use thiserror::Error;
 
 pub use models::{
-    AssetKnowledgeSummaryRecord, AutomationDetailRecord, AutomationRecord,
-    AutomationSummaryRecord, CandidateKnowledgeSummaryRecord, CreateAutomationInput,
-    CreateAutomationReport, CreateTaskInput, CreateTriggerInput, CronTriggerConfig,
-    DispatchManualEventInput, DispatchMcpEventInput, DispatchWebhookEventInput,
-    KnowledgePromotionReport, KnowledgeSummaryRecord, ManualEventTriggerConfig,
-    McpEventTriggerConfig, ProjectKnowledgeIndexRecord, RunExecutionReport, RunRecord,
+    AssetKnowledgeSummaryRecord, AutomationDetailRecord, AutomationRecord, AutomationSummaryRecord,
+    CandidateKnowledgeSummaryRecord, CreateAutomationInput, CreateAutomationReport,
+    CreateTaskInput, CreateTriggerInput, CronTriggerConfig, DispatchManualEventInput,
+    DispatchMcpEventInput, DispatchWebhookEventInput, KnowledgePromotionReport,
+    KnowledgeSummaryRecord, ManualEventTriggerConfig, McpEventTriggerConfig,
+    ModelSelectionDecisionRecord, ProjectKnowledgeIndexRecord, RunExecutionReport, RunRecord,
     RunSummaryRecord, TaskRecord, TriggerDeliveryRecord, TriggerDeliveryReport, TriggerRecord,
     TriggerSpec, WebhookTriggerConfig,
 };
@@ -22,6 +22,7 @@ pub use octopus_domain_context::{ProjectContext, ProjectRecord};
 pub use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
     CapabilityDescriptorRecord, CapabilityGrantRecord, CapabilityResolutionRecord,
+    ModelCatalogItemRecord, ModelProfileRecord, ModelProviderRecord, TenantModelPolicyRecord,
 };
 pub use octopus_interop_mcp::{
     EnvironmentLeaseRecord, McpCredentialRecord, McpInvocationRecord, McpServerRecord,
@@ -631,6 +632,47 @@ impl Slice2Runtime {
 
     pub async fn load_run_report(&self, run_id: &str) -> Result<RunExecutionReport, RuntimeError> {
         self.run_orchestrator.load_run_report(run_id).await
+    }
+
+    pub async fn list_model_providers(&self) -> Result<Vec<ModelProviderRecord>, RuntimeError> {
+        self.run_orchestrator.list_model_providers().await
+    }
+
+    pub async fn list_model_catalog_items(
+        &self,
+    ) -> Result<Vec<ModelCatalogItemRecord>, RuntimeError> {
+        self.run_orchestrator.list_model_catalog_items().await
+    }
+
+    pub async fn list_model_profiles(&self) -> Result<Vec<ModelProfileRecord>, RuntimeError> {
+        self.run_orchestrator.list_model_profiles().await
+    }
+
+    pub async fn get_workspace_model_policy(
+        &self,
+        workspace_id: &str,
+    ) -> Result<Option<TenantModelPolicyRecord>, RuntimeError> {
+        self.run_orchestrator
+            .fetch_tenant_model_policy(workspace_id)
+            .await
+    }
+
+    pub async fn record_model_selection_decision(
+        &self,
+        record: ModelSelectionDecisionRecord,
+    ) -> Result<ModelSelectionDecisionRecord, RuntimeError> {
+        self.run_orchestrator
+            .record_model_selection_decision(record)
+            .await
+    }
+
+    pub async fn fetch_model_selection_decision_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Option<ModelSelectionDecisionRecord>, RuntimeError> {
+        self.run_orchestrator
+            .fetch_model_selection_decision_by_run(run_id)
+            .await
     }
 
     pub async fn promote_knowledge_candidate(

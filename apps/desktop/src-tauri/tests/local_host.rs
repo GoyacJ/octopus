@@ -4,7 +4,7 @@ use octopus_desktop_host::{
     local_hub_transport_contract, normalize_tauri_invoke_command, CollectingEventEmitter,
     DesktopLocalHost, LocalHostConfig,
 };
-use octopus_runtime::Slice2Runtime;
+use octopus_runtime::{ModelSelectionDecisionRecord, Slice2Runtime};
 use serde_json::{json, Value};
 
 fn command(name: &str) -> String {
@@ -192,6 +192,121 @@ async fn task_happy_path_round_trips_through_transport_and_records_knowledge() {
     assert!(events
         .iter()
         .any(|event| event.payload["event_type"] == "run.updated"));
+}
+
+#[tokio::test]
+async fn local_host_exposes_workspace_model_reads_and_run_selection_decision() {
+    let (tempdir, host, _emitter) = open_host().await;
+    let contract = local_hub_transport_contract();
+
+    let providers = invoke(
+        &host,
+        &contract.commands.list_model_providers,
+        json!({
+            "workspaceId": "demo"
+        }),
+    )
+    .await;
+    let catalog = invoke(
+        &host,
+        &contract.commands.list_model_catalog_items,
+        json!({
+            "workspaceId": "demo"
+        }),
+    )
+    .await;
+    let profiles = invoke(
+        &host,
+        &contract.commands.list_model_profiles,
+        json!({
+            "workspaceId": "demo"
+        }),
+    )
+    .await;
+    let policy = invoke(
+        &host,
+        &contract.commands.get_workspace_model_policy,
+        json!({
+            "workspaceId": "demo"
+        }),
+    )
+    .await;
+
+    assert_eq!(providers, json!([]));
+    assert_eq!(catalog, json!([]));
+    assert_eq!(profiles, json!([]));
+    assert_eq!(policy, Value::Null);
+
+    let task = invoke(
+        &host,
+        &contract.commands.create_task,
+        json!({
+            "workspace_id": "demo",
+            "project_id": "demo",
+            "title": "Model decision task",
+            "instruction": "Emit deterministic output",
+            "action": {
+                "kind": "emit_text",
+                "content": "decision"
+            },
+            "capability_id": "capability-local-demo",
+            "estimated_cost": 1,
+            "idempotency_key": "task-local-model-decision"
+        }),
+    )
+    .await;
+
+    let run_detail = invoke(
+        &host,
+        &contract.commands.start_task,
+        json!({
+            "taskId": task["id"].as_str().unwrap()
+        }),
+    )
+    .await;
+    let run_id = run_detail["run"]["id"].as_str().unwrap().to_string();
+
+    let runtime = Slice2Runtime::open_at(&tempdir.path().join("desktop-local-host.sqlite"))
+        .await
+        .unwrap();
+    runtime
+        .record_model_selection_decision(ModelSelectionDecisionRecord {
+            id: "selection-1".to_string(),
+            run_id: run_id.clone(),
+            model_profile_id: Some("profile-default-reasoning".to_string()),
+            requested_intent: "web_research".to_string(),
+            decision_outcome: "selected".to_string(),
+            selected_model_key: Some("openai:gpt-5.4".to_string()),
+            selected_provider_id: Some("provider-openai".to_string()),
+            required_feature_tags: vec![
+                "supports_structured_output".to_string(),
+                "supports_builtin_web_search".to_string(),
+            ],
+            missing_feature_tags: vec![],
+            requires_approval: false,
+            decision_reason: "best matching features within tenant policy".to_string(),
+            created_at: "2026-03-30T10:00:00Z".to_string(),
+        })
+        .await
+        .unwrap();
+
+    let loaded_run_detail = invoke(
+        &host,
+        &contract.commands.get_run_detail,
+        json!({
+            "runId": run_id
+        }),
+    )
+    .await;
+
+    assert_eq!(
+        loaded_run_detail["model_selection_decision"]["selected_model_key"],
+        "openai:gpt-5.4"
+    );
+    assert_eq!(
+        loaded_run_detail["model_selection_decision"]["selected_provider_id"],
+        "provider-openai"
+    );
 }
 
 #[tokio::test]

@@ -22,8 +22,9 @@ use octopus_runtime::{
     AutomationRecord, AutomationSummaryRecord, CapabilityResolutionRecord, CreateAutomationInput,
     CreateTaskInput, CreateTriggerInput, DispatchManualEventInput, DispatchWebhookEventInput,
     InboxItemRecord, KnowledgeAssetRecord, KnowledgeCandidateRecord, KnowledgeLineageRecord,
-    KnowledgeSpaceRecord, NotificationRecord, PolicyDecisionLogRecord, ProjectContext,
-    ProjectRecord,
+    KnowledgeSpaceRecord, ModelCatalogItemRecord, ModelProfileRecord, ModelProviderRecord,
+    ModelSelectionDecisionRecord, NotificationRecord, PolicyDecisionLogRecord, ProjectContext,
+    ProjectRecord, TenantModelPolicyRecord,
     ProjectKnowledgeIndexRecord, RunExecutionReport, RunRecord, RunSummaryRecord, RuntimeError,
     Slice1Runtime, TaskRecord, TraceRecord, TriggerDeliveryRecord, TriggerRecord, TriggerSpec,
 };
@@ -61,6 +62,22 @@ pub fn app(state: AppState) -> Router {
         .route(
             "/api/workspaces/{workspace_id}/projects/{project_id}/knowledge",
             get(get_project_knowledge),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/models/providers",
+            get(list_model_providers),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/models/catalog",
+            get(list_model_catalog_items),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/models/profiles",
+            get(list_model_profiles),
+        )
+        .route(
+            "/api/workspaces/{workspace_id}/models/policy",
+            get(get_workspace_model_policy),
         )
         .route(
             "/api/workspaces/{workspace_id}/projects/{project_id}/automations",
@@ -442,6 +459,7 @@ struct RunDetailResponse {
     inbox_items: Vec<InboxItemRecord>,
     notifications: Vec<NotificationRecord>,
     policy_decisions: Vec<PolicyDecisionLogRecord>,
+    model_selection_decision: Option<ModelSelectionDecisionRecord>,
     knowledge_candidates: Vec<KnowledgeCandidateRecord>,
     knowledge_assets: Vec<KnowledgeAssetRecord>,
     knowledge_lineage: Vec<KnowledgeLineageRecord>,
@@ -577,6 +595,67 @@ async fn get_project_knowledge(
         state
             .runtime
             .get_project_knowledge_index(&workspace_id, &project_id)
+            .await?,
+    ))
+}
+
+async fn list_model_providers(
+    State(state): State<AppState>,
+    Path(workspace_id): Path<String>,
+    headers: HeaderMap,
+) -> AppResult<Vec<ModelProviderRecord>> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
+    Ok(Json(state.runtime.list_model_providers().await?))
+}
+
+async fn list_model_catalog_items(
+    State(state): State<AppState>,
+    Path(workspace_id): Path<String>,
+    headers: HeaderMap,
+) -> AppResult<Vec<ModelCatalogItemRecord>> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
+    Ok(Json(state.runtime.list_model_catalog_items().await?))
+}
+
+async fn list_model_profiles(
+    State(state): State<AppState>,
+    Path(workspace_id): Path<String>,
+    headers: HeaderMap,
+) -> AppResult<Vec<ModelProfileRecord>> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
+    Ok(Json(state.runtime.list_model_profiles().await?))
+}
+
+async fn get_workspace_model_policy(
+    State(state): State<AppState>,
+    Path(workspace_id): Path<String>,
+    headers: HeaderMap,
+) -> AppResult<Option<TenantModelPolicyRecord>> {
+    let session = require_session(&state, &headers).await?;
+    state
+        .auth
+        .ensure_workspace_access(&session, &workspace_id)
+        .await?;
+
+    Ok(Json(
+        state
+            .runtime
+            .get_workspace_model_policy(&workspace_id)
             .await?,
     ))
 }
@@ -1208,6 +1287,7 @@ async fn build_run_detail_response(
         inbox_items: report.inbox_items,
         notifications: report.notifications,
         policy_decisions: report.policy_decisions,
+        model_selection_decision: report.model_selection_decision,
         knowledge_candidates: report.knowledge_candidates,
         knowledge_assets,
         knowledge_lineage,

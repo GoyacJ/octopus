@@ -393,6 +393,11 @@ classDiagram
 | `CapabilityBinding` | Capability Management | 将正式能力绑定到 Agent、Workspace、Project、Run 或 Template 范围内的连接对象 |
 | `CapabilityGrant` | Governance & Policy | 主体在某范围内的能力授权窗口 |
 | `BudgetPolicy` | Governance & Policy | 约束成本、时间、动作数、重试数和升级条件 |
+| `ModelProvider` | Governance & Policy | 已登记的模型提供方与协议家族记录 |
+| `ModelCatalogItem` | Governance & Policy | 可治理的模型目录项，记录 release channel、模态和最小 feature 标签 |
+| `ModelProfile` | Governance & Policy | Agent 或系统默认选择的命名模型档案，指向主模型与回退模型 |
+| `TenantModelPolicy` | Governance & Policy | 租户级模型准入与预览审批基线 |
+| `ModelSelectionDecision` | Run Orchestration | 某次 Run 的模型选择记录，承载所需 feature、缺失 feature 和审批结论 |
 | `DelegationGrant` | Collaboration Mesh | 某次委托的 authority、budget 和 expiry 约束 |
 | `InteractionPrompt` | Artifact & Inbox | 正式结构化提问/确认对象，进入 Chat、Inbox 与 Approval 语义 |
 | `MessageDraft` | Artifact & Inbox | 正式消息草稿对象，支持审阅、确认、发送前校验和引用 |
@@ -507,6 +512,7 @@ flowchart LR
 - Runtime Plane 不把“工具是否存在”建模为 prompt 层偶然行为；正式闭环是 `CapabilityCatalog -> CapabilityBinding -> CapabilityResolver -> ToolSearch -> InteractionPrompt / MessageDraft -> Audit`。
 - `Tool Search Service` 只返回当前主体在当前上下文中可发现的 descriptor、schema、治理标签与 fallback，不直接授予执行权。
 - `Execution Profile Resolver` 只能基于已注册 capability 和现有治理上下文解析 `SkillPack`，不能注入未注册能力或绕过 grant、budget、approval。
+- `Model Center` 负责 provider / catalog / profile / tenant-policy 真相；`ExecutionProfile` 只表达默认偏好，未来 `ModelSelectionDecision` 只记录模型选择结果，不得改写 capability 真相或绕过 `CapabilityResolver -> ToolSearch` 边界。
 - 工具实现、deferred discovery、结构化提问与消息草稿交互形态可参考 `docs/references/Claude_Hidden_Toolkit.md` 作为模式样例，但正式能力边界、对象语义和治理约束仍以本 SAD 与 PRD 为准。
 
 ### 4.4 Knowledge Plane
@@ -535,7 +541,7 @@ flowchart LR
 | `Grant Service` | 管理 CapabilityGrant、DelegationGrant 的签发、撤销和过期 |
 | `Budget Service` | 管理 BudgetPolicy 的计量、限额、预警和越界 |
 | `Approval Service` | 管理 ApprovalRequest、幂等处理、超时和恢复参数 |
-| `Model Center` | 管理 ModelProfile、默认模型、摘要和 embedding 档案 |
+| `Model Center` | 管理 `ModelProvider`、`ModelCatalogItem`、`ModelProfile`、`TenantModelPolicy` 与系统默认档案；运行时消费其选择结果，但 provider adapter 和 built-in tool 细化留待后续切片 |
 | `Secret Scope Manager` | 管理 Provider、MCP、A2A 和节点所需凭证的作用域 |
 
 ### 4.6 Interop Plane

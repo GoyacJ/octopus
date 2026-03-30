@@ -53,6 +53,16 @@
         "$ref": "https://octopus.local/schemas/observe/policy-decision-log.schema.json"
       }
     },
+    "model_selection_decision": {
+      "anyOf": [
+        {
+          "$ref": "https://octopus.local/schemas/governance/model-selection-decision.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "knowledge_candidates": {
       "type": "array",
       "items": {

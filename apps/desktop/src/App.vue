@@ -61,6 +61,14 @@ const inboxRoute = computed(() => {
   return `/workspaces/${activeWorkspaceId.value}/inbox`;
 });
 
+const modelsRoute = computed(() => {
+  if (!activeWorkspaceId.value) {
+    return null;
+  }
+
+  return `/workspaces/${activeWorkspaceId.value}/models`;
+});
+
 const notificationsRoute = computed(() => {
   if (!activeWorkspaceId.value) {
     return null;
@@ -137,6 +145,7 @@ const connectionBanner = computed(() => connection.connectionBanner);
         <RouterLink v-if="tasksRoute" :to="tasksRoute">Tasks</RouterLink>
         <RouterLink v-if="runsRoute" :to="runsRoute">Runs</RouterLink>
         <RouterLink v-if="knowledgeRoute" :to="knowledgeRoute">Knowledge</RouterLink>
+        <RouterLink v-if="modelsRoute" :to="modelsRoute">Models</RouterLink>
         <RouterLink v-if="inboxRoute" :to="inboxRoute">Inbox</RouterLink>
         <RouterLink v-if="notificationsRoute" :to="notificationsRoute">
           Notifications

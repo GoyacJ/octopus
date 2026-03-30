@@ -187,6 +187,68 @@ const promotionApprovalFixture = {
   dedupe_key: "knowledge_promotion:candidate-1:approval-promotion-1"
 } as const;
 
+const modelProviderFixture = {
+  id: "provider-openai",
+  display_name: "OpenAI",
+  provider_family: "openai",
+  status: "active",
+  default_base_url: "https://api.openai.com/v1",
+  protocol_families: ["openai_responses_compatible"],
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
+const modelCatalogItemFixture = {
+  id: "catalog-openai-gpt-5-4",
+  provider_id: "provider-openai",
+  model_key: "openai:gpt-5.4",
+  provider_model_id: "gpt-5.4",
+  release_channel: "ga",
+  modality_tags: ["text_in", "text_out", "image_in"],
+  feature_tags: ["supports_structured_output", "supports_builtin_web_search"],
+  context_window: 1050000,
+  max_output_tokens: 128000,
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
+const modelProfileFixture = {
+  id: "profile-default-reasoning",
+  display_name: "Default Reasoning",
+  scope_ref: "tenant:workspace-alpha",
+  primary_model_key: "openai:gpt-5.4",
+  fallback_model_keys: ["openai:gpt-5.4-mini"],
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
+const workspaceModelPolicyFixture = {
+  id: "tenant-policy-workspace-alpha",
+  tenant_id: "workspace-alpha",
+  allowed_model_keys: ["openai:gpt-5.4", "openai:gpt-5.4-mini"],
+  denied_model_keys: [],
+  allowed_provider_ids: ["provider-openai"],
+  denied_release_channels: ["experimental"],
+  require_approval_for_preview: true,
+  created_at: "2026-03-30T10:00:00Z",
+  updated_at: "2026-03-30T10:00:00Z"
+} as const;
+
+const modelSelectionDecisionFixture = {
+  id: "selection-1",
+  run_id: "run-1",
+  model_profile_id: "profile-default-reasoning",
+  requested_intent: "web_research",
+  decision_outcome: "selected",
+  selected_model_key: "openai:gpt-5.4",
+  selected_provider_id: "provider-openai",
+  required_feature_tags: ["supports_structured_output", "supports_builtin_web_search"],
+  missing_feature_tags: [],
+  requires_approval: false,
+  decision_reason: "best matching features within tenant policy",
+  created_at: "2026-03-30T10:00:00Z"
+} as const;
+
 const runDetailFixture = {
   run: {
     id: "run-1",
@@ -235,6 +297,7 @@ const runDetailFixture = {
   inbox_items: [],
   notifications: [],
   policy_decisions: [],
+  model_selection_decision: modelSelectionDecisionFixture,
   knowledge_candidates: [
     {
       id: "candidate-1",
@@ -410,6 +473,10 @@ function runHubClientContractSuite(name: string, factory: SuiteFactory) {
       await expect(client.getRunDetail("run-1")).resolves.toMatchObject({
         artifacts: [{ id: "artifact-1" }]
       });
+      const runDetail = await client.getRunDetail("run-1");
+      expect(runDetail.model_selection_decision?.selected_provider_id).toBe(
+        "provider-openai"
+      );
       await expect(
         client.retryRun({
           run_id: "run-1"
@@ -441,6 +508,18 @@ function runHubClientContractSuite(name: string, factory: SuiteFactory) {
           reason_code: "budget_soft_limit_exceeded"
         }
       ]);
+      await expect(client.listModelProviders("workspace-alpha")).resolves.toEqual([
+        modelProviderFixture
+      ]);
+      await expect(client.listModelCatalogItems("workspace-alpha")).resolves.toEqual([
+        modelCatalogItemFixture
+      ]);
+      await expect(client.listModelProfiles("workspace-alpha")).resolves.toEqual([
+        modelProfileFixture
+      ]);
+      await expect(
+        client.getWorkspaceModelPolicy("workspace-alpha")
+      ).resolves.toEqual(workspaceModelPolicyFixture);
       await expect(client.listInboxItems("workspace-alpha")).resolves.toEqual([]);
       await expect(client.listNotifications("workspace-alpha")).resolves.toEqual([]);
       await expect(client.getKnowledgeDetail("run-1")).resolves.toMatchObject({
@@ -577,6 +656,26 @@ runHubClientContractSuite("local adapter", () => {
             estimatedCost: 7
           });
           return capabilityResolutionFixture;
+        case "hub:list_model_providers":
+          expect(payload).toEqual({
+            workspaceId: "workspace-alpha"
+          });
+          return [modelProviderFixture];
+        case "hub:list_model_catalog_items":
+          expect(payload).toEqual({
+            workspaceId: "workspace-alpha"
+          });
+          return [modelCatalogItemFixture];
+        case "hub:list_model_profiles":
+          expect(payload).toEqual({
+            workspaceId: "workspace-alpha"
+          });
+          return [modelProfileFixture];
+        case "hub:get_workspace_model_policy":
+          expect(payload).toEqual({
+            workspaceId: "workspace-alpha"
+          });
+          return workspaceModelPolicyFixture;
         case "hub:list_inbox_items":
         case "hub:list_notifications":
           return [];
@@ -741,6 +840,30 @@ runHubClientContractSuite("remote adapter", () => {
             "http://hub.test/api/workspaces/workspace-alpha/projects/project-slice1/capabilities?estimated_cost=7"
         ) {
           return Response.json(capabilityResolutionFixture);
+        }
+        if (
+          method === "GET" &&
+          url === "http://hub.test/api/workspaces/workspace-alpha/models/providers"
+        ) {
+          return Response.json([modelProviderFixture]);
+        }
+        if (
+          method === "GET" &&
+          url === "http://hub.test/api/workspaces/workspace-alpha/models/catalog"
+        ) {
+          return Response.json([modelCatalogItemFixture]);
+        }
+        if (
+          method === "GET" &&
+          url === "http://hub.test/api/workspaces/workspace-alpha/models/profiles"
+        ) {
+          return Response.json([modelProfileFixture]);
+        }
+        if (
+          method === "GET" &&
+          url === "http://hub.test/api/workspaces/workspace-alpha/models/policy"
+        ) {
+          return Response.json(workspaceModelPolicyFixture);
         }
         if (method === "GET" && url === "http://hub.test/api/runs/run-1/knowledge") {
           return Response.json(knowledgeDetailFixture);

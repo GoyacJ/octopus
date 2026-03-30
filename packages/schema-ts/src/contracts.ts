@@ -31,6 +31,20 @@ export type KnowledgeCandidateStatus =
 export type KnowledgeAssetStatus = "verified_shared" | "deprecated";
 export type HubAuthState = "authenticated" | "auth_required" | "token_expired";
 export type AutomationStatus = "active" | "paused" | "archived";
+export type ModelProviderStatus =
+  | "active"
+  | "preview"
+  | "deprecated"
+  | "disabled";
+export type ModelReleaseChannel =
+  | "ga"
+  | "preview"
+  | "experimental"
+  | "deprecated";
+export type ModelSelectionOutcome =
+  | "selected"
+  | "approval_required"
+  | "denied";
 
 export interface Workspace {
   id: string;
@@ -354,6 +368,68 @@ export interface CapabilityDescriptor {
   updated_at: string;
 }
 
+export interface ModelProvider {
+  id: string;
+  display_name: string;
+  provider_family: string;
+  status: ModelProviderStatus;
+  default_base_url: string | null;
+  protocol_families: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModelCatalogItem {
+  id: string;
+  provider_id: string;
+  model_key: string;
+  provider_model_id: string;
+  release_channel: ModelReleaseChannel;
+  modality_tags: string[];
+  feature_tags: string[];
+  context_window: number;
+  max_output_tokens: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModelProfile {
+  id: string;
+  display_name: string;
+  scope_ref: string;
+  primary_model_key: string;
+  fallback_model_keys: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TenantModelPolicy {
+  id: string;
+  tenant_id: string;
+  allowed_model_keys: string[];
+  denied_model_keys: string[];
+  allowed_provider_ids: string[];
+  denied_release_channels: ModelReleaseChannel[];
+  require_approval_for_preview: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModelSelectionDecision {
+  id: string;
+  run_id: string;
+  model_profile_id: string | null;
+  requested_intent: string;
+  decision_outcome: ModelSelectionOutcome;
+  selected_model_key: string | null;
+  selected_provider_id: string | null;
+  required_feature_tags: string[];
+  missing_feature_tags: string[];
+  requires_approval: boolean;
+  decision_reason: string;
+  created_at: string;
+}
+
 export interface ApprovalRequest {
   id: string;
   workspace_id: string;
@@ -672,6 +748,10 @@ export interface LocalHubTransportCommands {
   start_task: string;
   list_runs: string;
   get_run_detail: string;
+  list_model_providers: string;
+  list_model_catalog_items: string;
+  list_model_profiles: string;
+  get_workspace_model_policy: string;
   retry_run: string;
   terminate_run: string;
   get_approval_request: string;
@@ -735,6 +815,7 @@ export interface RunDetail {
   inbox_items: InboxItem[];
   notifications: Notification[];
   policy_decisions: PolicyDecisionLog[];
+  model_selection_decision?: ModelSelectionDecision | null;
   knowledge_candidates: KnowledgeCandidate[];
   knowledge_assets: KnowledgeAsset[];
   knowledge_lineage: KnowledgeLineageRecord[];

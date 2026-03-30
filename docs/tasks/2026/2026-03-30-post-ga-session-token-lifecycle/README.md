@@ -4,13 +4,14 @@ This task package freezes the first post-GA auth hardening slice after the Slice
 
 ## Closeout Status
 
-- In progress.
-- This slice is the approved post-GA follow-on to the Slice 20 GA baseline.
+- Completed and verified.
+- This slice is now closed out as implemented post-GA truth after the Slice 20 GA baseline.
 
 ## Package Files
 
 - [design-note.md](design-note.md)
 - [contract-change.md](contract-change.md)
+- [implementation-summary.md](implementation-summary.md)
 - [verification.md](verification.md)
 - [delivery-note.md](delivery-note.md)
 
@@ -50,7 +51,7 @@ This task package freezes the first post-GA auth hardening slice after the Slice
 - Source Of Truth Updates:
   - Update this task package.
   - Update `README.md`, `docs/README.md`, and `docs/tasks/README.md`.
-  - Optionally update `docs/architecture/ga-implementation-blueprint.md` only to register the next post-GA priority without changing PRD or SAD semantics.
+  - Update `docs/architecture/ga-implementation-blueprint.md` to record the slice as completed truth without changing PRD or SAD semantics.
 - Affected Modules:
   - `schemas/interop`
   - `packages/schema-ts`

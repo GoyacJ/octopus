@@ -174,6 +174,22 @@ impl RunSummaryRecord {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModelSelectionDecisionRecord {
+    pub id: String,
+    pub run_id: String,
+    pub model_profile_id: Option<String>,
+    pub requested_intent: String,
+    pub decision_outcome: String,
+    pub selected_model_key: Option<String>,
+    pub selected_provider_id: Option<String>,
+    pub required_feature_tags: Vec<String>,
+    pub missing_feature_tags: Vec<String>,
+    pub requires_approval: bool,
+    pub decision_reason: String,
+    pub created_at: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RunExecutionReport {
     pub run: RunRecord,
@@ -186,6 +202,7 @@ pub struct RunExecutionReport {
     pub policy_decisions: Vec<PolicyDecisionLogRecord>,
     pub knowledge_candidates: Vec<KnowledgeCandidateRecord>,
     pub recalled_knowledge_assets: Vec<KnowledgeAssetRecord>,
+    pub model_selection_decision: Option<ModelSelectionDecisionRecord>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

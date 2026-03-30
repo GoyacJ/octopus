@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/governance/model-selection-decision.schema.json",
+  "title": "ModelSelectionDecision",
+  "type": "object",
+  "description": "Post-GA model-center foundation shared contract for the model-selection record emitted for a governed run.",
+  "properties": {
+    "id": { "type": "string" },
+    "run_id": { "type": "string" },
+    "model_profile_id": {
+      "type": ["string", "null"]
+    },
+    "requested_intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "decision_outcome": {
+      "type": "string",
+      "enum": ["selected", "approval_required", "denied"]
+    },
+    "selected_model_key": {
+      "type": ["string", "null"]
+    },
+    "selected_provider_id": {
+      "type": ["string", "null"]
+    },
+    "required_feature_tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "missing_feature_tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "requires_approval": {
+      "type": "boolean"
+    },
+    "decision_reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "required": [
+    "id",
+    "run_id",
+    "model_profile_id",
+    "requested_intent",
+    "decision_outcome",
+    "selected_model_key",
+    "selected_provider_id",
+    "required_feature_tags",
+    "missing_feature_tags",
+    "requires_approval",
+    "decision_reason",
+    "created_at"
+  ],
+  "additionalProperties": false
+}

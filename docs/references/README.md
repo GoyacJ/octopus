@@ -7,6 +7,7 @@ These files may inform design thinking, comparative analysis, or reverse-enginee
 ## Current References
 
 - [Claude_Hidden_Toolkit.md](Claude_Hidden_Toolkit.md)
+- [octopus_model_center_supplement_2026-03-27.md](octopus_model_center_supplement_2026-03-27.md)
 
 ## Rule
 

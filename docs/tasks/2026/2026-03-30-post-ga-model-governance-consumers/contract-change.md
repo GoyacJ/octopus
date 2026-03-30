@@ -1,0 +1,34 @@
+# Contract Change
+
+- Change Type:
+  - Documentation Alignment
+  - Planned Cross-language Contract
+- New / Updated Schemas:
+  - None in this package. Reuse the existing tracked model-governance contracts:
+    - `ModelProvider`
+    - `ModelCatalogItem`
+    - `ModelProfile`
+    - `TenantModelPolicy`
+    - `ModelSelectionDecision`
+- New / Updated Commands:
+  - None
+- New / Updated Queries:
+  - None
+- New / Updated Events:
+  - None
+- New / Updated DTOs:
+  - None in this design-only package.
+- Compatibility Impact:
+  - None. This package does not change the tracked contract surface.
+- Affected Consumers:
+  - Future `crates/governance` persistence consumers.
+  - Future `crates/runtime` decision-record consumers.
+  - Future `packages/hub-client`, `apps/remote-hub`, and `apps/desktop` read-only consumers if later approved.
+- Migration Notes:
+  - None until an implementation slice is approved.
+- Generation Impact:
+  - None in this package.
+- Open Questions:
+  - Whether the first read-only transport slice can reuse the existing objects directly or needs bounded summary/detail DTOs.
+  - Whether `ModelSelectionDecision` storage belongs fully in runtime persistence or needs a cross-reference owned by governance.
+  - How much read-only transport is necessary before any desktop/web surface work is justified.

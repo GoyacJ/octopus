@@ -1,4 +1,8 @@
-import type { HubClient } from "@octopus/hub-client";
+import {
+  HubClientAuthError,
+  HubClientTransportError,
+  type HubClient
+} from "@octopus/hub-client";
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 
@@ -20,6 +24,14 @@ type CreateAutomationResponse = Awaited<
   ReturnType<HubClient["createAutomation"]>
 >;
 type ManualDispatchCommand = Parameters<HubClient["manualDispatch"]>[0];
+type ModelProvider = Awaited<ReturnType<HubClient["listModelProviders"]>>[number];
+type ModelCatalogItem = Awaited<
+  ReturnType<HubClient["listModelCatalogItems"]>
+>[number];
+type ModelProfile = Awaited<ReturnType<HubClient["listModelProfiles"]>>[number];
+type WorkspaceModelPolicy = Awaited<
+  ReturnType<HubClient["getWorkspaceModelPolicy"]>
+>;
 type RunDetail = Awaited<ReturnType<HubClient["getRunDetail"]>>;
 type RunSummary = Awaited<ReturnType<HubClient["listRuns"]>>[number];
 type Artifact = Awaited<ReturnType<HubClient["listArtifacts"]>>[number];
@@ -28,6 +40,7 @@ type ProjectKnowledgeIndex = Awaited<ReturnType<HubClient["getProjectKnowledge"]
 type TaskCreateCommand = Parameters<HubClient["createTask"]>[0];
 type ApprovalDecision = Parameters<HubClient["resolveApproval"]>[0]["decision"];
 type RunActionKind = "retry" | "terminate";
+type WorkspaceModelsState = "idle" | "ready" | "offline" | "forbidden" | "auth_required";
 
 const DESKTOP_ACTOR_REF = "workspace_admin:desktop_operator";
 const DESKTOP_TERMINATE_REASON = "desktop_operator_stopped";
@@ -74,6 +87,11 @@ export const useHubStore = defineStore("hub", () => {
   const automations = ref<AutomationSummary[]>([]);
   const automationDetail = ref<AutomationDetail | null>(null);
   const webhookSecretReveal = ref<string | null>(null);
+  const workspaceModelProviders = ref<ModelProvider[]>([]);
+  const workspaceModelCatalogItems = ref<ModelCatalogItem[]>([]);
+  const workspaceModelProfiles = ref<ModelProfile[]>([]);
+  const workspaceModelPolicy = ref<WorkspaceModelPolicy>(null);
+  const workspaceModelsState = ref<WorkspaceModelsState>("idle");
   const runDetail = ref<RunDetail | null>(null);
   const artifacts = ref<Artifact[]>([]);
   const knowledgeDetail = ref<KnowledgeDetail | null>(null);
@@ -89,6 +107,7 @@ export const useHubStore = defineStore("hub", () => {
   const automationSubmitting = ref(false);
   const automationActionLoading = ref(false);
   const taskSubmitting = ref(false);
+  const workspaceModelsLoading = ref(false);
   const runLoading = ref(false);
   const projectKnowledgeLoading = ref(false);
   const governanceActionLoading = ref(false);
@@ -133,6 +152,11 @@ export const useHubStore = defineStore("hub", () => {
     automations.value = [];
     automationDetail.value = null;
     webhookSecretReveal.value = null;
+    workspaceModelProviders.value = [];
+    workspaceModelCatalogItems.value = [];
+    workspaceModelProfiles.value = [];
+    workspaceModelPolicy.value = null;
+    workspaceModelsState.value = "idle";
     runDetail.value = null;
     artifacts.value = [];
     knowledgeDetail.value = null;
@@ -349,6 +373,58 @@ export const useHubStore = defineStore("hub", () => {
     } catch (error) {
       surfaceError.value = toErrorMessage(error);
       throw error;
+    }
+  }
+
+  async function loadWorkspaceModels(workspaceId: string): Promise<void> {
+    workspaceModelsLoading.value = true;
+    surfaceError.value = null;
+    setWorkspaceScope(workspaceId);
+
+    try {
+      const client = requireHubClient();
+      const [
+        nextProviders,
+        nextCatalogItems,
+        nextProfiles,
+        nextPolicy,
+        nextConnectionStatus
+      ] = await Promise.all([
+        client.listModelProviders(workspaceId),
+        client.listModelCatalogItems(workspaceId),
+        client.listModelProfiles(workspaceId),
+        client.getWorkspaceModelPolicy(workspaceId),
+        client.getHubConnectionStatus()
+      ]);
+
+      workspaceModelProviders.value = nextProviders;
+      workspaceModelCatalogItems.value = nextCatalogItems;
+      workspaceModelProfiles.value = nextProfiles;
+      workspaceModelPolicy.value = nextPolicy;
+      connectionStatus.value = nextConnectionStatus;
+      workspaceModelsState.value = "ready";
+    } catch (error) {
+      workspaceModelProviders.value = [];
+      workspaceModelCatalogItems.value = [];
+      workspaceModelProfiles.value = [];
+      workspaceModelPolicy.value = null;
+
+      if (error instanceof HubClientAuthError) {
+        workspaceModelsState.value =
+          error.kind === "workspace_forbidden" ? "forbidden" : "auth_required";
+        return;
+      }
+
+      if (error instanceof HubClientTransportError) {
+        workspaceModelsState.value = "offline";
+        return;
+      }
+
+      workspaceModelsState.value = "idle";
+      surfaceError.value = toErrorMessage(error);
+      throw error;
+    } finally {
+      workspaceModelsLoading.value = false;
     }
   }
 
@@ -752,6 +828,11 @@ export const useHubStore = defineStore("hub", () => {
     automations,
     automationDetail,
     webhookSecretReveal,
+    workspaceModelProviders,
+    workspaceModelCatalogItems,
+    workspaceModelProfiles,
+    workspaceModelPolicy,
+    workspaceModelsState,
     runDetail,
     artifacts,
     knowledgeDetail,
@@ -766,6 +847,7 @@ export const useHubStore = defineStore("hub", () => {
     automationSubmitting,
     automationActionLoading,
     taskSubmitting,
+    workspaceModelsLoading,
     runLoading,
     projectKnowledgeLoading,
     governanceActionLoading,
@@ -787,6 +869,7 @@ export const useHubStore = defineStore("hub", () => {
     loadInboxItems,
     loadNotifications,
     loadAutomations,
+    loadWorkspaceModels,
     loadTaskSurface,
     loadTaskCapabilityResolutions,
     loadAutomationCapabilityResolutions,

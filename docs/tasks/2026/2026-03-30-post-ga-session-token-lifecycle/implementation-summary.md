@@ -1,0 +1,55 @@
+# Implementation Summary
+
+- Goal:
+  - Close the remote session token lifecycle gap after the Slice 20 GA baseline without widening beyond the existing remote auth boundary.
+- Files Added:
+  - `schemas/interop/hub-refresh-command.schema.json`
+  - `schemas/interop/hub-refresh-response.schema.json`
+  - `crates/access-auth/migrations/0011_remote_access_refresh_tokens.sql`
+  - `docs/tasks/2026/2026-03-30-post-ga-session-token-lifecycle/implementation-summary.md`
+- Files Changed:
+  - `Cargo.lock`
+  - `README.md`
+  - `docs/README.md`
+  - `docs/architecture/ga-implementation-blueprint.md`
+  - `docs/tasks/README.md`
+  - `docs/tasks/2026/2026-03-30-post-ga-session-token-lifecycle/README.md`
+  - `docs/tasks/2026/2026-03-30-post-ga-session-token-lifecycle/contract-change.md`
+  - `docs/tasks/2026/2026-03-30-post-ga-session-token-lifecycle/design-note.md`
+  - `docs/tasks/2026/2026-03-30-post-ga-session-token-lifecycle/verification.md`
+  - `docs/tasks/2026/2026-03-30-post-ga-session-token-lifecycle/delivery-note.md`
+  - `schemas/interop/hub-login-response.schema.json`
+  - `packages/schema-ts/src/contracts.ts`
+  - `packages/schema-ts/src/index.ts`
+  - `packages/schema-ts/test/contracts.test.ts`
+  - `crates/access-auth/Cargo.toml`
+  - `crates/access-auth/src/lib.rs`
+  - `apps/remote-hub/src/lib.rs`
+  - `apps/remote-hub/src/main.rs`
+  - `apps/remote-hub/tests/auth_surface.rs`
+  - `packages/hub-client/src/index.ts`
+  - `packages/hub-client/test/hub-client.contract.test.ts`
+  - `apps/desktop/src/stores/connection.ts`
+  - `apps/desktop/test/remote-connections.test.ts`
+  - `apps/desktop/src-tauri/src/session_vault.rs`
+  - `apps/desktop/src-tauri/tests/session_vault.rs`
+- Files Removed:
+  - None.
+- Structure Decision:
+  - Keep shared auth contract truth in `schemas/interop`, session-family rotation and revocation in `crates/access-auth`, HTTP assembly in `apps/remote-hub`, transport-managed refresh orchestration in `packages/hub-client`, and secure persistence / restore in desktop + Tauri.
+- Why This Structure:
+  - The slice needed to close `login -> refresh -> replay -> restore -> revoke` across the existing remote boundary without moving auth truth into app-shell code or widening into tenant / IdP work.
+- Reused Patterns:
+  - Reused the schema-first contract flow, SQLite migration pattern inside the Rust auth crate, remote-hub integration-test style, shared hub-client replay orchestration, and Tauri secure-vault persistence pattern already present in the repository.
+- New Dependencies:
+  - No new top-level tools or runtimes. The slice stays inside the existing Rust / TypeScript stack and only extends the auth-crate dependency surface where needed for refresh-token hashing and rotation.
+- Error Handling Strategy:
+  - Refresh is bounded to one attempt and one replay, rotated-token replay revokes the active session family, hard auth failure clears cached secure state, and transport-only failures remain on the existing degraded/read-only path.
+- Deferred Items:
+  - Multi-device or account-level session administration.
+  - RBAC, tenant admin, external IdP, and SSO.
+  - Any broader remote account-management surface.
+- Non-goals Preserved:
+  - No new desktop auth pages.
+  - No widened workspace-management or tenant-management API.
+  - No Beta or collaboration-surface expansion.

@@ -171,15 +171,19 @@ async fn request_knowledge_promotion_is_idempotent_and_creates_pending_records()
         .list_inbox_items_by_workspace("workspace-alpha")
         .await
         .unwrap();
-    assert!(inbox_items.iter().any(|item| item.approval_request_id == first.id
-        && item.target_ref == format!("knowledge_candidate:{candidate_id}")));
+    assert!(inbox_items
+        .iter()
+        .any(|item| item.approval_request_id == first.id
+            && item.target_ref == format!("knowledge_candidate:{candidate_id}")));
 
     let notifications = runtime
         .list_notifications_by_workspace("workspace-alpha")
         .await
         .unwrap();
-    assert!(notifications.iter().any(|item| item.approval_request_id == first.id
-        && item.target_ref == format!("knowledge_candidate:{candidate_id}")));
+    assert!(notifications
+        .iter()
+        .any(|item| item.approval_request_id == first.id
+            && item.target_ref == format!("knowledge_candidate:{candidate_id}")));
 }
 
 #[tokio::test]

@@ -11,8 +11,10 @@ use octopus_execution::{ExecutionAction, ExecutionEngine, ExecutionOutcome};
 use octopus_governance::{
     ApprovalDecision, ApprovalRequestRecord, BudgetPolicyRecord, CapabilityBindingRecord,
     CapabilityDescriptorRecord, CapabilityGrantRecord, CapabilityResolutionRecord,
-    GovernanceDecision, SqliteGovernanceStore, TaskGovernanceInput, APPROVAL_TYPE_EXECUTION,
-    APPROVAL_TYPE_KNOWLEDGE_PROMOTION, DECISION_ALLOW, DECISION_DENY, DECISION_REQUIRE_APPROVAL,
+    GovernanceDecision, ModelCatalogItemRecord, ModelProfileRecord, ModelProviderRecord,
+    SqliteGovernanceStore, TaskGovernanceInput, TenantModelPolicyRecord,
+    APPROVAL_TYPE_EXECUTION, APPROVAL_TYPE_KNOWLEDGE_PROMOTION, DECISION_ALLOW, DECISION_DENY,
+    DECISION_REQUIRE_APPROVAL,
 };
 use octopus_interop_mcp::{
     EnvironmentLeaseRecord, GatewayExecutionOutcome, GatewayRequest, McpCredentialRecord,
@@ -43,11 +45,11 @@ use sqlx::{Row, SqlitePool};
 
 use crate::{
     models::{
-        current_timestamp, AssetKnowledgeSummaryRecord, AutomationDetailRecord,
-        AutomationRecord, AutomationSummaryRecord, CandidateKnowledgeSummaryRecord,
-        CreateAutomationInput, CreateAutomationReport, CreateTaskInput, CreateTriggerInput,
-        CronTriggerConfig, KnowledgePromotionReport, KnowledgeSummaryRecord,
-        McpEventTriggerConfig, ProjectKnowledgeIndexRecord, RunExecutionReport, RunRecord,
+        current_timestamp, AssetKnowledgeSummaryRecord, AutomationDetailRecord, AutomationRecord,
+        AutomationSummaryRecord, CandidateKnowledgeSummaryRecord, CreateAutomationInput,
+        CreateAutomationReport, CreateTaskInput, CreateTriggerInput, CronTriggerConfig,
+        KnowledgePromotionReport, KnowledgeSummaryRecord, McpEventTriggerConfig,
+        ModelSelectionDecisionRecord, ProjectKnowledgeIndexRecord, RunExecutionReport, RunRecord,
         RunSummaryRecord, TaskRecord, TriggerDeliveryRecord, TriggerRecord, TriggerSpec,
         WebhookTriggerConfig,
     },
@@ -1038,9 +1040,9 @@ impl KnowledgeManager {
             .await?
             .into_iter()
             .map(|candidate| {
-                KnowledgeSummaryRecord::Candidate(
-                    CandidateKnowledgeSummaryRecord::from_candidate(&candidate),
-                )
+                KnowledgeSummaryRecord::Candidate(CandidateKnowledgeSummaryRecord::from_candidate(
+                    &candidate,
+                ))
             })
             .collect::<Vec<_>>();
 
@@ -1592,6 +1594,27 @@ impl RunOrchestrator {
 
     pub async fn list_mcp_credentials(&self) -> Result<Vec<McpCredentialRecord>, RuntimeError> {
         Ok(self.interop_store.list_mcp_credentials().await?)
+    }
+
+    pub async fn list_model_providers(&self) -> Result<Vec<ModelProviderRecord>, RuntimeError> {
+        Ok(self.governance_store.list_model_providers().await?)
+    }
+
+    pub async fn list_model_catalog_items(
+        &self,
+    ) -> Result<Vec<ModelCatalogItemRecord>, RuntimeError> {
+        Ok(self.governance_store.list_model_catalog_items().await?)
+    }
+
+    pub async fn list_model_profiles(&self) -> Result<Vec<ModelProfileRecord>, RuntimeError> {
+        Ok(self.governance_store.list_model_profiles().await?)
+    }
+
+    pub async fn fetch_tenant_model_policy(
+        &self,
+        tenant_id: &str,
+    ) -> Result<Option<TenantModelPolicyRecord>, RuntimeError> {
+        Ok(self.governance_store.fetch_tenant_model_policy(tenant_id).await?)
     }
 
     pub async fn list_mcp_invocations_by_run(
@@ -2243,6 +2266,77 @@ impl RunOrchestrator {
             .await?)
     }
 
+    pub async fn record_model_selection_decision(
+        &self,
+        record: ModelSelectionDecisionRecord,
+    ) -> Result<ModelSelectionDecisionRecord, RuntimeError> {
+        let run_id = record.run_id.clone();
+        self.fetch_run(&run_id)
+            .await?
+            .ok_or_else(|| RuntimeError::RunNotFound(run_id.clone()))?;
+
+        if let Some(existing) = self.fetch_model_selection_decision_by_run(&run_id).await? {
+            return Ok(existing);
+        }
+
+        let required_feature_tags_json = serde_json::to_string(&record.required_feature_tags)?;
+        let missing_feature_tags_json = serde_json::to_string(&record.missing_feature_tags)?;
+        let result = sqlx::query(
+            r#"
+            INSERT INTO model_selection_decisions (
+                id, run_id, model_profile_id, requested_intent, decision_outcome,
+                selected_model_key, selected_provider_id, required_feature_tags_json,
+                missing_feature_tags_json, requires_approval, decision_reason, created_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+            ON CONFLICT(run_id) DO NOTHING
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.run_id)
+        .bind(&record.model_profile_id)
+        .bind(&record.requested_intent)
+        .bind(&record.decision_outcome)
+        .bind(&record.selected_model_key)
+        .bind(&record.selected_provider_id)
+        .bind(required_feature_tags_json)
+        .bind(missing_feature_tags_json)
+        .bind(record.requires_approval)
+        .bind(&record.decision_reason)
+        .bind(&record.created_at)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return self
+                .fetch_model_selection_decision_by_run(&run_id)
+                .await?
+                .ok_or_else(|| RuntimeError::RunNotFound(run_id));
+        }
+
+        Ok(record)
+    }
+
+    pub async fn fetch_model_selection_decision_by_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Option<ModelSelectionDecisionRecord>, RuntimeError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, run_id, model_profile_id, requested_intent, decision_outcome,
+                   selected_model_key, selected_provider_id, required_feature_tags_json,
+                   missing_feature_tags_json, requires_approval, decision_reason, created_at
+            FROM model_selection_decisions
+            WHERE run_id = ?1
+            "#,
+        )
+        .bind(run_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| model_selection_decision_from_row(&row))
+            .transpose()
+    }
+
     pub async fn load_run_report(&self, run_id: &str) -> Result<RunExecutionReport, RuntimeError> {
         let run = self
             .fetch_run(run_id)
@@ -2275,6 +2369,7 @@ impl RunOrchestrator {
             .knowledge_manager
             .list_recalled_knowledge_assets_by_run(run_id)
             .await?;
+        let model_selection_decision = self.fetch_model_selection_decision_by_run(run_id).await?;
 
         Ok(RunExecutionReport {
             run,
@@ -2287,6 +2382,7 @@ impl RunOrchestrator {
             policy_decisions,
             knowledge_candidates,
             recalled_knowledge_assets,
+            model_selection_decision,
         })
     }
 
@@ -2877,6 +2973,28 @@ fn run_from_row(row: &sqlx::sqlite::SqliteRow) -> Result<RunRecord, RuntimeError
         started_at: row.try_get("started_at")?,
         completed_at: row.try_get("completed_at")?,
         terminated_at: row.try_get("terminated_at")?,
+    })
+}
+
+fn model_selection_decision_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<ModelSelectionDecisionRecord, RuntimeError> {
+    let required_feature_tags_json: String = row.try_get("required_feature_tags_json")?;
+    let missing_feature_tags_json: String = row.try_get("missing_feature_tags_json")?;
+
+    Ok(ModelSelectionDecisionRecord {
+        id: row.try_get("id")?,
+        run_id: row.try_get("run_id")?,
+        model_profile_id: row.try_get("model_profile_id")?,
+        requested_intent: row.try_get("requested_intent")?,
+        decision_outcome: row.try_get("decision_outcome")?,
+        selected_model_key: row.try_get("selected_model_key")?,
+        selected_provider_id: row.try_get("selected_provider_id")?,
+        required_feature_tags: serde_json::from_str(&required_feature_tags_json)?,
+        missing_feature_tags: serde_json::from_str(&missing_feature_tags_json)?,
+        requires_approval: row.try_get("requires_approval")?,
+        decision_reason: row.try_get("decision_reason")?,
+        created_at: row.try_get("created_at")?,
     })
 }
 

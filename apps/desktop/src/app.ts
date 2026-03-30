@@ -20,6 +20,7 @@ import AutomationDetailView from "./views/AutomationDetailView.vue";
 import ConnectionsView from "./views/ConnectionsView.vue";
 import InboxView from "./views/InboxView.vue";
 import KnowledgeView from "./views/KnowledgeView.vue";
+import ModelsView from "./views/ModelsView.vue";
 import NotificationsView from "./views/NotificationsView.vue";
 import ProjectsView from "./views/ProjectsView.vue";
 import RunView from "./views/RunView.vue";
@@ -75,6 +76,10 @@ function createRoutes(defaultRoute: string): RouteRecordRaw[] {
     {
       path: "/workspaces/:workspaceId/projects/:projectId/knowledge",
       component: KnowledgeView
+    },
+    {
+      path: "/workspaces/:workspaceId/models",
+      component: ModelsView
     },
     {
       path: "/workspaces/:workspaceId/inbox",

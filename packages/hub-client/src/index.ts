@@ -19,6 +19,10 @@ import {
   parseHubRefreshCommand,
   parseHubRefreshResponse,
   parseHubSession,
+  parseModelCatalogItems,
+  parseModelProfiles,
+  parseModelProviders,
+  parseTenantModelPolicy,
   parseKnowledgePromoteCommand,
   parseProjectKnowledgeIndex,
   parseRequestKnowledgePromotionCommand,
@@ -55,6 +59,9 @@ import {
   type RequestKnowledgePromotionCommand,
   type LocalHubTransportContract,
   type ManualDispatchCommand,
+  type ModelCatalogItem,
+  type ModelProfile,
+  type ModelProvider,
   type Notification,
   type Project,
   type ProjectContext,
@@ -62,6 +69,7 @@ import {
   type RunRetryCommand,
   type RunSummary,
   type RunTerminateCommand,
+  type TenantModelPolicy,
   type Task,
   type TaskCreateCommand,
   type TriggerDeliveryRetryCommand
@@ -113,6 +121,18 @@ export const LOCAL_HUB_COMMANDS = {
   getRunDetail: normalizeLocalCommandName(
     LOCAL_HUB_TRANSPORT.commands.get_run_detail
   ),
+  listModelProviders: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.list_model_providers
+  ),
+  listModelCatalogItems: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.list_model_catalog_items
+  ),
+  listModelProfiles: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.list_model_profiles
+  ),
+  getWorkspaceModelPolicy: normalizeLocalCommandName(
+    LOCAL_HUB_TRANSPORT.commands.get_workspace_model_policy
+  ),
   retryRun: normalizeLocalCommandName(LOCAL_HUB_TRANSPORT.commands.retry_run),
   terminateRun: normalizeLocalCommandName(
     LOCAL_HUB_TRANSPORT.commands.terminate_run
@@ -158,6 +178,10 @@ export interface HubClient {
     workspaceId: string,
     projectId: string
   ): Promise<ProjectKnowledgeIndex>;
+  listModelProviders(workspaceId: string): Promise<ModelProvider[]>;
+  listModelCatalogItems(workspaceId: string): Promise<ModelCatalogItem[]>;
+  listModelProfiles(workspaceId: string): Promise<ModelProfile[]>;
+  getWorkspaceModelPolicy(workspaceId: string): Promise<TenantModelPolicy | null>;
   listAutomations(
     workspaceId: string,
     projectId: string
@@ -439,6 +463,19 @@ function resolveRemoteFetch(options: RemoteHubClientOptions): typeof globalThis.
 }
 
 export function createLocalHubClient(transport: LocalHubTransport): HubClient {
+  async function getWorkspaceModelPolicy(
+    workspaceId: string
+  ): Promise<TenantModelPolicy | null> {
+    const result = await transport.invoke(
+      LOCAL_HUB_COMMANDS.getWorkspaceModelPolicy,
+      {
+        workspaceId
+      }
+    );
+
+    return result === null ? null : parseTenantModelPolicy(result);
+  }
+
   async function listCapabilityResolutions(
     workspaceId: string,
     projectId: string,
@@ -476,6 +513,30 @@ export function createLocalHubClient(transport: LocalHubTransport): HubClient {
           projectId
         })
       );
+    },
+    async listModelProviders(workspaceId) {
+      return parseModelProviders(
+        await transport.invoke(LOCAL_HUB_COMMANDS.listModelProviders, {
+          workspaceId
+        })
+      );
+    },
+    async listModelCatalogItems(workspaceId) {
+      return parseModelCatalogItems(
+        await transport.invoke(LOCAL_HUB_COMMANDS.listModelCatalogItems, {
+          workspaceId
+        })
+      );
+    },
+    async listModelProfiles(workspaceId) {
+      return parseModelProfiles(
+        await transport.invoke(LOCAL_HUB_COMMANDS.listModelProfiles, {
+          workspaceId
+        })
+      );
+    },
+    async getWorkspaceModelPolicy(workspaceId) {
+      return getWorkspaceModelPolicy(workspaceId);
     },
     async listAutomations(workspaceId, projectId) {
       return parseAutomationSummaries(
@@ -811,6 +872,45 @@ export function createRemoteHubClient(options: RemoteHubClientOptions): HubClien
           )
         )
       );
+    },
+    async listModelProviders(workspaceId) {
+      return parseModelProviders(
+        await readAuthenticatedJson(
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(workspaceId)}/models/providers`
+          )
+        )
+      );
+    },
+    async listModelCatalogItems(workspaceId) {
+      return parseModelCatalogItems(
+        await readAuthenticatedJson(
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(workspaceId)}/models/catalog`
+          )
+        )
+      );
+    },
+    async listModelProfiles(workspaceId) {
+      return parseModelProfiles(
+        await readAuthenticatedJson(
+          remotePath(
+            options.baseUrl,
+            `/api/workspaces/${encodePathSegment(workspaceId)}/models/profiles`
+          )
+        )
+      );
+    },
+    async getWorkspaceModelPolicy(workspaceId) {
+      const result = await readAuthenticatedJson(
+        remotePath(
+          options.baseUrl,
+          `/api/workspaces/${encodePathSegment(workspaceId)}/models/policy`
+        )
+      );
+      return result === null ? null : parseTenantModelPolicy(result);
     },
     async listAutomations(workspaceId, projectId) {
       return parseAutomationSummaries(

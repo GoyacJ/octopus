@@ -16,11 +16,12 @@ These instructions apply to work under `schemas/`.
 
 - `context/` holds Workspace, Project, and KnowledgeSpace contracts.
 - `runtime/` holds Task, Run, Automation, Trigger, TriggerDelivery, EnvironmentLease, and their strong runtime state enums.
-- `governance/` holds Capability, BudgetPolicy, ApprovalRequest, and approval state enums.
+- `governance/` holds Capability, `ModelProvider`, `ModelCatalogItem`, `ModelProfile`, `TenantModelPolicy`, `ModelSelectionDecision`, `BudgetPolicy`, `ApprovalRequest`, and approval / policy state enums.
 - `observe/` holds Artifact, Audit, Trace, Inbox, Notification, KnowledgeCandidate, KnowledgeAsset, and lineage contracts.
 
 ## Current Phase Constraint
 
 - These schemas are placeholders that freeze naming, grouping, and minimal boundary references only.
+- Approved post-GA model-governance foundation contracts may exist here only at the minimal doc/schema-only level recorded by the owner docs and task packages.
 - Do not silently expand them into full production contracts without a slice-specific task package.
 - Do not introduce Beta-only contracts here unless the source-of-truth docs explicitly bring them into scope.

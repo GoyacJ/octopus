@@ -9,7 +9,7 @@ use jsonschema::JSONSchema;
 use octopus_access_auth::RemoteAccessService;
 use octopus_runtime::{
     BudgetPolicyRecord, CapabilityBindingRecord, CapabilityDescriptorRecord, CapabilityGrantRecord,
-    Slice1Runtime,
+    ModelSelectionDecisionRecord, Slice1Runtime,
 };
 use serde_json::{json, Value};
 use tower::ServiceExt;
@@ -240,6 +240,26 @@ async fn completed_run_surface_matches_minimum_contracts() {
     assert_valid(&run_detail_schema, &run_detail);
 
     let run_id = run_detail["run"]["id"].as_str().unwrap().to_string();
+    runtime
+        .record_model_selection_decision(ModelSelectionDecisionRecord {
+            id: "selection-1".to_string(),
+            run_id: run_id.clone(),
+            model_profile_id: Some("profile-default-reasoning".to_string()),
+            requested_intent: "web_research".to_string(),
+            decision_outcome: "selected".to_string(),
+            selected_model_key: Some("openai:gpt-5.4".to_string()),
+            selected_provider_id: Some("provider-openai".to_string()),
+            required_feature_tags: vec![
+                "supports_structured_output".to_string(),
+                "supports_builtin_web_search".to_string(),
+            ],
+            missing_feature_tags: vec![],
+            requires_approval: false,
+            decision_reason: "best matching features within tenant policy".to_string(),
+            created_at: "2026-03-30T10:00:00Z".to_string(),
+        })
+        .await
+        .unwrap();
     let loaded_run_detail = response_json(
         router.clone(),
         Request::builder()
@@ -251,6 +271,14 @@ async fn completed_run_surface_matches_minimum_contracts() {
     .await;
     assert_valid(&run_detail_schema, &loaded_run_detail);
     assert!(loaded_run_detail["policy_decisions"].is_array());
+    assert_eq!(
+        loaded_run_detail["model_selection_decision"]["selected_model_key"],
+        "openai:gpt-5.4"
+    );
+    assert_eq!(
+        loaded_run_detail["model_selection_decision"]["selected_provider_id"],
+        "provider-openai"
+    );
 
     let recent_runs = response_json(
         router.clone(),
@@ -1413,4 +1441,71 @@ async fn project_scoped_recent_runs_are_ordered_and_empty_when_no_runs_exist() {
     )
     .await;
     assert_eq!(empty_runs, json!([]));
+}
+
+#[tokio::test]
+async fn workspace_model_governance_routes_return_read_only_empty_shapes() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let db_path = sample_db_path(tempdir.path(), "workspace-models.sqlite");
+    let runtime = Slice1Runtime::open_at(&db_path).await.unwrap();
+    runtime
+        .ensure_project_context(
+            "workspace-alpha",
+            "workspace-alpha",
+            "Workspace Alpha",
+            "project-slice1",
+            "project-slice1",
+            "Project Slice 1",
+        )
+        .await
+        .unwrap();
+
+    let auth = RemoteAccessService::open_at(&db_path).await.unwrap();
+    let router = app(AppState::new(runtime, auth));
+    let access_token = login_access_token(router.clone(), "workspace-alpha").await;
+    let authorization = format!("Bearer {access_token}");
+
+    let providers = response_json(
+        router.clone(),
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/models/providers")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(providers, json!([]));
+
+    let catalog = response_json(
+        router.clone(),
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/models/catalog")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(catalog, json!([]));
+
+    let profiles = response_json(
+        router.clone(),
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/models/profiles")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(profiles, json!([]));
+
+    let policy = response_json(
+        router,
+        Request::builder()
+            .uri("/api/workspaces/workspace-alpha/models/policy")
+            .header("authorization", authorization.as_str())
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(policy, Value::Null);
 }

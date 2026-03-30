@@ -182,6 +182,57 @@ impl BudgetPolicyRecord {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModelProviderRecord {
+    pub id: String,
+    pub display_name: String,
+    pub provider_family: String,
+    pub status: String,
+    pub default_base_url: Option<String>,
+    pub protocol_families: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModelCatalogItemRecord {
+    pub id: String,
+    pub provider_id: String,
+    pub model_key: String,
+    pub provider_model_id: String,
+    pub release_channel: String,
+    pub modality_tags: Vec<String>,
+    pub feature_tags: Vec<String>,
+    pub context_window: i64,
+    pub max_output_tokens: Option<i64>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ModelProfileRecord {
+    pub id: String,
+    pub display_name: String,
+    pub scope_ref: String,
+    pub primary_model_key: String,
+    pub fallback_model_keys: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TenantModelPolicyRecord {
+    pub id: String,
+    pub tenant_id: String,
+    pub allowed_model_keys: Vec<String>,
+    pub denied_model_keys: Vec<String>,
+    pub allowed_provider_ids: Vec<String>,
+    pub denied_release_channels: Vec<String>,
+    pub require_approval_for_preview: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApprovalRequestRecord {
     pub id: String,
     pub workspace_id: String,
@@ -332,6 +383,8 @@ pub enum GovernanceStoreError {
         to: String,
     },
     #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
+    #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 }
 
@@ -477,6 +530,305 @@ impl SqliteGovernanceStore {
         .await?;
 
         Ok(())
+    }
+
+    pub async fn upsert_model_provider(
+        &self,
+        record: &ModelProviderRecord,
+    ) -> Result<(), GovernanceStoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO model_providers (
+                id, display_name, provider_family, status, default_base_url,
+                protocol_families_json, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            ON CONFLICT(id) DO UPDATE SET
+                display_name = excluded.display_name,
+                provider_family = excluded.provider_family,
+                status = excluded.status,
+                default_base_url = excluded.default_base_url,
+                protocol_families_json = excluded.protocol_families_json,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.display_name)
+        .bind(&record.provider_family)
+        .bind(&record.status)
+        .bind(&record.default_base_url)
+        .bind(serialize_string_list(&record.protocol_families)?)
+        .bind(&record.created_at)
+        .bind(&record.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn upsert_model_catalog_item(
+        &self,
+        record: &ModelCatalogItemRecord,
+    ) -> Result<(), GovernanceStoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO model_catalog_items (
+                id, provider_id, model_key, provider_model_id, release_channel,
+                modality_tags_json, feature_tags_json, context_window,
+                max_output_tokens, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+            ON CONFLICT(id) DO UPDATE SET
+                provider_id = excluded.provider_id,
+                model_key = excluded.model_key,
+                provider_model_id = excluded.provider_model_id,
+                release_channel = excluded.release_channel,
+                modality_tags_json = excluded.modality_tags_json,
+                feature_tags_json = excluded.feature_tags_json,
+                context_window = excluded.context_window,
+                max_output_tokens = excluded.max_output_tokens,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.provider_id)
+        .bind(&record.model_key)
+        .bind(&record.provider_model_id)
+        .bind(&record.release_channel)
+        .bind(serialize_string_list(&record.modality_tags)?)
+        .bind(serialize_string_list(&record.feature_tags)?)
+        .bind(record.context_window)
+        .bind(record.max_output_tokens)
+        .bind(&record.created_at)
+        .bind(&record.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn upsert_model_profile(
+        &self,
+        record: &ModelProfileRecord,
+    ) -> Result<(), GovernanceStoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO model_profiles (
+                id, display_name, scope_ref, primary_model_key, fallback_model_keys_json,
+                created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            ON CONFLICT(id) DO UPDATE SET
+                display_name = excluded.display_name,
+                scope_ref = excluded.scope_ref,
+                primary_model_key = excluded.primary_model_key,
+                fallback_model_keys_json = excluded.fallback_model_keys_json,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.display_name)
+        .bind(&record.scope_ref)
+        .bind(&record.primary_model_key)
+        .bind(serialize_string_list(&record.fallback_model_keys)?)
+        .bind(&record.created_at)
+        .bind(&record.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn upsert_tenant_model_policy(
+        &self,
+        record: &TenantModelPolicyRecord,
+    ) -> Result<(), GovernanceStoreError> {
+        sqlx::query(
+            r#"
+            INSERT INTO tenant_model_policies (
+                id, tenant_id, allowed_model_keys_json, denied_model_keys_json,
+                allowed_provider_ids_json, denied_release_channels_json,
+                require_approval_for_preview, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            ON CONFLICT(id) DO UPDATE SET
+                tenant_id = excluded.tenant_id,
+                allowed_model_keys_json = excluded.allowed_model_keys_json,
+                denied_model_keys_json = excluded.denied_model_keys_json,
+                allowed_provider_ids_json = excluded.allowed_provider_ids_json,
+                denied_release_channels_json = excluded.denied_release_channels_json,
+                require_approval_for_preview = excluded.require_approval_for_preview,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(&record.id)
+        .bind(&record.tenant_id)
+        .bind(serialize_string_list(&record.allowed_model_keys)?)
+        .bind(serialize_string_list(&record.denied_model_keys)?)
+        .bind(serialize_string_list(&record.allowed_provider_ids)?)
+        .bind(serialize_string_list(&record.denied_release_channels)?)
+        .bind(record.require_approval_for_preview)
+        .bind(&record.created_at)
+        .bind(&record.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn fetch_model_provider(
+        &self,
+        provider_id: &str,
+    ) -> Result<Option<ModelProviderRecord>, GovernanceStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, display_name, provider_family, status, default_base_url,
+                   protocol_families_json, created_at, updated_at
+            FROM model_providers
+            WHERE id = ?1
+            "#,
+        )
+        .bind(provider_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| model_provider_from_row(&row)).transpose()
+    }
+
+    pub async fn fetch_model_catalog_item(
+        &self,
+        item_id: &str,
+    ) -> Result<Option<ModelCatalogItemRecord>, GovernanceStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, provider_id, model_key, provider_model_id, release_channel,
+                   modality_tags_json, feature_tags_json, context_window,
+                   max_output_tokens, created_at, updated_at
+            FROM model_catalog_items
+            WHERE id = ?1
+            "#,
+        )
+        .bind(item_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| model_catalog_item_from_row(&row)).transpose()
+    }
+
+    pub async fn fetch_model_profile(
+        &self,
+        profile_id: &str,
+    ) -> Result<Option<ModelProfileRecord>, GovernanceStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, display_name, scope_ref, primary_model_key, fallback_model_keys_json,
+                   created_at, updated_at
+            FROM model_profiles
+            WHERE id = ?1
+            "#,
+        )
+        .bind(profile_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| model_profile_from_row(&row)).transpose()
+    }
+
+    pub async fn fetch_tenant_model_policy(
+        &self,
+        tenant_id: &str,
+    ) -> Result<Option<TenantModelPolicyRecord>, GovernanceStoreError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, tenant_id, allowed_model_keys_json, denied_model_keys_json,
+                   allowed_provider_ids_json, denied_release_channels_json,
+                   require_approval_for_preview, created_at, updated_at
+            FROM tenant_model_policies
+            WHERE tenant_id = ?1
+            ORDER BY created_at, id
+            LIMIT 1
+            "#,
+        )
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(|row| tenant_model_policy_from_row(&row))
+            .transpose()
+    }
+
+    pub async fn list_model_providers(
+        &self,
+    ) -> Result<Vec<ModelProviderRecord>, GovernanceStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, display_name, provider_family, status, default_base_url,
+                   protocol_families_json, created_at, updated_at
+            FROM model_providers
+            ORDER BY created_at, id
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(model_provider_from_row)
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    pub async fn list_model_catalog_items(
+        &self,
+    ) -> Result<Vec<ModelCatalogItemRecord>, GovernanceStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, provider_id, model_key, provider_model_id, release_channel,
+                   modality_tags_json, feature_tags_json, context_window,
+                   max_output_tokens, created_at, updated_at
+            FROM model_catalog_items
+            ORDER BY created_at, id
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(model_catalog_item_from_row)
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    pub async fn list_model_profiles(
+        &self,
+    ) -> Result<Vec<ModelProfileRecord>, GovernanceStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, display_name, scope_ref, primary_model_key, fallback_model_keys_json,
+                   created_at, updated_at
+            FROM model_profiles
+            ORDER BY created_at, id
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(model_profile_from_row)
+            .collect::<Result<Vec<_>, _>>()
+    }
+
+    pub async fn list_tenant_model_policies(
+        &self,
+    ) -> Result<Vec<TenantModelPolicyRecord>, GovernanceStoreError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, tenant_id, allowed_model_keys_json, denied_model_keys_json,
+                   allowed_provider_ids_json, denied_release_channels_json,
+                   require_approval_for_preview, created_at, updated_at
+            FROM tenant_model_policies
+            ORDER BY created_at, id
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(tenant_model_policy_from_row)
+            .collect::<Result<Vec<_>, _>>()
     }
 
     pub async fn evaluate_task(
@@ -1120,6 +1472,71 @@ fn budget_policy_from_row(
     })
 }
 
+fn model_provider_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<ModelProviderRecord, GovernanceStoreError> {
+    Ok(ModelProviderRecord {
+        id: row.try_get("id")?,
+        display_name: row.try_get("display_name")?,
+        provider_family: row.try_get("provider_family")?,
+        status: row.try_get("status")?,
+        default_base_url: row.try_get("default_base_url")?,
+        protocol_families: deserialize_string_list(row.try_get("protocol_families_json")?)?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn model_catalog_item_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<ModelCatalogItemRecord, GovernanceStoreError> {
+    Ok(ModelCatalogItemRecord {
+        id: row.try_get("id")?,
+        provider_id: row.try_get("provider_id")?,
+        model_key: row.try_get("model_key")?,
+        provider_model_id: row.try_get("provider_model_id")?,
+        release_channel: row.try_get("release_channel")?,
+        modality_tags: deserialize_string_list(row.try_get("modality_tags_json")?)?,
+        feature_tags: deserialize_string_list(row.try_get("feature_tags_json")?)?,
+        context_window: row.try_get("context_window")?,
+        max_output_tokens: row.try_get("max_output_tokens")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn model_profile_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<ModelProfileRecord, GovernanceStoreError> {
+    Ok(ModelProfileRecord {
+        id: row.try_get("id")?,
+        display_name: row.try_get("display_name")?,
+        scope_ref: row.try_get("scope_ref")?,
+        primary_model_key: row.try_get("primary_model_key")?,
+        fallback_model_keys: deserialize_string_list(row.try_get("fallback_model_keys_json")?)?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn tenant_model_policy_from_row(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<TenantModelPolicyRecord, GovernanceStoreError> {
+    Ok(TenantModelPolicyRecord {
+        id: row.try_get("id")?,
+        tenant_id: row.try_get("tenant_id")?,
+        allowed_model_keys: deserialize_string_list(row.try_get("allowed_model_keys_json")?)?,
+        denied_model_keys: deserialize_string_list(row.try_get("denied_model_keys_json")?)?,
+        allowed_provider_ids: deserialize_string_list(row.try_get("allowed_provider_ids_json")?)?,
+        denied_release_channels: deserialize_string_list(
+            row.try_get("denied_release_channels_json")?,
+        )?,
+        require_approval_for_preview: row.try_get("require_approval_for_preview")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
 fn approval_request_from_row(
     row: &sqlx::sqlite::SqliteRow,
 ) -> Result<ApprovalRequestRecord, sqlx::Error> {
@@ -1140,6 +1557,14 @@ fn approval_request_from_row(
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
     })
+}
+
+fn serialize_string_list(values: &[String]) -> Result<String, serde_json::Error> {
+    serde_json::to_string(values)
+}
+
+fn deserialize_string_list(raw: String) -> Result<Vec<String>, serde_json::Error> {
+    serde_json::from_str(&raw)
 }
 
 fn current_timestamp() -> String {

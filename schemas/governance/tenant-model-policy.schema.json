@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://octopus.local/schemas/governance/tenant-model-policy.schema.json",
+  "title": "TenantModelPolicy",
+  "type": "object",
+  "description": "Post-GA model-center foundation shared contract for tenant-scoped model governance policy.",
+  "properties": {
+    "id": { "type": "string" },
+    "tenant_id": { "type": "string" },
+    "allowed_model_keys": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "denied_model_keys": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "allowed_provider_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "denied_release_channels": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["ga", "preview", "experimental", "deprecated"]
+      },
+      "uniqueItems": true
+    },
+    "require_approval_for_preview": {
+      "type": "boolean"
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" }
+  },
+  "required": [
+    "id",
+    "tenant_id",
+    "allowed_model_keys",
+    "denied_model_keys",
+    "allowed_provider_ids",
+    "denied_release_channels",
+    "require_approval_for_preview",
+    "created_at",
+    "updated_at"
+  ],
+  "additionalProperties": false
+}
