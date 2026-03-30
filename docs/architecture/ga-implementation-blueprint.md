@@ -190,6 +190,8 @@
 
 `2026-03-30-post-ga-model-governance-consumers` 作为 design-only predecessor 已完成其边界冻结职责，并已被 `2026-03-30-post-ga-model-governance-persistence` 消费用于 persistence/runtime-recording 子范围。当前排队的下一项是 design-only 的 `2026-03-30-post-ga-model-governance-read-transport`，仅允许冻结 `apps/remote-hub` 的只读 route assembly、`packages/hub-client` 的 transport-neutral read accessors、以及 `apps/desktop` 的只读消费边界；不进入写操作、provider connectivity、`ProviderAdapter` SPI、built-in tool 建模、`CapabilityResolver / ToolSearch` 重构或新的 admin surface。
 
+`2026-03-30-post-ga-desktop-dashboard-conversation-redesign` 作为新的 post-GA desktop implementation package 已获批准，用于把 desktop 交互模型从 GA 阶段的 `Tasks-first` workbench 调整为 `Dashboard -> Conversation -> explicit Task / Run confirmation`。该 slice 的边界严格限定为 `apps/desktop` 与 owner docs / ADR 更新：允许新增 app-local preference state 与 app-local conversation/proposal state，允许调整 shell routing / IA / copy / visual hierarchy，并继续复用现有 `Task` / `RunDetail` / `InboxItem` / `Notification` / `ProjectKnowledgeIndex` 与现有 execution APIs；不允许新增 cross-language conversation schema、hub-client command、remote-hub route、shared DTO、或任何 cross-device persistence truth。`Runs / Run Detail / Inbox / Knowledge / Connections / Models` 仍保持 formal authority surface 语义，`Tasks` 降为 expert-only direct execution surface。
+
 ### 6.3 Shared Contract 先于实现
 
 跨语言共享对象、正式命令、事件、DTO、状态、审批对象、知识对象，必须优先进入 `schemas/`，再进入实现。

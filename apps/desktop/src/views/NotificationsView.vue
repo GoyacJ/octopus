@@ -1,19 +1,15 @@
 <script setup lang="ts">
 import { onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
-import { Bell, Info } from "lucide-vue-next";
 
 import { useHubStore } from "../stores/hub";
-
-// UI Components
-import OPill from "../components/ui/OPill.vue";
-import OCard from "../components/ui/OCard.vue";
-import OStatPill from "../components/ui/OStatPill.vue";
-import PageHeader from "../components/layout/PageHeader.vue";
-import PageContainer from "../components/layout/PageContainer.vue";
+import { usePreferencesStore } from "../stores/preferences";
 
 const route = useRoute();
 const hub = useHubStore();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
 
 async function loadNotificationSurface(): Promise<void> {
   const workspaceId = String(route.params.workspaceId);
@@ -34,125 +30,98 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageContainer narrow>
-    <PageHeader
-      eyebrow="Signals"
-      title="Notifications"
-      subtitle="System events and status reminders."
-    >
-      <template #stats>
-        <OStatPill label="Pending" :value="hub.notifications.length" highlight />
-      </template>
-    </PageHeader>
+  <section class="notifications-layout">
+    <article class="surface-card hero">
+      <p class="eyebrow">{{ preferences.t("notifications.title") }}</p>
+      <h1>{{ preferences.t("notifications.title") }}</h1>
+      <p class="muted">{{ preferences.t("notifications.subtitle") }}</p>
+      <p class="muted">{{ hub.notifications.length }} pending signals</p>
+    </article>
 
-    <div class="notifications-content">
-      <div v-if="hub.notifications.length > 0" class="notifications-list">
-        <OCard
+    <article class="surface-card">
+      <ul v-if="hub.notifications.length > 0" class="stack-list">
+        <li
           v-for="notification in hub.notifications"
           :key="notification.id"
-          hover
+          class="notification-card"
         >
-          <div class="notification-card-inner">
-            <div class="card-indicator"></div>
-            <div class="card-body">
-              <h2 class="notification-title">{{ notification.title }}</h2>
-              <p class="notification-message">{{ notification.message }}</p>
-              <div class="notification-meta">
-                <OPill size="sm" :variant="notification.status === 'pending' ? 'warning' : 'default'">
-                  {{ notification.status }}
-                </OPill>
-                <span class="meta-item">Target: {{ notification.target_ref }}</span>
-              </div>
-            </div>
+          <strong>{{ notification.title }}</strong>
+          <p>{{ notification.message }}</p>
+          <div class="meta-list">
+            <span>Status: {{ notification.status }}</span>
+            <span>Target: {{ notification.target_ref }}</span>
           </div>
-        </OCard>
-      </div>
+        </li>
+      </ul>
 
-      <div v-else class="empty-state">
-        <div class="empty-icon"><Bell :size="32" /></div>
-        <h2 class="empty-title">All Clear</h2>
-        <p class="empty-text">No pending notifications at the moment.</p>
-      </div>
-    </div>
-  </PageContainer>
+      <p v-else class="muted">{{ preferences.t("notifications.empty") }}</p>
+    </article>
+  </section>
 </template>
 
 <style scoped>
-.notifications-list {
+.notifications-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+.surface-card {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.85rem;
+  padding: 1.2rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.45);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
 }
 
-.notification-card-inner {
+.hero {
+  background:
+    radial-gradient(circle at top right, rgba(103, 232, 249, 0.18), transparent 32%),
+    rgba(15, 23, 42, 0.56);
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #67e8f9;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+.muted {
+  color: #94a3b8;
+}
+
+.stack-list {
   display: flex;
-  overflow: hidden;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.card-indicator {
-  width: 4px;
-  background-color: var(--color-accent);
-  flex-shrink: 0;
-}
-
-.card-body {
-  padding: 1.25rem 1.5rem;
-  flex: 1;
-}
-
-.notification-title {
-  font-size: 1rem;
-  font-weight: 700;
-  margin: 0 0 0.375rem;
-  color: var(--text-primary);
-}
-
-.notification-message {
-  font-size: 0.9375rem;
-  color: var(--text-muted);
-  line-height: 1.5;
-  margin-bottom: 1rem;
-}
-
-.notification-meta {
+.notification-card {
   display: flex;
-  align-items: center;
-  gap: 1rem;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.95rem;
+  border-radius: 0.9rem;
+  background: rgba(2, 6, 23, 0.6);
 }
 
-.meta-item {
-  font-size: 0.75rem;
-  color: var(--text-subtle);
-}
-
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  background-color: var(--bg-surface);
-  border: 2px dashed var(--color-border);
-  border-radius: var(--radius-2xl);
-}
-
-.empty-icon {
-  width: 3.5rem;
-  height: 3.5rem;
+.meta-list {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 1.5rem;
-  background-color: var(--bg-app);
-  color: var(--text-subtle);
-  border-radius: 50%;
-}
-
-.empty-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-}
-
-.empty-text {
-  color: var(--text-muted);
-  font-size: 0.9375rem;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.92rem;
+  color: #cbd5e1;
 }
 </style>

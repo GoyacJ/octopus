@@ -1,20 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
-import { Mail, BookOpen, ExternalLink, Search } from "lucide-vue-next";
 
 import { useHubStore } from "../stores/hub";
-
-// UI Components
-import OButton from "../components/ui/OButton.vue";
-import OPill from "../components/ui/OPill.vue";
-import OCard from "../components/ui/OCard.vue";
-import OStatPill from "../components/ui/OStatPill.vue";
-import PageHeader from "../components/layout/PageHeader.vue";
-import PageContainer from "../components/layout/PageContainer.vue";
+import { usePreferencesStore } from "../stores/preferences";
 
 const route = useRoute();
 const hub = useHubStore();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
 
 const projectKnowledgeIndex = computed(() => hub.projectKnowledgeIndex);
 const candidateRunMap = computed(() => {
@@ -64,185 +59,193 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageContainer>
-    <PageHeader
-      eyebrow="Project Knowledge"
-      :title="projectKnowledgeIndex?.knowledge_space.display_name ?? 'Knowledge Space'"
-      subtitle="Shared knowledge with source and governance traceability."
-    >
-      <template #stats>
-        <OStatPill label="Entries" :value="projectKnowledgeIndex?.entries.length ?? 0" />
-        <OStatPill label="Space ID" :value="projectKnowledgeIndex?.knowledge_space.id ?? '...'" />
-      </template>
-      <template #actions>
-        <OButton variant="secondary" :to="inboxRoute">
-          <template #icon-left><Mail :size="16" /></template>
-          Open Inbox
-        </OButton>
-      </template>
-    </PageHeader>
+  <section class="knowledge-layout">
+    <article class="surface-card hero">
+      <p class="eyebrow">{{ preferences.t("nav.knowledge") }}</p>
+      <h1>{{ preferences.t("knowledge.title") }}</h1>
+      <p class="muted">{{ preferences.t("knowledge.subtitle") }}</p>
+      <p class="muted">
+        {{
+          projectKnowledgeIndex?.knowledge_space.display_name ??
+          "Project knowledge loading"
+        }}
+      </p>
+      <div class="meta-list">
+        <span>Entries: {{ projectKnowledgeIndex?.entries.length ?? 0 }}</span>
+        <span>Workspace: {{ hub.workspaceName }}</span>
+        <span>Project: {{ hub.projectName }}</span>
+      </div>
+    </article>
 
-    <div class="knowledge-content">
-      <div v-if="(projectKnowledgeIndex?.entries.length ?? 0) > 0" class="knowledge-list">
-        <OCard
+    <article class="surface-card">
+      <div class="header-row">
+        <div>
+          <p class="eyebrow">Knowledge Space</p>
+          <h2>{{ projectKnowledgeIndex?.knowledge_space.id ?? "loading" }}</h2>
+        </div>
+        <RouterLink
+          :to="inboxRoute"
+          data-testid="knowledge-open-inbox"
+          class="ghost-link"
+        >
+          Open Inbox
+        </RouterLink>
+      </div>
+      <p class="muted">
+        Promotion requests stay authoritative in Run Detail, and approval resolution stays
+        authoritative in Inbox.
+      </p>
+    </article>
+
+    <article class="surface-card">
+      <div class="header-row">
+        <div>
+          <p class="eyebrow">Visible Entries</p>
+          <h2>{{ projectKnowledgeIndex?.entries.length ?? 0 }} mixed records</h2>
+        </div>
+      </div>
+
+      <ul v-if="(projectKnowledgeIndex?.entries.length ?? 0) > 0" class="stack-list">
+        <li
           v-for="entry in projectKnowledgeIndex?.entries ?? []"
           :key="`${entry.kind}:${entry.id}`"
-          hover
+          class="knowledge-card"
         >
-          <div class="card-inner">
-            <div class="card-header-row">
-              <div class="item-id-group">
-                <h2 class="item-id">{{ entry.id }}</h2>
-                <div class="item-pills">
-                  <OPill :variant="entry.kind === 'candidate' ? 'warning' : 'success'">
-                    {{ entry.kind }}
-                  </OPill>
-                  <OPill>{{ entry.status }}</OPill>
-                  <OPill variant="info" outline>Trust: {{ entry.trust_level }}</OPill>
-                </div>
-              </div>
-
-              <OButton
-                v-if="sourceRunIdForEntry(entry)"
-                size="sm"
-                variant="secondary"
-                :to="`/runs/${sourceRunIdForEntry(entry)}`"
-              >
-                <template #icon-left><ExternalLink :size="14" /></template>
-                View Source
-              </OButton>
-            </div>
-
-            <div class="card-details">
-              <div class="detail-group">
-                <span class="detail-label">Capability</span>
-                <span class="detail-value">{{ entry.capability_id }}</span>
-              </div>
-              <div class="detail-group">
-                <span class="detail-label">Provenance</span>
-                <span class="detail-value">
-                  {{ entry.kind === "candidate" ? entry.provenance_source : entry.provenance_source ?? "derived" }}
-                </span>
-              </div>
-              <div class="detail-group">
-                <span class="detail-label">Created</span>
-                <span class="detail-value">{{ entry.created_at }}</span>
+          <div class="header-row">
+            <div>
+              <strong>{{ entry.id }}</strong>
+              <div class="meta-list">
+                <span>Kind: {{ entry.kind }}</span>
+                <span>Status: {{ entry.status }}</span>
+                <span>Trust: {{ entry.trust_level }}</span>
               </div>
             </div>
 
-            <div v-if="entry.source_artifact_id || entry.source_candidate_id" class="card-footer-meta">
-              <span v-if="entry.source_artifact_id">Artifact: {{ entry.source_artifact_id }}</span>
-              <span v-if="entry.source_candidate_id">Candidate: {{ entry.source_candidate_id }}</span>
-            </div>
+            <RouterLink
+              v-if="sourceRunIdForEntry(entry)"
+              :to="`/runs/${sourceRunIdForEntry(entry)}`"
+              :data-testid="`knowledge-open-run-${sourceRunIdForEntry(entry)}`"
+              class="ghost-link"
+            >
+              Open Run
+            </RouterLink>
           </div>
-        </OCard>
-      </div>
 
-      <div v-else class="empty-state">
-        <div class="empty-icon"><BookOpen :size="32" /></div>
-        <h2 class="empty-title">No Knowledge Found</h2>
-        <p class="empty-text">Shared knowledge entries for this project will appear here.</p>
-      </div>
-    </div>
-  </PageContainer>
+          <div class="meta-list">
+            <span>Capability: {{ entry.capability_id }}</span>
+            <span>Created: {{ entry.created_at }}</span>
+            <span>Knowledge space: {{ entry.knowledge_space_id }}</span>
+          </div>
+
+          <div class="meta-list">
+            <span>
+              Provenance:
+              {{
+                entry.kind === "candidate"
+                  ? entry.provenance_source
+                  : entry.provenance_source ?? "derived_from_candidate"
+              }}
+            </span>
+            <span v-if="sourceRunIdForEntry(entry)">
+              Source run: {{ sourceRunIdForEntry(entry) }}
+            </span>
+            <span v-if="entry.source_artifact_id">
+              Source artifact: {{ entry.source_artifact_id }}
+            </span>
+            <span v-if="entry.source_candidate_id">
+              Source candidate: {{ entry.source_candidate_id }}
+            </span>
+          </div>
+        </li>
+      </ul>
+
+      <p v-else class="muted">{{ preferences.t("knowledge.empty") }}</p>
+    </article>
+  </section>
 </template>
 
 <style scoped>
-.knowledge-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.card-inner {
-  padding: 1.5rem;
-}
-
-.card-header-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1.5rem;
-}
-
-.item-id {
-  font-size: 1.125rem;
-  font-weight: 700;
-  font-family: monospace;
-  margin: 0 0 0.5rem;
-  color: var(--text-primary);
-}
-
-.item-pills {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.card-details {
+.knowledge-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1.25rem;
-  padding: 1rem;
-  background-color: var(--bg-app);
-  border-radius: var(--radius-lg);
+  gap: 1rem;
 }
 
-.detail-group {
+.surface-card {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.85rem;
+  padding: 1.2rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.45);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
 }
 
-.detail-label {
-  font-size: 0.625rem;
-  font-weight: 700;
-  color: var(--text-subtle);
+.hero {
+  background:
+    radial-gradient(circle at top right, rgba(14, 165, 233, 0.18), transparent 32%),
+    rgba(15, 23, 42, 0.56);
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
+  color: #67e8f9;
 }
 
-.detail-value {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  word-break: break-all;
+h1,
+h2,
+p {
+  margin: 0;
 }
 
-.card-footer-meta {
-  margin-top: 1rem;
+.muted {
+  color: #94a3b8;
+}
+
+.header-row {
   display: flex;
-  gap: 1.5rem;
-  font-size: 0.75rem;
-  color: var(--text-subtle);
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  background-color: var(--bg-surface);
-  border: 2px dashed var(--color-border);
-  border-radius: var(--radius-2xl);
-}
-
-.empty-icon {
-  width: 3.5rem;
-  height: 3.5rem;
+.stack-list {
   display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.knowledge-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.95rem;
+  border-radius: 0.9rem;
+  background: rgba(2, 6, 23, 0.6);
+}
+
+.meta-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.92rem;
+  color: #cbd5e1;
+}
+
+.ghost-link {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  margin: 0 auto 1.5rem;
-  background-color: var(--bg-app);
-  color: var(--text-subtle);
-  border-radius: 50%;
-}
-
-.empty-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-}
-
-.empty-text {
-  color: var(--text-muted);
-  font-size: 0.9375rem;
+  border: 1px solid rgba(103, 232, 249, 0.24);
+  border-radius: 999px;
+  padding: 0.65rem 0.9rem;
+  color: #e2e8f0;
+  text-decoration: none;
+  background: rgba(15, 23, 42, 0.6);
 }
 </style>

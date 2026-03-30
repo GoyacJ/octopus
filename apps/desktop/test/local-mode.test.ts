@@ -181,7 +181,7 @@ describe("desktop local mode trigger restrictions", () => {
     const client = createLocalHubClient(createWorkspaceTransport());
     const { pinia, router } = createDesktopPlugins(client, true);
 
-    await router.push("/workspaces/demo/projects/demo");
+    await router.push("/workspaces/demo/projects/demo/tasks");
     await router.isReady();
 
     const wrapper = mount(AppShell, {

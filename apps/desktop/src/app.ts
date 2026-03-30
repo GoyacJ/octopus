@@ -15,13 +15,17 @@ import {
   DEFAULT_LOCAL_WORKBENCH_ROUTE,
   useConnectionStore
 } from "./stores/connection";
+import { usePreferencesStore } from "./stores/preferences";
 import { configureHubClient } from "./stores/hub";
 import AutomationDetailView from "./views/AutomationDetailView.vue";
+import ConversationView from "./views/ConversationView.vue";
 import ConnectionsView from "./views/ConnectionsView.vue";
+import DashboardView from "./views/DashboardView.vue";
 import InboxView from "./views/InboxView.vue";
 import KnowledgeView from "./views/KnowledgeView.vue";
 import ModelsView from "./views/ModelsView.vue";
 import NotificationsView from "./views/NotificationsView.vue";
+import PreferencesView from "./views/PreferencesView.vue";
 import ProjectsView from "./views/ProjectsView.vue";
 import RunView from "./views/RunView.vue";
 import RunsView from "./views/RunsView.vue";
@@ -63,7 +67,15 @@ function createRoutes(defaultRoute: string): RouteRecordRaw[] {
     {
       path: "/workspaces/:workspaceId/projects/:projectId",
       redirect: (to) =>
-        `/workspaces/${routeParam(to, "workspaceId")}/projects/${routeParam(to, "projectId")}/tasks`
+        `/workspaces/${routeParam(to, "workspaceId")}/projects/${routeParam(to, "projectId")}/dashboard`
+    },
+    {
+      path: "/workspaces/:workspaceId/projects/:projectId/dashboard",
+      component: DashboardView
+    },
+    {
+      path: "/workspaces/:workspaceId/projects/:projectId/conversation",
+      component: ConversationView
     },
     {
       path: "/workspaces/:workspaceId/projects/:projectId/tasks",
@@ -102,6 +114,10 @@ function createRoutes(defaultRoute: string): RouteRecordRaw[] {
       component: ConnectionsView
     },
     {
+      path: "/preferences",
+      component: PreferencesView
+    },
+    {
       path: "/workspaces/:workspaceId/projects/:projectId/automations/:automationId",
       component: AutomationDetailView
     },
@@ -120,6 +136,7 @@ export function createDesktopPlugins(
   configureHubClient(client);
 
   const pinia = createPinia();
+  usePreferencesStore(pinia).initialize();
   const router = createRouter({
     history: useMemoryHistory ? createMemoryHistory() : createWebHistory(),
     routes: createRoutes(options.defaultRoute ?? DEFAULT_LOCAL_WORKBENCH_ROUTE)

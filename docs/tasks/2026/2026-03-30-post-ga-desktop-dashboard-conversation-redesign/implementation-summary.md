@@ -1,0 +1,70 @@
+# Implementation Summary
+
+- Goal:
+  - Replace the frozen desktop `Tasks-first` entry with a bounded `Dashboard -> Conversation -> formal execution` path while preserving the existing `Task` / `Run` / `Inbox` / `Knowledge` truth and post-Slice-20 degraded-state semantics.
+- Files Added:
+  - `apps/desktop/src/copy.ts`
+  - `apps/desktop/src/index.css`
+  - `apps/desktop/src/stores/conversation.ts`
+  - `apps/desktop/src/stores/preferences.ts`
+  - `apps/desktop/src/views/ConversationView.vue`
+  - `apps/desktop/src/views/DashboardView.vue`
+  - `apps/desktop/src/views/PreferencesView.vue`
+  - `apps/desktop/test/desktop-redesign.test.ts`
+  - `docs/decisions/0008-desktop-dashboard-plus-conversation-first-interaction-model.md`
+  - `docs/tasks/2026/2026-03-30-post-ga-desktop-dashboard-conversation-redesign/README.md`
+  - `docs/tasks/2026/2026-03-30-post-ga-desktop-dashboard-conversation-redesign/design-note.md`
+  - `docs/tasks/2026/2026-03-30-post-ga-desktop-dashboard-conversation-redesign/contract-change.md`
+  - `docs/tasks/2026/2026-03-30-post-ga-desktop-dashboard-conversation-redesign/implementation-summary.md`
+  - `docs/tasks/2026/2026-03-30-post-ga-desktop-dashboard-conversation-redesign/verification.md`
+  - `docs/tasks/2026/2026-03-30-post-ga-desktop-dashboard-conversation-redesign/delivery-note.md`
+- Files Changed:
+  - `README.md`
+  - `docs/README.md`
+  - `docs/architecture/VISUAL_FRAMEWORK.md`
+  - `docs/architecture/ga-implementation-blueprint.md`
+  - `docs/decisions/README.md`
+  - `docs/tasks/README.md`
+  - `apps/desktop/src/App.vue`
+  - `apps/desktop/src/app.ts`
+  - `apps/desktop/src/main.ts`
+  - `apps/desktop/src/stores/connection.ts`
+  - `apps/desktop/src/views/ConnectionsView.vue`
+  - `apps/desktop/src/views/InboxView.vue`
+  - `apps/desktop/src/views/KnowledgeView.vue`
+  - `apps/desktop/src/views/ModelsView.vue`
+  - `apps/desktop/src/views/NotificationsView.vue`
+  - `apps/desktop/src/views/ProjectsView.vue`
+  - `apps/desktop/src/views/RunView.vue`
+  - `apps/desktop/src/views/RunsView.vue`
+  - `apps/desktop/src/views/TasksView.vue`
+  - `apps/desktop/test/bootstrap-smoke.test.ts`
+  - `apps/desktop/test/local-mode.test.ts`
+  - `apps/desktop/test/remote-connections.test.ts`
+  - `apps/desktop/test/workbench-routes.test.ts`
+- Files Removed:
+  - None.
+- Structure Decision:
+  - Keep the redesign desktop-local by adding one preferences store, one conversation/proposal store, new `Dashboard` and `Conversation` views, and a shell/routing refactor on top of the existing connection and hub stores.
+- Why This Structure:
+  - The redesign changes user initiation and information architecture, but it does not justify new shared schemas or hub-client APIs. Keeping proposal state app-local preserves the formal `Task` / `Run` boundary and keeps complexity inside the system rather than in the user's first action.
+- Reused Patterns:
+  - Existing `useConnectionStore` and `useHubStore` orchestration.
+  - Existing `hub.createAndStartTask()` execution path for formal run creation.
+  - Existing degraded/read-only shell semantics from Slice 20.
+  - Existing desktop test stack and route-split shell assembly.
+- New Dependencies:
+  - None. The slice uses a bounded app-local translation dictionary and semantic CSS tokens instead of adding a new i18n or theming framework.
+- Error Handling Strategy:
+  - Stale remembered remote project entry is cleared and redirected back to `Projects` from both `Dashboard` and `Conversation` when the current remote project no longer exists.
+  - Drafting, clarifying, and proposal edits stay local and never create backend state until explicit confirmation.
+  - `scheduled` and `event-driven` proposals deliberately hand off to the expert `Tasks` surface rather than faking unsupported confirmation semantics.
+  - Theme and locale initialization remain resilient to missing browser APIs and fall back to system/default values.
+- Deferred Items:
+  - Cross-device conversation draft persistence or shared conversation truth.
+  - Real LLM orchestration or server-managed proposal generation.
+  - A dedicated governed scheduler/event-confirmation surface inside `Conversation`.
+- Non-goals Preserved:
+  - No `schemas/`, `packages/schema-ts`, `packages/hub-client`, or `apps/remote-hub` changes.
+  - No new shared DTOs, events, routes, or commands.
+  - No change to the formal authority of `Run Detail`, `Inbox`, or `Knowledge`.

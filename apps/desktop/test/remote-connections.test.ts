@@ -247,12 +247,29 @@ const remoteInboxFixture = [
   }
 ] as const;
 
+function projectKnowledgeFixture(workspaceId: string, projectId: string) {
+  return {
+    knowledge_space: {
+      id: `knowledge-space:${workspaceId}:${projectId}`,
+      workspace_id: workspaceId,
+      project_id: projectId,
+      owner_ref: "workspace_admin:bootstrap_admin",
+      display_name: `${projectId} knowledge`,
+      created_at: "2026-03-29T10:00:00Z",
+      updated_at: "2026-03-29T10:00:00Z"
+    },
+    entries: []
+  } as const;
+}
+
 function createLocalWorkbenchClient(): HubClient {
   const transport: LocalHubTransport = {
     async invoke(command, payload) {
       switch (command) {
         case "hub:get_project_context":
           return localProjectContextFixture;
+        case "hub:get_project_knowledge":
+          return projectKnowledgeFixture("demo", "demo");
         case "hub:list_projects":
           expect(payload).toEqual({
             workspaceId: "demo"
@@ -337,6 +354,16 @@ function createRemoteWorkbenchClient(
             );
           }
           return remoteProjectContextFixture(project.id);
+        }
+        case "hub:get_project_knowledge": {
+          const commandPayload = payload as {
+            workspaceId: string;
+            projectId: string;
+          };
+          return projectKnowledgeFixture(
+            commandPayload.workspaceId,
+            commandPayload.projectId
+          );
         }
         case "hub:list_capability_visibility":
           return localCapabilityResolutionFixture;
@@ -487,7 +514,7 @@ describe("desktop remote connection surface", () => {
     });
 
     expect(router.currentRoute.value.fullPath).toBe("/connections");
-    expect(wrapper.text()).toContain("Hub Connections");
+    expect(wrapper.text()).toContain("Connections");
     expect(wrapper.text()).toContain("auth_required");
   });
 
@@ -603,10 +630,10 @@ describe("desktop remote connection surface", () => {
     await flushPromises();
 
     expect(router.currentRoute.value.fullPath).toBe(
-      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+      "/workspaces/workspace-alpha/projects/project-auth/dashboard"
     );
     expect(loadDesktopConnectionProfile().projectId).toBe("project-auth");
-    expect(wrapper.text()).toContain("Task Create");
+    expect(wrapper.text()).toContain("Dashboard");
   });
 
   it("reuses the remembered project on a later remote login", async () => {
@@ -648,9 +675,9 @@ describe("desktop remote connection surface", () => {
     await flushPromises();
 
     expect(router.currentRoute.value.fullPath).toBe(
-      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+      "/workspaces/workspace-alpha/projects/project-auth/dashboard"
     );
-    expect(wrapper.text()).toContain("Task Create");
+    expect(wrapper.text()).toContain("Dashboard");
   });
 
   it("restores the cached remote session on app restart and reuses the remembered project route", async () => {
@@ -748,9 +775,9 @@ describe("desktop remote connection surface", () => {
     );
 
     expect(restartedShell.router.currentRoute.value.fullPath).toBe(
-      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+      "/workspaces/workspace-alpha/projects/project-auth/dashboard"
     );
-    expect(restartedShell.wrapper.text()).toContain("Task Create");
+    expect(restartedShell.wrapper.text()).toContain("Dashboard");
   });
 
   it("refreshes expired cached access before resolving the remote entry route", async () => {
@@ -811,9 +838,9 @@ describe("desktop remote connection surface", () => {
     );
 
     expect(router.currentRoute.value.fullPath).toBe(
-      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+      "/workspaces/workspace-alpha/projects/project-auth/dashboard"
     );
-    expect(wrapper.text()).toContain("Task Create");
+    expect(wrapper.text()).toContain("Dashboard");
     expect(persistedSession).toEqual(
       createPersistedRemoteSession({
         accessToken: "remote-token-next",
@@ -947,7 +974,7 @@ describe("desktop remote connection surface", () => {
     );
 
     expect(router.currentRoute.value.fullPath).toBe(
-      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+      "/workspaces/workspace-alpha/projects/project-auth/dashboard"
     );
     await router.push("/connections");
     await flushPromises();
@@ -1148,8 +1175,8 @@ describe("desktop remote connection surface", () => {
     await wrapper.get('[data-testid="connection-apply"]').trigger("click");
     await flushPromises();
 
-    expect(router.currentRoute.value.fullPath).toBe("/workspaces/demo/projects/demo/tasks");
-    expect(wrapper.text()).toContain("Task Create");
+    expect(router.currentRoute.value.fullPath).toBe("/workspaces/demo/projects/demo/dashboard");
+    expect(wrapper.text()).toContain("Dashboard");
     expect(wrapper.text()).toContain("local");
     expect(persistedSession).toBeNull();
   });
@@ -1258,7 +1285,7 @@ describe("desktop remote connection surface", () => {
     );
 
     expect(router.currentRoute.value.fullPath).toBe(
-      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+      "/workspaces/workspace-alpha/projects/project-auth/dashboard"
     );
     await router.push("/connections");
     await flushPromises();
@@ -1318,7 +1345,7 @@ describe("desktop remote connection surface", () => {
     );
 
     expect(router.currentRoute.value.fullPath).toBe(
-      "/workspaces/workspace-alpha/projects/project-auth/tasks"
+      "/workspaces/workspace-alpha/projects/project-auth/dashboard"
     );
     expect(
       wrapper.get('[data-testid="connection-banner"]').attributes("data-kind")

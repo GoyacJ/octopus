@@ -1,19 +1,15 @@
 <script setup lang="ts">
 import { onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
-import { CheckCircle2, Inbox } from "lucide-vue-next";
 
 import { useHubStore } from "../stores/hub";
-
-// UI Components
-import OButton from "../components/ui/OButton.vue";
-import OPill from "../components/ui/OPill.vue";
-import OCard from "../components/ui/OCard.vue";
-import PageHeader from "../components/layout/PageHeader.vue";
-import PageContainer from "../components/layout/PageContainer.vue";
+import { usePreferencesStore } from "../stores/preferences";
 
 const route = useRoute();
 const hub = useHubStore();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
 
 type InboxItem = ReturnType<typeof useHubStore>["inboxItems"][number];
 
@@ -66,139 +62,140 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageContainer narrow>
-    <PageHeader
-      eyebrow="Approval Inbox"
-      :title="`${hub.inboxItems.length} Pending Items`"
-      subtitle="Actionable approval requests requiring your attention."
-    />
+  <section class="inbox-layout">
+    <article class="surface-card hero">
+      <p class="eyebrow">{{ preferences.t("nav.inbox") }}</p>
+      <h1>{{ preferences.t("inbox.title") }}</h1>
+      <p class="muted">{{ preferences.t("inbox.subtitle") }}</p>
+      <p class="muted">{{ hub.inboxItems.length }} open items</p>
+    </article>
 
-    <div class="inbox-content">
-      <div v-if="hub.inboxItems.length > 0" class="inbox-list">
-        <OCard v-for="item in hub.inboxItems" :key="item.id" hover>
-          <div class="card-body">
-            <div class="card-main">
-              <h2 class="item-title">{{ item.title }}</h2>
-              <p class="item-message">{{ item.message }}</p>
-              
-              <div v-if="approvalForItem(item)" class="item-meta">
-                <OPill>{{ approvalForItem(item)?.approval_type }}</OPill>
-                <OPill :variant="approvalForItem(item)?.status === 'pending' ? 'warning' : 'info'">
-                  {{ approvalForItem(item)?.status }}
-                </OPill>
-                <OPill size="sm" outline>Target: {{ approvalForItem(item)?.target_ref }}</OPill>
-              </div>
-            </div>
-
-            <div class="card-actions">
-              <OButton
-                variant="primary"
-                :disabled="hub.readOnlyMode || hub.governanceActionLoading"
-                :loading="hub.governanceActionLoading && hub.governanceActionTarget === item.approval_request_id"
-                @click="handleResolveApproval(item.approval_request_id, 'approve')"
-              >
-                Approve
-              </OButton>
-              <OButton
-                variant="secondary"
-                :disabled="hub.readOnlyMode || hub.governanceActionLoading"
-                @click="handleResolveApproval(item.approval_request_id, 'reject')"
-              >
-                Reject
-              </OButton>
-            </div>
+    <article class="surface-card">
+      <ul v-if="hub.inboxItems.length > 0" class="stack-list">
+        <li v-for="item in hub.inboxItems" :key="item.id" class="inbox-card">
+          <strong>{{ item.title }}</strong>
+          <p>{{ item.message }}</p>
+          <div v-if="approvalForItem(item)" class="meta-list">
+            <span>{{ approvalForItem(item)?.approval_type }}</span>
+            <span>{{ approvalForItem(item)?.status }}</span>
+            <span>{{ approvalForItem(item)?.target_ref }}</span>
           </div>
-        </OCard>
-      </div>
+          <div class="action-row">
+            <button
+              :data-testid="`workspace-approve-${item.approval_request_id}`"
+              :disabled="hub.readOnlyMode || hub.governanceActionLoading"
+              @click="handleResolveApproval(item.approval_request_id, 'approve')"
+            >
+              {{ governanceActionLabel(item.approval_request_id, 'approve') }}
+            </button>
+            <button
+              class="secondary-button"
+              :data-testid="`workspace-reject-${item.approval_request_id}`"
+              :disabled="hub.readOnlyMode || hub.governanceActionLoading"
+              @click="handleResolveApproval(item.approval_request_id, 'reject')"
+            >
+              {{ governanceActionLabel(item.approval_request_id, 'reject') }}
+            </button>
+          </div>
+        </li>
+      </ul>
 
-      <div v-else class="empty-state">
-        <div class="empty-icon"><CheckCircle2 :size="32" /></div>
-        <h2 class="empty-title">All Caught Up</h2>
-        <p class="empty-text">No approval requests are waiting for your review.</p>
-      </div>
-    </div>
-  </PageContainer>
+      <p v-else class="muted">{{ preferences.t("inbox.empty") }}</p>
+    </article>
+  </section>
 </template>
 
 <style scoped>
-.inbox-list {
+.inbox-layout {
+  display: grid;
+  gap: 1rem;
+}
+
+.surface-card {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 0.85rem;
+  padding: 1.2rem;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 1rem;
+  background: rgba(15, 23, 42, 0.45);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
 }
 
-.card-body {
+.hero {
+  background:
+    radial-gradient(circle at top right, rgba(250, 204, 21, 0.16), transparent 32%),
+    rgba(15, 23, 42, 0.56);
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #67e8f9;
+}
+
+h1,
+p {
+  margin: 0;
+}
+
+.muted {
+  color: #94a3b8;
+}
+
+.stack-list {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 2rem;
-  padding: 1.5rem;
+  flex-direction: column;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.card-main {
-  flex: 1;
+.inbox-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.95rem;
+  border-radius: 0.9rem;
+  background: rgba(2, 6, 23, 0.6);
 }
 
-.item-title {
-  font-size: 1.125rem;
-  font-weight: 700;
-  margin: 0 0 0.5rem;
-}
-
-.item-message {
-  font-size: 0.9375rem;
-  color: var(--text-muted);
-  line-height: 1.5;
-  margin-bottom: 1.25rem;
-}
-
-.item-meta {
+.meta-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.6rem;
+  font-size: 0.92rem;
+  color: #cbd5e1;
 }
 
-.card-actions {
+.action-row {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-width: 140px;
+  flex-wrap: wrap;
+  gap: 0.6rem;
 }
 
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  background-color: var(--bg-surface);
-  border: 2px dashed var(--color-border);
-  border-radius: var(--radius-2xl);
+button {
+  border: none;
+  border-radius: 999px;
+  padding: 0.85rem 1.05rem;
+  font: inherit;
+  font-weight: 600;
+  color: #082f49;
+  background: linear-gradient(135deg, #67e8f9, #facc15);
+  cursor: pointer;
 }
 
-.empty-icon {
-  width: 3.5rem;
-  height: 3.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 1.5rem;
-  background-color: var(--color-success-soft);
-  color: var(--color-success);
-  border-radius: 50%;
+button:disabled {
+  cursor: progress;
+  opacity: 0.75;
 }
 
-.empty-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-}
-
-.empty-text {
-  color: var(--text-muted);
-  font-size: 0.9375rem;
-}
-
-@media (max-width: 640px) {
-  .card-body { flex-direction: column; gap: 1.5rem; }
-  .card-actions { flex-direction: row; width: 100%; }
-  .card-actions > * { flex: 1; }
+.secondary-button {
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(125, 211, 252, 0.25);
 }
 </style>

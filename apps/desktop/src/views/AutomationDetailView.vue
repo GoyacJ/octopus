@@ -82,6 +82,7 @@ async function retryDelivery(deliveryId: string): Promise<void> {
 async function handleActivateAutomation(): Promise<void> {
   try {
     await activateAutomation();
+    await loadAutomationSurface();
   } catch {
     // The store already exposes the error banner for the shell.
   }
@@ -90,6 +91,7 @@ async function handleActivateAutomation(): Promise<void> {
 async function handlePauseAutomation(): Promise<void> {
   try {
     await pauseAutomation();
+    await loadAutomationSurface();
   } catch {
     // The store already exposes the error banner for the shell.
   }
@@ -98,6 +100,7 @@ async function handlePauseAutomation(): Promise<void> {
 async function handleArchiveAutomation(): Promise<void> {
   try {
     await archiveAutomation();
+    await loadAutomationSurface();
   } catch {
     // The store already exposes the error banner for the shell.
   }
@@ -106,6 +109,7 @@ async function handleArchiveAutomation(): Promise<void> {
 async function handleManualDispatch(): Promise<void> {
   try {
     await manualDispatch();
+    await loadAutomationSurface();
   } catch {
     // The store already exposes the error banner for the shell.
   }
@@ -114,6 +118,7 @@ async function handleManualDispatch(): Promise<void> {
 async function handleRetryDelivery(deliveryId: string): Promise<void> {
   try {
     await retryDelivery(deliveryId);
+    await loadAutomationSurface();
   } catch {
     // The store already exposes the error banner for the shell.
   }
@@ -149,6 +154,7 @@ onMounted(() => {
       <template #actions>
         <OButton
           v-if="manualDispatchAvailable"
+          data-testid="manual-dispatch"
           variant="primary"
           :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
           @click="handleManualDispatch"
@@ -168,6 +174,7 @@ onMounted(() => {
           <OCardContent>
             <div class="lifecycle-actions">
               <button
+                data-testid="automation-activate"
                 class="btn-action"
                 :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
                 @click="handleActivateAutomation"
@@ -176,6 +183,7 @@ onMounted(() => {
                 <span>Activate</span>
               </button>
               <button
+                data-testid="automation-pause"
                 class="btn-action"
                 :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
                 @click="handlePauseAutomation"
@@ -184,6 +192,7 @@ onMounted(() => {
                 <span>Pause</span>
               </button>
               <button
+                data-testid="automation-archive"
                 class="btn-action danger"
                 :disabled="hub.readOnlyMode || hub.automationActionLoading || hub.automationLoading"
                 @click="handleArchiveAutomation"
@@ -212,7 +221,7 @@ onMounted(() => {
             <div v-if="automationDetail?.recent_deliveries.length" class="delivery-list">
               <div v-for="del in automationDetail.recent_deliveries" :key="del.id" class="delivery-item">
                 <div class="delivery-main">
-                  <span class="delivery-id"><Hash :size="12" /> {{ del.id.slice(0, 12) }}</span>
+                  <span class="delivery-id"><Hash :size="12" /> {{ del.id }}</span>
                   <OPill size="sm" :variant="del.status === 'succeeded' ? 'success' : 'danger'">
                     {{ del.status }}
                   </OPill>
@@ -223,6 +232,7 @@ onMounted(() => {
                 </div>
                 <div class="delivery-actions">
                   <OButton
+                    :data-testid="`retry-delivery-${del.id}`"
                     size="sm"
                     variant="secondary"
                     :disabled="hub.readOnlyMode || hub.automationActionLoading"
