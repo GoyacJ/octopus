@@ -165,7 +165,7 @@ describe("desktop bootstrap smoke", () => {
         projectId: "demo"
       }
     );
-    expect(window.location.pathname).toBe("/workspaces/demo/projects/demo/tasks");
+    expect(window.location.pathname).toBe("/workspaces/demo/projects/demo/dashboard");
     expect(document.body.textContent).toContain("Demo Workspace");
     expect(document.body.textContent).not.toContain(
       "No local Hub transport bridge is registered"

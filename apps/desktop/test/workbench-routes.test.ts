@@ -328,11 +328,11 @@ async function mountAt(path: string, transport = buildTransport()) {
 }
 
 describe("desktop task workbench routes", () => {
-  it("redirects the default entry to the demo tasks route", async () => {
+  it("redirects the default entry to the demo dashboard route", async () => {
     const { router } = await mountAt("/");
 
     expect(router.currentRoute.value.fullPath).toBe(
-      "/workspaces/demo/projects/demo/tasks"
+      "/workspaces/demo/projects/demo/dashboard"
     );
   });
 
@@ -430,7 +430,7 @@ describe("desktop task workbench routes", () => {
   it("renders the notifications route separately from inbox actions", async () => {
     const { wrapper } = await mountAt("/workspaces/workspace-alpha/notifications");
 
-    expect(wrapper.text()).toContain("Notifications");
+    expect(wrapper.text()).toContain("Reminder Center");
     expect(wrapper.text()).toContain("Approval pending");
     expect(wrapper.text()).not.toContain("Approve");
   });
@@ -438,7 +438,7 @@ describe("desktop task workbench routes", () => {
   it("renders the connections route with explicit hub state", async () => {
     const { wrapper } = await mountAt("/connections");
 
-    expect(wrapper.text()).toContain("Hub Connections");
+    expect(wrapper.text()).toContain("Connections");
     expect(wrapper.text()).toContain("connected");
     expect(wrapper.text()).toContain("authenticated");
   });

@@ -3,9 +3,13 @@ import { computed, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
 import { useHubStore } from "../stores/hub";
+import { usePreferencesStore } from "../stores/preferences";
 
 const route = useRoute();
 const hub = useHubStore();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
 
 const providers = computed(() => hub.workspaceModelProviders);
 const catalogItems = computed(() => hub.workspaceModelCatalogItems);
@@ -58,12 +62,10 @@ watch(
 <template>
   <section class="models-layout">
     <article class="surface-card hero">
-      <p class="eyebrow">Models</p>
-      <h1>Models</h1>
+      <p class="eyebrow">{{ preferences.t("nav.models") }}</p>
+      <h1>{{ preferences.t("models.title") }}</h1>
       <p class="read-only">Read-only</p>
-      <p class="muted">
-        Workspace model governance is visible here without exposing edit, approval, or provider-management actions.
-      </p>
+      <p class="muted">{{ preferences.t("models.subtitle") }}</p>
       <p v-if="hub.workspaceModelsLoading" class="muted">
         Loading workspace model governance...
       </p>

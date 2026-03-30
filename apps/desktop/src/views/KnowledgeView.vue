@@ -3,9 +3,13 @@ import { computed, onMounted, watch } from "vue";
 import { RouterLink, useRoute } from "vue-router";
 
 import { useHubStore } from "../stores/hub";
+import { usePreferencesStore } from "../stores/preferences";
 
 const route = useRoute();
 const hub = useHubStore();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
 
 const projectKnowledgeIndex = computed(() => hub.projectKnowledgeIndex);
 const candidateRunMap = computed(() => {
@@ -57,15 +61,14 @@ onMounted(() => {
 <template>
   <section class="knowledge-layout">
     <article class="surface-card hero">
-      <p class="eyebrow">Project Knowledge</p>
-      <h1>
+      <p class="eyebrow">{{ preferences.t("nav.knowledge") }}</p>
+      <h1>{{ preferences.t("knowledge.title") }}</h1>
+      <p class="muted">{{ preferences.t("knowledge.subtitle") }}</p>
+      <p class="muted">
         {{
           projectKnowledgeIndex?.knowledge_space.display_name ??
           "Project knowledge loading"
         }}
-      </h1>
-      <p class="muted">
-        Read-only project-scoped shared knowledge with source and governance traceability.
       </p>
       <div class="meta-list">
         <span>Entries: {{ projectKnowledgeIndex?.entries.length ?? 0 }}</span>
@@ -156,9 +159,7 @@ onMounted(() => {
         </li>
       </ul>
 
-      <p v-else class="muted">
-        No shared knowledge entries are visible for this project yet.
-      </p>
+      <p v-else class="muted">{{ preferences.t("knowledge.empty") }}</p>
     </article>
   </section>
 </template>

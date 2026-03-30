@@ -8,10 +8,14 @@ import {
   useConnectionStore
 } from "../stores/connection";
 import { useHubStore } from "../stores/hub";
+import { usePreferencesStore } from "../stores/preferences";
 
 const hub = useHubStore();
 const connection = useConnectionStore();
 const router = useRouter();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
 
 const selectedMode = ref(connection.profile.mode);
 const remoteDraft = reactive({
@@ -140,7 +144,7 @@ onMounted(() => {
 <template>
   <section class="connections-layout">
     <article class="surface-card hero">
-      <p class="eyebrow">Hub Connections</p>
+      <p class="eyebrow">{{ preferences.t("nav.connections") }}</p>
       <h1>
         {{ hub.connectionStatus?.mode ?? selectedMode }} /
         {{ stateLabel }}
@@ -148,6 +152,7 @@ onMounted(() => {
       <p class="muted">
         Auth state: {{ authStateLabel }}
       </p>
+      <p class="muted">{{ preferences.t("connections.subtitle") }}</p>
       <p class="muted">{{ authMessage }}</p>
     </article>
 

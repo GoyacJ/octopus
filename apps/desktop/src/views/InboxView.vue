@@ -3,9 +3,13 @@ import { onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import { useHubStore } from "../stores/hub";
+import { usePreferencesStore } from "../stores/preferences";
 
 const route = useRoute();
 const hub = useHubStore();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
 
 type InboxItem = ReturnType<typeof useHubStore>["inboxItems"][number];
 
@@ -60,9 +64,10 @@ onMounted(() => {
 <template>
   <section class="inbox-layout">
     <article class="surface-card hero">
-      <p class="eyebrow">Approval Inbox</p>
-      <h1>{{ hub.inboxItems.length }} open items</h1>
-      <p class="muted">Actionable approval requests stay isolated from passive notifications.</p>
+      <p class="eyebrow">{{ preferences.t("nav.inbox") }}</p>
+      <h1>{{ preferences.t("inbox.title") }}</h1>
+      <p class="muted">{{ preferences.t("inbox.subtitle") }}</p>
+      <p class="muted">{{ hub.inboxItems.length }} open items</p>
     </article>
 
     <article class="surface-card">
@@ -95,7 +100,7 @@ onMounted(() => {
         </li>
       </ul>
 
-      <p v-else class="muted">No approval requests are waiting.</p>
+      <p v-else class="muted">{{ preferences.t("inbox.empty") }}</p>
     </article>
   </section>
 </template>

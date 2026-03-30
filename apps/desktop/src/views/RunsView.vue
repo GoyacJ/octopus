@@ -1,12 +1,36 @@
 <script setup lang="ts">
-import { onMounted, watch } from "vue";
+import { computed, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import { useHubStore } from "../stores/hub";
+import { usePreferencesStore } from "../stores/preferences";
 
 const route = useRoute();
 const router = useRouter();
 const hub = useHubStore();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
+
+const prioritizedRuns = computed(() =>
+  [...hub.runs].sort((left, right) => {
+    const priority = (status: string) => {
+      switch (status) {
+        case "failed":
+          return 0;
+        case "waiting_approval":
+        case "blocked":
+          return 1;
+        case "running":
+          return 2;
+        default:
+          return 3;
+      }
+    };
+
+    return priority(left.status) - priority(right.status);
+  })
+);
 
 async function loadRunsSurface(): Promise<void> {
   const workspaceId = String(route.params.workspaceId);
@@ -37,21 +61,21 @@ onMounted(() => {
 <template>
   <section class="runs-layout">
     <article class="surface-card hero">
-      <p class="eyebrow">Recent Runs</p>
-      <h1>{{ hub.projectName }}</h1>
-      <p class="muted">Project-scoped execution history ordered by latest activity.</p>
+      <p class="eyebrow">{{ preferences.t("nav.runs") }}</p>
+      <h1>{{ preferences.t("runs.title") }}</h1>
+      <p class="muted">{{ preferences.t("runs.subtitle") }}</p>
     </article>
 
     <article class="surface-card">
       <div class="header-row">
         <div>
-          <p class="eyebrow">Runs</p>
+          <p class="eyebrow">Recent Runs</p>
           <h2>{{ hub.runs.length }} recent records</h2>
         </div>
       </div>
 
-      <ul v-if="hub.runs.length > 0" class="stack-list">
-        <li v-for="run in hub.runs" :key="run.id" class="run-card">
+      <ul v-if="prioritizedRuns.length > 0" class="stack-list">
+        <li v-for="run in prioritizedRuns" :key="run.id" class="run-card">
           <button class="run-link" @click="openRun(run.id)">{{ run.title }}</button>
           <div class="meta-list">
             <span>Status: {{ run.status }}</span>
@@ -63,7 +87,7 @@ onMounted(() => {
         </li>
       </ul>
 
-      <p v-else class="muted">No runs have been recorded for this project yet.</p>
+      <p v-else class="muted">{{ preferences.t("runs.empty") }}</p>
     </article>
   </section>
 </template>

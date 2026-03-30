@@ -83,7 +83,7 @@ const DEFAULT_REMOTE_BASE_URL = "http://127.0.0.1:4000";
 const DEFAULT_SECURE_SESSION_WARNING =
   "Secure session storage is unavailable. Remote sign-in will stay memory-only.";
 
-export const DEFAULT_LOCAL_WORKBENCH_ROUTE = "/workspaces/demo/projects/demo/tasks";
+export const DEFAULT_LOCAL_WORKBENCH_ROUTE = "/workspaces/demo/projects/demo/dashboard";
 
 let runtimeOptions: DesktopConnectionRuntimeOptions = {};
 const remoteAccessToken = ref<string | null>(null);
@@ -359,6 +359,20 @@ export function buildWorkspaceProjectsRoute(workspaceId: string): string {
   return `/workspaces/${encodePathSegment(workspaceId)}/projects`;
 }
 
+export function buildProjectDashboardRoute(
+  workspaceId: string,
+  projectId: string
+): string {
+  return `/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/dashboard`;
+}
+
+export function buildProjectConversationRoute(
+  workspaceId: string,
+  projectId: string
+): string {
+  return `/workspaces/${encodePathSegment(workspaceId)}/projects/${encodePathSegment(projectId)}/conversation`;
+}
+
 export function buildProjectTasksRoute(
   workspaceId: string,
   projectId: string
@@ -448,7 +462,7 @@ export function resolveDesktopEntryRoute(
   const rememberedProjectId = profile.projectId?.trim() ?? "";
 
   if (rememberedProjectId) {
-    return buildProjectTasksRoute(workspaceId, rememberedProjectId);
+    return buildProjectDashboardRoute(workspaceId, rememberedProjectId);
   }
 
   return buildWorkspaceProjectsRoute(workspaceId);

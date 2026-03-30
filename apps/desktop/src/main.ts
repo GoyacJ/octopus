@@ -1,3 +1,4 @@
+import "./index.css";
 import { createDesktopApp } from "./app";
 import {
   configureDesktopConnectionRuntime,

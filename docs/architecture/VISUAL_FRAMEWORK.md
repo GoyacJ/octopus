@@ -1,7 +1,7 @@
 # Visual Framework
 
-**Status**: Frozen for the first GA minimum surface through Slice 15 project knowledge index
-**Last updated**: 2026-03-29
+**Status**: Revised post-GA desktop framework; GA minimum-surface constraints remain preserved where not explicitly replaced below
+**Last updated**: 2026-03-30
 
 ## Purpose
 
@@ -11,36 +11,37 @@ It does not expand PRD scope or architecture boundaries. It only defines how the
 
 ## Current Scope
 
-This frozen version covers only the minimum GA surfaces required by the blueprint plus the tracked Slice 14 and Slice 15 desktop IA refinements:
+This revised version defines the approved post-GA desktop interaction model for the tracked desktop shell:
 
-- Task creation entry
-- Recent project runs
-- Run detail and Trace replay
-- Approval Inbox
-- Artifact detail
-- Project-scoped Shared Knowledge read index
-- Workspace / Project context presentation
-- Hub Connections status
-- Notification intake
+- project-scoped `Dashboard`
+- project-scoped `Conversation`
+- project-scoped `Runs`
+- project-scoped `Knowledge`
+- workspace-scoped `Inbox`
+- workspace-scoped `Projects`
+- secondary `Connections`, `Models`, and `Preferences`
+- shell-level reminder handling for notifications and degraded-state warnings
 
-This version does **not** define:
+This version still does **not** define:
 
-- a full board or multi-view collaboration experience
+- a full cross-device conversation platform
 - mobile-first layouts
-- deep responsive variants beyond the minimum desktop shell
-- a shared component library or design-token system for every future app
+- deep responsive variants beyond the desktop shell
+- a repository-wide permanent design system for every future app
+- a generic consumer-chat product surface
 
 ## Surface Priorities
 
-The first tracked UI implementation must prioritize pages in this order:
+The tracked post-GA desktop implementation must prioritize pages in this order:
 
-1. Workspace / Project shell and Hub Connection status
-2. Task creation and recent run follow-up
-3. Run detail with status, policy, artifact, trace, and knowledge sections
-4. Approval Inbox and Notification entry
-5. Project-scoped Shared Knowledge read index
+1. Workspace / Project shell, reminder state, and preferences
+2. `Dashboard` as the operational home
+3. `Conversation` as the primary governed initiation path
+4. `Run Detail`, `Runs`, and `Inbox` as authority surfaces
+5. `Knowledge` as the provenance/read surface
+6. `Connections`, `Models`, `Tasks`, and other expert tools as secondary surfaces
 
-If scope pressure appears, keep the order above. Do not drop Hub status, Task create, Runs, Run detail, or Approval Inbox in favor of richer secondary views.
+If scope pressure appears, keep `Dashboard`, `Conversation`, `Run Detail`, and `Inbox` coherent before enriching secondary tools.
 
 ## Minimum Page Set
 
@@ -49,8 +50,8 @@ If scope pressure appears, keep the order above. Do not drop Hub status, Task cr
 Purpose:
 
 - present current workspace and project context
-- surface current hub mode and connection health
-- anchor navigation for all minimum GA workbench pages
+- surface current hub mode, connection health, locale, theme, and reminder state
+- anchor navigation for all primary and secondary desktop surfaces
 
 Required regions:
 
@@ -59,34 +60,67 @@ Required regions:
 - current hub mode (`local` or `remote`)
 - connection status badge
 - last synchronization / refresh hint
+- locale preference
+- theme preference
+- reminder visibility for notifications and degraded state
 
-### 2. Tasks
+### 2. Dashboard
 
 Purpose:
 
-- let a user create and start a minimum task from a formal surface
-- act as the default local-mode landing page for the current demo project
+- act as the default active-project landing page
+- resume context, surface operational truth, and start or continue work
 
-Required fields:
+Required regions:
 
-- title
-- instruction
-- capability selector or identifier input
-- action payload editor appropriate to the minimum supported task flow
-- estimated cost hint
+- context rail with workspace/project/hub/auth/read-only/locale/theme state
+- one natural-language hero input
+- continue-work modules for recent conversations, runs, and pending items
+- system summary for in-progress runs, pending approvals, failed runs, and new knowledge
+- risk/reminder region for auth expiry, degraded connection, blocked approvals, low-trust outputs, and write failures
 
 Required states:
 
 - idle
-- submitting
-- validation error
-- success with navigation to the created run
+- populated operational state
+- degraded/read-only
+- empty recent activity
 
-### 3. Runs
+Constraint:
+
+- `Dashboard` is operational and contextual, not a metrics-heavy BI surface.
+
+### 3. Conversation
 
 Purpose:
 
-- provide a focused recent-run follow-up surface for the current project
+- let users form intent through governed Q&A instead of direct formal object entry
+- keep execution proposal visible before any formal run exists
+
+Required regions:
+
+- conversation turn history
+- guided clarification prompts
+- persistent `Execution Proposal` side panel
+- explicit execution confirmation control
+
+Required stages:
+
+- `drafting`
+- `proposal_ready`
+- `execution_started`
+- `follow_up`
+
+Explicit rule:
+
+- drafting or revising must never auto-create a run
+- formal execution begins only on explicit confirmation
+
+### 4. Runs
+
+Purpose:
+
+- provide a focused recent-run follow-up surface ranked by what needs attention now
 
 Required data:
 
@@ -96,14 +130,15 @@ Required data:
 - capability identifier or task context summary
 - updated time
 - direct navigation to run detail
+- attention-oriented ordering or grouping
 
 Required states:
 
 - populated recent list
 - empty recent list
-- refetch after task creation or `run.updated`
+- refetch after confirmed execution or `run.updated`
 
-### 4. Run Detail
+### 5. Run Detail
 
 Purpose:
 
@@ -111,12 +146,10 @@ Purpose:
 
 Required sections:
 
-- run summary
-- status timeline or ordered state blocks
-- approval status and policy decisions
-- artifact result
-- trace stream or ordered trace list
-- knowledge candidate / recalled asset summary
+- conclusion / current state
+- result
+- governance
+- diagnosis
 - recovery actions when allowed
 
 Required states:
@@ -128,7 +161,7 @@ Required states:
 - failed
 - terminated
 
-### 5. Approval Inbox
+### 6. Approval Inbox
 
 Purpose:
 
@@ -143,25 +176,11 @@ Required data:
 - current status
 - approve / reject actions where allowed
 
-### 6. Artifact Detail
-
-Purpose:
-
-- present the primary execution output and its provenance clearly
-
-Required data:
-
-- artifact content
-- artifact type
-- provenance source
-- trust level
-- knowledge-gate status
-
 ### 7. Project Knowledge Index
 
 Purpose:
 
-- show the minimum project-level Shared Knowledge loop without claiming a full knowledge-management product
+- show the project-level Shared Knowledge loop with meaning, provenance, trust, and traceability before raw identifiers
 
 Required data:
 
@@ -171,40 +190,49 @@ Required data:
 - source run or candidate traceability hint
 - navigation back to `Run Detail` and `Inbox`
 
-### 8. Notification Entry
+### 8. Secondary Tool Surfaces
 
 Purpose:
 
-- expose reminders separately from Inbox facts
+- preserve dedicated environment/governance and expert execution surfaces without making them the first user entry
 
-Required data:
+Includes:
 
-- notification title
-- message
-- dedupe-aware status
-- linked run or approval target
+- `Projects`
+- `Connections`
+- `Models`
+- `Preferences`
+- expert `Tasks`
 
 ## Information Architecture
 
-The minimum desktop shell should use a stable two-level IA:
+The desktop shell should use a stable two-level IA:
 
 - Global shell
   - Workspace context
   - Project context
   - Hub status
+  - Reminder state
   - Primary navigation
+  - Secondary tools and preferences
 - Content area
-  - Tasks
+  - Dashboard
+  - Conversation
   - Runs
   - Run Detail
   - Inbox
-  - Connections
-  - Notifications
   - Knowledge
+  - Projects
+  - Connections
+  - Models
+  - Preferences
+  - expert Tasks
 
-The stable desktop workbench IA is `Tasks / Runs / Knowledge / Inbox / Notifications / Connections`.
+The stable primary IA is `Dashboard / Conversation / Runs / Inbox / Knowledge`.
 
-The first tracked shell should prefer direct pages over nested modal flows. Approval decisions may use inline actions or simple dialogs, but the authoritative state must remain visible on the page after action completion.
+The stable secondary IA is `Projects / Connections / Models / Preferences`, with `Tasks` available as an expert-only direct execution path.
+
+Notifications remain reminder context and must not compete with `Inbox` as a primary work destination.
 
 ## Shared Visual Grammar
 
@@ -219,13 +247,15 @@ The first tracked shell should prefer direct pages over nested modal flows. Appr
 - desktop-first composition with a persistent shell
 - one primary content column with optional secondary summary rail
 - avoid dashboard sprawl; each page should answer one operational question clearly
-- the default workbench route should be `Tasks`, not a mixed dashboard page
+- the default active-project route should be `Dashboard`
+- `Conversation` may use a two-column layout with proposal context on the side
 
 ### 3. Hierarchy
 
 - context first: workspace, project, hub mode
-- object second: task, run, artifact, approval, knowledge
-- diagnostics third: policy decisions, trace, lineage
+- intent second: dashboard state, conversation proposal, next action
+- formal object third: run, artifact, approval, knowledge
+- diagnostics fourth: policy decisions, trace, lineage
 
 ### 4. Status Presentation
 
@@ -273,12 +303,14 @@ Error states must preserve the user’s context and identify whether the failure
 
 ## Interaction Rules
 
-- Task submission must remain explicit; do not auto-start tasks on field edit.
+- Conversation drafting and proposal editing must remain explicit; do not auto-start tasks on turn entry or field edit.
+- Task/run creation must remain explicit; formal execution starts only on confirmation.
 - Approval actions must require deliberate user action and show the resulting run state after completion.
 - Trace is explanatory, not decorative. Do not hide it behind development-only affordances.
 - Knowledge index pages remain read-only; promotion requests stay on `Run Detail`, and approval resolution stays on `Inbox`.
 - Notification is a reminder surface; Inbox is the action surface. Do not collapse them into one list.
 - Connections is a dedicated visibility surface for hub mode, auth/session, and refresh state. Do not bury it only inside the mixed workspace body.
+- `Tasks` may remain available for expert direct execution, but it must not be the default landing page or the only supported initiation path.
 
 ## Out Of Scope
 

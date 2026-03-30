@@ -3,15 +3,19 @@ import { onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
 import {
-  buildProjectTasksRoute,
+  buildProjectDashboardRoute,
   useConnectionStore
 } from "../stores/connection";
 import { useHubStore } from "../stores/hub";
+import { usePreferencesStore } from "../stores/preferences";
 
 const route = useRoute();
 const router = useRouter();
 const hub = useHubStore();
 const connection = useConnectionStore();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
 
 async function loadProjectsSurface(): Promise<void> {
   const workspaceId = String(route.params.workspaceId);
@@ -26,7 +30,7 @@ async function loadProjectsSurface(): Promise<void> {
 async function openProject(projectId: string): Promise<void> {
   const workspaceId = String(route.params.workspaceId);
   connection.rememberProject(projectId);
-  await router.push(buildProjectTasksRoute(workspaceId, projectId));
+  await router.push(buildProjectDashboardRoute(workspaceId, projectId));
 }
 
 watch(
@@ -44,12 +48,9 @@ onMounted(() => {
 <template>
   <section class="projects-layout">
     <article class="surface-card hero">
-      <p class="eyebrow">Projects</p>
+      <p class="eyebrow">{{ preferences.t("nav.projects") }}</p>
       <h1>{{ hub.currentWorkspaceId ?? route.params.workspaceId }}</h1>
-      <p class="muted">
-        Select an existing project in the current workspace to enter the tracked task
-        workbench.
-      </p>
+      <p class="muted">{{ preferences.t("projects.subtitle") }}</p>
     </article>
 
     <article class="surface-card">
@@ -72,14 +73,12 @@ onMounted(() => {
             class="project-link"
             @click="openProject(project.id)"
           >
-            Open Tasks
+            {{ preferences.t("projects.openDashboard") }}
           </button>
         </li>
       </ul>
 
-      <p v-else class="muted">
-        No tracked projects are available in this workspace yet.
-      </p>
+      <p v-else class="muted">{{ preferences.t("projects.empty") }}</p>
     </article>
   </section>
 </template>

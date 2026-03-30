@@ -1,0 +1,84 @@
+# Design Note
+
+- Problem:
+  - The tracked desktop shell currently exposes a `Tasks-first` object model and makes runtime structure visible too early. That is serviceable for GA validation, but it is not a mature product entry path for users who begin with an evolving goal instead of a pre-formed task.
+- Goal:
+  - Reframe desktop initiation around a governed operational home (`Dashboard`) and a governed Q&A workspace (`Conversation`) while preserving existing authority pages and execution contracts.
+- Acceptance Criteria:
+  - `Dashboard` becomes the default project landing route.
+  - `Conversation` becomes the primary project-scoped initiation path.
+  - Formal execution begins only on explicit confirmation.
+  - Internationalization and theme preferences are globally available and persisted locally.
+  - `Runs`, `Run Detail`, `Inbox`, and `Knowledge` remain authoritative for their formal objects.
+- Non-functional Constraints:
+  - Keep conversation draft/proposal truth inside `apps/desktop` only.
+  - Keep `Task`, `Run`, `InboxItem`, `Notification`, `RunDetail`, and `ProjectKnowledgeIndex` as the only formal shared execution/read objects in this slice.
+  - Reuse existing hub-client commands and transport parity; no backend redesign is allowed here.
+  - Preserve read-only/degraded connection semantics from Slice 20.
+- MVP Boundary:
+  - One shell refactor, one preferences store, one conversation store, two new primary pages, and focused re-ranking of authority surfaces.
+  - No remote persistence for conversation drafts.
+  - No generic consumer-chat product semantics.
+- Layer Placement:
+  - Route/default-entry logic remains in `apps/desktop/src/app.ts` and `apps/desktop/src/stores/connection.ts`.
+  - Preferences persistence and theme application live in a desktop app-local store.
+  - Conversation draft/proposal state lives in a desktop app-local store and may persist locally only.
+  - `Dashboard`, `Conversation`, `Runs`, `Run Detail`, `Inbox`, `Knowledge`, `Models`, `Connections`, and `Tasks` remain desktop view assembly under `apps/desktop/src/views/`.
+  - Owner-doc truth and durable decision records remain under `docs/`.
+- Module Boundaries:
+  - `stores/connection.ts` continues to own connection mode, remembered project, and entry-route resolution.
+  - `stores/hub.ts` continues to own formal shared-object loading and execution actions.
+  - The new conversation layer may consume `hub.createAndStartTask(...)` and existing loaders, but may not create new formal transport contracts.
+  - `TasksView.vue` remains available for expert direct execution and automation detail work, but it no longer defines the default user journey.
+- Inputs:
+  - Existing desktop route split and hub store actions from Slice 14 through Slice 20.
+  - The approved target-state redesign plan from the current session.
+  - Existing read-only authority pages for runs, inbox, notifications, knowledge, models, and connections.
+- Outputs:
+  - Updated owner docs and one ADR.
+  - App-local preferences and conversation state.
+  - New dashboard and conversation surfaces.
+  - Re-ranked desktop authority pages and updated routing/tests.
+- State Transitions:
+  - `drafting`:
+    - User clarifies goal, constraints, and expected result.
+    - Proposal updates locally only.
+  - `proposal_ready`:
+    - Execution proposal is explicit and editable.
+    - No run exists yet.
+  - `execution_started`:
+    - Explicit confirmation creates one formal task/run.
+    - Authority shifts to `Run Detail`.
+  - `follow_up`:
+    - Later conversation turns update a linked proposal or request reconfirmation for material scope changes.
+- Error Handling:
+  - Connection/auth/read-only issues remain surfaced through existing hub/connection state and must appear in both shell reminder regions and dashboard risk sections.
+  - Conversation drafting errors remain local validation issues; they do not mutate backend state.
+  - Execution failures remain authoritative on `Run Detail`.
+- Tech Stack Decision:
+  - Reuse Vue 3, Pinia, Vue Router, and the existing test stack.
+  - Do not add a new i18n library for this slice; a bounded app-local translation layer is sufficient.
+- Visual Framework Impact:
+  - High. This slice replaces the frozen `Tasks-first` shell hierarchy with `Dashboard + Conversation first` while preserving formal authority surfaces.
+- Human Approval Points:
+  - Stop and return to docs if implementation reveals a need for new shared conversation schemas or hub-client commands.
+- Reused Components:
+  - `useConnectionStore`
+  - `useHubStore`
+  - Existing task/run execution actions and authority-page loaders
+- New Abstractions:
+  - `PreferenceState`
+  - `ConversationStage`
+  - `ConversationDraft`
+  - `ExecutionProposal`
+  - `ConversationThreadSummary`
+- Trade-offs:
+  - Keeping conversation state app-local preserves backend boundaries and speeds delivery, but it deliberately limits cross-device continuity.
+  - Reusing the existing task/run APIs keeps formal system truth stable, but the first conversation experience is intentionally guided rather than fully intelligent.
+- Test Strategy:
+  - Update route and connection tests for the new default entry behavior.
+  - Add explicit conversation-flow tests proving that drafting does not create a run and confirmation does.
+  - Add preference tests for locale/theme persistence and shell copy changes.
+  - Keep run/inbox/knowledge authority-page tests green after the shell refactor.
+- ADR Needed:
+  - Yes. The desktop primary interaction model becomes a durable repository-level conclusion and must be recorded outside this task package.

@@ -7,11 +7,15 @@ import {
   useConnectionStore
 } from "../stores/connection";
 import { useHubStore } from "../stores/hub";
+import { usePreferencesStore } from "../stores/preferences";
 
 const route = useRoute();
 const router = useRouter();
 const hub = useHubStore();
 const connection = useConnectionStore();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
 
 type AutomationTriggerType = "manual_event" | "cron" | "webhook" | "mcp_event";
 type CreateTriggerInput = Parameters<typeof hub.createAutomation>[0]["trigger"];
@@ -304,14 +308,15 @@ onMounted(() => {
 <template>
   <section class="surface-grid">
     <article class="surface-card hero">
-      <p class="eyebrow">Task Workbench</p>
-      <h1>{{ hub.workspaceName }}</h1>
-      <p class="muted">{{ hub.projectName }}</p>
+      <p class="eyebrow">{{ preferences.t("nav.tasks") }}</p>
+      <h1>{{ preferences.t("tasks.title") }}</h1>
+      <p class="muted">{{ preferences.t("tasks.subtitle") }}</p>
       <div class="meta-list">
         <span>Workspace: {{ hub.projectContext?.workspace.id ?? "loading" }}</span>
         <span>Project: {{ hub.projectContext?.project.id ?? "loading" }}</span>
         <span>Auth: {{ hub.authState }}</span>
       </div>
+      <p class="muted">{{ preferences.t("tasks.recommended") }}</p>
     </article>
 
     <article class="surface-card">

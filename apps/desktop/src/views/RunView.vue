@@ -3,9 +3,13 @@ import { computed, onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import { useHubStore } from "../stores/hub";
+import { usePreferencesStore } from "../stores/preferences";
 
 const route = useRoute();
 const hub = useHubStore();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
 
 const runDetail = computed(() => hub.runDetail);
 const artifacts = computed(() => hub.artifacts);
@@ -137,8 +141,9 @@ onMounted(() => {
 <template>
   <section class="run-layout">
     <article class="surface-card hero">
-      <p class="eyebrow">Run Detail</p>
+      <p class="eyebrow">{{ preferences.t("run.conclusion") }}</p>
       <h1>{{ runDetail?.task.title ?? "Run loading" }}</h1>
+      <p class="muted">{{ preferences.t("run.subtitle") }}</p>
       <div class="meta-list">
         <span>Run: {{ runDetail?.run.id ?? "loading" }}</span>
         <span>Status: {{ runDetail?.run.status ?? "loading" }}</span>
@@ -167,9 +172,21 @@ onMounted(() => {
     </article>
 
     <article class="surface-card">
-      <p class="eyebrow">Model Selection Decision</p>
+      <p class="eyebrow">{{ preferences.t("run.result") }}</p>
+      <h2>{{ artifacts[0]?.artifact_type ?? "No artifact yet" }}</h2>
+      <p class="artifact-content">{{ artifacts[0]?.content ?? "No artifact content recorded." }}</p>
+      <div v-if="artifacts[0]" class="meta-list">
+        <span>Trust: {{ artifacts[0].trust_level }}</span>
+        <span>Knowledge gate: {{ artifacts[0].knowledge_gate_status }}</span>
+        <span>Provenance: {{ artifacts[0].provenance_source }}</span>
+      </div>
+    </article>
+
+    <article class="surface-card">
+      <p class="eyebrow">{{ preferences.t("run.governance") }}</p>
+      <h2>Model Selection Decision</h2>
       <template v-if="modelSelectionDecision">
-        <h2>{{ modelSelectionDecision.requested_intent }}</h2>
+        <p>{{ modelSelectionDecision.requested_intent }}</p>
         <div class="meta-list">
           <span>Outcome: {{ modelSelectionDecision.decision_outcome }}</span>
           <span v-if="modelSelectionDecision.model_profile_id">
@@ -204,7 +221,7 @@ onMounted(() => {
     </article>
 
     <article class="surface-card">
-      <p class="eyebrow">Policy Decisions</p>
+      <p class="eyebrow">{{ preferences.t("run.governance") }}</p>
       <h2>{{ policyDecisions.length }} governance records</h2>
       <div v-if="policyDecisions.length > 0" class="stack-list">
         <div v-for="decision in policyDecisions" :key="decision.id">
@@ -223,19 +240,9 @@ onMounted(() => {
     </article>
 
     <article class="surface-card">
-      <p class="eyebrow">Artifact View</p>
-      <h2>{{ artifacts[0]?.artifact_type ?? "No artifact yet" }}</h2>
-      <p class="artifact-content">{{ artifacts[0]?.content ?? "No artifact content recorded." }}</p>
-      <div v-if="artifacts[0]" class="meta-list">
-        <span>Trust: {{ artifacts[0].trust_level }}</span>
-        <span>Knowledge gate: {{ artifacts[0].knowledge_gate_status }}</span>
-        <span>Provenance: {{ artifacts[0].provenance_source }}</span>
-      </div>
-    </article>
-
-    <article class="surface-card">
-      <p class="eyebrow">Shared Knowledge</p>
-      <h2>{{ knowledgeDetail?.knowledge_space.display_name ?? "Knowledge loading" }}</h2>
+      <p class="eyebrow">{{ preferences.t("run.governance") }}</p>
+      <h2>Shared Knowledge</h2>
+      <p>{{ knowledgeDetail?.knowledge_space.display_name ?? "Knowledge loading" }}</p>
       <div class="stack-list">
         <div v-for="candidate in knowledgeDetail?.candidates ?? []" :key="candidate.id">
           <strong>{{ candidate.id }}</strong>
@@ -273,18 +280,8 @@ onMounted(() => {
     </article>
 
     <article class="surface-card">
-      <p class="eyebrow">Trace Replay</p>
-      <div v-if="(runDetail?.traces.length ?? 0) > 0" class="stack-list">
-        <div v-for="trace in runDetail?.traces ?? []" :key="trace.id">
-          <strong>{{ trace.stage }}</strong>
-          <p>{{ trace.message }}</p>
-        </div>
-      </div>
-      <p v-else class="muted">No trace replay is recorded for this run yet.</p>
-    </article>
-
-    <article class="surface-card">
-      <p class="eyebrow">Approval / Notification State</p>
+      <p class="eyebrow">{{ preferences.t("run.governance") }}</p>
+      <h2>Approval / Notification State</h2>
       <div class="meta-list">
         <span>Approvals: {{ runDetail?.approvals.length ?? 0 }}</span>
         <span>Inbox items: {{ runDetail?.inbox_items.length ?? 0 }}</span>
@@ -329,6 +326,18 @@ onMounted(() => {
       <p class="muted">
         This minimum surface keeps the authoritative approval state visible from the run.
       </p>
+    </article>
+
+    <article class="surface-card">
+      <p class="eyebrow">{{ preferences.t("run.diagnosis") }}</p>
+      <h2>Trace Replay</h2>
+      <div v-if="(runDetail?.traces.length ?? 0) > 0" class="stack-list">
+        <div v-for="trace in runDetail?.traces ?? []" :key="trace.id">
+          <strong>{{ trace.stage }}</strong>
+          <p>{{ trace.message }}</p>
+        </div>
+      </div>
+      <p v-else class="muted">No trace replay is recorded for this run yet.</p>
     </article>
   </section>
 </template>

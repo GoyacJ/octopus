@@ -3,9 +3,13 @@ import { onMounted, watch } from "vue";
 import { useRoute } from "vue-router";
 
 import { useHubStore } from "../stores/hub";
+import { usePreferencesStore } from "../stores/preferences";
 
 const route = useRoute();
 const hub = useHubStore();
+const preferences = usePreferencesStore();
+
+preferences.initialize();
 
 async function loadNotificationSurface(): Promise<void> {
   const workspaceId = String(route.params.workspaceId);
@@ -28,9 +32,10 @@ onMounted(() => {
 <template>
   <section class="notifications-layout">
     <article class="surface-card hero">
-      <p class="eyebrow">Notifications</p>
-      <h1>{{ hub.notifications.length }} pending signals</h1>
-      <p class="muted">Read-only reminders remain visible without approval actions in this slice.</p>
+      <p class="eyebrow">{{ preferences.t("notifications.title") }}</p>
+      <h1>{{ preferences.t("notifications.title") }}</h1>
+      <p class="muted">{{ preferences.t("notifications.subtitle") }}</p>
+      <p class="muted">{{ hub.notifications.length }} pending signals</p>
     </article>
 
     <article class="surface-card">
@@ -49,7 +54,7 @@ onMounted(() => {
         </li>
       </ul>
 
-      <p v-else class="muted">No notifications are pending.</p>
+      <p v-else class="muted">{{ preferences.t("notifications.empty") }}</p>
     </article>
   </section>
 </template>
