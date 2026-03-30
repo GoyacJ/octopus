@@ -15,6 +15,43 @@ Read in this order:
 4. [docs/architecture/SAD.md](docs/architecture/SAD.md)
 5. [docs/architecture/ga-implementation-blueprint.md](docs/architecture/ga-implementation-blueprint.md)
 
+## Local Launch
+
+### Stable Startup Commands
+
+- Desktop shell: `pnpm desktop:open`
+- Remote hub: `pnpm remote-hub:start`
+
+Notes:
+
+- `pnpm desktop:open` builds `apps/desktop/dist` first, then starts the tracked Tauri host `octopus-desktop-host`.
+- `pnpm remote-hub:start` starts the tracked remote hub on `127.0.0.1:4000` by default, matching the desktop remote-profile default base URL.
+- These stable paths do not enable Vite HMR and do not apply the dev-only remote-hub seed path.
+
+### Desktop Dev Commands
+
+- Local Tauri + Vite HMR: `pnpm desktop:dev:local`
+- Remote hub + desktop联调: `pnpm desktop:dev:remote`
+- Remote hub dev-only shell only: `pnpm remote-hub:dev`
+
+Notes:
+
+- `pnpm desktop:dev:local` uses repo-managed `@tauri-apps/cli` plus a Vite dev server on `http://127.0.0.1:5173`.
+- `pnpm remote-hub:dev` keeps the existing remote-hub binary path, but forces an isolated dev database at `target/dev/remote-hub.sqlite` and applies the dev-only seed guarded by `OCTOPUS_REMOTE_HUB_DEV_SEED=1`.
+- `pnpm desktop:dev:remote` starts both processes through repo-local Node orchestration, prefixes child logs, forwards shutdown signals, and prints the manual login instructions once the remote hub is ready.
+
+### Remote Dev Login Defaults
+
+For `pnpm remote-hub:dev` and `pnpm desktop:dev:remote`, the isolated dev database is seeded with:
+
+- Workspace: `workspace-alpha`
+- Project: `project-remote-demo`
+- Base URL: `http://127.0.0.1:4000`
+- Email: `admin@octopus.local`
+- Password: `octopus-bootstrap-password`
+
+Manual remote login remains the only tracked remote desktop dev flow. No auto-login, hidden profile mutation, or session injection is applied.
+
 ## Documentation Map
 
 - [docs/product/PRD.md](docs/product/PRD.md): product meaning, release slices, and formal scope

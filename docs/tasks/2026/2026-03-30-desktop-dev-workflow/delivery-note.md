@@ -1,0 +1,38 @@
+## Delivery Note
+
+- What Changed:
+  - Added repo-level desktop dev entry points for local HMR and remote-hub联调.
+  - Added repo-managed Tauri CLI wiring and Vite dev/build scripts inside `apps/desktop`.
+  - Added repo-local Node orchestration scripts with prefixed logs, signal forwarding, and remote readiness messaging.
+  - Added a remote-hub dev-only seed path plus regression coverage for empty-DB login and project discovery.
+  - Updated README and task docs to distinguish stable startup commands from dev workflows.
+- Why:
+  - The repository had a truthful stable launch path but still lacked a tracked, reproducible developer workflow. This change adds that workflow without widening shared contracts or changing stable startup semantics.
+- User / System Impact:
+  - Developers can now use `pnpm desktop:dev:local` for local Tauri + Vite HMR and `pnpm desktop:dev:remote` for remote-hub联调.
+  - Remote dev runs against an isolated SQLite database seeded with deterministic login defaults, so it does not mutate the normal remote-hub default DB.
+  - Stable `pnpm desktop:open` and `pnpm remote-hub:start` remain the documented non-HMR paths.
+- Risks:
+  - Native-window HMR behavior is not automated in tests; this task verifies startup and runtime handoff, not GUI diffing.
+  - The remote-hub child still emits existing `octopus-access-auth` dead-code warnings during dev startup.
+  - The dev seed intentionally no-ops when a reused isolated DB already has project data for `workspace-alpha`.
+- Rollback Notes:
+  - Remove the new root scripts, `scripts/dev/`, desktop package/Tauri dev wiring, and the remote-hub dev seed helper.
+  - Stable startup commands can be preserved independently because they were not changed semantically by this task.
+- Follow-ups:
+  - If desired, add a GUI-capable smoke harness to verify live Vue HMR inside the native desktop window.
+  - Consider suppressing or cleaning up the existing remote-hub Rust warnings that now surface more often during dev startup.
+- Docs Updated:
+  - `README.md`
+  - `docs/tasks/README.md`
+  - `docs/tasks/2026/2026-03-30-desktop-dev-workflow/*`
+- Tests Included:
+  - Desktop config regression coverage.
+  - Desktop full Vitest suite.
+  - Desktop `vue-tsc` typecheck.
+  - Node dev-script spec test.
+  - Remote-hub full Rust test suite, including the new dev seed regression.
+- ADR Updated:
+  - No.
+- Temporary Workarounds:
+  - Tauri `beforeDevCommand` / `beforeBuildCommand` use `pnpm run ui:dev` / `pnpm run ui:build` instead of the originally planned `pnpm --dir .. ...` form because the verified working cwd is `apps/desktop`.

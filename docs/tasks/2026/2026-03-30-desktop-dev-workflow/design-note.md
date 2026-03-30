@@ -1,0 +1,69 @@
+## Design Note
+
+- Problem:
+  - The repository now has a truthful stable desktop open path, but it still lacks a tracked HMR workflow, a repo-managed Tauri CLI chain, and a deterministic remote-hub联调 path for the desktop remote connection surface.
+- Goal:
+  - Add explicit local and remote desktop dev workflows without changing the stable `desktop:open` / `remote-hub:start` behavior.
+- Acceptance Criteria:
+  - Desktop dev mode uses repo-managed `@tauri-apps/cli`, Vite HMR, and fixed `127.0.0.1:5173` dev wiring.
+  - Remote desktop dev mode starts both services through repo-local orchestration and provides manual login instructions once the remote hub is ready.
+  - Remote-hub dev mode seeds an isolated empty dev database with deterministic workspace/project/governance context needed for login and project discovery.
+  - Existing stable startup paths and shared contracts remain intact.
+- Non-functional Constraints:
+  - Cross-platform signal handling and prefixed logging for combined dev processes.
+  - No new shared schema or DTO layer.
+  - No auto-auth or hidden profile mutation.
+- MVP Boundary:
+  - Local dev: desktop only.
+  - Remote dev: remote-hub plus desktop with manual login only.
+  - Seed only the minimum workspace/project/capability/budget/knowledge context needed for the current desktop remote flow.
+- Layer Placement:
+  - Root `package.json` owns user-facing monorepo dev entry points.
+  - `apps/desktop` owns Tauri/Vite package wiring and config assertions.
+  - `apps/remote-hub` owns dev-only runtime seeding because the change is startup assembly, not shared runtime truth.
+  - `scripts/dev` owns repo-local process orchestration and readiness messaging.
+- Module Boundaries:
+  - `apps/desktop` adds scripts and config only; runtime/bootstrap logic remains unchanged.
+  - `apps/remote-hub` adds an env-gated startup helper that seeds existing runtime records into an isolated DB.
+  - `scripts/dev` builds commands/env and supervises child processes; it does not own app business logic.
+- Inputs:
+  - Existing desktop package scripts and Tauri config.
+  - Existing remote-hub startup env variables and runtime bootstrap auth behavior.
+  - Existing runtime helpers: `ensure_project_context`, `ensure_project_knowledge_space`, `upsert_capability_descriptor`, `upsert_capability_binding`, `upsert_capability_grant`, `upsert_budget_policy`.
+- Outputs:
+  - New root scripts for local and remote desktop dev workflows.
+  - New desktop package scripts for Tauri CLI dev/build wiring.
+  - New repo-local Node orchestration scripts and tests.
+  - New remote-hub dev-only seed path guarded by `OCTOPUS_REMOTE_HUB_DEV_SEED`.
+- State Transitions:
+  - Stable commands keep their current startup path.
+  - Dev local path transitions from `pnpm desktop:dev:local` to Vite readiness to Tauri dev.
+  - Dev remote path transitions from remote-hub ready to manual login guidance to desktop remote session flow.
+- Error Handling:
+  - Orchestrator exits non-zero if either child exits non-zero.
+  - Signals propagate to all child processes on shutdown.
+  - Remote-hub dev seed only runs when the isolated dev DB has no `workspace-alpha` context; repeated starts remain idempotent through runtime upsert helpers.
+- Tech Stack Decision:
+  - Use repo-managed `@tauri-apps/cli` plus existing Vite/Vitest tooling.
+  - Use Node standard library scripts instead of `concurrently` or shell-specific wrappers.
+- Visual Framework Impact:
+  - None.
+- Human Approval Points:
+  - None. Strategy and manual-login constraint are already fixed.
+- Reused Components:
+  - Existing desktop launch-config test pattern.
+  - Existing remote-hub test harness seeding helpers.
+  - Existing runtime seeding methods already used by desktop local-host and remote-hub tests.
+- New Abstractions:
+  - Small repo-local dev script helpers for child-process command specs and orchestration only.
+- Trade-offs:
+  - Seeding in app startup keeps the change app-local, but duplicates a small amount of deterministic runtime bootstrap logic rather than centralizing it in shared runtime.
+  - Node orchestration adds a small maintenance surface, but keeps env handling and signal cleanup cross-platform and testable.
+- Test Strategy:
+  - Extend desktop launch-config regression coverage.
+  - Add Node tests for dev command spec/orchestration behavior without GUI automation.
+  - Add a remote-hub Rust test for dev seed login/project listing against an empty isolated DB.
+  - Re-run desktop test and typecheck gates after implementation.
+- ADR Needed:
+  - No. This is local dev-tooling assembly within existing boundaries.
+

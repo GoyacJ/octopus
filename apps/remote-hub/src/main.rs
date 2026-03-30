@@ -3,7 +3,7 @@ use std::{env, net::SocketAddr, path::PathBuf, time::Duration};
 use axum::serve;
 use chrono::Utc;
 use octopus_access_auth::{RemoteAccessConfig, RemoteAccessService};
-use octopus_remote_hub::{app, AppState};
+use octopus_remote_hub::{app, ensure_dev_seed_context, AppState};
 use octopus_runtime::Slice1Runtime;
 use tokio::net::TcpListener;
 
@@ -36,6 +36,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let runtime = Slice1Runtime::open_at(&db_path).await?;
+    if env::var("OCTOPUS_REMOTE_HUB_DEV_SEED").as_deref() == Ok("1") {
+        ensure_dev_seed_context(&runtime).await?;
+    }
     let auth = RemoteAccessService::open_at_with_config(&db_path, access_config).await?;
     if cron_tick_interval_seconds > 0 {
         let ticker_runtime = runtime.clone();

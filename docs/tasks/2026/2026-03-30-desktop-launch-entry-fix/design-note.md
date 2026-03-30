@@ -1,0 +1,60 @@
+## Design Note
+
+- Problem:
+  - The repository contains a real desktop Tauri host and a buildable Vue frontend, but the tracked launch path is broken because there is no intentional open script and the Tauri shell points at the app source root instead of built frontend assets.
+- Goal:
+  - Make the local desktop surface launchable from the repository root without expanding scope beyond startup wiring and documentation.
+- Acceptance Criteria:
+  - Desktop launch configuration resolves to `apps/desktop/dist`.
+  - Root and package-level scripts provide a reproducible open command.
+  - Repository entry docs explain the current launch path.
+- Non-functional Constraints:
+  - No new dependency or CLI adoption.
+  - No shared-contract, runtime, or remote-hub route change.
+  - Keep the launch fix truthful to the currently tracked build graph.
+- MVP Boundary:
+  - One configuration correction.
+  - Two small script entries.
+  - One short doc section.
+- Layer Placement:
+  - Root `package.json` owns monorepo-facing launch aliases.
+  - `apps/desktop/package.json` owns desktop-local build/open scripts.
+  - `apps/desktop/src-tauri/tauri.conf.json` owns the packaged frontend asset root.
+  - `README.md` owns the user-facing launch instructions.
+- Module Boundaries:
+  - Desktop frontend build remains Vite-owned.
+  - Tauri host remains Rust-owned and unchanged at the behavior layer.
+  - Docs describe only the workflows actually implemented by manifests and tracked code.
+- Inputs:
+  - Existing desktop Vite build output in `apps/desktop/dist`.
+  - Existing Tauri host crate `octopus-desktop-host`.
+  - Existing remote-hub Rust binary `octopus-remote-hub`.
+- Outputs:
+  - A working `pnpm desktop:open` handoff chain.
+  - Tauri config that loads the built frontend.
+  - Entry-doc launch guidance.
+- State Transitions:
+  - None. The fix does not change runtime state semantics.
+- Error Handling:
+  - The open command must fail fast if the frontend build fails or if the Tauri host fails to start.
+  - The fix does not add recovery behavior beyond existing command exit codes.
+- Tech Stack Decision:
+  - Reuse existing `pnpm`, `vite`, and `cargo run` tooling instead of introducing Tauri CLI or a live dev server.
+- Visual Framework Impact:
+  - None. This task changes launch wiring only.
+- Human Approval Points:
+  - None.
+- Reused Components:
+  - Existing desktop `build` script.
+  - Existing Tauri host crate.
+  - Existing repository entry docs.
+- New Abstractions:
+  - None.
+- Trade-offs:
+  - The fix favors a reproducible build-and-open command over hot reload. That is intentional because the repo does not currently track a Tauri dev-chain dependency or dev-server workflow.
+- Test Strategy:
+  - Add a targeted regression test that fails when the Tauri asset root or desktop open script regress.
+  - Verify the build output still succeeds.
+  - Verify the new root open command reaches the running Tauri host process.
+- ADR Needed:
+  - No. This is local launch wiring, not a durable architecture decision.

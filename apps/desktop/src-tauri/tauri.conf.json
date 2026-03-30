@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "identifier": "com.octopus.desktop",
   "build": {
-    "frontendDist": ".."
+    "beforeDevCommand": "pnpm run ui:dev",
+    "beforeBuildCommand": "pnpm run ui:build",
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [

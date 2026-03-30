@@ -4,6 +4,11 @@
   "packageManager": "pnpm@10.6.0",
   "description": "Octopus monorepo root governance package. Runtime members are added slice-by-slice after contracts and local design are frozen.",
   "scripts": {
+    "desktop:dev:local": "pnpm --filter @octopus/desktop dev",
+    "remote-hub:dev": "node scripts/dev/remote-hub-dev.mjs",
+    "desktop:dev:remote": "node scripts/dev/desktop-remote-dev.mjs",
+    "desktop:open": "pnpm --filter @octopus/desktop open",
+    "remote-hub:start": "cargo run -p octopus-remote-hub",
     "test:ts": "pnpm --filter @octopus/schema-ts test && pnpm --filter @octopus/hub-client test && pnpm --filter @octopus/desktop test",
     "build:ts": "pnpm --filter @octopus/schema-ts build && pnpm --filter @octopus/hub-client build && pnpm --filter @octopus/desktop build",
     "typecheck:ts": "pnpm --filter @octopus/schema-ts typecheck && pnpm --filter @octopus/hub-client typecheck && pnpm --filter @octopus/desktop typecheck"

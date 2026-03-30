@@ -9,6 +9,11 @@
   "types": "./src/app.ts",
   "scripts": {
     "build": "vite build",
+    "ui:dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "ui:build": "vite build",
+    "tauri": "tauri",
+    "dev": "pnpm tauri dev",
+    "open": "pnpm build && cargo run --manifest-path src-tauri/Cargo.toml",
     "smoke:local-host": "vitest run test/bootstrap-smoke.test.ts",
     "test": "vitest run",
     "typecheck": "vue-tsc --noEmit"
@@ -22,6 +27,8 @@
     "vue-router": "^4.6.3"
   },
   "devDependencies": {
+    "@types/node": "^24.6.0",
+    "@tauri-apps/cli": "^2.10.1",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vue/test-utils": "^2.4.6",
     "jsdom": "^26.1.0",

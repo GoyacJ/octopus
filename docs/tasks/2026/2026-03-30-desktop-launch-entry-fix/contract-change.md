@@ -1,0 +1,24 @@
+## Contract Change
+
+- Change Type:
+  - Internal Interface
+- New / Updated Schemas:
+  - None.
+- New / Updated Commands:
+  - None.
+- New / Updated Queries:
+  - None.
+- New / Updated Events:
+  - None.
+- New / Updated DTOs:
+  - None.
+- Compatibility Impact:
+  - Backward compatible. The fix changes launch wiring and documentation only.
+- Affected Consumers:
+  - Local developers/operators launching the tracked desktop surface from the repository.
+- Migration Notes:
+  - None.
+- Generation Impact:
+  - None.
+- Open Questions:
+  - None.

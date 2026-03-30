@@ -28,6 +28,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use thiserror::Error;
 
+mod dev_seed;
+
+pub use dev_seed::ensure_dev_seed_context;
+
 #[derive(Clone)]
 pub struct AppState {
     runtime: Slice1Runtime,

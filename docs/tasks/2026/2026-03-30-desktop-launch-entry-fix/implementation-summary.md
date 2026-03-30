@@ -1,0 +1,38 @@
+# Implementation Summary
+
+- Goal:
+  - Restore a truthful local desktop launch path after Slice 20 by wiring the Tauri shell to built frontend assets and exposing intentional launch commands.
+- Files Added:
+  - `docs/tasks/2026/2026-03-30-desktop-launch-entry-fix/implementation-summary.md`
+  - `docs/tasks/2026/2026-03-30-desktop-launch-entry-fix/verification.md`
+  - `docs/tasks/2026/2026-03-30-desktop-launch-entry-fix/delivery-note.md`
+  - `apps/desktop/test/launch-config.test.ts`
+- Files Changed:
+  - `package.json`
+  - `README.md`
+  - `apps/desktop/package.json`
+  - `apps/desktop/src-tauri/tauri.conf.json`
+  - `docs/tasks/README.md`
+  - `docs/tasks/2026/2026-03-30-desktop-launch-entry-fix/README.md`
+- Files Removed:
+  - None.
+- Structure Decision:
+  - Keep the fix in the repo entry layer and desktop assembly layer only: root/package scripts own the launch path, while Tauri config owns the frontend asset root.
+- Why This Structure:
+  - The failure is a launch-chain wiring issue, not a runtime or shared-contract problem. Root/package script changes plus one Tauri config correction solve it without adding new dependencies or widening scope.
+- Reused Patterns:
+  - Existing `vite build` desktop asset generation.
+  - Existing `cargo run` entry for workspace Rust binaries.
+  - Existing task-package documentation structure.
+- New Dependencies:
+  - None.
+- Error Handling Strategy:
+  - `pnpm desktop:open` fails if either the frontend build or the Tauri host startup fails.
+  - `pnpm remote-hub:start` preserves the current Rust binary startup/exit behavior.
+- Deferred Items:
+  - Tauri CLI integration.
+  - Hot-reload desktop dev workflow.
+  - Packaging/distribution automation.
+- Non-goals Preserved:
+  - No `schemas/`, shared DTO, runtime, or remote-hub API change.
+  - No desktop UX or auth-flow redesign.
