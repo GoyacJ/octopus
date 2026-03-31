@@ -1,264 +1,189 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
 
-import {
-  buildProjectConversationRoute,
-  buildWorkspaceProjectsRoute,
-  buildWorkspaceInboxRoute
-} from "../stores/connection";
-import { useConversationStore } from "../stores/conversation";
-import { usePreferencesStore } from "../stores/preferences";
-import { useHubStore } from "../stores/hub";
-import { useConnectionStore } from "../stores/connection";
+import { UiArtifactBlock, UiBadge, UiEmptyState, UiInboxBlock, UiSectionHeading, UiStatTile, UiSurface } from '@octopus/ui'
 
-const route = useRoute();
-const router = useRouter();
-const hub = useHubStore();
-const preferences = usePreferencesStore();
-const conversations = useConversationStore();
-const connection = useConnectionStore();
+import { countLabel, enumLabel, resolveCopy, resolveMockField } from '@/i18n/copy'
+import { useWorkbenchStore } from '@/stores/workbench'
 
-preferences.initialize();
-conversations.initialize();
+const { t } = useI18n()
+const workbench = useWorkbenchStore()
 
-const dashboardPrompt = ref("");
+const pendingInbox = computed(() => workbench.workspaceInbox.filter((item) => item.status === 'pending'))
 
-const workspaceId = computed(() => String(route.params.workspaceId));
-const projectId = computed(() => String(route.params.projectId));
-const conversationSummaries = computed(() =>
-  conversations.summariesForProject(workspaceId.value, projectId.value)
-);
-const riskSignals = computed(() => {
-  const signals = [];
-
-  if (hub.authState !== "authenticated") {
-    signals.push(preferences.t("shell.readOnly"));
-  }
-  if (hub.connectionStatus?.state === "disconnected") {
-    signals.push(preferences.t("shell.degraded"));
+function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'error' | 'info' {
+  if (tone === 'success' || tone === 'warning' || tone === 'error' || tone === 'info') {
+    return tone
   }
 
-  return [
-    ...signals,
-    ...hub.notifications.map((notification) => notification.title)
-  ];
-});
-
-const prioritizedRuns = computed(() =>
-  [...hub.runs].sort((left, right) => {
-    const priority = (status: string) => {
-      switch (status) {
-        case "failed":
-          return 0;
-        case "waiting_approval":
-        case "blocked":
-          return 1;
-        case "running":
-          return 2;
-        default:
-          return 3;
-      }
-    };
-
-    return priority(left.status) - priority(right.status);
-  })
-);
-
-async function loadDashboard(): Promise<void> {
-  try {
-    await Promise.all([
-      hub.loadProjectContext(workspaceId.value, projectId.value),
-      hub.loadRuns(workspaceId.value, projectId.value),
-      hub.loadProjectKnowledge(workspaceId.value, projectId.value),
-      hub.loadInboxItems(workspaceId.value),
-      hub.loadNotifications(workspaceId.value)
-    ]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const rememberedProjectId = connection.profile.projectId ?? "";
-
-    if (
-      connection.remoteMode &&
-      rememberedProjectId === projectId.value &&
-      message.includes(`project \`${projectId.value}\` not found`)
-    ) {
-      connection.clearRememberedProject();
-      await router.replace(buildWorkspaceProjectsRoute(workspaceId.value));
-    }
-  }
+  return 'default'
 }
-
-async function startConversation(): Promise<void> {
-  const prompt = dashboardPrompt.value.trim();
-  const threadId = prompt
-    ? conversations.createThreadFromPrompt(workspaceId.value, projectId.value, prompt)
-    : conversations.ensureThread(workspaceId.value, projectId.value).id;
-  dashboardPrompt.value = "";
-  await router.push({
-    path: buildProjectConversationRoute(workspaceId.value, projectId.value),
-    query: {
-      thread: threadId
-    }
-  });
-}
-
-async function continueConversation(threadId?: string): Promise<void> {
-  const ensuredThreadId =
-    threadId ??
-    conversations.ensureThread(workspaceId.value, projectId.value).id;
-
-  await router.push({
-    path: buildProjectConversationRoute(workspaceId.value, projectId.value),
-    query: {
-      thread: ensuredThreadId
-    }
-  });
-}
-
-async function openRun(runId: string): Promise<void> {
-  await router.push(`/runs/${runId}`);
-}
-
-async function openInbox(): Promise<void> {
-  await router.push(buildWorkspaceInboxRoute(workspaceId.value));
-}
-
-watch(
-  () => [route.params.workspaceId, route.params.projectId],
-  () => {
-    void loadDashboard();
-  }
-);
-
-onMounted(() => {
-  void loadDashboard();
-});
 </script>
 
 <template>
-  <section class="page-grid">
-    <article class="panel panel-hero">
-      <p class="eyebrow">{{ preferences.t("nav.dashboard") }}</p>
-      <h1 class="page-title">{{ preferences.t("dashboard.heroTitle") }}</h1>
-      <p class="page-subtitle">{{ preferences.t("dashboard.heroSubtitle") }}</p>
-      <div class="hero-input-row">
-        <textarea
-          v-model="dashboardPrompt"
-          data-testid="dashboard-prompt"
-          class="hero-textarea"
-          :placeholder="preferences.t('dashboard.promptPlaceholder')"
-          rows="3"
-        />
-        <div class="button-row">
-          <button class="button-primary" type="button" @click="startConversation">
-            {{ preferences.t("dashboard.startConversation") }}
-          </button>
-          <button
-            class="button-secondary"
-            type="button"
-            @click="continueConversation(conversationSummaries[0]?.id)"
-          >
-            {{ preferences.t("dashboard.continuePrevious") }}
-          </button>
+  <section class="section-stack">
+    <UiSectionHeading
+      :eyebrow="t('dashboard.header.eyebrow')"
+      :title="workbench.activeWorkspace ? resolveMockField('workspace', workbench.activeWorkspace.id, 'name', workbench.activeWorkspace.name) : t('dashboard.header.titleFallback')"
+      :subtitle="workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'summary', workbench.activeProject.summary) : t('dashboard.header.subtitleFallback')"
+    />
+
+    <div class="surface-grid three">
+      <UiStatTile
+        v-for="metric in workbench.workspaceDashboard.workspaceMetrics"
+        :key="metric.label"
+        :label="resolveCopy(metric.label)"
+        :value="resolveCopy(metric.value)"
+        :tone="toneForMetric(metric.tone)"
+      />
+    </div>
+
+    <div class="surface-grid two">
+      <UiSurface
+        :title="t('dashboard.summary.title')"
+        :subtitle="workbench.activeWorkspace ? resolveMockField('workspace', workbench.activeWorkspace.id, 'description', workbench.activeWorkspace.description) : t('dashboard.summary.subtitleFallback')"
+      >
+        <div class="meta-row">
+          <UiBadge
+            :label="workbench.activeWorkspace ? resolveMockField('workspace', workbench.activeWorkspace.id, 'roleSummary', workbench.activeWorkspace.roleSummary) : t('common.na')"
+            tone="info"
+          />
+          <UiBadge :label="countLabel('common.members', workbench.activeWorkspace?.memberCount ?? 0)" subtle />
         </div>
-      </div>
-    </article>
+        <p class="summary-copy">
+          {{ workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'goal', workbench.activeProject.goal) : '' }}
+        </p>
+        <div class="action-row">
+          <RouterLink :to="{ name: 'agents', params: { workspaceId: workbench.currentWorkspaceId } }" class="secondary-button">
+            {{ t('dashboard.summary.openAgentCenter') }}
+          </RouterLink>
+          <RouterLink :to="{ name: 'teams', params: { workspaceId: workbench.currentWorkspaceId } }" class="ghost-button">
+            {{ t('dashboard.summary.openTeamCenter') }}
+          </RouterLink>
+        </div>
+      </UiSurface>
 
-    <div class="summary-grid">
-      <article class="panel">
-        <p class="eyebrow">{{ preferences.t("dashboard.continueWork") }}</p>
-        <h2 class="section-title">{{ preferences.t("dashboard.recentConversations") }}</h2>
-        <ul v-if="conversationSummaries.length > 0" class="stack-list">
-          <li v-for="thread in conversationSummaries.slice(0, 3)" :key="thread.id" class="list-card">
-            <button class="text-button" type="button" @click="continueConversation(thread.id)">
-              {{ thread.title }}
-            </button>
-            <p class="muted-copy">{{ thread.whyResume }}</p>
-          </li>
-        </ul>
-        <p v-else class="muted-copy">{{ preferences.t("dashboard.emptyConversations") }}</p>
-      </article>
+      <UiSurface
+        :title="t('dashboard.project.title')"
+        :subtitle="workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'recentDecision', workbench.activeProject.recentDecision) : t('dashboard.project.subtitleFallback')"
+      >
+        <div class="meta-row">
+          <UiBadge
+            :label="workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'phase', workbench.activeProject.phase) : t('common.na')"
+            tone="info"
+          />
+          <UiBadge :label="countLabel('common.artifacts', workbench.activeProject?.artifactIds.length ?? 0)" subtle />
+          <UiBadge :label="countLabel('common.conversations', workbench.activeProject?.conversationIds.length ?? 0)" subtle />
+        </div>
+        <p class="summary-copy">{{ workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'summary', workbench.activeProject.summary) : '' }}</p>
+        <div class="action-row">
+          <RouterLink
+            class="primary-button"
+            :to="{
+              name: 'conversation',
+              params: {
+                workspaceId: workbench.currentWorkspaceId,
+                projectId: workbench.currentProjectId,
+                conversationId: workbench.currentConversationId,
+              },
+            }"
+          >
+            {{ t('dashboard.project.openConversation') }}
+          </RouterLink>
+          <RouterLink
+            class="ghost-button"
+            :to="{ name: 'knowledge', params: { workspaceId: workbench.currentWorkspaceId, projectId: workbench.currentProjectId } }"
+          >
+            {{ t('dashboard.project.knowledge') }}
+          </RouterLink>
+          <RouterLink
+            class="ghost-button"
+            :to="{ name: 'trace', params: { workspaceId: workbench.currentWorkspaceId, projectId: workbench.currentProjectId } }"
+          >
+            {{ t('dashboard.project.trace') }}
+          </RouterLink>
+        </div>
+      </UiSurface>
+    </div>
 
-      <article class="panel">
-        <p class="eyebrow">{{ preferences.t("dashboard.continueWork") }}</p>
-        <h2 class="section-title">{{ preferences.t("dashboard.recentRuns") }}</h2>
-        <ul v-if="prioritizedRuns.length > 0" class="stack-list">
-          <li v-for="run in prioritizedRuns.slice(0, 3)" :key="run.id" class="list-card">
-            <button class="text-button" type="button" @click="openRun(run.id)">
-              {{ run.title }}
-            </button>
-            <p class="muted-copy">
-              {{
-                run.status === "failed"
-                  ? preferences.t("dashboard.whyRunFailed")
-                  : run.status === "running"
-                    ? preferences.t("dashboard.whyRunRunning")
-                    : preferences.t("dashboard.whyRunWaiting")
-              }}
-            </p>
-          </li>
-        </ul>
-        <p v-else class="muted-copy">{{ preferences.t("dashboard.emptyRuns") }}</p>
-      </article>
+    <div class="surface-grid two">
+      <UiSurface :title="t('dashboard.highlights.title')" :subtitle="t('dashboard.highlights.subtitle')">
+        <div class="panel-list">
+          <RouterLink
+            v-for="highlight in workbench.workspaceDashboard.highlights"
+            :key="highlight.id"
+            :to="highlight.route"
+            class="highlight-link"
+          >
+            <strong>{{ resolveCopy(highlight.title) }}</strong>
+            <p>{{ resolveCopy(highlight.description) }}</p>
+          </RouterLink>
+        </div>
+      </UiSurface>
 
-      <article class="panel">
-        <p class="eyebrow">{{ preferences.t("dashboard.continueWork") }}</p>
-        <h2 class="section-title">{{ preferences.t("dashboard.pendingItems") }}</h2>
-        <ul v-if="hub.inboxItems.length > 0" class="stack-list">
-          <li
-            v-for="item in hub.inboxItems.slice(0, 3)"
+      <UiSurface :title="t('dashboard.inbox.title')" :subtitle="t('dashboard.inbox.subtitle')">
+        <div v-if="pendingInbox.length" class="panel-list">
+          <UiInboxBlock
+            v-for="item in pendingInbox"
             :key="item.id"
-            class="list-card"
-          >
-            <button class="text-button" type="button" @click="openInbox">
-              {{ item.title }}
-            </button>
-            <p class="muted-copy">{{ preferences.t("dashboard.whyInbox") }}</p>
-          </li>
-        </ul>
-        <p v-else class="muted-copy">{{ preferences.t("dashboard.emptyInbox") }}</p>
-      </article>
-    </div>
-
-    <div class="summary-grid summary-grid-compact">
-      <article class="panel">
-        <p class="eyebrow">{{ preferences.t("dashboard.systemSummary") }}</p>
-        <div class="metric-grid">
-          <div class="metric-card">
-            <span class="metric-label">{{ preferences.t("dashboard.summaryRuns") }}</span>
-            <strong class="metric-value">
-              {{ hub.runs.filter((run) => run.status !== "completed").length }}
-            </strong>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">{{ preferences.t("dashboard.summaryApprovals") }}</span>
-            <strong class="metric-value">{{ hub.inboxItems.length }}</strong>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">{{ preferences.t("dashboard.summaryKnowledge") }}</span>
-            <strong class="metric-value">
-              {{ hub.projectKnowledgeIndex?.entries.length ?? 0 }}
-            </strong>
-          </div>
-          <div class="metric-card">
-            <span class="metric-label">
-              {{ preferences.t("dashboard.summaryNotifications") }}
-            </span>
-            <strong class="metric-value">{{ hub.notifications.length }}</strong>
-          </div>
+            :title="resolveMockField('inboxItem', item.id, 'title', resolveCopy(item.title))"
+            :description="resolveMockField('inboxItem', item.id, 'description', resolveCopy(item.description))"
+            :priority-label="enumLabel('riskLevel', item.priority)"
+            :status-label="enumLabel('inboxStatus', item.status)"
+            :impact="resolveMockField('inboxItem', item.id, 'impact', resolveCopy(item.impact))"
+            :risk-note="resolveMockField('inboxItem', item.id, 'riskNote', resolveCopy(item.riskNote))"
+            :status-heading="t('common.status')"
+            :impact-heading="t('common.impact')"
+            :risk-heading="t('common.risk')"
+          />
         </div>
-      </article>
-
-      <article class="panel">
-        <p class="eyebrow">{{ preferences.t("dashboard.risks") }}</p>
-        <ul v-if="riskSignals.length > 0" class="stack-list">
-          <li v-for="signal in riskSignals" :key="signal" class="list-card tone-warning">
-            <p>{{ signal }}</p>
-          </li>
-        </ul>
-        <p v-else class="muted-copy">{{ preferences.t("shell.noReminders") }}</p>
-      </article>
+        <UiEmptyState v-else :title="t('dashboard.inbox.emptyTitle')" :description="t('dashboard.inbox.emptyDescription')" />
+      </UiSurface>
     </div>
+
+    <UiSurface :title="t('dashboard.artifacts.title')" :subtitle="t('dashboard.artifacts.subtitle')">
+      <div v-if="workbench.activeConversationArtifacts.length" class="surface-grid two">
+        <UiArtifactBlock
+          v-for="artifact in workbench.activeConversationArtifacts"
+          :key="artifact.id"
+          :title="resolveMockField('artifact', artifact.id, 'title', artifact.title)"
+          :excerpt="resolveMockField('artifact', artifact.id, 'excerpt', artifact.excerpt)"
+          :type-label="resolveMockField('artifact', artifact.id, 'type', artifact.type)"
+          :version-label="`v${artifact.version}`"
+          :status-label="enumLabel('artifactStatus', artifact.status)"
+        />
+      </div>
+      <UiEmptyState v-else :title="t('dashboard.artifacts.emptyTitle')" :description="t('dashboard.artifacts.emptyDescription')" />
+    </UiSurface>
   </section>
 </template>
+
+<style scoped>
+.summary-copy,
+.highlight-link p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.highlight-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.95rem;
+  border-radius: var(--radius-l);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
+}
+
+.highlight-link strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+</style>

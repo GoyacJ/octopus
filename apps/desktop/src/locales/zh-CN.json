@@ -1,0 +1,827 @@
+{
+  "common": {
+    "theme": "主题",
+    "language": "语言",
+    "search": "搜索…",
+    "newConversation": "新建会话",
+    "na": "暂无",
+    "open": "打开",
+    "selected": "已选中",
+    "send": "发送",
+    "approve": "批准",
+    "reject": "驳回",
+    "saveDraft": "保存草稿",
+    "requestReview": "发起审阅",
+    "savePreferences": "保存偏好",
+    "pause": "暂停",
+    "resume": "恢复",
+    "mockSave": "Mock 保存",
+    "createProjectCopy": "创建项目副本",
+    "goal": "目标",
+    "constraints": "约束",
+    "resumePoints": "恢复点",
+    "branchLinks": "分支链接",
+    "status": "状态",
+    "owner": "负责人",
+    "nextAction": "下一步",
+    "impact": "影响",
+    "risk": "风险",
+    "lineage": "来源链",
+    "workspace": "Workspace",
+    "project": "Project",
+    "members": "{count} 名成员",
+    "artifacts": "{count} 个 Artifact",
+    "teams": "{count} 个 Team",
+    "conversations": "{count} 个 Conversation",
+    "progress": "{value}% 进度",
+    "updatedAt": "更新于 {time}",
+    "currentShell": "当前 Shell: {shell}",
+    "lastRoute": "最近路由: {route}",
+    "activeWorkspace": "当前 Workspace: {workspace}",
+    "workspaceLabel": "Workspace: {workspace}",
+    "noRemoteBaseUrl": "暂无远端地址",
+    "noBaseUrl": "暂无地址"
+  },
+  "sidebar": {
+    "header": {
+      "eyebrow": "Octopus",
+      "title": "Desktop GA Workbench",
+      "subtitle": "Conversation-first shell，使用 mock runtime state 驱动。"
+    },
+    "workspace": {
+      "label": "切换 Workspace",
+      "hint": "切换后会跳到目标 workspace 的 dashboard，并带上首个 project。",
+      "summaryTitle": "当前 Workspace",
+      "roleLabel": "角色与运行态",
+      "membershipLabel": "成员规模",
+      "localLabel": "本地 Workspace",
+      "sharedLabel": "共享 Workspace"
+    },
+    "projectRail": {
+      "title": "Project Rail",
+      "subtitle": "切换当前 workspace 下的 project 与默认 dashboard 焦点。"
+    },
+    "navigation": {
+      "title": "导航",
+      "subtitle": "PRD 要求的桌面表面与宿主入口。",
+      "dashboard": "Dashboard",
+      "conversation": "Conversation",
+      "knowledge": "Knowledge",
+      "trace": "Trace",
+      "agents": "Agents",
+      "teams": "Teams",
+      "settings": "Settings",
+      "automations": "Automations",
+      "connections": "Connections"
+    },
+    "scope": {
+      "title": "当前范围",
+      "eyebrow": "Project Focus"
+    }
+  },
+  "dashboard": {
+    "header": {
+      "eyebrow": "工作区 Dashboard",
+      "titleFallback": "Workspace Overview",
+      "subtitleFallback": "用于解释 workspace / project / conversation 三层状态。"
+    },
+    "metrics": {
+      "activeProjects": "活跃项目",
+      "activeConversations": "活跃会话",
+      "pendingInbox": "待处理 Inbox",
+      "projectPhase": "项目阶段",
+      "artifacts": "Artifacts",
+      "teams": "Teams",
+      "intent": "意图",
+      "progress": "进度",
+      "resumePoints": "恢复点"
+    },
+    "summary": {
+      "title": "Workspace 摘要",
+      "subtitleFallback": "当前还没有选中的 workspace。",
+      "openAgentCenter": "打开 Agent Center",
+      "openTeamCenter": "打开 Team Center"
+    },
+    "project": {
+      "title": "当前 Project",
+      "subtitleFallback": "请从 Project Rail 选择一个项目。",
+      "openConversation": "打开 Conversation",
+      "knowledge": "Knowledge",
+      "trace": "Trace"
+    },
+    "highlights": {
+      "title": "Highlights",
+      "subtitle": "从 dashboard 直接跳到 conversation、artifact、inbox 和 trace。",
+      "conversationTitle": "打开当前 Conversation",
+      "conversationDescription": "继续推进最近一次工作流。",
+      "artifactTitle": "查看最新 Artifact",
+      "artifactDescription": "跳到 Artifact Pane 检查最新交付物。",
+      "traceTitle": "查看 Trace Run",
+      "traceDescription": "检查当前执行链路。"
+    },
+    "inbox": {
+      "title": "待处理 Inbox",
+      "subtitle": "审批、阻塞和确认项会同时影响 conversation、run 与 dashboard。",
+      "emptyTitle": "没有待处理 Inbox",
+      "emptyDescription": "当前 dashboard 没有待处理审批。"
+    },
+    "artifacts": {
+      "title": "最近 Artifacts",
+      "subtitle": "Project 和 conversation 的 artifact 会一直暴露在消息流外。",
+      "emptyTitle": "暂无 Artifacts",
+      "emptyDescription": "当前 conversation 还没有产出 artifact。"
+    }
+  },
+  "conversation": {
+    "header": {
+      "eyebrow": "Conversation",
+      "titleFallback": "暂无 Conversation",
+      "subtitleFallback": "请从当前 project 里选择一个 conversation。"
+    },
+    "controls": {
+      "title": "Conversation 控制",
+      "goalLabel": "目标",
+      "constraintsLabel": "约束"
+    },
+    "stream": {
+      "title": "消息流",
+      "subtitle": "Conversation-first 主入口，支持中断、补充与继续执行。",
+      "emptyTitle": "暂无消息",
+      "emptyDescription": "当前 conversation 还没有消息。",
+      "placeholder": "补充约束、追加上下文或继续要求执行。"
+    },
+    "artifacts": {
+      "title": "Artifacts 与恢复",
+      "subtitle": "Artifact 打开、派生、branch / resume 占位交互。",
+      "emptyTitle": "暂无关联 Artifact",
+      "emptyDescription": "当前 conversation 没有关联 artifact。",
+      "resumeTitle": "恢复点",
+      "branchTitle": "分支链接",
+      "emptyBranchTitle": "暂无分支",
+      "emptyBranchDescription": "当前 conversation 没有分支探索记录。"
+    },
+    "senderType": {
+      "user": "用户",
+      "agent": "Agent",
+      "system": "系统"
+    }
+  },
+  "contextPane": {
+    "host": {
+      "eyebrow": "Host",
+      "title": "Shell 状态",
+      "subtitle": "Mock 产品状态 + 最小 Tauri 宿主初始化。",
+      "cargoWorkspace": "cargo workspace",
+      "webFallback": "web fallback"
+    },
+    "tabs": {
+      "context": {
+        "label": "Context",
+        "hint": "目标 / 阻塞"
+      },
+      "artifacts": {
+        "label": "Artifacts",
+        "hint": "详情 / 编辑"
+      },
+      "inbox": {
+        "label": "Inbox",
+        "hint": "审批 / 驳回"
+      },
+      "trace": {
+        "label": "Trace",
+        "hint": "时间线 / 恢复"
+      }
+    },
+    "conversation": {
+      "eyebrow": "Conversation Context",
+      "goalLabel": "目标",
+      "constraintsLabel": "约束",
+      "resumePointsLabel": "恢复点",
+      "branchesLabel": "分支",
+      "emptyBranchTitle": "暂无衍生分支",
+      "emptyBranchDescription": "继续在当前 conversation 内推进即可。"
+    },
+    "artifacts": {
+      "eyebrow": "Artifact Pane",
+      "title": "Artifacts",
+      "subtitle": "列表、详情、mock 编辑与 review trigger。",
+      "emptyTitle": "暂无 Artifact",
+      "emptyDescription": "发送消息或从当前 conversation 派生一个 artifact。"
+    },
+    "inbox": {
+      "eyebrow": "Inbox",
+      "title": "审批与阻塞",
+      "emptyTitle": "Inbox 已清空",
+      "emptyDescription": "当前 workspace 没有待审批或阻塞项。"
+    },
+    "trace": {
+      "eyebrow": "Trace",
+      "title": "Run 时间线",
+      "subtitle": "关键动作、阻塞原因与恢复点。",
+      "emptyTitle": "暂无 Trace 记录",
+      "emptyDescription": "当前 run 还没有写入 trace timeline。"
+    }
+  },
+  "knowledge": {
+    "header": {
+      "eyebrow": "Knowledge",
+      "titleFallback": "Knowledge View",
+      "subtitle": "Private / shared / candidate knowledge，包含 lineage 与晋升占位。"
+    },
+    "sections": {
+      "private": {
+        "title": "Private",
+        "emptyTitle": "暂无私有记忆",
+        "emptyDescription": "当前 project 没有私有记忆条目。"
+      },
+      "shared": {
+        "title": "Shared",
+        "emptyTitle": "暂无共享知识",
+        "emptyDescription": "共享知识会在后续 review 后沉淀。"
+      },
+      "candidates": {
+        "title": "Candidates",
+        "badge": "promotion review",
+        "emptyTitle": "暂无候选知识",
+        "emptyDescription": "当前没有候选知识待晋升。"
+      }
+    }
+  },
+  "trace": {
+    "header": {
+      "eyebrow": "Trace",
+      "titleFallback": "Run Trace",
+      "subtitleFallback": "当前没有选中的 run。"
+    },
+    "stats": {
+      "status": "状态",
+      "owner": "Owner",
+      "nextAction": "Next Action"
+    },
+    "runState": {
+      "title": "Run State",
+      "subtitle": "状态迁移、blockers 和恢复语义。",
+      "emptyTitle": "暂无 Run",
+      "emptyDescription": "当前 project 没有激活 run。"
+    },
+    "recovery": {
+      "title": "Recovery",
+      "subtitle": "Resume points 来自关联 conversation。",
+      "emptyTitle": "暂无恢复点",
+      "emptyDescription": "当前 conversation 还没有恢复点。"
+    },
+    "timeline": {
+      "title": "Timeline",
+      "subtitle": "关键动作记录、审批与阻塞说明。",
+      "emptyTitle": "暂无 Trace 时间线",
+      "emptyDescription": "当前 run 尚未写入 trace records。"
+    }
+  },
+  "agents": {
+    "header": {
+      "eyebrow": "Agent Center",
+      "title": "Workspace / Project Agents",
+      "subtitle": "Create / edit / mock save / project copy 占位。"
+    },
+    "list": {
+      "title": "Agent 列表",
+      "subtitle": "Workspace agents 与 project-scoped copies。",
+      "emptyTitle": "暂无 Agent",
+      "emptyDescription": "当前 workspace 没有 agent。",
+      "workspaceTemplate": "workspace template",
+      "projectCopy": "project copy"
+    },
+    "form": {
+      "name": "名称",
+      "role": "角色",
+      "scope": "范围",
+      "owner": "Owner",
+      "model": "模型",
+      "autonomy": "自治级别",
+      "systemPrompt": "System Prompt",
+      "tools": "工具（逗号分隔）",
+      "sharedSources": "共享知识来源",
+      "approvalPreferences": "审批偏好",
+      "scopeOptions": {
+        "personal": "personal",
+        "workspace": "workspace",
+        "project": "project"
+      }
+    }
+  },
+  "teams": {
+    "header": {
+      "eyebrow": "Team Center",
+      "title": "Workspace / Project Teams",
+      "subtitle": "Team edit / save / project copy 占位。"
+    },
+    "list": {
+      "title": "Team 列表",
+      "subtitle": "Workspace teams 与 project-scoped copies。",
+      "emptyTitle": "暂无 Team",
+      "emptyDescription": "当前 workspace 没有 team。",
+      "workspaceTeam": "workspace team",
+      "projectCopy": "project copy"
+    },
+    "form": {
+      "name": "名称",
+      "mode": "模式",
+      "useScope": "使用范围",
+      "defaultOutput": "默认输出",
+      "description": "描述",
+      "projectNotes": "项目说明",
+      "members": "成员",
+      "approvalPreferences": "审批偏好"
+    }
+  },
+  "settings": {
+    "header": {
+      "eyebrow": "Settings / Admin",
+      "title": "Connections、RBAC、策略、审计与日志",
+      "subtitle": "只读治理面 + shell preferences + host status。"
+    },
+    "preferences": {
+      "title": "Shell 偏好",
+      "subtitle": "Theme / locale / compact sidebar 会通过 host bridge 持久化。",
+      "theme": "Theme",
+      "locale": "Locale",
+      "compactSidebar": "使用紧凑侧栏布局",
+      "themeOptions": {
+        "system": "system",
+        "light": "light",
+        "dark": "dark"
+      },
+      "localeOptions": {
+        "zh-CN": "zh-CN",
+        "en-US": "en-US"
+      }
+    },
+    "host": {
+      "title": "Host 状态",
+      "subtitle": "Tauri 2 host shell 健康度与 workspace 绑定。"
+    }
+  },
+  "automations": {
+    "placeholder": {
+      "eyebrow": "Automations",
+      "title": "可导航占位表面",
+      "subtitle": "这一轮保持 automations 浅实现，但结构和入口完整。"
+    },
+    "list": {
+      "title": "Workspace Automations",
+      "subtitle": "AutomationSummary 契约已接通；运行态仍由 mock 驱动。",
+      "emptyTitle": "暂无 Automation",
+      "emptyDescription": "当前 workspace 没有 automation summaries。"
+    }
+  },
+  "connections": {
+    "header": {
+      "eyebrow": "Connections",
+      "title": "产品连接 + 宿主 Stub",
+      "subtitle": "前端 mock 仍是真源；Rust 只提供宿主初始化骨架。"
+    },
+    "product": {
+      "title": "产品表面连接",
+      "subtitle": "桌面表面的 mock connection profiles。"
+    },
+    "host": {
+      "title": "Host Bootstrap Stub",
+      "subtitle": "在可用时来自 Tauri bridge。",
+      "emptyTitle": "Web fallback 已启用",
+      "emptyDescription": "当 Tauri 不可用时，shell 只依赖本地 mock 数据运行。"
+    },
+    "empty": {
+      "title": "暂无连接",
+      "description": "当前没有连接配置。"
+    }
+  },
+  "enum": {
+    "conversationIntent": {
+      "explore": "探索",
+      "clarify": "澄清",
+      "plan": "规划",
+      "draft": "草稿",
+      "execute": "执行中",
+      "review": "审阅中",
+      "approve": "待审批",
+      "blocked": "已阻塞",
+      "paused": "已暂停",
+      "automated": "自动化"
+    },
+    "teamMode": {
+      "leadered": "leadered",
+      "hybrid": "hybrid",
+      "mesh": "mesh"
+    },
+    "projectStatus": {
+      "active": "活跃",
+      "archived": "归档"
+    },
+    "artifactStatus": {
+      "draft": "草稿",
+      "review": "审阅中",
+      "approved": "已批准"
+    },
+    "runStatus": {
+      "draft": "草稿",
+      "planned": "已计划",
+      "running": "运行中",
+      "waiting_input": "等待输入",
+      "waiting_approval": "等待审批",
+      "blocked": "已阻塞",
+      "paused": "已暂停",
+      "completed": "已完成",
+      "failed": "失败",
+      "terminated": "已终止"
+    },
+    "runType": {
+      "conversation_run": "conversation run",
+      "review_run": "review run",
+      "execution_run": "execution run",
+      "automation_run": "automation run"
+    },
+    "riskLevel": {
+      "low": "低",
+      "medium": "中",
+      "high": "高"
+    },
+    "viewStatus": {
+      "healthy": "健康",
+      "configured": "已配置",
+      "attention": "需关注"
+    },
+    "knowledgeStatus": {
+      "candidate": "候选",
+      "reviewed": "已审阅",
+      "shared": "已共享",
+      "archived": "归档"
+    },
+    "knowledgeSourceType": {
+      "conversation": "conversation",
+      "artifact": "artifact",
+      "run": "run"
+    },
+    "connectionMode": {
+      "local": "本地",
+      "shared": "共享",
+      "remote": "远端"
+    },
+    "connectionState": {
+      "local-ready": "本地就绪",
+      "connected": "已连接",
+      "disconnected": "未连接"
+    },
+    "automationStatus": {
+      "active": "运行中",
+      "paused": "已暂停",
+      "error": "错误"
+    },
+    "inboxStatus": {
+      "pending": "待处理",
+      "resolved": "已解决",
+      "dismissed": "已驳回"
+    },
+    "agentScope": {
+      "personal": "personal",
+      "workspace": "workspace",
+      "project": "project"
+    },
+    "teamScope": {
+      "workspace": "workspace",
+      "project": "project"
+    },
+    "hostPlatform": {
+      "tauri": "Tauri",
+      "web": "Web"
+    },
+    "hostMode": {
+      "local": "本地"
+    },
+    "theme": {
+      "system": "system",
+      "light": "light",
+      "dark": "dark"
+    },
+    "locale": {
+      "zh-CN": "zh-CN",
+      "en-US": "en-US"
+    }
+  },
+  "runtime": {
+    "messages": {
+      "requirementsRecorded": "已记录新的要求。下一步会同步更新 Dashboard、Trace 和 Artifact 视图。"
+    },
+    "conversation": {
+      "inputIngested": "新的输入已进入渐进式 formalization 流程。",
+      "reviewRequested": "Artifact 已送入审阅阶段，等待审批或确认。",
+      "paused": "Conversation 已暂停，等待恢复。",
+      "resumed": "Conversation 已恢复，继续执行当前计划。",
+      "approved": "审批已通过，执行链路继续推进。",
+      "rejected": "审批被拒绝，需要调整方案或改道。"
+    },
+    "run": {
+      "ingestingConstraints": "正在吸收新的用户约束",
+      "pausedByUser": "用户已暂停",
+      "resumedFromCheckpoint": "从保存的检查点恢复",
+      "approvalReceived": "已收到审批，继续执行",
+      "reroutedAfterRejection": "审批驳回后已改道"
+    },
+    "inbox": {
+      "reviewArtifactTitle": "审阅最新 Artifact",
+      "reviewArtifactDescription": "新版本 artifact 已生成，建议在正式共享或执行前进行一次审阅确认。",
+      "reviewArtifactImpact": "审阅通过后，Artifact 可以继续成为后续执行和知识沉淀的来源。",
+      "reviewArtifactRisk": "未经审阅直接提升可能污染共享知识或误导下游执行。",
+      "reviewArtifactAction": "检查结构、版本和来源信息，然后批准或驳回。"
+    },
+    "copy": {
+      "projectSuffix": "Project Copy"
+    }
+  },
+  "mock": {
+    "workspace": {
+      "ws-local": {
+        "name": "本地枢纽",
+        "description": "本地优先的桌面工作区，适合快速原型与个人试验。",
+        "roleSummary": "Owner · 本地 Runtime"
+      },
+      "ws-enterprise": {
+        "name": "企业运营",
+        "description": "共享工作区，用于跨团队治理、审批和发布协同。",
+        "roleSummary": "Admin · 共享 Workspace"
+      }
+    },
+    "agent": {
+      "agent-architect": {
+        "name": "架构 Agent",
+        "role": "系统架构师",
+        "persona": ["严谨", "结构化", "设计优先"],
+        "systemPrompt": "负责澄清架构、模块边界与可扩展性约束。",
+        "knowledgeScope": {
+          "privateMemories": ["用户偏好：先给结构，再给细节"],
+          "sharedSources": ["PRD", "设计系统"]
+        }
+      },
+      "agent-coder": {
+        "name": "实现 Agent",
+        "role": "资深全栈工程师",
+        "persona": ["务实", "直接", "验证优先"],
+        "systemPrompt": "负责实现 Vue / Tauri / Rust 相关工作，并在关键节点回报验证结果。",
+        "knowledgeScope": {
+          "privateMemories": ["偏好：先打补丁，再跑构建"],
+          "sharedSources": ["前端模式", "Rust 启动骨架"]
+        }
+      },
+      "agent-gov": {
+        "name": "治理 Agent",
+        "role": "策略评审者",
+        "persona": ["谨慎", "审计导向"],
+        "systemPrompt": "负责风险、审批、审计和策略检查。",
+        "knowledgeScope": {
+          "privateMemories": ["偏好：先标红风险，再给建议动作"],
+          "sharedSources": ["策略", "Trace"]
+        }
+      }
+    },
+    "team": {
+      "team-launch": {
+        "name": "上线就绪团队",
+        "description": "产品、工程和治理三方协作的发布队形。",
+        "defaultOutput": "上线简报 + 审批清单",
+        "projectNotes": "适合跨角色评审和上线前压测。"
+      },
+      "team-redesign-copy": {
+        "name": "改版突击队",
+        "description": "针对当前 UI 改版的项目内副本团队。",
+        "defaultOutput": "设计决策 + 实现增量",
+        "projectNotes": "已针对 Octopus 桌面壳做定制化分工。"
+      }
+    },
+    "project": {
+      "proj-redesign": {
+        "name": "Octopus Desktop Shell",
+        "goal": "把桌面端从单页原型升级成可持续扩展的 GA 工作台。",
+        "phase": "Implementation",
+        "summary": "当前正在补齐 PRD 模块、重建共享 UI、整理 Tauri 2 壳层。",
+        "recentDecision": "先用前端 mock 驱动全部正式对象，再为 Rust 预留最小宿主接口。"
+      },
+      "proj-governance": {
+        "name": "治理控制台",
+        "goal": "梳理设置中心、审计日志与策略可视化面。",
+        "phase": "Planning",
+        "summary": "治理面板 schema 已定，等待统一接入桌面壳。",
+        "recentDecision": "先交付只读治理表面，不接真实后端。"
+      },
+      "proj-launch": {
+        "name": "企业上线运营",
+        "goal": "跟踪企业工作区的审批、Trace 与自动化健康。",
+        "phase": "Review",
+        "summary": "共享工作区需要完整的 Dashboard、Inbox 和 Team 协作视图。",
+        "recentDecision": "Trace 优先做成可解释的运行时间线，而不是只展示日志。"
+      }
+    },
+    "run": {
+      "run-redesign": {
+        "title": "桌面壳重构运行",
+        "currentStep": "等待写入共享 Artifact 的审批",
+        "blockers": ["提升 Artifact v3 前需要审批"],
+        "nextAction": "批准审阅请求后继续执行链路。"
+      },
+      "run-governance": {
+        "title": "治理只读表面审计",
+        "currentStep": "同步审计与设置面板",
+        "nextAction": "复核策略文案并确认标签。"
+      },
+      "run-launch": {
+        "title": "上线就绪检查清单",
+        "currentStep": "等待预算批准后再做最终签核",
+        "blockers": ["预算审批待处理"],
+        "nextAction": "解决阻塞 Inbox 项并重新运行清单。"
+      }
+    },
+    "traceRecord": {
+      "trace-redesign-1": {
+        "title": "映射当前桌面壳",
+        "detail": "已索引 App.vue、schema、UI tokens 和 Tauri 启动状态。"
+      },
+      "trace-redesign-2": {
+        "title": "等待 Artifact 审阅批准",
+        "detail": "新版本 artifact 获批后，重构才能继续。"
+      },
+      "trace-governance-1": {
+        "title": "标记审计时间线为共享候选",
+        "detail": "审计时间线卡片应迁入共享 UI 包。"
+      },
+      "trace-launch-1": {
+        "title": "预算锁已触发",
+        "detail": "企业计费确认资源分配前，上线团队保持暂停。"
+      }
+    },
+    "conversation": {
+      "conv-redesign": {
+        "title": "Desktop shell GA 重构",
+        "summary": "把单页原型拆成工作台壳、共享 UI 和最小 Tauri 宿主。",
+        "currentGoal": "补齐桌面端 PRD 模块与 Tauri / Rust 初始化。",
+        "constraints": ["只做前端 + mock 数据", "保留后端 Rust 初始化骨架", "保持未来 Mobile 和官网可复用"],
+        "statusNote": "当前重点是把原型壳切换到模块化工作台。",
+        "resumePoints": {
+          "resume-redesign-1": {
+            "label": "共享 schema 与 UI 契约已定义"
+          }
+        },
+        "branchLinks": {
+          "branch-redesign-1": {
+            "label": "治理表面后续分支"
+          }
+        }
+      },
+      "conv-governance": {
+        "title": "设置与审计对齐",
+        "summary": "治理表面采用只读 mock，先满足可解释性要求。",
+        "currentGoal": "把策略、日志、审计和集成状态放进统一设置中心。",
+        "constraints": ["先不接真实权限后端"],
+        "statusNote": "治理面即将进入共享组件抽取。",
+        "resumePoints": {
+          "resume-gov-1": {
+            "label": "审计表面已进入共享 UI backlog"
+          }
+        }
+      },
+      "conv-launch": {
+        "title": "上线就绪指挥台",
+        "summary": "企业工作区聚焦审批恢复、Trace 和自动化健康。",
+        "currentGoal": "让 Dashboard、Inbox 与 Trace 共同解释当前阻塞。",
+        "constraints": ["预算未批复前不恢复 automation run"],
+        "statusNote": "阻塞原因和恢复动作需要在一个屏上解释清楚。",
+        "resumePoints": {
+          "resume-launch-1": {
+            "label": "预算审批待处理"
+          }
+        }
+      }
+    },
+    "message": {
+      "msg-redesign-1": {
+        "content": "请先查看当前桌面端实现状态，再按 PRD 补齐剩余模块，并整理 Tauri2 / Rust 初始化。"
+      },
+      "msg-redesign-2": {
+        "content": "建议先把 schema、共享 UI 和工作台布局拆开，再逐步填充 Dashboard、Trace、Knowledge 和 Settings。"
+      },
+      "msg-governance-1": {
+        "content": "治理面板建议先做只读可视化，保证审计链路和风险说明可解释。"
+      },
+      "msg-launch-1": {
+        "content": "Automation run 因预算审批未通过而被阻塞。"
+      }
+    },
+    "artifact": {
+      "art-roadmap": {
+        "type": "implementation-plan",
+        "title": "GA Shell 重构路线图",
+        "content": "# GA Shell 重构\n\n- 扩展 schema\n- 重建工作台布局\n- 增加 Trace / Knowledge / Settings 表面\n- 初始化 Tauri 2 宿主壳",
+        "excerpt": "扩展 schema、重建工作台布局、补齐 Trace / Knowledge / Settings，并初始化 Tauri。"
+      },
+      "art-prd": {
+        "type": "prd",
+        "title": "Octopus PRD 快照",
+        "content": "# Octopus PRD\n\n以 Conversation 为中心的 Agent Runtime 平台，覆盖桌面、Web 和移动端。",
+        "excerpt": "Conversation-first 平台，包含正式对象与可解释状态。"
+      },
+      "art-policy": {
+        "type": "policy",
+        "title": "能力策略矩阵",
+        "content": "# Capability Policy Matrix\n\n- 低风险：read、analyze\n- 中风险：write artifact\n- 高风险：send / delete / system command",
+        "excerpt": "面向治理表面的 Capability Policy 矩阵。"
+      },
+      "art-launch-plan": {
+        "type": "launch-plan",
+        "title": "上线就绪简报",
+        "content": "# Launch Readiness\n\n待处理：预算审批、automation 重跑、最终审计签核。",
+        "excerpt": "一份被预算审批阻塞的上线简报。"
+      }
+    },
+    "knowledgeEntry": {
+      "knowledge-private-redesign": {
+        "title": "Architect 偏好设计先行拆解",
+        "summary": "复杂改版里先切契约，再切页面，可以显著降低返工。"
+      },
+      "knowledge-shared-trace": {
+        "title": "Trace 必须解释 blockers 与 next actions",
+        "summary": "Dashboard、Trace 和 Inbox 需要共同解释当前状态、阻塞原因和恢复动作。"
+      },
+      "knowledge-candidate-audit": {
+        "title": "审计时间线卡片具备复用价值",
+        "summary": "审计时间线卡片可以沉淀到共享 UI 包。"
+      }
+    },
+    "inboxItem": {
+      "inbox-approval-1": {
+        "title": "批准桌面壳重构的 Artifact 提升",
+        "description": "重构运行需要在提升新版本 artifact 并继续写入动作前获得审批。",
+        "impact": "会解除当前执行运行的阻塞，并刷新 dashboard 状态。",
+        "riskNote": "共享 artifact 内容会成为后续工作的最新参考。",
+        "recommendedAction": "检查 roadmap artifact 与 PRD 是否一致，然后批准。"
+      },
+      "inbox-blocker-1": {
+        "title": "预算审批阻塞上线就绪运行",
+        "description": "预算审批通过前，automation run 会持续暂停。",
+        "impact": "上线清单无法完成，dashboard 会持续处于 blocked 状态。",
+        "riskNote": "跳过这个审批会让企业 workspace 缺少最终 readiness 信号。",
+        "recommendedAction": "解决预算审批，或正式暂停该 automation。"
+      }
+    },
+    "automation": {
+      "auto-launch-daily": {
+        "title": "每日上线就绪摘要",
+        "description": "每天汇总阻塞项、审批积压和最新 Trace。",
+        "cadence": "每个工作日 · 09:00",
+        "output": "Inbox 项 + 每日简报 Artifact"
+      },
+      "auto-governance-weekly": {
+        "title": "每周治理复盘",
+        "description": "每周汇总高风险操作、策略变更和知识晋升请求。",
+        "cadence": "每周一 · 10:00",
+        "output": "Review 清单 + 审计备注"
+      }
+    },
+    "settingsSection": {
+      "connections": {
+        "title": "Connections",
+        "description": "本地 Hub、共享工作区与未来远端接入状态。",
+        "items": ["本地 Workspace 启动", "共享 Workspace 配置", "连接健康状态"]
+      },
+      "roles": {
+        "title": "Roles & RBAC",
+        "description": "用户权限决定可见范围，Agent 与 Team 不拥有独立 RBAC。",
+        "items": ["Workspace 角色", "Project 管理权限", "只读治理视图"]
+      },
+      "policies": {
+        "title": "Capability Policies",
+        "description": "定义模型、工具、环境范围和审批触发规则。",
+        "items": ["模型档位", "工具白名单", "需要审批的动作"]
+      },
+      "audit": {
+        "title": "Audit Trail",
+        "description": "高风险动作、审批决议和配置变更都会进入审计视图。",
+        "items": ["Trace 关联", "审批记录", "配置增量"]
+      },
+      "integrations": {
+        "title": "Integrations",
+        "description": "外部能力绑定与连接器状态。",
+        "items": ["Tauri Host 命令", "Docs 绑定", "未来远端连接器"]
+      },
+      "logs": {
+        "title": "Logs",
+        "description": "运行时日志、宿主状态与调试入口。",
+        "items": ["tauri-plugin-log", "Host healthcheck", "运行摘要"]
+      }
+    },
+    "connection": {
+      "conn-local": {
+        "label": "默认本地 Workspace"
+      },
+      "conn-shared-enterprise": {
+        "label": "企业运营共享 Workspace"
+      }
+    }
+  }
+}

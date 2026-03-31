@@ -1,24 +1,28 @@
 [package]
-name = "octopus-desktop-host"
-version = "0.1.0"
+name = "octopus-desktop-shell"
+version.workspace = true
+description = "Octopus desktop shell"
+authors = ["Octopus"]
+license.workspace = true
+repository = ""
 edition.workspace = true
+rust-version.workspace = true
 
 [lib]
-name = "octopus_desktop_host"
-
-[dependencies]
-chrono.workspace = true
-keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "linux-native-sync-persistent", "crypto-rust", "vendored"] }
-octopus-execution = { path = "../../../crates/execution" }
-octopus-runtime = { path = "../../../crates/runtime" }
-serde.workspace = true
-serde_json.workspace = true
-tauri = { version = "2", features = [] }
-thiserror.workspace = true
-tokio.workspace = true
+name = "octopus_desktop_shell"
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build.workspace = true
+
+[dependencies]
+log.workspace = true
+octopus-core = { path = "../../../crates/octopus-core" }
+serde.workspace = true
+serde_json.workspace = true
+tauri.workspace = true
+tauri-plugin-log.workspace = true
+thiserror.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

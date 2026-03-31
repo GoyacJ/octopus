@@ -1,41 +1,32 @@
 {
-  "name": "@octopus/desktop",
-  "version": "0.1.0",
+  "name": "octopus-desktop",
   "private": true,
+  "version": "0.1.0",
   "type": "module",
-  "exports": {
-    ".": "./src/app.ts"
-  },
-  "types": "./src/app.ts",
   "scripts": {
-    "build": "vite build",
-    "ui:dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
-    "ui:build": "vite build",
-    "tauri": "tauri",
-    "dev": "pnpm tauri dev",
-    "open": "pnpm build && cargo run --manifest-path src-tauri/Cargo.toml",
-    "smoke:local-host": "vitest run test/bootstrap-smoke.test.ts",
-    "test": "vitest run",
-    "typecheck": "vue-tsc --noEmit"
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@octopus/hub-client": "workspace:*",
-    "@octopus/schema-ts": "workspace:*",
-    "@tauri-apps/api": "^2.0.0",
-    "lucide-vue-next": "^1.0.0",
-    "pinia": "^3.0.3",
-    "vue": "^3.5.22",
-    "vue-router": "^4.6.3"
+    "@tauri-apps/api": "^2.10.0",
+    "lucide-vue-next": "^0.400.0",
+    "pinia": "^2.2.0",
+    "vue": "^3.5.0",
+    "vue-router": "^4.5.1",
+    "vue-i18n": "^10.0.0",
+    "@octopus/schema": "workspace:*",
+    "@octopus/ui": "workspace:*"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.10.1",
-    "@types/node": "^24.6.0",
-    "@vitejs/plugin-vue": "^6.0.1",
-    "@vue/test-utils": "^2.4.6",
-    "jsdom": "^26.1.0",
-    "typescript": "^5.9.3",
-    "vite": "^7.3.1",
-    "vitest": "^3.2.4",
-    "vue-tsc": "^3.1.1"
+    "@pinia/testing": "^0.1.7",
+    "@types/node": "^20.0.0",
+    "@vitejs/plugin-vue": "^5.1.0",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0",
+    "vitest": "^2.1.9",
+    "vue-tsc": "^2.1.0"
   }
 }

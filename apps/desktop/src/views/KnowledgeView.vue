@@ -1,251 +1,98 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from "vue";
-import { RouterLink, useRoute } from "vue-router";
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
-import { useHubStore } from "../stores/hub";
-import { usePreferencesStore } from "../stores/preferences";
+import { UiBadge, UiEmptyState, UiSectionHeading, UiSurface } from '@octopus/ui'
 
-const route = useRoute();
-const hub = useHubStore();
-const preferences = usePreferencesStore();
+import { enumLabel, resolveMockField } from '@/i18n/copy'
+import { useWorkbenchStore } from '@/stores/workbench'
 
-preferences.initialize();
+const { t } = useI18n()
+const workbench = useWorkbenchStore()
 
-const projectKnowledgeIndex = computed(() => hub.projectKnowledgeIndex);
-const candidateRunMap = computed(() => {
-  const entries = projectKnowledgeIndex.value?.entries ?? [];
-  return new Map(
-    entries
-      .filter((entry) => entry.kind === "candidate")
-      .map((entry) => [entry.id, entry.source_run_id])
-  );
-});
-
-const inboxRoute = computed(() => {
-  const workspaceId = String(route.params.workspaceId);
-  return `/workspaces/${workspaceId}/inbox`;
-});
-
-function sourceRunIdForEntry(
-  entry: NonNullable<typeof projectKnowledgeIndex.value>["entries"][number]
-): string | null {
-  if (entry.kind === "candidate") {
-    return entry.source_run_id;
-  }
-
-  return candidateRunMap.value.get(entry.source_candidate_id) ?? null;
-}
-
-async function loadKnowledgeSurface(): Promise<void> {
-  const workspaceId = String(route.params.workspaceId);
-  const projectId = String(route.params.projectId);
-
-  await Promise.all([
-    hub.loadProjectContext(workspaceId, projectId),
-    hub.loadProjectKnowledge(workspaceId, projectId)
-  ]);
-}
-
-watch(
-  () => [route.params.workspaceId, route.params.projectId],
-  () => {
-    void loadKnowledgeSurface();
-  }
-);
-
-onMounted(() => {
-  void loadKnowledgeSurface();
-});
+const privateEntries = computed(() => workbench.projectKnowledge.filter((entry) => entry.kind === 'private'))
+const sharedEntries = computed(() => workbench.projectKnowledge.filter((entry) => entry.kind === 'shared'))
+const candidateEntries = computed(() => workbench.projectKnowledge.filter((entry) => entry.kind === 'candidate'))
 </script>
 
 <template>
-  <section class="knowledge-layout">
-    <article class="surface-card hero">
-      <p class="eyebrow">{{ preferences.t("nav.knowledge") }}</p>
-      <h1>{{ preferences.t("knowledge.title") }}</h1>
-      <p class="muted">{{ preferences.t("knowledge.subtitle") }}</p>
-      <p class="muted">
-        {{
-          projectKnowledgeIndex?.knowledge_space.display_name ??
-          "Project knowledge loading"
-        }}
-      </p>
-      <div class="meta-list">
-        <span>Entries: {{ projectKnowledgeIndex?.entries.length ?? 0 }}</span>
-        <span>Workspace: {{ hub.workspaceName }}</span>
-        <span>Project: {{ hub.projectName }}</span>
-      </div>
-    </article>
+  <section class="section-stack">
+    <UiSectionHeading
+      :eyebrow="t('knowledge.header.eyebrow')"
+      :title="workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'name', workbench.activeProject.name) : t('knowledge.header.titleFallback')"
+      :subtitle="t('knowledge.header.subtitle')"
+    />
 
-    <article class="surface-card">
-      <div class="header-row">
-        <div>
-          <p class="eyebrow">Knowledge Space</p>
-          <h2>{{ projectKnowledgeIndex?.knowledge_space.id ?? "loading" }}</h2>
-        </div>
-        <RouterLink
-          :to="inboxRoute"
-          data-testid="knowledge-open-inbox"
-          class="ghost-link"
-        >
-          Open Inbox
-        </RouterLink>
-      </div>
-      <p class="muted">
-        Promotion requests stay authoritative in Run Detail, and approval resolution stays
-        authoritative in Inbox.
-      </p>
-    </article>
-
-    <article class="surface-card">
-      <div class="header-row">
-        <div>
-          <p class="eyebrow">Visible Entries</p>
-          <h2>{{ projectKnowledgeIndex?.entries.length ?? 0 }} mixed records</h2>
-        </div>
-      </div>
-
-      <ul v-if="(projectKnowledgeIndex?.entries.length ?? 0) > 0" class="stack-list">
-        <li
-          v-for="entry in projectKnowledgeIndex?.entries ?? []"
-          :key="`${entry.kind}:${entry.id}`"
-          class="knowledge-card"
-        >
-          <div class="header-row">
-            <div>
-              <strong>{{ entry.id }}</strong>
-              <div class="meta-list">
-                <span>Kind: {{ entry.kind }}</span>
-                <span>Status: {{ entry.status }}</span>
-                <span>Trust: {{ entry.trust_level }}</span>
-              </div>
+    <div class="surface-grid three">
+      <UiSurface :title="t('knowledge.sections.private.title')">
+        <div v-if="privateEntries.length" class="entry-list">
+          <article v-for="entry in privateEntries" :key="entry.id" class="knowledge-card">
+            <div class="meta-row">
+              <UiBadge :label="enumLabel('knowledgeStatus', entry.status)" subtle />
+              <UiBadge :label="entry.ownerId ?? t('common.workspace')" tone="info" subtle />
             </div>
+            <strong>{{ resolveMockField('knowledgeEntry', entry.id, 'title', entry.title) }}</strong>
+            <p>{{ resolveMockField('knowledgeEntry', entry.id, 'summary', entry.summary) }}</p>
+          </article>
+        </div>
+        <UiEmptyState v-else :title="t('knowledge.sections.private.emptyTitle')" :description="t('knowledge.sections.private.emptyDescription')" />
+      </UiSurface>
 
-            <RouterLink
-              v-if="sourceRunIdForEntry(entry)"
-              :to="`/runs/${sourceRunIdForEntry(entry)}`"
-              :data-testid="`knowledge-open-run-${sourceRunIdForEntry(entry)}`"
-              class="ghost-link"
-            >
-              Open Run
-            </RouterLink>
-          </div>
+      <UiSurface :title="t('knowledge.sections.shared.title')">
+        <div v-if="sharedEntries.length" class="entry-list">
+          <article v-for="entry in sharedEntries" :key="entry.id" class="knowledge-card">
+            <div class="meta-row">
+              <UiBadge :label="enumLabel('riskLevel', entry.trustLevel)" tone="success" />
+              <UiBadge :label="enumLabel('knowledgeSourceType', entry.sourceType)" subtle />
+            </div>
+            <strong>{{ resolveMockField('knowledgeEntry', entry.id, 'title', entry.title) }}</strong>
+            <p>{{ resolveMockField('knowledgeEntry', entry.id, 'summary', entry.summary) }}</p>
+            <small>{{ t('common.lineage') }}: {{ entry.lineage.join(' → ') }}</small>
+          </article>
+        </div>
+        <UiEmptyState v-else :title="t('knowledge.sections.shared.emptyTitle')" :description="t('knowledge.sections.shared.emptyDescription')" />
+      </UiSurface>
 
-          <div class="meta-list">
-            <span>Capability: {{ entry.capability_id }}</span>
-            <span>Created: {{ entry.created_at }}</span>
-            <span>Knowledge space: {{ entry.knowledge_space_id }}</span>
-          </div>
-
-          <div class="meta-list">
-            <span>
-              Provenance:
-              {{
-                entry.kind === "candidate"
-                  ? entry.provenance_source
-                  : entry.provenance_source ?? "derived_from_candidate"
-              }}
-            </span>
-            <span v-if="sourceRunIdForEntry(entry)">
-              Source run: {{ sourceRunIdForEntry(entry) }}
-            </span>
-            <span v-if="entry.source_artifact_id">
-              Source artifact: {{ entry.source_artifact_id }}
-            </span>
-            <span v-if="entry.source_candidate_id">
-              Source candidate: {{ entry.source_candidate_id }}
-            </span>
-          </div>
-        </li>
-      </ul>
-
-      <p v-else class="muted">{{ preferences.t("knowledge.empty") }}</p>
-    </article>
+      <UiSurface :title="t('knowledge.sections.candidates.title')">
+        <div v-if="candidateEntries.length" class="entry-list">
+          <article v-for="entry in candidateEntries" :key="entry.id" class="knowledge-card">
+            <div class="meta-row">
+              <UiBadge :label="t('knowledge.sections.candidates.badge')" tone="warning" />
+              <UiBadge :label="entry.sourceId" subtle />
+            </div>
+            <strong>{{ resolveMockField('knowledgeEntry', entry.id, 'title', entry.title) }}</strong>
+            <p>{{ resolveMockField('knowledgeEntry', entry.id, 'summary', entry.summary) }}</p>
+            <small>{{ t('common.lineage') }}: {{ entry.lineage.join(' → ') }}</small>
+          </article>
+        </div>
+        <UiEmptyState v-else :title="t('knowledge.sections.candidates.emptyTitle')" :description="t('knowledge.sections.candidates.emptyDescription')" />
+      </UiSurface>
+    </div>
   </section>
 </template>
 
 <style scoped>
-.knowledge-layout {
-  display: grid;
-  gap: 1rem;
-}
-
-.surface-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  padding: 1.2rem;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 1rem;
-  background: rgba(15, 23, 42, 0.45);
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.18);
-}
-
-.hero {
-  background:
-    radial-gradient(circle at top right, rgba(14, 165, 233, 0.18), transparent 32%),
-    rgba(15, 23, 42, 0.56);
-}
-
-.eyebrow {
-  margin: 0;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #67e8f9;
-}
-
-h1,
-h2,
-p {
-  margin: 0;
-}
-
-.muted {
-  color: #94a3b8;
-}
-
-.header-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.stack-list {
+.entry-list {
   display: flex;
   flex-direction: column;
   gap: 0.8rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
 }
 
 .knowledge-card {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 0.95rem;
-  border-radius: 0.9rem;
-  background: rgba(2, 6, 23, 0.6);
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 1rem;
+  border-radius: var(--radius-l);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
 }
 
-.meta-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
-  font-size: 0.92rem;
-  color: #cbd5e1;
-}
-
-.ghost-link {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid rgba(103, 232, 249, 0.24);
-  border-radius: 999px;
-  padding: 0.65rem 0.9rem;
-  color: #e2e8f0;
-  text-decoration: none;
-  background: rgba(15, 23, 42, 0.6);
+.knowledge-card p,
+.knowledge-card small {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 </style>

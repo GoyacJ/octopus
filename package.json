@@ -1,16 +1,15 @@
 {
-  "name": "@octopus/root",
+  "name": "octopus",
   "private": true,
-  "packageManager": "pnpm@10.6.0",
-  "description": "Octopus monorepo root governance package. Runtime members are added slice-by-slice after contracts and local design are frozen.",
+  "version": "0.1.0",
+  "type": "module",
   "scripts": {
-    "desktop:dev:local": "pnpm --filter @octopus/desktop dev",
-    "remote-hub:dev": "node scripts/dev/remote-hub-dev.mjs",
-    "desktop:dev:remote": "node scripts/dev/desktop-remote-dev.mjs",
-    "desktop:open": "pnpm --filter @octopus/desktop open",
-    "remote-hub:start": "cargo run -p octopus-remote-hub",
-    "test:ts": "pnpm --filter @octopus/schema-ts test && pnpm --filter @octopus/hub-client test && pnpm --filter @octopus/desktop test",
-    "build:ts": "pnpm --filter @octopus/schema-ts build && pnpm --filter @octopus/hub-client build && pnpm --filter @octopus/desktop build",
-    "typecheck:ts": "pnpm --filter @octopus/schema-ts typecheck && pnpm --filter @octopus/hub-client typecheck && pnpm --filter @octopus/desktop typecheck"
+    "dev": "pnpm -C apps/desktop dev",
+    "build": "pnpm -C apps/desktop build",
+    "test": "pnpm -C apps/desktop test",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1"
   }
 }

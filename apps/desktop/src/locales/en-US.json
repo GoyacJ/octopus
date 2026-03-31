@@ -1,0 +1,827 @@
+{
+  "common": {
+    "theme": "Theme",
+    "language": "Language",
+    "search": "Search…",
+    "newConversation": "New Conversation",
+    "na": "N/A",
+    "open": "Open",
+    "selected": "Selected",
+    "send": "Send",
+    "approve": "Approve",
+    "reject": "Reject",
+    "saveDraft": "Save Draft",
+    "requestReview": "Request Review",
+    "savePreferences": "Save Preferences",
+    "pause": "Pause",
+    "resume": "Resume",
+    "mockSave": "Mock Save",
+    "createProjectCopy": "Create Project Copy",
+    "goal": "Goal",
+    "constraints": "Constraints",
+    "resumePoints": "Resume Points",
+    "branchLinks": "Branch Links",
+    "status": "Status",
+    "owner": "Owner",
+    "nextAction": "Next Action",
+    "impact": "Impact",
+    "risk": "Risk",
+    "lineage": "Lineage",
+    "workspace": "Workspace",
+    "project": "Project",
+    "members": "{count} members",
+    "artifacts": "{count} artifacts",
+    "teams": "{count} teams",
+    "conversations": "{count} conversations",
+    "progress": "{value}% progress",
+    "updatedAt": "Updated {time}",
+    "currentShell": "Current shell: {shell}",
+    "lastRoute": "Last route: {route}",
+    "activeWorkspace": "Active workspace: {workspace}",
+    "workspaceLabel": "Workspace: {workspace}",
+    "noRemoteBaseUrl": "No remote base URL",
+    "noBaseUrl": "No base URL"
+  },
+  "sidebar": {
+    "header": {
+      "eyebrow": "Octopus",
+      "title": "Desktop GA Workbench",
+      "subtitle": "Conversation-first shell backed by mock runtime state."
+    },
+    "workspace": {
+      "label": "Switch Workspace",
+      "hint": "Changing workspace jumps to the target dashboard and keeps the first project in query state.",
+      "summaryTitle": "Current Workspace",
+      "roleLabel": "Role and runtime",
+      "membershipLabel": "Membership",
+      "localLabel": "Local Workspace",
+      "sharedLabel": "Shared Workspace"
+    },
+    "projectRail": {
+      "title": "Project Rail",
+      "subtitle": "Switch the current workspace project and default dashboard focus."
+    },
+    "navigation": {
+      "title": "Navigate",
+      "subtitle": "PRD-required desktop surfaces and host-level entry points.",
+      "dashboard": "Dashboard",
+      "conversation": "Conversation",
+      "knowledge": "Knowledge",
+      "trace": "Trace",
+      "agents": "Agents",
+      "teams": "Teams",
+      "settings": "Settings",
+      "automations": "Automations",
+      "connections": "Connections"
+    },
+    "scope": {
+      "title": "Current Scope",
+      "eyebrow": "Project Focus"
+    }
+  },
+  "dashboard": {
+    "header": {
+      "eyebrow": "Workspace Dashboard",
+      "titleFallback": "Workspace Overview",
+      "subtitleFallback": "Explains workspace / project / conversation state in one place."
+    },
+    "metrics": {
+      "activeProjects": "Active Projects",
+      "activeConversations": "Active Conversations",
+      "pendingInbox": "Pending Inbox",
+      "projectPhase": "Project Phase",
+      "artifacts": "Artifacts",
+      "teams": "Teams",
+      "intent": "Intent",
+      "progress": "Progress",
+      "resumePoints": "Resume Points"
+    },
+    "summary": {
+      "title": "Workspace Summary",
+      "subtitleFallback": "No workspace is currently selected.",
+      "openAgentCenter": "Open Agent Center",
+      "openTeamCenter": "Open Team Center"
+    },
+    "project": {
+      "title": "Current Project",
+      "subtitleFallback": "Select a project from the rail.",
+      "openConversation": "Open Conversation",
+      "knowledge": "Knowledge",
+      "trace": "Trace"
+    },
+    "highlights": {
+      "title": "Highlights",
+      "subtitle": "Jump from the dashboard into conversation, artifact, inbox, and trace surfaces.",
+      "conversationTitle": "Open current conversation",
+      "conversationDescription": "Continue the latest workstream.",
+      "artifactTitle": "Review the latest artifact",
+      "artifactDescription": "Jump into the artifact pane and inspect the newest deliverable.",
+      "traceTitle": "Inspect the trace run",
+      "traceDescription": "Inspect the current execution chain."
+    },
+    "inbox": {
+      "title": "Pending Inbox",
+      "subtitle": "Approvals, blockers, and confirmations affect the conversation, run, and dashboard together.",
+      "emptyTitle": "No pending inbox items",
+      "emptyDescription": "There are no pending approvals on this dashboard."
+    },
+    "artifacts": {
+      "title": "Recent Artifacts",
+      "subtitle": "Project and conversation artifacts remain visible outside the message stream.",
+      "emptyTitle": "No artifacts yet",
+      "emptyDescription": "The current conversation has not produced an artifact yet."
+    }
+  },
+  "conversation": {
+    "header": {
+      "eyebrow": "Conversation",
+      "titleFallback": "No Conversation",
+      "subtitleFallback": "Pick a conversation from the current project."
+    },
+    "controls": {
+      "title": "Conversation Control",
+      "goalLabel": "Goal",
+      "constraintsLabel": "Constraints"
+    },
+    "stream": {
+      "title": "Message Stream",
+      "subtitle": "Conversation-first entry surface with interruption, follow-up, and continuation support.",
+      "emptyTitle": "No messages",
+      "emptyDescription": "The current conversation has no messages yet.",
+      "placeholder": "Add constraints, append context, or continue execution."
+    },
+    "artifacts": {
+      "title": "Artifacts and Recovery",
+      "subtitle": "Artifact open, derive, branch, and resume placeholder interactions.",
+      "emptyTitle": "No active artifacts",
+      "emptyDescription": "The current conversation has no linked artifacts.",
+      "resumeTitle": "Resume Points",
+      "branchTitle": "Branch Links",
+      "emptyBranchTitle": "No branches",
+      "emptyBranchDescription": "This conversation has no branch exploration history."
+    },
+    "senderType": {
+      "user": "User",
+      "agent": "Agent",
+      "system": "System"
+    }
+  },
+  "contextPane": {
+    "host": {
+      "eyebrow": "Host",
+      "title": "Shell Status",
+      "subtitle": "Mock-driven product state with minimal Tauri host bootstrap.",
+      "cargoWorkspace": "cargo workspace",
+      "webFallback": "web fallback"
+    },
+    "tabs": {
+      "context": {
+        "label": "Context",
+        "hint": "goal / blockers"
+      },
+      "artifacts": {
+        "label": "Artifacts",
+        "hint": "detail / edit"
+      },
+      "inbox": {
+        "label": "Inbox",
+        "hint": "approve / reject"
+      },
+      "trace": {
+        "label": "Trace",
+        "hint": "timeline / recovery"
+      }
+    },
+    "conversation": {
+      "eyebrow": "Conversation Context",
+      "goalLabel": "Goal",
+      "constraintsLabel": "Constraints",
+      "resumePointsLabel": "Resume Points",
+      "branchesLabel": "Branches",
+      "emptyBranchTitle": "No derived branches",
+      "emptyBranchDescription": "Continue inside the current conversation."
+    },
+    "artifacts": {
+      "eyebrow": "Artifact Pane",
+      "title": "Artifacts",
+      "subtitle": "List, detail, mock editing, and review trigger.",
+      "emptyTitle": "No artifacts yet",
+      "emptyDescription": "Send a message or derive a new artifact from the active conversation."
+    },
+    "inbox": {
+      "eyebrow": "Inbox",
+      "title": "Approvals and blockers",
+      "emptyTitle": "Inbox is clear",
+      "emptyDescription": "This workspace has no pending approvals or blockers."
+    },
+    "trace": {
+      "eyebrow": "Trace",
+      "title": "Run Timeline",
+      "subtitle": "Key actions, blockers, and recovery points.",
+      "emptyTitle": "No trace records",
+      "emptyDescription": "The current run has not written a trace timeline yet."
+    }
+  },
+  "knowledge": {
+    "header": {
+      "eyebrow": "Knowledge",
+      "titleFallback": "Knowledge View",
+      "subtitle": "Private, shared, and candidate knowledge with lineage and promotion placeholders."
+    },
+    "sections": {
+      "private": {
+        "title": "Private",
+        "emptyTitle": "No private memories",
+        "emptyDescription": "This project has no private memory entries."
+      },
+      "shared": {
+        "title": "Shared",
+        "emptyTitle": "No shared knowledge",
+        "emptyDescription": "Shared knowledge will land after follow-up review."
+      },
+      "candidates": {
+        "title": "Candidates",
+        "badge": "promotion review",
+        "emptyTitle": "No candidates",
+        "emptyDescription": "There are no candidate entries waiting for promotion."
+      }
+    }
+  },
+  "trace": {
+    "header": {
+      "eyebrow": "Trace",
+      "titleFallback": "Run Trace",
+      "subtitleFallback": "No run selected."
+    },
+    "stats": {
+      "status": "Status",
+      "owner": "Owner",
+      "nextAction": "Next Action"
+    },
+    "runState": {
+      "title": "Run State",
+      "subtitle": "State transitions, blockers, and recovery semantics.",
+      "emptyTitle": "No run",
+      "emptyDescription": "This project has no active run."
+    },
+    "recovery": {
+      "title": "Recovery",
+      "subtitle": "Resume points come from the linked conversation.",
+      "emptyTitle": "No resume points",
+      "emptyDescription": "The current conversation has no resume points."
+    },
+    "timeline": {
+      "title": "Timeline",
+      "subtitle": "Key actions, approvals, and blocker notes.",
+      "emptyTitle": "No trace timeline",
+      "emptyDescription": "The current run has not written trace records yet."
+    }
+  },
+  "agents": {
+    "header": {
+      "eyebrow": "Agent Center",
+      "title": "Workspace / Project Agents",
+      "subtitle": "Create, edit, mock save, and project copy placeholders."
+    },
+    "list": {
+      "title": "Agent List",
+      "subtitle": "Workspace agents plus project-scoped copies.",
+      "emptyTitle": "No agents",
+      "emptyDescription": "This workspace has no agents.",
+      "workspaceTemplate": "workspace template",
+      "projectCopy": "project copy"
+    },
+    "form": {
+      "name": "Name",
+      "role": "Role",
+      "scope": "Scope",
+      "owner": "Owner",
+      "model": "Model",
+      "autonomy": "Autonomy",
+      "systemPrompt": "System Prompt",
+      "tools": "Tools (comma separated)",
+      "sharedSources": "Shared Knowledge Sources",
+      "approvalPreferences": "Approval Preferences",
+      "scopeOptions": {
+        "personal": "personal",
+        "workspace": "workspace",
+        "project": "project"
+      }
+    }
+  },
+  "teams": {
+    "header": {
+      "eyebrow": "Team Center",
+      "title": "Workspace / Project Teams",
+      "subtitle": "Team edit, save, and project copy placeholders."
+    },
+    "list": {
+      "title": "Team List",
+      "subtitle": "Workspace teams plus project-scoped copies.",
+      "emptyTitle": "No teams",
+      "emptyDescription": "This workspace has no teams.",
+      "workspaceTeam": "workspace team",
+      "projectCopy": "project copy"
+    },
+    "form": {
+      "name": "Name",
+      "mode": "Mode",
+      "useScope": "Use Scope",
+      "defaultOutput": "Default Output",
+      "description": "Description",
+      "projectNotes": "Project Notes",
+      "members": "Members",
+      "approvalPreferences": "Approval Preferences"
+    }
+  },
+  "settings": {
+    "header": {
+      "eyebrow": "Settings / Admin",
+      "title": "Connections, RBAC, policies, audit, and logs",
+      "subtitle": "Read-only governance surfaces plus shell preferences and host status."
+    },
+    "preferences": {
+      "title": "Shell Preferences",
+      "subtitle": "Theme, locale, and compact sidebar are persisted through the host bridge.",
+      "theme": "Theme",
+      "locale": "Locale",
+      "compactSidebar": "Use compact sidebar layout",
+      "themeOptions": {
+        "system": "system",
+        "light": "light",
+        "dark": "dark"
+      },
+      "localeOptions": {
+        "zh-CN": "zh-CN",
+        "en-US": "en-US"
+      }
+    },
+    "host": {
+      "title": "Host Status",
+      "subtitle": "Tauri 2 host shell health and workspace wiring."
+    }
+  },
+  "automations": {
+    "placeholder": {
+      "eyebrow": "Automations",
+      "title": "Navigable placeholder surface",
+      "subtitle": "This round keeps automations shallow while preserving structure and entry points."
+    },
+    "list": {
+      "title": "Workspace Automations",
+      "subtitle": "The AutomationSummary contract is wired; runtime execution remains mock-only.",
+      "emptyTitle": "No automations",
+      "emptyDescription": "This workspace has no automation summaries."
+    }
+  },
+  "connections": {
+    "header": {
+      "eyebrow": "Connections",
+      "title": "Product connections + host stub",
+      "subtitle": "Front-end mock remains the source of truth; Rust only provides the host bootstrap skeleton."
+    },
+    "product": {
+      "title": "Product Surface Connections",
+      "subtitle": "Mock-driven connection profiles for desktop surfaces."
+    },
+    "host": {
+      "title": "Host Bootstrap Stub",
+      "subtitle": "Comes from the Tauri bridge when available.",
+      "emptyTitle": "Web fallback active",
+      "emptyDescription": "When Tauri is unavailable, the shell keeps running on local mock data only."
+    },
+    "empty": {
+      "title": "No connections",
+      "description": "There are no connection profiles configured."
+    }
+  },
+  "enum": {
+    "conversationIntent": {
+      "explore": "Explore",
+      "clarify": "Clarify",
+      "plan": "Plan",
+      "draft": "Draft",
+      "execute": "Execute",
+      "review": "Review",
+      "approve": "Awaiting Approval",
+      "blocked": "Blocked",
+      "paused": "Paused",
+      "automated": "Automated"
+    },
+    "teamMode": {
+      "leadered": "leadered",
+      "hybrid": "hybrid",
+      "mesh": "mesh"
+    },
+    "projectStatus": {
+      "active": "Active",
+      "archived": "Archived"
+    },
+    "artifactStatus": {
+      "draft": "Draft",
+      "review": "In Review",
+      "approved": "Approved"
+    },
+    "runStatus": {
+      "draft": "Draft",
+      "planned": "Planned",
+      "running": "Running",
+      "waiting_input": "Waiting for Input",
+      "waiting_approval": "Waiting for Approval",
+      "blocked": "Blocked",
+      "paused": "Paused",
+      "completed": "Completed",
+      "failed": "Failed",
+      "terminated": "Terminated"
+    },
+    "runType": {
+      "conversation_run": "conversation run",
+      "review_run": "review run",
+      "execution_run": "execution run",
+      "automation_run": "automation run"
+    },
+    "riskLevel": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High"
+    },
+    "viewStatus": {
+      "healthy": "Healthy",
+      "configured": "Configured",
+      "attention": "Needs Attention"
+    },
+    "knowledgeStatus": {
+      "candidate": "Candidate",
+      "reviewed": "Reviewed",
+      "shared": "Shared",
+      "archived": "Archived"
+    },
+    "knowledgeSourceType": {
+      "conversation": "conversation",
+      "artifact": "artifact",
+      "run": "run"
+    },
+    "connectionMode": {
+      "local": "Local",
+      "shared": "Shared",
+      "remote": "Remote"
+    },
+    "connectionState": {
+      "local-ready": "Local Ready",
+      "connected": "Connected",
+      "disconnected": "Disconnected"
+    },
+    "automationStatus": {
+      "active": "Active",
+      "paused": "Paused",
+      "error": "Error"
+    },
+    "inboxStatus": {
+      "pending": "Pending",
+      "resolved": "Resolved",
+      "dismissed": "Dismissed"
+    },
+    "agentScope": {
+      "personal": "personal",
+      "workspace": "workspace",
+      "project": "project"
+    },
+    "teamScope": {
+      "workspace": "workspace",
+      "project": "project"
+    },
+    "hostPlatform": {
+      "tauri": "Tauri",
+      "web": "Web"
+    },
+    "hostMode": {
+      "local": "Local"
+    },
+    "theme": {
+      "system": "system",
+      "light": "light",
+      "dark": "dark"
+    },
+    "locale": {
+      "zh-CN": "zh-CN",
+      "en-US": "en-US"
+    }
+  },
+  "runtime": {
+    "messages": {
+      "requirementsRecorded": "The new request has been captured. Dashboard, Trace, and Artifact surfaces will update next."
+    },
+    "conversation": {
+      "inputIngested": "The new input has entered the progressive formalization flow.",
+      "reviewRequested": "The artifact has moved into review and is waiting for approval or confirmation.",
+      "paused": "The conversation is paused and waiting to be resumed.",
+      "resumed": "The conversation resumed and execution is continuing.",
+      "approved": "Approval received. The execution chain is moving again.",
+      "rejected": "The approval was rejected. Adjust the plan or reroute the run."
+    },
+    "run": {
+      "ingestingConstraints": "Ingesting new user constraints",
+      "pausedByUser": "Paused by user",
+      "resumedFromCheckpoint": "Resumed from saved checkpoint",
+      "approvalReceived": "Approval received, resuming execution",
+      "reroutedAfterRejection": "Execution rerouted after rejection"
+    },
+    "inbox": {
+      "reviewArtifactTitle": "Review the latest artifact",
+      "reviewArtifactDescription": "A new artifact version is ready. Review it before sharing broadly or continuing execution.",
+      "reviewArtifactImpact": "Once approved, the artifact can feed downstream execution and knowledge capture.",
+      "reviewArtifactRisk": "Promoting without review can pollute shared knowledge or mislead downstream execution.",
+      "reviewArtifactAction": "Check structure, versioning, and provenance, then approve or reject."
+    },
+    "copy": {
+      "projectSuffix": "Project Copy"
+    }
+  },
+  "mock": {
+    "workspace": {
+      "ws-local": {
+        "name": "Local Hub",
+        "description": "A local-first desktop workspace for quick prototyping and personal experimentation.",
+        "roleSummary": "Owner · Local Runtime"
+      },
+      "ws-enterprise": {
+        "name": "Enterprise Ops",
+        "description": "A shared workspace for cross-team governance, approvals, and launch coordination.",
+        "roleSummary": "Admin · Shared Workspace"
+      }
+    },
+    "agent": {
+      "agent-architect": {
+        "name": "Architect Agent",
+        "role": "System Architect",
+        "persona": ["Rigorous", "Structured", "Design-first"],
+        "systemPrompt": "Clarifies architecture, module boundaries, and extensibility constraints.",
+        "knowledgeScope": {
+          "privateMemories": ["User preference: structure first, detail second"],
+          "sharedSources": ["PRD", "Design System"]
+        }
+      },
+      "agent-coder": {
+        "name": "Coder Agent",
+        "role": "Senior Full-stack Engineer",
+        "persona": ["Pragmatic", "Direct", "Verification-first"],
+        "systemPrompt": "Implements Vue, Tauri, and Rust work, then reports back with verification evidence.",
+        "knowledgeScope": {
+          "privateMemories": ["Preference: patch first, then run the build"],
+          "sharedSources": ["Frontend Patterns", "Rust Bootstrap"]
+        }
+      },
+      "agent-gov": {
+        "name": "Governance Agent",
+        "role": "Policy Reviewer",
+        "persona": ["Careful", "Audit-oriented"],
+        "systemPrompt": "Reviews risk, approvals, audits, and policy compliance.",
+        "knowledgeScope": {
+          "privateMemories": ["Preference: mark the risk first, then suggest actions"],
+          "sharedSources": ["Policy", "Trace"]
+        }
+      }
+    },
+    "team": {
+      "team-launch": {
+        "name": "Launch Readiness Team",
+        "description": "A release formation that aligns product, engineering, and governance.",
+        "defaultOutput": "Launch brief + approval checklist",
+        "projectNotes": "Best suited for multi-role review and pre-launch stress work."
+      },
+      "team-redesign-copy": {
+        "name": "Redesign Tiger Team",
+        "description": "A project-scoped team copy dedicated to the current UI redesign.",
+        "defaultOutput": "Design decisions + implementation deltas",
+        "projectNotes": "Already customized for the Octopus desktop shell."
+      }
+    },
+    "project": {
+      "proj-redesign": {
+        "name": "Octopus Desktop Shell",
+        "goal": "Upgrade the desktop surface from a single-page prototype into a sustainable GA workbench.",
+        "phase": "Implementation",
+        "summary": "The team is filling the remaining PRD modules, rebuilding shared UI, and tightening the Tauri 2 shell.",
+        "recentDecision": "Keep the front-end mock as the source of truth for all formal objects and reserve a minimal host interface in Rust."
+      },
+      "proj-governance": {
+        "name": "Governance Console",
+        "goal": "Shape the settings center, audit logs, and policy visualization surfaces.",
+        "phase": "Planning",
+        "summary": "The governance schema is set and waiting to be wired into the desktop shell.",
+        "recentDecision": "Ship a read-only governance surface first and skip the real backend for now."
+      },
+      "proj-launch": {
+        "name": "Enterprise Launch Ops",
+        "goal": "Track approvals, trace state, and automation health inside the enterprise workspace.",
+        "phase": "Review",
+        "summary": "The shared workspace needs a complete Dashboard, Inbox, and Team collaboration surface.",
+        "recentDecision": "Prioritize an explainable run timeline instead of a log-only trace view."
+      }
+    },
+    "run": {
+      "run-redesign": {
+        "title": "Desktop shell refactor run",
+        "currentStep": "Awaiting permission to write shared artifacts",
+        "blockers": ["Need approval before promoting artifact version v3"],
+        "nextAction": "Approve the review request to continue the execution chain."
+      },
+      "run-governance": {
+        "title": "Governance read surface audit",
+        "currentStep": "Syncing audit and settings panels",
+        "nextAction": "Review policy copy and confirm labels."
+      },
+      "run-launch": {
+        "title": "Launch readiness checklist",
+        "currentStep": "Waiting on budget approval for final sign-off",
+        "blockers": ["Budget approval pending"],
+        "nextAction": "Resolve the blocking inbox item and rerun the checklist."
+      }
+    },
+    "traceRecord": {
+      "trace-redesign-1": {
+        "title": "Mapped the current desktop shell",
+        "detail": "Indexed App.vue, schema, UI tokens, and Tauri bootstrap state."
+      },
+      "trace-redesign-2": {
+        "title": "Waiting for artifact review approval",
+        "detail": "The refactor can continue after the new artifact version is approved."
+      },
+      "trace-governance-1": {
+        "title": "Flagged the audit timeline for shared reuse",
+        "detail": "The audit timeline card should move into the shared UI package."
+      },
+      "trace-launch-1": {
+        "title": "Budget lock engaged",
+        "detail": "The launch team remains paused until enterprise billing confirms resource allocation."
+      }
+    },
+    "conversation": {
+      "conv-redesign": {
+        "title": "Desktop shell GA refactor",
+        "summary": "Split the single-page prototype into a workbench shell, shared UI, and minimal Tauri host.",
+        "currentGoal": "Fill the desktop PRD modules and finish Tauri / Rust initialization.",
+        "constraints": ["Front-end and mock data only", "Keep the Rust backend as bootstrap scaffolding", "Preserve reuse for mobile and the marketing site"],
+        "statusNote": "The current focus is switching the prototype shell into a modular workbench.",
+        "resumePoints": {
+          "resume-redesign-1": {
+            "label": "Shared schema and UI contracts are already defined"
+          }
+        },
+        "branchLinks": {
+          "branch-redesign-1": {
+            "label": "Governance surface follow-up"
+          }
+        }
+      },
+      "conv-governance": {
+        "title": "Settings and audit alignment",
+        "summary": "The governance surface stays read-only and mock-driven to preserve explainability.",
+        "currentGoal": "Bring policy, logs, audit, and integration state into one settings center.",
+        "constraints": ["Do not connect the real permission backend yet"],
+        "statusNote": "The governance surface is ready for shared component extraction.",
+        "resumePoints": {
+          "resume-gov-1": {
+            "label": "The audit surface is already in the shared UI backlog"
+          }
+        }
+      },
+      "conv-launch": {
+        "title": "Launch readiness command center",
+        "summary": "The enterprise workspace is focused on approval recovery, trace clarity, and automation health.",
+        "currentGoal": "Make Dashboard, Inbox, and Trace explain the current blocker together.",
+        "constraints": ["Do not resume the automation run before budget approval"],
+        "statusNote": "The blocker and recovery action should be explained clearly on a single screen.",
+        "resumePoints": {
+          "resume-launch-1": {
+            "label": "Budget approval pending"
+          }
+        }
+      }
+    },
+    "message": {
+      "msg-redesign-1": {
+        "content": "Please inspect the current desktop implementation, fill the remaining PRD modules, and organize the Tauri2 / Rust bootstrap."
+      },
+      "msg-redesign-2": {
+        "content": "Start by separating schema, shared UI, and the workbench layout, then fill Dashboard, Trace, Knowledge, and Settings incrementally."
+      },
+      "msg-governance-1": {
+        "content": "The governance surface should stay read-only first so the audit path and risk explanation remain easy to understand."
+      },
+      "msg-launch-1": {
+        "content": "The automation run is blocked because budget approval has not been granted yet."
+      }
+    },
+    "artifact": {
+      "art-roadmap": {
+        "type": "implementation plan",
+        "title": "GA Shell Refactor Roadmap",
+        "content": "# GA Shell Refactor\n\n- Expand schema\n- Rebuild the workbench layout\n- Add Trace / Knowledge / Settings surfaces\n- Initialize the Tauri 2 host shell",
+        "excerpt": "Expand the schema, rebuild the workbench layout, add Trace / Knowledge / Settings, and initialize Tauri."
+      },
+      "art-prd": {
+        "type": "prd",
+        "title": "Octopus PRD Snapshot",
+        "content": "# Octopus PRD\n\nA conversation-first agent runtime platform for desktop, web, and mobile surfaces.",
+        "excerpt": "A conversation-first platform with formal objects and explainable state."
+      },
+      "art-policy": {
+        "type": "policy",
+        "title": "Capability Policy Matrix",
+        "content": "# Capability Policy Matrix\n\n- low risk: read, analyze\n- medium risk: write artifact\n- high risk: send / delete / system command",
+        "excerpt": "Capability policy matrix for governance surfaces."
+      },
+      "art-launch-plan": {
+        "type": "launch plan",
+        "title": "Launch Readiness Brief",
+        "content": "# Launch Readiness\n\nPending: budget approval, automation rerun, final audit sign-off.",
+        "excerpt": "A blocked launch brief with budget approval still pending."
+      }
+    },
+    "knowledgeEntry": {
+      "knowledge-private-redesign": {
+        "title": "The architect prefers design-first decomposition",
+        "summary": "In a complex redesign, cutting contracts before pages sharply reduces rework."
+      },
+      "knowledge-shared-trace": {
+        "title": "Trace must explain blockers and next actions",
+        "summary": "Dashboard, Trace, and Inbox should explain the current state, blocker, and recovery action together."
+      },
+      "knowledge-candidate-audit": {
+        "title": "The audit timeline card is reusable",
+        "summary": "The audit timeline card can be promoted into the shared UI package."
+      }
+    },
+    "inboxItem": {
+      "inbox-approval-1": {
+        "title": "Approve artifact promotion for the desktop shell refactor",
+        "description": "The refactor run needs approval before promoting the new artifact version and continuing write actions.",
+        "impact": "Unblocks the current execution run and refreshes dashboard status.",
+        "riskNote": "The shared artifact content becomes the new reference for downstream work.",
+        "recommendedAction": "Review the roadmap artifact and approve it if the structure matches the PRD."
+      },
+      "inbox-blocker-1": {
+        "title": "Budget approval blocks the launch readiness run",
+        "description": "The automation run remains paused until budget approval is granted.",
+        "impact": "The launch checklist cannot complete and the dashboard remains blocked.",
+        "riskNote": "Skipping this approval leaves the enterprise workspace without a final readiness signal.",
+        "recommendedAction": "Resolve budget approval or formally pause the automation."
+      }
+    },
+    "automation": {
+      "auto-launch-daily": {
+        "title": "Daily launch readiness digest",
+        "description": "Summarize blockers, approval backlog, and the latest trace every day.",
+        "cadence": "Every weekday · 09:00",
+        "output": "Inbox item + daily brief artifact"
+      },
+      "auto-governance-weekly": {
+        "title": "Weekly governance review",
+        "description": "Summarize high-risk actions, policy changes, and knowledge promotion requests each week.",
+        "cadence": "Every Monday · 10:00",
+        "output": "Review checklist + audit notes"
+      }
+    },
+    "settingsSection": {
+      "connections": {
+        "title": "Connections",
+        "description": "Status for the local hub, shared workspaces, and future remote access.",
+        "items": ["Local workspace bootstrap", "Shared workspace profile", "Connection health"]
+      },
+      "roles": {
+        "title": "Roles & RBAC",
+        "description": "User permissions define visibility; agents and teams do not own RBAC separately.",
+        "items": ["Workspace roles", "Project manager rights", "Read-only governance views"]
+      },
+      "policies": {
+        "title": "Capability Policies",
+        "description": "Defines model tiers, tools, environment scope, and approval triggers.",
+        "items": ["Model profiles", "Tool allowlists", "Approval-required actions"]
+      },
+      "audit": {
+        "title": "Audit Trail",
+        "description": "High-risk actions, approval decisions, and config changes all land in the audit view.",
+        "items": ["Trace linkage", "Approval records", "Configuration deltas"]
+      },
+      "integrations": {
+        "title": "Integrations",
+        "description": "External bindings and connector state.",
+        "items": ["Tauri host commands", "Docs bindings", "Future remote connectors"]
+      },
+      "logs": {
+        "title": "Logs",
+        "description": "Runtime logs, host state, and debugging entry points.",
+        "items": ["tauri-plugin-log", "Host healthcheck", "Runtime summaries"]
+      }
+    },
+    "connection": {
+      "conn-local": {
+        "label": "Default Local Workspace"
+      },
+      "conn-shared-enterprise": {
+        "label": "Enterprise Ops Shared Workspace"
+      }
+    }
+  }
+}

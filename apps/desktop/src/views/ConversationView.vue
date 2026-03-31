@@ -1,273 +1,254 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
 
-import {
-  buildProjectTasksRoute,
-  buildWorkspaceProjectsRoute,
-  useConnectionStore
-} from "../stores/connection";
-import { useConversationStore } from "../stores/conversation";
-import { usePreferencesStore } from "../stores/preferences";
-import { useHubStore } from "../stores/hub";
+import { ConversationIntent } from '@octopus/schema'
+import { UiArtifactBlock, UiBadge, UiEmptyState, UiSectionHeading, UiSurface } from '@octopus/ui'
 
-const route = useRoute();
-const router = useRouter();
-const hub = useHubStore();
-const preferences = usePreferencesStore();
-const conversations = useConversationStore();
-const connection = useConnectionStore();
+import { enumLabel, resolveCopy, resolveMockField, resolveMockList } from '@/i18n/copy'
+import { useShellStore } from '@/stores/shell'
+import { useWorkbenchStore } from '@/stores/workbench'
 
-preferences.initialize();
-conversations.initialize();
+const route = useRoute()
+const router = useRouter()
+const { t } = useI18n()
+const shell = useShellStore()
+const workbench = useWorkbenchStore()
 
-const composer = ref("");
-const constraintDraft = ref("");
+const messageDraft = ref('')
+const activeConversation = computed(() => workbench.activeConversation)
 
-const workspaceId = computed(() => String(route.params.workspaceId));
-const projectId = computed(() => String(route.params.projectId));
-const threadId = computed(() =>
-  typeof route.query.thread === "string" ? route.query.thread : null
-);
-const thread = computed(() =>
-  conversations.ensureThread(workspaceId.value, projectId.value, threadId.value)
-);
+const activeAgent = computed(() =>
+  workbench.agents.find((agent) => agent.id === activeConversation.value?.activeAgentId),
+)
 
-const executionReadinessLabel = computed(() => {
-  switch (thread.value.proposal.executionReadiness) {
-    case "ready":
-      return preferences.t("conversation.readinessReady");
-    case "reconfirm_required":
-      return preferences.t("conversation.readinessReconfirm");
-    default:
-      return preferences.t("conversation.readinessDrafting");
-  }
-});
+const activeTeam = computed(() =>
+  workbench.teams.find((team) => team.id === activeConversation.value?.activeTeamId),
+)
 
-async function loadConversationContext(): Promise<void> {
-  try {
-    await hub.loadProjectContext(workspaceId.value, projectId.value);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    const rememberedProjectId = connection.profile.projectId ?? "";
-
-    if (
-      connection.remoteMode &&
-      rememberedProjectId === projectId.value &&
-      message.includes(`project \`${projectId.value}\` not found`)
-    ) {
-      connection.clearRememberedProject();
-      await router.replace(buildWorkspaceProjectsRoute(workspaceId.value));
-    }
-  }
+function sendMessage() {
+  workbench.sendMessage(messageDraft.value)
+  messageDraft.value = ''
 }
 
-function sendTurn(): void {
-  conversations.appendUserTurn(thread.value.id, composer.value);
-  composer.value = "";
+function openArtifact(artifactId: string) {
+  shell.selectArtifact(artifactId)
+  shell.setContextPane('artifacts')
+  void router.replace({
+    query: {
+      ...route.query,
+      pane: 'artifacts',
+      artifact: artifactId,
+    },
+  })
 }
 
-function addConstraint(): void {
-  const trimmed = constraintDraft.value.trim();
-  if (!trimmed) {
-    return;
-  }
-
-  thread.value.draft.constraints = [...thread.value.draft.constraints, trimmed];
-  constraintDraft.value = "";
-  conversations.refreshThread(thread.value.id);
+function requestReview(artifactId: string) {
+  workbench.requestArtifactReview(artifactId)
+  shell.setContextPane('inbox')
+  void router.replace({
+    query: {
+      ...route.query,
+      pane: 'inbox',
+      artifact: artifactId,
+    },
+  })
 }
 
-async function confirmExecution(): Promise<void> {
-  if (thread.value.proposal.executionMode !== "now") {
-    await router.push(buildProjectTasksRoute(workspaceId.value, projectId.value));
-    return;
+function senderLabel(senderId: string, senderType: 'user' | 'agent' | 'system'): string {
+  if (senderType === 'user') {
+    return t('conversation.senderType.user')
   }
 
-  try {
-    const runDetail = await hub.createAndStartTask({
-      workspace_id: workspaceId.value,
-      project_id: projectId.value,
-      title: thread.value.draft.goal || thread.value.title,
-      instruction:
-        thread.value.draft.expectedResult ||
-        thread.value.messages.at(-1)?.content ||
-        thread.value.draft.goal,
-      action: {
-        kind: "emit_text",
-        content:
-          thread.value.draft.expectedResult ||
-          thread.value.draft.goal ||
-          thread.value.title
-      },
-      capability_id: "capability-write-note",
-      estimated_cost: 1,
-      idempotency_key: `${workspaceId.value}:${projectId.value}:${thread.value.id}`
-    });
-
-    conversations.markExecutionStarted(thread.value.id, runDetail.run.id);
-    await router.push(`/runs/${runDetail.run.id}`);
-  } catch {
-    // The shared shell error state already surfaces execution failures.
+  if (senderType === 'system') {
+    return t('conversation.senderType.system')
   }
+
+  const agent = workbench.agents.find((item) => item.id === senderId)
+  return agent ? resolveMockField('agent', agent.id, 'name', agent.name) : senderId
 }
-
-watch(
-  () => [route.params.workspaceId, route.params.projectId],
-  () => {
-    void loadConversationContext();
-  }
-);
-
-onMounted(() => {
-  void loadConversationContext();
-});
 </script>
 
 <template>
-  <section class="conversation-layout">
-    <article class="panel panel-hero">
-      <p class="eyebrow">{{ preferences.t("nav.conversation") }}</p>
-      <h1 class="page-title">{{ preferences.t("conversation.title") }}</h1>
-      <p class="page-subtitle">{{ preferences.t("conversation.subtitle") }}</p>
-      <div class="stage-chip">
-        <span>{{ preferences.t("conversation.stage") }}</span>
-        <strong>{{ thread.stage }}</strong>
+  <section class="section-stack">
+    <UiSectionHeading
+      :eyebrow="t('conversation.header.eyebrow')"
+      :title="activeConversation ? resolveMockField('conversation', activeConversation.id, 'title', activeConversation.title) : t('conversation.header.titleFallback')"
+      :subtitle="activeConversation ? resolveMockField('conversation', activeConversation.id, 'summary', activeConversation.summary) : t('conversation.header.subtitleFallback')"
+    />
+
+    <UiSurface
+      v-if="activeConversation"
+      :title="t('conversation.controls.title')"
+      :subtitle="resolveMockField('conversation', activeConversation.id, 'statusNote', resolveCopy(activeConversation.statusNote))"
+    >
+      <div class="meta-row">
+        <UiBadge :label="enumLabel('conversationIntent', activeConversation.intent)" tone="info" />
+        <UiBadge v-if="activeAgent" :label="resolveMockField('agent', activeAgent.id, 'name', activeAgent.name)" subtle />
+        <UiBadge v-if="activeTeam" :label="resolveMockField('team', activeTeam.id, 'name', activeTeam.name)" subtle />
+        <UiBadge :label="t('common.progress', { value: activeConversation.stageProgress })" subtle />
       </div>
-    </article>
-
-    <div class="conversation-grid">
-      <article class="panel">
-        <ul v-if="thread.messages.length > 0" class="stack-list">
-          <li
-            v-for="message in thread.messages"
-            :key="message.id"
-            class="message-card"
-            :class="message.role === 'user' ? 'message-user' : 'message-assistant'"
-          >
-            <span class="message-role">
-              {{
-                message.role === "user"
-                  ? preferences.t("conversation.roleUser")
-                  : preferences.t("conversation.roleSystem")
-              }}
-            </span>
-            <p>{{ message.content }}</p>
-          </li>
-        </ul>
-        <p v-else class="muted-copy">{{ preferences.t("conversation.empty") }}</p>
-
-        <div class="field-stack">
-          <textarea
-            v-model="composer"
-            data-testid="conversation-input"
-            rows="4"
-            :placeholder="preferences.t('conversation.placeholder')"
-          />
-          <div class="button-row">
-            <button
-              class="button-primary"
-              data-testid="conversation-send"
-              type="button"
-              @click="sendTurn"
-            >
-              {{ preferences.t("conversation.send") }}
-            </button>
-          </div>
+      <div class="action-row">
+        <button
+          v-if="activeConversation.intent !== ConversationIntent.PAUSED"
+          type="button"
+          class="secondary-button"
+          @click="workbench.pauseConversation()"
+        >
+          {{ t('common.pause') }}
+        </button>
+        <button
+          v-else
+          type="button"
+          class="primary-button"
+          @click="workbench.resumeConversation()"
+        >
+          {{ t('common.resume') }}
+        </button>
+      </div>
+      <div class="surface-grid two">
+        <div class="context-copy">
+          <strong>{{ t('conversation.controls.goalLabel') }}</strong>
+          <p>{{ resolveMockField('conversation', activeConversation.id, 'currentGoal', activeConversation.currentGoal) }}</p>
         </div>
-      </article>
-
-      <aside class="panel proposal-panel">
-        <p class="eyebrow">{{ preferences.t("conversation.proposal") }}</p>
-        <label class="field-stack">
-          <span>{{ preferences.t("conversation.goal") }}</span>
-          <textarea
-            v-model="thread.draft.goal"
-            rows="3"
-            @input="conversations.refreshThread(thread.id)"
-          />
-        </label>
-
-        <label class="field-stack">
-          <span>{{ preferences.t("conversation.expected") }}</span>
-          <textarea
-            v-model="thread.draft.expectedResult"
-            rows="3"
-            @input="conversations.refreshThread(thread.id)"
-          />
-        </label>
-
-        <label class="field-stack">
-          <span>{{ preferences.t("conversation.mode") }}</span>
-          <select
-            v-model="thread.draft.executionMode"
-            @change="conversations.refreshThread(thread.id)"
-          >
-            <option value="now">{{ preferences.t("conversation.executionNow") }}</option>
-            <option value="scheduled">
-              {{ preferences.t("conversation.executionScheduled") }}
-            </option>
-            <option value="event-driven">
-              {{ preferences.t("conversation.executionEvent") }}
-            </option>
-          </select>
-        </label>
-
-        <div class="field-stack">
-          <span>{{ preferences.t("conversation.constraints") }}</span>
-          <ul v-if="thread.draft.constraints.length > 0" class="stack-list compact-stack">
+        <div class="context-copy">
+          <strong>{{ t('conversation.controls.constraintsLabel') }}</strong>
+          <ul>
             <li
-              v-for="constraint in thread.draft.constraints"
-              :key="constraint"
-              class="tag-pill"
+              v-for="(constraint, index) in resolveMockList('conversation', activeConversation.id, 'constraints', activeConversation.constraints)"
+              :key="`${activeConversation.id}-constraint-${index}`"
             >
               {{ constraint }}
             </li>
           </ul>
-          <div class="inline-field">
-            <input
-              v-model="constraintDraft"
-              type="text"
-              :placeholder="preferences.t('conversation.constraints')"
-            />
-            <button class="button-secondary" type="button" @click="addConstraint">
-              +
+        </div>
+      </div>
+    </UiSurface>
+
+    <UiSurface :title="t('conversation.stream.title')" :subtitle="t('conversation.stream.subtitle')">
+      <div v-if="workbench.conversationMessages.length" class="message-stream">
+        <article
+          v-for="message in workbench.conversationMessages"
+          :key="message.id"
+          class="message-card"
+          :class="message.senderType"
+        >
+          <header>
+            <strong>{{ senderLabel(message.senderId, message.senderType) }}</strong>
+            <span>{{ t(`conversation.senderType.${message.senderType}`) }}</span>
+          </header>
+          <p>{{ resolveMockField('message', message.id, 'content', resolveCopy(message.content)) }}</p>
+          <div v-if="message.artifacts?.length" class="action-row">
+            <button
+              v-for="artifactId in message.artifacts"
+              :key="artifactId"
+              type="button"
+              class="ghost-button"
+              @click="openArtifact(artifactId)"
+            >
+              {{ t('common.open') }} {{ artifactId }}
             </button>
           </div>
-        </div>
+        </article>
+      </div>
+      <UiEmptyState v-else :title="t('conversation.stream.emptyTitle')" :description="t('conversation.stream.emptyDescription')" />
+      <div class="composer">
+        <textarea
+          v-model="messageDraft"
+          rows="5"
+          :placeholder="t('conversation.stream.placeholder')"
+        />
+        <button type="button" class="primary-button" @click="sendMessage">{{ t('common.send') }}</button>
+      </div>
+    </UiSurface>
 
-        <div class="field-stack">
-          <span>{{ preferences.t("conversation.risks") }}</span>
-          <ul v-if="thread.proposal.riskNotes.length > 0" class="stack-list compact-stack">
-            <li v-for="risk in thread.proposal.riskNotes" :key="risk" class="list-card tone-warning">
-              {{ risk }}
+    <UiSurface :title="t('conversation.artifacts.title')" :subtitle="t('conversation.artifacts.subtitle')">
+      <div v-if="workbench.activeConversationArtifacts.length" class="surface-grid two">
+        <UiArtifactBlock
+          v-for="artifact in workbench.activeConversationArtifacts"
+          :key="artifact.id"
+          :title="resolveMockField('artifact', artifact.id, 'title', artifact.title)"
+          :excerpt="resolveMockField('artifact', artifact.id, 'excerpt', artifact.excerpt)"
+          :type-label="resolveMockField('artifact', artifact.id, 'type', artifact.type)"
+          :version-label="`v${artifact.version}`"
+          :status-label="enumLabel('artifactStatus', artifact.status)"
+        >
+          <template #actions>
+            <button type="button" class="ghost-button" @click="openArtifact(artifact.id)">{{ t('common.open') }}</button>
+            <button type="button" class="secondary-button" @click="requestReview(artifact.id)">{{ t('common.requestReview') }}</button>
+          </template>
+        </UiArtifactBlock>
+      </div>
+      <UiEmptyState v-else :title="t('conversation.artifacts.emptyTitle')" :description="t('conversation.artifacts.emptyDescription')" />
+      <div v-if="activeConversation" class="surface-grid two">
+        <UiSurface :title="t('conversation.artifacts.resumeTitle')">
+          <ul>
+            <li v-for="resumePoint in activeConversation.resumePoints" :key="resumePoint.id">
+              {{ resolveMockField('conversation', activeConversation.id, `resumePoints.${resumePoint.id}.label`, resumePoint.label) }}
             </li>
           </ul>
-          <p v-else class="muted-copy">{{ preferences.t("common.empty") }}</p>
-        </div>
-
-        <div class="stage-chip stage-chip-strong">
-          <span>{{ preferences.t("conversation.readiness") }}</span>
-          <strong>{{ executionReadinessLabel }}</strong>
-        </div>
-
-        <button
-          class="button-primary"
-          data-testid="proposal-confirm"
-          type="button"
-          @click="confirmExecution"
-        >
-          {{
-            thread.proposal.executionMode === "now"
-              ? preferences.t("conversation.confirm")
-              : preferences.t("conversation.openAdvanced")
-          }}
-        </button>
-
-        <p v-if="thread.lastRunId" class="muted-copy">
-          {{ preferences.t("conversation.linkedRun") }}: {{ thread.lastRunId }}
-        </p>
-      </aside>
-    </div>
+        </UiSurface>
+        <UiSurface :title="t('conversation.artifacts.branchTitle')">
+          <ul v-if="activeConversation.branchLinks.length">
+            <li v-for="branch in activeConversation.branchLinks" :key="branch.id">
+              {{ resolveMockField('conversation', activeConversation.id, `branchLinks.${branch.id}.label`, branch.label) }} → {{ branch.targetConversationId }}
+            </li>
+          </ul>
+          <UiEmptyState v-else :title="t('conversation.artifacts.emptyBranchTitle')" :description="t('conversation.artifacts.emptyBranchDescription')" />
+        </UiSurface>
+      </div>
+    </UiSurface>
   </section>
 </template>
+
+<style scoped>
+.context-copy p,
+.message-card p {
+  color: var(--text-secondary);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-left: 1rem;
+  color: var(--text-secondary);
+}
+
+.message-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.message-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 1rem;
+  border-radius: var(--radius-l);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
+}
+
+.message-card.user {
+  border-color: color-mix(in srgb, var(--brand-primary) 30%, var(--border-subtle));
+}
+
+.message-card header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+</style>
