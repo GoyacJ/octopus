@@ -1,0 +1,39 @@
+- generic [ref=e2]:
+  - generic [ref=e3]: PLATFORM ARCHITECTURE
+  - heading "Octopus 不是单一界面，而是可分层治理的智能体平台" [level=1] [ref=e4]
+  - generic [ref=e5]: 前台负责交互，后台负责运行、知识、治理和外部接入；观测能力横切全链路，确保每一次 AI 行为可追踪、可解释、可审计。
+  - generic [ref=e6]:
+    - strong [ref=e7]: Observation Layer
+    - generic [ref=e8]: Trace / Audit / Cost Ledger / Lineage 横切所有层，形成统一观测面
+  - generic [ref=e9]:
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - text: 交互层
+        - text: Interaction
+      - generic [ref=e12]: 承载 Chat、Dashboard、Inbox、Trace、Knowledge 等用户工作表面，让复杂运行结果被业务方看见并参与决策。
+    - generic [ref=e13]:
+      - generic [ref=e14]:
+        - text: 运行层
+        - text: Runtime
+      - generic [ref=e15]: 负责任务调度、Run 编排、能力解析、自动化触发，是智能体真正从“对话”进入“执行”的核心引擎。
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - text: 知识层
+        - text: Knowledge
+      - generic [ref=e18]: 管理私有记忆、共享知识与组织级知识图谱，使经验与成果不再埋在单次对话里。
+    - generic [ref=e19]:
+      - generic [ref=e20]:
+        - text: 治理层
+        - text: Governance
+      - generic [ref=e21]: 通过 RBAC、Grant、Budget、Approval 和策略管理，保证 AI 在企业规则内运行。
+    - generic [ref=e22]:
+      - generic [ref=e23]:
+        - text: 互操作层
+        - text: Interop
+      - generic [ref=e24]: 统一 MCP、A2A、Webhook 等外部接入协议，避免工具、数据源与外部 Agent 各自为政。
+    - generic [ref=e25]:
+      - generic [ref=e26]:
+        - text: 执行层
+        - text: Execution
+      - generic [ref=e27]: 承载工具运行、代码执行、沙箱与外部系统调用，是能力真正被执行的最后一公里。
+  - generic [ref=e28]: 管理层关心的核心并非“功能堆叠”，而是平台能否把执行能力、知识沉淀和风险控制收敛到同一条运营链路中。Octopus 的分层设计正是为了同时支持扩展性与治理性。

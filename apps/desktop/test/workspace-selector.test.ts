@@ -9,11 +9,11 @@ describe('workspace selector contract', () => {
     setActivePinia(createPinia())
   })
 
-  it('routes workspace dropdown changes to the target dashboard and keeps scoped data aligned', () => {
+  it('routes workspace dropdown changes to the target overview and keeps scoped data aligned', () => {
     const store = useWorkbenchStore()
 
     expect(createWorkspaceSwitchTarget(store.workspaces, 'ws-enterprise')).toEqual({
-      name: 'dashboard',
+      name: 'workspace-overview',
       params: { workspaceId: 'ws-enterprise' },
       query: { project: 'proj-launch' },
     })

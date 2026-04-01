@@ -1,0 +1,217 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e7]
+      - generic [ref=e11]:
+        - strong [ref=e12]: Octopus
+        - generic [ref=e13]: 本地枢纽
+    - button "搜索对话、项目或页面… ⌘K" [ref=e14] [cursor=pointer]:
+      - img [ref=e15]
+      - generic [ref=e18]: 搜索对话、项目或页面…
+      - generic [ref=e19]: ⌘K
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - button "切换主题" [ref=e22] [cursor=pointer]:
+          - img [ref=e23]
+        - button "切换语言" [ref=e25] [cursor=pointer]:
+          - img [ref=e26]
+        - button "打开审批" [ref=e31] [cursor=pointer]:
+          - img [ref=e32]
+        - button "打开设置" [ref=e35] [cursor=pointer]:
+          - img [ref=e36]
+      - button "L 本地枢纽 本地工作台" [ref=e41] [cursor=pointer]:
+        - generic [ref=e42]: L
+        - generic [ref=e43]:
+          - strong [ref=e44]: 本地枢纽
+          - generic [ref=e45]: 本地工作台
+        - img [ref=e46]
+  - generic [ref=e48]:
+    - complementary [ref=e49]:
+      - generic [ref=e50]:
+        - generic [ref=e51]:
+          - generic [ref=e53]: 项目
+          - generic [ref=e54]:
+            - button "新增项目" [ref=e55] [cursor=pointer]:
+              - img [ref=e56]
+            - button "切换左侧栏" [ref=e57] [cursor=pointer]:
+              - img [ref=e58]
+        - generic [ref=e61]:
+          - generic [ref=e63]:
+            - generic [ref=e65]:
+              - generic [ref=e66]:
+                - button "Octopus Desktop Shell 1 个会话" [ref=e67] [cursor=pointer]:
+                  - generic [ref=e68]:
+                    - img [ref=e70]
+                    - generic [ref=e72]:
+                      - strong [ref=e73]: Octopus Desktop Shell
+                      - generic [ref=e74]: 1 个会话
+                - img [ref=e75]
+              - generic [ref=e77]:
+                - link "仪表盘" [ref=e78] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/dashboard?project=proj-redesign"
+                  - img [ref=e79]
+                  - generic [ref=e84]: 仪表盘
+                - link "会话" [ref=e85] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign"
+                  - img [ref=e86]
+                  - generic [ref=e88]: 会话
+                - link "知识" [ref=e89] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/knowledge"
+                  - img [ref=e90]
+                  - generic [ref=e93]: 知识
+                - link "追踪" [ref=e94] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/trace"
+                  - img [ref=e95]
+                  - generic [ref=e98]: 追踪
+            - generic [ref=e99]:
+              - generic:
+                - button "删除项目":
+                  - img
+              - generic [ref=e101]:
+                - button "治理控制台 1 个会话" [ref=e102] [cursor=pointer]:
+                  - generic [ref=e103]:
+                    - img [ref=e105]
+                    - generic [ref=e107]:
+                      - strong [ref=e108]: 治理控制台
+                      - generic [ref=e109]: 1 个会话
+                - img [ref=e110]
+          - navigation [ref=e112]:
+            - link "知识" [ref=e113] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/projects/proj-redesign/knowledge"
+              - img [ref=e114]
+              - generic [ref=e117]: 知识
+            - link "追踪" [ref=e118] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/projects/proj-redesign/trace"
+              - img [ref=e119]
+              - generic [ref=e122]: 追踪
+            - link "智能体" [ref=e123] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/agents"
+              - img [ref=e124]
+              - generic [ref=e127]: 智能体
+            - link "团队" [ref=e128] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/teams"
+              - img [ref=e129]
+              - generic [ref=e134]: 团队
+            - link "自动化" [ref=e135] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/automations"
+              - img [ref=e136]
+              - generic [ref=e140]: 自动化
+    - main [ref=e141]:
+      - generic [ref=e142]:
+        - generic [ref=e144]:
+          - generic [ref=e145]:
+            - button "Desktop shell GA 重构" [ref=e146] [cursor=pointer]:
+              - img [ref=e147]
+              - generic [ref=e149]: Desktop shell GA 重构
+            - button "删除会话" [ref=e150] [cursor=pointer]:
+              - img [ref=e151]
+          - button "新建会话" [ref=e154] [cursor=pointer]:
+            - img [ref=e155]
+        - generic [ref=e157]:
+          - generic [ref=e158]:
+            - generic [ref=e160]:
+              - article [ref=e161]:
+                - generic [ref=e162]:
+                  - strong [ref=e163]: 用户
+                  - generic [ref=e164]: 04/01 06:38
+                - paragraph [ref=e165]: 请先查看当前桌面端实现状态，再按 PRD 补齐剩余模块，并整理 Tauri2 / Rust 初始化。
+                - generic [ref=e166]:
+                  - button "Octopus PRD Snapshot" [ref=e167] [cursor=pointer]:
+                    - img [ref=e168]
+                    - generic [ref=e170]: Octopus PRD Snapshot
+                  - button "Octopus PRD 快照" [ref=e171] [cursor=pointer]:
+                    - img [ref=e172]
+                    - generic [ref=e175]: Octopus PRD 快照
+              - article [ref=e176]:
+                - generic [ref=e177]:
+                  - strong [ref=e178]: 架构 Agent
+                  - generic [ref=e179]: 04/01 06:45
+                - paragraph [ref=e180]: 建议先把 schema、共享 UI 和工作台布局拆开，再逐步填充 Dashboard、Trace、Knowledge 和 Settings。
+                - button "GA Shell 重构路线图" [ref=e182] [cursor=pointer]:
+                  - img [ref=e183]
+                  - generic [ref=e186]: GA Shell 重构路线图
+            - generic [ref=e188]:
+              - textbox "输入你的消息、约束或下一步指令…" [ref=e189]
+              - generic [ref=e190]:
+                - generic [ref=e191]:
+                  - generic [ref=e192]:
+                    - img [ref=e193]
+                    - generic [ref=e195]: 附件
+                    - combobox "附件" [ref=e196]:
+                      - option "不附加资源" [selected]
+                      - option "GA Shell 重构路线图"
+                      - option "Octopus PRD 快照"
+                  - generic [ref=e197]:
+                    - img [ref=e198]
+                    - generic [ref=e201]: 模型
+                    - combobox "模型" [ref=e202]:
+                      - option "GPT-4o" [selected]
+                      - option "Claude Sonnet"
+                      - option "o3-mini"
+                  - generic [ref=e203]:
+                    - img [ref=e204]
+                    - generic [ref=e206]: 工具
+                    - combobox "工具" [ref=e207]:
+                      - option "工作区" [selected]
+                      - option "浏览器"
+                      - option "智能体工具"
+                - button "发送" [disabled] [ref=e208]:
+                  - generic [ref=e209]: 发送
+                  - img [ref=e210]
+          - complementary [ref=e212]:
+            - generic [ref=e213]:
+              - strong [ref=e214]: 会话详情
+              - button "收起会话详情" [ref=e215] [cursor=pointer]:
+                - img [ref=e216]
+            - generic [ref=e219]:
+              - generic [ref=e220]:
+                - generic [ref=e221]: 规划
+                - generic [ref=e222]: 实现 Agent
+                - generic [ref=e223]: 改版突击队
+                - generic [ref=e224]: 64% 进度
+              - generic [ref=e225]:
+                - generic [ref=e226]:
+                  - strong [ref=e227]: 目标
+                  - paragraph [ref=e228]: 补齐桌面端 PRD 模块与 Tauri / Rust 初始化。
+                - generic [ref=e229]:
+                  - strong [ref=e230]: 下一步
+                  - paragraph [ref=e231]: Approve the review request to continue the execution chain.
+            - tablist [ref=e232]:
+              - button "概览" [ref=e233] [cursor=pointer]:
+                - img [ref=e234]
+                - generic [ref=e236]: 概览
+              - button "资源" [ref=e237] [cursor=pointer]:
+                - img [ref=e238]
+                - generic [ref=e241]: 资源
+              - button "审批" [ref=e242] [cursor=pointer]:
+                - img [ref=e243]
+                - generic [ref=e246]: 审批
+              - button "时间线" [ref=e247] [cursor=pointer]:
+                - img [ref=e248]
+                - generic [ref=e255]: 时间线
+            - generic [ref=e256]:
+              - generic [ref=e257]:
+                - heading "运行概览" [level=2] [ref=e258]
+                - paragraph [ref=e259]: 目标、约束、当前步骤与恢复信息。
+              - generic [ref=e260]:
+                - strong [ref=e261]: 约束
+                - list [ref=e262]:
+                  - listitem [ref=e263]: 只做前端 + mock 数据
+                  - listitem [ref=e264]: 保留后端 Rust 初始化骨架
+                  - listitem [ref=e265]: 保持未来 Mobile 和官网可复用
+              - generic [ref=e266]:
+                - generic [ref=e267]:
+                  - strong [ref=e268]: 当前步骤
+                  - paragraph [ref=e269]: Awaiting permission to write shared artifacts
+                - generic [ref=e270]:
+                  - strong [ref=e271]: 最近更新时间
+                  - paragraph [ref=e272]: 04/01 07:29
+              - generic [ref=e273]:
+                - generic [ref=e274]:
+                  - strong [ref=e275]: 恢复点
+                  - list [ref=e276]:
+                    - listitem [ref=e277]: 共享 schema 与 UI 契约已定义
+                - generic [ref=e278]:
+                  - strong [ref=e279]: 分支链接
+                  - list [ref=e280]:
+                    - listitem [ref=e281]: 治理表面后续分支

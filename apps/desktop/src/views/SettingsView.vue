@@ -14,14 +14,16 @@ const workbench = useWorkbenchStore()
 
 const theme = ref(shell.preferences.theme)
 const locale = ref(shell.preferences.locale)
-const compactSidebar = ref(shell.preferences.compactSidebar)
+const leftSidebarCollapsed = ref(shell.preferences.leftSidebarCollapsed)
+const rightSidebarCollapsed = ref(shell.preferences.rightSidebarCollapsed)
 
 watch(
   () => shell.preferences,
   (preferences) => {
     theme.value = preferences.theme
     locale.value = preferences.locale
-    compactSidebar.value = preferences.compactSidebar
+    leftSidebarCollapsed.value = preferences.leftSidebarCollapsed
+    rightSidebarCollapsed.value = preferences.rightSidebarCollapsed
   },
   { deep: true, immediate: true },
 )
@@ -30,7 +32,8 @@ async function savePreferences() {
   await shell.updatePreferences({
     theme: theme.value,
     locale: locale.value,
-    compactSidebar: compactSidebar.value,
+    leftSidebarCollapsed: leftSidebarCollapsed.value,
+    rightSidebarCollapsed: rightSidebarCollapsed.value,
   })
 }
 </script>
@@ -59,10 +62,16 @@ async function savePreferences() {
           </select>
         </UiField>
       </div>
-      <label class="checkbox-row">
-        <input v-model="compactSidebar" type="checkbox" />
-        <span>{{ t('settings.preferences.compactSidebar') }}</span>
-      </label>
+      <div class="checkbox-stack">
+        <label class="checkbox-row">
+          <input v-model="leftSidebarCollapsed" type="checkbox" />
+          <span>{{ t('settings.preferences.leftSidebarCollapsed') }}</span>
+        </label>
+        <label class="checkbox-row">
+          <input v-model="rightSidebarCollapsed" type="checkbox" />
+          <span>{{ t('settings.preferences.rightSidebarCollapsed') }}</span>
+        </label>
+      </div>
       <div class="action-row">
         <button type="button" class="primary-button" @click="savePreferences">{{ t('common.savePreferences') }}</button>
       </div>
@@ -104,6 +113,12 @@ async function savePreferences() {
 li {
   color: var(--text-secondary);
   line-height: 1.6;
+}
+
+.checkbox-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .checkbox-row {

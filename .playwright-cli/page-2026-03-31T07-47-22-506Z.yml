@@ -1,0 +1,150 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e7]
+      - generic [ref=e11]:
+        - strong [ref=e12]: Octopus
+        - generic [ref=e13]: 本地枢纽
+    - button "搜索对话、项目或页面… ⌘K" [ref=e14] [cursor=pointer]:
+      - img [ref=e15]
+      - generic [ref=e18]: 搜索对话、项目或页面…
+      - generic [ref=e19]: ⌘K
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - button "切换主题" [ref=e22] [cursor=pointer]:
+          - img [ref=e23]
+        - button "切换语言" [ref=e25] [cursor=pointer]:
+          - img [ref=e26]
+        - button "打开审批" [ref=e31] [cursor=pointer]:
+          - img [ref=e32]
+        - button "打开设置" [ref=e35] [cursor=pointer]:
+          - img [ref=e36]
+      - button "L 本地枢纽 本地工作台" [ref=e41] [cursor=pointer]:
+        - generic [ref=e42]: L
+        - generic [ref=e43]:
+          - strong [ref=e44]: 本地枢纽
+          - generic [ref=e45]: 本地工作台
+        - img [ref=e46]
+  - generic [ref=e48]:
+    - complementary [ref=e49]:
+      - generic [ref=e50]:
+        - generic [ref=e51]:
+          - generic [ref=e53]: 项目
+          - generic [ref=e54]:
+            - button "新增项目" [ref=e55] [cursor=pointer]:
+              - img [ref=e56]
+            - button "切换左侧栏" [ref=e57] [cursor=pointer]:
+              - img [ref=e58]
+        - generic [ref=e61]:
+          - generic [ref=e63]:
+            - generic [ref=e65]:
+              - generic [ref=e66]:
+                - button "Octopus Desktop Shell 1 个会话" [ref=e67] [cursor=pointer]:
+                  - generic [ref=e68]:
+                    - img [ref=e70]
+                    - generic [ref=e72]:
+                      - strong [ref=e73]: Octopus Desktop Shell
+                      - generic [ref=e74]: 1 个会话
+                - img [ref=e75]
+              - generic [ref=e77]:
+                - link "仪表盘" [ref=e78] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/dashboard?project=proj-redesign"
+                  - img [ref=e79]
+                  - generic [ref=e84]: 仪表盘
+                - link "会话" [ref=e85] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign"
+                  - img [ref=e86]
+                  - generic [ref=e88]: 会话
+                - link "知识" [ref=e89] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/knowledge"
+                  - img [ref=e90]
+                  - generic [ref=e93]: 知识
+                - link "追踪" [ref=e94] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/trace"
+                  - img [ref=e95]
+                  - generic [ref=e98]: 追踪
+            - generic [ref=e99]:
+              - generic:
+                - button "删除项目":
+                  - img
+              - generic [ref=e101]:
+                - button "治理控制台 1 个会话" [ref=e102] [cursor=pointer]:
+                  - generic [ref=e103]:
+                    - img [ref=e105]
+                    - generic [ref=e107]:
+                      - strong [ref=e108]: 治理控制台
+                      - generic [ref=e109]: 1 个会话
+                - img [ref=e110]
+          - navigation [ref=e112]:
+            - link "知识" [ref=e113] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/projects/proj-redesign/knowledge"
+              - img [ref=e114]
+              - generic [ref=e117]: 知识
+            - link "追踪" [ref=e118] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/projects/proj-redesign/trace"
+              - img [ref=e119]
+              - generic [ref=e122]: 追踪
+            - link "智能体" [ref=e123] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/agents"
+              - img [ref=e124]
+              - generic [ref=e127]: 智能体
+            - link "团队" [ref=e128] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/teams"
+              - img [ref=e129]
+              - generic [ref=e134]: 团队
+            - link "自动化" [ref=e135] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/automations"
+              - img [ref=e136]
+              - generic [ref=e140]: 自动化
+    - main [ref=e141]:
+      - generic [ref=e553]:
+        - generic [ref=e554]:
+          - paragraph [ref=e555]: Trace
+          - heading "桌面壳重构运行" [level=2] [ref=e556]
+          - paragraph [ref=e557]: 等待写入共享 Artifact 的审批
+        - generic [ref=e558]:
+          - generic [ref=e559]:
+            - generic [ref=e560]: 状态
+            - strong [ref=e561]: 等待审批
+          - generic [ref=e562]:
+            - generic [ref=e563]: Owner
+            - strong [ref=e564]: agent:agent-coder
+          - generic [ref=e565]:
+            - generic [ref=e566]: Next Action
+            - strong [ref=e567]: 批准审阅请求后继续执行链路。
+        - generic [ref=e568]:
+          - generic [ref=e569]:
+            - generic [ref=e570]:
+              - heading "Run State" [level=2] [ref=e571]
+              - paragraph [ref=e572]: 状态迁移、blockers 和恢复语义。
+            - generic [ref=e573]:
+              - generic [ref=e574]:
+                - generic [ref=e575]: execution run
+                - generic [ref=e576]: 04/01 06:35
+                - generic [ref=e577]: 04/01 07:29
+              - paragraph [ref=e578]: 等待写入共享 Artifact 的审批
+              - list [ref=e579]:
+                - listitem [ref=e580]: 提升 Artifact v3 前需要审批
+          - generic [ref=e581]:
+            - generic [ref=e582]:
+              - heading "Recovery" [level=2] [ref=e583]
+              - paragraph [ref=e584]: Resume points 来自关联 conversation。
+            - list [ref=e585]:
+              - listitem [ref=e586]: 共享 schema 与 UI 契约已定义
+        - generic [ref=e587]:
+          - generic [ref=e588]:
+            - heading "Timeline" [level=2] [ref=e589]
+            - paragraph [ref=e590]: 关键动作记录、审批与阻塞说明。
+          - generic [ref=e591]:
+            - article [ref=e592]:
+              - generic [ref=e593]:
+                - generic [ref=e594]: agent-coder
+                - generic [ref=e595]: 04/01 06:48
+              - strong [ref=e596]: 映射当前桌面壳
+              - paragraph [ref=e597]: 已索引 App.vue、schema、UI tokens 和 Tauri 启动状态。
+            - article [ref=e598]:
+              - generic [ref=e599]:
+                - generic [ref=e600]: agent-gov
+                - generic [ref=e601]: 04/01 07:29
+              - strong [ref=e602]: 等待 Artifact 审阅批准
+              - paragraph [ref=e603]: 新版本 artifact 获批后，重构才能继续。

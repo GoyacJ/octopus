@@ -6,10 +6,18 @@ import { RouterLink } from 'vue-router'
 import { UiArtifactBlock, UiBadge, UiEmptyState, UiInboxBlock, UiSectionHeading, UiStatTile, UiSurface } from '@octopus/ui'
 
 import { countLabel, enumLabel, resolveCopy, resolveMockField } from '@/i18n/copy'
+import { createProjectConversationTarget } from '@/i18n/navigation'
 import { useWorkbenchStore } from '@/stores/workbench'
 
 const { t } = useI18n()
 const workbench = useWorkbenchStore()
+const conversationTarget = computed(() =>
+  createProjectConversationTarget(
+    workbench.currentWorkspaceId,
+    workbench.currentProjectId,
+    workbench.currentConversationId,
+  ),
+)
 
 const pendingInbox = computed(() => workbench.workspaceInbox.filter((item) => item.status === 'pending'))
 
@@ -59,7 +67,7 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
           <RouterLink :to="{ name: 'agents', params: { workspaceId: workbench.currentWorkspaceId } }" class="secondary-button">
             {{ t('dashboard.summary.openAgentCenter') }}
           </RouterLink>
-          <RouterLink :to="{ name: 'teams', params: { workspaceId: workbench.currentWorkspaceId } }" class="ghost-button">
+          <RouterLink :to="{ name: 'agents', params: { workspaceId: workbench.currentWorkspaceId }, query: { kind: 'team' } }" class="ghost-button">
             {{ t('dashboard.summary.openTeamCenter') }}
           </RouterLink>
         </div>
@@ -81,14 +89,7 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
         <div class="action-row">
           <RouterLink
             class="primary-button"
-            :to="{
-              name: 'conversation',
-              params: {
-                workspaceId: workbench.currentWorkspaceId,
-                projectId: workbench.currentProjectId,
-                conversationId: workbench.currentConversationId,
-              },
-            }"
+            :to="conversationTarget"
           >
             {{ t('dashboard.project.openConversation') }}
           </RouterLink>

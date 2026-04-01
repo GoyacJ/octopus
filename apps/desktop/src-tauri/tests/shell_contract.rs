@@ -33,7 +33,7 @@ fn bootstrap_uses_defaults_when_preferences_file_is_missing() {
 
   assert_eq!(payload.host_state.platform, "tauri");
   assert_eq!(payload.preferences.default_workspace_id, "ws-local");
-  assert_eq!(payload.preferences.last_visited_route, "/workspaces/ws-local/dashboard?project=proj-redesign");
+  assert_eq!(payload.preferences.last_visited_route, "/workspaces/ws-local/overview?project=proj-redesign");
 }
 
 #[test]
@@ -44,8 +44,10 @@ fn save_then_load_preferences_roundtrips_to_disk() {
     theme: "dark".into(),
     locale: "en-US".into(),
     compact_sidebar: true,
+    left_sidebar_collapsed: true,
+    right_sidebar_collapsed: false,
     default_workspace_id: "ws-enterprise".into(),
-    last_visited_route: "/workspaces/ws-enterprise/dashboard?project=proj-launch".into(),
+    last_visited_route: "/workspaces/ws-enterprise/overview?project=proj-launch".into(),
   };
 
   save_shell_preferences(&state, preferences.clone()).expect("save preferences");

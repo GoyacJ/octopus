@@ -3,6 +3,7 @@ export type Locale = 'zh-CN' | 'en-US'
 export type RiskLevel = 'low' | 'medium' | 'high'
 export type ViewStatus = 'healthy' | 'configured' | 'attention'
 export type DecisionAction = 'approve' | 'reject'
+export type PermissionMode = 'auto' | 'readonly'
 
 export enum ConversationIntent {
   EXPLORE = 'explore',
@@ -26,9 +27,11 @@ export enum TeamMode {
 export type ProjectStatus = 'active' | 'archived'
 export type AgentScope = 'personal' | 'workspace' | 'project'
 export type TeamScope = 'workspace' | 'project'
+export type AgentAssetKind = 'agent' | 'team'
 export type AgentStatus = 'active' | 'archived'
 export type TeamStatus = 'active' | 'archived'
 export type ArtifactStatus = 'draft' | 'review' | 'approved'
+export type ProjectResourceKind = 'file' | 'folder' | 'artifact' | 'url'
 export type RunType = 'conversation_run' | 'review_run' | 'execution_run' | 'automation_run'
 export type RunStatus =
   | 'draft'
@@ -50,6 +53,20 @@ export type ConnectionMode = 'local' | 'shared' | 'remote'
 export type ConnectionState = 'local-ready' | 'connected' | 'disconnected'
 export type AutomationStatus = 'active' | 'paused' | 'error'
 export type SettingsSectionId = 'connections' | 'roles' | 'policies' | 'audit' | 'integrations' | 'logs'
+export type ToolCatalogKind = 'builtin' | 'skill' | 'mcp'
+export type ConversationActorKind = 'agent' | 'team'
+export type MessageProcessEntryType = 'thinking' | 'execution' | 'tool' | 'result'
+export type ConversationMemorySource = 'agent' | 'conversation'
+export type UserStatus = 'active' | 'disabled'
+export type UserGender = 'male' | 'female' | 'unknown'
+export type PasswordState = 'set' | 'reset-required' | 'temporary'
+export type WorkspaceScopeMode = 'all-projects' | 'selected-projects'
+export type RbacRoleStatus = 'active' | 'disabled'
+export type RbacPermissionStatus = 'active' | 'disabled'
+export type RbacPermissionKind = 'atomic' | 'bundle'
+export type RbacPermissionTargetType = 'project' | 'agent' | 'tool' | 'skill' | 'mcp'
+export type MenuSource = 'main-sidebar' | 'user-center'
+export type MenuStatus = 'active' | 'disabled'
 export type InboxItemType =
   | 'execution_approval'
   | 'sending_approval'
@@ -72,6 +89,63 @@ export interface Workspace {
   projectIds: string[]
 }
 
+export interface UserAccount {
+  id: string
+  username: string
+  nickname: string
+  gender: UserGender
+  avatar: string
+  phone: string
+  email: string
+  status: UserStatus
+  passwordState: PasswordState
+  passwordUpdatedAt: number
+}
+
+export interface WorkspaceMembership {
+  workspaceId: string
+  userId: string
+  roleIds: string[]
+  scopeMode: WorkspaceScopeMode
+  scopeProjectIds: string[]
+}
+
+export interface RbacRole {
+  id: string
+  workspaceId: string
+  name: string
+  code: string
+  description: string
+  status: RbacRoleStatus
+  permissionIds: string[]
+  menuIds: string[]
+}
+
+export interface RbacPermission {
+  id: string
+  workspaceId: string
+  name: string
+  code: string
+  description: string
+  status: RbacPermissionStatus
+  kind: RbacPermissionKind
+  targetType?: RbacPermissionTargetType
+  targetIds?: string[]
+  action?: string
+  memberPermissionIds?: string[]
+}
+
+export interface MenuNode {
+  id: string
+  workspaceId: string
+  parentId?: string
+  source: MenuSource
+  label: string
+  routeName?: string
+  status: MenuStatus
+  order: number
+}
+
 export interface Project {
   id: string
   workspaceId: string
@@ -84,8 +158,11 @@ export interface Project {
   recentDecision: string
   conversationIds: string[]
   artifactIds: string[]
+  resourceIds: string[]
   agentIds: string[]
   teamIds: string[]
+  defaultActorKind?: ConversationActorKind
+  defaultActorId?: string
 }
 
 export interface KnowledgeScope {
@@ -117,7 +194,10 @@ export interface Agent {
   name: string
   avatar: string
   role: string
+  summary: string
   persona: string[]
+  skillTags: string[]
+  mcpBindings: string[]
   systemPrompt: string
   capabilityPolicy: CapabilityPolicy
   knowledgeScope: KnowledgeScope
@@ -136,17 +216,42 @@ export interface Team {
   projectId?: string
   name: string
   description: string
+  summary: string
   avatar: string
   mode: TeamMode
   members: string[]
+  skillTags: string[]
+  mcpBindings: string[]
   defaultKnowledgeScope: string[]
   defaultOutput: string
   useScope: TeamScope
   projectNotes: string
   approvalPreferences: string[]
+  structureMode: 'org-chart' | 'flow'
+  structureNodes: TeamStructureNode[]
+  structureEdges: TeamStructureEdge[]
   status: TeamStatus
   isProjectCopy: boolean
   sourceTeamId?: string
+}
+
+export interface TeamStructureNode {
+  id: string
+  label: string
+  role: string
+  memberId?: string
+  level: number
+  position: {
+    x: number
+    y: number
+  }
+}
+
+export interface TeamStructureEdge {
+  id: string
+  source: string
+  target: string
+  relation: string
 }
 
 export interface ResumePoint {
@@ -198,14 +303,98 @@ export interface Conversation {
   statusNote: string
 }
 
+export type MessageSenderType = 'user' | 'agent' | 'system'
+export type ConversationAttachmentKind = 'artifact' | 'file' | 'folder' | 'image'
+
+export interface ConversationAttachment {
+  id: string
+  name: string
+  kind: ConversationAttachmentKind
+}
+
+export interface ConversationComposerDraft {
+  content: string
+  modelId: string
+  permissionMode: PermissionMode
+  actorKind?: ConversationActorKind
+  actorId?: string
+  resourceIds: string[]
+  attachments: ConversationAttachment[]
+}
+
+export interface MessageUsage {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+}
+
+export interface MessageToolCall {
+  toolId: string
+  label: string
+  kind: ToolCatalogKind
+  count: number
+}
+
+export interface MessageProcessEntry {
+  id: string
+  type: MessageProcessEntryType
+  title: string
+  detail: string
+  timestamp: number
+  toolId?: string
+}
+
 export interface Message {
   id: string
   conversationId: string
   senderId: string
-  senderType: 'user' | 'agent' | 'system'
+  senderType: MessageSenderType
   content: string
+  modelId?: string
+  permissionMode?: PermissionMode
+  actorKind?: ConversationActorKind
+  actorId?: string
+  requestedActorKind?: ConversationActorKind
+  requestedActorId?: string
+  usedDefaultActor?: boolean
+  resourceIds?: string[]
+  toolIds?: string[]
+  toolCalls?: MessageToolCall[]
+  usage?: MessageUsage
+  processEntries?: MessageProcessEntry[]
+  attachments?: ConversationAttachment[]
   artifacts?: string[]
   timestamp: number
+}
+
+export interface ConversationQueueItem {
+  id: string
+  conversationId: string
+  content: string
+  modelId: string
+  permissionMode: PermissionMode
+  requestedActorKind?: ConversationActorKind
+  requestedActorId?: string
+  resolvedActorKind: ConversationActorKind
+  resolvedActorId: string
+  resourceIds: string[]
+  attachments: ConversationAttachment[]
+  createdAt: number
+}
+
+export interface ProjectResource {
+  id: string
+  projectId: string
+  workspaceId: string
+  name: string
+  kind: ProjectResourceKind
+  sourceArtifactId?: string
+  linkedConversationIds: string[]
+  createdAt: number
+  createdByMessageId?: string
+  sizeLabel?: string
+  location?: string
+  tags: string[]
 }
 
 export interface Artifact {
@@ -221,17 +410,22 @@ export interface Artifact {
   status: ArtifactStatus
   authorId: string
   updatedAt: number
+  createdByMessageId?: string
 }
 
 export interface TraceRecord {
   id: string
   runId: string
+  conversationId: string
   kind: TraceKind
   title: string
   detail: string
   status: TraceTone
   timestamp: number
   actor: string
+  messageId?: string
+  toolId?: string
+  createdByMessageId?: string
   relatedArtifactId?: string
   relatedInboxId?: string
 }
@@ -264,10 +458,71 @@ export interface DashboardSnapshot {
   highlights: DashboardHighlight[]
 }
 
+export interface ActivityRecord {
+  id: string
+  workspaceId: string
+  projectId?: string
+  userId?: string
+  scope: 'user' | 'project' | 'workspace'
+  type: 'login' | 'operation'
+  title: string
+  description: string
+  timestamp: number
+  tokenCount?: number
+}
+
+export interface UsageRankingItem {
+  id: string
+  label: string
+  value: number
+  secondary?: string
+}
+
+export interface ProjectOverviewSummary {
+  projectId: string
+  metrics: DashboardMetric[]
+  activity: ActivityRecord[]
+  conversationTokenTop: UsageRankingItem[]
+}
+
+export interface WorkspaceOverviewSnapshot {
+  workspaceId: string
+  projectId?: string
+  userMetrics: DashboardMetric[]
+  userActivity: ActivityRecord[]
+  projectSummary: ProjectOverviewSummary
+  workspaceMetrics: DashboardMetric[]
+  projectTokenTop: UsageRankingItem[]
+  agentUsage: UsageRankingItem[]
+  teamUsage: UsageRankingItem[]
+  toolUsage: UsageRankingItem[]
+  modelUsage: UsageRankingItem[]
+}
+
+export interface ProjectDashboardProgress {
+  phase: string
+  progress: number
+  runStatus?: RunStatus
+  currentStep: string
+  blockerCount: number
+  pendingInboxCount: number
+}
+
+export interface ProjectDashboardSnapshot {
+  workspaceId: string
+  project: Project
+  resourceMetrics: DashboardMetric[]
+  progress: ProjectDashboardProgress
+  dataMetrics: DashboardMetric[]
+  activity: ActivityRecord[]
+  conversationTokenTop: UsageRankingItem[]
+}
+
 export interface KnowledgeEntry {
   id: string
   workspaceId: string
   projectId?: string
+  conversationId?: string
   title: string
   kind: KnowledgeKind
   status: KnowledgeStatus
@@ -278,6 +533,7 @@ export interface KnowledgeEntry {
   lastUsedAt: number
   trustLevel: RiskLevel
   lineage: string[]
+  createdByMessageId?: string
 }
 
 export interface KnowledgeCandidate extends KnowledgeEntry {
@@ -317,6 +573,43 @@ export interface ConnectionProfile {
   lastSyncAt?: number
 }
 
+export interface ModelCatalogItem {
+  id: string
+  label: string
+  provider: string
+  description: string
+  recommendedFor: string
+  availability: ViewStatus
+  defaultPermission: PermissionMode
+}
+
+export interface ToolCatalogItem {
+  id: string
+  name: string
+  kind: ToolCatalogKind
+  description: string
+  availability: ViewStatus
+  permissions: string[]
+}
+
+export interface ToolCatalogGroup {
+  id: ToolCatalogKind
+  title: string
+  description: string
+  items: ToolCatalogItem[]
+}
+
+export interface ConversationMemoryItem {
+  id: string
+  conversationId: string
+  title: string
+  summary: string
+  source: ConversationMemorySource
+  ownerId?: string
+  createdAt: number
+  createdByMessageId?: string
+}
+
 export interface AutomationSummary {
   id: string
   workspaceId: string
@@ -352,6 +645,8 @@ export interface ShellPreferences {
   theme: ThemeMode
   locale: Locale
   compactSidebar: boolean
+  leftSidebarCollapsed: boolean
+  rightSidebarCollapsed: boolean
   defaultWorkspaceId: string
   lastVisitedRoute: string
 }

@@ -1,0 +1,185 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e7]
+      - generic [ref=e11]:
+        - strong [ref=e12]: Octopus
+        - generic [ref=e13]: 本地枢纽
+    - button "搜索对话、项目或页面… ⌘K" [ref=e14] [cursor=pointer]:
+      - img [ref=e15]
+      - generic [ref=e18]: 搜索对话、项目或页面…
+      - generic [ref=e19]: ⌘K
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - button "切换主题" [ref=e22] [cursor=pointer]:
+          - img [ref=e23]
+        - button "切换语言" [ref=e25] [cursor=pointer]:
+          - img [ref=e26]
+        - button "打开审批" [ref=e31] [cursor=pointer]:
+          - img [ref=e32]
+        - button "打开设置" [ref=e35] [cursor=pointer]:
+          - img [ref=e36]
+      - button "L 本地枢纽 本地工作台" [ref=e41] [cursor=pointer]:
+        - generic [ref=e42]: L
+        - generic [ref=e43]:
+          - strong [ref=e44]: 本地枢纽
+          - generic [ref=e45]: 本地工作台
+        - img [ref=e46]
+  - generic [ref=e48]:
+    - complementary [ref=e49]:
+      - generic [ref=e50]:
+        - generic [ref=e51]:
+          - generic [ref=e53]: 项目
+          - generic [ref=e54]:
+            - button "新增项目" [ref=e55] [cursor=pointer]:
+              - img [ref=e56]
+            - button "切换左侧栏" [ref=e57] [cursor=pointer]:
+              - img [ref=e58]
+        - generic [ref=e61]:
+          - generic [ref=e63]:
+            - generic [ref=e65]:
+              - generic [ref=e66]:
+                - button "Octopus Desktop Shell 1 个会话" [ref=e67] [cursor=pointer]:
+                  - generic [ref=e68]:
+                    - img [ref=e70]
+                    - generic [ref=e72]:
+                      - strong [ref=e73]: Octopus Desktop Shell
+                      - generic [ref=e74]: 1 个会话
+                - img [ref=e75]
+              - generic [ref=e77]:
+                - link "仪表盘" [ref=e78] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/dashboard?project=proj-redesign"
+                  - img [ref=e79]
+                  - generic [ref=e84]: 仪表盘
+                - link "会话" [ref=e85] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign"
+                  - img [ref=e86]
+                  - generic [ref=e88]: 会话
+                - link "知识" [ref=e89] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/knowledge"
+                  - img [ref=e90]
+                  - generic [ref=e93]: 知识
+                - link "追踪" [ref=e94] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/trace"
+                  - img [ref=e95]
+                  - generic [ref=e98]: 追踪
+            - generic [ref=e99]:
+              - generic:
+                - button "删除项目":
+                  - img
+              - generic [ref=e101]:
+                - button "治理控制台 1 个会话" [ref=e102] [cursor=pointer]:
+                  - generic [ref=e103]:
+                    - img [ref=e105]
+                    - generic [ref=e107]:
+                      - strong [ref=e108]: 治理控制台
+                      - generic [ref=e109]: 1 个会话
+                - img [ref=e110]
+          - navigation [ref=e112]:
+            - link "知识" [ref=e113] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/projects/proj-redesign/knowledge"
+              - img [ref=e114]
+              - generic [ref=e117]: 知识
+            - link "追踪" [ref=e118] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/projects/proj-redesign/trace"
+              - img [ref=e119]
+              - generic [ref=e122]: 追踪
+            - link "智能体" [ref=e123] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/agents"
+              - img [ref=e124]
+              - generic [ref=e127]: 智能体
+            - link "团队" [ref=e128] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/teams"
+              - img [ref=e129]
+              - generic [ref=e134]: 团队
+            - link "自动化" [ref=e135] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/automations"
+              - img [ref=e136]
+              - generic [ref=e140]: 自动化
+    - main [ref=e141]:
+      - generic [ref=e142]:
+        - generic [ref=e144]:
+          - generic [ref=e145]:
+            - button "Desktop shell GA 重构" [ref=e146] [cursor=pointer]:
+              - img [ref=e147]
+              - generic [ref=e149]: Desktop shell GA 重构
+            - button "删除会话" [ref=e150] [cursor=pointer]:
+              - img [ref=e151]
+          - button "新建会话" [ref=e154] [cursor=pointer]:
+            - img [ref=e155]
+        - generic [ref=e156]:
+          - generic [ref=e157]:
+            - generic [ref=e158]:
+              - generic [ref=e159]:
+                - generic [ref=e160]: 会话
+                - heading "Desktop shell GA 重构" [level=1] [ref=e161]
+                - paragraph [ref=e162]: 把单页原型拆成工作台壳、共享 UI 和最小 Tauri 宿主。
+              - generic [ref=e163]:
+                - generic [ref=e164]: 规划
+                - generic [ref=e165]: 实现 Agent
+                - generic [ref=e166]: 改版突击队
+                - generic [ref=e167]: 64% 进度
+            - generic [ref=e168]:
+              - article [ref=e169]:
+                - generic [ref=e170]:
+                  - generic [ref=e171]:
+                    - strong [ref=e172]: 用户
+                    - generic [ref=e173]: 04/01 06:38
+                  - generic [ref=e174]:
+                    - generic [ref=e175]: gpt-4o
+                    - generic [ref=e176]: workspace
+                - paragraph [ref=e177]: 请先查看当前桌面端实现状态，再按 PRD 补齐剩余模块，并整理 Tauri2 / Rust 初始化。
+                - button "Octopus PRD Snapshot" [ref=e179] [cursor=pointer]:
+                  - img [ref=e180]
+                  - generic [ref=e182]: Octopus PRD Snapshot
+                - button "打开 art-prd" [ref=e184] [cursor=pointer]
+              - article [ref=e185]:
+                - generic [ref=e186]:
+                  - generic [ref=e187]:
+                    - strong [ref=e188]: 架构 Agent
+                    - generic [ref=e189]: 04/01 06:45
+                  - generic [ref=e190]:
+                    - generic [ref=e191]: claude-sonnet
+                    - generic [ref=e192]: analysis
+                - paragraph [ref=e193]: 建议先把 schema、共享 UI 和工作台布局拆开，再逐步填充 Dashboard、Trace、Knowledge 和 Settings。
+                - generic [ref=e194]:
+                  - button "打开 art-roadmap" [ref=e195] [cursor=pointer]
+                  - button "发起审阅" [ref=e196] [cursor=pointer]
+            - generic [ref=e197]:
+              - textbox "输入你的消息、约束或下一步指令…" [ref=e198]
+              - generic [ref=e199]:
+                - generic [ref=e200]:
+                  - img [ref=e201]
+                  - generic [ref=e203]: 附件
+                  - combobox "附件" [ref=e204]:
+                    - option "不附加资源" [selected]
+                    - option "GA Shell 重构路线图"
+                    - option "Octopus PRD 快照"
+                - generic [ref=e205]:
+                  - img [ref=e206]
+                  - generic [ref=e209]: 模型
+                  - combobox "模型" [ref=e210]:
+                    - option "GPT-4o" [selected]
+                    - option "Claude Sonnet"
+                    - option "o3-mini"
+                - generic [ref=e211]:
+                  - img [ref=e212]
+                  - generic [ref=e214]: 工具
+                  - combobox "工具" [ref=e215]:
+                    - option "工作区" [selected]
+                    - option "浏览器"
+                    - option "智能体工具"
+                - button "发送" [disabled] [ref=e216]:
+                  - generic [ref=e217]: 发送
+                  - img [ref=e218]
+          - complementary [ref=e296]:
+            - button "展开会话详情" [ref=e297] [cursor=pointer]:
+              - img [ref=e298]
+            - button "概览" [ref=e301] [cursor=pointer]:
+              - img [ref=e302]
+            - button "资源" [ref=e304] [cursor=pointer]:
+              - img [ref=e305]
+            - button "审批" [ref=e308] [cursor=pointer]:
+              - img [ref=e309]
+            - button "时间线" [ref=e312] [cursor=pointer]:
+              - img [ref=e313]

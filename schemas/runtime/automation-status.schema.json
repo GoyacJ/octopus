@@ -1,8 +1,0 @@
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://octopus.local/schemas/runtime/automation-status.schema.json",
-  "title": "AutomationStatus",
-  "type": "string",
-  "description": "Minimum GA automation lifecycle states exposed by the automation management surface.",
-  "enum": ["active", "paused", "archived"]
-}

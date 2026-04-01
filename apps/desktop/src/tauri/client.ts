@@ -20,8 +20,38 @@ function createDefaultPreferences(defaultWorkspaceId: string, defaultProjectId: 
     theme: 'system',
     locale: 'zh-CN',
     compactSidebar: false,
+    leftSidebarCollapsed: false,
+    rightSidebarCollapsed: false,
     defaultWorkspaceId,
-    lastVisitedRoute: `/workspaces/${defaultWorkspaceId}/dashboard?project=${defaultProjectId}`,
+    lastVisitedRoute: `/workspaces/${defaultWorkspaceId}/overview?project=${defaultProjectId}`,
+  }
+}
+
+function extractProjectIdFromRoute(lastVisitedRoute: string): string {
+  if (lastVisitedRoute.includes('?project=')) {
+    return lastVisitedRoute.split('?project=')[1]?.split('&')[0] ?? 'proj-redesign'
+  }
+
+  const projectMatch = lastVisitedRoute.match(/\/projects\/([^/]+)/)
+  return projectMatch?.[1] ?? 'proj-redesign'
+}
+
+function normalizePreferences(
+  value: Partial<ShellPreferences>,
+  defaultWorkspaceId: string,
+  defaultProjectId: string,
+): ShellPreferences {
+  const defaults = createDefaultPreferences(defaultWorkspaceId, defaultProjectId)
+  const leftSidebarCollapsed = typeof value.leftSidebarCollapsed === 'boolean'
+    ? value.leftSidebarCollapsed
+    : Boolean(value.compactSidebar)
+
+  return {
+    ...defaults,
+    ...value,
+    compactSidebar: typeof value.compactSidebar === 'boolean' ? value.compactSidebar : leftSidebarCollapsed,
+    leftSidebarCollapsed,
+    rightSidebarCollapsed: typeof value.rightSidebarCollapsed === 'boolean' ? value.rightSidebarCollapsed : defaults.rightSidebarCollapsed,
   }
 }
 
@@ -46,10 +76,7 @@ function loadStoredPreferences(defaultWorkspaceId: string, defaultProjectId: str
   }
 
   try {
-    return {
-      ...createDefaultPreferences(defaultWorkspaceId, defaultProjectId),
-      ...(JSON.parse(raw) as Partial<ShellPreferences>),
-    }
+    return normalizePreferences(JSON.parse(raw) as Partial<ShellPreferences>, defaultWorkspaceId, defaultProjectId)
   } catch {
     return createDefaultPreferences(defaultWorkspaceId, defaultProjectId)
   }
@@ -79,7 +106,9 @@ export async function bootstrapShellHost(
 
   try {
     const bootstrap = await invoke<ShellBootstrap>('bootstrap_shell')
-    const preferences = bootstrap.preferences ?? fallbackPreferences
+    const preferences = bootstrap.preferences
+      ? normalizePreferences(bootstrap.preferences, defaultWorkspaceId, defaultProjectId)
+      : fallbackPreferences
     saveStoredPreferences(preferences)
 
     return {
@@ -103,7 +132,7 @@ export async function loadPreferences(defaultWorkspaceId: string, defaultProject
   }
 
   try {
-    const preferences = await invoke<ShellPreferences>('load_preferences')
+    const preferences = normalizePreferences(await invoke<ShellPreferences>('load_preferences'), defaultWorkspaceId, defaultProjectId)
     saveStoredPreferences(preferences)
     return preferences
   } catch {
@@ -112,17 +141,29 @@ export async function loadPreferences(defaultWorkspaceId: string, defaultProject
 }
 
 export async function savePreferences(preferences: ShellPreferences): Promise<ShellPreferences> {
-  saveStoredPreferences(preferences)
+  const normalizedPreferences = normalizePreferences(
+    {
+      ...preferences,
+      compactSidebar: preferences.leftSidebarCollapsed,
+    },
+    preferences.defaultWorkspaceId,
+    extractProjectIdFromRoute(preferences.lastVisitedRoute),
+  )
+  saveStoredPreferences(normalizedPreferences)
   if (!isTauriRuntime()) {
-    return preferences
+    return normalizedPreferences
   }
 
   try {
-    const savedPreferences = await invoke<ShellPreferences>('save_preferences', { preferences })
+    const savedPreferences = normalizePreferences(
+      await invoke<ShellPreferences>('save_preferences', { preferences: normalizedPreferences }),
+      normalizedPreferences.defaultWorkspaceId,
+      extractProjectIdFromRoute(normalizedPreferences.lastVisitedRoute),
+    )
     saveStoredPreferences(savedPreferences)
     return savedPreferences
   } catch {
-    return preferences
+    return normalizedPreferences
   }
 }
 

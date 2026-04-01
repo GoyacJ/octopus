@@ -1,0 +1,200 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - img [ref=e7]
+      - generic [ref=e11]:
+        - strong [ref=e12]: Octopus
+        - generic [ref=e13]: 本地枢纽
+    - button "搜索对话、项目或页面… ⌘K" [ref=e14] [cursor=pointer]:
+      - img [ref=e15]
+      - generic [ref=e18]: 搜索对话、项目或页面…
+      - generic [ref=e19]: ⌘K
+    - generic [ref=e20]:
+      - generic [ref=e21]:
+        - button "切换主题" [ref=e22] [cursor=pointer]:
+          - img [ref=e23]
+        - button "切换语言" [ref=e25] [cursor=pointer]:
+          - img [ref=e26]
+        - button "打开审批" [ref=e31] [cursor=pointer]:
+          - img [ref=e32]
+        - button "打开设置" [ref=e35] [cursor=pointer]:
+          - img [ref=e36]
+      - button "L 本地枢纽 本地工作台" [ref=e41] [cursor=pointer]:
+        - generic [ref=e42]: L
+        - generic [ref=e43]:
+          - strong [ref=e44]: 本地枢纽
+          - generic [ref=e45]: 本地工作台
+        - img [ref=e46]
+  - generic [ref=e48]:
+    - complementary [ref=e49]:
+      - generic [ref=e50]:
+        - generic [ref=e51]:
+          - generic [ref=e53]: 项目
+          - generic [ref=e54]:
+            - button "新增项目" [ref=e55] [cursor=pointer]:
+              - img [ref=e56]
+            - button "切换左侧栏" [ref=e57] [cursor=pointer]:
+              - img [ref=e58]
+        - generic [ref=e61]:
+          - generic [ref=e63]:
+            - generic [ref=e65]:
+              - generic [ref=e66]:
+                - button "Octopus Desktop Shell 1 个会话" [ref=e67] [cursor=pointer]:
+                  - generic [ref=e68]:
+                    - img [ref=e70]
+                    - generic [ref=e72]:
+                      - strong [ref=e73]: Octopus Desktop Shell
+                      - generic [ref=e74]: 1 个会话
+                - img [ref=e75]
+              - generic [ref=e77]:
+                - link "仪表盘" [ref=e78] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/dashboard?project=proj-redesign"
+                  - img [ref=e79]
+                  - generic [ref=e84]: 仪表盘
+                - link "会话" [ref=e85] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign"
+                  - img [ref=e86]
+                  - generic [ref=e88]: 会话
+                - link "知识" [ref=e89] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/knowledge"
+                  - img [ref=e90]
+                  - generic [ref=e93]: 知识
+                - link "追踪" [ref=e94] [cursor=pointer]:
+                  - /url: "#/workspaces/ws-local/projects/proj-redesign/trace"
+                  - img [ref=e95]
+                  - generic [ref=e98]: 追踪
+            - generic [ref=e99]:
+              - generic:
+                - button "删除项目":
+                  - img
+              - generic [ref=e101]:
+                - button "治理控制台 1 个会话" [ref=e102] [cursor=pointer]:
+                  - generic [ref=e103]:
+                    - img [ref=e105]
+                    - generic [ref=e107]:
+                      - strong [ref=e108]: 治理控制台
+                      - generic [ref=e109]: 1 个会话
+                - img [ref=e110]
+          - navigation [ref=e112]:
+            - link "知识" [ref=e113] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/projects/proj-redesign/knowledge"
+              - img [ref=e114]
+              - generic [ref=e117]: 知识
+            - link "追踪" [ref=e118] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/projects/proj-redesign/trace"
+              - img [ref=e119]
+              - generic [ref=e122]: 追踪
+            - link "智能体" [ref=e123] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/agents"
+              - img [ref=e124]
+              - generic [ref=e127]: 智能体
+            - link "团队" [ref=e128] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/teams"
+              - img [ref=e129]
+              - generic [ref=e134]: 团队
+            - link "自动化" [ref=e135] [cursor=pointer]:
+              - /url: "#/workspaces/ws-local/automations"
+              - img [ref=e136]
+              - generic [ref=e140]: 自动化
+    - main [ref=e141]:
+      - generic [ref=e457]:
+        - generic [ref=e458]:
+          - paragraph [ref=e459]: 工作区 Dashboard
+          - heading "本地枢纽" [level=2] [ref=e460]
+          - paragraph [ref=e461]: 当前正在补齐 PRD 模块、重建共享 UI、整理 Tauri 2 壳层。
+        - generic [ref=e462]:
+          - generic [ref=e463]:
+            - generic [ref=e464]: 活跃项目
+            - strong [ref=e465]: "2"
+          - generic [ref=e466]:
+            - generic [ref=e467]: 活跃会话
+            - strong [ref=e468]: "2"
+          - generic [ref=e469]:
+            - generic [ref=e470]: 待处理 Inbox
+            - strong [ref=e471]: "1"
+        - generic [ref=e472]:
+          - generic [ref=e473]:
+            - generic [ref=e474]:
+              - heading "Workspace 摘要" [level=2] [ref=e475]
+              - paragraph [ref=e476]: 本地优先的桌面工作区，适合快速原型与个人试验。
+            - generic [ref=e477]:
+              - generic [ref=e478]: Owner · 本地 Runtime
+              - generic [ref=e479]: 3 名成员
+            - paragraph [ref=e480]: 把桌面端从单页原型升级成可持续扩展的 GA 工作台。
+            - generic [ref=e481]:
+              - link "打开 Agent Center" [ref=e482] [cursor=pointer]:
+                - /url: "#/workspaces/ws-local/agents"
+              - link "打开 Team Center" [ref=e483] [cursor=pointer]:
+                - /url: "#/workspaces/ws-local/teams"
+          - generic [ref=e484]:
+            - generic [ref=e485]:
+              - heading "当前 Project" [level=2] [ref=e486]
+              - paragraph [ref=e487]: 先用前端 mock 驱动全部正式对象，再为 Rust 预留最小宿主接口。
+            - generic [ref=e488]:
+              - generic [ref=e489]: Implementation
+              - generic [ref=e490]: 2 个产物
+              - generic [ref=e491]: 1 个会话
+            - paragraph [ref=e492]: 当前正在补齐 PRD 模块、重建共享 UI、整理 Tauri 2 壳层。
+            - generic [ref=e493]:
+              - link "打开 Conversation" [ref=e494] [cursor=pointer]:
+                - /url: "#/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign"
+              - link "Knowledge" [ref=e495] [cursor=pointer]:
+                - /url: "#/workspaces/ws-local/projects/proj-redesign/knowledge"
+              - link "Trace" [ref=e496] [cursor=pointer]:
+                - /url: "#/workspaces/ws-local/projects/proj-redesign/trace"
+        - generic [ref=e497]:
+          - generic [ref=e498]:
+            - generic [ref=e499]:
+              - heading "Highlights" [level=2] [ref=e500]
+              - paragraph [ref=e501]: 从 dashboard 直接跳到 conversation、artifact、inbox 和 trace。
+            - generic [ref=e502]:
+              - link "Desktop shell GA 重构 当前重点是把原型壳切换到模块化工作台。" [ref=e503] [cursor=pointer]:
+                - /url: "#/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign"
+                - strong [ref=e504]: Desktop shell GA 重构
+                - paragraph [ref=e505]: 当前重点是把原型壳切换到模块化工作台。
+              - link "GA Shell 重构路线图 跳到会话详情面板检查最新交付物。" [ref=e506] [cursor=pointer]:
+                - /url: "#/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?detail=resources"
+                - strong [ref=e507]: GA Shell 重构路线图
+                - paragraph [ref=e508]: 跳到会话详情面板检查最新交付物。
+              - link "桌面壳重构运行 批准审阅请求后继续执行链路。" [ref=e509] [cursor=pointer]:
+                - /url: "#/workspaces/ws-local/projects/proj-redesign/trace"
+                - strong [ref=e510]: 桌面壳重构运行
+                - paragraph [ref=e511]: 批准审阅请求后继续执行链路。
+          - generic [ref=e512]:
+            - generic [ref=e513]:
+              - heading "待处理 Inbox" [level=2] [ref=e514]
+              - paragraph [ref=e515]: 审批、阻塞和确认项会同时影响 conversation、run 与 dashboard。
+            - article [ref=e517]:
+              - generic [ref=e518]:
+                - strong [ref=e519]: 批准桌面壳重构的 Artifact 提升
+                - generic [ref=e520]: 高
+              - paragraph [ref=e521]: 重构运行需要在提升新版本 artifact 并继续写入动作前获得审批。
+              - generic [ref=e522]:
+                - generic [ref=e523]:
+                  - term [ref=e524]: 状态
+                  - definition [ref=e525]: 待处理
+                - generic [ref=e526]:
+                  - term [ref=e527]: 影响
+                  - definition [ref=e528]: 会解除当前执行运行的阻塞，并刷新 dashboard 状态。
+                - generic [ref=e529]:
+                  - term [ref=e530]: 风险
+                  - definition [ref=e531]: 共享 artifact 内容会成为后续工作的最新参考。
+        - generic [ref=e532]:
+          - generic [ref=e533]:
+            - heading "最近 Artifacts" [level=2] [ref=e534]
+            - paragraph [ref=e535]: Project 和 conversation 的 artifact 会一直暴露在消息流外。
+          - generic [ref=e536]:
+            - article [ref=e537]:
+              - generic [ref=e538]:
+                - generic [ref=e539]: implementation-plan
+                - generic [ref=e540]: v3
+              - strong [ref=e541]: GA Shell 重构路线图
+              - paragraph [ref=e542]: 扩展 schema、重建工作台布局、补齐 Trace / Knowledge / Settings，并初始化 Tauri。
+              - generic [ref=e544]: 草稿
+            - article [ref=e545]:
+              - generic [ref=e546]:
+                - generic [ref=e547]: prd
+                - generic [ref=e548]: v1
+              - strong [ref=e549]: Octopus PRD 快照
+              - paragraph [ref=e550]: Conversation-first 平台，包含正式对象与可解释状态。
+              - generic [ref=e552]: 已批准

@@ -15,14 +15,16 @@ export function useWorkbenchRouteSync(): void {
       const workspaceId = typeof route.params.workspaceId === 'string' ? route.params.workspaceId : undefined
       const projectId = typeof route.params.projectId === 'string' ? route.params.projectId : undefined
       const conversationId = typeof route.params.conversationId === 'string' ? route.params.conversationId : undefined
-      const dashboardProjectId = typeof route.query.project === 'string' ? route.query.project : undefined
+      const overviewProjectId = route.name === 'workspace-overview' && typeof route.query.project === 'string'
+        ? route.query.project
+        : undefined
 
       if (workspaceId) {
         workbench.selectWorkspace(workspaceId)
       }
 
-      if (dashboardProjectId) {
-        workbench.selectProject(dashboardProjectId)
+      if (overviewProjectId) {
+        workbench.selectProject(overviewProjectId)
       }
 
       if (projectId) {
@@ -34,6 +36,7 @@ export function useWorkbenchRouteSync(): void {
       }
 
       shell.syncFromRoute({
+        detail: typeof route.query.detail === 'string' ? route.query.detail : undefined,
         pane: typeof route.query.pane === 'string' ? route.query.pane : undefined,
         artifact: typeof route.query.artifact === 'string' ? route.query.artifact : undefined,
       })

@@ -1,0 +1,23 @@
+- generic [ref=e2]:
+  - generic [ref=e3]: EXECUTIVE VALUE LOOP
+  - heading "Octopus 让 AI 从“零散使用”变成“正式生产体系”" [level=1] [ref=e4]
+  - generic [ref=e5]: 对管理层而言，平台价值不止于让员工“更会用 AI”，而是把执行、治理、沉淀和复用纳入同一套可持续运营机制。
+  - generic [ref=e6]:
+    - generic [ref=e7]: 价值一
+    - heading "降本增效" [level=3] [ref=e8]
+    - paragraph [ref=e9]: 把重复脑力劳动、跨角色协作和长流程任务交给可运行的智能体体系持续推进。
+  - generic [ref=e10]:
+    - generic [ref=e11]: 价值二
+    - heading "统一治理" [level=3] [ref=e12]
+    - paragraph [ref=e13]: 通过授权、预算、审批与审计，把 AI 纳入企业现有的责任边界和管理机制。
+  - generic [ref=e14]:
+    - generic [ref=e15]: 价值三
+    - heading "平台升级" [level=3] [ref=e16]
+    - paragraph [ref=e17]: 从单点 AI 工具升级为统一的智能体运行平台，让执行数据、成果物和知识资产持续沉淀复用。
+  - generic [ref=e19]:
+    - heading "Octopus" [level=2] [ref=e20]
+    - paragraph [ref=e21]:
+      - text: 统一的智能体运行与治理平台
+      - text: 把“会话”收敛为“执行”
+      - text: 把“结果”沉淀为“资产”
+  - generic [ref=e25]: 执行链路统一进入 Workspace / Project / Conversation / Run / Artifact / Knowledge 的正式体系

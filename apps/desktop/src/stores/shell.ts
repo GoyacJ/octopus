@@ -4,9 +4,17 @@ import type { ConnectionProfile, HostState, ShellBootstrap, ShellPreferences } f
 
 import { bootstrapShellHost, savePreferences } from '@/tauri/client'
 
-export type ContextPaneTab = 'context' | 'artifacts' | 'inbox' | 'trace'
+export type ConversationDetailFocus =
+  | 'summary'
+  | 'memories'
+  | 'artifacts'
+  | 'knowledge'
+  | 'resources'
+  | 'tools'
+  | 'timeline'
 
 interface RouteSyncState {
+  detail?: string
   pane?: string
   artifact?: string
 }
@@ -16,8 +24,10 @@ function createDefaultPreferences(defaultWorkspaceId: string, defaultProjectId: 
     theme: 'system',
     locale: 'zh-CN',
     compactSidebar: false,
+    leftSidebarCollapsed: false,
+    rightSidebarCollapsed: false,
     defaultWorkspaceId,
-    lastVisitedRoute: `/workspaces/${defaultWorkspaceId}/dashboard?project=${defaultProjectId}`,
+    lastVisitedRoute: `/workspaces/${defaultWorkspaceId}/overview?project=${defaultProjectId}`,
   }
 }
 
@@ -31,20 +41,43 @@ function createFallbackHostState(): HostState {
   }
 }
 
-function normalizePane(pane?: string): ContextPaneTab {
-  if (pane === 'artifacts' || pane === 'inbox' || pane === 'trace') {
-    return pane
+function normalizeDetail(detail?: string, legacyPane?: string): ConversationDetailFocus {
+  if (
+    detail === 'summary'
+    || detail === 'memories'
+    || detail === 'artifacts'
+    || detail === 'knowledge'
+    || detail === 'resources'
+    || detail === 'tools'
+    || detail === 'timeline'
+  ) {
+    return detail
   }
 
-  return 'context'
+  if (legacyPane === 'artifacts') {
+    return 'artifacts'
+  }
+
+  if (legacyPane === 'inbox') {
+    return 'timeline'
+  }
+
+  if (legacyPane === 'trace') {
+    return 'timeline'
+  }
+
+  return 'summary'
 }
 
 export const useShellStore = defineStore('shell', {
   state: () => ({
     defaultWorkspaceId: 'ws-local',
     defaultProjectId: 'proj-redesign',
-    contextPane: 'context' as ContextPaneTab,
+    detailFocus: 'summary' as ConversationDetailFocus,
     selectedArtifactId: '',
+    leftSidebarCollapsed: false,
+    rightSidebarCollapsed: false,
+    searchOpen: false,
     bootstrapPayload: null as ShellBootstrap | null,
     preferencesState: null as ShellPreferences | null,
     loading: false,
@@ -62,6 +95,11 @@ export const useShellStore = defineStore('shell', {
     },
   },
   actions: {
+    applyShellPreferences(preferences: ShellPreferences) {
+      this.preferencesState = preferences
+      this.leftSidebarCollapsed = preferences.leftSidebarCollapsed
+      this.rightSidebarCollapsed = preferences.rightSidebarCollapsed
+    },
     async bootstrap(defaultWorkspaceId: string, defaultProjectId: string, mockConnections: ConnectionProfile[]) {
       this.defaultWorkspaceId = defaultWorkspaceId
       this.defaultProjectId = defaultProjectId
@@ -71,7 +109,7 @@ export const useShellStore = defineStore('shell', {
       try {
         const payload = await bootstrapShellHost(defaultWorkspaceId, defaultProjectId, mockConnections)
         this.bootstrapPayload = payload
-        this.preferencesState = payload.preferences
+        this.applyShellPreferences(payload.preferences)
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to bootstrap shell host'
         this.bootstrapPayload = {
@@ -79,13 +117,13 @@ export const useShellStore = defineStore('shell', {
           preferences: createDefaultPreferences(defaultWorkspaceId, defaultProjectId),
           connections: mockConnections,
         }
-        this.preferencesState = this.bootstrapPayload.preferences
+        this.applyShellPreferences(this.bootstrapPayload.preferences)
       } finally {
         this.loading = false
       }
     },
-    setContextPane(pane: ContextPaneTab) {
-      this.contextPane = pane
+    setDetailFocus(detail: ConversationDetailFocus) {
+      this.detailFocus = detail
     },
     selectArtifact(artifactId?: string) {
       this.selectedArtifactId = artifactId ?? ''
@@ -101,18 +139,54 @@ export const useShellStore = defineStore('shell', {
       }
     },
     syncFromRoute(routeState: RouteSyncState) {
-      this.contextPane = normalizePane(routeState.pane)
+      this.detailFocus = normalizeDetail(routeState.detail, routeState.pane)
       if (routeState.artifact) {
         this.selectedArtifactId = routeState.artifact
       }
+    },
+    setLeftSidebarCollapsed(collapsed: boolean) {
+      this.leftSidebarCollapsed = collapsed
+      if (this.preferencesState) {
+        void this.updatePreferences({
+          leftSidebarCollapsed: collapsed,
+        })
+      }
+    },
+    toggleLeftSidebar() {
+      this.setLeftSidebarCollapsed(!this.leftSidebarCollapsed)
+    },
+    setRightSidebarCollapsed(collapsed: boolean) {
+      this.rightSidebarCollapsed = collapsed
+      if (this.preferencesState) {
+        void this.updatePreferences({
+          rightSidebarCollapsed: collapsed,
+        })
+      }
+    },
+    toggleRightSidebar() {
+      this.setRightSidebarCollapsed(!this.rightSidebarCollapsed)
+    },
+    openSearch() {
+      this.searchOpen = true
+    },
+    closeSearch() {
+      this.searchOpen = false
+    },
+    toggleSearch() {
+      this.searchOpen = !this.searchOpen
     },
     async updatePreferences(patch: Partial<ShellPreferences>) {
       const nextPreferences = {
         ...this.preferences,
         ...patch,
+        compactSidebar: typeof patch.leftSidebarCollapsed === 'boolean'
+          ? patch.leftSidebarCollapsed
+          : typeof patch.compactSidebar === 'boolean'
+            ? patch.compactSidebar
+            : this.preferences.leftSidebarCollapsed,
       }
 
-      this.preferencesState = await savePreferences(nextPreferences)
+      this.applyShellPreferences(await savePreferences(nextPreferences))
     },
     async persistLastRoute(route: string) {
       await this.updatePreferences({
