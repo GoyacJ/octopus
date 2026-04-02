@@ -2,9 +2,17 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
-
-import { UiArtifactBlock, UiBadge, UiEmptyState, UiInboxBlock, UiSectionHeading, UiStatTile, UiSurface } from '@octopus/ui'
-
+import { 
+  UiArtifactBlock, 
+  UiBadge, 
+  UiEmptyState, 
+  UiInboxBlock, 
+  UiSectionHeading, 
+  UiStatTile, 
+  UiSurface,
+  UiButton
+} from '@octopus/ui'
+import { ArrowRight, MessageSquare, Library, Activity } from 'lucide-vue-next'
 import { countLabel, enumLabel, resolveCopy, resolveMockField } from '@/i18n/copy'
 import { createProjectConversationTarget } from '@/i18n/navigation'
 import { useWorkbenchStore } from '@/stores/workbench'
@@ -25,20 +33,19 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
   if (tone === 'success' || tone === 'warning' || tone === 'error' || tone === 'info') {
     return tone
   }
-
   return 'default'
 }
 </script>
 
 <template>
-  <section class="section-stack">
+  <div class="mx-auto flex max-w-[1400px] flex-col gap-8 pb-12">
     <UiSectionHeading
       :eyebrow="t('dashboard.header.eyebrow')"
       :title="workbench.activeWorkspace ? resolveMockField('workspace', workbench.activeWorkspace.id, 'name', workbench.activeWorkspace.name) : t('dashboard.header.titleFallback')"
       :subtitle="workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'summary', workbench.activeProject.summary) : t('dashboard.header.subtitleFallback')"
     />
 
-    <div class="surface-grid three">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
       <UiStatTile
         v-for="metric in workbench.workspaceDashboard.workspaceMetrics"
         :key="metric.label"
@@ -48,28 +55,38 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
       />
     </div>
 
-    <div class="surface-grid two">
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <UiSurface
         :title="t('dashboard.summary.title')"
         :subtitle="workbench.activeWorkspace ? resolveMockField('workspace', workbench.activeWorkspace.id, 'description', workbench.activeWorkspace.description) : t('dashboard.summary.subtitleFallback')"
       >
-        <div class="meta-row">
+        <div class="flex flex-wrap gap-2 mb-2">
           <UiBadge
             :label="workbench.activeWorkspace ? resolveMockField('workspace', workbench.activeWorkspace.id, 'roleSummary', workbench.activeWorkspace.roleSummary) : t('common.na')"
             tone="info"
           />
           <UiBadge :label="countLabel('common.members', workbench.activeWorkspace?.memberCount ?? 0)" subtle />
         </div>
-        <p class="summary-copy">
+        <p class="text-text-secondary leading-relaxed text-sm">
           {{ workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'goal', workbench.activeProject.goal) : '' }}
         </p>
-        <div class="action-row">
-          <RouterLink :to="{ name: 'agents', params: { workspaceId: workbench.currentWorkspaceId } }" class="secondary-button">
+        <div class="flex flex-wrap gap-3 mt-4">
+          <UiButton 
+            variant="secondary" 
+            size="sm"
+            as="RouterLink"
+            :to="{ name: 'agents', params: { workspaceId: workbench.currentWorkspaceId } }"
+          >
             {{ t('dashboard.summary.openAgentCenter') }}
-          </RouterLink>
-          <RouterLink :to="{ name: 'agents', params: { workspaceId: workbench.currentWorkspaceId }, query: { kind: 'team' } }" class="ghost-button">
+          </UiButton>
+          <UiButton 
+            variant="ghost" 
+            size="sm"
+            as="RouterLink"
+            :to="{ name: 'agents', params: { workspaceId: workbench.currentWorkspaceId }, query: { kind: 'team' } }"
+          >
             {{ t('dashboard.summary.openTeamCenter') }}
-          </RouterLink>
+          </UiButton>
         </div>
       </UiSurface>
 
@@ -77,7 +94,7 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
         :title="t('dashboard.project.title')"
         :subtitle="workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'recentDecision', workbench.activeProject.recentDecision) : t('dashboard.project.subtitleFallback')"
       >
-        <div class="meta-row">
+        <div class="flex flex-wrap gap-2 mb-2">
           <UiBadge
             :label="workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'phase', workbench.activeProject.phase) : t('common.na')"
             tone="info"
@@ -85,47 +102,60 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
           <UiBadge :label="countLabel('common.artifacts', workbench.activeProject?.artifactIds.length ?? 0)" subtle />
           <UiBadge :label="countLabel('common.conversations', workbench.activeProject?.conversationIds.length ?? 0)" subtle />
         </div>
-        <p class="summary-copy">{{ workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'summary', workbench.activeProject.summary) : '' }}</p>
-        <div class="action-row">
-          <RouterLink
-            class="primary-button"
+        <p class="text-text-secondary leading-relaxed text-sm">
+          {{ workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'summary', workbench.activeProject.summary) : '' }}
+        </p>
+        <div class="flex flex-wrap gap-3 mt-4">
+          <UiButton 
+            size="sm"
+            as="RouterLink"
             :to="conversationTarget"
           >
+            <MessageSquare :size="16" />
             {{ t('dashboard.project.openConversation') }}
-          </RouterLink>
-          <RouterLink
-            class="ghost-button"
+          </UiButton>
+          <UiButton 
+            variant="ghost" 
+            size="sm"
+            as="RouterLink"
             :to="{ name: 'knowledge', params: { workspaceId: workbench.currentWorkspaceId, projectId: workbench.currentProjectId } }"
           >
+            <Library :size="16" />
             {{ t('dashboard.project.knowledge') }}
-          </RouterLink>
-          <RouterLink
-            class="ghost-button"
+          </UiButton>
+          <UiButton 
+            variant="ghost" 
+            size="sm"
+            as="RouterLink"
             :to="{ name: 'trace', params: { workspaceId: workbench.currentWorkspaceId, projectId: workbench.currentProjectId } }"
           >
+            <Activity :size="16" />
             {{ t('dashboard.project.trace') }}
-          </RouterLink>
+          </UiButton>
         </div>
       </UiSurface>
     </div>
 
-    <div class="surface-grid two">
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
       <UiSurface :title="t('dashboard.highlights.title')" :subtitle="t('dashboard.highlights.subtitle')">
-        <div class="panel-list">
+        <div class="flex flex-col gap-3">
           <RouterLink
             v-for="highlight in workbench.workspaceDashboard.highlights"
             :key="highlight.id"
             :to="highlight.route"
-            class="highlight-link"
+            class="group flex flex-col gap-2 rounded-[calc(var(--radius-lg)+1px)] border border-border bg-subtle/35 p-4 transition-all duration-fast ease-apple hover:border-primary/20 hover:bg-surface hover:shadow-sm"
           >
-            <strong>{{ resolveCopy(highlight.title) }}</strong>
-            <p>{{ resolveCopy(highlight.description) }}</p>
+            <div class="flex items-center justify-between gap-4">
+              <strong class="text-sm font-semibold text-text-primary line-clamp-1">{{ resolveCopy(highlight.title) }}</strong>
+              <ArrowRight :size="14" class="text-text-tertiary group-hover:text-primary transition-colors" />
+            </div>
+            <p class="text-xs text-text-secondary leading-relaxed line-clamp-2">{{ resolveCopy(highlight.description) }}</p>
           </RouterLink>
         </div>
       </UiSurface>
 
       <UiSurface :title="t('dashboard.inbox.title')" :subtitle="t('dashboard.inbox.subtitle')">
-        <div v-if="pendingInbox.length" class="panel-list">
+        <div v-if="pendingInbox.length" class="flex flex-col gap-3">
           <UiInboxBlock
             v-for="item in pendingInbox"
             :key="item.id"
@@ -145,7 +175,7 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
     </div>
 
     <UiSurface :title="t('dashboard.artifacts.title')" :subtitle="t('dashboard.artifacts.subtitle')">
-      <div v-if="workbench.activeConversationArtifacts.length" class="surface-grid two">
+      <div v-if="workbench.activeConversationArtifacts.length" class="grid grid-cols-1 md:grid-cols-2 gap-5">
         <UiArtifactBlock
           v-for="artifact in workbench.activeConversationArtifacts"
           :key="artifact.id"
@@ -158,33 +188,5 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
       </div>
       <UiEmptyState v-else :title="t('dashboard.artifacts.emptyTitle')" :description="t('dashboard.artifacts.emptyDescription')" />
     </UiSurface>
-  </section>
+  </div>
 </template>
-
-<style scoped>
-.summary-copy,
-.highlight-link p {
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
-.highlight-link {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  min-width: 0;
-  padding: 0.95rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
-}
-
-.highlight-link strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-</style>

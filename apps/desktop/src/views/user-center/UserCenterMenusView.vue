@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { FolderTree, Power, Route, Save } from 'lucide-vue-next'
 
-import { UiBadge, UiSurface } from '@octopus/ui'
+import { UiBadge, UiButton, UiField, UiInput, UiSectionHeading, UiSelect, UiSurface } from '@octopus/ui'
 
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -38,6 +39,15 @@ const flattenedMenus = computed(() => {
   walk(undefined, 0)
   return result
 })
+
+const selectedMenu = computed(() =>
+  workbench.workspaceMenus.find((item) => item.id === selectedMenuId.value),
+)
+
+const statusOptions = computed(() => [
+  { value: 'active', label: t('userCenter.common.active') },
+  { value: 'disabled', label: t('userCenter.common.disabled') },
+])
 
 function applyMenu(menuId?: string) {
   if (!menuId) {
@@ -91,73 +101,102 @@ function roleUsage(menuId: string) {
 </script>
 
 <template>
-  <div class="page-layout">
-    <UiSurface :title="t('userCenter.menus.title')" :subtitle="t('userCenter.menus.subtitle')">
-      <div class="menu-tree">
-        <article
-          v-for="menu in flattenedMenus"
-          :key="menu.id"
-          class="menu-item"
-          :class="{ active: selectedMenuId === menu.id }"
-          :style="{ '--depth': String(menu.depth) }"
-          @click="applyMenu(menu.id)"
-        >
-          <div class="menu-copy">
-            <strong>{{ menu.label }}</strong>
-            <small>{{ menu.routeName || t('userCenter.menus.nonNavigable') }}</small>
+  <section class="menu-page section-stack">
+    <UiSectionHeading
+      :eyebrow="t('userCenter.menus.title')"
+      :title="t('userCenter.menus.editTitle')"
+      :subtitle="t('userCenter.menus.subtitle')"
+    />
+
+    <div class="menu-layout">
+      <UiSurface class="menu-tree-surface" :title="t('userCenter.menus.title')" :subtitle="t('userCenter.menus.subtitle')">
+        <div class="menu-tree">
+          <article
+            v-for="menu in flattenedMenus"
+            :key="menu.id"
+            class="menu-card"
+            :class="{ active: selectedMenuId === menu.id }"
+            :style="{ '--depth': String(menu.depth) }"
+            @click="applyMenu(menu.id)"
+          >
+            <div class="menu-card-main">
+              <span class="menu-indent" aria-hidden="true" />
+              <div class="menu-icon-wrap">
+                <FolderTree :size="16" />
+              </div>
+              <div class="menu-copy">
+                <strong>{{ menu.label }}</strong>
+                <small>{{ menu.routeName || t('userCenter.menus.nonNavigable') }}</small>
+              </div>
+            </div>
+            <div class="menu-meta">
+              <UiBadge :label="menu.status" :tone="menu.status === 'active' ? 'success' : 'warning'" />
+              <UiBadge :label="t('userCenter.menus.roleUsage', { count: roleUsage(menu.id) })" subtle />
+            </div>
+          </article>
+        </div>
+      </UiSurface>
+
+      <UiSurface class="menu-editor-surface" :title="t('userCenter.menus.editTitle')" :subtitle="t('userCenter.menus.formSubtitle')">
+        <div class="menu-editor-shell">
+          <div class="menu-preview-card">
+            <div class="menu-preview-header">
+              <div class="menu-preview-icon">
+                <Route :size="18" />
+              </div>
+              <div>
+                <strong>{{ selectedMenu?.label ?? t('common.na') }}</strong>
+                <p>{{ selectedMenu?.routeName || t('userCenter.menus.nonNavigable') }}</p>
+              </div>
+            </div>
+            <div class="menu-preview-badges">
+              <UiBadge v-if="selectedMenu" :label="selectedMenu.source" subtle />
+              <UiBadge v-if="selectedMenu" :label="t('userCenter.menus.roleUsage', { count: roleUsage(selectedMenu.id) })" subtle />
+            </div>
           </div>
-          <div class="menu-meta">
-            <UiBadge :label="menu.status" :tone="menu.status === 'active' ? 'success' : 'warning'" />
-            <UiBadge :label="t('userCenter.menus.roleUsage', { count: roleUsage(menu.id) })" subtle />
+
+          <div class="menu-form-grid">
+            <UiField class="menu-form-full" :label="t('userCenter.menus.labelLabel')">
+              <UiInput v-model="form.label" />
+            </UiField>
+            <UiField :label="t('userCenter.menus.orderLabel')">
+              <UiInput v-model="form.order" type="number" />
+            </UiField>
+            <UiField :label="t('userCenter.common.status')">
+              <UiSelect v-model="form.status" :options="statusOptions" />
+            </UiField>
           </div>
-        </article>
-      </div>
-    </UiSurface>
 
-    <UiSurface :title="t('userCenter.menus.editTitle')" :subtitle="t('userCenter.menus.formSubtitle')">
-      <div class="form-grid">
-        <label class="full-width">
-          <span>{{ t('userCenter.menus.labelLabel') }}</span>
-          <input v-model="form.label" />
-        </label>
-        <label>
-          <span>{{ t('userCenter.menus.orderLabel') }}</span>
-          <input v-model.number="form.order" type="number" />
-        </label>
-        <label>
-          <span>{{ t('userCenter.common.status') }}</span>
-          <select v-model="form.status">
-            <option value="active">{{ t('userCenter.common.active') }}</option>
-            <option value="disabled">{{ t('userCenter.common.disabled') }}</option>
-          </select>
-        </label>
-      </div>
+          <div class="menu-editor-actions">
+            <UiButton variant="ghost" @click="selectedMenuId && workbench.toggleMenuStatus(selectedMenuId)">
+              <Power :size="14" />
+              {{ t('userCenter.menus.toggleStatus') }}
+            </UiButton>
+            <UiButton @click="saveMenu">
+              <Save :size="14" />
+              {{ t('common.save') }}
+            </UiButton>
+          </div>
 
-      <div class="form-actions">
-        <button type="button" class="ghost-button" @click="selectedMenuId && workbench.toggleMenuStatus(selectedMenuId)">
-          {{ t('userCenter.menus.toggleStatus') }}
-        </button>
-        <button type="button" class="primary-button" @click="saveMenu">
-          {{ t('common.save') }}
-        </button>
-      </div>
-
-      <p class="helper-text">{{ t('userCenter.menus.parentHint') }}</p>
-    </UiSurface>
-  </div>
+          <p class="menu-helper-text">{{ t('userCenter.menus.parentHint') }}</p>
+        </div>
+      </UiSurface>
+    </div>
+  </section>
 </template>
 
 <style scoped>
-.page-layout,
-.menu-item,
-.menu-meta,
-.form-actions {
+.menu-page,
+.menu-editor-shell,
+.menu-copy {
   display: flex;
+  flex-direction: column;
 }
 
-.page-layout {
-  flex-direction: column;
-  gap: 1rem;
+.menu-layout {
+  display: grid;
+  grid-template-columns: minmax(22rem, 28rem) minmax(0, 1fr);
+  gap: 1.1rem;
 }
 
 .menu-tree {
@@ -165,69 +204,132 @@ function roleUsage(menuId: string) {
   gap: 0.75rem;
 }
 
-.menu-item {
+.menu-card,
+.menu-card-main,
+.menu-meta,
+.menu-preview-header,
+.menu-preview-badges,
+.menu-editor-actions {
+  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.85rem 0.9rem 0.85rem calc(0.9rem + var(--depth) * 1rem);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-l);
-  cursor: pointer;
 }
 
-.menu-item.active {
-  border-color: color-mix(in srgb, var(--brand-primary) 34%, var(--border-subtle));
-  background: color-mix(in srgb, var(--brand-primary) 6%, transparent);
+.menu-card,
+.menu-preview-header,
+.menu-editor-actions {
+  justify-content: space-between;
+}
+
+.menu-card {
+  gap: 1rem;
+  min-width: 0;
+  padding: 0.95rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  border-radius: calc(var(--radius-lg) + 2px);
+  background: color-mix(in srgb, var(--bg-subtle) 68%, transparent);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-apple), transform var(--duration-fast) var(--ease-apple), box-shadow var(--duration-fast) var(--ease-apple);
+}
+
+.menu-card:hover,
+.menu-card.active {
+  border-color: color-mix(in srgb, var(--brand-primary) 26%, var(--border-strong));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.menu-card-main {
+  min-width: 0;
+  gap: 0.75rem;
+}
+
+.menu-indent {
+  width: calc(var(--depth) * 0.9rem);
+  flex-shrink: 0;
+}
+
+.menu-icon-wrap,
+.menu-preview-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--brand-primary) 10%, transparent);
+  color: var(--brand-primary);
+  flex-shrink: 0;
+}
+
+.menu-icon-wrap {
+  width: 2.2rem;
+  height: 2.2rem;
+}
+
+.menu-preview-icon {
+  width: 2.5rem;
+  height: 2.5rem;
 }
 
 .menu-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+  min-width: 0;
+  gap: 0.18rem;
 }
 
 .menu-copy small,
-.helper-text,
-.form-grid label span {
+.menu-preview-header p,
+.menu-helper-text {
   color: var(--text-secondary);
 }
 
 .menu-meta,
-.form-actions {
-  gap: 0.5rem;
+.menu-preview-badges,
+.menu-editor-actions {
+  gap: 0.55rem;
+  flex-wrap: wrap;
 }
 
-.form-grid {
+.menu-preview-card {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.85rem 1rem;
-  margin-bottom: 1rem;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 90%, transparent);
+  border-radius: calc(var(--radius-lg) + 1px);
+  background: color-mix(in srgb, var(--bg-subtle) 62%, transparent);
 }
 
-.form-grid label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+.menu-preview-header {
+  justify-content: flex-start;
+  gap: 0.85rem;
 }
 
-.full-width {
+.menu-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.menu-form-full {
   grid-column: 1 / -1;
 }
 
-.form-grid input,
-.form-grid select {
-  min-height: 2.6rem;
-  padding: 0 0.75rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-m);
-  background: var(--bg-input);
+.menu-helper-text {
+  font-size: 0.82rem;
+  line-height: 1.55;
 }
 
-.form-actions {
-  justify-content: flex-end;
+@media (max-width: 1180px) {
+  .menu-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
-.helper-text {
-  margin: 0.75rem 0 0;
+@media (max-width: 760px) {
+  .menu-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .menu-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 </style>

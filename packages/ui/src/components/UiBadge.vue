@@ -13,60 +13,17 @@ const props = withDefaults(
 </script>
 
 <template>
-  <span class="ui-badge" :class="[`tone-${props.tone}`, { subtle: props.subtle }]">
+  <span
+    class="inline-flex max-w-full items-center whitespace-nowrap overflow-hidden text-ellipsis rounded-full border px-2.5 py-1 text-[0.72rem] font-semibold tracking-[0.02em] transition-all duration-fast ease-apple"
+    :class="[
+      props.tone === 'default' ? 'border-border bg-subtle text-text-secondary' : '',
+      props.tone === 'success' ? 'border-status-success/20 bg-status-success/10 text-status-success' : '',
+      props.tone === 'warning' ? 'border-status-warning/20 bg-status-warning/10 text-status-warning' : '',
+      props.tone === 'error' ? 'border-status-error/20 bg-status-error/10 text-status-error' : '',
+      props.tone === 'info' ? 'border-primary/15 bg-primary/10 text-primary' : '',
+      props.subtle ? 'border-border/70 bg-transparent text-text-tertiary shadow-none' : ''
+    ]"
+  >
     {{ props.label }}
   </span>
 </template>
-
-<style scoped>
-.ui-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 1.75rem;
-  min-width: 0;
-  max-width: 100%;
-  padding: 0 0.75rem;
-  border-radius: 999px;
-  border: 1px solid transparent;
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.tone-default {
-  background: color-mix(in srgb, var(--bg-subtle) 88%, transparent);
-  color: var(--text-secondary);
-  border-color: var(--border-subtle);
-}
-
-.tone-success {
-  background: color-mix(in srgb, var(--status-success) 14%, transparent);
-  color: var(--status-success);
-  border-color: color-mix(in srgb, var(--status-success) 35%, transparent);
-}
-
-.tone-warning {
-  background: color-mix(in srgb, var(--status-warning) 16%, transparent);
-  color: var(--status-warning);
-  border-color: color-mix(in srgb, var(--status-warning) 35%, transparent);
-}
-
-.tone-error {
-  background: color-mix(in srgb, var(--status-error) 16%, transparent);
-  color: var(--status-error);
-  border-color: color-mix(in srgb, var(--status-error) 35%, transparent);
-}
-
-.tone-info {
-  background: color-mix(in srgb, var(--status-info) 16%, transparent);
-  color: var(--status-info);
-  border-color: color-mix(in srgb, var(--status-info) 35%, transparent);
-}
-
-.subtle {
-  background: transparent;
-}
-</style>

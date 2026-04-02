@@ -641,6 +641,15 @@ export interface HostState {
   shell: string
 }
 
+export interface HealthcheckStatus {
+  status: 'ok'
+  host: 'web' | 'tauri'
+  mode: 'local'
+  cargoWorkspace: boolean
+  backendReady: boolean
+  transport: string
+}
+
 export interface ShellPreferences {
   theme: ThemeMode
   locale: Locale
@@ -651,8 +660,115 @@ export interface ShellPreferences {
   lastVisitedRoute: string
 }
 
+export interface DesktopBackendConnection {
+  baseUrl?: string
+  authToken?: string
+  ready: boolean
+  transport: string
+}
+
 export interface ShellBootstrap {
   hostState: HostState
   preferences: ShellPreferences
   connections: ConnectionProfile[]
+  backend?: DesktopBackendConnection
+}
+
+export interface RuntimeBootstrap {
+  provider: ProviderConfig
+  sessions: RuntimeSessionSummary[]
+}
+
+export interface ProviderConfig {
+  provider: string
+  apiKey?: string
+  baseUrl?: string
+  defaultModel?: string
+}
+
+export interface RuntimeSessionSummary {
+  id: string
+  conversationId: string
+  projectId: string
+  title: string
+  status: string
+  updatedAt: number
+  lastMessagePreview?: string
+}
+
+export interface RuntimeRunSnapshot {
+  id: string
+  sessionId: string
+  conversationId: string
+  status: string
+  currentStep: string
+  startedAt: number
+  updatedAt: number
+  modelId?: string
+  nextAction?: string
+}
+
+export interface RuntimeMessage {
+  id: string
+  sessionId: string
+  conversationId: string
+  senderType: 'user' | 'assistant' | 'system'
+  senderLabel: string
+  content: string
+  timestamp: number
+  modelId?: string
+  status: string
+}
+
+export interface RuntimeTraceItem {
+  id: string
+  sessionId: string
+  runId: string
+  conversationId: string
+  kind: string
+  title: string
+  detail: string
+  tone: TraceTone | 'default' | string
+  timestamp: number
+  actor: string
+  relatedMessageId?: string
+  relatedToolName?: string
+}
+
+export interface RuntimeApprovalRequest {
+  id: string
+  sessionId: string
+  conversationId: string
+  runId: string
+  toolName: string
+  summary: string
+  detail: string
+  riskLevel: RiskLevel | string
+  createdAt: number
+}
+
+export type RuntimeDecisionAction = 'approve' | 'reject'
+
+export interface RuntimeEventEnvelope {
+  id: string
+  kind: string
+  sessionId: string
+  conversationId: string
+  runId?: string
+  emittedAt: number
+  run?: RuntimeRunSnapshot
+  message?: RuntimeMessage
+  trace?: RuntimeTraceItem
+  approval?: RuntimeApprovalRequest
+  decision?: RuntimeDecisionAction
+  summary?: RuntimeSessionSummary
+  error?: string
+}
+
+export interface RuntimeSessionDetail {
+  summary: RuntimeSessionSummary
+  run: RuntimeRunSnapshot
+  messages: RuntimeMessage[]
+  trace: RuntimeTraceItem[]
+  pendingApproval?: RuntimeApprovalRequest
 }

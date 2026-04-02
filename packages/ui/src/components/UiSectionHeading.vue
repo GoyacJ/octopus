@@ -18,23 +18,25 @@ const props = defineProps<{
 .ui-section-heading {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: 0.45rem;
   min-width: 0;
 }
 
 .eyebrow {
   margin: 0;
   color: var(--brand-primary);
-  font-size: 0.74rem;
-  letter-spacing: 0.12em;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   font-weight: 700;
 }
 
 h2 {
   margin: 0;
-  font-size: 1.1rem;
-  line-height: 1.25;
+  font-size: clamp(1.28rem, 1.8vw, 1.9rem);
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  font-weight: 700;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -45,8 +47,10 @@ h2 {
 
 .subtitle {
   margin: 0;
+  max-width: 60rem;
   color: var(--text-secondary);
-  line-height: 1.5;
+  font-size: 0.95rem;
+  line-height: 1.6;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

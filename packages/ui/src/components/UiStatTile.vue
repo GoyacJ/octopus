@@ -1,79 +1,36 @@
 <script setup lang="ts">
+import { cn } from '../lib/utils'
+
 const props = withDefaults(
   defineProps<{
     label: string
     value: string
     helper?: string
     tone?: 'default' | 'success' | 'warning' | 'error' | 'info'
+    class?: string
   }>(),
   {
     helper: '',
     tone: 'default',
+    class: '',
   },
 )
 </script>
 
 <template>
-  <div class="ui-stat-tile" :class="`tone-${props.tone}`">
-    <span class="label">{{ props.label }}</span>
-    <strong class="value">{{ props.value }}</strong>
-    <span v-if="props.helper" class="helper">{{ props.helper }}</span>
+  <div
+    :class="cn(
+      'flex min-h-[8.5rem] flex-col gap-2 rounded-[calc(var(--radius-lg)+2px)] border bg-surface p-6 shadow-xs transition-all duration-normal ease-apple',
+      props.tone === 'default' && 'border-border',
+      props.tone === 'success' && 'border-status-success/20 bg-status-success/[0.04]',
+      props.tone === 'warning' && 'border-status-warning/20 bg-status-warning/[0.04]',
+      props.tone === 'error' && 'border-status-error/20 bg-status-error/[0.04]',
+      props.tone === 'info' && 'border-primary/15 bg-primary/[0.04]',
+      props.class
+    )"
+  >
+    <span class="line-clamp-2 text-[0.74rem] font-semibold uppercase tracking-[0.12em] text-text-tertiary">{{ props.label }}</span>
+    <strong class="break-all text-[2rem] font-semibold leading-tight tracking-[-0.04em] text-text-primary">{{ props.value }}</strong>
+    <span v-if="props.helper" class="mt-auto break-all text-[0.82rem] leading-relaxed text-text-secondary">{{ props.helper }}</span>
   </div>
 </template>
-
-<style scoped>
-.ui-stat-tile {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  min-height: 7rem;
-  min-width: 0;
-  padding: 1rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-  box-shadow: var(--shadow-sm);
-}
-
-.label {
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.value {
-  font-size: 1.85rem;
-  line-height: 1;
-  overflow-wrap: anywhere;
-}
-
-.helper {
-  margin-top: auto;
-  color: var(--text-tertiary);
-  font-size: 0.8rem;
-  overflow-wrap: anywhere;
-}
-
-.tone-warning {
-  border-color: color-mix(in srgb, var(--status-warning) 35%, var(--border-subtle));
-}
-
-.tone-error {
-  border-color: color-mix(in srgb, var(--status-error) 35%, var(--border-subtle));
-}
-
-.tone-info {
-  border-color: color-mix(in srgb, var(--status-info) 35%, var(--border-subtle));
-}
-
-.tone-success {
-  border-color: color-mix(in srgb, var(--status-success) 35%, var(--border-subtle));
-}
-</style>

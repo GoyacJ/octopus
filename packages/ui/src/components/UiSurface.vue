@@ -1,75 +1,65 @@
 <script setup lang="ts">
-const props = defineProps<{
+import { cva, type VariantProps } from 'class-variance-authority'
+import { computed } from 'vue'
+import { cn } from '../lib/utils'
+
+const surfaceVariants = cva(
+  'rounded-[calc(var(--radius-lg)+2px)] transition-all duration-normal ease-apple',
+  {
+    variants: {
+      variant: {
+        flat: 'bg-background border border-border/70 shadow-none',
+        raised: 'bg-card border border-border/80 shadow-sm',
+        overlay: 'bg-popover border border-border/80 shadow-lg backdrop-blur-xl',
+        subtle: 'bg-muted/72 border border-border/40 shadow-none',
+      },
+      padding: {
+        none: 'p-0',
+        sm: 'p-4',
+        md: 'p-6',
+        lg: 'p-8',
+      }
+    },
+    defaultVariants: {
+      variant: 'raised',
+      padding: 'md',
+    },
+  },
+)
+
+interface Props {
+  variant?: NonNullable<VariantProps<typeof surfaceVariants>['variant']>
+  padding?: NonNullable<VariantProps<typeof surfaceVariants>['padding']>
   eyebrow?: string
   title?: string
   subtitle?: string
-}>()
+  class?: string
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  variant: 'raised',
+  padding: 'md',
+  class: '',
+})
+
+const classes = computed(() => cn(surfaceVariants({ variant: props.variant, padding: props.padding }), props.class))
 </script>
 
 <template>
-  <section class="ui-surface">
-    <header v-if="props.eyebrow || props.title || props.subtitle" class="surface-header">
-      <p v-if="props.eyebrow" class="eyebrow">{{ props.eyebrow }}</p>
-      <h2 v-if="props.title">{{ props.title }}</h2>
-      <p v-if="props.subtitle" class="subtitle">{{ props.subtitle }}</p>
+  <section :class="classes">
+    <header v-if="eyebrow || title || subtitle" class="mb-4 space-y-1.5">
+      <p v-if="eyebrow" class="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80">
+        {{ eyebrow }}
+      </p>
+      <h2 v-if="title" class="text-lg font-semibold leading-tight tracking-tight text-foreground">
+        {{ title }}
+      </h2>
+      <p v-if="subtitle" class="text-sm leading-relaxed text-muted-foreground line-clamp-2">
+        {{ subtitle }}
+      </p>
     </header>
-    <slot />
+    <div class="relative">
+      <slot />
+    </div>
   </section>
 </template>
-
-<style scoped>
-.ui-surface {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  min-width: 0;
-  padding: 1.1rem;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-subtle);
-  background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--brand-primary) 10%, transparent), transparent 35%),
-    var(--bg-surface);
-  box-shadow: var(--shadow-md);
-}
-
-.surface-header {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  min-width: 0;
-}
-
-.eyebrow {
-  margin: 0;
-  color: var(--brand-primary);
-  font-size: 0.74rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  font-weight: 700;
-}
-
-h2 {
-  margin: 0;
-  font-size: 1.1rem;
-  line-height: 1.3;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.subtitle {
-  margin: 0;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow-wrap: anywhere;
-}
-</style>

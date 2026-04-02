@@ -138,16 +138,16 @@ watch(
 .user-center-shell {
   display: grid;
   grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
-  gap: 1rem;
+  gap: 1.1rem;
   min-height: 0;
 }
 
 .user-center-nav,
 .user-center-panel {
   min-height: 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--bg-surface) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  border-radius: calc(var(--radius-xl) + 2px);
+  background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
   box-shadow: var(--shadow-sm);
 }
 
@@ -180,13 +180,12 @@ watch(
 
 .nav-link:hover {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--brand-primary) 8%, transparent);
+  background: color-mix(in srgb, var(--brand-primary) 7%, transparent);
 }
 
 .nav-link.active {
   color: var(--text-primary);
-  background:
-    linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 16%, transparent), color-mix(in srgb, var(--brand-primary) 4%, transparent));
+  background: color-mix(in srgb, var(--brand-primary) 10%, transparent);
   transform: translateX(2px);
 }
 

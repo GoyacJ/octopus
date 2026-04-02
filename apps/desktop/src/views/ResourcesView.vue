@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import {
+  ChevronLeft,
+  ChevronRight,
   Eye,
   ExternalLink,
   FileText,
@@ -14,16 +16,14 @@ import {
   Plus,
   Search,
   Trash2,
-  ChevronLeft,
-  ChevronRight,
 } from 'lucide-vue-next'
 
 import type { Artifact, ProjectResource } from '@octopus/schema'
-import { UiBadge, UiEmptyState, UiPagination, UiSectionHeading, UiSurface } from '@octopus/ui'
+import { UiBadge, UiButton, UiEmptyState, UiInput, UiPagination, UiSectionHeading, UiSurface } from '@octopus/ui'
 
+import { usePagination } from '@/composables/usePagination'
 import { resolveMockField } from '@/i18n/copy'
 import { createProjectConversationTarget } from '@/i18n/navigation'
-import { usePagination } from '@/composables/usePagination'
 import { useWorkbenchStore } from '@/stores/workbench'
 
 type ResourceViewMode = 'list' | 'grid'
@@ -81,6 +81,12 @@ const previewArtifact = computed<Artifact | undefined>(() => {
 
   return workbench.artifacts.find((artifact) => artifact.id === (resource.sourceArtifactId ?? resource.id))
 })
+const resourceStats = computed(() => [
+  { label: t('resources.kinds.file'), value: String(resources.value.filter((resource) => resource.kind === 'file').length) },
+  { label: t('resources.kinds.folder'), value: String(resources.value.filter((resource) => resource.kind === 'folder').length) },
+  { label: t('resources.kinds.artifact'), value: String(resources.value.filter((resource) => resource.kind === 'artifact').length) },
+  { label: t('resources.kinds.url'), value: String(resources.value.filter((resource) => resource.kind === 'url').length) },
+])
 
 const {
   currentPage,
@@ -118,10 +124,6 @@ function resourceIcon(resource: ProjectResource) {
 }
 
 function resourceSecondaryText(resource: ProjectResource): string {
-  if (resource.kind === 'artifact') {
-    return resource.location || resourceKindLabel(resource)
-  }
-
   return resource.location || resourceKindLabel(resource)
 }
 
@@ -242,85 +244,72 @@ function confirmDelete() {
     closePreview()
   }
 }
-
 </script>
 
 <template>
-  <section class="section-stack">
+  <section class="resources-page section-stack">
     <UiSectionHeading
       :eyebrow="t('resources.header.eyebrow')"
       :title="t('resources.header.title')"
     />
 
+    <div class="resource-stats-grid">
+      <UiSurface v-for="stat in resourceStats" :key="stat.label" class="resource-stat-card" padding="sm">
+        <small>{{ stat.label }}</small>
+        <strong>{{ stat.value }}</strong>
+      </UiSurface>
+    </div>
+
     <UiSurface>
-      <div class="toolbar">
-        <label class="search-shell">
-          <Search :size="16" />
-          <input
+      <div class="resource-toolbar">
+        <div class="resource-search-shell">
+          <Search :size="16" class="resource-search-icon" />
+          <UiInput
             v-model="searchQuery"
+            class="resource-search-input"
             data-testid="resources-search-input"
             :placeholder="t('resources.search.placeholder')"
-          >
-        </label>
+          />
+        </div>
 
-        <div class="toolbar-actions">
-          <div class="view-toggle">
-            <button
-              type="button"
-              class="ghost-button"
-              :class="{ active: viewMode === 'list' }"
+        <div class="resource-toolbar-actions">
+          <div class="resource-view-toggle">
+            <UiButton
+              variant="ghost"
+              size="sm"
+              :class="viewMode === 'list' ? 'active' : ''"
               data-testid="resources-view-list"
               @click="viewMode = 'list'"
             >
               <List :size="16" />
               <span>{{ t('resources.views.list') }}</span>
-            </button>
-            <button
-              type="button"
-              class="ghost-button"
-              :class="{ active: viewMode === 'grid' }"
+            </UiButton>
+            <UiButton
+              variant="ghost"
+              size="sm"
+              :class="viewMode === 'grid' ? 'active' : ''"
               data-testid="resources-view-grid"
               @click="viewMode = 'grid'"
             >
               <LayoutGrid :size="16" />
               <span>{{ t('resources.views.grid') }}</span>
-            </button>
+            </UiButton>
           </div>
 
-          <div class="add-menu-shell">
-            <button
-              type="button"
-              class="primary-button"
-              data-testid="resources-add-trigger"
-              @click="toggleAddMenu"
-            >
+          <div class="resource-add-shell">
+            <UiButton data-testid="resources-add-trigger" @click="toggleAddMenu">
               <Plus :size="16" />
               <span>{{ t('resources.actions.add') }}</span>
-            </button>
+            </UiButton>
 
-            <div v-if="addMenuOpen" class="menu-card" data-testid="resources-add-menu">
-              <button
-                type="button"
-                class="menu-item"
-                data-testid="resources-add-file"
-                @click="createFile"
-              >
+            <div v-if="addMenuOpen" class="resource-add-menu" data-testid="resources-add-menu">
+              <button type="button" class="resource-menu-item" data-testid="resources-add-file" @click="createFile">
                 {{ t('resources.actions.uploadFile') }}
               </button>
-              <button
-                type="button"
-                class="menu-item"
-                data-testid="resources-add-folder"
-                @click="createFolder"
-              >
+              <button type="button" class="resource-menu-item" data-testid="resources-add-folder" @click="createFolder">
                 {{ t('resources.actions.uploadFolder') }}
               </button>
-              <button
-                type="button"
-                class="menu-item"
-                data-testid="resources-add-url"
-                @click="openCreateUrlModal"
-              >
+              <button type="button" class="resource-menu-item" data-testid="resources-add-url" @click="openCreateUrlModal">
                 {{ t('resources.actions.addUrl') }}
               </button>
             </div>
@@ -352,30 +341,33 @@ function confirmDelete() {
                 <span>{{ resourceMetaLabel(resource) }}</span>
               </div>
               <div class="resource-actions">
-                <button
-                  type="button"
-                  class="ghost-button action-button"
+                <UiButton
+                  variant="ghost"
+                  size="sm"
+                  class="resource-action-button"
                   :data-testid="`resource-preview-${resource.id}`"
                   @click="openPreview(resource.id)"
                 >
                   <Eye :size="14" />
-                </button>
-                <button
-                  type="button"
-                  class="ghost-button action-button"
+                </UiButton>
+                <UiButton
+                  variant="ghost"
+                  size="sm"
+                  class="resource-action-button"
                   :data-testid="`resource-edit-${resource.id}`"
                   @click="openEdit(resource.id)"
                 >
                   <Pencil :size="14" />
-                </button>
-                <button
-                  type="button"
-                  class="ghost-button action-button danger"
+                </UiButton>
+                <UiButton
+                  variant="ghost"
+                  size="sm"
+                  class="resource-action-button resource-action-danger"
                   :data-testid="`resource-delete-${resource.id}`"
                   @click="openDelete(resource.id)"
                 >
                   <Trash2 :size="14" />
-                </button>
+                </UiButton>
               </div>
             </div>
           </article>
@@ -388,43 +380,46 @@ function confirmDelete() {
             class="resource-card"
             :data-testid="`resource-item-${resource.id}`"
           >
-            <div class="card-topline">
-              <span class="resource-icon large">
+            <div class="resource-card-topline">
+              <span class="resource-icon resource-icon-large">
                 <component :is="resourceIcon(resource)" :size="20" />
               </span>
               <UiBadge :label="resourceKindLabel(resource)" subtle />
             </div>
-            <div class="card-copy">
+            <div class="resource-copy">
               <strong>{{ resourceLabel(resource) }}</strong>
               <small>{{ resourceSecondaryText(resource) }}</small>
             </div>
-            <div class="card-footer">
+            <div class="resource-card-footer">
               <span>{{ resourceMetaLabel(resource) }}</span>
               <div class="resource-actions">
-                <button
-                  type="button"
-                  class="ghost-button action-button"
+                <UiButton
+                  variant="ghost"
+                  size="sm"
+                  class="resource-action-button"
                   :data-testid="`resource-preview-${resource.id}`"
                   @click="openPreview(resource.id)"
                 >
                   <Eye :size="14" />
-                </button>
-                <button
-                  type="button"
-                  class="ghost-button action-button"
+                </UiButton>
+                <UiButton
+                  variant="ghost"
+                  size="sm"
+                  class="resource-action-button"
                   :data-testid="`resource-edit-${resource.id}`"
                   @click="openEdit(resource.id)"
                 >
                   <Pencil :size="14" />
-                </button>
-                <button
-                  type="button"
-                  class="ghost-button action-button danger"
+                </UiButton>
+                <UiButton
+                  variant="ghost"
+                  size="sm"
+                  class="resource-action-button resource-action-danger"
                   :data-testid="`resource-delete-${resource.id}`"
                   @click="openDelete(resource.id)"
                 >
                   <Trash2 :size="14" />
-                </button>
+                </UiButton>
               </div>
             </div>
           </article>
@@ -461,67 +456,60 @@ function confirmDelete() {
       />
     </UiSurface>
 
-    <div v-if="creatingUrl" class="modal-shell">
-      <button type="button" class="modal-backdrop" @click="closeCreateUrlModal" />
-      <section class="modal-card">
-        <div class="modal-copy">
+    <div v-if="creatingUrl" class="resource-modal-shell">
+      <button type="button" class="resource-modal-backdrop" @click="closeCreateUrlModal" />
+      <section class="resource-modal-card">
+        <div class="resource-modal-copy">
           <strong>{{ t('resources.editForm.urlTitle') }}</strong>
         </div>
-        <label class="field-stack">
+        <label class="resource-field-stack">
           <span>{{ t('resources.editForm.nameLabel') }}</span>
-          <input
+          <UiInput
             v-model="createUrlNameDraft"
             data-testid="resource-url-name-input"
             :placeholder="t('resources.editForm.namePlaceholder')"
-          >
+          />
         </label>
-        <label class="field-stack">
+        <label class="resource-field-stack">
           <span>{{ t('resources.editForm.locationLabel') }}</span>
-          <input
+          <UiInput
             v-model="createUrlLocationDraft"
             data-testid="resource-url-location-input"
             :placeholder="t('resources.editForm.locationPlaceholder')"
-          >
+          />
         </label>
-        <div class="modal-actions">
-          <button type="button" class="ghost-button" @click="closeCreateUrlModal">{{ t('resources.actions.cancel') }}</button>
-          <button
-            type="button"
-            class="primary-button"
-            data-testid="resource-url-confirm"
-            @click="submitUrlResource"
-          >
-            {{ t('resources.editForm.confirmCreate') }}
-          </button>
+        <div class="resource-modal-actions">
+          <UiButton variant="ghost" @click="closeCreateUrlModal">{{ t('resources.actions.cancel') }}</UiButton>
+          <UiButton data-testid="resource-url-confirm" @click="submitUrlResource">{{ t('resources.editForm.confirmCreate') }}</UiButton>
         </div>
       </section>
     </div>
 
-    <div v-if="previewResource" class="modal-shell">
-      <button type="button" class="modal-backdrop" @click="closePreview" />
-      <section class="modal-card preview-card" data-testid="resource-preview-modal">
-        <div class="split-heading">
-          <div class="modal-copy">
+    <div v-if="previewResource" class="resource-modal-shell">
+      <button type="button" class="resource-modal-backdrop" @click="closePreview" />
+      <section class="resource-modal-card resource-preview-card" data-testid="resource-preview-modal">
+        <div class="resource-preview-heading">
+          <div class="resource-modal-copy">
             <strong>{{ t('resources.preview.title') }}</strong>
             <p>{{ resourceLabel(previewResource) }}</p>
           </div>
-          <button type="button" class="ghost-button action-button" data-testid="resource-preview-close" @click="closePreview">
+          <UiButton variant="ghost" size="sm" data-testid="resource-preview-close" @click="closePreview">
             <span>{{ t('resources.actions.cancel') }}</span>
-          </button>
+          </UiButton>
         </div>
-        <div class="meta-row">
+        <div class="resource-preview-meta">
           <UiBadge :label="resourceKindLabel(previewResource)" subtle />
           <span>{{ t('resources.preview.size') }}: {{ resourceMetaLabel(previewResource) }}</span>
           <span>{{ t('resources.preview.linkedConversations') }}: {{ previewResource.linkedConversationIds.length }}</span>
         </div>
-        <div class="preview-content">
+        <div class="resource-preview-content">
           <p><strong>{{ t('resources.preview.location') }}:</strong> {{ resourceSecondaryText(previewResource) }}</p>
           <p><strong>{{ t('resources.preview.tags') }}:</strong> {{ previewResource.tags.join(', ') || t('common.na') }}</p>
           <p v-if="previewArtifact"><strong>{{ t('resources.preview.kind') }}:</strong> {{ previewArtifact.type }}</p>
-          <pre v-if="previewArtifact" class="artifact-preview">{{ previewArtifact.content }}</pre>
+          <pre v-if="previewArtifact" class="resource-artifact-preview">{{ previewArtifact.content }}</pre>
           <a
             v-if="previewResource.kind === 'url' && previewResource.location"
-            class="secondary-button preview-link"
+            class="resource-preview-link"
             :href="previewResource.location"
             target="_blank"
             rel="noreferrer"
@@ -533,56 +521,47 @@ function confirmDelete() {
       </section>
     </div>
 
-    <div v-if="editingResource" class="modal-shell">
-      <button type="button" class="modal-backdrop" @click="closeEdit" />
-      <section class="modal-card" data-testid="resource-edit-modal">
-        <div class="modal-copy">
+    <div v-if="editingResource" class="resource-modal-shell">
+      <button type="button" class="resource-modal-backdrop" @click="closeEdit" />
+      <section class="resource-modal-card" data-testid="resource-edit-modal">
+        <div class="resource-modal-copy">
           <strong>{{ t('resources.editForm.renameTitle') }}</strong>
           <p>{{ resourceKindLabel(editingResource) }}</p>
         </div>
-        <label class="field-stack">
+        <label class="resource-field-stack">
           <span>{{ t('resources.editForm.nameLabel') }}</span>
-          <input
+          <UiInput
             v-model="editNameDraft"
             data-testid="resource-edit-name-input"
             :placeholder="t('resources.editForm.namePlaceholder')"
-          >
+          />
         </label>
-        <label v-if="editingResource.kind === 'url'" class="field-stack">
+        <label v-if="editingResource.kind === 'url'" class="resource-field-stack">
           <span>{{ t('resources.editForm.locationLabel') }}</span>
-          <input
+          <UiInput
             v-model="editLocationDraft"
             data-testid="resource-edit-location-input"
             :placeholder="t('resources.editForm.locationPlaceholder')"
-          >
+          />
         </label>
-        <div class="modal-actions">
-          <button type="button" class="ghost-button" @click="closeEdit">{{ t('resources.actions.cancel') }}</button>
-          <button
-            type="button"
-            class="primary-button"
-            data-testid="resource-edit-confirm"
-            @click="saveEdit"
-          >
-            {{ t('resources.editForm.confirmSave') }}
-          </button>
+        <div class="resource-modal-actions">
+          <UiButton variant="ghost" @click="closeEdit">{{ t('resources.actions.cancel') }}</UiButton>
+          <UiButton data-testid="resource-edit-confirm" @click="saveEdit">{{ t('resources.editForm.confirmSave') }}</UiButton>
         </div>
       </section>
     </div>
 
-    <div v-if="deletingResource" class="modal-shell">
-      <button type="button" class="modal-backdrop" @click="closeDelete" />
-      <section class="modal-card" data-testid="resource-delete-modal">
-        <div class="modal-copy">
+    <div v-if="deletingResource" class="resource-modal-shell">
+      <button type="button" class="resource-modal-backdrop" @click="closeDelete" />
+      <section class="resource-modal-card" data-testid="resource-delete-modal">
+        <div class="resource-modal-copy">
           <strong>{{ t('resources.deleteDialog.title') }}</strong>
           <p>{{ deletingResource ? resourceLabel(deletingResource) : '' }}</p>
         </div>
-        <p class="delete-copy">{{ t('resources.deleteDialog.description') }}</p>
-        <div class="modal-actions">
-          <button type="button" class="ghost-button" @click="closeDelete">{{ t('resources.actions.cancel') }}</button>
-          <button type="button" class="danger-button" data-testid="resource-delete-confirm" @click="confirmDelete">
-            {{ t('resources.deleteDialog.confirm') }}
-          </button>
+        <p class="resource-delete-copy">{{ t('resources.deleteDialog.description') }}</p>
+        <div class="resource-modal-actions">
+          <UiButton variant="ghost" @click="closeDelete">{{ t('resources.actions.cancel') }}</UiButton>
+          <UiButton variant="destructive" data-testid="resource-delete-confirm" @click="confirmDelete">{{ t('resources.deleteDialog.confirm') }}</UiButton>
         </div>
       </section>
     </div>
@@ -590,74 +569,113 @@ function confirmDelete() {
 </template>
 
 <style scoped>
-.toolbar,
-.toolbar-actions,
-.view-toggle,
-.search-shell,
+.resources-page,
+.resource-copy,
+.resource-modal-copy,
+.resource-preview-content,
+.resource-field-stack {
+  display: flex;
+  flex-direction: column;
+}
+
+.resource-stats-grid,
+.resource-toolbar,
+.resource-toolbar-actions,
+.resource-view-toggle,
 .resource-main,
 .resource-side,
 .resource-meta,
 .resource-actions,
-.card-topline,
-.card-footer,
-.pagination-row,
-.modal-actions {
+.resource-card-topline,
+.resource-card-footer,
+.resource-modal-actions,
+.resource-preview-heading,
+.resource-preview-meta {
   display: flex;
   align-items: center;
 }
 
-.toolbar,
+.resource-toolbar,
 .resource-row,
-.pagination-row,
-.split-heading {
+.resource-preview-heading {
   justify-content: space-between;
 }
 
-.toolbar {
+.resource-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.resource-stat-card {
+  gap: 0.35rem;
+}
+
+.resource-stat-card small,
+.resource-copy small,
+.resource-modal-copy p,
+.resource-delete-copy,
+.resource-preview-meta,
+.resource-meta,
+.resource-card-footer {
+  color: var(--text-secondary);
+}
+
+.resource-stat-card strong {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.resource-toolbar {
   gap: 1rem;
   flex-wrap: wrap;
 }
 
-.search-shell {
-  flex: 1;
+.resource-search-shell {
+  display: flex;
+  align-items: center;
   gap: 0.65rem;
+  flex: 1;
   min-width: min(100%, 18rem);
-  padding: 0 0.95rem;
-  min-height: 2.9rem;
-  border-radius: var(--radius-m);
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
+  padding: 0.15rem 0.2rem 0.15rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  border-radius: calc(var(--radius-lg) + 2px);
+  background: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
 }
 
-.search-shell input,
-.field-stack input {
-  width: 100%;
-  min-width: 0;
-  border: none;
+.resource-search-icon {
+  color: var(--text-tertiary);
+}
+
+.resource-search-input {
+  border: 0;
   background: transparent;
-  color: inherit;
-  outline: none;
+  box-shadow: none;
 }
 
-.toolbar-actions {
-  gap: 0.75rem;
-  margin-left: auto;
+.resource-search-input:focus-visible {
+  box-shadow: none;
 }
 
-.view-toggle {
-  gap: 0.5rem;
+.resource-toolbar-actions,
+.resource-view-toggle,
+.resource-actions,
+.resource-modal-actions,
+.resource-preview-meta {
+  gap: 0.6rem;
 }
 
-.view-toggle .ghost-button.active {
-  border-color: color-mix(in srgb, var(--brand-primary) 30%, var(--border-subtle));
+.resource-view-toggle .active {
+  border-color: color-mix(in srgb, var(--brand-primary) 28%, var(--border-strong));
   background: color-mix(in srgb, var(--brand-primary) 10%, transparent);
+  color: var(--text-primary);
 }
 
-.add-menu-shell {
+.resource-add-shell {
   position: relative;
 }
 
-.menu-card {
+.resource-add-menu {
   position: absolute;
   top: calc(100% + 0.45rem);
   right: 0;
@@ -667,13 +685,13 @@ function confirmDelete() {
   gap: 0.35rem;
   min-width: 12rem;
   padding: 0.45rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
+  border-radius: calc(var(--radius-lg) + 2px);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
   background: var(--bg-surface);
   box-shadow: var(--shadow-md);
 }
 
-.menu-item {
+.resource-menu-item {
   display: flex;
   align-items: center;
   min-height: 2.5rem;
@@ -682,7 +700,7 @@ function confirmDelete() {
   transition: background-color var(--duration-fast) var(--ease-apple);
 }
 
-.menu-item:hover {
+.resource-menu-item:hover {
   background: color-mix(in srgb, var(--bg-subtle) 88%, transparent);
 }
 
@@ -690,6 +708,7 @@ function confirmDelete() {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  margin-top: 1rem;
 }
 
 .resource-list {
@@ -698,13 +717,25 @@ function confirmDelete() {
   gap: 0.75rem;
 }
 
+.resource-row,
+.resource-card {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  border-radius: calc(var(--radius-lg) + 2px);
+  transition: border-color var(--duration-fast) var(--ease-apple), transform var(--duration-fast) var(--ease-apple), box-shadow var(--duration-fast) var(--ease-apple);
+}
+
+.resource-row:hover,
+.resource-card:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 24%, var(--border-strong));
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
 .resource-row {
   display: flex;
   gap: 1rem;
-  padding: 0.95rem 1rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-subtle) 72%, transparent);
+  padding: 1rem;
+  background: color-mix(in srgb, var(--bg-subtle) 70%, transparent);
 }
 
 .resource-main {
@@ -724,40 +755,20 @@ function confirmDelete() {
   flex-shrink: 0;
 }
 
-.resource-icon.large {
+.resource-icon-large {
   width: 2.85rem;
   height: 2.85rem;
 }
 
 .resource-copy,
-.card-copy,
-.modal-copy,
-.preview-content,
-.field-stack {
-  display: flex;
-  flex-direction: column;
-}
-
-.resource-copy,
-.card-copy,
-.modal-copy,
-.preview-content {
+.resource-modal-copy,
+.resource-preview-content {
   gap: 0.3rem;
   min-width: 0;
 }
 
 .resource-copy strong,
-.card-copy strong,
-.modal-copy strong {
-  overflow-wrap: anywhere;
-}
-
-.resource-copy small,
-.card-copy small,
-.modal-copy p,
-.delete-copy {
-  color: var(--text-secondary);
-  line-height: 1.5;
+.resource-modal-copy strong {
   overflow-wrap: anywhere;
 }
 
@@ -770,21 +781,15 @@ function confirmDelete() {
   flex-direction: column;
   align-items: flex-end;
   gap: 0.35rem;
-  color: var(--text-secondary);
   font-size: 0.82rem;
 }
 
-.resource-actions {
-  gap: 0.35rem;
-}
-
-.action-button {
-  min-height: 2.35rem;
-  min-width: 2.35rem;
+.resource-action-button {
+  min-width: 2.25rem;
   padding: 0;
 }
 
-.action-button.danger {
+.resource-action-danger {
   color: var(--status-error);
 }
 
@@ -800,48 +805,34 @@ function confirmDelete() {
   gap: 0.9rem;
   min-width: 0;
   padding: 1rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
   background:
     radial-gradient(circle at top right, color-mix(in srgb, var(--brand-primary) 10%, transparent), transparent 42%),
     var(--bg-surface);
 }
 
-.card-topline,
-.card-footer {
+.resource-card-topline,
+.resource-card-footer {
   justify-content: space-between;
-  gap: 0.75rem;
 }
 
-.card-footer {
+.resource-card-footer {
   margin-top: auto;
-  color: var(--text-secondary);
   font-size: 0.82rem;
 }
 
-.pagination-row {
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.pagination-summary {
-  color: var(--text-secondary);
-  font-size: 0.82rem;
-}
-
-.modal-shell {
+.resource-modal-shell {
   position: fixed;
   inset: 0;
   z-index: 30;
 }
 
-.modal-backdrop {
+.resource-modal-backdrop {
   position: absolute;
   inset: 0;
   background: rgba(10, 15, 30, 0.42);
 }
 
-.modal-card {
+.resource-modal-card {
   position: relative;
   z-index: 1;
   width: min(32rem, calc(100vw - 2rem));
@@ -850,44 +841,39 @@ function confirmDelete() {
   flex-direction: column;
   gap: 1rem;
   padding: 1.15rem;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-subtle);
+  border-radius: calc(var(--radius-xl) + 2px);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
   background: var(--bg-surface);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
 }
 
-.preview-card {
+.resource-preview-card {
   width: min(40rem, calc(100vw - 2rem));
 }
 
-.field-stack {
+.resource-field-stack {
   gap: 0.45rem;
 }
 
-.field-stack span {
+.resource-field-stack span {
   font-size: 0.82rem;
   font-weight: 700;
 }
 
-.field-stack input {
-  min-height: 2.75rem;
-  padding: 0 0.9rem;
-  border-radius: var(--radius-m);
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
-}
-
-.modal-actions {
-  justify-content: flex-end;
-  gap: 0.65rem;
+.resource-preview-meta {
   flex-wrap: wrap;
+  font-size: 0.82rem;
 }
 
-.artifact-preview {
+.resource-preview-content {
+  line-height: 1.6;
+}
+
+.resource-artifact-preview {
   margin: 0;
   padding: 0.95rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
+  border-radius: calc(var(--radius-lg) + 1px);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
   background: color-mix(in srgb, var(--bg-subtle) 80%, transparent);
   color: var(--text-secondary);
   font-family: var(--font-mono);
@@ -896,19 +882,30 @@ function confirmDelete() {
   overflow-wrap: anywhere;
 }
 
-.preview-link {
+.resource-preview-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
   align-self: flex-start;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius-m);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  background: color-mix(in srgb, var(--bg-subtle) 72%, transparent);
+}
+
+@media (max-width: 1040px) {
+  .resource-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 880px) {
-  .toolbar-actions,
-  .resource-side,
-  .pagination-row {
+  .resource-toolbar-actions,
+  .resource-side {
     width: 100%;
   }
 
-  .toolbar-actions,
-  .pagination-row {
+  .resource-toolbar-actions {
     justify-content: space-between;
   }
 
@@ -918,6 +915,12 @@ function confirmDelete() {
 
   .resource-side {
     justify-content: space-between;
+  }
+}
+
+@media (max-width: 640px) {
+  .resource-stats-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>

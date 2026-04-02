@@ -249,9 +249,9 @@ const progressTone = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  padding: 0.95rem 1rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
+  padding: 1rem 1.05rem;
+  border-radius: calc(var(--radius-l) + 1px);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
   background: color-mix(in srgb, var(--bg-subtle) 66%, transparent);
 }
 
@@ -293,9 +293,9 @@ const progressTone = computed(() => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.85rem 0.95rem;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-l);
+  padding: 0.95rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  border-radius: calc(var(--radius-l) + 1px);
   background: color-mix(in srgb, var(--bg-subtle) 66%, transparent);
 }
 

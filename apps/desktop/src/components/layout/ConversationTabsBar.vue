@@ -32,17 +32,26 @@ async function openConversation(conversationId: string) {
 
 async function removeConversation(conversationId: string) {
   const targetConversationId = workbench.removeConversation(conversationId)
-  const nextConversationId = targetConversationId && workbench.projectConversations.some((item) => item.id === targetConversationId)
+  const remainingConversationIds = workbench.conversations
+    .filter((item) => item.projectId === projectId.value)
+    .map((item) => item.id)
+  const nextConversationId = targetConversationId && remainingConversationIds.includes(targetConversationId)
     ? targetConversationId
-    : (workbench.projectConversations[0]?.id ?? null)
+    : (remainingConversationIds[0] ?? null)
 
-  const target = createProjectConversationTarget(workspaceId.value, projectId.value, nextConversationId)
-  if (nextConversationId) {
-    await router.push(target)
+  if (!nextConversationId) {
+    await router.replace({
+      name: 'project-conversations',
+      params: {
+        workspaceId: workspaceId.value,
+        projectId: projectId.value,
+      },
+    })
     return
   }
 
-  await router.replace(target)
+  const target = createProjectConversationTarget(workspaceId.value, projectId.value, nextConversationId)
+  await router.push(target)
 }
 </script>
 
@@ -101,10 +110,10 @@ async function removeConversation(conversationId: string) {
 .conversation-tabs-track {
   display: flex;
   align-items: center;
-  gap: 0.15rem;
+  gap: 0.3rem;
   overflow-x: auto;
-  min-height: 2.5rem;
-  padding: 0 0.1rem 0.15rem;
+  min-height: 2.75rem;
+  padding: 0 0.15rem 0.35rem;
 }
 
 .conversation-tab,
@@ -139,7 +148,8 @@ async function removeConversation(conversationId: string) {
 
 .conversation-tab.active .conversation-tab-trigger {
   color: var(--text-primary);
-  background: color-mix(in srgb, var(--brand-primary) 7%, transparent);
+  background: color-mix(in srgb, var(--brand-primary) 8%, transparent);
+  box-shadow: var(--shadow-xs);
 }
 
 .conversation-tab-title {

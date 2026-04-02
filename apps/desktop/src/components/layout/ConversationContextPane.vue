@@ -397,14 +397,14 @@ function requestReview() {
 
 .detail-panel {
   display: grid;
-  gap: 0.85rem;
+  gap: 0.65rem;
   grid-template-rows: auto auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   height: 100%;
   max-height: 100%;
   max-width: 100%;
-  padding: 0.15rem 0 0 0.95rem;
+  padding: 0.15rem 0 0 0.7rem;
   border-left: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
   overflow-x: hidden;
 }
@@ -415,10 +415,11 @@ function requestReview() {
 
 .detail-content {
   min-height: 0;
-  padding-right: 0.35rem;
-  padding-bottom: 0.25rem;
+  padding-right: 0.2rem;
+  padding-bottom: 0.2rem;
   overflow-x: hidden;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .detail-content > * + * {
@@ -449,8 +450,8 @@ function requestReview() {
 
 .detail-toolbar {
   justify-content: space-between;
-  gap: 0.75rem;
-  padding-bottom: 0.65rem;
+  gap: 0.55rem;
+  padding-bottom: 0.55rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
 }
 
@@ -473,15 +474,16 @@ function requestReview() {
 
 .detail-section-button {
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.55rem 0.75rem;
+  gap: 0.35rem;
+  padding: 0.42rem 0.58rem;
+  font-size: 0.74rem;
 }
 
 .detail-rail-link.active,
 .detail-section-button.active,
 .resource-card.active {
-  border-color: color-mix(in srgb, var(--brand-primary) 48%, var(--border-subtle));
-  background: color-mix(in srgb, var(--brand-primary) 12%, var(--bg-surface));
+  border-color: color-mix(in srgb, var(--brand-primary) 34%, var(--border-subtle));
+  background: color-mix(in srgb, var(--brand-primary) 10%, var(--bg-surface));
   color: var(--text-primary);
 }
 
@@ -494,9 +496,14 @@ function requestReview() {
 
 .detail-section-nav {
   display: flex;
-  gap: 0.45rem;
+  gap: 0.35rem;
   flex-wrap: wrap;
   min-width: 0;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.1rem 0 0.35rem;
+  background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
 }
 
 .detail-summary-grid {
@@ -519,8 +526,9 @@ function requestReview() {
 .resource-copy strong,
 .resource-copy small {
   color: var(--text-secondary);
-  line-height: 1.55;
+  line-height: 1.45;
   overflow-wrap: anywhere;
+  font-size: 0.8rem;
 }
 
 .detail-copy strong,
@@ -539,8 +547,8 @@ function requestReview() {
 .panel-card,
 .resource-card {
   min-width: 0;
-  padding: 0.9rem;
-  border-radius: 1rem;
+  padding: 0.78rem;
+  border-radius: calc(var(--radius-l) + 1px);
   border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
   background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
 }
@@ -562,11 +570,12 @@ textarea {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  border-radius: 1rem;
+  border-radius: calc(var(--radius-l) + 1px);
   border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
   background: color-mix(in srgb, var(--bg-subtle) 72%, transparent);
   color: var(--text-primary);
-  padding: 0.85rem 0.95rem;
+  padding: 0.72rem 0.82rem;
+  font-size: 0.82rem;
   resize: vertical;
 }
 

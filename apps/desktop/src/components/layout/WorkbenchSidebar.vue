@@ -26,6 +26,7 @@ import { createProjectConversationTarget, createProjectDashboardTarget, createPr
 import { type MenuIconKey, getMenuDefinition } from '@/navigation/menuRegistry'
 import { useShellStore } from '@/stores/shell'
 import { useWorkbenchStore } from '@/stores/workbench'
+import { UiButton, UiInput } from '@octopus/ui'
 
 const route = useRoute()
 const router = useRouter()
@@ -309,42 +310,35 @@ onBeforeUnmount(() => {
               class="project-node"
               :class="{ expanded: isProjectExpanded(project.id) }"
             >
-              <div v-if="!isProjectExpanded(project.id)" class="project-delete-rail">
-                <button
-                  type="button"
-                  class="project-delete"
-                  :data-testid="`remove-project-${project.id}`"
-                  :title="t('sidebar.projectTree.remove')"
-                  :disabled="workbench.workspaceProjects.length <= 1"
-                  @click.stop="removeProject(project.id)"
-                >
-                  <Trash2 :size="14" />
-                </button>
-              </div>
-
               <div class="project-node-card">
-                <div
-                  class="project-node-button"
-                  :class="{ active: isProjectExpanded(project.id) }"
-                >
+                <div class="project-node-button">
                   <button
                     type="button"
                     class="project-node-trigger"
                     :data-testid="`project-node-${project.id}`"
                     @click="selectProject(project.id)"
                   >
-                    <span class="project-node-leading">
-                      <span class="project-node-icon">
-                        <FolderKanban :size="16" />
-                      </span>
-                      <span class="project-node-copy">
-                        <strong>{{ resolveMockField('project', project.id, 'name', project.name) }}</strong>
-                        <small>{{ t('common.conversations', { count: project.conversationIds.length }) }}</small>
-                      </span>
+                    <span class="project-node-icon">
+                      <FolderKanban :size="16" />
+                    </span>
+                    <span class="project-node-copy">
+                      <strong>{{ resolveMockField('project', project.id, 'name', project.name) }}</strong>
+                      <small>{{ t('common.conversations', { count: project.conversationIds.length }) }}</small>
                     </span>
                   </button>
                   <ChevronRight :size="16" class="project-node-chevron" />
                 </div>
+
+                <button
+                  v-if="!isProjectExpanded(project.id)"
+                  type="button"
+                  class="project-remove"
+                  :title="t('sidebar.projectTree.remove')"
+                  :data-testid="`remove-project-${project.id}`"
+                  @click.stop="removeProject(project.id)"
+                >
+                  <Trash2 :size="14" />
+                </button>
 
                 <div v-if="isProjectExpanded(project.id)" class="project-modules">
                   <RouterLink
@@ -411,33 +405,44 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-if="projectDialogOpen" class="project-dialog-shell" data-testid="project-create-dialog">
+    <div
+      v-if="projectDialogOpen"
+      class="project-dialog-overlay"
+      data-testid="project-create-dialog"
+    >
       <button type="button" class="project-dialog-backdrop" @click="closeProjectDialog" />
-      <section class="project-dialog">
-        <div class="project-dialog-copy">
-          <strong>{{ t('sidebar.projectTree.dialogTitle') }}</strong>
-          <p>{{ t('sidebar.projectTree.dialogDescription') }}</p>
+      <section class="project-dialog-card">
+        <header class="project-dialog-header">
+          <div>
+            <h2>{{ t('sidebar.projectTree.dialogTitle') }}</h2>
+            <p>{{ t('sidebar.projectTree.dialogDescription') }}</p>
+          </div>
+          <button type="button" class="project-dialog-close" @click="closeProjectDialog">×</button>
+        </header>
+        <div class="project-dialog-body">
+          <UiInput
+            v-model="projectName"
+            data-testid="project-create-input"
+            :placeholder="t('sidebar.projectTree.inputPlaceholder')"
+            @keydown.enter.prevent="confirmCreateProject"
+          />
         </div>
-        <input
-          v-model="projectName"
-          data-testid="project-create-input"
-          :placeholder="t('sidebar.projectTree.inputPlaceholder')"
-          @keydown.enter.prevent="confirmCreateProject"
-        >
-        <div class="project-dialog-actions">
-          <button type="button" class="ghost-button" data-testid="project-create-cancel" @click="closeProjectDialog">
+        <footer class="project-dialog-footer">
+          <UiButton
+            variant="ghost"
+            data-testid="project-create-cancel"
+            @click="closeProjectDialog"
+          >
             {{ t('common.cancel') }}
-          </button>
-          <button
-            type="button"
-            class="primary-button"
+          </UiButton>
+          <UiButton
             data-testid="project-create-confirm"
             :disabled="!projectName.trim()"
             @click="confirmCreateProject"
           >
             {{ t('common.confirm') }}
-          </button>
-        </div>
+          </UiButton>
+        </footer>
       </section>
     </div>
   </aside>
@@ -446,10 +451,8 @@ onBeforeUnmount(() => {
 <style scoped>
 .sidebar-shell {
   min-height: 0;
-  border-right: 1px solid var(--border-subtle);
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--brand-primary) 10%, transparent), transparent 36%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-sidebar) 96%, white), var(--bg-sidebar));
+  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  background: var(--bg-sidebar);
 }
 
 .sidebar-panel {
@@ -457,68 +460,51 @@ onBeforeUnmount(() => {
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  padding: 0.95rem 0.9rem 0.85rem;
-  background: color-mix(in srgb, var(--bg-sidebar) 94%, transparent);
+  padding: 0.95rem 0.85rem;
+  background: transparent;
   overflow: hidden;
 }
 
-.sidebar-toolbar,
-.toolbar-actions,
-.project-node-card,
-.project-node-button,
-.project-node-trigger,
-.project-node-leading,
-.project-node-copy,
-.project-module-link,
-.workspace-navigation,
-.workspace-trigger,
-.workspace-trigger-copy,
-.workspace-nav-link,
-.sidebar-rail {
+.sidebar-toolbar {
   display: flex;
   align-items: center;
-}
-
-.sidebar-toolbar {
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.15rem 0.1rem 0.95rem;
+  background: var(--bg-sidebar);
   position: sticky;
   top: 0;
   z-index: 2;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.2rem 0.1rem 0.95rem;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-sidebar) 98%, black), color-mix(in srgb, var(--bg-sidebar) 88%, transparent));
-}
-
-.toolbar-copy {
-  display: flex;
-  min-width: 0;
 }
 
 .toolbar-title {
   font-size: 0.95rem;
   font-weight: 700;
-}
-
-.project-node-copy small {
-  color: var(--text-secondary);
-}
-
-.toolbar-actions {
-  gap: 0.45rem;
+  color: var(--text-primary);
 }
 
 .project-create,
+.project-remove,
 .rail-toggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.15rem;
-  height: 2.15rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 86%, transparent);
+  width: 2.1rem;
+  height: 2.1rem;
+  border: 1px solid var(--border-subtle);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-surface) 74%, transparent);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-xs);
+  transition: all var(--duration-fast) var(--ease-apple);
+}
+
+.project-create:hover,
+.project-remove:hover,
+.rail-toggle:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 22%, var(--border-subtle));
   color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-subtle) 70%, var(--bg-surface));
 }
 
 .sidebar-main {
@@ -526,7 +512,7 @@ onBeforeUnmount(() => {
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  gap: 1rem;
+  gap: 1.25rem;
   overflow: hidden;
 }
 
@@ -539,246 +525,188 @@ onBeforeUnmount(() => {
   overflow-x: hidden;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
-  scrollbar-width: thin;
   padding-right: 0.2rem;
   padding-bottom: 0.35rem;
 }
 
-.project-tree-scroll::-webkit-scrollbar {
-  width: 10px;
-}
-
-.project-tree-scroll::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-  border-radius: 999px;
-}
-
-.project-tree-scroll::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background-clip: padding-box;
-}
-
-.project-tree-scroll:hover::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb-hover);
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
 .project-tree {
   display: flex;
-  flex: none;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.5rem;
   width: 100%;
-  min-height: max-content;
 }
 
 .project-node {
-  --project-delete-width: 3.6rem;
   position: relative;
-  border-radius: 1rem;
+  border-radius: var(--radius-l);
   overflow: hidden;
-}
-
-.project-delete-rail {
-  position: absolute;
-  inset: 0 0 0 auto;
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
-  width: var(--project-delete-width);
-  padding: 0.18rem 0 0.18rem 0.25rem;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--duration-fast) var(--ease-apple);
 }
 
 .project-node-card {
   position: relative;
   z-index: 1;
+  display: flex;
   flex-direction: column;
-  align-items: stretch;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 76%, transparent);
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--bg-surface) 62%, transparent);
-  transition:
-    transform var(--duration-fast) var(--ease-apple),
-    border-color var(--duration-fast) var(--ease-apple),
-    background var(--duration-fast) var(--ease-apple);
-}
-
-.project-node:not(.expanded):hover .project-delete-rail,
-.project-node:not(.expanded):focus-within .project-delete-rail {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.project-node:not(.expanded):hover .project-node-card,
-.project-node:not(.expanded):focus-within .project-node-card {
-  transform: translateX(calc(-1 * var(--project-delete-width)));
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  border-radius: calc(var(--radius-l) + 1px);
+  background: color-mix(in srgb, var(--bg-surface) 96%, transparent);
+  box-shadow: var(--shadow-xs);
+  transition: all var(--duration-fast) var(--ease-apple);
 }
 
 .project-node.expanded .project-node-card {
-  border-color: color-mix(in srgb, var(--brand-primary) 28%, var(--border-subtle));
-  background:
-    radial-gradient(circle at top right, color-mix(in srgb, var(--brand-primary) 10%, transparent), transparent 46%),
-    color-mix(in srgb, var(--bg-surface) 80%, transparent);
+  border-color: color-mix(in srgb, var(--brand-primary) 18%, var(--border-subtle));
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .project-node-button {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.9rem 0.95rem;
+  padding: 0.85rem 0.95rem;
 }
 
-.project-node-button.active {
-  color: var(--text-primary);
+.project-remove {
+  width: 1.95rem;
+  height: 1.95rem;
+  flex-shrink: 0;
 }
 
 .project-node-trigger {
-  flex: 1 1 auto;
+  flex: 1;
   min-width: 0;
   border: 0;
   background: transparent;
   text-align: left;
-}
-
-.project-node-leading {
+  display: flex;
+  align-items: center;
   gap: 0.75rem;
-  min-width: 0;
-  flex: 1 1 auto;
 }
 
 .project-node-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.95rem;
-  height: 1.95rem;
-  border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--brand-primary) 16%, transparent);
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-m);
+  background: color-mix(in srgb, var(--brand-primary) 10%, transparent);
   color: var(--brand-primary);
 }
 
 .project-node-copy {
+  display: flex;
   flex-direction: column;
-  align-items: flex-start;
   min-width: 0;
-  gap: 0.18rem;
 }
 
 .project-node-copy strong {
-  max-width: 100%;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.project-node-chevron {
-  flex: none;
+.project-node-copy small {
+  font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+.project-node-chevron {
+  color: var(--text-tertiary);
   transition: transform var(--duration-fast) var(--ease-apple);
 }
 
 .project-node.expanded .project-node-chevron {
   transform: rotate(90deg);
-}
-
-.project-delete {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  border: 1px solid color-mix(in srgb, var(--status-error) 24%, transparent);
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--status-error) 10%, transparent);
-  color: var(--text-secondary);
-}
-
-.project-delete:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.project-delete:not(:disabled):hover {
-  color: var(--status-error);
-  background: color-mix(in srgb, var(--status-error) 16%, transparent);
+  color: var(--text-primary);
 }
 
 .project-modules {
   display: grid;
-  gap: 0.3rem;
-  padding: 0 0.55rem 0.55rem;
+  gap: 0.2rem;
+  padding: 0 0.5rem 0.5rem;
 }
 
 .project-module-link {
+  display: flex;
+  align-items: center;
   gap: 0.65rem;
-  min-width: 0;
-  padding: 0.72rem 0.8rem;
-  border-radius: 0.85rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-m);
   color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all var(--duration-fast) var(--ease-apple);
+}
+
+.project-module-link:hover {
+  background: color-mix(in srgb, var(--bg-subtle) 82%, transparent);
+  color: var(--text-primary);
 }
 
 .project-module-link.active {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-subtle) 74%, transparent);
+  background: color-mix(in srgb, var(--brand-primary) 9%, var(--bg-subtle));
+  color: var(--brand-primary);
+  font-weight: 600;
 }
 
 .workspace-navigation {
   position: relative;
-  gap: 0.32rem;
-  padding-top: 0.8rem;
-  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
-}
-
-.workspace-navigation,
-.project-node-copy,
-.sidebar-rail {
+  display: flex;
   flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .workspace-trigger {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   width: 100%;
-  min-width: 0;
-  padding: 0.8rem 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 74%, transparent);
-  border-radius: 0.95rem;
-  background: color-mix(in srgb, var(--bg-surface) 54%, transparent);
-  color: var(--text-primary);
-  transition:
-    border-color var(--duration-fast) var(--ease-apple),
-    background var(--duration-fast) var(--ease-apple);
+  padding: 0.8rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  border-radius: calc(var(--radius-l) + 1px);
+  background: color-mix(in srgb, var(--bg-surface) 96%, transparent);
+  box-shadow: var(--shadow-xs);
+  transition: all var(--duration-fast) var(--ease-apple);
 }
 
 .workspace-trigger:hover,
 .workspace-trigger.active {
-  border-color: color-mix(in srgb, var(--brand-primary) 26%, var(--border-subtle));
-  background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+  border-color: color-mix(in srgb, var(--brand-primary) 20%, var(--border-subtle));
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-sm);
 }
 
 .workspace-trigger-copy {
-  flex: 1;
-  min-width: 0;
+  display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.15rem;
+  min-width: 0;
 }
 
 .workspace-trigger-copy small {
-  color: var(--text-secondary);
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 0.05em;
 }
 
 .workspace-trigger-copy strong {
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .workspace-trigger-chevron {
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   transition: transform var(--duration-fast) var(--ease-apple);
 }
 
@@ -788,95 +716,131 @@ onBeforeUnmount(() => {
 
 .workspace-menu {
   position: absolute;
-  right: 0;
-  bottom: calc(100% + 0.65rem);
+  bottom: calc(100% + 0.5rem);
   left: 0;
-  z-index: 5;
+  right: 0;
+  z-index: 10;
   display: flex;
   flex-direction: column;
-  gap: 0.22rem;
-  padding: 0.55rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 76%, transparent);
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--bg-sidebar) 96%, black);
-  box-shadow: 0 18px 38px color-mix(in srgb, black 18%, transparent);
+  padding: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  border-radius: calc(var(--radius-l) + 2px);
+  background: var(--bg-popover);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(18px);
 }
 
 .workspace-menu-header {
-  padding: 0.35rem 0.35rem 0.5rem;
-}
-
-.workspace-menu-header strong {
-  font-size: 0.82rem;
-  color: var(--text-secondary);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
 }
 
 .workspace-nav-link {
-  gap: 0.7rem;
-  width: 100%;
-  min-width: 0;
-  padding: 0.72rem 0.85rem;
-  border-radius: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-m);
   color: var(--text-secondary);
+  font-size: 0.85rem;
+  transition: all var(--duration-fast) var(--ease-apple);
+}
+
+.workspace-nav-link:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
 }
 
 .workspace-nav-link.active {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-surface) 80%, transparent);
+  background: color-mix(in srgb, var(--brand-primary) 10%, var(--bg-subtle));
+  color: var(--brand-primary);
+  font-weight: 600;
 }
 
-.project-dialog-shell {
+.project-dialog-overlay {
   position: fixed;
   inset: 0;
-  z-index: 30;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
 }
 
 .project-dialog-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(10, 15, 30, 0.42);
+  backdrop-filter: blur(14px);
 }
 
-.project-dialog {
+.project-dialog-card {
   position: relative;
   z-index: 1;
-  width: min(24rem, calc(100vw - 2rem));
-  margin: 12vh auto 0;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  padding: 1.1rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 86%, transparent);
-  border-radius: 1rem;
-  background: color-mix(in srgb, var(--bg-surface) 96%, transparent);
+  width: min(100%, 32rem);
+  padding: 1.2rem;
+  border-radius: calc(var(--radius-xl) + 2px);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  background: var(--bg-popover);
   box-shadow: var(--shadow-lg);
 }
 
-.project-dialog-copy {
+.project-dialog-header,
+.project-dialog-footer {
   display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.project-dialog-copy p {
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-
-.project-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
 }
 
+.project-dialog-header {
+  align-items: flex-start;
+}
+
+.project-dialog-header h2 {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.project-dialog-header p {
+  margin-top: 0.25rem;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+
+.project-dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  color: var(--text-secondary);
+}
+
+.project-dialog-close:hover {
+  background: color-mix(in srgb, var(--bg-subtle) 82%, transparent);
+  color: var(--text-primary);
+}
+
+.project-dialog-footer {
+  justify-content: flex-end;
+}
+
 .sidebar-rail {
-  gap: 0.45rem;
-  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   padding: 0.9rem 0.65rem;
   border-right: 1px solid var(--border-subtle);
-  background:
-    radial-gradient(circle at top left, color-mix(in srgb, var(--brand-primary) 10%, transparent), transparent 36%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg-sidebar) 96%, white), var(--bg-sidebar));
+  background: var(--bg-sidebar);
 }
 
 .rail-link {
@@ -885,22 +849,18 @@ onBeforeUnmount(() => {
   justify-content: center;
   width: 2.25rem;
   height: 2.25rem;
-  border-radius: 0.9rem;
+  border-radius: var(--radius-m);
   color: var(--text-secondary);
+  transition: all var(--duration-fast) var(--ease-apple);
+}
+
+.rail-link:hover {
+  background: var(--bg-subtle);
+  color: var(--text-primary);
 }
 
 .rail-link.active {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
-}
-
-@media (max-width: 980px) {
-  .sidebar-toolbar {
-    position: static;
-  }
-
-  .workspace-navigation {
-    padding-bottom: 0.35rem;
-  }
+  background: color-mix(in srgb, var(--brand-primary) 15%, var(--bg-subtle));
+  color: var(--brand-primary);
 }
 </style>

@@ -9,17 +9,18 @@ import {
   FolderOpen,
   Paperclip,
   Plus,
+  Search,
   SendHorizontal,
   Shield,
+  Upload,
+  X,
 } from 'lucide-vue-next'
 
 import {
-  type ConversationAttachment,
-  type Message,
   type PermissionMode,
   type ProjectResource,
 } from '@octopus/schema'
-import { UiEmptyState, UiSurface } from '@octopus/ui'
+import { UiButton, UiEmptyState, UiPopover, UiSurface } from '@octopus/ui'
 
 import ConversationMessageBubble from '@/components/conversation/ConversationMessageBubble.vue'
 import ConversationQueueList from '@/components/conversation/ConversationQueueList.vue'
@@ -27,7 +28,6 @@ import ConversationContextPane from '@/components/layout/ConversationContextPane
 import ConversationTabsBar from '@/components/layout/ConversationTabsBar.vue'
 import { resolveMockField } from '@/i18n/copy'
 import { createProjectConversationTarget } from '@/i18n/navigation'
-import type { ConversationDetailFocus } from '@/stores/shell'
 import { useShellStore } from '@/stores/shell'
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -43,7 +43,9 @@ const selectedPermissionMode = ref<PermissionMode>('auto')
 const selectedActorValue = ref('')
 const selectedResourceIds = ref<string[]>([])
 const resourceMenuOpen = ref(false)
-const existingResourcesOpen = ref(false)
+const modelMenuOpen = ref(false)
+const actorMenuOpen = ref(false)
+const permissionMenuOpen = ref(false)
 const expandedMessageIds = ref<string[]>([])
 
 const activeConversation = computed(() => workbench.activeConversation)
@@ -56,51 +58,39 @@ const selectedResources = computed(() =>
     .map((resourceId) => availableResources.value.find((resource) => resource.id === resourceId))
     .filter(Boolean) as ProjectResource[],
 )
+const attachableResources = computed(() =>
+  availableResources.value.filter((resource) => !selectedResourceIds.value.includes(resource.id)),
+)
 const actorGroups = computed(() => ({
   agents: workbench.workspaceAgents,
   teams: workbench.workspaceTeams,
 }))
 const hasMessageDraft = computed(() => messageDraft.value.trim().length > 0)
 const canSend = computed(() => hasMessageDraft.value)
+const detailPaneWidth = computed(() => (detailPaneCollapsed.value ? '76px' : '392px'))
+
 const selectedActor = computed(() => {
   if (!selectedActorValue.value) {
-    return {
-      actorKind: undefined,
-      actorId: undefined,
-    } as const
+    return { actorKind: undefined, actorId: undefined } as const
   }
-
   const [kind, id] = selectedActorValue.value.split(':')
   return {
     actorKind: kind === 'team' ? 'team' : 'agent',
     actorId: id ?? undefined,
   } as const
 })
-const selectedAttachments = computed<ConversationAttachment[]>(() =>
-  selectedResources.value.map((resource) => ({
-    id: resource.id,
-    name: resource.name,
-    kind: resource.kind === 'artifact'
-      ? 'artifact'
-      : resource.kind === 'folder'
-        ? 'folder'
-        : 'file',
-  })),
-)
+
 const defaultActorLabel = computed(() => {
   const resolved = workbench.activeConversationDefaultActor
-  if (!resolved) {
-    return t('common.na')
-  }
-
+  if (!resolved) return t('common.na')
   return actorLabel(resolved.actorKind, resolved.actorId)
 })
+
 const selectedPermissionLabel = computed(() => permissionLabel(selectedPermissionMode.value))
 const selectedActorLabel = computed(() => {
   if (!selectedActor.value.actorKind || !selectedActor.value.actorId) {
     return t('conversation.composer.defaultActorOption', { name: defaultActorLabel.value })
   }
-
   return actorLabel(selectedActor.value.actorKind, selectedActor.value.actorId)
 })
 const selectedModelLabel = computed(() =>
@@ -118,38 +108,8 @@ const queueItems = computed(() =>
 watch(
   [() => route.name, () => workbench.currentWorkspaceId, () => workbench.currentProjectId, () => firstConversationId.value],
   async ([routeName, workspaceId, projectId, conversationId]) => {
-    if (routeName !== 'project-conversations' || !workspaceId || !projectId || !conversationId) {
-      return
-    }
-
+    if (routeName !== 'project-conversations' || !workspaceId || !projectId || !conversationId) return
     await router.replace(createProjectConversationTarget(workspaceId, projectId, conversationId))
-  },
-  { immediate: true },
-)
-
-watch(
-  [
-    () => route.name,
-    () => route.params.workspaceId,
-    () => route.params.projectId,
-    () => route.params.conversationId,
-    () => workbench.conversations.map((item) => `${item.projectId}:${item.id}`).join('|'),
-  ],
-  async ([routeName, workspaceIdParam, projectIdParam, conversationIdParam]) => {
-    if (routeName !== 'conversation') {
-      return
-    }
-
-    const workspaceId = typeof workspaceIdParam === 'string' ? workspaceIdParam : workbench.currentWorkspaceId
-    const projectId = typeof projectIdParam === 'string' ? projectIdParam : workbench.currentProjectId
-    const conversationId = typeof conversationIdParam === 'string' ? conversationIdParam : ''
-    const routeConversationExists = workbench.conversations.some((item) => item.id === conversationId && item.projectId === projectId)
-
-    if (!workspaceId || !projectId || !conversationId || routeConversationExists) {
-      return
-    }
-
-    await router.replace(createProjectConversationTarget(workspaceId, projectId, workbench.firstConversationIdForProject(projectId) || null))
   },
   { immediate: true },
 )
@@ -158,46 +118,11 @@ watch(
   [() => activeConversation.value?.id],
   () => {
     selectedActorValue.value = ''
+    selectedResourceIds.value = []
     expandedMessageIds.value = []
   },
   { immediate: true },
 )
-
-watch(
-  modelOptions,
-  (options) => {
-    if (!options.some((option) => option.id === selectedModelId.value)) {
-      selectedModelId.value = options[0]?.id ?? 'gpt-4o'
-    }
-  },
-  { immediate: true },
-)
-
-watch(
-  availableResources,
-  (resources) => {
-    const validIds = new Set(resources.map((resource) => resource.id))
-    selectedResourceIds.value = selectedResourceIds.value.filter((resourceId) => validIds.has(resourceId))
-  },
-  { immediate: true },
-)
-
-function updateDetailQuery(detail: ConversationDetailFocus, artifactId?: string) {
-  void router.replace({
-    query: {
-      ...route.query,
-      detail,
-      ...(artifactId ? { artifact: artifactId } : {}),
-    },
-  })
-}
-
-function toggleResourceMenu() {
-  resourceMenuOpen.value = !resourceMenuOpen.value
-  if (!resourceMenuOpen.value) {
-    existingResourcesOpen.value = false
-  }
-}
 
 function attachResource(resourceId: string) {
   if (!selectedResourceIds.value.includes(resourceId)) {
@@ -209,11 +134,15 @@ function createAndAttachResource(kind: 'file' | 'folder') {
   const resource = workbench.createProjectResource(kind)
   attachResource(resource.id)
   resourceMenuOpen.value = false
-  existingResourcesOpen.value = false
 }
 
-function toggleExistingResources() {
-  existingResourcesOpen.value = !existingResourcesOpen.value
+function attachExistingResource() {
+  const resource = attachableResources.value[0]
+  if (!resource) {
+    return
+  }
+  attachResource(resource.id)
+  resourceMenuOpen.value = false
 }
 
 function removeSelectedResource(resourceId: string) {
@@ -221,10 +150,7 @@ function removeSelectedResource(resourceId: string) {
 }
 
 function sendMessage() {
-  if (!canSend.value) {
-    return
-  }
-
+  if (!canSend.value) return
   workbench.sendMessage({
     content: messageDraft.value,
     modelId: selectedModelId.value,
@@ -232,37 +158,55 @@ function sendMessage() {
     actorKind: selectedActor.value.actorKind,
     actorId: selectedActor.value.actorId,
     resourceIds: [...selectedResourceIds.value],
-    attachments: selectedAttachments.value,
+    attachments: selectedResources.value.map((resource) => ({
+      id: resource.id,
+      name: resource.name,
+      kind: resource.kind === 'artifact' ? 'artifact' : resource.kind === 'folder' ? 'folder' : 'file',
+    })),
   })
-
   messageDraft.value = ''
   selectedResourceIds.value = []
-  resourceMenuOpen.value = false
-  existingResourcesOpen.value = false
 }
 
-function openArtifact(artifactId: string) {
-  shell.selectArtifact(artifactId)
-  shell.setDetailFocus('artifacts')
-  shell.setRightSidebarCollapsed(false)
-  updateDetailQuery('artifacts', artifactId)
+function actorLabel(actorKind?: 'agent' | 'team', actorId?: string): string {
+  if (!actorKind || !actorId) return ''
+  if (actorKind === 'team') {
+    const team = workbench.teams.find((item) => item.id === actorId)
+    return team ? resolveMockField('team', team.id, 'name', team.name) : actorId
+  }
+  const agent = workbench.agents.find((item) => item.id === actorId)
+  return agent ? resolveMockField('agent', agent.id, 'name', agent.name) : actorId
 }
 
-function openResource(resourceId: string) {
-  const resource = availableResources.value.find((item) => item.id === resourceId)
-  if (resource?.kind === 'artifact') {
-    openArtifact(resource.sourceArtifactId ?? resource.id)
-    return
+function messageSenderLabel(senderType: 'user' | 'agent' | 'system', senderId: string, actorKind?: 'agent' | 'team') {
+  if (senderType === 'user') {
+    return '你'
+  }
+  return actorLabel(actorKind ?? 'agent', senderId) || 'Octopus'
+}
+
+function messageAvatarLabel(senderType: 'user' | 'agent' | 'system', senderId: string, actorKind?: 'agent' | 'team') {
+  if (senderType === 'user') {
+    return '你'
   }
 
-  shell.setDetailFocus('resources')
-  shell.setRightSidebarCollapsed(false)
-  updateDetailQuery('resources')
+  if (actorKind === 'team') {
+    const team = workbench.teams.find((item) => item.id === senderId || item.id === selectedActor.value.actorId)
+    return team?.avatar || 'OT'
+  }
+
+  const agent = workbench.agents.find((item) => item.id === senderId)
+  return agent?.avatar || 'OA'
 }
 
-async function createConversation() {
-  const conversation = workbench.createConversation()
-  await router.push(createProjectConversationTarget(workbench.currentWorkspaceId, workbench.currentProjectId, conversation.id))
+function permissionLabel(permissionMode?: PermissionMode): string {
+  return permissionMode === 'readonly' ? t('conversation.composer.readonlyPermission') : t('conversation.composer.autoPermission')
+}
+
+function toggleMessageDetail(messageId: string) {
+  expandedMessageIds.value = expandedMessageIds.value.includes(messageId)
+    ? expandedMessageIds.value.filter((item) => item !== messageId)
+    : [...expandedMessageIds.value, messageId]
 }
 
 function handleComposerKeydown(event: KeyboardEvent) {
@@ -272,605 +216,730 @@ function handleComposerKeydown(event: KeyboardEvent) {
   }
 }
 
-function senderLabel(senderId: string, senderType: 'user' | 'agent' | 'system'): string {
-  if (senderType === 'user') {
-    return t('conversation.senderType.user')
-  }
-
-  if (senderType === 'system') {
-    return t('conversation.senderType.system')
-  }
-
-  const team = workbench.teams.find((item) => item.id === senderId)
-  if (team) {
-    return resolveMockField('team', team.id, 'name', team.name)
-  }
-
-  const agent = workbench.agents.find((item) => item.id === senderId)
-  return agent ? resolveMockField('agent', agent.id, 'name', agent.name) : senderId
-}
-
-function actorLabel(actorKind?: 'agent' | 'team', actorId?: string): string {
-  if (!actorKind || !actorId) {
-    return ''
-  }
-
-  if (actorKind === 'team') {
-    const team = workbench.teams.find((item) => item.id === actorId)
-    return team ? resolveMockField('team', team.id, 'name', team.name) : actorId
-  }
-
-  const agent = workbench.agents.find((item) => item.id === actorId)
-  return agent ? resolveMockField('agent', agent.id, 'name', agent.name) : actorId
-}
-
-function permissionLabel(permissionMode?: PermissionMode): string {
-  if (permissionMode === 'readonly') {
-    return t('conversation.composer.readonlyPermission')
-  }
-
-  return t('conversation.composer.autoPermission')
-}
-
-function artifactLabel(artifactId: string): string {
-  const artifact = workbench.artifacts.find((item) => item.id === artifactId)
-  return artifact ? resolveMockField('artifact', artifact.id, 'title', artifact.title) : artifactId
-}
-
-function messageResources(message: Message): ProjectResource[] {
-  return (message.resourceIds ?? [])
-    .map((resourceId) => availableResources.value.find((resource) => resource.id === resourceId))
-    .filter(Boolean) as ProjectResource[]
-}
-
-function messageAttachments(message: Message): ConversationAttachment[] {
-  const selectedIds = new Set(message.resourceIds ?? [])
-  return (message.attachments ?? []).filter((attachment) => attachment.kind !== 'artifact' && !selectedIds.has(attachment.id))
-}
-
-function messageArtifacts(message: Message): Array<{ id: string, label: string }> {
-  const selectedIds = new Set(message.resourceIds ?? [])
-  return (message.artifacts ?? [])
-    .filter((artifactId) => !selectedIds.has(artifactId))
-    .map((artifactId) => ({
-      id: artifactId,
-      label: artifactLabel(artifactId),
-    }))
-}
-
-function toggleMessageDetail(messageId: string) {
-  expandedMessageIds.value = expandedMessageIds.value.includes(messageId)
-    ? expandedMessageIds.value.filter((item) => item !== messageId)
-    : [...expandedMessageIds.value, messageId]
-}
-
-function removeQueueItem(queueItemId: string) {
-  workbench.removeQueuedMessage(queueItemId)
-}
-
-function rollbackToMessage(messageId: string) {
-  workbench.rollbackConversationToMessage(messageId)
-  shell.hydrateArtifactSelection(workbench.activeConversationArtifacts.map((artifact) => artifact.id))
+async function createConversation() {
+  const conversation = workbench.createConversation()
+  await router.push(createProjectConversationTarget(workbench.currentWorkspaceId, workbench.currentProjectId, conversation.id))
 }
 </script>
 
 <template>
-  <section class="conversation-page">
+  <section class="conversation-page section-stack">
     <ConversationTabsBar />
 
-    <section v-if="!activeConversation" class="conversation-empty-state" data-testid="conversation-empty-state">
-      <UiSurface :title="t('conversation.empty.title')" :subtitle="t('conversation.empty.subtitle')">
-        <div class="empty-stack">
+    <div v-if="!activeConversation" class="conversation-empty-shell">
+      <UiSurface
+        class="conversation-empty-state"
+        data-testid="conversation-empty-state"
+        :title="t('conversation.empty.title')"
+        :subtitle="t('conversation.empty.subtitle')"
+      >
+        <div class="conversation-empty-content">
           <UiEmptyState
+            class="conversation-empty-card"
             :title="t('conversation.empty.guideTitle')"
             :description="t('conversation.empty.guideDescription')"
           />
-          <div class="action-row">
-            <button
-              type="button"
-              class="primary-button"
-              data-testid="conversation-empty-create"
-              @click="createConversation"
-            >
-              {{ t('conversation.empty.create') }}
-            </button>
-          </div>
+          <UiButton data-testid="conversation-empty-create" @click="createConversation">
+            <Plus :size="18" />
+            {{ t('conversation.empty.create') }}
+          </UiButton>
         </div>
       </UiSurface>
-    </section>
+    </div>
 
-    <section
+    <div
       v-else
       class="conversation-chat-layout"
-      :class="{ 'detail-collapsed': detailPaneCollapsed }"
       data-testid="conversation-chat-layout"
+      :style="{ '--conversation-detail-width': detailPaneWidth }"
     >
-      <div class="conversation-chat-main">
-        <div class="message-scroll scroll-y" data-testid="conversation-message-scroll">
-          <div class="message-stream">
-            <ConversationMessageBubble
-              v-for="message in workbench.conversationMessages"
-              :key="message.id"
-              :message="message"
-              :sender-label="senderLabel(message.senderId, message.senderType)"
-              :actor-label="actorLabel(message.actorKind, message.actorId)"
-              :permission-label="permissionLabel(message.permissionMode)"
-              :resources="messageResources(message)"
-              :attachments="messageAttachments(message)"
-              :artifacts="messageArtifacts(message)"
-              :is-expanded="expandedMessageIds.includes(message.id)"
-              @toggle-detail="toggleMessageDetail"
-              @rollback="rollbackToMessage"
-              @open-resource="openResource"
-              @open-artifact="openArtifact"
-            />
-            <UiEmptyState
-              v-if="!workbench.conversationMessages.length"
-              :title="t('conversation.stream.emptyTitle')"
-              :description="t('conversation.stream.emptyDescription')"
-            />
+      <section class="conversation-main-column">
+        <div class="conversation-stream-panel">
+          <div class="conversation-stream-header">
+            <div>
+              <p class="conversation-stream-eyebrow">{{ t('conversation.header.eyebrow') }}</p>
+              <h1 class="conversation-stream-title">
+                {{ resolveMockField('conversation', activeConversation.id, 'title', activeConversation.title) }}
+              </h1>
+            </div>
+            <p class="conversation-stream-subtitle">
+              {{ resolveMockField('conversation', activeConversation.id, 'summary', activeConversation.summary) }}
+            </p>
+          </div>
+
+          <div class="scroll-y conversation-scroll-region" data-testid="conversation-message-scroll">
+            <div class="message-stream">
+              <ConversationMessageBubble
+                v-for="message in workbench.conversationMessages"
+                :key="message.id"
+                :message="message"
+                :sender-label="messageSenderLabel(message.senderType, message.senderId, message.actorKind)"
+                :avatar-label="messageAvatarLabel(message.senderType, message.senderId, message.actorKind)"
+                :actor-label="actorLabel(message.actorKind, message.actorId)"
+                :permission-label="permissionLabel(message.permissionMode)"
+                :resources="[]"
+                :attachments="message.attachments ?? []"
+                :artifacts="[]"
+                :is-expanded="expandedMessageIds.includes(message.id)"
+                @toggle-detail="toggleMessageDetail"
+              />
+              <UiEmptyState
+                v-if="!workbench.conversationMessages.length"
+                class="conversation-stream-empty"
+                :title="t('conversation.stream.emptyTitle')"
+                :description="t('conversation.stream.emptyDescription')"
+              />
+            </div>
           </div>
         </div>
 
         <div class="conversation-composer-dock" data-testid="conversation-composer-dock">
-          <ConversationQueueList
-            class="conversation-queue-floating"
-            :items="queueItems"
-            @remove="removeQueueItem"
-          />
-
-          <section class="conversation-composer" data-testid="conversation-composer">
-            <textarea
-              v-model="messageDraft"
-              data-testid="conversation-composer-input"
-              rows="4"
-              :placeholder="t('conversation.composer.placeholder')"
-              @keydown="handleComposerKeydown"
+          <div class="composer-shell">
+            <ConversationQueueList
+              v-if="queueItems.length"
+              class="composer-queue"
+              :items="queueItems"
+              @remove="(id) => workbench.removeQueuedMessage(id)"
             />
 
-            <div v-if="selectedResources.length" class="composer-resource-row">
-              <button
-                v-for="resource in selectedResources"
-                :key="resource.id"
-                type="button"
-                class="attachment-pill"
-                @click="openResource(resource.id)"
-              >
-                <FolderOpen v-if="resource.kind === 'folder'" :size="12" />
-                <FileText v-else-if="resource.kind === 'artifact'" :size="12" />
-                <Paperclip v-else :size="12" />
-                <span>{{ resource.name }}</span>
-              </button>
-              <button
-                v-for="resource in selectedResources"
-                :key="`${resource.id}-remove`"
-                type="button"
-                class="resource-remove"
-                @click="removeSelectedResource(resource.id)"
-              >
-                {{ t('conversation.composer.removeResource', { name: resource.name }) }}
-              </button>
-            </div>
+            <section class="conversation-composer" data-testid="conversation-composer">
+              <textarea
+                v-model="messageDraft"
+                class="conversation-composer-input"
+                data-testid="conversation-composer-input"
+                :placeholder="t('conversation.composer.placeholder')"
+                @keydown="handleComposerKeydown"
+              />
 
-            <div class="composer-toolbar">
-              <div class="composer-controls">
-                <div class="composer-menu-shell">
-                  <button
-                    type="button"
-                    class="resource-trigger"
-                    data-testid="composer-resource-trigger"
-                    :title="t('conversation.composer.resourceTrigger')"
-                    @click="toggleResourceMenu"
-                  >
-                    <Plus :size="16" />
+              <div v-if="selectedResources.length" class="composer-resource-strip">
+                <div
+                  v-for="resource in selectedResources"
+                  :key="resource.id"
+                  class="composer-resource-chip"
+                >
+                  <FolderOpen v-if="resource.kind === 'folder'" :size="12" />
+                  <FileText v-else-if="resource.kind === 'artifact'" :size="12" />
+                  <Paperclip v-else :size="12" />
+                  <span>{{ resource.name }}</span>
+                  <button type="button" class="composer-resource-remove" @click="removeSelectedResource(resource.id)">
+                    <X :size="12" />
                   </button>
-
-                  <div v-if="resourceMenuOpen" class="resource-menu">
-                    <button
-                      type="button"
-                      class="resource-action"
-                      data-testid="resource-action-upload-file"
-                      @click="createAndAttachResource('file')"
-                    >
-                      {{ t('conversation.composer.uploadFile') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="resource-action"
-                      data-testid="resource-action-upload-folder"
-                      @click="createAndAttachResource('folder')"
-                    >
-                      {{ t('conversation.composer.uploadFolder') }}
-                    </button>
-                    <button
-                      type="button"
-                      class="resource-action"
-                      data-testid="resource-action-attach-existing"
-                      @click="toggleExistingResources"
-                    >
-                      {{ t('conversation.composer.attachExisting') }}
-                    </button>
-
-                    <div v-if="existingResourcesOpen" class="resource-list">
-                      <button
-                        v-for="resource in availableResources"
-                        :key="resource.id"
-                        type="button"
-                        class="resource-list-item"
-                        :disabled="selectedResourceIds.includes(resource.id)"
-                        @click="attachResource(resource.id)"
-                      >
-                        <span>{{ resource.name }}</span>
-                        <small>{{ resource.kind }}</small>
-                      </button>
-                    </div>
-                  </div>
                 </div>
-
-                <label
-                  class="composer-select"
-                  :title="t('conversation.composer.permissionLabel')"
-                >
-                  <Shield :size="14" />
-                  <span class="composer-select-value">{{ selectedPermissionLabel }}</span>
-                  <ChevronDown :size="14" />
-                  <select
-                    v-model="selectedPermissionMode"
-                    data-testid="composer-permission-select"
-                    :aria-label="t('conversation.composer.permissionLabel')"
-                  >
-                    <option value="auto">{{ t('conversation.composer.autoPermission') }}</option>
-                    <option value="readonly">{{ t('conversation.composer.readonlyPermission') }}</option>
-                  </select>
-                </label>
-
-                <label
-                  class="composer-select"
-                  :title="t('conversation.composer.actorLabel')"
-                >
-                  <Bot :size="14" />
-                  <span class="composer-select-value">{{ selectedActorLabel }}</span>
-                  <ChevronDown :size="14" />
-                  <select
-                    v-model="selectedActorValue"
-                    data-testid="composer-actor-select"
-                    :aria-label="t('conversation.composer.actorLabel')"
-                  >
-                    <option value="">{{ t('conversation.composer.defaultActorOption', { name: defaultActorLabel }) }}</option>
-                    <optgroup :label="t('conversation.composer.agentGroup')">
-                      <option v-for="agent in actorGroups.agents" :key="agent.id" :value="`agent:${agent.id}`">
-                        {{ resolveMockField('agent', agent.id, 'name', agent.name) }}
-                      </option>
-                    </optgroup>
-                    <optgroup :label="t('conversation.composer.teamGroup')">
-                      <option v-for="team in actorGroups.teams" :key="team.id" :value="`team:${team.id}`">
-                        {{ resolveMockField('team', team.id, 'name', team.name) }}
-                      </option>
-                    </optgroup>
-                  </select>
-                </label>
-
-                <label
-                  class="composer-select"
-                  :title="t('conversation.composer.modelLabel')"
-                >
-                  <FileText :size="14" />
-                  <span class="composer-select-value">{{ selectedModelLabel }}</span>
-                  <ChevronDown :size="14" />
-                  <select
-                    v-model="selectedModelId"
-                    data-testid="composer-model-select"
-                    :aria-label="t('conversation.composer.modelLabel')"
-                  >
-                    <option v-for="model in modelOptions" :key="model.id" :value="model.id">
-                      {{ model.label }}
-                    </option>
-                  </select>
-                </label>
               </div>
 
-              <button
-                type="button"
-                class="composer-send"
-                data-testid="conversation-composer-send"
-                :disabled="!canSend"
-                :aria-label="t('common.send')"
-                :title="t('common.send')"
-                @click="sendMessage"
-              >
-                <SendHorizontal :size="15" />
-              </button>
-            </div>
-          </section>
-        </div>
-      </div>
+              <div class="composer-toolbar">
+                <div class="composer-toolbar-main">
+                  <UiPopover v-model:open="resourceMenuOpen">
+                    <template #trigger>
+                      <button
+                        type="button"
+                        class="composer-icon-button"
+                        data-testid="composer-resource-trigger"
+                        :title="t('conversation.composer.resourceTrigger')"
+                        @click="resourceMenuOpen = !resourceMenuOpen"
+                      >
+                        <Plus :size="18" />
+                      </button>
+                    </template>
+                    <div class="composer-popover-list">
+                      <button
+                        type="button"
+                        class="composer-popover-item"
+                        data-testid="resource-action-upload-file"
+                        @click="createAndAttachResource('file')"
+                      >
+                        <Upload :size="16" class="composer-popover-icon" />
+                        {{ t('conversation.composer.uploadFile') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="composer-popover-item"
+                        data-testid="resource-action-upload-folder"
+                        @click="createAndAttachResource('folder')"
+                      >
+                        <FolderOpen :size="16" class="composer-popover-icon" />
+                        {{ t('conversation.composer.uploadFolder') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="composer-popover-item"
+                        data-testid="resource-action-attach-existing"
+                        @click="attachExistingResource"
+                      >
+                        <Search :size="16" class="composer-popover-icon" />
+                        {{ t('conversation.composer.attachExisting') }}
+                      </button>
+                    </div>
+                  </UiPopover>
 
-      <ConversationContextPane class="conversation-chat-detail" />
-    </section>
+                  <UiPopover v-model:open="permissionMenuOpen">
+                    <template #trigger>
+                      <div class="composer-select">
+                        <select
+                          class="composer-native-select"
+                          data-testid="composer-permission-select"
+                          :value="selectedPermissionMode"
+                          tabindex="-1"
+                          aria-hidden="true"
+                        >
+                          <option value="auto">{{ t('conversation.composer.autoPermission') }}</option>
+                          <option value="readonly">{{ t('conversation.composer.readonlyPermission') }}</option>
+                        </select>
+                        <button
+                          type="button"
+                          class="composer-select-trigger"
+                          @click="permissionMenuOpen = !permissionMenuOpen"
+                        >
+                          <Shield :size="14" />
+                          <span class="composer-select-value">{{ selectedPermissionLabel }}</span>
+                          <ChevronDown :size="12" />
+                        </button>
+                      </div>
+                    </template>
+                    <div class="composer-popover-list">
+                      <button
+                        type="button"
+                        class="composer-popover-item"
+                        :class="{ active: selectedPermissionMode === 'auto' }"
+                        @click="selectedPermissionMode = 'auto'; permissionMenuOpen = false"
+                      >
+                        {{ t('conversation.composer.autoPermission') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="composer-popover-item"
+                        :class="{ active: selectedPermissionMode === 'readonly' }"
+                        @click="selectedPermissionMode = 'readonly'; permissionMenuOpen = false"
+                      >
+                        {{ t('conversation.composer.readonlyPermission') }}
+                      </button>
+                    </div>
+                  </UiPopover>
+
+                  <UiPopover v-model:open="actorMenuOpen">
+                    <template #trigger>
+                      <div class="composer-select composer-select-wide">
+                        <select
+                          class="composer-native-select"
+                          data-testid="composer-actor-select"
+                          :value="selectedActorValue"
+                          tabindex="-1"
+                          aria-hidden="true"
+                        >
+                          <option value="">{{ selectedActorLabel }}</option>
+                        </select>
+                        <button
+                          type="button"
+                          class="composer-select-trigger"
+                          @click="actorMenuOpen = !actorMenuOpen"
+                        >
+                          <Bot :size="14" />
+                          <span class="composer-select-value">{{ selectedActorLabel }}</span>
+                          <ChevronDown :size="12" />
+                        </button>
+                      </div>
+                    </template>
+                    <div class="composer-popover-list composer-popover-scroll">
+                      <div v-if="actorGroups.agents.length">
+                        <p class="composer-popover-label">{{ t('conversation.composer.agentGroup') }}</p>
+                        <button
+                          type="button"
+                          class="composer-popover-item"
+                          :class="{ active: !selectedActorValue }"
+                          @click="selectedActorValue = ''; actorMenuOpen = false"
+                        >
+                          {{ t('conversation.composer.defaultActorOption', { name: defaultActorLabel }) }}
+                        </button>
+                        <button
+                          v-for="agent in actorGroups.agents"
+                          :key="agent.id"
+                          type="button"
+                          class="composer-popover-item"
+                          :class="{ active: selectedActorValue === `agent:${agent.id}` }"
+                          @click="selectedActorValue = `agent:${agent.id}`; actorMenuOpen = false"
+                        >
+                          {{ resolveMockField('agent', agent.id, 'name', agent.name) }}
+                        </button>
+                      </div>
+                      <div v-if="actorGroups.teams.length">
+                        <p class="composer-popover-label">{{ t('conversation.composer.teamGroup') }}</p>
+                        <button
+                          v-for="team in actorGroups.teams"
+                          :key="team.id"
+                          type="button"
+                          class="composer-popover-item"
+                          :class="{ active: selectedActorValue === `team:${team.id}` }"
+                          @click="selectedActorValue = `team:${team.id}`; actorMenuOpen = false"
+                        >
+                          {{ resolveMockField('team', team.id, 'name', team.name) }}
+                        </button>
+                      </div>
+                    </div>
+                  </UiPopover>
+
+                  <UiPopover v-model:open="modelMenuOpen">
+                    <template #trigger>
+                      <div class="composer-select">
+                        <select
+                          class="composer-native-select"
+                          data-testid="composer-model-select"
+                          :value="selectedModelId"
+                          tabindex="-1"
+                          aria-hidden="true"
+                        >
+                          <option :value="selectedModelId">{{ selectedModelLabel }}</option>
+                        </select>
+                        <button
+                          type="button"
+                          class="composer-select-trigger"
+                          @click="modelMenuOpen = !modelMenuOpen"
+                        >
+                          <FileText :size="14" />
+                          <span class="composer-select-value">{{ selectedModelLabel }}</span>
+                          <ChevronDown :size="12" />
+                        </button>
+                      </div>
+                    </template>
+                    <div class="composer-popover-list">
+                      <button
+                        v-for="model in modelOptions"
+                        :key="model.id"
+                        type="button"
+                        class="composer-popover-item"
+                        :class="{ active: selectedModelId === model.id }"
+                        @click="selectedModelId = model.id; modelMenuOpen = false"
+                      >
+                        {{ model.label }}
+                      </button>
+                    </div>
+                  </UiPopover>
+                </div>
+
+                <UiButton
+                  class="composer-send-button"
+                  data-testid="conversation-composer-send"
+                  :disabled="!canSend"
+                  @click="sendMessage"
+                >
+                  <SendHorizontal :size="18" />
+                </UiButton>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <div class="conversation-detail-shell">
+        <ConversationContextPane class="conversation-detail-pane" />
+      </div>
+    </div>
   </section>
 </template>
 
 <style scoped>
-.conversation-page,
-.empty-stack,
-.conversation-chat-main,
-.message-stream {
+.conversation-page {
+  min-height: 100%;
+  height: 100%;
+  overflow: hidden;
+  gap: 0.8rem;
+}
+
+.conversation-empty-shell {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: 1rem 0;
+}
+
+.conversation-empty-state {
+  width: min(100%, 42rem);
+}
+
+.conversation-empty-content {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 1rem 0 0.25rem;
 }
 
-.conversation-page {
-  gap: 0.75rem;
-  height: 100%;
-  min-height: 100%;
-  overflow: hidden;
-}
-
-.empty-stack {
-  gap: 1rem;
+.conversation-empty-card {
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .conversation-chat-layout {
-  --conversation-detail-width: clamp(300px, 26vw, 380px);
+  --conversation-detail-width: 352px;
   display: grid;
-  gap: 1rem;
   grid-template-columns: minmax(0, 1fr) var(--conversation-detail-width);
-  align-items: stretch;
-  flex: 1;
+  gap: 0.9rem;
   min-height: 0;
-  overflow: hidden;
+  flex: 1;
+  align-items: stretch;
 }
 
-.conversation-chat-layout.detail-collapsed {
-  gap: 0.75rem;
-  grid-template-columns: minmax(0, 1fr) 3.5rem;
+.conversation-main-column,
+.conversation-stream-panel,
+.conversation-detail-shell,
+.composer-shell {
+  min-width: 0;
+  min-height: 0;
 }
 
-.conversation-chat-main {
+.conversation-main-column {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
-  gap: 0.85rem;
-  min-width: 0;
-  min-height: 0;
+  gap: 0.75rem;
   overflow: hidden;
 }
 
-.conversation-chat-detail {
+.conversation-stream-panel,
+.conversation-composer,
+.conversation-detail-shell {
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 96%, transparent), color-mix(in srgb, var(--bg-surface) 92%, var(--bg-subtle))),
+    var(--bg-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.conversation-stream-panel,
+.conversation-detail-shell {
+  border-radius: calc(var(--radius-xl) + 4px);
+}
+
+.conversation-stream-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.conversation-stream-header {
   display: flex;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  max-height: 100%;
-  width: var(--conversation-detail-width);
-  max-width: var(--conversation-detail-width);
-  overflow-x: hidden;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.8rem;
+  padding: 0.9rem 1rem 0.8rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 90%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--brand-primary) 8%, var(--bg-surface)), transparent 140%),
+    color-mix(in srgb, var(--bg-surface) 94%, transparent);
 }
 
-.conversation-chat-layout.detail-collapsed .conversation-chat-detail {
-  width: 3.5rem;
-  max-width: 3.5rem;
+.conversation-stream-eyebrow {
+  color: var(--brand-primary);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
-.message-scroll {
+.conversation-stream-title {
+  margin-top: 0.2rem;
+  font-size: clamp(1.12rem, 1.35vw, 1.45rem);
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+}
+
+.conversation-stream-subtitle {
+  max-width: 22rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  text-align: right;
+}
+
+.conversation-scroll-region {
   min-height: 0;
-  padding-right: 0.35rem;
-  overflow-x: hidden;
+  padding: 0.75rem 0.45rem 0.2rem;
 }
 
 .message-stream {
-  gap: 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  width: min(100%, 100%);
   min-height: 100%;
-  padding-bottom: 0.35rem;
+  margin: 0 auto;
+}
+
+.conversation-stream-empty {
+  margin: auto 0 1rem;
 }
 
 .conversation-composer-dock {
   position: relative;
-  width: min(100%, 52rem);
-  margin-inline: auto;
 }
 
-.conversation-queue-floating {
+.composer-shell {
+  position: relative;
+  width: min(100%, 100%);
+  margin: 0 auto;
+}
+
+.composer-queue {
   position: absolute;
-  inset-inline: 0;
-  bottom: calc(100% + 0.18rem);
+  right: 1rem;
+  bottom: calc(100% + 0.55rem);
+  left: 1rem;
   z-index: 3;
-  width: 90%;
-  margin-inline: auto;
-  box-shadow: 0 12px 28px rgb(15 23 42 / 0.08);
 }
 
 .conversation-composer {
   display: flex;
   flex-direction: column;
-  gap: 0.8rem;
-  padding: 0.95rem 1rem 0.95rem;
-  border-radius: 1.4rem;
-  border: 0;
-  background: color-mix(in srgb, var(--bg-surface) 92%, var(--bg-subtle));
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.03),
-    0 14px 36px rgb(15 23 42 / 0.12);
+  gap: 0.65rem;
+  padding: 0.75rem;
+  border-radius: 1.2rem;
+  transition:
+    border-color var(--duration-fast) var(--ease-apple),
+    box-shadow var(--duration-fast) var(--ease-apple),
+    transform var(--duration-fast) var(--ease-apple);
 }
 
-textarea {
-  width: 100%;
-  min-height: 7.25rem;
-  resize: vertical;
-  border-radius: 1rem;
+.conversation-composer:focus-within {
+  border-color: color-mix(in srgb, var(--brand-primary) 24%, var(--border-strong));
+  box-shadow: var(--shadow-md);
+}
+
+.conversation-composer-input {
+  min-height: 5.75rem;
   border: 0;
   background: transparent;
-  color: var(--text-primary);
-  padding: 0.2rem 0.15rem 0.3rem;
-  line-height: 1.65;
+  box-shadow: none;
+  resize: none;
+  padding: 0.15rem 0.2rem 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
 }
 
-.composer-resource-row,
+.conversation-composer-input:focus-visible {
+  box-shadow: none;
+}
+
+.composer-resource-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  padding: 0 0.2rem;
+}
+
+.composer-resource-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
+  background: color-mix(in srgb, var(--bg-subtle) 82%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.composer-resource-chip span {
+  overflow: hidden;
+  max-width: 10rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-resource-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  color: var(--text-tertiary);
+}
+
+.composer-resource-remove:hover {
+  color: var(--status-error);
+}
+
 .composer-toolbar,
-.composer-controls,
-.composer-select,
-.resource-list-item,
-.action-row {
+.composer-toolbar-main,
+.composer-icon-button,
+.composer-select-trigger {
   display: flex;
   align-items: center;
-}
-
-.composer-resource-row,
-.composer-controls {
-  gap: 0.45rem;
-  flex-wrap: wrap;
 }
 
 .composer-toolbar {
   justify-content: space-between;
-  gap: 0.7rem;
+  gap: 0.9rem;
 }
 
-.composer-controls {
-  align-items: flex-start;
+.composer-toolbar-main {
+  flex: 1;
+  min-width: 0;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.composer-icon-button,
+.composer-select-trigger {
+  min-height: 2.2rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  background: color-mix(in srgb, var(--bg-subtle) 76%, transparent);
+  box-shadow: var(--shadow-xs);
+  color: var(--text-secondary);
+  transition:
+    border-color var(--duration-fast) var(--ease-apple),
+    background-color var(--duration-fast) var(--ease-apple),
+    color var(--duration-fast) var(--ease-apple),
+    transform var(--duration-fast) var(--ease-apple);
+}
+
+.composer-icon-button:hover,
+.composer-select-trigger:hover {
+  border-color: color-mix(in srgb, var(--brand-primary) 18%, var(--border-strong));
+  background: color-mix(in srgb, var(--bg-surface) 92%, var(--brand-primary) 6%);
+  color: var(--text-primary);
+}
+
+.composer-icon-button {
+  justify-content: center;
+  width: 2.2rem;
+  border-radius: 999px;
 }
 
 .composer-select {
   position: relative;
-  justify-content: flex-start;
-  gap: 0.32rem;
-  min-width: 0;
-  height: 2.4rem;
-  padding: 0 0.7rem;
-  border-radius: 999px;
-  border: 0;
-  background: color-mix(in srgb, var(--bg-subtle) 82%, transparent);
-  color: var(--text-secondary);
-  overflow: hidden;
 }
 
-.composer-select :deep(svg) {
+.composer-select-wide {
+  max-width: min(100%, 20rem);
+}
+
+.composer-native-select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
   pointer-events: none;
-  flex-shrink: 0;
+}
+
+.composer-select-trigger {
+  gap: 0.45rem;
+  max-width: 100%;
+  padding: 0 0.85rem;
+  border-radius: 999px;
 }
 
 .composer-select-value {
-  min-width: 0;
-  max-width: 8rem;
   overflow: hidden;
+  max-width: 12rem;
+  font-size: 0.74rem;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-primary);
-  font-size: 0.82rem;
 }
 
-.composer-select select {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  min-width: 100%;
-  height: 100%;
-  border: 0;
-  background: transparent;
-  color: transparent;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.resource-trigger,
-.composer-send,
-.primary-button,
-.secondary-button,
-.resource-remove,
-.resource-action,
-.resource-list-item {
+.composer-send-button {
+  width: 2.45rem;
+  min-width: 2.45rem;
+  height: 2.45rem;
+  padding: 0;
   border-radius: 999px;
-  border: 0;
 }
 
-.resource-trigger,
-.composer-send,
-.primary-button,
-.secondary-button,
-.resource-remove,
-.resource-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.42rem 0.72rem;
-}
-
-.resource-trigger {
-  justify-content: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  padding: 0;
-}
-
-.composer-send,
-.primary-button {
-  justify-content: center;
-  width: 2.4rem;
-  height: 2.4rem;
-  padding: 0;
-  background: color-mix(in srgb, var(--brand-primary) 85%, #5243c2);
-  color: white;
-  box-shadow: 0 8px 24px rgb(82 67 194 / 0.32);
-}
-
-.resource-trigger,
-.secondary-button,
-.resource-remove,
-.resource-action,
-.resource-list-item {
-  background: color-mix(in srgb, var(--bg-subtle) 82%, transparent);
-  color: var(--text-secondary);
-}
-
-.resource-remove {
-  font-size: 0.76rem;
-}
-
-.composer-menu-shell {
-  position: relative;
-}
-
-.resource-menu,
-.resource-list {
+.composer-popover-list {
   display: flex;
   flex-direction: column;
+  gap: 0.3rem;
+  min-width: 14rem;
 }
 
-.resource-menu {
-  position: absolute;
-  bottom: calc(100% + 0.5rem);
-  left: 0;
-  z-index: 4;
-  gap: 0.45rem;
-  min-width: 15rem;
-  padding: 0.75rem;
-  border-radius: 1rem;
-  border: 0;
-  background: color-mix(in srgb, var(--bg-surface) 96%, var(--bg-subtle));
-  box-shadow: 0 18px 40px rgb(15 23 42 / 10%);
-}
-
-.resource-list {
-  gap: 0.45rem;
-  max-height: 12rem;
+.composer-popover-scroll {
+  max-height: 18rem;
   overflow-y: auto;
 }
 
-.resource-list-item {
-  justify-content: space-between;
-  padding: 0.6rem 0.7rem;
+.composer-popover-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-m);
+  text-align: left;
+  color: var(--text-primary);
+  transition: background-color var(--duration-fast) var(--ease-apple), color var(--duration-fast) var(--ease-apple);
 }
 
-@media (max-width: 1120px) {
+.composer-popover-item:hover,
+.composer-popover-item.active {
+  background: color-mix(in srgb, var(--brand-primary) 9%, transparent);
+}
+
+.composer-popover-item.active {
+  color: var(--brand-primary);
+  font-weight: 600;
+}
+
+.composer-popover-icon {
+  color: var(--text-tertiary);
+}
+
+.composer-popover-label {
+  margin: 0.35rem 0 0.2rem;
+  padding: 0 0.25rem;
+  color: var(--text-tertiary);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.conversation-detail-shell {
+  overflow: hidden;
+}
+
+.conversation-detail-pane {
+  height: 100%;
+}
+
+@media (max-width: 1240px) {
   .conversation-chat-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .conversation-chat-layout.detail-collapsed {
-    grid-template-columns: minmax(0, 1fr);
+  .conversation-detail-shell {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .conversation-stream-header {
+    flex-direction: column;
   }
 
-  .conversation-composer-dock {
+  .conversation-stream-subtitle {
+    max-width: none;
+    text-align: left;
+  }
+
+  .conversation-scroll-region {
+    padding: 1rem 0.7rem 0.25rem;
+  }
+
+  .conversation-composer {
+    padding: 0.8rem;
+    border-radius: 1.4rem;
+  }
+
+  .composer-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .composer-send-button {
     width: 100%;
+    min-width: 0;
+    border-radius: var(--radius-l);
   }
 }
 </style>

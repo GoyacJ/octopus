@@ -66,12 +66,12 @@ onBeforeUnmount(() => {
 .workbench-main {
   grid-area: main;
   min-width: 0;
-  padding: 1rem 1.1rem 1.2rem;
+  padding: 1.1rem 1.25rem 1.4rem;
 }
 
 @media (max-width: 980px) {
   .workbench-main {
-    padding: 0.85rem 0.9rem 1rem;
+    padding: 0.9rem 0.95rem 1rem;
   }
 }
 </style>
