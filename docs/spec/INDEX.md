@@ -1,7 +1,7 @@
 # Claude Code — Spec Index
 
 > Quick-reference index across all spec documents.
-> Total spec coverage: ~990 KB across 15 markdown files.
+> Total spec coverage: ~1.0 MB across 16 markdown files.
 
 ---
 
@@ -23,6 +23,7 @@
 | 11 | [11_special_systems.md](11_special_systems.md) | 64 KB | Buddy/Tamagotchi, memdir, keybindings, skills, voice, plugins, migrations |
 | 12 | [12_constants_types.md](12_constants_types.md) | 83 KB | Every constant, type, OAuth config, system prompts, tool limits, beta headers |
 | 13 | [13_rust_codebase.md](13_rust_codebase.md) | 63 KB | Complete Rust rewrite: all 9 crates, 33 tools, query loop, TUI, bridge |
+| 14 | [14_frontend_stack_and_design_system.md](14_frontend_stack_and_design_system.md) | 16 KB | Octopus desktop frontend governance, design-system boundaries, adoption matrix, and migration blockers |
 
 ---
 
@@ -90,6 +91,8 @@
 | Rust query loop | 13 | §cc-query |
 | Rust TUI | 13 | §cc-tui |
 | Rust bridge | 13 | §cc-bridge |
+| Octopus desktop frontend stack | 14 | §2–4 |
+| Octopus design-system governance | 14 | §5–9 |
 
 ---
 
@@ -109,7 +112,7 @@
 | Bridge protocol files | 31 |
 | Rust crates | 9 |
 | Rust source files | 47 |
-| Spec documentation size | ~990 KB |
+| Spec documentation size | ~1.0 MB |
 
 ---
 
