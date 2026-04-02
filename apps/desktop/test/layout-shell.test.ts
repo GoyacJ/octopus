@@ -76,11 +76,14 @@ describe('Workbench shell layout', () => {
 
     const themeButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-theme-toggle"]')
     expect(themeButton).not.toBeNull()
+    expect(themeButton?.parentElement?.classList.contains('menu-shell')).toBe(true)
 
     themeButton?.click()
     await flushUi()
 
-    expect(mounted.container.querySelector('[data-testid="topbar-theme-menu"]')).not.toBeNull()
+    const themeMenu = mounted.container.querySelector<HTMLElement>('[data-testid="topbar-theme-menu"]')
+    expect(themeMenu).not.toBeNull()
+    expect(themeMenu?.classList.contains('topbar-dropdown')).toBe(true)
 
     const lightThemeOption = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-theme-option-light"]')
     expect(lightThemeOption).not.toBeNull()
@@ -115,7 +118,10 @@ describe('Workbench shell layout', () => {
     localeButton?.click()
     await flushUi()
 
-    expect(mounted.container.querySelector('[data-testid="topbar-locale-menu"]')).not.toBeNull()
+    const localeMenu = mounted.container.querySelector<HTMLElement>('[data-testid="topbar-locale-menu"]')
+    expect(localeMenu).not.toBeNull()
+    expect(localeButton?.parentElement?.classList.contains('menu-shell')).toBe(true)
+    expect(localeMenu?.classList.contains('topbar-dropdown')).toBe(true)
 
     const englishLocaleOption = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-locale-option-en-US"]')
     expect(englishLocaleOption).not.toBeNull()
@@ -286,7 +292,7 @@ describe('Workbench shell layout', () => {
     mounted.destroy()
   })
 
-  it('keeps the expanded project free of delete affordance and still removes a collapsed project', async () => {
+  it('keeps the expanded project free of delete affordance and removes a collapsed project after confirmation', async () => {
     const mounted = mountLayout()
     const workbench = useWorkbenchStore()
 
@@ -294,12 +300,21 @@ describe('Workbench shell layout', () => {
 
     expect(mounted.container.querySelector('[data-testid="remove-project-proj-redesign"]')).toBeNull()
 
+    const projectNode = mounted.container.querySelector<HTMLElement>('[data-testid="project-node-proj-governance"]')?.closest('.project-node')
+    expect(projectNode).not.toBeNull()
+    expect(projectNode?.querySelector('.project-remove')).not.toBeNull()
+
     const deleteButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="remove-project-proj-governance"]')
     expect(deleteButton).not.toBeNull()
 
     deleteButton?.click()
-    await nextTick()
-    await new Promise((resolve) => window.setTimeout(resolve, 0))
+    await flushUi()
+
+    expect(mounted.container.querySelector('[data-testid="project-delete-confirm"]')).not.toBeNull()
+
+    const confirmButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-delete-confirm"]')
+    confirmButton?.click()
+    await flushUi()
 
     expect(workbench.workspaceProjects.some((item) => item.id === 'proj-governance')).toBe(false)
     expect(workbench.currentProjectId).toBe('proj-redesign')

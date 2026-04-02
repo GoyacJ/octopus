@@ -26,7 +26,7 @@ import { createProjectConversationTarget, createProjectDashboardTarget, createPr
 import { type MenuIconKey, getMenuDefinition } from '@/navigation/menuRegistry'
 import { useShellStore } from '@/stores/shell'
 import { useWorkbenchStore } from '@/stores/workbench'
-import { UiButton, UiInput } from '@octopus/ui'
+import { UiButton, UiDialog, UiInput } from '@octopus/ui'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,7 +34,9 @@ const { t } = useI18n()
 const shell = useShellStore()
 const workbench = useWorkbenchStore()
 const projectDialogOpen = ref(false)
+const projectDeleteDialogOpen = ref(false)
 const projectName = ref('')
+const pendingDeleteProjectId = ref<string | null>(null)
 const workspaceMenuOpen = ref(false)
 const workspaceMenuRef = ref<HTMLElement | null>(null)
 
@@ -229,6 +231,16 @@ function closeProjectDialog() {
   projectName.value = ''
 }
 
+function openProjectDeleteDialog(projectId: string) {
+  pendingDeleteProjectId.value = projectId
+  projectDeleteDialogOpen.value = true
+}
+
+function closeProjectDeleteDialog() {
+  projectDeleteDialogOpen.value = false
+  pendingDeleteProjectId.value = null
+}
+
 async function confirmCreateProject() {
   const nextProjectName = projectName.value.trim()
   if (!nextProjectName) {
@@ -240,12 +252,13 @@ async function confirmCreateProject() {
   await router.push(createProjectDashboardTarget(project.workspaceId, project.id))
 }
 
-async function removeProject(projectId: string) {
-  if (!window.confirm(t('sidebar.projectTree.removeConfirm'))) {
+async function confirmRemoveProject() {
+  if (!pendingDeleteProjectId.value) {
     return
   }
 
-  const targetProjectId = workbench.removeProject(projectId)
+  const targetProjectId = workbench.removeProject(pendingDeleteProjectId.value)
+  closeProjectDeleteDialog()
   if (!targetProjectId) {
     return
   }
@@ -325,20 +338,19 @@ onBeforeUnmount(() => {
                       <strong>{{ resolveMockField('project', project.id, 'name', project.name) }}</strong>
                       <small>{{ t('common.conversations', { count: project.conversationIds.length }) }}</small>
                     </span>
+                    <ChevronRight :size="16" class="project-node-chevron" />
                   </button>
-                  <ChevronRight :size="16" class="project-node-chevron" />
+                  <button
+                    v-if="!isProjectExpanded(project.id)"
+                    type="button"
+                    class="project-remove"
+                    :title="t('sidebar.projectTree.remove')"
+                    :data-testid="`remove-project-${project.id}`"
+                    @click.stop="openProjectDeleteDialog(project.id)"
+                  >
+                    <Trash2 :size="14" />
+                  </button>
                 </div>
-
-                <button
-                  v-if="!isProjectExpanded(project.id)"
-                  type="button"
-                  class="project-remove"
-                  :title="t('sidebar.projectTree.remove')"
-                  :data-testid="`remove-project-${project.id}`"
-                  @click.stop="removeProject(project.id)"
-                >
-                  <Trash2 :size="14" />
-                </button>
 
                 <div v-if="isProjectExpanded(project.id)" class="project-modules">
                   <RouterLink
@@ -445,6 +457,31 @@ onBeforeUnmount(() => {
         </footer>
       </section>
     </div>
+
+    <UiDialog
+      :open="projectDeleteDialogOpen"
+      :title="t('sidebar.projectTree.remove')"
+      :description="t('sidebar.projectTree.removeConfirm')"
+      :close-label="t('common.cancel')"
+      @update:open="(open) => { if (!open) closeProjectDeleteDialog() }"
+    >
+      <template #footer>
+        <UiButton
+          variant="ghost"
+          data-testid="project-delete-cancel"
+          @click="closeProjectDeleteDialog"
+        >
+          {{ t('common.cancel') }}
+        </UiButton>
+        <UiButton
+          variant="destructive"
+          data-testid="project-delete-confirm"
+          @click="confirmRemoveProject"
+        >
+          {{ t('sidebar.projectTree.remove') }}
+        </UiButton>
+      </template>
+    </UiDialog>
   </aside>
 </template>
 
@@ -500,7 +537,6 @@ onBeforeUnmount(() => {
 }
 
 .project-create:hover,
-.project-remove:hover,
 .rail-toggle:hover {
   border-color: color-mix(in srgb, var(--brand-primary) 22%, var(--border-subtle));
   color: var(--text-primary);
@@ -561,21 +597,42 @@ onBeforeUnmount(() => {
 }
 
 .project-node-button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.85rem 0.95rem;
+  position: relative;
+  overflow: hidden;
 }
 
 .project-remove {
-  width: 1.95rem;
-  height: 1.95rem;
-  flex-shrink: 0;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 3.25rem;
+  height: auto;
+  border: 0;
+  border-left: 1px solid color-mix(in srgb, var(--status-error) 24%, var(--border-subtle));
+  border-radius: 0;
+  background: color-mix(in srgb, var(--status-error) 10%, var(--bg-surface));
+  color: var(--status-error);
+  box-shadow: none;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(100%);
+}
+
+.project-node:not(.expanded):hover .project-remove,
+.project-node:not(.expanded):focus-within .project-remove {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.project-remove:hover {
+  background: color-mix(in srgb, var(--status-error) 18%, var(--bg-surface));
+  color: var(--status-error);
 }
 
 .project-node-trigger {
-  flex: 1;
+  width: 100%;
   min-width: 0;
   border: 0;
   background: transparent;
@@ -583,6 +640,13 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  transition: transform var(--duration-fast) var(--ease-apple);
+}
+
+.project-node:not(.expanded):hover .project-node-trigger,
+.project-node:not(.expanded):focus-within .project-node-trigger {
+  transform: translateX(-2.9rem);
 }
 
 .project-node-icon {
@@ -617,6 +681,7 @@ onBeforeUnmount(() => {
 }
 
 .project-node-chevron {
+  margin-left: auto;
   color: var(--text-tertiary);
   transition: transform var(--duration-fast) var(--ease-apple);
 }

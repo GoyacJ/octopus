@@ -527,6 +527,11 @@ kbd {
   border-right: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
 }
 
+.menu-shell,
+.profile-menu-shell {
+  position: relative;
+}
+
 .icon-button {
   display: inline-flex;
   align-items: center;
