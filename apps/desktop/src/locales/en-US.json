@@ -254,8 +254,8 @@
       "eyebrow": "Project Dashboard"
     },
     "info": {
-      "title": "Project Info & Summary",
-      "subtitle": "Name, goal, phase, and summary can be edited directly inside this card."
+      "title": "Project Details",
+      "subtitle": "Keep project metadata in a secondary area so status comes first and editing stays close at hand."
     },
     "fields": {
       "name": "Project Name",
@@ -264,9 +264,17 @@
       "summary": "Project Summary",
       "status": "Project Status"
     },
+    "actions": {
+      "openConversation": "Open Conversation",
+      "openConversationHint": "Jump back into the main collaboration thread and continue execution.",
+      "openKnowledge": "Open Knowledge",
+      "openKnowledgeHint": "Browse the project's knowledge assets and supporting context.",
+      "openTrace": "Open Trace",
+      "openTraceHint": "Inspect recent runtime state, execution paths, and blockers."
+    },
     "resources": {
-      "title": "Project Resource Stats",
-      "subtitle": "Current size of conversations, resources, bound Agents, Teams, and knowledge.",
+      "title": "Resource Overview",
+      "subtitle": "Track the current scale of conversations, resources, agents, teams, and knowledge attached to this project.",
       "conversations": "Conversations",
       "resources": "Resources",
       "agents": "Bound Agents",
@@ -274,8 +282,8 @@
       "knowledge": "Knowledge"
     },
     "progress": {
-      "title": "Project Progress",
-      "subtitle": "Derived from the primary conversation stageProgress and latest run state.",
+      "title": "Project Health & Progress",
+      "subtitle": "A working snapshot derived from the primary conversation progress, latest run state, and pending operational signals.",
       "phase": "Project Phase",
       "progress": "Primary Progress",
       "runStatus": "Latest Run Status",
@@ -284,7 +292,7 @@
       "pendingInbox": "Pending Inbox"
     },
     "data": {
-      "title": "Project Data",
+      "title": "Data & Activity Overview",
       "subtitle": "Aggregated project-level conversation, participant, invocation, token, and activity metrics.",
       "conversations": "Conversations",
       "participants": "Participants",
@@ -295,10 +303,12 @@
       "modelCalls": "Model Calls",
       "tokens": "Project Tokens",
       "activity": "Activity Records",
-      "conversationTop": "Top 3 conversations by tokens"
+      "conversationTop": "High-usage conversations",
+      "conversationTopSubtitle": "Ranked by token spend to surface the heaviest collaboration threads first."
     },
     "activity": {
-      "title": "Latest 10 Project Activities"
+      "title": "Recent Project Activity",
+      "subtitle": "A timeline of the latest meaningful actions and changes across the project."
     },
     "empty": {
       "activityTitle": "No project activity yet",
@@ -990,8 +1000,8 @@
   "connections": {
     "header": {
       "eyebrow": "Connections",
-      "title": "Product connections + host stub",
-      "subtitle": "Front-end mock remains the source of truth; Rust only provides the host bootstrap skeleton."
+      "title": "Product connections + host shell",
+      "subtitle": "Front-end mock remains the source of truth; the Tauri host stays a thin bootstrap shell."
     },
     "product": {
       "title": "Product Surface Connections",
@@ -1228,7 +1238,7 @@
         "goal": "Shape the settings center, audit logs, and policy visualization surfaces.",
         "phase": "Planning",
         "summary": "The governance schema is set and waiting to be wired into the desktop shell.",
-        "recentDecision": "Ship a read-only governance surface first and skip the real backend for now."
+        "recentDecision": "Ship a read-only governance surface first and keep live integration deferred."
       },
       "proj-launch": {
         "name": "Enterprise Launch Ops",
@@ -1280,7 +1290,7 @@
         "title": "Desktop shell GA refactor",
         "summary": "Split the single-page prototype into a workbench shell, shared UI, and minimal Tauri host.",
         "currentGoal": "Fill the desktop PRD modules and finish Tauri / Rust initialization.",
-        "constraints": ["Front-end and mock data only", "Keep the Rust backend as bootstrap scaffolding", "Preserve reuse for mobile and the marketing site"],
+        "constraints": ["Front-end and mock data only", "Keep the Tauri host as bootstrap scaffolding", "Preserve reuse for mobile and the marketing site"],
         "statusNote": "The current focus is switching the prototype shell into a modular workbench.",
         "resumePoints": {
           "resume-redesign-1": {
@@ -1297,7 +1307,7 @@
         "title": "Settings and audit alignment",
         "summary": "The governance surface stays read-only and mock-driven to preserve explainability.",
         "currentGoal": "Bring policy, logs, audit, and integration state into one settings center.",
-        "constraints": ["Do not connect the real permission backend yet"],
+        "constraints": ["Keep live permission integration deferred for now"],
         "statusNote": "The governance surface is ready for shared component extraction.",
         "resumePoints": {
           "resume-gov-1": {

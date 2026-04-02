@@ -254,8 +254,8 @@
       "eyebrow": "项目控制台"
     },
     "info": {
-      "title": "项目信息与简介",
-      "subtitle": "名称、目标、阶段与简介支持在卡片内直接编辑。"
+      "title": "项目详情",
+      "subtitle": "项目基础信息保留在次级区域，便于在查看状态后再编辑。"
     },
     "fields": {
       "name": "项目名称",
@@ -264,9 +264,17 @@
       "summary": "项目简介",
       "status": "项目状态"
     },
+    "actions": {
+      "openConversation": "进入会话",
+      "openConversationHint": "继续当前项目的主线程协作与执行。",
+      "openKnowledge": "查看知识库",
+      "openKnowledgeHint": "快速打开该项目的知识与上下文资产。",
+      "openTrace": "查看 Trace",
+      "openTraceHint": "检查最近运行状态、链路与阻塞线索。"
+    },
     "resources": {
-      "title": "项目资源统计",
-      "subtitle": "会话、资源、绑定 Agent、Team 与知识的当前规模。",
+      "title": "资源概览",
+      "subtitle": "聚焦项目当前可调度的会话、资源、Agent、Team 与知识规模。",
       "conversations": "会话数",
       "resources": "资源数",
       "agents": "绑定 Agent 个数",
@@ -274,8 +282,8 @@
       "knowledge": "知识数"
     },
     "progress": {
-      "title": "项目进度",
-      "subtitle": "基于主会话 stageProgress 与最近运行状态派生展示。",
+      "title": "项目健康与进度",
+      "subtitle": "基于主会话进度、最近运行状态与待处理项生成当前工作态势。",
       "phase": "项目阶段",
       "progress": "主进度",
       "runStatus": "最近 Run 状态",
@@ -284,7 +292,7 @@
       "pendingInbox": "待处理 Inbox 数"
     },
     "data": {
-      "title": "项目数据",
+      "title": "数据与调用概览",
       "subtitle": "聚合项目级会话、参与人、调用次数、Token 与操作记录。",
       "conversations": "会话数",
       "participants": "项目参与人数",
@@ -295,10 +303,12 @@
       "modelCalls": "项目调用模型次数",
       "tokens": "项目使用 Token 数",
       "activity": "项目操作记录数",
-      "conversationTop": "会话 Token Top 3"
+      "conversationTop": "高使用会话",
+      "conversationTopSubtitle": "按 Token 消耗排序，帮助快速定位最重的协作线程。"
     },
     "activity": {
-      "title": "最新 10 条项目操作"
+      "title": "最新项目动态",
+      "subtitle": "展示最近发生的关键操作与时间线变化。"
     },
     "empty": {
       "activityTitle": "暂无项目操作",
@@ -990,8 +1000,8 @@
   "connections": {
     "header": {
       "eyebrow": "Connections",
-      "title": "产品连接 + 宿主 Stub",
-      "subtitle": "前端 mock 仍是真源；Rust 只提供宿主初始化骨架。"
+      "title": "产品连接 + 宿主壳",
+      "subtitle": "前端 mock 仍是真源；Tauri 宿主保持为轻量初始化壳。"
     },
     "product": {
       "title": "产品表面连接",
@@ -1228,7 +1238,7 @@
         "goal": "梳理设置中心、审计日志与策略可视化面。",
         "phase": "Planning",
         "summary": "治理面板 schema 已定，等待统一接入桌面壳。",
-        "recentDecision": "先交付只读治理表面，不接真实后端。"
+        "recentDecision": "先交付只读治理表面，暂缓接入实时集成。"
       },
       "proj-launch": {
         "name": "企业上线运营",
@@ -1280,7 +1290,7 @@
         "title": "Desktop shell GA 重构",
         "summary": "把单页原型拆成工作台壳、共享 UI 和最小 Tauri 宿主。",
         "currentGoal": "补齐桌面端 PRD 模块与 Tauri / Rust 初始化。",
-        "constraints": ["只做前端 + mock 数据", "保留后端 Rust 初始化骨架", "保持未来 Mobile 和官网可复用"],
+        "constraints": ["只做前端 + mock 数据", "保留 Tauri 宿主初始化骨架", "保持未来 Mobile 和官网可复用"],
         "statusNote": "当前重点是把原型壳切换到模块化工作台。",
         "resumePoints": {
           "resume-redesign-1": {
@@ -1297,7 +1307,7 @@
         "title": "设置与审计对齐",
         "summary": "治理表面采用只读 mock，先满足可解释性要求。",
         "currentGoal": "把策略、日志、审计和集成状态放进统一设置中心。",
-        "constraints": ["先不接真实权限后端"],
+        "constraints": ["暂缓接入实时权限集成"],
         "statusNote": "治理面即将进入共享组件抽取。",
         "resumePoints": {
           "resume-gov-1": {

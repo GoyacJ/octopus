@@ -3,6 +3,10 @@
 ## Frontend Governance
 
 - Desktop frontend baseline: `Vue 3 + Vite + Pinia + Vue Router + Vue I18n + Tauri 2`.
+- Frontend-first delivery uses mock data by default. Pages, stores, and view models must be able to complete their primary flows without requiring a live backend or Tauri host response.
+- Real Tauri or backend integration may remain behind the existing adapter layer, but it must not become the default path for new frontend feature development in the current phase.
+- Shared schemas in `packages/schema` must be defined in feature-based files under `packages/schema/src/*`. `packages/schema/src/index.ts` is the public export surface only and must not keep accumulating schema definitions.
+- Frontend mock data must reuse `@octopus/schema` contracts so mock flows and later real integrations stay aligned.
 - Shared UI must go through `@octopus/ui`. Business pages must not introduce ad-hoc third-party UI styles or bypass the shared design system.
 - Component selection order:
   1. Reuse `@octopus/ui`.

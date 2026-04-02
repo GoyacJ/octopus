@@ -466,7 +466,7 @@ function createMockConversation(sequence: number, projectId: string, title: stri
     activeAgentId: 'agent-architect',
     summary: 'A starter conversation created from the desktop shell mock controls.',
     currentGoal: 'Outline the first project steps and collect the initial requirements.',
-    constraints: ['Mock-only workspace', 'No backend integration'],
+    constraints: ['Mock-only workspace', 'Live integration deferred'],
     blockerIds: [],
     pendingInboxIds: [],
     resumePoints: [],

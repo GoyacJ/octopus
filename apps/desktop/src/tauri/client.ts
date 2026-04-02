@@ -207,41 +207,74 @@ function listMockSessions() {
   return Object.values(readMockRuntimeState()).map((detail) => detail.summary)
 }
 
+function shouldUseMockRuntime(): boolean {
+  return true
+}
+
+function resolveMockShellBootstrap(
+  defaultWorkspaceId: string,
+  defaultProjectId: string,
+  mockConnections: ConnectionProfile[],
+): ShellBootstrap {
+  return {
+    hostState: fallbackHostState(),
+    preferences: loadStoredPreferences(defaultWorkspaceId, defaultProjectId),
+    connections: mockConnections,
+    backend: fallbackBackendConnection(),
+  }
+}
+
+async function resolveDesktopShellBootstrap(): Promise<ShellBootstrap | null> {
+  if (!isTauriRuntime()) {
+    return null
+  }
+
+  try {
+    return await invoke<ShellBootstrap>('bootstrap_shell')
+  } catch {
+    return null
+  }
+}
+
+async function resolveRuntimeBackendConnection(): Promise<DesktopBackendConnection | undefined> {
+  if (shouldUseMockRuntime()) {
+    return undefined
+  }
+
+  const shellBootstrap = await resolveDesktopShellBootstrap()
+  return shellBootstrap?.backend
+}
+
 export async function bootstrapShellHost(
   defaultWorkspaceId: string,
   defaultProjectId: string,
   mockConnections: ConnectionProfile[],
 ): Promise<ShellBootstrap> {
   const fallbackPreferences = loadStoredPreferences(defaultWorkspaceId, defaultProjectId)
-  if (!isTauriRuntime()) {
+  const mockBootstrap = resolveMockShellBootstrap(defaultWorkspaceId, defaultProjectId, mockConnections)
+  const desktopBootstrap = await resolveDesktopShellBootstrap()
+
+  if (!desktopBootstrap) {
     return {
-      hostState: fallbackHostState(),
+      ...mockBootstrap,
       preferences: fallbackPreferences,
-      connections: mockConnections,
-      backend: fallbackBackendConnection(),
     }
   }
 
-  try {
-    const bootstrap = await invoke<ShellBootstrap>('bootstrap_shell')
-    const preferences = bootstrap.preferences
-      ? normalizePreferences(bootstrap.preferences, defaultWorkspaceId, defaultProjectId)
-      : fallbackPreferences
-    saveStoredPreferences(preferences)
+  const preferences = desktopBootstrap.preferences
+    ? normalizePreferences(desktopBootstrap.preferences, defaultWorkspaceId, defaultProjectId)
+    : fallbackPreferences
+  saveStoredPreferences(preferences)
 
-    return {
-      hostState: bootstrap.hostState ?? fallbackHostState(),
-      preferences,
-      connections: bootstrap.connections ?? mockConnections,
-      backend: bootstrap.backend ?? fallbackBackendConnection(),
-    }
-  } catch {
-    return {
-      hostState: fallbackHostState(),
-      preferences: fallbackPreferences,
-      connections: mockConnections,
-      backend: fallbackBackendConnection(),
-    }
+  return {
+    hostState: desktopBootstrap.hostState ?? fallbackHostState(),
+    preferences,
+    connections: shouldUseMockRuntime()
+      ? mockConnections
+      : desktopBootstrap.connections ?? mockConnections,
+    backend: shouldUseMockRuntime()
+      ? fallbackBackendConnection()
+      : desktopBootstrap.backend ?? fallbackBackendConnection(),
   }
 }
 
@@ -350,16 +383,12 @@ export async function restartDesktopBackend(): Promise<void> {
 }
 
 export async function bootstrapRuntime(): Promise<RuntimeBootstrap> {
-  if (!isTauriRuntime()) {
+  const backend = await resolveRuntimeBackendConnection()
+  if (!backend?.ready) {
     return buildMockRuntimeBootstrap()
   }
 
-  const shellBootstrap = await invoke<ShellBootstrap>('bootstrap_shell')
-  if (!shellBootstrap.backend?.ready) {
-    throw new Error('Desktop backend is unavailable')
-  }
-
-  return await fetchBackend<RuntimeBootstrap>(shellBootstrap.backend, '/runtime/bootstrap', {
+  return await fetchBackend<RuntimeBootstrap>(backend, '/runtime/bootstrap', {
     method: 'GET',
   })
 }
@@ -370,14 +399,9 @@ export async function createRuntimeSession(
   title: string,
   _workingDir?: string,
 ): Promise<RuntimeSessionDetail> {
-  if (!isTauriRuntime()) {
-    return upsertMockSession(createMockRuntimeSessionDetail(conversationId, projectId, title, Date.now()))
-  }
-
-  const shellBootstrap = await invoke<ShellBootstrap>('bootstrap_shell')
-  const backend = shellBootstrap.backend
+  const backend = await resolveRuntimeBackendConnection()
   if (!backend?.ready) {
-    throw new Error('Desktop backend is unavailable')
+    return upsertMockSession(createMockRuntimeSessionDetail(conversationId, projectId, title, Date.now()))
   }
 
   return await fetchBackend<RuntimeSessionDetail>(backend, '/runtime/sessions', {
@@ -387,23 +411,23 @@ export async function createRuntimeSession(
 }
 
 export async function loadRuntimeSession(sessionId: string): Promise<RuntimeSessionDetail> {
-  if (!isTauriRuntime()) {
+  const backend = await resolveRuntimeBackendConnection()
+  if (!backend?.ready) {
     return loadMockSession(sessionId)
   }
 
-  const shellBootstrap = await invoke<ShellBootstrap>('bootstrap_shell')
-  return await fetchBackend<RuntimeSessionDetail>(shellBootstrap.backend, `/runtime/sessions/${sessionId}`, {
+  return await fetchBackend<RuntimeSessionDetail>(backend, `/runtime/sessions/${sessionId}`, {
     method: 'GET',
   })
 }
 
 export async function pollRuntimeEvents(sessionId: string) {
-  if (!isTauriRuntime()) {
+  const backend = await resolveRuntimeBackendConnection()
+  if (!backend?.ready) {
     return []
   }
 
-  const shellBootstrap = await invoke<ShellBootstrap>('bootstrap_shell')
-  return await fetchBackend<any[]>(shellBootstrap.backend, `/runtime/sessions/${sessionId}/events`, {
+  return await fetchBackend<any[]>(backend, `/runtime/sessions/${sessionId}/events`, {
     method: 'GET',
   })
 }
@@ -414,7 +438,8 @@ export async function submitRuntimeUserTurn(
   modelId: string,
   permissionMode: string,
 ): Promise<RuntimeRunSnapshot> {
-  if (!isTauriRuntime()) {
+  const backend = await resolveRuntimeBackendConnection()
+  if (!backend?.ready) {
     const detail = loadMockSession(sessionId)
     const timestamp = Date.now()
     const waitingApproval = /\b(pwd|rm|delete|terminal|bash|shell)\b/i.test(content)
@@ -496,8 +521,7 @@ export async function submitRuntimeUserTurn(
     return nextRun
   }
 
-  const shellBootstrap = await invoke<ShellBootstrap>('bootstrap_shell')
-  return await fetchBackend<RuntimeRunSnapshot>(shellBootstrap.backend, `/runtime/sessions/${sessionId}/turns`, {
+  return await fetchBackend<RuntimeRunSnapshot>(backend, `/runtime/sessions/${sessionId}/turns`, {
     method: 'POST',
     body: JSON.stringify({ content, modelId, permissionMode }),
   })
@@ -508,7 +532,8 @@ export async function resolveRuntimeApproval(
   approvalId: string,
   decision: RuntimeDecisionAction,
 ): Promise<void> {
-  if (!isTauriRuntime()) {
+  const backend = await resolveRuntimeBackendConnection()
+  if (!backend?.ready) {
     const detail = loadMockSession(sessionId)
     const timestamp = Date.now()
     const nextDetail: RuntimeSessionDetail = {
@@ -547,20 +572,19 @@ export async function resolveRuntimeApproval(
     return
   }
 
-  const shellBootstrap = await invoke<ShellBootstrap>('bootstrap_shell')
-  await fetchBackend(shellBootstrap.backend, `/runtime/sessions/${sessionId}/approvals/${approvalId}`, {
+  await fetchBackend(backend, `/runtime/sessions/${sessionId}/approvals/${approvalId}`, {
     method: 'POST',
     body: JSON.stringify({ decision }),
   })
 }
 
 export async function listRuntimeSessions(): Promise<RuntimeSessionDetail['summary'][]> {
-  if (!isTauriRuntime()) {
+  const backend = await resolveRuntimeBackendConnection()
+  if (!backend?.ready) {
     return listMockSessions()
   }
 
-  const shellBootstrap = await invoke<ShellBootstrap>('bootstrap_shell')
-  return await fetchBackend(shellBootstrap.backend, '/runtime/sessions', {
+  return await fetchBackend(backend, '/runtime/sessions', {
     method: 'GET',
   })
 }
