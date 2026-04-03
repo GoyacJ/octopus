@@ -26,12 +26,14 @@ import ConversationMessageBubble from '@/components/conversation/ConversationMes
 import ConversationContextPane from '@/components/layout/ConversationContextPane.vue'
 import { resolveMockField } from '@/i18n/copy'
 import { createProjectConversationTarget } from '@/i18n/navigation'
+import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 import { useWorkbenchStore } from '@/stores/workbench'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const runtime = useRuntimeStore()
 const shell = useShellStore()
 const workbench = useWorkbenchStore()
 
@@ -44,9 +46,16 @@ const expandedMessageIds = ref<string[]>([])
 
 const activeConversation = computed(() => workbench.activeConversation)
 const conversations = computed(() => workbench.projectConversations)
+const conversationMessages = computed(() => {
+  if (runtime.activeConversationId === activeConversation.value?.id && runtime.activeMessages.length) {
+    return runtime.activeMessages
+  }
+
+  return workbench.conversationMessages
+})
 
 const detailPaneCollapsed = computed(() => shell.rightSidebarCollapsed)
-const detailPaneWidth = computed(() => (detailPaneCollapsed.value ? '48px' : '360px'))
+const detailPaneWidth = computed(() => (detailPaneCollapsed.value ? '0px' : '360px'))
 
 const modelOptions = computed(() => workbench.workspaceModelCatalog)
 const selectedActorLabel = computed(() => {
@@ -56,7 +65,7 @@ const selectedActorLabel = computed(() => {
 })
 const selectedModelLabel = computed(() => modelOptions.value.find((m) => m.id === selectedModelId.value)?.label ?? selectedModelId.value)
 
-// --- Session Logic ---
+// --- Session Management ---
 const editingSessionId = ref<string | null>(null)
 const sessionNameDraft = ref('')
 
@@ -99,19 +108,40 @@ function scrollToBottom() {
   })
 }
 
-watch(() => workbench.conversationMessages.length, scrollToBottom)
+watch(() => conversationMessages.value.length, scrollToBottom)
 
-function sendMessage() {
-  if (!messageDraft.value.trim()) return
-  workbench.sendMessage({
-    content: messageDraft.value,
+watch(
+  () => activeConversation.value?.id,
+  async (conversationId) => {
+    if (!conversationId || !workbench.activeProject) {
+      return
+    }
+
+    await runtime.ensureSession({
+      conversationId,
+      projectId: workbench.activeProject.id,
+      title: activeConversation.value?.title ?? 'Runtime Session',
+    })
+  },
+  { immediate: true },
+)
+
+async function sendMessage() {
+  const trimmed = messageDraft.value.trim()
+  if (!trimmed || !activeConversation.value || !workbench.activeProject) return
+
+  await runtime.ensureSession({
+    conversationId: activeConversation.value.id,
+    projectId: workbench.activeProject.id,
+    title: activeConversation.value.title,
+  })
+  await runtime.submitTurn({
+    content: trimmed,
     modelId: selectedModelId.value,
     permissionMode: selectedPermissionMode.value,
-    actorKind: selectedActorValue.value.startsWith('team') ? 'team' : 'agent',
-    actorId: selectedActorValue.value.split(':')[1],
-    resourceIds: [...selectedResourceIds.value],
-    attachments: [],
+    actorLabel: selectedActorLabel.value,
   })
+
   messageDraft.value = ''
   selectedResourceIds.value = []
 }
@@ -145,18 +175,17 @@ function messageAvatarLabel(senderType: string, senderId: string, actorKind?: st
 
 <template>
   <div class="flex h-full w-full overflow-hidden bg-background flex-col">
-    <!-- 1. Top Session Tabs (Flush with Sidebar and Topbar) -->
+    <!-- 1. Top Session Tabs -->
     <header class="flex shrink-0 items-center gap-1 border-b border-border-subtle bg-subtle/20 px-4 h-11 z-30">
       <div class="flex flex-1 items-center gap-1 overflow-x-auto no-scrollbar py-1">
         <div
           v-for="conv in conversations"
           :key="conv.id"
           class="group relative flex items-center h-8 px-3 rounded-md transition-all cursor-pointer whitespace-nowrap min-w-[120px]"
-          :class="activeConversation?.id === conv.id ? 'bg-background shadow-sm text-text-primary' : 'text-text-tertiary hover:bg-accent hover:text-text-secondary'"
+          :class="activeConversation?.id === conv.id ? 'bg-background shadow-sm text-text-primary border border-border-subtle' : 'text-text-tertiary hover:bg-accent hover:text-text-secondary'"
           @click="switchSession(conv.id)"
         >
           <MessageSquare :size="12" class="mr-2 opacity-60" />
-          
           <input
             v-if="editingSessionId === conv.id"
             v-model="sessionNameDraft"
@@ -168,47 +197,29 @@ function messageAvatarLabel(senderType: string, senderId: string, actorKind?: st
           <span v-else class="text-[12px] font-bold truncate max-w-[140px]" @dblclick="startRename(conv)">
             {{ resolveMockField('conversation', conv.id, 'title', conv.title) }}
           </span>
-
-          <button 
-            v-if="conversations.length > 1"
-            class="ml-2 opacity-0 group-hover:opacity-100 p-0.5 hover:bg-subtle rounded transition-opacity"
-            @click.stop="removeSession(conv.id)"
-          >
-            <X :size="10" />
-          </button>
+          <button v-if="conversations.length > 1" class="ml-2 opacity-0 group-hover:opacity-100 p-0.5 hover:bg-subtle rounded" @click.stop="removeSession(conv.id)"><X :size="10" /></button>
         </div>
-
-        <UiButton variant="ghost" size="icon" class="h-7 w-7 rounded-md ml-1" @click="createNewSession">
-          <Plus :size="14" />
-        </UiButton>
+        <UiButton variant="ghost" size="icon" class="h-7 w-7 rounded-md ml-1" @click="createNewSession"><Plus :size="14" /></UiButton>
       </div>
-
-      <!-- Context Sidebar Toggle -->
-      <UiButton
-        variant="ghost"
-        size="icon"
-        class="h-8 w-8 ml-2 text-text-tertiary hover:text-text-primary"
-        @click="shell.toggleRightSidebar()"
-      >
-        <PanelRight :size="16" />
-      </UiButton>
+      <UiButton variant="ghost" size="icon" class="h-8 w-8 ml-2 text-text-tertiary hover:text-text-primary" @click="shell.toggleRightSidebar()"><PanelRight :size="16" /></UiButton>
     </header>
 
-    <!-- 2. Main Body (Message list and sidebar) -->
+    <!-- 2. Main Area (Message Area + Sidebar) -->
     <div class="flex flex-1 min-h-0 relative overflow-hidden">
       
-      <!-- Left: Message Area -->
+      <!-- Central Chat Column -->
       <div class="flex flex-1 flex-col min-w-0 h-full relative">
-        <!-- Message list independent scroll -->
-        <main ref="scrollContainer" class="flex-1 overflow-y-auto bg-background/30 relative py-8">
+        
+        <!-- Scrolling Message List (Ends exactly where composer starts) -->
+        <main ref="scrollContainer" class="flex-1 overflow-y-auto bg-background py-8 px-6">
           <div v-if="!activeConversation" class="flex h-full items-center justify-center p-12">
             <UiEmptyState :title="t('conversation.empty.guideTitle')" :description="t('conversation.empty.guideDescription')" />
           </div>
           
-          <div v-else class="w-full px-4 flex flex-col min-h-0">
-            <div class="space-y-2">
+          <div v-else class="w-full flex flex-col min-h-0">
+            <div class="space-y-4">
               <ConversationMessageBubble
-                v-for="message in workbench.conversationMessages"
+                v-for="message in conversationMessages"
                 :key="message.id"
                 :message="message"
                 :sender-label="messageSenderLabel(message.senderType, message.senderId, message.actorKind)"
@@ -225,41 +236,43 @@ function messageAvatarLabel(senderType: string, senderId: string, actorKind?: st
           </div>
         </main>
 
-        <!-- 3. Fixed Bottom Composer (Flush with edges) -->
-        <footer class="shrink-0 border-t border-border-subtle bg-background px-6 py-4 z-20">
-          <div class="mx-auto max-w-[900px] space-y-3">
-            <div class="relative group">
+        <!-- 3. Fixed Bottom Composer (Part of the vertical flex flow, NO overlap) -->
+        <footer class="shrink-0 bg-background px-6 py-6">
+          <div class="mx-auto max-w-[900px] border border-border-strong bg-background shadow-lg rounded-2xl overflow-hidden">
+            <div class="p-4">
               <UiTextarea
                 v-model="messageDraft"
+                data-testid="conversation-runtime-composer-input"
                 class="w-full min-h-[48px] max-h-[300px] resize-none border-0 bg-transparent p-0 text-[15px] focus-visible:ring-0 shadow-none leading-relaxed"
                 :placeholder="t('conversation.composer.placeholder')"
                 auto-height
                 @keydown="handleComposerKeydown"
               />
               
-              <div class="flex items-center justify-between mt-3 pt-3 border-t border-border-subtle/50">
+              <!-- Clean Actions (No border line) -->
+              <div class="flex items-center justify-between mt-4">
                 <div class="flex items-center gap-1.5">
-                  <UiButton variant="ghost" size="icon" class="h-7 w-7 rounded-md text-text-tertiary hover:bg-accent"><Plus :size="16" /></UiButton>
+                  <UiButton variant="ghost" size="icon" class="h-8 w-8 rounded-lg text-text-tertiary hover:bg-accent"><Plus :size="18" /></UiButton>
                   <div class="h-4 w-px bg-border-subtle mx-1" />
                   
-                  <button class="px-2.5 py-1 text-[11px] font-bold text-text-secondary hover:bg-accent rounded-md transition-colors flex items-center gap-1.5 border border-transparent hover:border-border-subtle">
-                    <Bot :size="14" class="opacity-70" /> {{ selectedActorLabel }}
+                  <button class="px-3 py-1.5 text-[12px] font-bold text-text-secondary hover:bg-accent rounded-lg transition-colors flex items-center gap-2">
+                    <Bot :size="14" class="text-primary opacity-80" /> {{ selectedActorLabel }}
                   </button>
                   
-                  <button class="px-2.5 py-1 text-[11px] font-bold text-text-secondary hover:bg-accent rounded-md transition-colors flex items-center gap-1.5 border border-transparent hover:border-border-subtle">
-                    <Sparkles :size="14" class="opacity-70" /> {{ selectedModelLabel }}
+                  <button class="px-3 py-1.5 text-[12px] font-bold text-text-secondary hover:bg-accent rounded-lg transition-colors flex items-center gap-2">
+                    <Sparkles :size="14" class="text-primary opacity-80" /> {{ selectedModelLabel }}
                   </button>
                 </div>
 
                 <UiButton
+                  data-testid="conversation-runtime-send"
                   variant="primary"
-                  size="sm"
-                  class="h-8 px-4 rounded-lg shadow-sm gap-2"
+                  size="icon"
+                  class="h-9 w-9 rounded-xl shadow-md"
                   :disabled="!messageDraft.trim()"
                   @click="sendMessage"
                 >
-                  <span class="text-[12px] font-bold">Send</span>
-                  <SendHorizontal :size="14" />
+                  <SendHorizontal :size="18" />
                 </UiButton>
               </div>
             </div>
@@ -267,12 +280,12 @@ function messageAvatarLabel(senderType: string, senderId: string, actorKind?: st
         </footer>
       </div>
 
-      <!-- Right: Independent Sidebar -->
+      <!-- Right Sidebar -->
       <aside
-        class="transition-all duration-300 overflow-hidden shrink-0 h-full border-l border-border-subtle"
+        class="transition-all duration-300 overflow-hidden shrink-0 h-full border-l border-border-subtle bg-sidebar"
         :style="{ width: detailPaneWidth }"
       >
-        <ConversationContextPane class="h-full" />
+        <ConversationContextPane class="h-full w-[360px]" />
       </aside>
     </div>
   </div>

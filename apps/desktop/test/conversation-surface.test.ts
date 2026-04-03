@@ -8,6 +8,7 @@ import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 import { resolveMockField } from '@/i18n/copy'
+import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -366,6 +367,35 @@ describe('Conversation surfaces', () => {
     })
     expect(mounted.container.querySelector(`[data-testid="conversation-message-bubble-${sentMessage?.id}"]`)).not.toBeNull()
 
+    mounted.destroy()
+  })
+
+  it('routes the composer through runtime messages for the active conversation', async () => {
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await nextTick()
+    await new Promise((resolve) => window.setTimeout(resolve, 0))
+
+    const textarea = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="conversation-runtime-composer-input"]')
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-runtime-send"]')
+    expect(textarea).not.toBeNull()
+    expect(sendButton).not.toBeNull()
+
+    textarea!.value = '请总结当前 desktop runtime 集成进展。'
+    textarea!.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    sendButton?.click()
+
+    await new Promise((resolve) => window.setTimeout(resolve, 160))
+    await nextTick()
+
+    expect(runtime.activeConversationId).toBe('conv-redesign')
+    expect(runtime.activeMessages.some((message) => message.content === '请总结当前 desktop runtime 集成进展。')).toBe(true)
+    expect(mounted.container.textContent).toContain('请总结当前 desktop runtime 集成进展。')
+
+    runtime.dispose()
     mounted.destroy()
   })
 })
