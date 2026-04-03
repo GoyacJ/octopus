@@ -517,26 +517,97 @@
   "knowledge": {
     "header": {
       "eyebrow": "Knowledge",
-      "titleFallback": "Knowledge View",
-      "subtitle": "Private, shared, and candidate knowledge with lineage and promotion placeholders."
+      "titleFallback": "Knowledge Hub",
+      "subtitle": "Browse project knowledge through source lineage and related conversation context."
     },
-    "sections": {
-      "private": {
-        "title": "Private",
-        "emptyTitle": "No private memories",
-        "emptyDescription": "This project has no private memory entries."
+    "hero": {
+      "summary": "A reading-first project knowledge hub that helps you review where knowledge came from, why it matters, and which conversation or runtime context it is tied to.",
+      "badges": {
+        "reading": "Reading-first",
+        "lineage": "Source lineage",
+        "context": "Conversation context"
       },
-      "shared": {
-        "title": "Shared",
-        "emptyTitle": "No shared knowledge",
-        "emptyDescription": "Shared knowledge will land after follow-up review."
-      },
-      "candidates": {
-        "title": "Candidates",
-        "badge": "promotion review",
-        "emptyTitle": "No candidates",
-        "emptyDescription": "There are no candidate entries waiting for promotion."
+      "cards": {
+        "total": "Total entries",
+        "shared": "Shared",
+        "candidate": "Candidates",
+        "highTrust": "High trust"
       }
+    },
+    "filters": {
+      "searchPlaceholder": "Search title, summary, source, owner, or lineage…",
+      "kindLabel": "Knowledge kind",
+      "sourceAll": "All sources",
+      "sortRecent": "Recently used",
+      "sortTrust": "Trust level",
+      "sortTitle": "Title"
+    },
+    "kinds": {
+      "all": "All",
+      "private": "Private",
+      "shared": "Shared",
+      "candidate": "Candidate"
+    },
+    "list": {
+      "title": "Knowledge library",
+      "subtitle": "{count} entries ready for reading and comparison.",
+      "sourceLabel": "Source · {source}"
+    },
+    "detail": {
+      "overviewTitle": "Overview",
+      "overviewSubtitle": "Read the selected knowledge first, then trace it back to source and context.",
+      "sourceTitle": "Source and lineage",
+      "sourceSubtitle": "Follow the origin chain before reusing or promoting the entry.",
+      "lineageTitle": "Lineage trail",
+      "lineageSubtitle": "Ordered references that explain how the entry was derived.",
+      "contextTitle": "Related context",
+      "contextSubtitle": "Jump to the linked conversation, runtime trace, artifacts, and resources.",
+      "relatedArtifactsTitle": "Related artifacts",
+      "relatedArtifactsSubtitle": "Artifacts that help explain or support the current entry.",
+      "relatedResourcesTitle": "Related resources",
+      "relatedResourcesSubtitle": "Files, folders, links, and generated assets connected to this entry.",
+      "fields": {
+        "owner": "Owner",
+        "source": "Source",
+        "lastUsedAt": "Last used",
+        "trustLevel": "Trust level"
+      },
+      "actions": {
+        "openConversation": "Open conversation",
+        "openTrace": "Open trace",
+        "openResources": "Open resources",
+        "traceLabel": "Runtime trace",
+        "traceHint": "Inspect blockers, execution steps, and recovery notes.",
+        "resourcesLabel": "Project resources",
+        "resourcesHint": "{count} related resources available in this project."
+      }
+    },
+    "empty": {
+      "projectTitle": "No project knowledge yet",
+      "projectDescription": "Knowledge entries will appear here after conversations, artifacts, or runtime traces start to accumulate context.",
+      "filteredTitle": "No matching knowledge",
+      "filteredDescription": "Try a different search term, source filter, or kind tab.",
+      "selectionTitle": "Select a knowledge entry",
+      "selectionDescription": "Choose a knowledge item from the left list to inspect its source lineage and related context.",
+      "lineageTitle": "No lineage recorded",
+      "lineageDescription": "This knowledge entry does not yet expose a derivation chain.",
+      "artifactsTitle": "No related artifacts",
+      "artifactsDescription": "There are no supporting artifacts linked to this knowledge entry yet.",
+      "resourcesTitle": "No related resources",
+      "resourcesDescription": "There are no project resources linked to this knowledge entry yet."
+    },
+    "lineageTypes": {
+      "conversation": "Conversation",
+      "artifact": "Artifact",
+      "run": "Run",
+      "resource": "Resource",
+      "trace": "Trace",
+      "unknown": "Reference"
+    },
+    "sourceDescriptions": {
+      "conversation": "Captured from the linked conversation context and then retained as reusable project knowledge.",
+      "artifact": "Derived from an artifact or document produced in the project workflow.",
+      "run": "Promoted from runtime execution state, trace findings, or operational review context."
     }
   },
   "trace": {
@@ -572,10 +643,26 @@
   "resources": {
     "header": {
       "eyebrow": "Resources",
-      "title": "Project Resource Center"
+      "title": "Project Resource Center",
+      "subtitle": "Manage original files and folders together with AI-generated artifacts in one place."
     },
     "search": {
-      "placeholder": "Search names, paths, tags, or resource kinds"
+      "placeholder": "Search names, paths, tags, kinds, or origins"
+    },
+    "tabs": {
+      "all": "All",
+      "source": "Original",
+      "generated": "AI Generated"
+    },
+    "stats": {
+      "total": "Total Resources",
+      "totalHelper": "All resources currently visible in this project.",
+      "source": "Original Resources",
+      "sourceHelper": "User-uploaded files, folders, and external links.",
+      "generated": "AI Generated",
+      "generatedHelper": "Artifacts and derived outputs created during conversations.",
+      "artifact": "Artifacts",
+      "artifactHelper": "Structured AI outputs linked to project conversations."
     },
     "views": {
       "list": "List View",
@@ -606,6 +693,10 @@
       "artifact": "Artifact",
       "url": "Url"
     },
+    "origins": {
+      "source": "Original",
+      "generated": "AI Generated"
+    },
     "pagination": {
       "previous": "Previous",
       "next": "Next",
@@ -614,6 +705,7 @@
     "preview": {
       "title": "Resource Preview",
       "location": "Location",
+      "origin": "Origin",
       "kind": "Kind",
       "size": "Size",
       "linkedConversations": "Linked Conversations",
@@ -651,35 +743,121 @@
   "tools": {
     "header": {
       "eyebrow": "Tools",
-      "title": "Tool Catalog",
-      "subtitle": "Built-in tools, Skills, and MCP bindings are unified on one page."
+      "title": "Workspace Tools"
     },
     "tabs": {
-      "title": "Tool Groups",
-      "subtitle": "After removal from the composer, tool capabilities are listed here.",
       "builtin": "Built-in",
       "skill": "Skill",
-      "mcp": "MCP",
-      "emptyTitle": "No tools",
-      "emptyDescription": "There are no tools to show for this group."
+      "mcp": "MCP"
+    },
+    "emptyTitle": "No tools",
+    "emptyDescription": "There are no tools to show for the current conditions.",
+    "search": {
+      "placeholder": "Search by name, permission, status, or config…"
+    },
+    "pagination": {
+      "perPage": "{count} per page",
+      "previous": "Previous",
+      "next": "Next",
+      "summary": "Page {page} / {totalPages}, {count} items"
+    },
+    "editor": {
+      "createTitle": "Create tool",
+      "editTitle": "Edit tool"
+    },
+    "fields": {
+      "name": "Name",
+      "description": "Description",
+      "permission": "Permission",
+      "status": "Status",
+      "availability": "Availability",
+      "skillContent": "Skill content",
+      "serverName": "Server name",
+      "endpoint": "Endpoint",
+      "toolNames": "Tool names",
+      "notes": "Notes"
+    },
+    "actions": {
+      "createSkill": "Create skill",
+      "createMcp": "Create MCP",
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete"
+    },
+    "permissions": {
+      "allow": "Allow",
+      "deny": "Deny",
+      "ask": "Ask",
+      "readonly": "Read-only"
+    },
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "availability": {
+      "healthy": "Healthy",
+      "configured": "Configured",
+      "attention": "Attention"
     }
   },
   "agentCenter": {
     "header": {
-      "title": "Agents"
+      "title": "Digital Employees",
+      "workspaceScope": "Workspace staffing",
+      "projectScope": "Project squad",
+      "agentSubtitle": "Manage AI employees by role and availability.",
+      "teamSubtitle": "Manage team agents by collaboration structure.",
+      "agentHighlight": "",
+      "teamHighlight": ""
+    },
+    "stats": {
+      "agents": "Employees",
+      "teams": "Teams",
+      "online": "Online",
+      "tasks": "Active Tasks",
+      "agentHelper": "Dispatchable digital employees in this scope",
+      "teamHelper": "Collaborative AI squads in this scope",
+      "onlineHelper": "Employees currently available to respond",
+      "taskHelper": "Combined active workload across employees and teams"
+    },
+    "filters": {
+      "status": {
+        "all": "All status",
+        "online": "Online",
+        "busy": "Busy",
+        "offline": "Offline"
+      },
+      "scenario": {
+        "all": "All scenarios"
+      },
+      "sort": {
+        "recent": "Recently used",
+        "efficiency": "Efficiency",
+        "cost": "Cost",
+        "favorite": "Favorite"
+      }
+    },
+    "metrics": {
+      "completedToday": "Completed today",
+      "avgResponse": "Avg response",
+      "cost": "Cost"
+    },
+    "states": {
+      "empty": "No data",
+      "noResults": "No results"
     },
     "sections": {
       "agents": {
-        "title": "Agent Management",
-        "subtitle": "Manage existing agents and separate workspace references from project-owned assets.",
+        "title": "Digital employee roster",
+        "subtitle": "View and manage digital employees by role.",
         "emptyTitle": "No agents",
         "emptyDescription": "There are no matching agents in the current scope.",
         "emptyProjectTitle": "No project agents",
         "emptyProjectDescription": "Use the create menu to add a project-scoped agent."
       },
       "teams": {
-        "title": "Team Agent Management",
-        "subtitle": "Manage team agents, collaboration modes, and organizational structure in one place.",
+        "title": "Team agent squads",
+        "subtitle": "View team structure and collaboration paths.",
         "emptyTitle": "No team agents",
         "emptyDescription": "There are no matching team agents in the current scope.",
         "emptyProjectTitle": "No project team agents",
@@ -830,44 +1008,72 @@
   },
   "settings": {
     "header": {
-      "eyebrow": "Settings / Admin",
-      "title": "Connections, RBAC, policies, audit, and logs",
-      "subtitle": "Read-only governance surfaces plus shell preferences and host status."
+      "eyebrow": "System Settings",
+      "title": "Desktop Environment",
+      "subtitle": "General, theme, locale, and version."
+    },
+    "tabs": {
+      "general": "General",
+      "theme": "Theme",
+      "i18n": "Locale",
+      "version": "Version"
     },
     "preferences": {
-      "title": "Shell Preferences",
-      "subtitle": "Theme, locale, and both sidebar collapse states are persisted through the host bridge.",
+      "title": "Preferences",
       "theme": "Theme",
-      "locale": "Locale",
+      "locale": "Language",
       "leftSidebarCollapsed": "Collapse the left sidebar by default",
       "rightSidebarCollapsed": "Collapse the right sidebar by default",
       "themeOptions": {
-        "system": "system",
-        "light": "light",
-        "dark": "dark"
+        "system": "Follow system",
+        "light": "Light",
+        "dark": "Dark"
       },
       "localeOptions": {
-        "zh-CN": "zh-CN",
-        "en-US": "en-US"
+        "zh-CN": "简体中文",
+        "en-US": "English"
       }
     },
-    "host": {
-      "title": "Host Status",
-      "subtitle": "Tauri 2 host shell health and workspace wiring."
+    "general": {
+      "layoutTitle": "Layout",
+      "leftSidebarHint": "Collapse the left navigation on launch",
+      "rightSidebarHint": "Collapse the right detail pane on launch"
+    },
+    "theme": {
+      "title": "Theme Mode"
+    },
+    "i18n": {
+      "title": "Display Language"
+    },
+    "version": {
+      "runtimeTitle": "Runtime",
+      "fields": {
+        "shell": "Shell",
+        "appVersion": "Version",
+        "workspace": "Current workspace",
+        "cargoWorkspace": "Cargo workspace"
+      },
+      "values": {
+        "enabled": "Enabled",
+        "disabled": "Disabled"
+      }
     }
   },
   "userCenter": {
     "header": {
       "eyebrow": "User Center",
       "title": "Workspace User Center and RBAC Prototype",
-      "subtitle": "Model a workspace-scoped RBAC admin surface with linked users, roles, permissions, and menus."
+      "subtitle": "Model a workspace-scoped RBAC admin surface with linked users, roles, permissions, and menus.",
+      "heroTitle": "See members, roles, permissions, and navigation in one governance view",
+      "heroSubtitle": "Lead with scope, risk, coverage, and recent changes so the user center feels like an operating surface, not only a form editor."
     },
     "common": {
       "empty": "No data",
       "noRoles": "No roles bound",
       "status": "Status",
       "active": "Active",
-      "disabled": "Disabled"
+      "disabled": "Disabled",
+      "confirmDelete": "Delete this item?"
     },
     "nav": {
       "title": "User Center Menu",
@@ -877,6 +1083,32 @@
       "roles": "Roles",
       "permissions": "Permissions",
       "menus": "Menus"
+    },
+    "metrics": {
+      "users": "Members",
+      "activeUsersHelper": "{count} currently active",
+      "roles": "Roles",
+      "orphanRolesHelper": "{count} roles without members",
+      "permissions": "Permissions",
+      "bundleHelper": "{count} bundle permissions",
+      "menus": "Menu nodes",
+      "disabledMenusHelper": "{count} disabled menus"
+    },
+    "alerts": {
+      "disabledMenuTitle": "Menu \"{label}\" is disabled",
+      "disabledMenuDescription": "{count} roles still keep this menu assignment and should be reviewed.",
+      "orphanRoleTitle": "Role \"{name}\" has no members",
+      "orphanRoleDescription": "The role still exists but nobody inherits it right now.",
+      "bundleRiskTitle": "Bundle \"{name}\" contains disabled member permissions",
+      "bundleRiskDescription": "{count} member permissions inside this bundle are disabled and should be revisited.",
+      "emptyTitle": "No high-priority governance alerts right now",
+      "emptyDescription": "You can keep reviewing member, role, and permission coverage from the current workspace."
+    },
+    "filters": {
+      "status": "Status filter",
+      "scope": "Scope filter",
+      "allStatuses": "All statuses",
+      "allScopes": "All scopes"
     },
     "scope": {
       "allProjects": "All projects",
@@ -907,7 +1139,23 @@
       "permissionTitle": "Roles and Atomic Permissions",
       "permissionSubtitle": "Effective permissions come from role bindings with bundles expanded to atomic permissions.",
       "roleListTitle": "Bound roles",
-      "atomicPermissionTitle": "Effective atomic permissions"
+      "atomicPermissionTitle": "Effective atomic permissions",
+      "heroSummary": "Combine account identity, security posture, permission shape, and recent activity in one page so the current user's real workspace capability is visible at a glance.",
+      "timelineTitle": "Recent activity",
+      "timelineSubtitle": "Use mock activity history to review recent logins, operations, and governance work.",
+      "permissionCountLabel": "{count} permissions",
+      "emptyPermissionTitle": "No permission groups to display yet",
+      "emptyPermissionDescription": "This user does not currently resolve to a visible atomic-permission profile.",
+      "emptyTimelineTitle": "No recent activity",
+      "emptyTimelineDescription": "There are no mock activity records for this user yet.",
+      "metrics": {
+        "permissionCount": "Effective permissions",
+        "permissionHelper": "Atomic permissions grouped by target type",
+        "menuCount": "Visible menus",
+        "menuHelper": "Navigation nodes currently available in session",
+        "roleCount": "Bound roles",
+        "roleHelper": "Roles currently assigned in this workspace"
+      }
     },
     "users": {
       "title": "Users",
@@ -923,7 +1171,19 @@
       "enable": "Enable",
       "delete": "Delete",
       "roleBindingTitle": "Bind roles",
-      "scopeTitle": "Permission scope"
+      "scopeTitle": "Permission scope",
+      "searchPlaceholder": "Search by member, username, email, or role…",
+      "currentSessionUser": "Current session user",
+      "effectivePermissions": "{count} effective permissions",
+      "effectiveMenus": "{count} visible menus",
+      "metrics": {
+        "total": "Members",
+        "activeHelper": "{count} currently active",
+        "disabled": "Disabled members",
+        "scopeHelper": "{count} users scoped to selected projects",
+        "unassigned": "Unassigned roles",
+        "unassignedHelper": "Best candidates to review for access ownership"
+      }
     },
     "roles": {
       "title": "Roles",
@@ -945,7 +1205,15 @@
       "delete": "Delete",
       "permissionCount": "{count} permissions",
       "menuCount": "{count} menus",
-      "memberCount": "{count} members"
+      "memberCount": "{count} members",
+      "metrics": {
+        "total": "Roles",
+        "disabledHelper": "{count} disabled roles",
+        "orphan": "Orphan roles",
+        "orphanHelper": "Role templates without any members",
+        "broadAccess": "Broad-access roles",
+        "broadAccessHelper": "Roles whose menu coverage deserves review"
+      }
     },
     "permissions": {
       "title": "Permissions",
@@ -969,7 +1237,16 @@
       "bundleMembers": "{count} member permissions",
       "disable": "Disable",
       "enable": "Enable",
-      "delete": "Delete"
+      "delete": "Delete",
+      "usedByRoles": "Used by {count} roles",
+      "metrics": {
+        "total": "Permissions",
+        "bundleHelper": "{count} bundles",
+        "disabled": "Disabled permissions",
+        "disabledHelper": "Good candidates to review for stale references",
+        "risky": "Risky permissions",
+        "riskyHelper": "Disabled members or risky bundle combinations"
+      }
     },
     "menus": {
       "title": "Menus",
@@ -981,7 +1258,24 @@
       "toggleStatus": "Toggle status",
       "parentHint": "Disabling a parent menu makes all descendants inaccessible.",
       "roleUsage": "Used by {count} roles",
-      "nonNavigable": "Non-navigable node"
+      "nonNavigable": "Non-navigable node",
+      "rootNode": "Top-level node",
+      "rootNode": "Top-level node",
+      "metrics": {
+        "total": "Menus",
+        "userCenterHelper": "{count} user-center child nodes",
+        "disabled": "Disabled menus",
+        "disabledHelper": "A disabled node affects the whole branch",
+        "unused": "Unused menus",
+        "unusedHelper": "Navigation items with no role bindings"
+      }
+    },
+    "risk": {
+      "orphanRole": "No members",
+      "disabledRole": "Disabled",
+      "broadMenuAccess": "Broad menu coverage",
+      "disabledPermission": "Permission disabled",
+      "bundleContainsDisabled": "Contains disabled members"
     }
   },
   "automations": {
@@ -1067,6 +1361,13 @@
       "low": "Low",
       "medium": "Medium",
       "high": "High"
+    },
+    "permissionTargetType": {
+      "project": "Project",
+      "agent": "Agent",
+      "tool": "Tool",
+      "skill": "Skill",
+      "mcp": "MCP"
     },
     "viewStatus": {
       "healthy": "Healthy",
@@ -1442,6 +1743,33 @@
         "title": "Logs",
         "description": "Runtime logs, host state, and debugging entry points.",
         "items": ["tauri-plugin-log", "Host healthcheck", "Runtime summaries"]
+      }
+    },
+    "settingsPage": {
+      "general-overview": {
+        "title": "Current environment",
+        "description": "View the current workspace and host wiring.",
+        "items": ["The current workspace is bound to the desktop shell", "The settings page stays mock-first", "Persisted preferences still save through the host bridge"]
+      },
+      "general-layout": {
+        "title": "Layout rules",
+        "description": "Keep the common layout toggles here.",
+        "items": ["The left sidebar holds workspace and project navigation", "The right sidebar holds detail and context panels"]
+      },
+      "theme-behavior": {
+        "title": "Theme behavior",
+        "description": "Theme changes apply directly to the desktop shell.",
+        "items": ["Support system, light, and dark modes", "The theme preference syncs to the next launch"]
+      },
+      "i18n-behavior": {
+        "title": "Language behavior",
+        "description": "Language switching updates the main UI copy.",
+        "items": ["The desktop currently supports 简体中文 and English", "The language preference syncs to the next launch"]
+      },
+      "version-meta": {
+        "title": "Version details",
+        "description": "Show the current desktop shell runtime info.",
+        "items": ["Version data comes from the active host state", "Use it to confirm the local runtime environment"]
       }
     },
     "connection": {

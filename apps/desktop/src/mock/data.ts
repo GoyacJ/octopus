@@ -6,7 +6,13 @@ import {
   type ConnectionProfile,
   type Conversation,
   type ConversationMemoryItem,
+  type DesktopSettingsPage,
   type ConversationQueueItem,
+  type PetMessage,
+  type PetPresenceState,
+  type PetProfile,
+  type UserCenterAlert,
+  type UserCenterQuickLink,
   ConversationIntent,
   type InboxItem,
   type KnowledgeEntry,
@@ -22,7 +28,7 @@ import {
   type Team,
   TeamMode,
   type TraceRecord,
-  type ToolCatalogGroup,
+  type WorkspaceToolDefinition,
   type UserAccount,
   type Workspace,
   type WorkspaceMembership,
@@ -42,6 +48,9 @@ export interface MockWorkbenchSeed {
   teams: Team[]
   conversations: Conversation[]
   messages: Message[]
+  pets: PetProfile[]
+  petMessages: PetMessage[]
+  petPresence: PetPresenceState[]
   artifacts: Artifact[]
   resources: ProjectResource[]
   runs: RunDetail[]
@@ -52,10 +61,13 @@ export interface MockWorkbenchSeed {
   conversationQueue: ConversationQueueItem[]
   inbox: InboxItem[]
   automations: AutomationSummary[]
+  settingsPage: DesktopSettingsPage
   settingsSections: SettingsSection[]
   connections: ConnectionProfile[]
   modelCatalog: ModelCatalogItem[]
-  toolCatalog: ToolCatalogGroup[]
+  workspaceTools: WorkspaceToolDefinition[]
+  userCenterAlerts: UserCenterAlert[]
+  userCenterQuickLinks: UserCenterQuickLink[]
   currentWorkspaceId: string
   currentUserId: string
   currentProjectId: string
@@ -64,6 +76,37 @@ export interface MockWorkbenchSeed {
 }
 
 const now = 1_775_000_000_000
+const petSpeciesCatalog = [
+  'duck',
+  'goose',
+  'blob',
+  'cat',
+  'dragon',
+  'octopus',
+  'owl',
+  'penguin',
+  'turtle',
+  'snail',
+  'ghost',
+  'axolotl',
+  'capybara',
+  'cactus',
+  'robot',
+  'rabbit',
+  'mushroom',
+  'chonk',
+] as const
+const petNameCatalog = ['Bubbles', 'Pico', 'Momo', 'Nova', 'Miso', 'Orbit', 'Puff', 'Pebble', 'Echo', 'Nori']
+const petSnackCatalog = ['blueberry cookie', 'seaweed chips', 'starlight jelly', 'lotus seeds', 'mochi crumbs', 'pumpkin toast']
+const petMoodCatalog = ['curious', 'happy', 'sleepy', 'playful', 'focused'] as const
+
+function hashString(value: string): number {
+  return Array.from(value).reduce((total, char, index) => total + char.charCodeAt(0) * (index + 1), 0)
+}
+
+function pickStableItem<T>(items: readonly T[], seed: string, offset = 0): T {
+  return items[(hashString(seed) + offset) % items.length]
+}
 
 export function createMockWorkbenchSeed(): MockWorkbenchSeed {
   const workspaces: Workspace[] = [
@@ -125,6 +168,30 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       status: 'active',
       passwordState: 'reset-required',
       passwordUpdatedAt: now - 1000 * 60 * 60 * 24 * 45,
+    },
+    {
+      id: 'user-designer',
+      username: 'mika',
+      nickname: 'Mika Tan',
+      gender: 'female',
+      avatar: 'MT',
+      phone: '13800000004',
+      email: 'mika@octopus.local',
+      status: 'disabled',
+      passwordState: 'set',
+      passwordUpdatedAt: now - 1000 * 60 * 60 * 24 * 12,
+    },
+    {
+      id: 'user-intern',
+      username: 'kai',
+      nickname: 'Kai Hu',
+      gender: 'male',
+      avatar: 'KH',
+      phone: '13800000005',
+      email: 'kai@octopus.local',
+      status: 'active',
+      passwordState: 'temporary',
+      passwordUpdatedAt: now - 1000 * 60 * 60 * 8,
     },
   ]
 
@@ -224,6 +291,52 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       memberPermissionIds: ['perm-ws-local-project-redesign', 'perm-ws-local-agent-coder', 'perm-ws-local-skill-vue'],
     },
     {
+      id: 'perm-ws-local-project-governance',
+      workspaceId: 'ws-local',
+      name: 'Governance Project Access',
+      code: 'project:governance:view',
+      description: '允许查看治理与审计项目。',
+      status: 'active',
+      kind: 'atomic',
+      targetType: 'project',
+      targetIds: ['proj-governance'],
+      action: 'view',
+    },
+    {
+      id: 'perm-ws-local-tool-write',
+      workspaceId: 'ws-local',
+      name: 'Write Tool Access',
+      code: 'tool:write:use',
+      description: '允许使用 Write 工具。',
+      status: 'disabled',
+      kind: 'atomic',
+      targetType: 'tool',
+      targetIds: ['builtin-write'],
+      action: 'use',
+    },
+    {
+      id: 'perm-ws-local-skill-figma',
+      workspaceId: 'ws-local',
+      name: 'Figma Skill Access',
+      code: 'skill:figma:use',
+      description: '允许调用 Figma 设计接入 skill。',
+      status: 'active',
+      kind: 'atomic',
+      targetType: 'skill',
+      targetIds: ['skill-figma'],
+      action: 'use',
+    },
+    {
+      id: 'perm-ws-local-bundle-audit',
+      workspaceId: 'ws-local',
+      name: 'Audit Bundle',
+      code: 'bundle:audit',
+      description: '打包审阅、治理和文档访问能力。',
+      status: 'active',
+      kind: 'bundle',
+      memberPermissionIds: ['perm-ws-local-project-governance', 'perm-ws-local-tool-read', 'perm-ws-local-mcp-docs', 'perm-ws-local-tool-write'],
+    },
+    {
       id: 'perm-ws-enterprise-project-launch',
       workspaceId: 'ws-enterprise',
       name: 'Launch Project Access',
@@ -305,8 +418,28 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       code: 'workspace_auditor',
       description: '负责只读审查与风险校验。',
       status: 'active',
-      permissionIds: ['perm-ws-local-tool-read', 'perm-ws-local-mcp-docs'],
+      permissionIds: ['perm-ws-local-bundle-audit'],
       menuIds: ['menu-workspace-overview', 'menu-project-dashboard', 'menu-knowledge', 'menu-trace', 'menu-user-center', 'menu-user-center-profile'],
+    },
+    {
+      id: 'role-ws-local-design-lead',
+      workspaceId: 'ws-local',
+      name: 'Design Lead',
+      code: 'design_lead',
+      description: '负责体验设计与组件规范评审。',
+      status: 'disabled',
+      permissionIds: ['perm-ws-local-skill-figma', 'perm-ws-local-tool-read'],
+      menuIds: ['menu-workspace-overview', 'menu-project-dashboard', 'menu-user-center', 'menu-user-center-profile', 'menu-user-center-users'],
+    },
+    {
+      id: 'role-ws-local-observer',
+      workspaceId: 'ws-local',
+      name: 'Workspace Observer',
+      code: 'workspace_observer',
+      description: '只保留最小查看能力，便于旁路观察和演示。',
+      status: 'active',
+      permissionIds: ['perm-ws-local-tool-read'],
+      menuIds: ['menu-workspace-overview', 'menu-user-center', 'menu-user-center-profile'],
     },
     {
       id: 'role-ws-enterprise-admin',
@@ -390,12 +523,31 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       scopeMode: 'all-projects',
       scopeProjectIds: [],
     },
+    {
+      workspaceId: 'ws-local',
+      userId: 'user-designer',
+      roleIds: ['role-ws-local-design-lead'],
+      scopeMode: 'selected-projects',
+      scopeProjectIds: ['proj-redesign'],
+    },
+    {
+      workspaceId: 'ws-local',
+      userId: 'user-intern',
+      roleIds: [],
+      scopeMode: 'selected-projects',
+      scopeProjectIds: ['proj-redesign'],
+    },
   ]
 
   const menus: MenuNode[] = [
     ...buildWorkspaceMenuNodes('ws-local'),
     ...buildWorkspaceMenuNodes('ws-enterprise'),
   ]
+
+  const wsLocalAutomationsMenu = menus.find((menu) => menu.workspaceId === 'ws-local' && menu.id === 'menu-automations')
+  if (wsLocalAutomationsMenu) {
+    wsLocalAutomationsMenu.status = 'disabled'
+  }
 
   const activities: ActivityRecord[] = [
     {
@@ -498,6 +650,40 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       timestamp: now - 1000 * 60 * 9,
       tokenCount: 520,
     },
+    {
+      id: 'activity-user-designer',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      userId: 'user-designer',
+      scope: 'user',
+      type: 'operation',
+      title: 'Mika 同步设计规范调整',
+      description: '补充卡片层级、导航反馈与信息密度规范。',
+      timestamp: now - 1000 * 60 * 42,
+      tokenCount: 264,
+    },
+    {
+      id: 'activity-user-intern',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      userId: 'user-intern',
+      scope: 'user',
+      type: 'operation',
+      title: 'Kai 跟进用户中心列表校对',
+      description: '对照角色与项目范围检查 mock 数据展示是否一致。',
+      timestamp: now - 1000 * 60 * 14,
+      tokenCount: 96,
+    },
+    {
+      id: 'activity-workspace-local-2',
+      workspaceId: 'ws-local',
+      scope: 'workspace',
+      type: 'operation',
+      title: '工作区标记高风险权限组合',
+      description: '检测到停用权限仍被权限包引用，已在治理面板中提示。',
+      timestamp: now - 1000 * 60 * 12,
+      tokenCount: 0,
+    },
   ]
 
   const agents: Agent[] = [
@@ -506,9 +692,12 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       name: 'Architect Agent',
       avatar: 'A',
       role: 'System Architect',
+      title: '首席系统架构师',
       summary: '负责桌面壳架构、对象边界和跨页面信息架构决策。',
+      description: '擅长将模糊需求拆解为可执行的系统方案，适合承担跨模块设计、架构审阅与技术方案把关。',
       persona: ['严谨', '结构化', '设计优先'],
       skillTags: ['架构设计', '信息架构', 'PRD 对齐'],
+      tags: ['研发', '架构设计', '高复用'],
       mcpBindings: ['figma', 'docs'],
       systemPrompt: '负责澄清架构、模块边界与可扩展性约束。',
       capabilityPolicy: {
@@ -533,6 +722,16 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
         interruptPreference: 'confirm-before-high-risk',
       },
       approvalPreferences: ['knowledge_promotion_approval'],
+      recentTask: '输出桌面端 AI 团队编制中心的信息架构草图',
+      lastActiveAt: now - 1000 * 60 * 18,
+      metrics: {
+        completedToday: 6,
+        avgResponse: '1.8m',
+        cost: '34 credits',
+        activeTasks: 2,
+        successRate: '96%',
+        efficiency: 'A+'
+      },
       scope: 'workspace',
       owner: 'workspace:ws-local',
       status: 'active',
@@ -543,9 +742,12 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       name: 'Coder Agent',
       avatar: 'C',
       role: 'Senior Full-stack Engineer',
+      title: '资深全栈工程师',
       summary: '负责 Vue/Tauri 实现、状态流改造和测试闭环。',
+      description: '偏执行落地，擅长在既有工程结构中快速实现可维护改造，并补齐类型检查与测试验证。',
       persona: ['务实', '直接', '验证优先'],
       skillTags: ['Vue', 'Tauri', 'Vitest'],
+      tags: ['研发', '前端开发', '自动测试'],
       mcpBindings: ['git', 'tauri'],
       systemPrompt: '负责实现 Vue/Tauri/Rust 相关工作，并在关键节点回报验证结果。',
       capabilityPolicy: {
@@ -570,6 +772,16 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
         interruptPreference: 'interruptible',
       },
       approvalPreferences: ['execution_approval', 'high_risk_tool_approval'],
+      recentTask: '实现桌面端数字员工页的首屏 Hero 与卡片层级',
+      lastActiveAt: now - 1000 * 60 * 6,
+      metrics: {
+        completedToday: 9,
+        avgResponse: '1.2m',
+        cost: '52 credits',
+        activeTasks: 4,
+        successRate: '98%',
+        efficiency: 'S'
+      },
       scope: 'workspace',
       owner: 'workspace:ws-local',
       status: 'active',
@@ -580,9 +792,12 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       name: 'Governance Agent',
       avatar: 'G',
       role: 'Policy Reviewer',
+      title: '治理审阅官',
       summary: '负责风险识别、审批提示与治理只读表面的解释性输出。',
+      description: '适合在上线评审、权限检查和合规性审阅中作为第二执行视角，帮助团队在推进前识别高风险动作。',
       persona: ['谨慎', '审计导向'],
       skillTags: ['治理策略', '审批流', '审计'],
+      tags: ['运营', '测试', '风险控制'],
       mcpBindings: ['audit-log'],
       systemPrompt: '负责风险、审批、审计和策略检查。',
       capabilityPolicy: {
@@ -607,9 +822,19 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
         interruptPreference: 'always-confirm',
       },
       approvalPreferences: ['resource_exceed_approval', 'sending_approval'],
+      recentTask: '审核企业工作区发布前的审批链路与风险提示',
+      lastActiveAt: now - 1000 * 60 * 52,
+      metrics: {
+        completedToday: 4,
+        avgResponse: '2.6m',
+        cost: '21 credits',
+        activeTasks: 1,
+        successRate: '99%',
+        efficiency: 'A'
+      },
       scope: 'workspace',
       owner: 'workspace:ws-enterprise',
-      status: 'active',
+      status: 'archived',
       isProjectCopy: false,
     },
   ]
@@ -619,15 +844,29 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       id: 'team-studio',
       workspaceId: 'ws-local',
       name: 'Studio Direction Team',
+      title: '产品体验编排组',
       description: '负责项目方向、结构评审与设计约束统一的工作区团队智能体。',
       summary: '可在多个项目中复用的工作区级团队智能体，适合承担方向对齐与方案审阅。',
       avatar: 'SD',
       mode: TeamMode.HYBRID,
       members: ['agent-architect', 'agent-coder'],
+      lead: 'agent-architect',
       skillTags: ['方向对齐', '结构评审', '跨项目复用'],
+      tags: ['产品', '设计', '研发'],
       mcpBindings: ['figma', 'docs'],
       defaultKnowledgeScope: ['design-system', 'workspace-decisions'],
       defaultOutput: 'Direction brief + solution review',
+      workflow: ['需求分析', '结构评审', '界面定义', '实现验收'],
+      recentTask: '为桌面端工作台梳理数字员工页的首屏结构与筛选维度',
+      recentOutcome: '已沉淀一版统一的页面结构和交互优先级。',
+      lastActiveAt: now - 1000 * 60 * 14,
+      metrics: {
+        activeTasks: 3,
+        cost: '68 credits',
+        successRate: '97%',
+        handoffSpeed: '11m',
+        throughput: '12 / week'
+      },
       useScope: 'workspace',
       projectNotes: '适合作为项目引用团队，用于统一方案质量和结构边界。',
       approvalPreferences: ['execution_approval'],
@@ -646,15 +885,29 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       id: 'team-launch',
       workspaceId: 'ws-enterprise',
       name: 'Launch Readiness Team',
+      title: '上线协同战情组',
       description: '产品、工程和治理三方协作的发布队形。',
       summary: '面向上线准备的团队智能体，负责跨角色汇总、阻塞识别和审批联动。',
       avatar: 'LR',
       mode: TeamMode.HYBRID,
       members: ['agent-architect', 'agent-coder', 'agent-gov'],
+      lead: 'agent-architect',
       skillTags: ['发布治理', '跨团队协同', '检查清单'],
+      tags: ['测试', '运营', '研发'],
       mcpBindings: ['docs', 'audit-log'],
       defaultKnowledgeScope: ['shared-launch-knowledge'],
       defaultOutput: 'Launch brief + approval checklist',
+      workflow: ['需求冻结', '架构拆解', '构建联调', '测试验收', '上线审批'],
+      recentTask: '汇总上线前审批阻塞项与回滚预案',
+      recentOutcome: '完成发布清单整理，并识别 2 个高优先级阻塞。',
+      lastActiveAt: now - 1000 * 60 * 28,
+      metrics: {
+        activeTasks: 5,
+        cost: '81 credits',
+        successRate: '94%',
+        handoffSpeed: '18m',
+        throughput: '8 / week'
+      },
       useScope: 'workspace',
       projectNotes: '适合跨角色评审和上线前压测。',
       approvalPreferences: ['execution_approval', 'resource_exceed_approval'],
@@ -676,15 +929,29 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       workspaceId: 'ws-local',
       projectId: 'proj-redesign',
       name: 'Redesign Tiger Team',
+      title: '界面改版突击组',
       description: '针对当前 UI 改版的项目内副本团队。',
       summary: '围绕桌面端改版协同工作的团队智能体，强调结构决策与实现配合。',
       avatar: 'RT',
       mode: TeamMode.LEADERED,
       members: ['agent-architect', 'agent-coder'],
+      lead: 'agent-architect',
       skillTags: ['界面重构', '前端实现', '结构评审'],
+      tags: ['研发', '设计'],
       mcpBindings: ['figma', 'git'],
       defaultKnowledgeScope: ['design-system', 'desktop-shell'],
       defaultOutput: 'Design decisions + implementation deltas',
+      workflow: ['需求分析', '架构拆解', '开发实现', '测试验收'],
+      recentTask: '推进数字员工页的结构重组与卡片体系设计',
+      recentOutcome: '已完成首屏层级定义，进入组件拆分与联调阶段。',
+      lastActiveAt: now - 1000 * 60 * 4,
+      metrics: {
+        activeTasks: 4,
+        cost: '57 credits',
+        successRate: '98%',
+        handoffSpeed: '9m',
+        throughput: '14 / week'
+      },
       useScope: 'project',
       projectNotes: '已针对 Octopus 桌面壳做定制化分工。',
       approvalPreferences: ['knowledge_promotion_approval'],
@@ -1049,6 +1316,61 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       artifacts: ['art-roadmap'],
     },
     {
+      id: 'msg-redesign-3',
+      conversationId: 'conv-redesign',
+      senderId: 'user-1',
+      senderType: 'user',
+      content: '知识库界面的开发进度如何了？我们需要确保它能支持全宽显示和 Notion 风格的分栏。',
+      modelId: 'gpt-4o',
+      permissionMode: 'auto',
+      actorKind: 'agent',
+      actorId: 'agent-coder',
+      timestamp: now - 1000 * 60 * 40,
+    },
+    {
+      id: 'msg-redesign-4',
+      conversationId: 'conv-redesign',
+      senderId: 'agent-coder',
+      senderType: 'agent',
+      content: '知识库界面（Knowledge surface）已经完成了基础重构。目前已经支持：\n- 全宽响应式布局\n- 左右分栏结构（左侧列表，右侧详情）\n- 符合 Notion 风格的极简文档渲染\n\n你可以查看 `art-knowledge-spec` 了解详细实现。',
+      modelId: 'gpt-4o',
+      permissionMode: 'auto',
+      actorKind: 'agent',
+      actorId: 'agent-coder',
+      toolCalls: [
+        { toolId: 'builtin-read', label: 'Read', kind: 'builtin', count: 1 },
+        { toolId: 'skill-vue', label: 'Vue Component Authoring', kind: 'skill', count: 2 },
+      ],
+      usage: {
+        inputTokens: 420,
+        outputTokens: 280,
+        totalTokens: 700,
+      },
+      processEntries: [
+        {
+          id: 'msg-redesign-4-step-1',
+          type: 'thinking',
+          title: 'Refining Knowledge UI',
+          detail: 'Implementing a split-view layout with a searchable list on the left and a scrollable document view on the right.',
+          timestamp: now - 1000 * 60 * 39,
+        },
+      ],
+      timestamp: now - 1000 * 60 * 38,
+      artifacts: ['art-knowledge-spec'],
+    },
+    {
+      id: 'msg-redesign-5',
+      conversationId: 'conv-redesign',
+      senderId: 'user-1',
+      senderType: 'user',
+      content: '太棒了，这正是我想要的效果。请继续处理 Trace 和设置页面。',
+      modelId: 'gpt-4o',
+      permissionMode: 'auto',
+      actorKind: 'agent',
+      actorId: 'agent-coder',
+      timestamp: now - 1000 * 60 * 35,
+    },
+    {
       id: 'msg-governance-1',
       conversationId: 'conv-governance',
       senderId: 'agent-gov',
@@ -1112,6 +1434,48 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
     },
   ]
 
+  const pets: PetProfile[] = users.map((user, index) => {
+    const species = pickStableItem(petSpeciesCatalog, user.id)
+    const displayName = `${pickStableItem(petNameCatalog, user.id, index)} ${species.slice(0, 1).toUpperCase()}${species.slice(1)}`
+    return {
+      id: `pet-${user.id}`,
+      species,
+      displayName,
+      ownerUserId: user.id,
+      avatarLabel: species.slice(0, 2).toUpperCase(),
+      summary: `${displayName} 会在右下角陪伴当前用户，偏好用轻松短句回应。`,
+      greeting: `你好呀，我是 ${displayName}。点击我就能开始聊天。`,
+      mood: pickStableItem(petMoodCatalog, `${user.id}-mood`, index),
+      favoriteSnack: pickStableItem(petSnackCatalog, `${user.id}-snack`, index),
+      promptHints: [`和 ${displayName} 闲聊一下今天的工作`, `让 ${displayName} 给你一个轻松提醒`],
+      fallbackAsset: `/src/assets/pets/${species}.svg`,
+      stateMachine: 'PetState',
+    }
+  })
+
+  const petMessages: PetMessage[] = pets.flatMap((pet, index) => [
+    {
+      id: `pet-msg-${pet.id}-1`,
+      petId: pet.id,
+      sender: 'pet',
+      content: pet.greeting,
+      timestamp: now - 1000 * 60 * (12 - index),
+    },
+  ])
+
+  const petPresence: PetPresenceState[] = pets.map((pet, index) => ({
+    petId: pet.id,
+    isVisible: true,
+    chatOpen: false,
+    motionState: index % 2 === 0 ? 'idle' : 'hover',
+    unreadCount: index === 0 ? 1 : 0,
+    lastInteractionAt: now - 1000 * 60 * (10 - index),
+    position: {
+      x: 24 + index * 4,
+      y: 24 + (index % 3) * 6,
+    },
+  }))
+
   const artifacts: Artifact[] = [
     {
       id: 'art-roadmap',
@@ -1127,6 +1491,21 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       authorId: 'agent-architect',
       updatedAt: now - 1000 * 60 * 9,
       createdByMessageId: 'msg-redesign-2',
+    },
+    {
+      id: 'art-knowledge-spec',
+      projectId: 'proj-redesign',
+      conversationId: 'conv-redesign',
+      type: 'ui-spec',
+      title: 'Knowledge Surface Specification',
+      content: '# Knowledge Surface UI Spec\n\n## Layout\n- **Full Width**: Enable content to expand to the edges with a 48px padding.\n- **Split View**: Left sidebar (320px) for navigation, right panel for details.\n\n## Components\n- `UiNavCardList` for the entry list.\n- `UiArticleBlock` for document rendering.\n- `UiFilterChipGroup` for quick filtering.',
+      excerpt: 'Full width split-view layout for knowledge management with Notion-inspired document rendering.',
+      tags: ['ui', 'knowledge', 'refactor'],
+      version: 1,
+      status: 'published',
+      authorId: 'agent-coder',
+      updatedAt: now - 1000 * 60 * 38,
+      createdByMessageId: 'msg-redesign-4',
     },
     {
       id: 'art-prd',
@@ -1181,6 +1560,7 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       workspaceId: 'ws-local',
       name: 'Desktop PRD Folder',
       kind: 'folder',
+      origin: 'source',
       linkedConversationIds: ['conv-redesign'],
       createdAt: now - 1000 * 60 * 56,
       sizeLabel: '12 files',
@@ -1193,6 +1573,7 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       workspaceId: 'ws-local',
       name: 'Shell Layout Notes.md',
       kind: 'file',
+      origin: 'generated',
       linkedConversationIds: ['conv-redesign'],
       createdAt: now - 1000 * 60 * 50,
       createdByMessageId: 'msg-redesign-2',
@@ -1206,6 +1587,7 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       workspaceId: 'ws-local',
       name: 'Audit Surface Notes.md',
       kind: 'file',
+      origin: 'generated',
       linkedConversationIds: ['conv-governance'],
       createdAt: now - 1000 * 60 * 18,
       createdByMessageId: 'msg-governance-1',
@@ -1219,6 +1601,7 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
       workspaceId: 'ws-enterprise',
       name: 'Launch Runbook',
       kind: 'folder',
+      origin: 'source',
       linkedConversationIds: ['conv-launch'],
       createdAt: now - 1000 * 60 * 14,
       createdByMessageId: 'msg-launch-1',
@@ -1374,6 +1757,68 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
     },
   ]
 
+  const settingsPage: DesktopSettingsPage = {
+    tabs: [
+      { value: 'general', label: 'settings.tabs.general' },
+      { value: 'theme', label: 'settings.tabs.theme' },
+      { value: 'i18n', label: 'settings.tabs.i18n' },
+      { value: 'version', label: 'settings.tabs.version' },
+    ],
+    sections: [
+      {
+        id: 'general-overview',
+        tab: 'general',
+        title: 'mock.settingsPage.general-overview.title',
+        description: 'mock.settingsPage.general-overview.description',
+        items: [
+          'mock.settingsPage.general-overview.items.0',
+          'mock.settingsPage.general-overview.items.1',
+          'mock.settingsPage.general-overview.items.2',
+        ],
+      },
+      {
+        id: 'general-layout',
+        tab: 'general',
+        title: 'mock.settingsPage.general-layout.title',
+        description: 'mock.settingsPage.general-layout.description',
+        items: [
+          'mock.settingsPage.general-layout.items.0',
+          'mock.settingsPage.general-layout.items.1',
+        ],
+      },
+      {
+        id: 'theme-behavior',
+        tab: 'theme',
+        title: 'mock.settingsPage.theme-behavior.title',
+        description: 'mock.settingsPage.theme-behavior.description',
+        items: [
+          'mock.settingsPage.theme-behavior.items.0',
+          'mock.settingsPage.theme-behavior.items.1',
+        ],
+      },
+      {
+        id: 'i18n-behavior',
+        tab: 'i18n',
+        title: 'mock.settingsPage.i18n-behavior.title',
+        description: 'mock.settingsPage.i18n-behavior.description',
+        items: [
+          'mock.settingsPage.i18n-behavior.items.0',
+          'mock.settingsPage.i18n-behavior.items.1',
+        ],
+      },
+      {
+        id: 'version-meta',
+        tab: 'version',
+        title: 'mock.settingsPage.version-meta.title',
+        description: 'mock.settingsPage.version-meta.description',
+        items: [
+          'mock.settingsPage.version-meta.items.0',
+          'mock.settingsPage.version-meta.items.1',
+        ],
+      },
+    ],
+  }
+
   const settingsSections: SettingsSection[] = [
     {
       id: 'connections',
@@ -1478,34 +1923,198 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
     },
   ]
 
-  const toolCatalog: ToolCatalogGroup[] = [
+  const workspaceTools: WorkspaceToolDefinition[] = [
     {
-      id: 'builtin',
-      title: '内置工具',
-      description: '桌面端默认可用的内置能力。',
-      items: [
-        { id: 'builtin-read', name: 'Read', kind: 'builtin', description: '读取工作区文件与上下文。', availability: 'healthy', permissions: ['auto', 'readonly'] },
-        { id: 'builtin-write', name: 'Write', kind: 'builtin', description: '修改项目文件与产物。', availability: 'configured', permissions: ['auto'] },
-        { id: 'builtin-terminal', name: 'Terminal', kind: 'builtin', description: '执行本地命令与验证脚本。', availability: 'configured', permissions: ['auto'] },
-      ],
+      id: 'builtin-read',
+      workspaceId: 'ws-local',
+      builtinKey: 'read',
+      name: 'Read',
+      kind: 'builtin',
+      description: '读取工作区文件与上下文。',
+      availability: 'healthy',
+      status: 'active',
+      permissionMode: 'allow',
     },
     {
-      id: 'skill',
-      title: 'Skill',
-      description: '为智能体挂接的技能集合。',
-      items: [
-        { id: 'skill-vue', name: 'Vue Best Practices', kind: 'skill', description: 'Vue 3 组合式 API 与组件实现规范。', availability: 'healthy', permissions: ['auto', 'readonly'] },
-        { id: 'skill-tdd', name: 'Test Driven Development', kind: 'skill', description: '功能开发前先写失败测试。', availability: 'healthy', permissions: ['auto', 'readonly'] },
-      ],
+      id: 'builtin-write',
+      workspaceId: 'ws-local',
+      builtinKey: 'write',
+      name: 'Write',
+      kind: 'builtin',
+      description: '修改项目文件与产物。',
+      availability: 'configured',
+      status: 'active',
+      permissionMode: 'ask',
     },
     {
-      id: 'mcp',
-      title: 'MCP',
-      description: '通过 MCP 绑定的外部上下文与工具。',
-      items: [
-        { id: 'mcp-figma', name: 'Figma MCP', kind: 'mcp', description: '读取设计稿节点、变量和导出资源。', availability: 'configured', permissions: ['auto', 'readonly'] },
-        { id: 'mcp-docs', name: 'Docs MCP', kind: 'mcp', description: '查询产品文档与 API 说明。', availability: 'healthy', permissions: ['auto', 'readonly'] },
-      ],
+      id: 'builtin-terminal',
+      workspaceId: 'ws-local',
+      builtinKey: 'terminal',
+      name: 'Terminal',
+      kind: 'builtin',
+      description: '执行本地命令与验证脚本。',
+      availability: 'configured',
+      status: 'disabled',
+      permissionMode: 'deny',
+    },
+    {
+      id: 'skill-vue',
+      workspaceId: 'ws-local',
+      name: 'Vue Best Practices',
+      kind: 'skill',
+      description: 'Vue 3 组合式 API 与组件实现规范。',
+      availability: 'healthy',
+      status: 'active',
+      permissionMode: 'allow',
+      content: '使用 <script setup> 和 Composition API。优先 computed 而不是 watchEffect 做派生状态，避免在模板里写带副作用的函数。',
+    },
+    {
+      id: 'skill-tdd',
+      workspaceId: 'ws-local',
+      name: 'Test Driven Development',
+      kind: 'skill',
+      description: '功能开发前先写失败测试。',
+      availability: 'healthy',
+      status: 'active',
+      permissionMode: 'readonly',
+      content: '先补失败测试，再实现最小改动。提交前运行对应 Vitest 用例，并避免只写快照断言。',
+    },
+    {
+      id: 'mcp-figma',
+      workspaceId: 'ws-local',
+      name: 'Figma MCP',
+      kind: 'mcp',
+      description: '读取设计稿节点、变量和导出资源。',
+      availability: 'configured',
+      status: 'active',
+      permissionMode: 'ask',
+      serverName: 'figma-mcp',
+      endpoint: 'https://mcp.octopus.local/figma',
+      toolNames: ['get_file', 'get_node', 'export_assets'],
+      notes: '用于桌面端界面还原和变量映射。',
+    },
+    {
+      id: 'mcp-docs',
+      workspaceId: 'ws-local',
+      name: 'Docs MCP',
+      kind: 'mcp',
+      description: '查询产品文档与 API 说明。',
+      availability: 'healthy',
+      status: 'active',
+      permissionMode: 'allow',
+      serverName: 'docs-mcp',
+      endpoint: 'https://mcp.octopus.local/docs',
+      toolNames: ['search_docs', 'read_page'],
+      notes: '用于产品文档和接口说明检索。',
+    },
+    {
+      id: 'builtin-read-enterprise',
+      workspaceId: 'ws-enterprise',
+      builtinKey: 'read',
+      name: 'Read',
+      kind: 'builtin',
+      description: '读取企业工作区文件与治理上下文。',
+      availability: 'healthy',
+      status: 'active',
+      permissionMode: 'allow',
+    },
+    {
+      id: 'builtin-write-enterprise',
+      workspaceId: 'ws-enterprise',
+      builtinKey: 'write',
+      name: 'Write',
+      kind: 'builtin',
+      description: '修改企业工作区项目文件与配置。',
+      availability: 'attention',
+      status: 'disabled',
+      permissionMode: 'deny',
+    },
+    {
+      id: 'builtin-terminal-enterprise',
+      workspaceId: 'ws-enterprise',
+      builtinKey: 'terminal',
+      name: 'Terminal',
+      kind: 'builtin',
+      description: '执行共享环境下的本地命令。',
+      availability: 'configured',
+      status: 'disabled',
+      permissionMode: 'deny',
+    },
+    {
+      id: 'skill-governance-enterprise',
+      workspaceId: 'ws-enterprise',
+      name: 'Governance Review',
+      kind: 'skill',
+      description: '审批、合规与治理评审规范。',
+      availability: 'healthy',
+      status: 'active',
+      permissionMode: 'ask',
+      content: '输出需要包含风险说明、影响面和审批建议，不得直接执行高风险变更。',
+    },
+    {
+      id: 'mcp-policy-enterprise',
+      workspaceId: 'ws-enterprise',
+      name: 'Policy MCP',
+      kind: 'mcp',
+      description: '查询治理策略与审批流程。',
+      availability: 'configured',
+      status: 'active',
+      permissionMode: 'ask',
+      serverName: 'policy-mcp',
+      endpoint: 'https://mcp.octopus.local/policy',
+      toolNames: ['search_policy', 'list_controls'],
+      notes: '用于企业治理工作区的审批和策略查询。',
+    },
+  ]
+
+  const userCenterAlerts: UserCenterAlert[] = [
+    {
+      id: 'user-center-alert-disabled-menu',
+      workspaceId: 'ws-local',
+      title: '自动化菜单已停用',
+      description: 'menu-automations 已停用，但仍在管理员角色菜单集中保留，适合作为治理提醒。',
+      severity: 'high',
+      routeName: 'user-center-menus',
+      entityId: 'menu-automations',
+    },
+    {
+      id: 'user-center-alert-disabled-permission-in-bundle',
+      workspaceId: 'ws-local',
+      title: '权限包引用了停用权限',
+      description: 'Audit Bundle 仍引用处于 disabled 状态的 Write Tool Access，需要尽快调整组合。',
+      severity: 'medium',
+      routeName: 'user-center-permissions',
+      entityId: 'perm-ws-local-bundle-audit',
+    },
+    {
+      id: 'user-center-alert-empty-role',
+      workspaceId: 'ws-local',
+      title: '存在无成员角色',
+      description: 'Workspace Observer 角色当前没有绑定成员，建议确认是否仍需保留。',
+      severity: 'low',
+      routeName: 'user-center-roles',
+      entityId: 'role-ws-local-observer',
+    },
+  ]
+
+  const userCenterQuickLinks: UserCenterQuickLink[] = [
+    {
+      id: 'user-center-quick-users',
+      label: '成员治理',
+      helper: '查看启停状态、角色覆盖与项目范围',
+      routeName: 'user-center-users',
+    },
+    {
+      id: 'user-center-quick-roles',
+      label: '角色矩阵',
+      helper: '检查角色人数、权限密度与菜单覆盖',
+      routeName: 'user-center-roles',
+    },
+    {
+      id: 'user-center-quick-permissions',
+      label: '权限依赖',
+      helper: '识别 bundle 组合与高风险目标绑定',
+      routeName: 'user-center-permissions',
     },
   ]
 
@@ -1521,6 +2130,9 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
     teams,
     conversations,
     messages,
+    pets,
+    petMessages,
+    petPresence,
     artifacts,
     resources,
     runs,
@@ -1531,10 +2143,13 @@ export function createMockWorkbenchSeed(): MockWorkbenchSeed {
     conversationQueue,
     inbox,
     automations,
+    settingsPage,
     settingsSections,
     connections,
     modelCatalog,
-    toolCatalog,
+    workspaceTools,
+    userCenterAlerts,
+    userCenterQuickLinks,
     currentWorkspaceId: 'ws-local',
     currentUserId: 'user-admin',
     currentProjectId: 'proj-redesign',

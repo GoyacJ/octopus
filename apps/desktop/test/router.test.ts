@@ -27,6 +27,7 @@ describe('desktop router contract', () => {
     expect(routePaths).toContain('/workspaces/:workspaceId/tools')
     expect(routePaths).toContain('/workspaces/:workspaceId/teams')
     expect(routePaths).toContain('/workspaces/:workspaceId/settings')
+    expect(routePaths).toContain('/workspaces/:workspaceId/connections')
     expect(routePaths).toContain('/workspaces/:workspaceId/user-center')
     expect(routePaths).toContain('/workspaces/:workspaceId/user-center/profile')
     expect(routePaths).toContain('/workspaces/:workspaceId/user-center/users')
@@ -37,11 +38,11 @@ describe('desktop router contract', () => {
     expect(routePaths).toContain('/connections')
   })
 
-  it('redirects the legacy teams route into the merged agents surface', async () => {
+  it('keeps teams on the dedicated management panel route', async () => {
     await router.push('/workspaces/ws-local/teams')
 
-    expect(router.currentRoute.value.name).toBe('agents')
-    expect(router.currentRoute.value.query.kind).toBe('team')
+    expect(router.currentRoute.value.name).toBe('teams')
+    expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
   })
 
   it('redirects the user center root to the first authorized child route', async () => {

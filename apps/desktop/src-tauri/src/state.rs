@@ -1,34 +1,58 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use octopus_core::{
-  default_connection_stubs, default_host_state, default_preferences, ConnectionProfile, HostState, PreferencesPort,
-  ShellPreferences, DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
+  default_connection_stubs, default_host_state, default_preferences, ConnectionProfile, DesktopBackendConnection, HostState,
+  PreferencesPort, ShellPreferences, DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
 };
+use parking_lot::RwLock;
 use tauri::{AppHandle, Manager};
 
-use crate::{error::ShellResult, services::PreferencesService};
+use crate::{backend::BackendSupervisor, error::ShellResult, services::PreferencesService};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct ShellState {
   pub host_state: HostState,
   pub preferences_service: PreferencesService,
   pub connections: Vec<ConnectionProfile>,
+  pub backend_supervisor: BackendSupervisor,
 }
 
 impl ShellState {
   pub fn new(host_state: HostState, preferences_service: PreferencesService) -> Self {
-    Self::with_connections(host_state, preferences_service, default_connection_stubs())
+    let preferences_path = preferences_service.path().to_path_buf();
+    let runtime_root = preferences_path
+      .parent()
+      .map(Path::to_path_buf)
+      .unwrap_or_else(|| Path::new(".").to_path_buf())
+      .join("runtime");
+
+    Self::with_connections(
+      host_state,
+      preferences_service,
+      default_connection_stubs(),
+      BackendSupervisor::new(
+        Arc::new(RwLock::new(DesktopBackendConnection {
+          base_url: None,
+          auth_token: None,
+          state: "unavailable".into(),
+          transport: "http".into(),
+        })),
+        runtime_root,
+      ),
+    )
   }
 
   pub fn with_connections(
     host_state: HostState,
     preferences_service: PreferencesService,
     connections: Vec<ConnectionProfile>,
+    backend_supervisor: BackendSupervisor,
   ) -> Self {
     Self {
       host_state,
       preferences_service,
       connections,
+      backend_supervisor,
     }
   }
 

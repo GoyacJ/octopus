@@ -63,6 +63,7 @@ describe('User center RBAC prototype', () => {
     expect(mounted.container.querySelector('[data-testid="user-center-nav-roles"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="user-center-nav-permissions"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="user-center-nav-menus"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="user-center-metric-users"]')?.textContent).toContain('5')
 
     const switchButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="user-switch-current-user-user-operator"]')
     expect(switchButton).not.toBeNull()
@@ -76,6 +77,40 @@ describe('User center RBAC prototype', () => {
     expect(mounted.container.querySelector('[data-testid="user-center-nav-roles"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="user-center-nav-permissions"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="user-center-nav-menus"]')).toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('renders permissions, roles, menus, and profile pages through shared management surfaces', async () => {
+    const mounted = mountApp()
+
+    await router.push('/workspaces/ws-local/user-center/permissions')
+    await nextTick()
+
+    expect(mounted.container.querySelector('[data-testid="user-center-permissions-toolbar"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="user-center-permissions-tabs"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid^="user-center-permission-record-"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="user-center-permissions-editor"]')).not.toBeNull()
+
+    await router.push('/workspaces/ws-local/user-center/roles')
+    await nextTick()
+
+    expect(mounted.container.querySelector('[data-testid="user-center-roles-toolbar"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid^="user-center-role-record-"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="user-center-roles-editor"]')).not.toBeNull()
+
+    await router.push('/workspaces/ws-local/user-center/menus')
+    await nextTick()
+
+    expect(mounted.container.querySelector('[data-testid="user-center-menus-tree"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid^="user-center-menu-record-"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="user-center-menus-editor"]')).not.toBeNull()
+
+    await router.push('/workspaces/ws-local/user-center/profile')
+    await nextTick()
+
+    expect(mounted.container.querySelector('[data-testid="user-center-profile-metrics"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="user-center-profile-timeline"]')).not.toBeNull()
 
     mounted.destroy()
   })

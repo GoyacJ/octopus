@@ -1,73 +1,39 @@
 <script setup lang="ts">
+import { cn } from '../lib/utils'
+
 const props = defineProps<{
   title: string
   excerpt: string
   typeLabel: string
   versionLabel: string
   statusLabel: string
+  class?: string
 }>()
 </script>
 
 <template>
-  <article class="artifact-block">
-    <div class="topline">
+  <article 
+    :class="cn(
+      'flex flex-col gap-2 p-3 rounded-md border border-border-subtle bg-background transition-all hover:border-border-strong',
+      props.class
+    )"
+  >
+    <div class="flex items-center justify-between gap-4 text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
       <span>{{ props.typeLabel }}</span>
       <span>{{ props.versionLabel }}</span>
     </div>
-    <strong>{{ props.title }}</strong>
-    <p>{{ props.excerpt }}</p>
-    <footer>
-      <span>{{ props.statusLabel }}</span>
-      <slot name="actions" />
+    
+    <strong class="text-[14px] font-bold text-text-primary leading-tight line-clamp-1">{{ props.title }}</strong>
+    
+    <p class="text-[12px] leading-relaxed text-text-secondary line-clamp-2 break-words">
+      {{ props.excerpt }}
+    </p>
+    
+    <footer class="flex items-center justify-between gap-4 pt-1 mt-auto border-t border-border-subtle/50 pt-2">
+      <span class="text-[11px] font-medium text-text-tertiary">{{ props.statusLabel }}</span>
+      <div v-if="$slots.actions" class="flex items-center gap-1.5">
+        <slot name="actions" />
+      </div>
     </footer>
   </article>
 </template>
-
-<style scoped>
-.artifact-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  min-width: 0;
-  padding: 1rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-}
-
-.topline,
-footer {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.75rem;
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-}
-
-strong {
-  font-size: 1rem;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-p {
-  color: var(--text-secondary);
-  line-height: 1.5;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow-wrap: anywhere;
-}
-
-footer {
-  align-items: center;
-}
-</style>

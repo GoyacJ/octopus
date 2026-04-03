@@ -19,6 +19,38 @@ interface RouteSyncState {
   artifact?: string
 }
 
+function hasPreferencePatchKey<K extends keyof ShellPreferences>(
+  patch: Partial<ShellPreferences>,
+  key: K,
+): boolean {
+  return Object.prototype.hasOwnProperty.call(patch, key)
+}
+
+function mergeSavedPreferences(
+  currentPreferences: ShellPreferences,
+  savedPreferences: ShellPreferences,
+  patch: Partial<ShellPreferences>,
+): ShellPreferences {
+  const updatesLeftSidebar = hasPreferencePatchKey(patch, 'leftSidebarCollapsed') || hasPreferencePatchKey(patch, 'compactSidebar')
+
+  return {
+    ...savedPreferences,
+    theme: hasPreferencePatchKey(patch, 'theme') ? savedPreferences.theme : currentPreferences.theme,
+    locale: hasPreferencePatchKey(patch, 'locale') ? savedPreferences.locale : currentPreferences.locale,
+    compactSidebar: updatesLeftSidebar ? savedPreferences.compactSidebar : currentPreferences.compactSidebar,
+    leftSidebarCollapsed: updatesLeftSidebar ? savedPreferences.leftSidebarCollapsed : currentPreferences.leftSidebarCollapsed,
+    rightSidebarCollapsed: hasPreferencePatchKey(patch, 'rightSidebarCollapsed')
+      ? savedPreferences.rightSidebarCollapsed
+      : currentPreferences.rightSidebarCollapsed,
+    defaultWorkspaceId: hasPreferencePatchKey(patch, 'defaultWorkspaceId')
+      ? savedPreferences.defaultWorkspaceId
+      : currentPreferences.defaultWorkspaceId,
+    lastVisitedRoute: hasPreferencePatchKey(patch, 'lastVisitedRoute')
+      ? savedPreferences.lastVisitedRoute
+      : currentPreferences.lastVisitedRoute,
+  }
+}
+
 function createDefaultPreferences(defaultWorkspaceId: string, defaultProjectId: string): ShellPreferences {
   return {
     theme: 'system',
@@ -96,9 +128,11 @@ export const useShellStore = defineStore('shell', {
   },
   actions: {
     applyShellPreferences(preferences: ShellPreferences) {
+      const preserveLeftSidebar = this.preferencesState === null && this.leftSidebarCollapsed !== false
+      const preserveRightSidebar = this.preferencesState === null && this.rightSidebarCollapsed !== false
       this.preferencesState = preferences
-      this.leftSidebarCollapsed = preferences.leftSidebarCollapsed
-      this.rightSidebarCollapsed = preferences.rightSidebarCollapsed
+      this.leftSidebarCollapsed = preserveLeftSidebar ? this.leftSidebarCollapsed : preferences.leftSidebarCollapsed
+      this.rightSidebarCollapsed = preserveRightSidebar ? this.rightSidebarCollapsed : preferences.rightSidebarCollapsed
     },
     async bootstrap(defaultWorkspaceId: string, defaultProjectId: string, mockConnections: ConnectionProfile[]) {
       this.defaultWorkspaceId = defaultWorkspaceId
@@ -146,22 +180,18 @@ export const useShellStore = defineStore('shell', {
     },
     setLeftSidebarCollapsed(collapsed: boolean) {
       this.leftSidebarCollapsed = collapsed
-      if (this.preferencesState) {
-        void this.updatePreferences({
-          leftSidebarCollapsed: collapsed,
-        })
-      }
+      void this.updatePreferences({
+        leftSidebarCollapsed: collapsed,
+      })
     },
     toggleLeftSidebar() {
       this.setLeftSidebarCollapsed(!this.leftSidebarCollapsed)
     },
     setRightSidebarCollapsed(collapsed: boolean) {
       this.rightSidebarCollapsed = collapsed
-      if (this.preferencesState) {
-        void this.updatePreferences({
-          rightSidebarCollapsed: collapsed,
-        })
-      }
+      void this.updatePreferences({
+        rightSidebarCollapsed: collapsed,
+      })
     },
     toggleRightSidebar() {
       this.setRightSidebarCollapsed(!this.rightSidebarCollapsed)
@@ -186,7 +216,8 @@ export const useShellStore = defineStore('shell', {
             : this.preferences.leftSidebarCollapsed,
       }
 
-      this.applyShellPreferences(await savePreferences(nextPreferences))
+      const savedPreferences = await savePreferences(nextPreferences)
+      this.applyShellPreferences(mergeSavedPreferences(this.preferences, savedPreferences, patch))
     },
     async persistLastRoute(route: string) {
       await this.updatePreferences({

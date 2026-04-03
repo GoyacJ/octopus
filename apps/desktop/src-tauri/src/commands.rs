@@ -1,17 +1,17 @@
-use octopus_core::{ConnectionProfile, HealthcheckStatus, HostState, ShellBootstrap, ShellPreferences};
-use tauri::State;
+use octopus_core::{ConnectionProfile, DesktopBackendConnection, HostState, ShellPreferences};
+use tauri::{AppHandle, State};
 
 use crate::{
   bootstrap::{
     bootstrap_shell_payload, get_host_state_payload, healthcheck_payload, list_connections_payload, load_shell_preferences,
-    save_shell_preferences,
+    save_shell_preferences, HealthcheckStatusPayload, ShellBootstrapPayload,
   },
   error::into_command_error,
   state::ShellState,
 };
 
 #[tauri::command]
-pub fn bootstrap_shell(state: State<'_, ShellState>) -> Result<ShellBootstrap, String> {
+pub fn bootstrap_shell(state: State<'_, ShellState>) -> Result<ShellBootstrapPayload, String> {
   bootstrap_shell_payload(state.inner()).map_err(into_command_error)
 }
 
@@ -36,6 +36,19 @@ pub fn list_connections_stub(state: State<'_, ShellState>) -> Vec<ConnectionProf
 }
 
 #[tauri::command]
-pub fn healthcheck(state: State<'_, ShellState>) -> HealthcheckStatus {
+pub fn healthcheck(state: State<'_, ShellState>) -> HealthcheckStatusPayload {
   healthcheck_payload(state.inner())
+}
+
+#[tauri::command]
+pub async fn restart_desktop_backend(
+  app: AppHandle,
+  state: State<'_, ShellState>,
+) -> Result<DesktopBackendConnection, String> {
+  let preferences_path = state.preferences_service.path().to_path_buf();
+  state
+    .backend_supervisor
+    .restart(&app, &state.host_state, &preferences_path)
+    .await
+    .map_err(into_command_error)
 }

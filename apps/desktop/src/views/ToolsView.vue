@@ -13,10 +13,8 @@ import {
   UiRecordCard,
   UiSectionHeading,
   UiSelect,
-  UiSurface,
   UiTabs,
   UiTextarea,
-  UiToolbarRow,
 } from '@octopus/ui'
 
 import { usePagination } from '@/composables/usePagination'
@@ -24,7 +22,7 @@ import { useWorkbenchStore } from '@/stores/workbench'
 
 type ToolTab = 'builtin' | 'skill' | 'mcp'
 
-const PAGE_SIZE = 5
+const PAGE_SIZE = 10
 
 const { t } = useI18n()
 const workbench = useWorkbenchStore()
@@ -95,21 +93,12 @@ const canCreate = computed(() => activeTab.value !== 'builtin')
 const {
   currentPage,
   pageCount,
-  totalItems,
   pagedItems,
   setPage,
 } = usePagination(filteredItems, {
   pageSize: PAGE_SIZE,
   resetOn: [activeTab, normalizedSearch],
 })
-
-const paginationMetaLabel = computed(() => t('tools.pagination.perPage', { count: PAGE_SIZE }))
-const paginationSummaryLabel = computed(() => t('tools.pagination.summary', {
-  page: currentPage.value,
-  totalPages: pageCount.value,
-  count: totalItems.value,
-}))
-const pageInfoLabel = computed(() => `${currentPage.value} / ${pageCount.value}`)
 
 const statusOptions = computed(() => [
   { value: 'active', label: t('tools.status.active') },
@@ -283,158 +272,140 @@ function availabilityTone(availability: 'healthy' | 'configured' | 'attention') 
 </script>
 
 <template>
-  <section class="section-stack">
-    <UiSectionHeading
-      :eyebrow="t('tools.header.eyebrow')"
-      :title="t('tools.header.title')"
-    />
+  <div class="w-full flex flex-col gap-8 pb-20 h-full min-h-0">
+    <header class="px-2 shrink-0">
+      <UiSectionHeading
+        :eyebrow="t('tools.header.eyebrow')"
+        :title="t('tools.header.title')"
+      />
+    </header>
 
-    <div class="space-y-4">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <h1 data-testid="tools-title" class="text-[clamp(1.28rem,1.8vw,1.9rem)] font-bold leading-tight tracking-[-0.03em] text-text-primary">
-          {{ t('tools.header.title') }}
-        </h1>
-        <UiTabs
-          v-model="activeTab"
-          test-id="tools-tabs"
-          variant="pill"
-          :tabs="tabs"
-        />
+    <!-- Unified Filter Bar -->
+    <div class="px-2 flex flex-wrap items-center justify-between gap-6 border-b border-border-subtle pb-6">
+      <UiTabs v-model="activeTab" :tabs="tabs" />
+      
+      <div class="flex items-center gap-3">
+        <div class="relative w-80">
+          <Search :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+          <UiInput
+            v-model="searchQuery"
+            class="pl-9 bg-subtle/30 h-10 text-sm"
+            placeholder="Search tools..."
+          />
+        </div>
+        <UiButton v-if="canCreate" variant="primary" class="h-10 px-4" @click="applyTool()">
+          <Plus :size="18" />
+          {{ activeTab === 'skill' ? t('tools.actions.createSkill') : t('tools.actions.createMcp') }}
+        </UiButton>
       </div>
-
-      <UiToolbarRow test-id="tools-toolbar">
-        <template #search>
-          <UiField :label="t('common.search')">
-            <UiInput
-              v-model="searchQuery"
-              data-testid="tools-search-input"
-              :placeholder="t('tools.search.placeholder')"
-            />
-          </UiField>
-        </template>
-        <template #actions>
-          <UiButton v-if="canCreate" size="sm" data-testid="tools-create-button" @click="applyTool()">
-            <Plus :size="16" />
-            {{ activeTab === 'skill' ? t('tools.actions.createSkill') : t('tools.actions.createMcp') }}
-          </UiButton>
-        </template>
-      </UiToolbarRow>
     </div>
 
-    <div class="grid gap-4 xl:grid-cols-[minmax(22rem,30rem)_minmax(0,1fr)]">
-      <UiSurface :title="activeGroup?.title ?? t('tools.header.title')" :subtitle="activeGroupSubtitle">
-        <div v-if="pagedItems.length" data-testid="tools-record-list" class="space-y-3">
-          <UiRecordCard
-            v-for="item in pagedItems"
-            :key="item.id"
-            :test-id="`tool-item-${item.id}`"
-            :title="item.name"
-            :description="item.description"
-            :active="selectedToolId === item.id"
-            interactive
-            @click="applyTool(item.id)"
-          >
-            <template #badges>
-              <UiBadge :label="t(`tools.permissions.${item.permissionMode}`)" subtle />
-              <UiBadge :label="t(`tools.status.${item.status}`)" :tone="statusTone(item.status)" />
-            </template>
-            <template #meta>
-              <UiBadge :label="t(`tools.availability.${item.availability}`)" :tone="availabilityTone(item.availability)" subtle />
-            </template>
-            <template #actions>
-              <UiButton variant="ghost" size="sm" :data-testid="`tool-toggle-${item.id}`" @click.stop="toggleTool(item.id)">
-                <Power :size="14" />
-                {{ item.status === 'active' ? t('tools.actions.disable') : t('tools.actions.enable') }}
-              </UiButton>
-              <UiButton
-                v-if="item.kind !== 'builtin'"
-                variant="ghost"
-                size="sm"
-                :data-testid="`tool-delete-${item.id}`"
-                @click.stop="deleteSelectedTool(item.id)"
-              >
-                <Trash2 :size="14" />
-                {{ t('tools.actions.delete') }}
-              </UiButton>
-            </template>
-          </UiRecordCard>
+    <!-- Main Split View (Extended) -->
+    <div class="flex flex-1 min-h-0 gap-12 px-2">
+      
+      <!-- Left: Tool List (Wider for full screen) -->
+      <aside class="flex flex-col w-[420px] shrink-0 border-r border-border-subtle pr-12 gap-6">
+        <div class="flex items-center justify-between">
+          <h3 class="text-[15px] font-bold text-text-primary">{{ activeGroup?.title ?? t('tools.header.title') }}</h3>
+          <span class="text-[12px] text-text-tertiary font-medium">{{ filteredItems.length }} items</span>
         </div>
-        <UiEmptyState v-else :title="t('tools.emptyTitle')" :description="t('tools.emptyDescription')" />
 
-        <UiPagination
-          v-if="filteredItems.length"
-          class="mt-4"
-          :page="currentPage"
-          :page-count="pageCount"
-          :meta-label="paginationMetaLabel"
-          :summary-label="paginationSummaryLabel"
-          :page-info-label="pageInfoLabel"
-          :previous-label="t('tools.pagination.previous')"
-          :next-label="t('tools.pagination.next')"
-          root-test-id="tools-pagination"
-          previous-button-test-id="tools-pagination-prev"
-          next-button-test-id="tools-pagination-next"
-          page-info-test-id="tools-pagination-page-info"
-          summary-test-id="tools-pagination-summary"
-          @update:page="setPage"
-        >
-          <template #previousIcon>
-            <ChevronLeft :size="16" />
+        <div class="flex-1 overflow-y-auto min-h-0 pb-4 space-y-4 pr-3">
+          <template v-if="pagedItems.length">
+            <UiRecordCard
+              v-for="item in pagedItems"
+              :key="item.id"
+              :title="item.name"
+              :description="item.description"
+              :active="selectedToolId === item.id"
+              interactive
+              class="p-4"
+              @click="applyTool(item.id)"
+            >
+              <template #badges>
+                <UiBadge :label="t(`tools.permissions.${item.permissionMode}`)" subtle />
+                <UiBadge :label="t(`tools.status.${item.status}`)" :tone="statusTone(item.status)" />
+              </template>
+              <template #meta>
+                <span class="text-[11px] text-text-tertiary uppercase tracking-widest font-bold">{{ t(`tools.availability.${item.availability}`) }}</span>
+              </template>
+              <template #actions>
+                <div class="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+                  <UiButton variant="ghost" size="sm" class="h-7 text-xs" @click.stop="toggleTool(item.id)">
+                    {{ item.status === 'active' ? 'Disable' : 'Enable' }}
+                  </UiButton>
+                  <UiButton v-if="item.kind !== 'builtin'" variant="ghost" size="sm" class="h-7 text-xs text-destructive hover:bg-destructive/10" @click.stop="deleteSelectedTool(item.id)">
+                    Delete
+                  </UiButton>
+                </div>
+              </template>
+            </UiRecordCard>
           </template>
-          <template #nextIcon>
-            <ChevronRight :size="16" />
-          </template>
-        </UiPagination>
-      </UiSurface>
+          <UiEmptyState v-else :title="t('tools.emptyTitle')" :description="t('tools.emptyDescription')" />
+        </div>
+        
+        <div v-if="pageCount > 1" class="pt-6 border-t border-border-subtle shrink-0">
+          <UiPagination :page="currentPage" :page-count="pageCount" @update:page="setPage" />
+        </div>
+      </aside>
 
-      <UiSurface
-        :title="t(selectedToolId ? 'tools.editor.editTitle' : 'tools.editor.createTitle')"
-        :subtitle="selectedTool?.description || t('tools.header.eyebrow')"
-      >
-        <div class="grid gap-4 md:grid-cols-2">
+      <!-- Right: Tool Editor (Expanded) -->
+      <main class="flex-1 overflow-y-auto min-h-0 pr-6 pb-12 space-y-10">
+        <header class="space-y-2">
+          <h2 class="text-2xl font-bold text-text-primary">
+            {{ t(selectedToolId ? 'tools.editor.editTitle' : 'tools.editor.createTitle') }}
+          </h2>
+          <p class="text-base text-text-secondary max-w-3xl leading-relaxed">{{ selectedTool?.description || t('tools.header.eyebrow') }}</p>
+        </header>
+
+        <div class="grid gap-x-12 gap-y-8 md:grid-cols-2 max-w-5xl">
           <UiField :label="t('tools.fields.name')">
-            <UiInput v-model="form.name" :disabled="activeTab === 'builtin'" data-testid="tools-form-name" />
+            <UiInput v-model="form.name" :disabled="activeTab === 'builtin'" class="h-10" />
           </UiField>
           <UiField :label="t('tools.fields.permission')">
-            <UiSelect v-model="form.permissionMode" :options="permissionOptions" data-testid="tools-form-permission" />
+            <UiSelect v-model="form.permissionMode" :options="permissionOptions" class="h-10" />
           </UiField>
           <UiField :label="t('tools.fields.status')">
-            <UiSelect v-model="form.status" :options="statusOptions" data-testid="tools-form-status" />
+            <UiSelect v-model="form.status" :options="statusOptions" class="h-10" />
           </UiField>
           <UiField :label="t('tools.fields.availability')">
-            <UiSelect v-model="form.availability" :options="availabilityOptions" data-testid="tools-form-availability" />
+            <UiSelect v-model="form.availability" :options="availabilityOptions" class="h-10" />
           </UiField>
           <UiField class="md:col-span-2" :label="t('tools.fields.description')">
-            <UiTextarea v-model="form.description" :rows="3" disabled data-testid="tools-form-description" />
+            <UiTextarea v-model="form.description" :rows="2" :disabled="activeTab === 'builtin'" />
           </UiField>
-          <UiField v-if="activeTab === 'skill'" class="md:col-span-2" :label="t('tools.fields.skillContent')">
-            <UiTextarea v-model="form.content" :rows="8" data-testid="tools-form-content" />
-          </UiField>
+
+          <template v-if="activeTab === 'skill'">
+            <UiField class="md:col-span-2" :label="t('tools.fields.skillContent')">
+              <UiTextarea v-model="form.content" :rows="12" class="font-mono text-[13px] leading-relaxed" />
+            </UiField>
+          </template>
+
           <template v-if="activeTab === 'mcp'">
             <UiField :label="t('tools.fields.serverName')">
-              <UiInput v-model="form.serverName" data-testid="tools-form-server-name" />
+              <UiInput v-model="form.serverName" class="h-10" />
             </UiField>
             <UiField :label="t('tools.fields.endpoint')">
-              <UiInput v-model="form.endpoint" data-testid="tools-form-endpoint" />
+              <UiInput v-model="form.endpoint" class="h-10" />
             </UiField>
             <UiField class="md:col-span-2" :label="t('tools.fields.toolNames')">
-              <UiInput v-model="form.toolNames" data-testid="tools-form-tool-names" />
+              <UiInput v-model="form.toolNames" class="h-10" />
             </UiField>
             <UiField class="md:col-span-2" :label="t('tools.fields.notes')">
-              <UiTextarea v-model="form.notes" :rows="5" data-testid="tools-form-notes" />
+              <UiTextarea v-model="form.notes" :rows="5" />
             </UiField>
           </template>
         </div>
 
-        <div class="mt-4 flex flex-wrap justify-end gap-3">
-          <UiButton variant="ghost" data-testid="tools-form-cancel" @click="applyTool(filteredItems[0]?.id)">
-            {{ t('common.cancel') }}
-          </UiButton>
-          <UiButton data-testid="tools-form-save" @click="saveTool">
+        <div class="pt-8 border-t border-border-subtle flex gap-4 max-w-5xl">
+          <UiButton variant="primary" class="h-10 px-8" @click="saveTool">
             {{ t('common.save') }}
           </UiButton>
+          <UiButton variant="ghost" class="h-10 px-6" @click="applyTool(filteredItems[0]?.id)">
+            {{ t('common.cancel') }}
+          </UiButton>
         </div>
-      </UiSurface>
+      </main>
     </div>
-  </section>
+  </div>
 </template>

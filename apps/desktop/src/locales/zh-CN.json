@@ -517,26 +517,97 @@
   "knowledge": {
     "header": {
       "eyebrow": "Knowledge",
-      "titleFallback": "Knowledge View",
-      "subtitle": "Private / shared / candidate knowledge，包含 lineage 与晋升占位。"
+      "titleFallback": "知识中枢",
+      "subtitle": "以来源链路和关联会话上下文为核心浏览项目知识。"
     },
-    "sections": {
-      "private": {
-        "title": "Private",
-        "emptyTitle": "暂无私有记忆",
-        "emptyDescription": "当前 project 没有私有记忆条目。"
+    "hero": {
+      "summary": "这是一个偏浏览 / 阅读的项目知识中枢，帮助你先理解知识从哪里来、为什么重要，以及它关联了哪些会话与运行上下文。",
+      "badges": {
+        "reading": "偏阅读",
+        "lineage": "来源链路",
+        "context": "关联上下文"
       },
-      "shared": {
-        "title": "Shared",
-        "emptyTitle": "暂无共享知识",
-        "emptyDescription": "共享知识会在后续 review 后沉淀。"
-      },
-      "candidates": {
-        "title": "Candidates",
-        "badge": "promotion review",
-        "emptyTitle": "暂无候选知识",
-        "emptyDescription": "当前没有候选知识待晋升。"
+      "cards": {
+        "total": "知识总数",
+        "shared": "已共享",
+        "candidate": "候选中",
+        "highTrust": "高可信"
       }
+    },
+    "filters": {
+      "searchPlaceholder": "搜索标题、摘要、来源、负责人或来源链…",
+      "kindLabel": "知识类型",
+      "sourceAll": "全部来源",
+      "sortRecent": "最近使用",
+      "sortTrust": "可信度",
+      "sortTitle": "标题"
+    },
+    "kinds": {
+      "all": "全部",
+      "private": "私有",
+      "shared": "共享",
+      "candidate": "候选"
+    },
+    "list": {
+      "title": "知识列表",
+      "subtitle": "共 {count} 条知识，可直接浏览与对比。",
+      "sourceLabel": "来源 · {source}"
+    },
+    "detail": {
+      "overviewTitle": "知识概览",
+      "overviewSubtitle": "先阅读当前知识，再回到来源和上下文理解它。",
+      "sourceTitle": "来源与链路",
+      "sourceSubtitle": "在复用或晋升前，先追溯它的来源链路。",
+      "lineageTitle": "来源轨迹",
+      "lineageSubtitle": "按顺序展示这条知识是如何被沉淀出来的。",
+      "contextTitle": "关联上下文",
+      "contextSubtitle": "可继续跳转到关联会话、运行 Trace、Artifacts 与资源。",
+      "relatedArtifactsTitle": "关联产物",
+      "relatedArtifactsSubtitle": "帮助解释这条知识的文档、产物与支撑材料。",
+      "relatedResourcesTitle": "关联资源",
+      "relatedResourcesSubtitle": "与当前知识相连的文件、文件夹、链接与生成资源。",
+      "fields": {
+        "owner": "负责人",
+        "source": "来源对象",
+        "lastUsedAt": "最近使用",
+        "trustLevel": "可信度"
+      },
+      "actions": {
+        "openConversation": "打开关联会话",
+        "openTrace": "打开 Trace",
+        "openResources": "打开资源页",
+        "traceLabel": "运行 Trace",
+        "traceHint": "查看阻塞、执行步骤与恢复说明。",
+        "resourcesLabel": "项目资源",
+        "resourcesHint": "当前项目中有 {count} 个相关资源。"
+      }
+    },
+    "empty": {
+      "projectTitle": "当前项目还没有知识",
+      "projectDescription": "当会话、产物或运行轨迹逐渐沉淀上下文后，这里会形成项目知识。",
+      "filteredTitle": "没有匹配的知识",
+      "filteredDescription": "试试换个搜索词、来源筛选或知识类型。",
+      "selectionTitle": "选择一条知识开始阅读",
+      "selectionDescription": "从左侧列表选择知识，右侧会展示它的来源链路和关联上下文。",
+      "lineageTitle": "暂无来源链路",
+      "lineageDescription": "这条知识暂时没有可展示的推导链路。",
+      "artifactsTitle": "暂无关联产物",
+      "artifactsDescription": "当前知识还没有关联的支撑产物。",
+      "resourcesTitle": "暂无关联资源",
+      "resourcesDescription": "当前知识还没有关联的项目资源。"
+    },
+    "lineageTypes": {
+      "conversation": "会话",
+      "artifact": "产物",
+      "run": "运行",
+      "resource": "资源",
+      "trace": "追踪",
+      "unknown": "引用"
+    },
+    "sourceDescriptions": {
+      "conversation": "这条知识来自关联会话中的上下文沉淀，随后被保留为可复用的项目知识。",
+      "artifact": "这条知识从项目流程中的文档或产物中提炼而来。",
+      "run": "这条知识源自运行状态、Trace 发现或运营复盘后的沉淀。"
     }
   },
   "trace": {
@@ -572,10 +643,26 @@
   "resources": {
     "header": {
       "eyebrow": "Resources",
-      "title": "项目资源中心"
+      "title": "项目资源中心",
+      "subtitle": "统一管理原始资料与 AI 生成资源，保持项目上下文可追溯。"
     },
     "search": {
-      "placeholder": "搜索资源名称、路径、标签或类型"
+      "placeholder": "搜索资源名称、路径、标签、类型或来源"
+    },
+    "tabs": {
+      "all": "全部",
+      "source": "原始资源",
+      "generated": "AI 生成"
+    },
+    "stats": {
+      "total": "资源总量",
+      "totalHelper": "当前项目中可访问的全部资源。",
+      "source": "原始资源",
+      "sourceHelper": "用户上传的文件、文件夹与外部链接。",
+      "generated": "AI 生成",
+      "generatedHelper": "会话过程中产出的 Artifact 与派生文件。",
+      "artifact": "Artifacts",
+      "artifactHelper": "与项目会话关联的结构化 AI 输出。"
     },
     "views": {
       "list": "列表视图",
@@ -606,6 +693,10 @@
       "artifact": "Artifact",
       "url": "链接"
     },
+    "origins": {
+      "source": "原始资源",
+      "generated": "AI 生成"
+    },
     "pagination": {
       "previous": "上一页",
       "next": "下一页",
@@ -614,6 +705,7 @@
     "preview": {
       "title": "资源预览",
       "location": "位置",
+      "origin": "来源",
       "kind": "类型",
       "size": "大小",
       "linkedConversations": "关联会话",
@@ -651,35 +743,121 @@
   "tools": {
     "header": {
       "eyebrow": "Tools",
-      "title": "工具目录",
-      "subtitle": "内置工具、Skill 和 MCP 统一收敛到一个页面。"
+      "title": "工作区工具"
     },
     "tabs": {
-      "title": "工具分组",
-      "subtitle": "从发送框移除后，工具能力集中在这里查看。",
       "builtin": "内置工具",
       "skill": "Skill",
-      "mcp": "MCP",
-      "emptyTitle": "暂无工具",
-      "emptyDescription": "当前分组没有可展示的工具。"
+      "mcp": "MCP"
+    },
+    "emptyTitle": "暂无工具",
+    "emptyDescription": "当前条件下没有可展示的工具。",
+    "search": {
+      "placeholder": "按名称、权限、状态或配置搜索…"
+    },
+    "pagination": {
+      "perPage": "每页 {count} 条",
+      "previous": "上一页",
+      "next": "下一页",
+      "summary": "第 {page} / {totalPages} 页，共 {count} 项"
+    },
+    "editor": {
+      "createTitle": "新建工具",
+      "editTitle": "编辑工具"
+    },
+    "fields": {
+      "name": "名称",
+      "description": "描述",
+      "permission": "权限",
+      "status": "状态",
+      "availability": "可用性",
+      "skillContent": "Skill 内容",
+      "serverName": "服务名",
+      "endpoint": "端点",
+      "toolNames": "工具列表",
+      "notes": "备注"
+    },
+    "actions": {
+      "createSkill": "新建 Skill",
+      "createMcp": "新建 MCP",
+      "enable": "启用",
+      "disable": "禁用",
+      "delete": "删除"
+    },
+    "permissions": {
+      "allow": "允许",
+      "deny": "禁止",
+      "ask": "询问",
+      "readonly": "只读"
+    },
+    "status": {
+      "active": "启用",
+      "disabled": "禁用"
+    },
+    "availability": {
+      "healthy": "健康",
+      "configured": "已配置",
+      "attention": "关注"
     }
   },
   "agentCenter": {
     "header": {
-      "title": "智能体"
+      "title": "数字员工",
+      "workspaceScope": "工作区编制",
+      "projectScope": "项目编组",
+      "agentSubtitle": "按角色管理与调用 AI 员工。",
+      "teamSubtitle": "按协作关系管理团队智能体。",
+      "agentHighlight": "",
+      "teamHighlight": ""
+    },
+    "stats": {
+      "agents": "员工数",
+      "teams": "团队数",
+      "online": "在线中",
+      "tasks": "进行中任务",
+      "agentHelper": "当前范围内可派发的数字员工",
+      "teamHelper": "当前范围内可协作的 AI 团队",
+      "onlineHelper": "活跃可响应的员工数量",
+      "taskHelper": "员工与团队当前承接中的任务总数"
+    },
+    "filters": {
+      "status": {
+        "all": "全部状态",
+        "online": "在线",
+        "busy": "忙碌",
+        "offline": "离线"
+      },
+      "scenario": {
+        "all": "全部场景"
+      },
+      "sort": {
+        "recent": "最近使用",
+        "efficiency": "效率",
+        "cost": "成本",
+        "favorite": "收藏"
+      }
+    },
+    "metrics": {
+      "completedToday": "今日完成",
+      "avgResponse": "平均响应",
+      "cost": "消耗"
+    },
+    "states": {
+      "empty": "暂无数据",
+      "noResults": "无搜索结果"
     },
     "sections": {
       "agents": {
-        "title": "智能体管理",
-        "subtitle": "维护已有智能体，并按作用域区分工作区引用与项目自有对象。",
+        "title": "数字员工编制",
+        "subtitle": "按角色查看与管理数字员工。",
         "emptyTitle": "暂无智能体",
         "emptyDescription": "当前范围没有匹配的智能体。",
         "emptyProjectTitle": "暂无项目智能体",
         "emptyProjectDescription": "可以通过右上角新建项目级智能体。"
       },
       "teams": {
-        "title": "团队智能体管理",
-        "subtitle": "集中管理团队智能体、协作模式与组织结构配置。",
+        "title": "团队智能体编组",
+        "subtitle": "查看团队结构与协作关系。",
         "emptyTitle": "暂无团队智能体",
         "emptyDescription": "当前范围没有匹配的团队智能体。",
         "emptyProjectTitle": "暂无项目团队智能体",
@@ -830,44 +1008,72 @@
   },
   "settings": {
     "header": {
-      "eyebrow": "Settings / Admin",
-      "title": "Connections、RBAC、策略、审计与日志",
-      "subtitle": "只读治理面 + shell preferences + host status。"
+      "eyebrow": "系统设置",
+      "title": "桌面环境",
+      "subtitle": "通用、主题、国际化与版本。"
+    },
+    "tabs": {
+      "general": "通用",
+      "theme": "主题",
+      "i18n": "国际化",
+      "version": "版本"
     },
     "preferences": {
-      "title": "Shell 偏好",
-      "subtitle": "Theme / locale / 两侧边栏折叠状态会通过 host bridge 持久化。",
-      "theme": "Theme",
-      "locale": "Locale",
+      "title": "偏好设置",
+      "theme": "主题",
+      "locale": "语言",
       "leftSidebarCollapsed": "默认折叠左侧栏",
       "rightSidebarCollapsed": "默认折叠右侧栏",
       "themeOptions": {
-        "system": "system",
-        "light": "light",
-        "dark": "dark"
+        "system": "跟随系统",
+        "light": "浅色",
+        "dark": "深色"
       },
       "localeOptions": {
-        "zh-CN": "zh-CN",
-        "en-US": "en-US"
+        "zh-CN": "简体中文",
+        "en-US": "English"
       }
     },
-    "host": {
-      "title": "Host 状态",
-      "subtitle": "Tauri 2 host shell 健康度与 workspace 绑定。"
+    "general": {
+      "layoutTitle": "布局",
+      "leftSidebarHint": "启动时默认收起左侧导航",
+      "rightSidebarHint": "启动时默认收起右侧详情"
+    },
+    "theme": {
+      "title": "主题模式"
+    },
+    "i18n": {
+      "title": "界面语言"
+    },
+    "version": {
+      "runtimeTitle": "运行环境",
+      "fields": {
+        "shell": "Shell",
+        "appVersion": "版本号",
+        "workspace": "当前工作区",
+        "cargoWorkspace": "Cargo Workspace"
+      },
+      "values": {
+        "enabled": "已启用",
+        "disabled": "未启用"
+      }
     }
   },
   "userCenter": {
     "header": {
       "eyebrow": "用户中心",
       "title": "工作区用户中心与 RBAC 原型",
-      "subtitle": "通过工作区级角色、权限与菜单定义，模拟真实的 RBAC 管理台联动。"
+      "subtitle": "通过工作区级角色、权限与菜单定义，模拟真实的 RBAC 管理台联动。",
+      "heroTitle": "把成员、角色、权限和导航放进同一个治理视图",
+      "heroSubtitle": "优先展示范围、风险、覆盖关系和近期变更，避免把用户中心做成只有表单的管理页。"
     },
     "common": {
       "empty": "暂无数据",
       "noRoles": "未绑定角色",
       "status": "状态",
       "active": "启用",
-      "disabled": "禁用"
+      "disabled": "禁用",
+      "confirmDelete": "确认删除当前条目吗？"
     },
     "nav": {
       "title": "用户中心菜单",
@@ -877,6 +1083,32 @@
       "roles": "角色列表",
       "permissions": "权限列表",
       "menus": "菜单列表"
+    },
+    "metrics": {
+      "users": "成员总数",
+      "activeUsersHelper": "当前启用 {count} 人",
+      "roles": "角色总数",
+      "orphanRolesHelper": "无成员角色 {count} 个",
+      "permissions": "权限总数",
+      "bundleHelper": "权限包 {count} 个",
+      "menus": "菜单节点",
+      "disabledMenusHelper": "停用菜单 {count} 个"
+    },
+    "alerts": {
+      "disabledMenuTitle": "菜单“{label}”已停用",
+      "disabledMenuDescription": "仍有 {count} 个角色保留该菜单绑定，建议同步清理。",
+      "orphanRoleTitle": "角色“{name}”暂无成员",
+      "orphanRoleDescription": "角色已保留但当前没有成员承接，适合做治理复盘。",
+      "bundleRiskTitle": "权限包“{name}”存在停用成员权限",
+      "bundleRiskDescription": "当前组合里有 {count} 个成员权限已停用，建议重新整理权限包。",
+      "emptyTitle": "当前没有高优先级治理提醒",
+      "emptyDescription": "可以继续从成员、角色和权限覆盖关系检查治理健康度。"
+    },
+    "filters": {
+      "status": "状态筛选",
+      "scope": "范围筛选",
+      "allStatuses": "全部状态",
+      "allScopes": "全部范围"
     },
     "scope": {
       "allProjects": "全部项目",
@@ -907,7 +1139,23 @@
       "permissionTitle": "角色与原子权限",
       "permissionSubtitle": "当前用户的有效权限来自角色绑定并展开权限包。",
       "roleListTitle": "绑定角色",
-      "atomicPermissionTitle": "有效原子权限"
+      "atomicPermissionTitle": "有效原子权限",
+      "heroSummary": "把账号身份、安全状态、权限能力和近期活动放进同一页，优先帮助你判断当前用户在工作区里的真实能力边界。",
+      "timelineTitle": "最近活动",
+      "timelineSubtitle": "从 mock 活动流查看最近登录、操作与治理动作。",
+      "permissionCountLabel": "{count} 个权限",
+      "emptyPermissionTitle": "暂无可展示的权限分组",
+      "emptyPermissionDescription": "当前用户还没有形成有效的原子权限画像。",
+      "emptyTimelineTitle": "暂无活动记录",
+      "emptyTimelineDescription": "当前用户近期没有可展示的 mock 活动。",
+      "metrics": {
+        "permissionCount": "有效权限",
+        "permissionHelper": "按 targetType 聚合后的原子权限数",
+        "menuCount": "可访问菜单",
+        "menuHelper": "当前会话可见导航节点总数",
+        "roleCount": "绑定角色",
+        "roleHelper": "当前账号在工作区内承接的角色数"
+      }
     },
     "users": {
       "title": "用户列表",
@@ -923,7 +1171,19 @@
       "enable": "启用",
       "delete": "删除",
       "roleBindingTitle": "关联角色",
-      "scopeTitle": "权限范围"
+      "scopeTitle": "权限范围",
+      "searchPlaceholder": "搜索成员昵称、账号、邮箱或角色…",
+      "currentSessionUser": "当前会话用户",
+      "effectivePermissions": "{count} 个有效权限",
+      "effectiveMenus": "{count} 个可见菜单",
+      "metrics": {
+        "total": "成员总数",
+        "activeHelper": "当前启用 {count} 人",
+        "disabled": "禁用成员",
+        "scopeHelper": "指定项目范围 {count} 人",
+        "unassigned": "未分配角色",
+        "unassignedHelper": "适合优先检查权限与范围归属"
+      }
     },
     "roles": {
       "title": "角色列表",
@@ -945,7 +1205,15 @@
       "delete": "删除",
       "permissionCount": "{count} 个权限",
       "menuCount": "{count} 个菜单",
-      "memberCount": "{count} 个成员"
+      "memberCount": "{count} 个成员",
+      "metrics": {
+        "total": "角色总数",
+        "disabledHelper": "停用角色 {count} 个",
+        "orphan": "无成员角色",
+        "orphanHelper": "没有成员承接的角色模板",
+        "broadAccess": "广覆盖角色",
+        "broadAccessHelper": "菜单绑定过多，适合重点复查"
+      }
     },
     "permissions": {
       "title": "权限列表",
@@ -969,7 +1237,16 @@
       "bundleMembers": "{count} 个成员权限",
       "disable": "禁用",
       "enable": "启用",
-      "delete": "删除"
+      "delete": "删除",
+      "usedByRoles": "被 {count} 个角色引用",
+      "metrics": {
+        "total": "权限总数",
+        "bundleHelper": "权限包 {count} 个",
+        "disabled": "停用权限",
+        "disabledHelper": "适合优先清理引用关系",
+        "risky": "风险权限",
+        "riskyHelper": "包含停用成员或高风险组合"
+      }
     },
     "menus": {
       "title": "菜单列表",
@@ -981,7 +1258,24 @@
       "toggleStatus": "切换启用状态",
       "parentHint": "父节点禁用后，其子节点将自动不可访问。",
       "roleUsage": "{count} 个角色使用",
-      "nonNavigable": "非导航节点"
+      "nonNavigable": "非导航节点",
+      "rootNode": "顶层节点",
+      "rootNode": "顶层节点",
+      "metrics": {
+        "total": "菜单总数",
+        "userCenterHelper": "用户中心子菜单 {count} 个",
+        "disabled": "停用菜单",
+        "disabledHelper": "停用后将影响整条导航分支",
+        "unused": "未使用菜单",
+        "unusedHelper": "当前没有角色绑定的导航项"
+      }
+    },
+    "risk": {
+      "orphanRole": "无成员",
+      "disabledRole": "已停用",
+      "broadMenuAccess": "菜单覆盖过大",
+      "disabledPermission": "权限已停用",
+      "bundleContainsDisabled": "权限包含停用成员"
     }
   },
   "automations": {
@@ -1067,6 +1361,13 @@
       "low": "低",
       "medium": "中",
       "high": "高"
+    },
+    "permissionTargetType": {
+      "project": "项目",
+      "agent": "Agent",
+      "tool": "工具",
+      "skill": "Skill",
+      "mcp": "MCP"
     },
     "viewStatus": {
       "healthy": "健康",
@@ -1442,6 +1743,33 @@
         "title": "Logs",
         "description": "运行时日志、宿主状态与调试入口。",
         "items": ["tauri-plugin-log", "Host healthcheck", "运行摘要"]
+      }
+    },
+    "settingsPage": {
+      "general-overview": {
+        "title": "当前环境",
+        "description": "查看当前工作区与宿主接入状态。",
+        "items": ["当前 workspace 已绑定桌面 shell", "设置页继续保持 mock-first 组织", "真实偏好项仍通过 host bridge 保存"]
+      },
+      "general-layout": {
+        "title": "布局约定",
+        "description": "保留常用布局开关。",
+        "items": ["左侧栏用于工作区与项目导航", "右侧栏用于详情与上下文面板"]
+      },
+      "theme-behavior": {
+        "title": "主题说明",
+        "description": "主题切换立即作用于桌面壳。",
+        "items": ["支持系统、浅色、深色三种模式", "主题偏好会同步到下次启动"]
+      },
+      "i18n-behavior": {
+        "title": "语言说明",
+        "description": "语言切换覆盖主要界面文案。",
+        "items": ["当前提供简体中文与 English", "语言偏好会同步到下次启动"]
+      },
+      "version-meta": {
+        "title": "版本信息",
+        "description": "展示当前桌面壳运行信息。",
+        "items": ["版本信息来自当前 host state", "可用于核对本地运行环境"]
       }
     },
     "connection": {

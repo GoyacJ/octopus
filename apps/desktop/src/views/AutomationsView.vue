@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
-import { UiBadge, UiEmptyState, UiSectionHeading, UiSurface } from '@octopus/ui'
+import { UiBadge, UiEmptyState, UiRecordCard, UiSectionHeading } from '@octopus/ui'
 
 import { enumLabel, resolveMockField } from '@/i18n/copy'
 import { useWorkbenchStore } from '@/stores/workbench'
@@ -11,46 +11,44 @@ const workbench = useWorkbenchStore()
 </script>
 
 <template>
-  <section class="section-stack">
-    <UiSectionHeading
-      :eyebrow="t('automations.placeholder.eyebrow')"
-      :title="t('automations.placeholder.title')"
-      :subtitle="t('automations.placeholder.subtitle')"
-    />
+  <div class="w-full flex flex-col gap-10 pb-20">
+    <header class="px-2 shrink-0">
+      <UiSectionHeading
+        :eyebrow="t('automations.placeholder.eyebrow')"
+        :title="t('automations.placeholder.title')"
+        :subtitle="t('automations.placeholder.subtitle')"
+      />
+    </header>
 
-    <UiSurface :title="t('automations.list.title')" :subtitle="t('automations.list.subtitle')">
-      <div v-if="workbench.workspaceAutomations.length" class="panel-list">
-        <article v-for="automation in workbench.workspaceAutomations" :key="automation.id" class="automation-card">
-          <div class="meta-row">
+    <main class="flex-1 px-2 space-y-6">
+      <div class="space-y-1 border-b border-border-subtle pb-4">
+        <h3 class="text-lg font-bold text-text-primary">{{ t('automations.list.title') }}</h3>
+        <p class="text-[13px] text-text-secondary">{{ t('automations.list.subtitle') }}</p>
+      </div>
+
+      <div v-if="workbench.workspaceAutomations.length" data-testid="automations-record-list" class="grid gap-4 sm:grid-cols-2">
+        <UiRecordCard
+          v-for="automation in workbench.workspaceAutomations"
+          :key="automation.id"
+          :test-id="`automation-record-${automation.id}`"
+          :title="resolveMockField('automation', automation.id, 'title', automation.title)"
+          :description="resolveMockField('automation', automation.id, 'description', automation.description)"
+        >
+          <template #badges>
             <UiBadge :label="enumLabel('automationStatus', automation.status)" :tone="automation.status === 'active' ? 'success' : 'warning'" />
             <UiBadge :label="resolveMockField('automation', automation.id, 'cadence', automation.cadence)" subtle />
-          </div>
-          <strong>{{ resolveMockField('automation', automation.id, 'title', automation.title) }}</strong>
-          <p>{{ resolveMockField('automation', automation.id, 'description', automation.description) }}</p>
-          <small>{{ resolveMockField('automation', automation.id, 'output', automation.output) }}</small>
-        </article>
+          </template>
+          <template #meta>
+            <span class="text-[12px] text-text-secondary">{{ resolveMockField('automation', automation.id, 'output', automation.output) }}</span>
+          </template>
+        </UiRecordCard>
       </div>
-      <UiEmptyState v-else :title="t('automations.list.emptyTitle')" :description="t('automations.list.emptyDescription')" />
-    </UiSurface>
-  </section>
+      
+      <UiEmptyState 
+        v-else 
+        :title="t('automations.list.emptyTitle')" 
+        :description="t('automations.list.emptyDescription')" 
+      />
+    </main>
+  </div>
 </template>
-
-<style scoped>
-.automation-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  min-width: 0;
-  padding: 1rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
-}
-
-.automation-card p,
-.automation-card small {
-  color: var(--text-secondary);
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-</style>

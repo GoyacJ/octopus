@@ -1,24 +1,33 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { Plus, UserCheck, UserCog, UserMinus } from 'lucide-vue-next'
+
 import {
   UiBadge,
   UiButton,
   UiCheckbox,
   UiField,
   UiInput,
+  UiMetricCard,
   UiRadioGroup,
+  UiRecordCard,
   UiSelect,
   UiSurface,
+  UiTextarea,
+  UiToolbarRow,
 } from '@octopus/ui'
-import { Plus, UserCheck, UserCog, UserMinus } from 'lucide-vue-next'
 
+import { formatDateTime } from '@/i18n/copy'
 import { useWorkbenchStore } from '@/stores/workbench'
 
 const { t } = useI18n()
 const workbench = useWorkbenchStore()
 
 const selectedUserId = ref<string>('')
+const searchQuery = ref('')
+const statusFilter = ref<'all' | 'active' | 'disabled'>('all')
+const scopeFilter = ref<'all' | 'all-projects' | 'selected-projects'>('all')
 
 const form = reactive({
   username: '',
@@ -30,6 +39,65 @@ const form = reactive({
   scopeMode: 'all-projects' as 'all-projects' | 'selected-projects',
   scopeProjectIds: [] as string[],
   roleIds: [] as string[],
+})
+
+const normalizedSearch = computed(() => searchQuery.value.trim().toLowerCase())
+const userItems = computed(() => workbench.workspaceUserListItems)
+const filteredUsers = computed(() =>
+  userItems.value.filter((user) => {
+    if (statusFilter.value !== 'all' && user.status !== statusFilter.value) {
+      return false
+    }
+    if (scopeFilter.value !== 'all') {
+      const isAllProjects = user.scopeSummary === t('userCenter.scope.allProjects')
+      if (scopeFilter.value === 'all-projects' && !isAllProjects) {
+        return false
+      }
+      if (scopeFilter.value === 'selected-projects' && isAllProjects) {
+        return false
+      }
+    }
+    if (!normalizedSearch.value) {
+      return true
+    }
+    return [user.nickname, user.username, user.email, user.roleSummary]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedSearch.value)
+  }),
+)
+
+function resolveMetricTone(hasWarning: boolean): 'default' | 'warning' {
+  return hasWarning ? 'warning' : 'default'
+}
+
+const summaryMetrics = computed(() => {
+  const disabledCount = userItems.value.filter((user) => user.status === 'disabled').length
+  const selectedScopeCount = userItems.value.filter((user) => user.scopeSummary !== t('userCenter.scope.allProjects')).length
+  const noRoleCount = userItems.value.filter((user) => !user.roleNames.length).length
+  return [
+    {
+      id: 'users',
+      label: t('userCenter.users.metrics.total'),
+      value: String(userItems.value.length),
+      helper: t('userCenter.users.metrics.activeHelper', { count: userItems.value.length - disabledCount }),
+      tone: 'accent' as const,
+    },
+    {
+      id: 'disabled',
+      label: t('userCenter.users.metrics.disabled'),
+      value: String(disabledCount),
+      helper: t('userCenter.users.metrics.scopeHelper', { count: selectedScopeCount }),
+      tone: resolveMetricTone(disabledCount > 0),
+    },
+    {
+      id: 'unassigned',
+      label: t('userCenter.users.metrics.unassigned'),
+      value: String(noRoleCount),
+      helper: t('userCenter.users.metrics.unassignedHelper'),
+      tone: resolveMetricTone(noRoleCount > 0),
+    },
+  ]
 })
 
 function applyForm(userId?: string) {
@@ -80,19 +148,9 @@ watch(
   { immediate: true },
 )
 
-function roleSummary(userId: string) {
-  const membership = workbench.memberships.find((item) =>
-    item.workspaceId === workbench.currentWorkspaceId && item.userId === userId,
-  )
-  if (!membership?.roleIds.length) {
-    return t('userCenter.common.noRoles')
-  }
-
-  return membership.roleIds
-    .map((roleId) => workbench.workspaceRoles.find((role) => role.id === roleId)?.name)
-    .filter((name): name is string => Boolean(name))
-    .join(', ')
-}
+const selectedUserSummary = computed(() =>
+  userItems.value.find((user) => user.id === selectedUserId.value),
+)
 
 function saveUser() {
   if (selectedUserId.value) {
@@ -145,134 +203,173 @@ const statusOptions = [
   { value: 'active', label: t('userCenter.common.active') },
   { value: 'disabled', label: t('userCenter.common.disabled') },
 ]
+
+const filterStatusOptions = computed(() => [
+  { value: 'all', label: t('userCenter.filters.allStatuses') },
+  { value: 'active', label: t('userCenter.common.active') },
+  { value: 'disabled', label: t('userCenter.common.disabled') },
+])
+
+const filterScopeOptions = computed(() => [
+  { value: 'all', label: t('userCenter.filters.allScopes') },
+  { value: 'all-projects', label: t('userCenter.scope.allProjects') },
+  { value: 'selected-projects', label: t('userCenter.scope.selectedProjects') },
+])
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
+  <section class="section-stack">
+    <div class="grid gap-4 md:grid-cols-3">
+      <UiMetricCard
+        v-for="metric in summaryMetrics"
+        :key="metric.id"
+        :data-testid="metric.id === 'users' ? 'user-center-metric-users' : undefined"
+        :label="metric.label"
+        :value="metric.value"
+        :helper="metric.helper"
+        :tone="metric.tone"
+      />
+    </div>
+
     <UiSurface :title="t('userCenter.users.title')" :subtitle="t('userCenter.users.subtitle')">
-      <div class="flex flex-col gap-4">
-        <div class="flex items-center justify-between gap-4">
-          <div class="flex flex-col">
-            <h3 class="text-base font-bold text-text-primary">{{ t('userCenter.users.listTitle') }}</h3>
-            <p class="text-sm text-text-secondary">{{ t('userCenter.users.listSubtitle') }}</p>
-          </div>
+      <UiToolbarRow class="mb-4">
+        <template #search>
+          <UiField :label="t('common.search')">
+            <UiInput v-model="searchQuery" :placeholder="t('userCenter.users.searchPlaceholder')" />
+          </UiField>
+        </template>
+        <template #filters>
+          <UiField :label="t('userCenter.filters.status')">
+            <UiSelect v-model="statusFilter" :options="filterStatusOptions" />
+          </UiField>
+          <UiField :label="t('userCenter.filters.scope')">
+            <UiSelect v-model="scopeFilter" :options="filterScopeOptions" />
+          </UiField>
+        </template>
+        <template #actions>
           <UiButton size="sm" @click="applyForm()">
             <Plus :size="16" />
             {{ t('userCenter.users.create') }}
           </UiButton>
-        </div>
+        </template>
+      </UiToolbarRow>
 
-        <div class="flex flex-col gap-2">
-          <article
-            v-for="user in workbench.workspaceUsers"
+      <div class="grid gap-4 xl:grid-cols-[minmax(22rem,30rem)_minmax(0,1fr)]">
+        <div class="space-y-3">
+          <UiRecordCard
+            v-for="user in filteredUsers"
             :key="user.id"
-            class="group flex flex-col justify-between gap-4 rounded-[calc(var(--radius-lg)+1px)] border p-4 transition-all duration-fast ease-apple sm:flex-row sm:items-center"
-            :class="[
-              selectedUserId === user.id
-                ? 'border-primary/20 bg-surface shadow-sm'
-                : 'border-border bg-subtle/30 hover:border-border-strong hover:bg-subtle/50'
-            ]"
+            :title="user.nickname"
+            :description="user.email"
+            :active="selectedUserId === user.id"
+            interactive
+            @click="applyForm(user.id)"
           >
-            <div class="flex items-center gap-4 min-w-0 flex-1 cursor-pointer" @click="applyForm(user.id)">
-              <div class="flex size-11 shrink-0 items-center justify-center rounded-[calc(var(--radius-m)+2px)] bg-primary/10 text-primary font-bold text-lg">
-                {{ user.avatar }}
-              </div>
-              <div class="flex flex-col min-w-0">
-                <div class="flex items-center gap-2">
-                  <strong class="text-sm font-semibold text-text-primary truncate">{{ user.nickname }}</strong>
-                  <UiBadge :label="user.status" :tone="user.status === 'active' ? 'success' : 'warning'" />
-                </div>
-                <span class="text-xs text-text-tertiary truncate">{{ user.email }}</span>
-                <span class="text-xs text-text-secondary mt-0.5 truncate">{{ roleSummary(user.id) }}</span>
-              </div>
-            </div>
-
-            <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity focus-within:opacity-100">
-              <UiButton variant="ghost" size="sm" :title="t('userCenter.users.switchCurrentUser')" @click="switchCurrentUser(user.id)">
+            <template #eyebrow>{{ user.username }}</template>
+            <template #badges>
+              <UiBadge v-if="user.isCurrentUser" :label="t('userCenter.users.currentSessionUser')" tone="info" />
+              <UiBadge :label="user.status" :tone="user.status === 'active' ? 'success' : 'warning'" />
+            </template>
+            <template #meta>
+              <UiBadge :label="user.roleSummary" subtle />
+              <UiBadge :label="user.scopeSummary" subtle />
+              <span>{{ t('userCenter.users.effectivePermissions', { count: user.effectivePermissionCount }) }}</span>
+              <span>{{ t('userCenter.users.effectiveMenus', { count: user.effectiveMenuCount }) }}</span>
+              <span>{{ formatDateTime(user.lastActivityAt) }}</span>
+            </template>
+            <template #actions>
+              <UiButton variant="ghost" size="sm" :title="t('userCenter.users.switchCurrentUser')" :data-testid="`user-switch-current-user-${user.id}`" @click.stop="switchCurrentUser(user.id)">
                 <UserCheck :size="16" />
               </UiButton>
-              <UiButton variant="ghost" size="sm" :title="user.status === 'active' ? t('userCenter.users.disable') : t('userCenter.users.enable')" @click="workbench.toggleUserStatus(user.id)">
+              <UiButton variant="ghost" size="sm" :title="user.status === 'active' ? t('userCenter.users.disable') : t('userCenter.users.enable')" @click.stop="workbench.toggleUserStatus(user.id)">
                 <UserCog :size="16" />
               </UiButton>
-              <UiButton variant="ghost" size="sm" class="text-status-error hover:bg-status-error/10" @click="removeUser(user.id)">
+              <UiButton variant="ghost" size="sm" @click.stop="removeUser(user.id)">
                 <UserMinus :size="16" />
               </UiButton>
-            </div>
-          </article>
+            </template>
+          </UiRecordCard>
         </div>
+
+        <UiSurface
+          variant="subtle"
+          :title="t(selectedUserId ? 'userCenter.users.editTitle' : 'userCenter.users.createTitle')"
+          :subtitle="t('userCenter.users.formSubtitle')"
+        >
+          <div v-if="selectedUserSummary" class="mb-4 flex flex-wrap items-center gap-2">
+            <UiBadge :label="selectedUserSummary.roleSummary" subtle />
+            <UiBadge :label="t('userCenter.users.effectivePermissions', { count: selectedUserSummary.effectivePermissionCount })" subtle />
+            <UiBadge :label="t('userCenter.users.effectiveMenus', { count: selectedUserSummary.effectiveMenuCount })" subtle />
+          </div>
+
+          <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <UiField :label="t('userCenter.profile.usernameLabel')">
+              <UiInput v-model="form.username" />
+            </UiField>
+            <UiField :label="t('userCenter.profile.nicknameLabel')">
+              <UiInput v-model="form.nickname" />
+            </UiField>
+            <UiField :label="t('userCenter.profile.phoneLabel')">
+              <UiInput v-model="form.phone" />
+            </UiField>
+            <UiField :label="t('userCenter.profile.emailLabel')">
+              <UiInput v-model="form.email" />
+            </UiField>
+            <UiField :label="t('userCenter.profile.genderLabel')">
+              <UiSelect v-model="form.gender" :options="genderOptions" />
+            </UiField>
+            <UiField :label="t('userCenter.common.status')">
+              <UiSelect v-model="form.status" :options="statusOptions" />
+            </UiField>
+          </div>
+
+          <div class="mt-4 grid gap-4 xl:grid-cols-2">
+            <UiSurface variant="subtle" padding="sm" :title="t('userCenter.users.roleBindingTitle')">
+              <div class="mb-3 flex items-center justify-between">
+                <UiBadge :label="String(form.roleIds.length)" subtle />
+              </div>
+              <div class="space-y-2">
+                <UiCheckbox
+                  v-for="role in workbench.workspaceRoles"
+                  :key="role.id"
+                  v-model="form.roleIds"
+                  :value="role.id"
+                  :label="role.name"
+                />
+              </div>
+            </UiSurface>
+
+            <UiSurface variant="subtle" padding="sm" :title="t('userCenter.users.scopeTitle')">
+              <UiRadioGroup
+                v-model="form.scopeMode"
+                direction="horizontal"
+                :options="[
+                  { value: 'all-projects', label: t('userCenter.scope.allProjects') },
+                  { value: 'selected-projects', label: t('userCenter.scope.selectedProjects') }
+                ]"
+              />
+              <div v-if="form.scopeMode === 'selected-projects'" class="mt-4 space-y-2">
+                <UiCheckbox
+                  v-for="project in workbench.workspaceProjects"
+                  :key="project.id"
+                  v-model="form.scopeProjectIds"
+                  :value="project.id"
+                  :label="project.name"
+                />
+              </div>
+            </UiSurface>
+          </div>
+
+          <div class="mt-4 flex flex-wrap justify-end gap-3">
+            <UiButton variant="ghost" @click="applyForm(workbench.workspaceUsers[0]?.id)">
+              {{ t('common.cancel') }}
+            </UiButton>
+            <UiButton @click="saveUser">
+              {{ t('common.save') }}
+            </UiButton>
+          </div>
+        </UiSurface>
       </div>
     </UiSurface>
-
-    <UiSurface 
-      :title="t(selectedUserId ? 'userCenter.users.editTitle' : 'userCenter.users.createTitle')" 
-      :subtitle="t('userCenter.users.formSubtitle')"
-    >
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        <UiField :label="t('userCenter.profile.usernameLabel')">
-          <UiInput v-model="form.username" />
-        </UiField>
-        <UiField :label="t('userCenter.profile.nicknameLabel')">
-          <UiInput v-model="form.nickname" />
-        </UiField>
-        <UiField :label="t('userCenter.profile.phoneLabel')">
-          <UiInput v-model="form.phone" />
-        </UiField>
-        <UiField :label="t('userCenter.profile.emailLabel')">
-          <UiInput v-model="form.email" />
-        </UiField>
-        <UiField :label="t('userCenter.profile.genderLabel')">
-          <UiSelect v-model="form.gender" :options="genderOptions" />
-        </UiField>
-        <UiField :label="t('userCenter.common.status')">
-          <UiSelect v-model="form.status" :options="statusOptions" />
-        </UiField>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 py-4 border-t border-border/60 mt-4">
-        <div class="flex flex-col gap-3">
-          <h4 class="text-sm font-bold text-text-primary">{{ t('userCenter.users.roleBindingTitle') }}</h4>
-          <div class="flex flex-wrap gap-x-6 gap-y-2">
-            <UiCheckbox 
-              v-for="role in workbench.workspaceRoles" 
-              :key="role.id" 
-              v-model="form.roleIds" 
-              :value="role.id" 
-              :label="role.name"
-            />
-          </div>
-        </div>
-
-        <div class="flex flex-col gap-3">
-          <h4 class="text-sm font-bold text-text-primary">{{ t('userCenter.users.scopeTitle') }}</h4>
-          <UiRadioGroup 
-            v-model="form.scopeMode"
-            direction="horizontal"
-            :options="[
-              { value: 'all-projects', label: t('userCenter.scope.allProjects') },
-              { value: 'selected-projects', label: t('userCenter.scope.selectedProjects') }
-            ]"
-          />
-
-          <div v-if="form.scopeMode === 'selected-projects'" class="flex flex-wrap gap-x-6 gap-y-2 pt-2 animate-in fade-in slide-in-from-top-1 duration-fast">
-            <UiCheckbox 
-              v-for="project in workbench.workspaceProjects" 
-              :key="project.id" 
-              v-model="form.scopeProjectIds" 
-              :value="project.id" 
-              :label="project.name"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div class="flex justify-end gap-3 pt-6 border-t border-border/60 mt-2">
-        <UiButton variant="ghost" @click="applyForm(workbench.workspaceUsers[0]?.id)">
-          {{ t('common.cancel') }}
-        </UiButton>
-        <UiButton @click="saveUser">
-          {{ t('common.save') }}
-        </UiButton>
-      </div>
-    </UiSurface>
-  </div>
+  </section>
 </template>

@@ -4,6 +4,7 @@ import { onBeforeUnmount, onMounted } from 'vue'
 import WorkbenchSearchOverlay from '@/components/layout/WorkbenchSearchOverlay.vue'
 import WorkbenchSidebar from '@/components/layout/WorkbenchSidebar.vue'
 import WorkbenchTopbar from '@/components/layout/WorkbenchTopbar.vue'
+import DesktopPetHost from '@/components/pet/DesktopPetHost.vue'
 import { useShellStore } from '@/stores/shell'
 
 const shell = useShellStore()
@@ -30,48 +31,33 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-    class="app-shell-grid"
-    :class="{
-      'left-collapsed': shell.leftSidebarCollapsed,
-    }"
-  >
-    <WorkbenchTopbar class="shell-topbar" />
-    <div class="workbench-body">
-      <WorkbenchSidebar class="shell-sidebar" />
-      <main class="workbench-main scroll-y" data-testid="workbench-main">
-        <slot />
+  <div class="flex h-screen w-screen overflow-hidden bg-background font-sans text-text-primary antialiased">
+    <!-- Notion Style: Sidebar is full height -->
+    <WorkbenchSidebar />
+
+    <div class="flex flex-1 flex-col min-w-0 relative">
+      <WorkbenchTopbar />
+      
+      <main class="flex-1 overflow-y-auto min-w-0" data-testid="workbench-main">
+        <!-- Removed fixed padding to allow full-bleed layouts (like Conversation) -->
+        <div class="w-full h-full">
+          <slot />
+        </div>
       </main>
     </div>
+
     <WorkbenchSearchOverlay />
+    <DesktopPetHost />
   </div>
 </template>
 
 <style scoped>
-.shell-topbar {
-  grid-area: topbar;
+main {
+  scrollbar-gutter: stable;
 }
 
-.workbench-body {
-  grid-area: body;
-  min-height: 0;
-}
-
-.shell-sidebar {
-  grid-area: sidebar;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.workbench-main {
-  grid-area: main;
-  min-width: 0;
-  padding: 1.1rem 1.25rem 1.4rem;
-}
-
-@media (max-width: 980px) {
-  .workbench-main {
-    padding: 0.9rem 0.95rem 1rem;
-  }
+:deep(.scroll-y) {
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 </style>

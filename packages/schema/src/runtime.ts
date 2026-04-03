@@ -1,4 +1,4 @@
-import type { RiskLevel, TraceTone } from './shared'
+import type { DecisionAction, RiskLevel, RunStatus, TraceKind, TraceTone } from './shared'
 
 export interface ProviderConfig {
   provider: string
@@ -7,12 +7,22 @@ export interface ProviderConfig {
   defaultModel?: string
 }
 
+export type RuntimeActorType = 'user' | 'assistant' | 'system'
+export type RuntimeEventKind =
+  | 'run_updated'
+  | 'message_created'
+  | 'trace_emitted'
+  | 'approval_requested'
+  | 'approval_resolved'
+  | 'session_updated'
+  | 'error'
+
 export interface RuntimeSessionSummary {
   id: string
   conversationId: string
   projectId: string
   title: string
-  status: string
+  status: RunStatus
   updatedAt: number
   lastMessagePreview?: string
 }
@@ -21,7 +31,7 @@ export interface RuntimeRunSnapshot {
   id: string
   sessionId: string
   conversationId: string
-  status: string
+  status: RunStatus
   currentStep: string
   startedAt: number
   updatedAt: number
@@ -33,12 +43,12 @@ export interface RuntimeMessage {
   id: string
   sessionId: string
   conversationId: string
-  senderType: 'user' | 'assistant' | 'system'
+  senderType: RuntimeActorType
   senderLabel: string
   content: string
   timestamp: number
   modelId?: string
-  status: string
+  status: RunStatus
 }
 
 export interface RuntimeTraceItem {
@@ -46,10 +56,10 @@ export interface RuntimeTraceItem {
   sessionId: string
   runId: string
   conversationId: string
-  kind: string
+  kind: TraceKind
   title: string
   detail: string
-  tone: TraceTone | 'default' | string
+  tone: TraceTone | 'default'
   timestamp: number
   actor: string
   relatedMessageId?: string
@@ -64,15 +74,15 @@ export interface RuntimeApprovalRequest {
   toolName: string
   summary: string
   detail: string
-  riskLevel: RiskLevel | string
+  riskLevel: RiskLevel
   createdAt: number
 }
 
-export type RuntimeDecisionAction = 'approve' | 'reject'
+export type RuntimeDecisionAction = DecisionAction
 
 export interface RuntimeEventEnvelope {
   id: string
-  kind: string
+  kind: RuntimeEventKind
   sessionId: string
   conversationId: string
   runId?: string

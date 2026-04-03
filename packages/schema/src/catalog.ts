@@ -2,12 +2,15 @@ import type {
   AutomationStatus,
   ConnectionMode,
   ConnectionState,
+  DesktopSettingsTabId,
   InboxItemType,
   PermissionMode,
   RiskLevel,
   SettingsSectionId,
   ToolCatalogKind,
   ViewStatus,
+  WorkspaceToolPermissionMode,
+  WorkspaceToolStatus,
 } from './shared'
 
 export interface InboxItem {
@@ -53,19 +56,56 @@ export interface ModelCatalogItem {
   defaultPermission: PermissionMode
 }
 
-export interface ToolCatalogItem {
+interface WorkspaceToolBase {
   id: string
+  workspaceId: string
   name: string
   kind: ToolCatalogKind
   description: string
   availability: ViewStatus
-  permissions: string[]
+  status: WorkspaceToolStatus
+  permissionMode: WorkspaceToolPermissionMode
+}
+
+export interface BuiltinToolDefinition extends WorkspaceToolBase {
+  kind: 'builtin'
+  builtinKey: string
+}
+
+export interface SkillToolDefinition extends WorkspaceToolBase {
+  kind: 'skill'
+  content: string
+}
+
+export interface McpToolDefinition extends WorkspaceToolBase {
+  kind: 'mcp'
+  serverName: string
+  endpoint: string
+  toolNames: string[]
+  notes: string
+}
+
+export type WorkspaceToolDefinition = BuiltinToolDefinition | SkillToolDefinition | McpToolDefinition
+
+export interface ToolCatalogItem {
+  id: string
+  workspaceId: string
+  name: string
+  kind: ToolCatalogKind
+  description: string
+  availability: ViewStatus
+  status: WorkspaceToolStatus
+  permissionMode: WorkspaceToolPermissionMode
+  content?: string
+  serverName?: string
+  endpoint?: string
+  toolNames?: string[]
+  notes?: string
 }
 
 export interface ToolCatalogGroup {
   id: ToolCatalogKind
   title: string
-  description: string
   items: ToolCatalogItem[]
 }
 
@@ -82,6 +122,24 @@ export interface AutomationSummary {
   nextRunAt?: number
   lastRunAt?: number
   output: string
+}
+
+export interface DesktopSettingsTab {
+  value: DesktopSettingsTabId
+  label: string
+}
+
+export interface DesktopSettingsSection {
+  id: string
+  tab: DesktopSettingsTabId
+  title: string
+  description?: string
+  items: string[]
+}
+
+export interface DesktopSettingsPage {
+  tabs: DesktopSettingsTab[]
+  sections: DesktopSettingsSection[]
 }
 
 export interface SettingsSection {

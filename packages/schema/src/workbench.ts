@@ -6,7 +6,12 @@ import type {
   ConversationActorKind,
   ConversationIntent,
   PermissionMode,
+  PetChatSender,
+  PetMood,
+  PetMotionState,
+  PetSpecies,
   ProjectResourceKind,
+  ProjectResourceOrigin,
   ProjectStatus,
   RiskLevel,
   RunStatus,
@@ -44,20 +49,43 @@ export interface CapabilityPolicy {
   riskLevel: RiskLevel
 }
 
+export interface AgentMetrics {
+  completedToday?: number
+  avgResponse?: string
+  cost?: string
+  activeTasks?: number
+  successRate?: string
+  efficiency?: string
+}
+
+export interface TeamMetrics {
+  activeTasks?: number
+  cost?: string
+  successRate?: string
+  handoffSpeed?: string
+  throughput?: string
+}
+
 export interface Agent {
   id: string
   name: string
   avatar: string
   role: string
+  title?: string
   summary: string
+  description?: string
   persona: string[]
   skillTags: string[]
+  tags?: string[]
   mcpBindings: string[]
   systemPrompt: string
   capabilityPolicy: CapabilityPolicy
   knowledgeScope: KnowledgeScope
   executionProfile: ExecutionProfile
   approvalPreferences: string[]
+  recentTask?: string
+  lastActiveAt?: number
+  metrics?: AgentMetrics
   scope: AgentScope
   owner: string
   status: AgentStatus
@@ -70,15 +98,23 @@ export interface Team {
   workspaceId: string
   projectId?: string
   name: string
+  title?: string
   description: string
   summary: string
   avatar: string
   mode: TeamMode
   members: string[]
+  lead?: string
   skillTags: string[]
+  tags?: string[]
   mcpBindings: string[]
   defaultKnowledgeScope: string[]
   defaultOutput: string
+  workflow?: string[]
+  recentTask?: string
+  recentOutcome?: string
+  lastActiveAt?: number
+  metrics?: TeamMetrics
   useScope: TeamScope
   projectNotes: string
   approvalPreferences: string[]
@@ -222,6 +258,43 @@ export interface Message {
   timestamp: number
 }
 
+export interface PetProfile {
+  id: string
+  species: PetSpecies
+  displayName: string
+  ownerUserId: string
+  avatarLabel: string
+  summary: string
+  greeting: string
+  mood: PetMood
+  favoriteSnack: string
+  promptHints: string[]
+  fallbackAsset: string
+  riveAsset?: string
+  stateMachine?: string
+}
+
+export interface PetMessage {
+  id: string
+  petId: string
+  sender: PetChatSender
+  content: string
+  timestamp: number
+}
+
+export interface PetPresenceState {
+  petId: string
+  isVisible: boolean
+  chatOpen: boolean
+  motionState: PetMotionState
+  unreadCount: number
+  lastInteractionAt: number
+  position: {
+    x: number
+    y: number
+  }
+}
+
 export interface ConversationQueueItem {
   id: string
   conversationId: string
@@ -243,6 +316,7 @@ export interface ProjectResource {
   workspaceId: string
   name: string
   kind: ProjectResourceKind
+  origin: ProjectResourceOrigin
   sourceArtifactId?: string
   linkedConversationIds: string[]
   createdAt: number

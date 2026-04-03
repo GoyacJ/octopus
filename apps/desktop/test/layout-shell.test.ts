@@ -58,8 +58,12 @@ describe('Workbench shell layout', () => {
 
     expect(mounted.container.querySelector('[data-testid="workbench-topbar"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="brand-title"]')?.textContent).toContain('Octopus')
+    expect(mounted.container.querySelector('.brand-logo-image')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="global-search-trigger"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="topbar-menu"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="topbar-brand-frame"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="topbar-search-frame"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="topbar-menu-frame"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="topbar-left-sidebar-toggle"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="topbar-locale-toggle"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="topbar-actions"]')).not.toBeNull()
@@ -76,14 +80,13 @@ describe('Workbench shell layout', () => {
 
     const themeButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-theme-toggle"]')
     expect(themeButton).not.toBeNull()
-    expect(themeButton?.parentElement?.classList.contains('menu-shell')).toBe(true)
 
     themeButton?.click()
     await flushUi()
 
     const themeMenu = mounted.container.querySelector<HTMLElement>('[data-testid="topbar-theme-menu"]')
     expect(themeMenu).not.toBeNull()
-    expect(themeMenu?.classList.contains('topbar-dropdown')).toBe(true)
+    expect(themeMenu?.querySelector('[data-testid="topbar-theme-menu-panel"]')).not.toBeNull()
 
     const lightThemeOption = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-theme-option-light"]')
     expect(lightThemeOption).not.toBeNull()
@@ -120,8 +123,7 @@ describe('Workbench shell layout', () => {
 
     const localeMenu = mounted.container.querySelector<HTMLElement>('[data-testid="topbar-locale-menu"]')
     expect(localeMenu).not.toBeNull()
-    expect(localeButton?.parentElement?.classList.contains('menu-shell')).toBe(true)
-    expect(localeMenu?.classList.contains('topbar-dropdown')).toBe(true)
+    expect(localeMenu?.querySelector('[data-testid="topbar-locale-menu-panel"]')).not.toBeNull()
 
     const englishLocaleOption = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-locale-option-en-US"]')
     expect(englishLocaleOption).not.toBeNull()
@@ -147,6 +149,7 @@ describe('Workbench shell layout', () => {
     await flushUi()
 
     expect(mounted.container.querySelector('[data-testid="topbar-account-menu"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="topbar-account-menu-panel"]')).not.toBeNull()
 
     const workspaceButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="workspace-switch-ws-enterprise"]')
     workspaceButton?.click()
@@ -237,6 +240,25 @@ describe('Workbench shell layout', () => {
     mounted.destroy()
   })
 
+  it('renders the floating desktop pet globally and opens the pet chat surface', async () => {
+    const mounted = mountLayout()
+
+    await flushUi()
+
+    expect(mounted.container.querySelector('[data-testid="desktop-pet-host"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="desktop-pet-trigger"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="desktop-pet-chat"]')).toBeNull()
+
+    const trigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="desktop-pet-trigger"]')
+    trigger?.click()
+    await flushUi()
+
+    expect(mounted.container.querySelector('[data-testid="desktop-pet-chat"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="desktop-pet-input"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
+
   it('renders the restructured project modules and exposes workspace navigation through a dropdown in the left sidebar', async () => {
     const mounted = mountLayout()
     const workbench = useWorkbenchStore()
@@ -264,6 +286,7 @@ describe('Workbench shell layout', () => {
     expect(mounted.container.querySelector('[data-testid="project-module-proj-governance-conversations"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="add-project-button"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="sidebar-bottom-navigation"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="sidebar-projects-nav"]')).not.toBeNull()
 
     const workspaceTrigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-trigger"]')
     expect(workspaceTrigger).not.toBeNull()
@@ -274,12 +297,12 @@ describe('Workbench shell layout', () => {
     await flushUi()
 
     expect(mounted.container.querySelector('[data-testid="sidebar-workspace-menu"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="sidebar-workspace-nav"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="sidebar-nav-workspace-overview"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="sidebar-nav-knowledge"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="sidebar-nav-agents"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="sidebar-nav-models"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="sidebar-nav-tools"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="sidebar-nav-automations"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="sidebar-nav-user-center"]')).not.toBeNull()
 
     const userCenterLink = mounted.container.querySelector<HTMLAnchorElement>('[data-testid="sidebar-nav-user-center"]')
@@ -300,9 +323,8 @@ describe('Workbench shell layout', () => {
 
     expect(mounted.container.querySelector('[data-testid="remove-project-proj-redesign"]')).toBeNull()
 
-    const projectNode = mounted.container.querySelector<HTMLElement>('[data-testid="project-node-proj-governance"]')?.closest('.project-node')
+    const projectNode = mounted.container.querySelector<HTMLElement>('[data-testid="ui-nav-card-proj-governance"]')
     expect(projectNode).not.toBeNull()
-    expect(projectNode?.querySelector('.project-remove')).not.toBeNull()
 
     const deleteButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="remove-project-proj-governance"]')
     expect(deleteButton).not.toBeNull()
@@ -310,7 +332,7 @@ describe('Workbench shell layout', () => {
     deleteButton?.click()
     await flushUi()
 
-    expect(mounted.container.querySelector('[data-testid="project-delete-confirm"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="project-delete-confirm"]')).not.toBeNull()
 
     const confirmButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-delete-confirm"]')
     confirmButton?.click()
@@ -337,9 +359,10 @@ describe('Workbench shell layout', () => {
     addProjectButton?.click()
     await nextTick()
 
-    expect(mounted.container.querySelector('[data-testid="project-create-dialog"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="project-create-dialog"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-ui-dialog-content="true"]')).not.toBeNull()
 
-    const input = mounted.container.querySelector<HTMLInputElement>('[data-testid="project-create-input"]')
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="project-create-input"]')
     expect(input).not.toBeNull()
     if (input) {
       input.value = 'Project Atlas'
@@ -348,7 +371,7 @@ describe('Workbench shell layout', () => {
 
     await nextTick()
 
-    const confirmButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-create-confirm"]')
+    const confirmButton = document.body.querySelector<HTMLButtonElement>('[data-testid="project-create-confirm"]')
     expect(confirmButton?.disabled).toBe(false)
     confirmButton?.click()
 

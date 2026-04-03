@@ -1,21 +1,34 @@
 import type { ConnectionProfile } from './catalog'
-import type { Locale, ThemeMode } from './shared'
+import type {
+  BackendConnectionState,
+  BackendTransport,
+  HostExecutionMode,
+  HostPlatform,
+  Locale,
+  ThemeMode,
+} from './shared'
 
 export interface HostState {
-  platform: 'tauri' | 'web'
-  mode: 'local'
+  platform: HostPlatform
+  mode: HostExecutionMode
   appVersion: string
   cargoWorkspace: boolean
   shell: string
 }
 
+export interface HostBackendConnection {
+  baseUrl?: string
+  authToken?: string
+  state: BackendConnectionState
+  transport: BackendTransport
+}
+
 export interface HealthcheckStatus {
   status: 'ok'
-  host: 'web' | 'tauri'
-  mode: 'local'
+  host: HostPlatform
+  mode: HostExecutionMode
   cargoWorkspace: boolean
-  backendReady: boolean
-  transport: string
+  backend: Pick<HostBackendConnection, 'state' | 'transport'>
 }
 
 export interface ShellPreferences {
@@ -28,16 +41,9 @@ export interface ShellPreferences {
   lastVisitedRoute: string
 }
 
-export interface DesktopBackendConnection {
-  baseUrl?: string
-  authToken?: string
-  ready: boolean
-  transport: string
-}
-
 export interface ShellBootstrap {
   hostState: HostState
   preferences: ShellPreferences
   connections: ConnectionProfile[]
-  backend?: DesktopBackendConnection
+  backend?: HostBackendConnection
 }

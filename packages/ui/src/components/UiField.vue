@@ -6,30 +6,9 @@ const props = defineProps<{
 </script>
 
 <template>
-  <label class="ui-field">
-    <span class="label">{{ props.label }}</span>
+  <label class="flex flex-col gap-1.5 min-w-0">
+    <span class="text-[12px] font-semibold text-text-secondary">{{ props.label }}</span>
     <slot />
-    <small v-if="props.hint" class="hint">{{ props.hint }}</small>
+    <small v-if="props.hint" class="text-[11px] text-text-tertiary leading-relaxed break-words">{{ props.hint }}</small>
   </label>
 </template>
-
-<style scoped>
-.ui-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  min-width: 0;
-}
-
-.label {
-  font-size: 0.83rem;
-  font-weight: 700;
-}
-
-.hint {
-  color: var(--text-tertiary);
-  line-height: 1.5;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-</style>

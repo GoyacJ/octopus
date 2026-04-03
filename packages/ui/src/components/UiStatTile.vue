@@ -20,17 +20,16 @@ const props = withDefaults(
 <template>
   <div
     :class="cn(
-      'flex min-h-[8.5rem] flex-col gap-2 rounded-[calc(var(--radius-lg)+2px)] border bg-surface p-6 shadow-xs transition-all duration-normal ease-apple',
-      props.tone === 'default' && 'border-border',
-      props.tone === 'success' && 'border-status-success/20 bg-status-success/[0.04]',
-      props.tone === 'warning' && 'border-status-warning/20 bg-status-warning/[0.04]',
-      props.tone === 'error' && 'border-status-error/20 bg-status-error/[0.04]',
-      props.tone === 'info' && 'border-primary/15 bg-primary/[0.04]',
+      'flex flex-col gap-1.5 p-4 rounded-md border border-border-subtle bg-background transition-colors',
+      props.tone === 'success' && 'border-status-success/20 bg-status-success/5',
+      props.tone === 'warning' && 'border-status-warning/20 bg-status-warning/5',
+      props.tone === 'error' && 'border-status-error/20 bg-status-error/5',
+      props.tone === 'info' && 'border-primary/20 bg-primary/5',
       props.class
     )"
   >
-    <span class="line-clamp-2 text-[0.74rem] font-semibold uppercase tracking-[0.12em] text-text-tertiary">{{ props.label }}</span>
-    <strong class="break-all text-[2rem] font-semibold leading-tight tracking-[-0.04em] text-text-primary">{{ props.value }}</strong>
-    <span v-if="props.helper" class="mt-auto break-all text-[0.82rem] leading-relaxed text-text-secondary">{{ props.helper }}</span>
+    <span class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary opacity-70">{{ props.label }}</span>
+    <strong class="text-2xl font-bold tracking-tight text-text-primary tabular-nums">{{ props.value }}</strong>
+    <span v-if="props.helper" class="text-[11px] text-text-secondary line-clamp-1">{{ props.helper }}</span>
   </div>
 </template>

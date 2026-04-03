@@ -2,8 +2,20 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink } from 'vue-router'
+import { ArrowRight, LayoutDashboard, MessageSquare } from 'lucide-vue-next'
 
-import { UiEmptyState, UiSectionHeading, UiStatTile, UiSurface } from '@octopus/ui'
+import {
+  UiActionCard,
+  UiBadge,
+  UiEmptyState,
+  UiInfoCard,
+  UiMetricCard,
+  UiPageHero,
+  UiPanelFrame,
+  UiRankingList,
+  UiSectionHeading,
+  UiTimelineList,
+} from '@octopus/ui'
 
 import { createProjectConversationTarget, createProjectDashboardTarget } from '@/i18n/navigation'
 import { useWorkbenchStore } from '@/stores/workbench'
@@ -18,276 +30,166 @@ const currentProject = computed(() =>
     : undefined,
 )
 const currentConversationId = computed(() => currentProject.value?.conversationIds[0])
+
+function metricNumber(value: string | number) {
+  if (typeof value === 'number') {
+    return value
+  }
+
+  const normalized = String(value).replace(/,/g, '').replace(/[^0-9.]/g, '')
+  return Number(normalized) || 0
+}
+
+function withRatio<T extends { value: string | number }>(items: T[], minRatio = 0.12) {
+  const entries = items.map((item) => ({
+    ...item,
+    numeric: metricNumber(item.value),
+  }))
+  const max = Math.max(1, ...entries.map((item) => item.numeric))
+
+  return entries.map((item) => ({
+    ...item,
+    ratio: Math.max(minRatio, item.numeric / max),
+  }))
+}
+
+function toTimelineItems(items: Array<{ id: string, title: string, description: string, timestamp: number }>) {
+  return items.map((item) => ({
+    id: item.id,
+    title: item.title,
+    description: item.description,
+    timestamp: new Date(item.timestamp).toLocaleString(),
+  }))
+}
+
+function toRankingItems(items: Array<{ id: string, label: string, value: string | number, secondary?: string, ratio: number }>) {
+  return items.map((item) => ({
+    id: item.id,
+    label: item.label,
+    helper: item.secondary,
+    value: item.value,
+    ratio: item.ratio,
+  }))
+}
+
+const userVisuals = computed(() => withRatio(snapshot.value.userMetrics, 0.18))
+const projectVisuals = computed(() => withRatio(snapshot.value.projectSummary.metrics))
+const workspaceVisuals = computed(() => withRatio(snapshot.value.workspaceMetrics))
+const projectTokenVisuals = computed(() => withRatio(snapshot.value.projectTokenTop, 0.18))
+const agentUsageVisuals = computed(() => withRatio(snapshot.value.agentUsage, 0.18))
+const teamUsageVisuals = computed(() => withRatio(snapshot.value.teamUsage, 0.18))
+const toolUsageVisuals = computed(() => withRatio(snapshot.value.toolUsage, 0.18))
+const modelUsageVisuals = computed(() => withRatio(snapshot.value.modelUsage, 0.18))
+const conversationTopVisuals = computed(() => withRatio(snapshot.value.projectSummary.conversationTokenTop, 0.18))
+
+const userTimelineItems = computed(() => toTimelineItems(snapshot.value.userActivity))
+const projectTimelineItems = computed(() => toTimelineItems(snapshot.value.projectSummary.activity))
+const conversationTopItems = computed(() => toRankingItems(conversationTopVisuals.value))
+const workspaceProjectRankingItems = computed(() => toRankingItems(projectTokenVisuals.value))
+const workspaceAgentRankingItems = computed(() => toRankingItems(agentUsageVisuals.value))
+const workspaceTeamRankingItems = computed(() => toRankingItems(teamUsageVisuals.value))
+const workspaceToolRankingItems = computed(() => toRankingItems(toolUsageVisuals.value))
+const workspaceModelRankingItems = computed(() => toRankingItems(modelUsageVisuals.value))
 </script>
 
 <template>
-  <section class="section-stack">
-    <UiSectionHeading
-      :eyebrow="t('overview.header.eyebrow')"
-      :title="workbench.activeWorkspace?.name ?? t('overview.header.titleFallback')"
-      :subtitle="workbench.activeWorkspace?.description ?? t('overview.header.subtitleFallback')"
-    />
+  <div class="w-full space-y-16 pb-20">
+    <header class="space-y-2 px-2">
+      <UiSectionHeading
+        :eyebrow="t('overview.header.eyebrow')"
+        :title="workbench.activeWorkspace?.name ?? t('overview.header.titleFallback')"
+        :subtitle="workbench.activeWorkspace?.description ?? t('overview.header.subtitleFallback')"
+      />
+    </header>
 
-    <UiSurface :title="t('overview.sections.user.title')" :subtitle="t('overview.sections.user.subtitle')">
-      <div class="stat-grid triple">
-        <UiStatTile
-          v-for="metric in snapshot.userMetrics"
-          :key="metric.label"
-          :label="t(metric.label)"
-          :value="metric.value"
-        />
-      </div>
-
-      <div class="surface-subsection">
-        <div class="subsection-header">
-          <strong>{{ t('overview.sections.user.activity') }}</strong>
-        </div>
-        <ul v-if="snapshot.userActivity.length" class="rank-list">
-          <li v-for="activity in snapshot.userActivity" :key="activity.id" class="rank-list-item">
-            <div class="rank-copy">
-              <strong>{{ activity.title }}</strong>
-              <small>{{ activity.description }}</small>
-            </div>
-            <span class="rank-value">{{ new Date(activity.timestamp).toLocaleString() }}</span>
-          </li>
-        </ul>
-        <UiEmptyState
-          v-else
-          :title="t('overview.empty.activityTitle')"
-          :description="t('overview.empty.activityDescription')"
-        />
-      </div>
-    </UiSurface>
-
-    <UiSurface :title="t('overview.sections.project.title')" :subtitle="t('overview.sections.project.subtitle')">
-      <div v-if="currentProject" class="surface-subsection">
-        <div class="surface-actions">
-          <RouterLink class="ghost-button" :to="createProjectDashboardTarget(currentProject.workspaceId, currentProject.id)">
-            {{ t('overview.sections.project.openDashboard') }}
-          </RouterLink>
-          <RouterLink
-            class="primary-button"
-            :to="createProjectConversationTarget(currentProject.workspaceId, currentProject.id, currentConversationId)"
-          >
-            {{ t('overview.sections.project.openConversation') }}
-          </RouterLink>
+    <!-- Active Project Spotlight -->
+    <section v-if="currentProject" class="px-2 space-y-4">
+      <h3 class="text-lg font-bold text-text-primary">{{ t('overview.sections.project.title') }}</h3>
+      
+      <div class="bg-subtle/30 border border-border-subtle p-6 rounded-lg space-y-6">
+        <div class="flex items-start justify-between">
+          <div class="space-y-1">
+            <h4 class="text-xl font-bold text-text-primary">{{ currentProject.name }}</h4>
+            <p class="text-sm text-text-secondary">{{ currentProject.summary }}</p>
+          </div>
+          <UiBadge :label="currentProject.phase" subtle />
         </div>
 
-        <div class="stat-grid triple">
-          <UiStatTile
-            v-for="metric in snapshot.projectSummary.metrics"
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <UiMetricCard
+            v-for="metric in projectVisuals"
             :key="metric.label"
             :label="t(metric.label)"
             :value="metric.value"
+            :progress="metric.ratio * 100"
+            tone="accent"
           />
+        </div>
+
+        <div class="flex gap-3">
+          <RouterLink class="min-w-[160px] block" :to="createProjectDashboardTarget(currentProject.workspaceId, currentProject.id)">
+            <UiActionCard :title="t('overview.sections.project.openDashboard')">
+              <template #icon><LayoutDashboard :size="16" /></template>
+            </UiActionCard>
+          </RouterLink>
+          <RouterLink class="min-w-[160px] block" :to="createProjectConversationTarget(currentProject.workspaceId, currentProject.id, currentConversationId)">
+            <UiActionCard :title="t('overview.sections.project.openConversation')">
+              <template #icon><MessageSquare :size="16" /></template>
+            </UiActionCard>
+          </RouterLink>
         </div>
       </div>
+    </section>
 
-      <UiEmptyState
-        v-else
-        :title="t('overview.empty.projectTitle')"
-        :description="t('overview.empty.projectDescription')"
-      />
-
-      <div class="surface-grid two">
-        <div class="surface-subsection">
-          <div class="subsection-header">
-            <strong>{{ t('overview.sections.project.activity') }}</strong>
-          </div>
-          <ul v-if="snapshot.projectSummary.activity.length" class="rank-list">
-            <li v-for="activity in snapshot.projectSummary.activity" :key="activity.id" class="rank-list-item">
-              <div class="rank-copy">
-                <strong>{{ activity.title }}</strong>
-                <small>{{ activity.description }}</small>
-              </div>
-              <span class="rank-value">{{ new Date(activity.timestamp).toLocaleString() }}</span>
-            </li>
-          </ul>
-          <UiEmptyState
-            v-else
-            :title="t('overview.empty.activityTitle')"
-            :description="t('overview.empty.activityDescription')"
+    <!-- User Section -->
+    <section class="px-2 space-y-6 border-t border-border-subtle pt-8">
+      <h3 class="text-lg font-bold text-text-primary">{{ t('overview.sections.user.title') }}</h3>
+      <div class="grid gap-6 md:grid-cols-3">
+        <div class="space-y-3">
+          <UiMetricCard
+            v-for="metric in userVisuals"
+            :key="metric.label"
+            :label="t(metric.label)"
+            :value="metric.value"
+            :progress="metric.ratio * 100"
           />
         </div>
-
-        <div class="surface-subsection">
-          <div class="subsection-header">
-            <strong>{{ t('overview.sections.project.conversationTop') }}</strong>
-          </div>
-          <ul v-if="snapshot.projectSummary.conversationTokenTop.length" class="rank-list">
-            <li v-for="item in snapshot.projectSummary.conversationTokenTop" :key="item.id" class="rank-list-item">
-              <div class="rank-copy">
-                <strong>{{ item.label }}</strong>
-                <small>{{ item.secondary }}</small>
-              </div>
-              <span class="rank-value">{{ item.value }}</span>
-            </li>
-          </ul>
-          <UiEmptyState
-            v-else
-            :title="t('overview.empty.rankingTitle')"
-            :description="t('overview.empty.rankingDescription')"
-          />
+        <div class="md:col-span-2 bg-subtle/20 border border-border-subtle rounded-lg p-4 h-64 overflow-y-auto">
+          <UiTimelineList v-if="userTimelineItems.length" :items="userTimelineItems" />
+          <UiEmptyState v-else :title="t('overview.empty.activityTitle')" :description="t('overview.empty.activityDescription')" />
         </div>
       </div>
-    </UiSurface>
+    </section>
 
-    <UiSurface :title="t('overview.sections.workspace.title')" :subtitle="t('overview.sections.workspace.subtitle')">
-      <div class="stat-grid quad">
-        <UiStatTile
-          v-for="metric in snapshot.workspaceMetrics"
+    <!-- Workspace Overview Section -->
+    <section class="px-2 space-y-6 border-t border-border-subtle pt-8">
+      <h3 class="text-lg font-bold text-text-primary">{{ t('overview.sections.workspace.title') }}</h3>
+      
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <UiMetricCard
+          v-for="metric in workspaceVisuals"
           :key="metric.label"
           :label="t(metric.label)"
           :value="metric.value"
+          :progress="metric.ratio * 100"
+          tone="muted"
         />
       </div>
 
-      <div class="surface-grid two">
-        <div class="surface-subsection">
-          <div class="subsection-header">
-            <strong>{{ t('overview.sections.workspace.projectRanking') }}</strong>
-          </div>
-          <ul class="rank-list">
-            <li v-for="item in snapshot.projectTokenTop" :key="item.id" class="rank-list-item">
-              <div class="rank-copy">
-                <strong>{{ item.label }}</strong>
-                <small>{{ item.secondary }}</small>
-              </div>
-              <span class="rank-value">{{ item.value }}</span>
-            </li>
-          </ul>
+      <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pt-4">
+        <div class="space-y-3">
+          <h4 class="text-[12px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('overview.sections.workspace.projectRanking') }}</h4>
+          <UiRankingList :items="workspaceProjectRankingItems" />
         </div>
-
-        <div class="surface-subsection">
-          <div class="subsection-header">
-            <strong>{{ t('overview.sections.workspace.agentRanking') }}</strong>
-          </div>
-          <ul class="rank-list">
-            <li v-for="item in snapshot.agentUsage" :key="item.id" class="rank-list-item">
-              <div class="rank-copy">
-                <strong>{{ item.label }}</strong>
-                <small>{{ item.secondary }}</small>
-              </div>
-              <span class="rank-value">{{ item.value }}</span>
-            </li>
-          </ul>
+        <div class="space-y-3">
+          <h4 class="text-[12px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('overview.sections.workspace.agentRanking') }}</h4>
+          <UiRankingList :items="workspaceAgentRankingItems" />
         </div>
-
-        <div class="surface-subsection">
-          <div class="subsection-header">
-            <strong>{{ t('overview.sections.workspace.teamRanking') }}</strong>
-          </div>
-          <ul class="rank-list">
-            <li v-for="item in snapshot.teamUsage" :key="item.id" class="rank-list-item">
-              <div class="rank-copy">
-                <strong>{{ item.label }}</strong>
-                <small>{{ item.secondary }}</small>
-              </div>
-              <span class="rank-value">{{ item.value }}</span>
-            </li>
-          </ul>
-        </div>
-
-        <div class="surface-subsection">
-          <div class="subsection-header">
-            <strong>{{ t('overview.sections.workspace.toolRanking') }}</strong>
-          </div>
-          <ul class="rank-list">
-            <li v-for="item in snapshot.toolUsage" :key="item.id" class="rank-list-item">
-              <div class="rank-copy">
-                <strong>{{ item.label }}</strong>
-              </div>
-              <span class="rank-value">{{ item.value }}</span>
-            </li>
-          </ul>
-        </div>
-
-        <div class="surface-subsection">
-          <div class="subsection-header">
-            <strong>{{ t('overview.sections.workspace.modelRanking') }}</strong>
-          </div>
-          <ul class="rank-list">
-            <li v-for="item in snapshot.modelUsage" :key="item.id" class="rank-list-item">
-              <div class="rank-copy">
-                <strong>{{ item.label }}</strong>
-                <small>{{ item.secondary }}</small>
-              </div>
-              <span class="rank-value">{{ item.value }}</span>
-            </li>
-          </ul>
+        <div class="space-y-3">
+          <h4 class="text-[12px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('overview.sections.workspace.toolRanking') }}</h4>
+          <UiRankingList :items="workspaceToolRankingItems" />
         </div>
       </div>
-    </UiSurface>
-  </section>
+    </section>
+  </div>
 </template>
-
-<style scoped>
-.surface-subsection {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.surface-subsection + .surface-subsection {
-  margin-top: 1rem;
-}
-
-.surface-actions,
-.subsection-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.stat-grid {
-  display: grid;
-  gap: 0.9rem;
-}
-
-.stat-grid.triple {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.stat-grid.quad {
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-}
-
-.rank-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.rank-list-item {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.95rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
-  border-radius: calc(var(--radius-l) + 1px);
-  background: color-mix(in srgb, var(--bg-subtle) 66%, transparent);
-}
-
-.rank-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.rank-copy small {
-  color: var(--text-secondary);
-  line-height: 1.5;
-}
-
-.rank-value {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  white-space: nowrap;
-}
-</style>

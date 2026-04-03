@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
-import { UiBadge, UiEmptyState, UiSectionHeading, UiSurface } from '@octopus/ui'
+import { UiBadge, UiEmptyState, UiRecordCard, UiSectionHeading } from '@octopus/ui'
 
 import { enumLabel, resolveMockField } from '@/i18n/copy'
 import { useShellStore } from '@/stores/shell'
@@ -18,67 +18,75 @@ function workspaceLabel(workspaceId: string): string {
 </script>
 
 <template>
-  <section class="section-stack">
-    <UiSectionHeading
-      :eyebrow="t('connections.header.eyebrow')"
-      :title="t('connections.header.title')"
-      :subtitle="t('connections.header.subtitle')"
-    />
+  <div class="w-full flex flex-col gap-10 pb-20">
+    <header class="px-2 shrink-0">
+      <UiSectionHeading
+        :eyebrow="t('connections.header.eyebrow')"
+        :title="t('connections.header.title')"
+        :subtitle="t('connections.header.subtitle')"
+      />
+    </header>
 
-    <div class="surface-grid two">
-      <UiSurface :title="t('connections.product.title')" :subtitle="t('connections.product.subtitle')">
-        <div v-if="workbench.connections.length" class="panel-list">
-          <article v-for="connection in workbench.connections" :key="connection.id" class="connection-card">
-            <div class="meta-row">
+    <main class="grid gap-8 xl:grid-cols-2 px-2">
+      <!-- Product Connections -->
+      <section class="space-y-6">
+        <div class="space-y-1 border-b border-border-subtle pb-4">
+          <h3 class="text-lg font-bold text-text-primary">{{ t('connections.product.title') }}</h3>
+          <p class="text-[13px] text-text-secondary">{{ t('connections.product.subtitle') }}</p>
+        </div>
+
+        <div data-testid="connections-product-list" class="space-y-4">
+          <UiRecordCard
+            v-for="connection in workbench.connections"
+            :key="connection.id"
+            :test-id="`connection-record-${connection.id}`"
+            :title="resolveMockField('connection', connection.id, 'label', connection.label)"
+            :description="t('common.workspaceLabel', { workspace: workspaceLabel(connection.workspaceId) })"
+          >
+            <template #badges>
               <UiBadge :label="enumLabel('connectionMode', connection.mode)" :tone="connection.mode === 'local' ? 'info' : 'success'" />
               <UiBadge :label="enumLabel('connectionState', connection.state)" subtle />
-            </div>
-            <strong>{{ resolveMockField('connection', connection.id, 'label', connection.label) }}</strong>
-            <p>{{ t('common.workspaceLabel', { workspace: workspaceLabel(connection.workspaceId) }) }}</p>
-            <small>{{ connection.baseUrl ?? t('common.noRemoteBaseUrl') }}</small>
-          </article>
-        </div>
-        <UiEmptyState v-else :title="t('connections.empty.title')" :description="t('connections.empty.description')" />
-      </UiSurface>
+            </template>
+            <template #meta>
+              <span class="truncate text-[12px] text-text-tertiary font-mono">{{ connection.baseUrl ?? t('common.noRemoteBaseUrl') }}</span>
+            </template>
+          </UiRecordCard>
 
-      <UiSurface :title="t('connections.host.title')" :subtitle="t('connections.host.subtitle')">
-        <div v-if="shell.bootstrapConnections.length" class="panel-list">
-          <article v-for="connection in shell.bootstrapConnections" :key="connection.id" class="connection-card">
-            <div class="meta-row">
+          <UiEmptyState v-if="!workbench.connections.length" :title="t('connections.empty.title')" :description="t('connections.empty.description')" />
+        </div>
+      </section>
+
+      <!-- Host Connections -->
+      <section class="space-y-6">
+        <div class="space-y-1 border-b border-border-subtle pb-4">
+          <h3 class="text-lg font-bold text-text-primary">{{ t('connections.host.title') }}</h3>
+          <p class="text-[13px] text-text-secondary">{{ t('connections.host.subtitle') }}</p>
+        </div>
+
+        <div data-testid="connections-host-list" class="space-y-4">
+          <UiRecordCard
+            v-for="connection in shell.bootstrapConnections"
+            :key="connection.id"
+            :test-id="`connection-record-${connection.id}`"
+            :title="resolveMockField('connection', connection.id, 'label', connection.label)"
+            :description="t('common.workspaceLabel', { workspace: workspaceLabel(connection.workspaceId) })"
+          >
+            <template #badges>
               <UiBadge :label="enumLabel('connectionMode', connection.mode)" :tone="connection.mode === 'local' ? 'info' : 'success'" />
               <UiBadge :label="enumLabel('connectionState', connection.state)" subtle />
-            </div>
-            <strong>{{ resolveMockField('connection', connection.id, 'label', connection.label) }}</strong>
-            <p>{{ t('common.workspaceLabel', { workspace: workspaceLabel(connection.workspaceId) }) }}</p>
-            <small>{{ connection.baseUrl ?? t('common.noBaseUrl') }}</small>
-          </article>
+            </template>
+            <template #meta>
+              <span class="truncate text-[12px] text-text-tertiary font-mono">{{ connection.baseUrl ?? t('common.noBaseUrl') }}</span>
+            </template>
+          </UiRecordCard>
+
+          <UiEmptyState
+            v-if="!shell.bootstrapConnections.length"
+            :title="t('connections.host.emptyTitle')"
+            :description="t('connections.host.emptyDescription')"
+          />
         </div>
-        <UiEmptyState
-          v-else
-          :title="t('connections.host.emptyTitle')"
-          :description="t('connections.host.emptyDescription')"
-        />
-      </UiSurface>
-    </div>
-  </section>
+      </section>
+    </main>
+  </div>
 </template>
-
-<style scoped>
-.connection-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  min-width: 0;
-  padding: 1rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
-}
-
-.connection-card p,
-.connection-card small {
-  color: var(--text-secondary);
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-</style>

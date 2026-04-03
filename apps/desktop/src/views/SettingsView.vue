@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Monitor, Palette, PanelLeft, PanelRight } from 'lucide-vue-next'
 
-import { UiBadge, UiButton, UiField, UiSectionHeading, UiSelect, UiSurface } from '@octopus/ui'
+import { UiBadge, UiButton, UiField, UiListRow, UiSectionHeading, UiSelect, UiSwitch, UiTabs } from '@octopus/ui'
 
-import { enumLabel, resolveMockField, resolveMockList } from '@/i18n/copy'
+import { enumLabel, resolveCopy, resolveMockField } from '@/i18n/copy'
 import { useShellStore } from '@/stores/shell'
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -13,6 +12,7 @@ const { t } = useI18n()
 const shell = useShellStore()
 const workbench = useWorkbenchStore()
 
+const activeTab = ref<'general' | 'theme' | 'i18n' | 'version'>('general')
 const theme = ref(shell.preferences.theme)
 const locale = ref(shell.preferences.locale)
 const leftSidebarCollapsed = ref(shell.preferences.leftSidebarCollapsed)
@@ -27,6 +27,48 @@ const themeOptions = computed(() => [
 const localeOptions = computed(() => [
   { value: 'zh-CN', label: t('settings.preferences.localeOptions.zh-CN') },
   { value: 'en-US', label: t('settings.preferences.localeOptions.en-US') },
+])
+
+const fallbackSettingsPage = {
+  tabs: [
+    { value: 'general', label: 'settings.tabs.general' },
+    { value: 'theme', label: 'settings.tabs.theme' },
+    { value: 'i18n', label: 'settings.tabs.i18n' },
+    { value: 'version', label: 'settings.tabs.version' },
+  ],
+  sections: [],
+} as const
+
+const settingsPage = computed(() => workbench.settingsPage ?? fallbackSettingsPage)
+
+const tabs = computed(() =>
+  settingsPage.value.tabs.map((tab) => ({
+    value: tab.value,
+    label: t(tab.label),
+  })),
+)
+
+const activeSections = computed(() =>
+  settingsPage.value.sections.filter((section) => section.tab === activeTab.value),
+)
+
+const activeWorkspaceName = computed(() =>
+  workbench.activeWorkspace
+    ? resolveMockField('workspace', workbench.activeWorkspace.id, 'name', workbench.activeWorkspace.name)
+    : t('common.na'),
+)
+
+const versionRows = computed(() => [
+  { id: 'shell', label: t('settings.version.fields.shell'), value: shell.hostState.shell },
+  { id: 'appVersion', label: t('settings.version.fields.appVersion'), value: shell.hostState.appVersion },
+  { id: 'workspace', label: t('settings.version.fields.workspace'), value: activeWorkspaceName.value },
+  {
+    id: 'cargoWorkspace',
+    label: t('settings.version.fields.cargoWorkspace'),
+    value: shell.hostState.cargoWorkspace
+      ? t('settings.version.values.enabled')
+      : t('settings.version.values.disabled'),
+  },
 ])
 
 watch(
@@ -51,224 +93,127 @@ async function savePreferences() {
 </script>
 
 <template>
-  <section class="settings-page section-stack">
-    <UiSectionHeading
-      :eyebrow="t('settings.header.eyebrow')"
-      :title="t('settings.header.title')"
-      :subtitle="t('settings.header.subtitle')"
-    />
+  <div class="w-full flex flex-col gap-8 pb-20">
+    <header class="px-2 space-y-4">
+      <UiSectionHeading
+        :eyebrow="t('settings.header.eyebrow')"
+        :title="t('settings.header.title')"
+        :subtitle="t('settings.header.subtitle')"
+      />
+      <UiTabs v-model="activeTab" :tabs="tabs" />
+    </header>
 
-    <div class="settings-overview-grid">
-      <UiSurface :title="t('settings.preferences.title')" :subtitle="t('settings.preferences.subtitle')">
-        <div class="preference-grid">
-          <UiField :label="t('settings.preferences.theme')">
-            <UiSelect v-model="theme" :options="themeOptions" />
-          </UiField>
-          <UiField :label="t('settings.preferences.locale')">
-            <UiSelect v-model="locale" :options="localeOptions" />
-          </UiField>
-        </div>
-
-        <div class="preference-switch-grid">
-          <button type="button" class="preference-toggle-card" :class="{ active: leftSidebarCollapsed }" @click="leftSidebarCollapsed = !leftSidebarCollapsed">
-            <span class="preference-toggle-icon"><PanelLeft :size="16" /></span>
-            <span>
-              <strong>{{ t('settings.preferences.leftSidebarCollapsed') }}</strong>
-              <small>{{ leftSidebarCollapsed ? t('userCenter.common.active') : t('userCenter.common.disabled') }}</small>
-            </span>
-          </button>
-          <button type="button" class="preference-toggle-card" :class="{ active: rightSidebarCollapsed }" @click="rightSidebarCollapsed = !rightSidebarCollapsed">
-            <span class="preference-toggle-icon"><PanelRight :size="16" /></span>
-            <span>
-              <strong>{{ t('settings.preferences.rightSidebarCollapsed') }}</strong>
-              <small>{{ rightSidebarCollapsed ? t('userCenter.common.active') : t('userCenter.common.disabled') }}</small>
-            </span>
-          </button>
-        </div>
-
-        <div class="settings-action-row">
-          <UiButton @click="savePreferences">{{ t('common.savePreferences') }}</UiButton>
-        </div>
-      </UiSurface>
-
-      <UiSurface :title="t('settings.host.title')" :subtitle="t('settings.host.subtitle')">
-        <div class="host-header">
-          <div class="host-icon">
-            <Monitor :size="18" />
+    <main class="grid gap-12 lg:grid-cols-[1fr_360px] items-start px-2">
+      <!-- Main Settings Form Area -->
+      <div class="flex flex-col gap-10">
+        
+        <!-- General Tab -->
+        <section v-if="activeTab === 'general'" class="space-y-8">
+          <div class="space-y-1">
+            <h3 class="text-xl font-bold text-text-primary">{{ t('settings.general.layoutTitle') }}</h3>
+            <p class="text-[14px] text-text-secondary">{{ t('settings.header.subtitle') }}</p>
           </div>
-          <div class="host-copy">
-            <strong>{{ shell.hostState.shell }}</strong>
-            <p>{{ shell.hostState.appVersion }}</p>
-          </div>
-        </div>
-        <div class="host-meta-row">
-          <UiBadge :label="enumLabel('hostPlatform', shell.hostState.platform)" :tone="shell.hostState.platform === 'tauri' ? 'success' : 'info'" />
-          <UiBadge :label="enumLabel('hostMode', shell.hostState.mode)" subtle />
-          <UiBadge :label="workbench.activeWorkspace ? resolveMockField('workspace', workbench.activeWorkspace.id, 'name', workbench.activeWorkspace.name) : t('common.na')" subtle />
-        </div>
-        <p class="host-copy-text">
-          {{ t('common.currentShell', { shell: shell.hostState.shell }) }}
-          {{ t('common.activeWorkspace', { workspace: workbench.activeWorkspace ? resolveMockField('workspace', workbench.activeWorkspace.id, 'name', workbench.activeWorkspace.name) : t('common.na') }) }}
-        </p>
-      </UiSurface>
-    </div>
 
-    <div class="settings-section-grid surface-grid two">
-      <UiSurface
-        v-for="section in workbench.settingsSections"
-        :key="section.id"
-        :title="resolveMockField('settingsSection', section.id, 'title', section.title)"
-        :subtitle="resolveMockField('settingsSection', section.id, 'description', section.description)"
-      >
-        <div class="settings-section-header">
-          <UiBadge :label="enumLabel('viewStatus', section.status)" :tone="section.status === 'attention' ? 'warning' : 'success'" />
-          <span class="settings-section-icon"><Palette :size="14" /></span>
+          <div class="space-y-2 bg-subtle/10 rounded-lg border border-border-subtle p-2">
+            <UiListRow
+              :title="t('settings.preferences.leftSidebarCollapsed')"
+              :subtitle="t('settings.general.leftSidebarHint')"
+            >
+              <template #actions>
+                <UiSwitch v-model="leftSidebarCollapsed" />
+              </template>
+            </UiListRow>
+
+            <UiListRow
+              :title="t('settings.preferences.rightSidebarCollapsed')"
+              :subtitle="t('settings.general.rightSidebarHint')"
+            >
+              <template #actions>
+                <UiSwitch v-model="rightSidebarCollapsed" />
+              </template>
+            </UiListRow>
+          </div>
+
+          <div class="pt-6 border-t border-border-subtle flex justify-end">
+            <UiButton variant="primary" @click="savePreferences">{{ t('common.savePreferences') }}</UiButton>
+          </div>
+        </section>
+
+        <!-- Theme Tab -->
+        <section v-else-if="activeTab === 'theme'" class="space-y-8">
+          <div class="space-y-1">
+            <h3 class="text-xl font-bold text-text-primary">{{ t('settings.preferences.title') }}</h3>
+            <p class="text-[14px] text-text-secondary">{{ t('settings.header.subtitle') }}</p>
+          </div>
+
+          <div class="max-w-md">
+            <UiField :label="t('settings.preferences.theme')">
+              <UiSelect v-model="theme" :options="themeOptions" />
+            </UiField>
+          </div>
+
+          <div class="pt-6 border-t border-border-subtle flex justify-end">
+            <UiButton variant="primary" @click="savePreferences">{{ t('common.savePreferences') }}</UiButton>
+          </div>
+        </section>
+
+        <!-- i18n Tab -->
+        <section v-else-if="activeTab === 'i18n'" class="space-y-8">
+          <div class="space-y-1">
+            <h3 class="text-xl font-bold text-text-primary">{{ t('settings.i18n.title') }}</h3>
+            <p class="text-[14px] text-text-secondary">{{ t('settings.header.subtitle') }}</p>
+          </div>
+
+          <div class="max-w-md">
+            <UiField :label="t('settings.preferences.locale')">
+              <UiSelect v-model="locale" :options="localeOptions" />
+            </UiField>
+          </div>
+
+          <div class="pt-6 border-t border-border-subtle flex justify-end">
+            <UiButton variant="primary" @click="savePreferences">{{ t('common.savePreferences') }}</UiButton>
+          </div>
+        </section>
+
+        <!-- Version Tab -->
+        <section v-else class="space-y-8">
+          <div class="space-y-6">
+            <h3 class="text-xl font-bold text-text-primary">{{ t('settings.version.runtimeTitle') }}</h3>
+            <div class="flex flex-wrap gap-2.5 mb-8">
+              <UiBadge :label="enumLabel('hostPlatform', shell.hostState.platform)" :tone="shell.hostState.platform === 'tauri' ? 'success' : 'info'" />
+              <UiBadge :label="enumLabel('hostMode', shell.hostState.mode)" subtle />
+            </div>
+
+            <div class="bg-subtle/20 border border-border-subtle rounded-md overflow-hidden">
+              <div
+                v-for="(row, i) in versionRows"
+                :key="row.id"
+                class="flex items-center justify-between px-6 py-4"
+                :class="i !== versionRows.length - 1 ? 'border-b border-border-subtle' : ''"
+              >
+                <span class="text-[14px] text-text-secondary font-medium">{{ row.label }}</span>
+                <span class="text-[14px] font-bold text-text-primary tracking-tight font-mono">{{ row.value }}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- Right Sidebar (Expanded for full width) -->
+      <aside class="flex flex-col gap-6">
+        <div
+          v-for="section in activeSections"
+          :key="section.id"
+          class="bg-subtle/30 rounded-lg border border-border-subtle p-6 space-y-4"
+        >
+          <strong class="block text-[14px] font-bold text-text-primary">{{ resolveCopy(section.title) }}</strong>
+          <p v-if="section.description" class="text-[13px] text-text-secondary leading-relaxed">{{ resolveCopy(section.description) }}</p>
+          <ul class="list-disc pl-5 space-y-2 text-[13px] text-text-secondary mt-2">
+            <li v-for="item in section.items" :key="item">{{ resolveCopy(item) }}</li>
+          </ul>
         </div>
-        <ul class="settings-section-list">
-          <li v-for="(item, index) in resolveMockList('settingsSection', section.id, 'items', section.items)" :key="`${section.id}-${index}`">{{ item }}</li>
-        </ul>
-      </UiSurface>
-    </div>
-  </section>
+      </aside>
+    </main>
+  </div>
 </template>
-
-<style scoped>
-.settings-page,
-.host-copy {
-  display: flex;
-  flex-direction: column;
-}
-
-.settings-overview-grid,
-.preference-grid,
-.preference-switch-grid {
-  display: grid;
-  gap: 1rem;
-}
-
-.settings-overview-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.preference-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.preference-switch-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 1rem;
-}
-
-.preference-toggle-card,
-.host-header,
-.host-meta-row,
-.settings-section-header,
-.settings-action-row {
-  display: flex;
-  align-items: center;
-}
-
-.preference-toggle-card,
-.host-header {
-  gap: 0.85rem;
-}
-
-.preference-toggle-card,
-.settings-section-header {
-  justify-content: space-between;
-}
-
-.preference-toggle-card {
-  width: 100%;
-  padding: 0.95rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
-  border-radius: calc(var(--radius-lg) + 2px);
-  background: color-mix(in srgb, var(--bg-subtle) 68%, transparent);
-  text-align: left;
-  transition: border-color var(--duration-fast) var(--ease-apple), transform var(--duration-fast) var(--ease-apple), box-shadow var(--duration-fast) var(--ease-apple);
-}
-
-.preference-toggle-card:hover,
-.preference-toggle-card.active {
-  border-color: color-mix(in srgb, var(--brand-primary) 24%, var(--border-strong));
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-}
-
-.preference-toggle-card span:last-child {
-  display: flex;
-  flex-direction: column;
-  gap: 0.18rem;
-}
-
-.preference-toggle-card small,
-.host-copy p,
-.host-copy-text,
-.settings-section-list li {
-  color: var(--text-secondary);
-}
-
-.preference-toggle-icon,
-.host-icon,
-.settings-section-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.85rem;
-  background: color-mix(in srgb, var(--brand-primary) 10%, transparent);
-  color: var(--brand-primary);
-}
-
-.preference-toggle-icon,
-.settings-section-icon {
-  width: 2.3rem;
-  height: 2.3rem;
-}
-
-.host-icon {
-  width: 2.7rem;
-  height: 2.7rem;
-}
-
-.host-copy {
-  gap: 0.18rem;
-}
-
-.host-meta-row {
-  gap: 0.55rem;
-  flex-wrap: wrap;
-  margin: 1rem 0 0.75rem;
-}
-
-.host-copy-text {
-  line-height: 1.65;
-}
-
-.settings-action-row {
-  justify-content: flex-end;
-  margin-top: 1rem;
-}
-
-.settings-section-header {
-  margin-bottom: 0.8rem;
-}
-
-.settings-section-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-left: 1rem;
-}
-
-.settings-section-list li {
-  line-height: 1.6;
-}
-
-@media (max-width: 1040px) {
-  .settings-overview-grid,
-  .preference-grid,
-  .preference-switch-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-</style>

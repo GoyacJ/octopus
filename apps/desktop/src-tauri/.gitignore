@@ -2,3 +2,6 @@
 # will have compiled files and executables
 /target/
 /gen/schemas
+/bin/octopus-desktop-backend*
+/src/runtime.rs
+/tests/runtime_contract.rs

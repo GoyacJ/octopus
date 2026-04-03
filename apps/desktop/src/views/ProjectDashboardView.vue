@@ -1,10 +1,28 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { RouterLink } from 'vue-router'
+import { Activity, ArrowRight, Library, MessageSquare } from 'lucide-vue-next'
 
-import { UiBadge, UiEmptyState, UiField, UiSectionHeading, UiStatTile, UiSurface } from '@octopus/ui'
+import {
+  UiActionCard,
+  UiBadge,
+  UiButton,
+  UiEmptyState,
+  UiField,
+  UiInfoCard,
+  UiInput,
+  UiMetricCard,
+  UiPageHero,
+  UiPanelFrame,
+  UiRankingList,
+  UiSectionHeading,
+  UiTimelineList,
+  UiTextarea,
+} from '@octopus/ui'
 
 import { enumLabel, resolveCopy } from '@/i18n/copy'
+import { createProjectConversationTarget } from '@/i18n/navigation'
 import { useWorkbenchStore } from '@/stores/workbench'
 
 const { t } = useI18n()
@@ -19,6 +37,14 @@ const draft = reactive({
   phase: '',
   summary: '',
 })
+
+const conversationTarget = computed(() =>
+  createProjectConversationTarget(
+    workbench.currentWorkspaceId,
+    workbench.currentProjectId,
+    workbench.currentConversationId,
+  ),
+)
 
 watch(
   project,
@@ -65,250 +91,253 @@ const progressTone = computed(() => {
   }
   return 'info'
 })
+
+function metricNumber(value: string | number) {
+  if (typeof value === 'number') {
+    return value
+  }
+
+  const normalized = String(value).replace(/,/g, '').replace(/[^0-9.]/g, '')
+  return Number(normalized) || 0
+}
+
+const progressPercent = computed(() => Math.min(100, Math.max(0, Number(snapshot.value.progress.progress) || 0)))
+
+const resourceVisuals = computed(() => {
+  const metrics = snapshot.value.resourceMetrics.map((metric) => ({
+    ...metric,
+    numeric: metricNumber(metric.value),
+  }))
+  const max = Math.max(1, ...metrics.map((metric) => metric.numeric))
+
+  return metrics.map((metric) => ({
+    ...metric,
+    ratio: Math.max(0.12, metric.numeric / max),
+  }))
+})
+
+const dataVisuals = computed(() => {
+  const metrics = snapshot.value.dataMetrics.map((metric) => ({
+    ...metric,
+    numeric: metricNumber(metric.value),
+  }))
+  const max = Math.max(1, ...metrics.map((metric) => metric.numeric))
+
+  return metrics.map((metric) => ({
+    ...metric,
+    ratio: Math.max(0.12, metric.numeric / max),
+  }))
+})
+
+const rankingVisuals = computed(() => {
+  const metrics = snapshot.value.conversationTokenTop.map((item) => ({
+    ...item,
+    numeric: metricNumber(item.value),
+  }))
+  const max = Math.max(1, ...metrics.map((metric) => metric.numeric))
+
+  return metrics.map((metric) => ({
+    ...metric,
+    ratio: Math.max(0.18, metric.numeric / max),
+  }))
+})
+
+const tokenValue = computed(() => snapshot.value.dataMetrics.find((metric) => metric.label === 'projectDashboard.data.tokens')?.value ?? t('common.na'))
+const activityTimelineItems = computed(() =>
+  snapshot.value.activity.map((activity) => ({
+    id: activity.id,
+    title: activity.title,
+    description: activity.description,
+    timestamp: new Date(activity.timestamp).toLocaleString(),
+  })),
+)
+const rankingItems = computed(() =>
+  rankingVisuals.value.map((item) => ({
+    id: item.id,
+    label: item.label,
+    helper: item.secondary,
+    value: item.value,
+    ratio: item.ratio,
+  })),
+)
 </script>
 
 <template>
-  <section class="section-stack">
-    <UiSectionHeading
-      :eyebrow="t('projectDashboard.header.eyebrow')"
-      :title="project.name"
-      :subtitle="project.goal"
-    />
+  <div class="w-full space-y-12 pb-20">
+    <header class="space-y-4 px-2">
+      <UiSectionHeading
+        :eyebrow="t('projectDashboard.header.eyebrow')"
+        :title="project.name"
+        :subtitle="project.goal"
+      />
+    </header>
 
-    <UiSurface :title="t('projectDashboard.info.title')" :subtitle="t('projectDashboard.info.subtitle')">
-      <div class="header-meta">
+    <UiPageHero data-testid="project-dashboard-hero" class="px-2">
+      <template #meta>
         <UiBadge :label="enumLabel('projectStatus', project.status)" :tone="project.status === 'active' ? 'success' : 'default'" />
         <UiBadge :label="project.phase" subtle />
-      </div>
+        <UiBadge
+          :label="snapshot.progress.runStatus ? enumLabel('runStatus', snapshot.progress.runStatus) : t('common.na')"
+          subtle
+        />
+      </template>
 
-      <div v-if="editing" class="field-stack">
-        <UiField :label="t('projectDashboard.fields.name')">
-          <input v-model="draft.name" />
-        </UiField>
-        <UiField :label="t('projectDashboard.fields.goal')">
-          <textarea v-model="draft.goal" rows="3" />
-        </UiField>
-        <UiField :label="t('projectDashboard.fields.phase')">
-          <input v-model="draft.phase" />
-        </UiField>
-        <UiField :label="t('projectDashboard.fields.summary')">
-          <textarea v-model="draft.summary" rows="4" />
-        </UiField>
-      </div>
+      <p class="text-[15px] leading-relaxed text-text-secondary max-w-4xl">
+        {{ project.summary }}
+      </p>
 
-      <div v-else class="project-info-grid">
-        <div class="project-info-item">
-          <span>{{ t('projectDashboard.fields.name') }}</span>
-          <strong>{{ project.name }}</strong>
-        </div>
-        <div class="project-info-item">
-          <span>{{ t('projectDashboard.fields.status') }}</span>
-          <strong>{{ enumLabel('projectStatus', project.status) }}</strong>
-        </div>
-        <div class="project-info-item">
-          <span>{{ t('projectDashboard.fields.phase') }}</span>
-          <strong>{{ project.phase }}</strong>
-        </div>
-        <div class="project-info-item full">
-          <span>{{ t('projectDashboard.fields.goal') }}</span>
-          <strong>{{ project.goal }}</strong>
-        </div>
-        <div class="project-info-item full">
-          <span>{{ t('projectDashboard.fields.summary') }}</span>
-          <p>{{ project.summary }}</p>
-        </div>
-      </div>
+      <template #actions>
+        <RouterLink :to="conversationTarget" class="block min-w-0 no-underline">
+          <UiActionCard
+            :title="t('projectDashboard.actions.openConversation')"
+            :description="t('projectDashboard.actions.openConversationHint')"
+            class="h-full"
+          >
+            <template #icon><MessageSquare :size="16" /></template>
+          </UiActionCard>
+        </RouterLink>
 
-      <div class="surface-actions">
-        <button v-if="!editing" type="button" class="ghost-button" @click="startEdit">
-          {{ t('common.edit') }}
-        </button>
-        <template v-else>
-          <button type="button" class="ghost-button" @click="cancelEdit">
-            {{ t('common.cancel') }}
-          </button>
-          <button type="button" class="primary-button" @click="saveProject">
-            {{ t('common.save') }}
-          </button>
-        </template>
-      </div>
-    </UiSurface>
+        <RouterLink
+          :to="{ name: 'knowledge', params: { workspaceId: workbench.currentWorkspaceId, projectId: workbench.currentProjectId } }"
+          class="block min-w-0 no-underline"
+        >
+          <UiActionCard
+            :title="t('projectDashboard.actions.openKnowledge')"
+            :description="t('projectDashboard.actions.openKnowledgeHint')"
+            class="h-full"
+          >
+            <template #icon><Library :size="16" /></template>
+          </UiActionCard>
+        </RouterLink>
 
-    <div class="surface-grid two">
-      <UiSurface :title="t('projectDashboard.resources.title')" :subtitle="t('projectDashboard.resources.subtitle')">
-        <div class="stat-grid triple">
-          <UiStatTile
-            v-for="metric in snapshot.resourceMetrics"
+        <RouterLink
+          :to="{ name: 'trace', params: { workspaceId: workbench.currentWorkspaceId, projectId: workbench.currentProjectId } }"
+          class="block min-w-0 no-underline"
+        >
+          <UiActionCard
+            :title="t('projectDashboard.actions.openTrace')"
+            :description="t('projectDashboard.actions.openTraceHint')"
+            class="h-full"
+          >
+            <template #icon><Activity :size="16" /></template>
+          </UiActionCard>
+        </RouterLink>
+      </template>
+
+      <template #aside>
+        <UiMetricCard
+          :label="t('projectDashboard.progress.progress')"
+          :value="`${progressPercent}%`"
+          :helper="snapshot.progress.runStatus ? enumLabel('runStatus', snapshot.progress.runStatus) : t('common.na')"
+          :progress="progressPercent"
+          tone="accent"
+        />
+      </template>
+    </UiPageHero>
+
+    <!-- Sub Sections (Automatically expanded grid) -->
+    <div class="grid gap-10 lg:grid-cols-2 px-2">
+      <!-- Progress -->
+      <section class="space-y-4">
+        <h3 class="text-lg font-bold text-text-primary">{{ t('projectDashboard.progress.title') }}</h3>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-2 2xl:grid-cols-4">
+          <UiMetricCard :label="t('projectDashboard.progress.phase')" :value="snapshot.progress.phase" />
+          <UiMetricCard :label="t('projectDashboard.progress.blockers')" :value="snapshot.progress.blockerCount" tone="warning" />
+          <UiMetricCard :label="t('projectDashboard.progress.pendingInbox')" :value="snapshot.progress.pendingInboxCount" />
+          <UiMetricCard
+            :label="t('projectDashboard.progress.currentStep')"
+            :value="snapshot.progress.currentStep ? resolveCopy(snapshot.progress.currentStep) : t('common.na')"
+            tone="accent"
+          />
+        </div>
+      </section>
+
+      <!-- Resources -->
+      <section class="space-y-4">
+        <h3 class="text-lg font-bold text-text-primary">{{ t('projectDashboard.resources.title') }}</h3>
+        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-2 2xl:grid-cols-4">
+          <UiMetricCard
+            v-for="metric in resourceVisuals"
             :key="metric.label"
             :label="t(metric.label)"
             :value="metric.value"
+            :progress="metric.ratio * 100"
           />
         </div>
-      </UiSurface>
-
-      <UiSurface :title="t('projectDashboard.progress.title')" :subtitle="t('projectDashboard.progress.subtitle')">
-        <div class="stat-grid triple">
-          <UiStatTile :label="t('projectDashboard.progress.phase')" :value="snapshot.progress.phase" />
-          <UiStatTile :label="t('projectDashboard.progress.progress')" :value="`${snapshot.progress.progress}%`" :tone="progressTone" />
-          <UiStatTile
-            :label="t('projectDashboard.progress.runStatus')"
-            :value="snapshot.progress.runStatus ? enumLabel('runStatus', snapshot.progress.runStatus) : t('common.na')"
-          />
-          <UiStatTile
-            :label="t('projectDashboard.progress.currentStep')"
-            :value="snapshot.progress.currentStep ? resolveCopy(snapshot.progress.currentStep) : t('common.na')"
-          />
-          <UiStatTile :label="t('projectDashboard.progress.blockers')" :value="String(snapshot.progress.blockerCount)" />
-          <UiStatTile :label="t('projectDashboard.progress.pendingInbox')" :value="String(snapshot.progress.pendingInboxCount)" />
-        </div>
-      </UiSurface>
+      </section>
     </div>
 
-    <UiSurface :title="t('projectDashboard.data.title')" :subtitle="t('projectDashboard.data.subtitle')">
-      <div class="stat-grid triple">
-        <UiStatTile
-          v-for="metric in snapshot.dataMetrics"
+    <!-- Data Overview -->
+    <section class="space-y-4 px-2 pt-8 border-t border-border-subtle">
+      <h3 class="text-lg font-bold text-text-primary">{{ t('projectDashboard.data.title') }}</h3>
+      <div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
+        <UiMetricCard
+          v-for="metric in dataVisuals"
           :key="metric.label"
           :label="t(metric.label)"
           :value="metric.value"
+          :progress="metric.ratio * 100"
+          tone="muted"
         />
       </div>
+    </section>
 
-      <div class="surface-grid two">
-        <div class="surface-subsection">
-          <div class="subsection-header">
-            <strong>{{ t('projectDashboard.activity.title') }}</strong>
-          </div>
-          <ul v-if="snapshot.activity.length" class="rank-list">
-            <li v-for="activity in snapshot.activity" :key="activity.id" class="rank-list-item">
-              <div class="rank-copy">
-                <strong>{{ activity.title }}</strong>
-                <small>{{ activity.description }}</small>
-              </div>
-              <span class="rank-value">{{ new Date(activity.timestamp).toLocaleString() }}</span>
-            </li>
-          </ul>
-          <UiEmptyState
-            v-else
-            :title="t('projectDashboard.empty.activityTitle')"
-            :description="t('projectDashboard.empty.activityDescription')"
-          />
+    <div class="grid gap-12 lg:grid-cols-2 px-2 pt-8 border-t border-border-subtle">
+      <section class="space-y-4">
+        <h3 class="text-lg font-bold text-text-primary">{{ t('projectDashboard.activity.title') }}</h3>
+        <div class="bg-subtle/20 rounded-lg p-5 border border-border-subtle h-[400px] overflow-y-auto">
+          <UiTimelineList v-if="activityTimelineItems.length" :items="activityTimelineItems" />
+          <UiEmptyState v-else :title="t('projectDashboard.empty.activityTitle')" :description="t('projectDashboard.empty.activityDescription')" />
         </div>
+      </section>
 
-        <div class="surface-subsection">
-          <div class="subsection-header">
-            <strong>{{ t('projectDashboard.data.conversationTop') }}</strong>
-          </div>
-          <ul v-if="snapshot.conversationTokenTop.length" class="rank-list">
-            <li v-for="item in snapshot.conversationTokenTop" :key="item.id" class="rank-list-item">
-              <div class="rank-copy">
-                <strong>{{ item.label }}</strong>
-                <small>{{ item.secondary }}</small>
-              </div>
-              <span class="rank-value">{{ item.value }}</span>
-            </li>
-          </ul>
-          <UiEmptyState
-            v-else
-            :title="t('projectDashboard.empty.rankingTitle')"
-            :description="t('projectDashboard.empty.rankingDescription')"
-          />
+      <section class="space-y-4">
+        <h3 class="text-lg font-bold text-text-primary">{{ t('projectDashboard.data.conversationTop') }}</h3>
+        <div class="bg-subtle/20 rounded-lg p-5 border border-border-subtle h-[400px] overflow-y-auto">
+          <UiRankingList v-if="rankingItems.length" :items="rankingItems" />
+          <UiEmptyState v-else :title="t('projectDashboard.empty.rankingTitle')" :description="t('projectDashboard.empty.rankingDescription')" />
+        </div>
+      </section>
+    </div>
+
+    <!-- Project Settings -->
+    <section class="space-y-8 px-2 pt-8 border-t border-border-subtle">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-bold text-text-primary">{{ t('projectDashboard.info.title') }}</h3>
+        <div class="flex gap-2">
+          <UiButton v-if="!editing" variant="ghost" size="sm" @click="startEdit">{{ t('common.edit') }}</UiButton>
+          <template v-else>
+            <UiButton variant="ghost" size="sm" @click="cancelEdit">{{ t('common.cancel') }}</UiButton>
+            <UiButton variant="primary" size="sm" @click="saveProject">{{ t('common.save') }}</UiButton>
+          </template>
         </div>
       </div>
-    </UiSurface>
-  </section>
+
+      <div v-if="editing" class="grid gap-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 max-w-full">
+        <UiField :label="t('projectDashboard.fields.name')"><UiInput v-model="draft.name" /></UiField>
+        <UiField :label="t('projectDashboard.fields.phase')"><UiInput v-model="draft.phase" /></UiField>
+        <UiField :label="t('projectDashboard.fields.goal')" class="md:col-span-2 lg:col-span-1"><UiTextarea v-model="draft.goal" :rows="2" /></UiField>
+        <UiField :label="t('projectDashboard.fields.summary')" class="md:col-span-2 lg:col-span-2"><UiTextarea v-model="draft.summary" :rows="3" /></UiField>
+      </div>
+
+      <div v-else class="grid gap-y-8 gap-x-16 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 max-w-full text-[13px]">
+        <div>
+          <strong class="block text-text-tertiary text-[10px] uppercase font-bold tracking-wider mb-1.5">{{ t('projectDashboard.fields.name') }}</strong>
+          <span class="text-text-primary font-semibold text-base">{{ project.name }}</span>
+        </div>
+        <div>
+          <strong class="block text-text-tertiary text-[10px] uppercase font-bold tracking-wider mb-1.5">{{ t('projectDashboard.fields.status') }}</strong>
+          <UiBadge :label="enumLabel('projectStatus', project.status)" :tone="project.status === 'active' ? 'success' : 'default'" />
+        </div>
+        <div class="lg:col-span-2">
+          <strong class="block text-text-tertiary text-[10px] uppercase font-bold tracking-wider mb-1.5">{{ t('projectDashboard.fields.goal') }}</strong>
+          <span class="text-text-primary text-sm leading-relaxed">{{ project.goal }}</span>
+        </div>
+        <div class="md:col-span-2 lg:col-span-4">
+          <strong class="block text-text-tertiary text-[10px] uppercase font-bold tracking-wider mb-1.5">{{ t('projectDashboard.fields.summary') }}</strong>
+          <span class="text-text-secondary text-sm leading-relaxed max-w-5xl block">{{ project.summary }}</span>
+        </div>
+      </div>
+    </section>
+  </div>
 </template>
-
-<style scoped>
-.header-meta,
-.surface-actions,
-.subsection-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.surface-actions {
-  justify-content: flex-end;
-}
-
-.field-stack,
-.surface-subsection {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.project-info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1rem;
-}
-
-.project-info-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 1rem 1.05rem;
-  border-radius: calc(var(--radius-l) + 1px);
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
-  background: color-mix(in srgb, var(--bg-subtle) 66%, transparent);
-}
-
-.project-info-item.full {
-  grid-column: 1 / -1;
-}
-
-.project-info-item span,
-.project-info-item p,
-.rank-copy small {
-  color: var(--text-secondary);
-}
-
-.project-info-item p {
-  margin: 0;
-  line-height: 1.6;
-}
-
-.stat-grid {
-  display: grid;
-  gap: 0.9rem;
-}
-
-.stat-grid.triple {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-
-.rank-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.rank-list-item {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.95rem 1rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
-  border-radius: calc(var(--radius-l) + 1px);
-  background: color-mix(in srgb, var(--bg-subtle) 66%, transparent);
-}
-
-.rank-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.rank-value {
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  white-space: nowrap;
-}
-</style>

@@ -18,26 +18,28 @@ const props = withDefaults(
 
 <template>
   <article 
-    class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 min-w-0 p-4 rounded-xl border transition-all duration-fast ease-apple"
+    class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 min-w-0 p-3 rounded-md transition-colors border border-transparent"
     :class="[
       props.active 
-        ? 'border-primary/30 bg-surface shadow-sm' 
-        : 'border-border bg-subtle/50',
-      props.interactive && !props.active ? 'hover:border-border-strong hover:bg-subtle hover:-translate-y-[1px]' : '',
+        ? 'bg-accent/50 border-border-subtle' 
+        : 'border-b border-b-border-subtle rounded-none sm:rounded-md sm:border-b-transparent',
+      props.interactive && !props.active ? 'hover:bg-accent' : '',
       props.interactive ? 'cursor-pointer' : ''
     ]"
   >
-    <div class="flex flex-col flex-1 gap-1.5 min-w-0">
-      <p v-if="props.eyebrow" class="m-0 text-primary text-[0.72rem] font-bold tracking-[0.12em] uppercase">{{ props.eyebrow }}</p>
-      <strong class="text-[0.98rem] leading-[1.35] font-semibold min-w-0 overflow-hidden text-ellipsis line-clamp-2 text-text-primary">{{ props.title }}</strong>
-      <p v-if="props.subtitle" class="m-0 text-text-secondary leading-[1.5] min-w-0 overflow-hidden text-ellipsis line-clamp-2 break-words">{{ props.subtitle }}</p>
-      <slot />
+    <div class="flex flex-col flex-1 gap-1 min-w-0">
+      <p v-if="props.eyebrow" class="m-0 text-text-tertiary text-[10px] font-bold tracking-[0.1em] uppercase">{{ props.eyebrow }}</p>
+      <strong class="text-[14px] leading-snug font-semibold min-w-0 overflow-hidden text-ellipsis line-clamp-1 text-text-primary">{{ props.title }}</strong>
+      <p v-if="props.subtitle" class="m-0 text-[13px] text-text-secondary leading-relaxed min-w-0 overflow-hidden text-ellipsis line-clamp-2">{{ props.subtitle }}</p>
+      <div v-if="$slots.default" class="pt-1">
+        <slot />
+      </div>
     </div>
-    <div class="flex flex-col items-start sm:items-end gap-2.5 min-w-0">
-      <div v-if="$slots.meta" class="flex flex-wrap justify-start sm:justify-end min-w-0 gap-2">
+    <div class="flex flex-col items-start sm:items-end gap-2 min-w-0 shrink-0 pt-1 sm:pt-0">
+      <div v-if="$slots.meta" class="flex flex-wrap justify-start sm:justify-end min-w-0 gap-2 text-[12px]">
         <slot name="meta" />
       </div>
-      <div v-if="$slots.actions" class="flex flex-wrap justify-start sm:justify-end min-w-0 gap-2">
+      <div v-if="$slots.actions" class="flex flex-wrap justify-start sm:justify-end min-w-0 gap-1.5">
         <slot name="actions" />
       </div>
     </div>

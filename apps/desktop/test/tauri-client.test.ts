@@ -37,7 +37,7 @@ function createHostBootstrap(overrides: Partial<ShellBootstrap> = {}): ShellBoot
     backend: {
       baseUrl: 'http://127.0.0.1:43127',
       authToken: 'desktop-test-token',
-      ready: true,
+      state: 'ready',
       transport: 'http',
     },
     ...overrides,
@@ -86,7 +86,7 @@ describe('desktop tauri client transport', () => {
       backend: {
         baseUrl: 'http://127.0.0.1:43127',
         authToken: 'desktop-test-token',
-        ready: false,
+        state: 'unavailable',
         transport: 'http',
       },
     }))
@@ -99,8 +99,14 @@ describe('desktop tauri client transport', () => {
     expect(payload.backend?.transport).toBe('mock')
   })
 
-  it('keeps runtime bootstrap mock-first and does not call backend HTTP by default', async () => {
+  it('falls back to mock runtime when desktop backend is unavailable', async () => {
     invokeMock.mockResolvedValue(createHostBootstrap({
+      backend: {
+        baseUrl: 'http://127.0.0.1:43127',
+        authToken: 'desktop-test-token',
+        state: 'unavailable',
+        transport: 'http',
+      },
       preferences: {
         theme: 'light',
         locale: 'en-US',
@@ -119,4 +125,36 @@ describe('desktop tauri client transport', () => {
     expect(payload.sessions).toEqual([])
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  it('uses desktop backend HTTP for runtime calls when tauri backend is ready', async () => {
+    invokeMock.mockResolvedValue(createHostBootstrap())
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        provider: {
+          provider: 'anthropic',
+          defaultModel: 'claude-sonnet-4-5',
+        },
+        sessions: [{
+          id: 'runtime-session-conv-1',
+          conversationId: 'conv-1',
+          projectId: 'proj-1',
+          title: 'Conversation',
+          status: 'completed',
+          updatedAt: 1,
+        }],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapRuntime()
+
+    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:43127/runtime/bootstrap', expect.objectContaining({
+      method: 'GET',
+      headers: expect.any(Headers),
+    }))
+    expect(payload.sessions).toHaveLength(1)
+    expect(payload.sessions[0]?.id).toBe('runtime-session-conv-1')
+  })
+
 })

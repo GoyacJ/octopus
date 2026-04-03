@@ -3,47 +3,68 @@ import {
   type ActivityRecord,
   type Agent,
   type AgentAssetKind,
+  type Artifact,
+  type BuiltinToolDefinition,
   type ConnectionProfile,
+  type Conversation,
   type ConversationActorKind,
   type ConversationAttachment,
   type ConversationComposerDraft,
-  type Conversation,
   type ConversationMemoryItem,
   type ConversationQueueItem,
   ConversationIntent,
+  type DashboardHighlight,
+  type DashboardMetric,
+  type DashboardSnapshot,
   type DecisionAction,
   type InboxItem,
   type KnowledgeEntry,
+  type McpToolDefinition,
   type Message,
   type MessageProcessEntry,
   type MessageToolCall,
   type MessageUsage,
   type MenuNode,
   type PermissionMode,
+  type PetMessage,
+  type PetMotionState,
+  type PetPresenceState,
+  type PetProfile,
   type Project,
+  type UserCenterAlert,
+  type UserCenterMenuTreeItem,
+  type UserCenterMetric,
+  type UserCenterOverview,
+  type UserCenterPermissionListItem,
+  type UserCenterProfileSnapshot,
+  type UserCenterQuickLink,
+  type UserCenterRoleListItem,
+  type UserCenterUserListItem,
+  type ProjectDashboardProgress,
+  type ProjectDashboardSnapshot,
   type ProjectResource,
+  type ProjectResourceOrigin,
   type RbacPermission,
   type RbacRole,
   type RunDetail,
   type RunStatus,
+  type SkillToolDefinition,
   type Team,
   type TeamStructureEdge,
   type TeamStructureNode,
   TeamMode,
-  type ToolCatalogItem,
   type ToolCatalogGroup,
+  type ToolCatalogItem,
+  type ToolCatalogKind,
   type TraceRecord,
+  type UsageRankingItem,
   type UserAccount,
   type Workspace,
   type WorkspaceMembership,
-  type DashboardSnapshot,
-  type DashboardMetric,
-  type DashboardHighlight,
-  type Artifact,
-  type ProjectDashboardProgress,
-  type ProjectDashboardSnapshot,
-  type UsageRankingItem,
   type WorkspaceOverviewSnapshot,
+  type WorkspaceToolDefinition,
+  type WorkspaceToolPermissionMode,
+  type WorkspaceToolStatus,
 } from '@octopus/schema'
 
 import { mockKey, resolveMockField, translate } from '@/i18n/copy'
@@ -57,6 +78,7 @@ function cloneSeed<T>(value: T): T {
 interface CreateProjectResourceOptions {
   name?: string
   location?: string
+  origin?: ProjectResourceOrigin
 }
 
 interface UpdateProjectResourcePatch {
@@ -102,6 +124,46 @@ interface CreatePermissionInput {
   memberPermissionIds?: string[]
 }
 
+interface ToolDefinitionBaseInput {
+  workspaceId?: string
+  name: string
+  description: string
+  availability?: ToolCatalogItem['availability']
+  status?: WorkspaceToolStatus
+  permissionMode?: WorkspaceToolPermissionMode
+}
+
+interface CreateSkillToolInput extends ToolDefinitionBaseInput {
+  content: string
+}
+
+interface CreateMcpToolInput extends ToolDefinitionBaseInput {
+  serverName: string
+  endpoint: string
+  toolNames?: string[]
+  notes?: string
+}
+
+interface UpdateBuiltinToolPatch {
+  description?: string
+  availability?: ToolCatalogItem['availability']
+  status?: WorkspaceToolStatus
+  permissionMode?: WorkspaceToolPermissionMode
+}
+
+interface UpdateSkillToolPatch extends UpdateBuiltinToolPatch {
+  name?: string
+  content?: string
+}
+
+interface UpdateMcpToolPatch extends UpdateBuiltinToolPatch {
+  name?: string
+  serverName?: string
+  endpoint?: string
+  toolNames?: string[]
+  notes?: string
+}
+
 interface UpdateProjectDetailsPatch {
   name?: string
   goal?: string
@@ -111,6 +173,16 @@ interface UpdateProjectDetailsPatch {
 
 function formatMetric(value: number): string {
   return value.toString()
+}
+
+function badgeToneFromSeverity(severity: UserCenterAlert['severity']): UserCenterMetric['tone'] {
+  if (severity === 'high') {
+    return 'error'
+  }
+  if (severity === 'medium') {
+    return 'warning'
+  }
+  return 'info'
 }
 
 function sumMessageTokens(messages: Message[]): number {
@@ -277,12 +349,126 @@ function dedupeById<T extends { id: string }>(items: T[]): T[] {
   })
 }
 
+function buildPetReply(content: string, pet: PetProfile): string {
+  const trimmed = content.trim()
+  if (!trimmed) {
+    return pet.greeting
+  }
+
+  if (trimmed.includes('工作') || trimmed.includes('任务')) {
+    return `${pet.displayName} 已收到，先帮你把节奏放慢一点，再继续推进。`
+  }
+
+  if (trimmed.includes('你好') || trimmed.includes('hi') || trimmed.includes('hello')) {
+    return `${pet.displayName} 在这里，今天也会陪你一起摸清思路。`
+  }
+
+  return `${pet.displayName} 觉得“${trimmed.slice(0, 24)}${trimmed.length > 24 ? '…' : ''}”听起来不错，我们一步一步来。`
+}
+
+function buildScenarioTags(agent: Agent): string[] {
+  return uniqueValues([...(agent.tags ?? []), ...agent.skillTags])
+}
+
+function buildTeamScenarioTags(team: Team): string[] {
+  return uniqueValues([...(team.tags ?? []), ...team.skillTags])
+}
+
+function buildAgentCenterSortValue(sortKey: string, agent: Agent): string | number {
+  if (sortKey === 'efficiency') {
+    return agent.metrics?.successRate ? Number.parseInt(agent.metrics.successRate, 10) : 0
+  }
+
+  if (sortKey === 'cost') {
+    return agent.metrics?.cost ? Number.parseInt(agent.metrics.cost, 10) * -1 : 0
+  }
+
+  if (sortKey === 'favorite') {
+    return agent.isProjectCopy ? 2 : 1
+  }
+
+  return agent.lastActiveAt ?? 0
+}
+
+function buildTeamSortValue(sortKey: string, team: Team): string | number {
+  if (sortKey === 'efficiency') {
+    return team.metrics?.successRate ? Number.parseInt(team.metrics.successRate, 10) : 0
+  }
+
+  if (sortKey === 'cost') {
+    return team.metrics?.cost ? Number.parseInt(team.metrics.cost, 10) * -1 : 0
+  }
+
+  if (sortKey === 'favorite') {
+    return team.isProjectCopy ? 2 : 1
+  }
+
+  return team.lastActiveAt ?? 0
+}
+
 function buildMenuLookup(menus: MenuNode[], workspaceId: string) {
   return new Map(
     menus
       .filter((menu) => menu.workspaceId === workspaceId)
       .map((menu) => [menu.id, menu]),
   )
+}
+
+function buildScopeSummary(
+  membership: WorkspaceMembership | undefined,
+  projects: Project[],
+  allProjectsLabel: string,
+  selectedProjectsLabel: string,
+): string {
+  if (!membership) {
+    return translate('common.na')
+  }
+
+  if (membership.scopeMode === 'all-projects') {
+    return allProjectsLabel
+  }
+
+  const projectLookup = new Map(projects.map((project) => [project.id, project]))
+  const projectNames = membership.scopeProjectIds
+    .map((projectId) => projectLookup.get(projectId)?.name)
+    .filter((name): name is string => Boolean(name))
+
+  return projectNames.length
+    ? `${selectedProjectsLabel}: ${projectNames.join(', ')}`
+    : selectedProjectsLabel
+}
+
+function buildTargetLabels(
+  permission: RbacPermission,
+  projects: Project[],
+  agents: Agent[],
+  tools: ToolCatalogItem[],
+): string[] {
+  const labelsByType = {
+    project: new Map(projects.map((project) => [project.id, project.name])),
+    agent: new Map(agents.map((agent) => [agent.id, agent.name])),
+    tool: new Map(tools.filter((item) => item.kind === 'builtin').map((item) => [item.id, item.name])),
+    skill: new Map(tools.filter((item) => item.kind === 'skill').map((item) => [item.id, item.name])),
+    mcp: new Map(tools.filter((item) => item.kind === 'mcp').map((item) => [item.id, item.name])),
+  } satisfies Record<NonNullable<RbacPermission['targetType']>, Map<string, string>>
+
+  const targetType = permission.targetType
+  if (!targetType) {
+    return []
+  }
+
+  return (permission.targetIds ?? [])
+    .map((targetId) => labelsByType[targetType].get(targetId) ?? targetId)
+}
+
+function severityScore(severity: UserCenterAlert['severity']): number {
+  if (severity === 'high') {
+    return 3
+  }
+  if (severity === 'medium') {
+    return 2
+  }
+  return 1
 }
 
 function findMembership(
@@ -501,6 +687,46 @@ function isRunBlockingForQueue(status?: RunStatus): boolean {
 
 function isConversationBusy(status?: RunStatus): boolean {
   return status ? QUEUE_BLOCKING_STATUSES.has(status) : false
+}
+
+function toToolCatalogItem(tool: WorkspaceToolDefinition): ToolCatalogItem {
+  return {
+    id: tool.id,
+    workspaceId: tool.workspaceId,
+    name: tool.name,
+    kind: tool.kind,
+    description: tool.description,
+    availability: tool.availability,
+    status: tool.status,
+    permissionMode: tool.permissionMode,
+    ...(tool.kind === 'skill' ? { content: tool.content } : {}),
+    ...(tool.kind === 'mcp'
+      ? {
+          serverName: tool.serverName,
+          endpoint: tool.endpoint,
+          toolNames: [...tool.toolNames],
+          notes: tool.notes,
+        }
+      : {}),
+  }
+}
+
+function groupWorkspaceTools(workspaceTools: WorkspaceToolDefinition[], workspaceId: string): ToolCatalogGroup[] {
+  const groups: ToolCatalogKind[] = ['builtin', 'skill', 'mcp']
+  const titles: Record<ToolCatalogKind, string> = {
+    builtin: '内置工具',
+    skill: 'Skill',
+    mcp: 'MCP',
+  }
+
+  return groups.map((kind) => ({
+    id: kind,
+    title: titles[kind],
+    items: workspaceTools
+      .filter((tool) => tool.workspaceId === workspaceId && tool.kind === kind)
+      .map(toToolCatalogItem)
+      .sort((left, right) => left.name.localeCompare(right.name)),
+  }))
 }
 
 function findToolCatalogItem(toolCatalog: ToolCatalogGroup[], toolId: string): ToolCatalogItem | undefined {
@@ -781,6 +1007,11 @@ export const useWorkbenchStore = defineStore('workbench', {
         .filter((menu) => menu.workspaceId === state.currentWorkspaceId)
         .sort((left, right) => left.order - right.order)
     },
+    currentWorkspaceActivities(state) {
+      return state.activities
+        .filter((activity) => activity.workspaceId === state.currentWorkspaceId)
+        .sort((left, right) => right.timestamp - left.timestamp)
+    },
     currentMembership(state) {
       return findMembership(state.memberships, state.currentWorkspaceId, state.currentUserId)
     },
@@ -854,6 +1085,290 @@ export const useWorkbenchStore = defineStore('workbench', {
           .find((routeName): routeName is string => Boolean(routeName))
       }
     },
+    userCenterSeedAlerts(state): UserCenterAlert[] {
+      return state.userCenterAlerts
+        .filter((alert) => alert.workspaceId === undefined || alert.workspaceId === state.currentWorkspaceId)
+        .filter((alert) => {
+          if (!alert.entityId) {
+            return true
+          }
+
+          const entityCollections = [state.roles, state.permissions, state.menus]
+          return entityCollections.some((items) => items.some((item) => item.id === alert.entityId))
+        })
+        .sort((left, right) => severityScore(right.severity) - severityScore(left.severity))
+    },
+    availableUserCenterQuickLinks(state): UserCenterQuickLink[] {
+      const accessibleRoutes = new Set(this.availableUserCenterMenus
+        .map((menu) => getMenuDefinition(menu.id)?.routeName)
+        .filter((routeName): routeName is string => Boolean(routeName)))
+
+      return state.userCenterQuickLinks.filter((link) => accessibleRoutes.has(link.routeName))
+    },
+    userCenterOverview(): UserCenterOverview {
+      const activeUsers = this.workspaceUsers.filter((user) => user.status === 'active').length
+      const disabledUsers = this.workspaceUsers.length - activeUsers
+      const bundleCount = this.workspacePermissions.filter((permission) => permission.kind === 'bundle').length
+      const orphanRoleCount = this.workspaceRoles.filter((role) =>
+        !this.memberships.some((membership) => membership.workspaceId === this.currentWorkspaceId && membership.roleIds.includes(role.id)),
+      ).length
+      const metrics: UserCenterMetric[] = [
+        {
+          id: 'users',
+          label: translate('userCenter.metrics.users'),
+          value: formatMetric(this.workspaceUsers.length),
+          helper: translate('userCenter.metrics.activeUsersHelper', { count: activeUsers }),
+          tone: 'info',
+        },
+        {
+          id: 'roles',
+          label: translate('userCenter.metrics.roles'),
+          value: formatMetric(this.workspaceRoles.length),
+          helper: translate('userCenter.metrics.orphanRolesHelper', { count: orphanRoleCount }),
+          tone: orphanRoleCount ? 'warning' : 'default',
+        },
+        {
+          id: 'permissions',
+          label: translate('userCenter.metrics.permissions'),
+          value: formatMetric(this.workspacePermissions.length),
+          helper: translate('userCenter.metrics.bundleHelper', { count: bundleCount }),
+          tone: bundleCount ? 'success' : 'default',
+        },
+        {
+          id: 'menus',
+          label: translate('userCenter.metrics.menus'),
+          value: formatMetric(this.workspaceMenus.length),
+          helper: translate('userCenter.metrics.disabledMenusHelper', {
+            count: this.workspaceMenus.filter((menu) => menu.status === 'disabled').length,
+          }),
+          tone: disabledUsers ? 'warning' : 'default',
+        },
+      ]
+
+      const derivedAlerts: UserCenterAlert[] = []
+      const disabledMenus = this.workspaceMenus.filter((menu) => menu.status === 'disabled')
+      for (const menu of disabledMenus) {
+        const roleUsageCount = this.workspaceRoles.filter((role) => role.menuIds.includes(menu.id)).length
+        if (!roleUsageCount) {
+          continue
+        }
+        derivedAlerts.push({
+          id: `derived-menu-${menu.id}`,
+          title: translate('userCenter.alerts.disabledMenuTitle', { label: menu.label }),
+          description: translate('userCenter.alerts.disabledMenuDescription', { count: roleUsageCount }),
+          severity: 'high',
+          routeName: 'user-center-menus',
+          entityId: menu.id,
+        })
+      }
+      for (const role of this.workspaceRoles) {
+        const memberCount = this.memberships.filter((membership) =>
+          membership.workspaceId === this.currentWorkspaceId && membership.roleIds.includes(role.id),
+        ).length
+        if (!memberCount) {
+          derivedAlerts.push({
+            id: `derived-role-${role.id}`,
+            title: translate('userCenter.alerts.orphanRoleTitle', { name: role.name }),
+            description: translate('userCenter.alerts.orphanRoleDescription'),
+            severity: role.status === 'active' ? 'medium' : 'low',
+            routeName: 'user-center-roles',
+            entityId: role.id,
+          })
+        }
+      }
+      for (const permission of this.workspacePermissions.filter((item) => item.kind === 'bundle')) {
+        const disabledMembers = (permission.memberPermissionIds ?? []).filter((memberId) =>
+          this.workspacePermissions.some((member) => member.id === memberId && member.status === 'disabled'),
+        ).length
+        if (!disabledMembers) {
+          continue
+        }
+        derivedAlerts.push({
+          id: `derived-permission-${permission.id}`,
+          title: translate('userCenter.alerts.bundleRiskTitle', { name: permission.name }),
+          description: translate('userCenter.alerts.bundleRiskDescription', { count: disabledMembers }),
+          severity: 'medium',
+          routeName: 'user-center-permissions',
+          entityId: permission.id,
+        })
+      }
+
+      return {
+        workspaceId: this.currentWorkspaceId,
+        currentUserId: this.currentUserId,
+        metrics,
+        alerts: [...this.userCenterSeedAlerts, ...derivedAlerts]
+          .sort((left, right) => severityScore(right.severity) - severityScore(left.severity))
+          .slice(0, 4),
+        quickLinks: this.availableUserCenterQuickLinks,
+      }
+    },
+    currentUserProfileSnapshot(): UserCenterProfileSnapshot {
+      const membership = this.currentMembership
+      const toolCatalogItems = this.toolCatalogGroups.flatMap((group) => group.items)
+      const permissions = this.currentEffectivePermissionIds
+        .map((permissionId) => this.workspacePermissions.find((permission) => permission.id === permissionId))
+        .filter((permission): permission is RbacPermission => permission !== undefined && permission.kind === 'atomic')
+      const groups = uniqueValues(permissions.map((permission) => permission.targetType ?? 'project'))
+        .map((targetType) => ({
+          targetType: targetType as NonNullable<RbacPermission['targetType']>,
+          permissions: permissions
+            .filter((permission) => permission.targetType === targetType)
+            .map((permission) => ({
+              id: permission.id,
+              name: permission.name,
+              code: permission.code,
+              action: permission.action,
+              targetLabels: buildTargetLabels(permission, this.workspaceProjects, this.workspaceAgents, toolCatalogItems),
+            })),
+        }))
+
+      return {
+        userId: this.currentUserId,
+        roleNames: this.currentUserRoles.length
+          ? this.currentUserRoles.map((role) => role.name)
+          : [translate('userCenter.common.noRoles')],
+        scopeSummary: buildScopeSummary(
+          membership,
+          this.workspaceProjects,
+          translate('userCenter.scope.allProjects'),
+          translate('userCenter.scope.selectedProjects'),
+        ),
+        permissionCount: permissions.length,
+        menuCount: this.currentEffectiveMenuIds.length,
+        groups,
+        recentActivity: this.currentWorkspaceActivities
+          .filter((activity) => activity.userId === this.currentUserId)
+          .slice(0, 4)
+          .map((activity) => ({
+            id: activity.id,
+            title: activity.title,
+            description: activity.description,
+            timestamp: activity.timestamp,
+          })),
+      }
+    },
+    workspaceUserListItems(): UserCenterUserListItem[] {
+      return this.workspaceUsers.map((user) => {
+        const membership = findMembership(this.memberships, this.currentWorkspaceId, user.id)
+        const roleNames = (membership?.roleIds ?? [])
+          .map((roleId) => this.workspaceRoles.find((role) => role.id === roleId)?.name)
+          .filter((name): name is string => Boolean(name))
+        const userActivities = this.currentWorkspaceActivities.filter((activity) => activity.userId === user.id)
+        return {
+          id: user.id,
+          nickname: user.nickname,
+          username: user.username,
+          email: user.email,
+          avatar: user.avatar,
+          status: user.status,
+          roleNames,
+          roleSummary: roleNames.length ? roleNames.join(', ') : translate('userCenter.common.noRoles'),
+          scopeSummary: buildScopeSummary(
+            membership,
+            this.workspaceProjects,
+            translate('userCenter.scope.allProjects'),
+            translate('userCenter.scope.selectedProjects'),
+          ),
+          projectCount: membership?.scopeMode === 'selected-projects'
+            ? membership.scopeProjectIds.length
+            : this.workspaceProjects.length,
+          effectivePermissionCount: this.effectivePermissionIdsByUser(user.id).length,
+          effectiveMenuCount: this.effectiveMenuIdsByUser(user.id).length,
+          isCurrentUser: user.id === this.currentUserId,
+          lastActivityAt: userActivities[0]?.timestamp,
+        }
+      })
+    },
+    workspaceRoleListItems(): UserCenterRoleListItem[] {
+      return this.workspaceRoles.map((role) => {
+        const memberCount = this.memberships.filter((membership) =>
+          membership.workspaceId === this.currentWorkspaceId && membership.roleIds.includes(role.id),
+        ).length
+        const riskFlags: string[] = []
+        if (!memberCount) {
+          riskFlags.push(translate('userCenter.risk.orphanRole'))
+        }
+        if (role.status === 'disabled') {
+          riskFlags.push(translate('userCenter.risk.disabledRole'))
+        }
+        if (role.menuIds.length >= 8) {
+          riskFlags.push(translate('userCenter.risk.broadMenuAccess'))
+        }
+        return {
+          id: role.id,
+          name: role.name,
+          code: role.code,
+          description: role.description,
+          status: role.status,
+          memberCount,
+          permissionCount: role.permissionIds.length,
+          menuCount: role.menuIds.length,
+          riskFlags,
+        }
+      })
+    },
+    workspacePermissionListItems(): UserCenterPermissionListItem[] {
+      const toolCatalogItems = this.toolCatalogGroups.flatMap((group) => group.items)
+      return this.workspacePermissions.map((permission) => {
+        const usedByRoleCount = this.workspaceRoles.filter((role) => role.permissionIds.includes(permission.id)).length
+        const riskFlags: string[] = []
+        if (permission.status === 'disabled') {
+          riskFlags.push(translate('userCenter.risk.disabledPermission'))
+        }
+        if (permission.kind === 'bundle' && (permission.memberPermissionIds ?? []).some((memberId) =>
+          this.workspacePermissions.some((member) => member.id === memberId && member.status === 'disabled'),
+        )) {
+          riskFlags.push(translate('userCenter.risk.bundleContainsDisabled'))
+        }
+        return {
+          id: permission.id,
+          name: permission.name,
+          code: permission.code,
+          description: permission.description,
+          status: permission.status,
+          kind: permission.kind,
+          targetType: permission.targetType,
+          targetSummary: permission.kind === 'bundle'
+            ? translate('userCenter.permissions.bundleMembers', { count: permission.memberPermissionIds?.length ?? 0 })
+            : buildTargetLabels(permission, this.workspaceProjects, this.workspaceAgents, toolCatalogItems).join(', ') || translate('userCenter.common.empty'),
+          usedByRoleCount,
+          bundleMemberCount: permission.memberPermissionIds?.length ?? 0,
+          riskFlags,
+        }
+      })
+    },
+    workspaceMenuTreeItems(): UserCenterMenuTreeItem[] {
+      const labelMap = new Map(this.workspaceMenus.map((menu) => [menu.id, menu.label]))
+      const childrenByParent = new Map<string | undefined, MenuNode[]>()
+      for (const menu of this.workspaceMenus) {
+        const key = menu.parentId
+        const list = childrenByParent.get(key) ?? []
+        list.push(menu)
+        list.sort((left, right) => left.order - right.order)
+        childrenByParent.set(key, list)
+      }
+      const result: UserCenterMenuTreeItem[] = []
+      const walk = (parentId: string | undefined, depth: number) => {
+        for (const menu of childrenByParent.get(parentId) ?? []) {
+          result.push({
+            id: menu.id,
+            label: menu.label,
+            routeName: menu.routeName,
+            source: menu.source,
+            status: menu.status,
+            order: menu.order,
+            parentId: menu.parentId,
+            parentLabel: menu.parentId ? labelMap.get(menu.parentId) : undefined,
+            depth,
+            roleUsageCount: this.workspaceRoles.filter((role) => role.menuIds.includes(menu.id)).length,
+          })
+          walk(menu.id, depth + 1)
+        }
+      }
+      walk(undefined, 0)
+      return result
+    },
     workspaceProjects(state) {
       return state.projects.filter((project) => project.workspaceId === state.currentWorkspaceId)
     },
@@ -878,6 +1393,27 @@ export const useWorkbenchStore = defineStore('workbench', {
       return state.messages
         .filter((message) => message.conversationId === state.currentConversationId)
         .sort((left, right) => left.timestamp - right.timestamp)
+    },
+    currentUserPet(state): PetProfile | undefined {
+      return state.pets.find((pet) => pet.ownerUserId === state.currentUserId)
+    },
+    currentUserPetMessages(state): PetMessage[] {
+      const petId = state.pets.find((pet) => pet.ownerUserId === state.currentUserId)?.id
+      if (!petId) {
+        return []
+      }
+
+      return state.petMessages
+        .filter((message) => message.petId === petId)
+        .sort((left, right) => left.timestamp - right.timestamp)
+    },
+    currentUserPetPresence(state): PetPresenceState | undefined {
+      const petId = state.pets.find((pet) => pet.ownerUserId === state.currentUserId)?.id
+      if (!petId) {
+        return undefined
+      }
+
+      return state.petPresence.find((presence) => presence.petId === petId)
     },
     activeConversationQueue(state) {
       return state.conversationQueue
@@ -912,6 +1448,7 @@ export const useWorkbenchStore = defineStore('workbench', {
           workspaceId: project.workspaceId,
           name: artifact.title,
           kind: 'artifact',
+          origin: 'generated',
           sourceArtifactId: artifact.id,
           linkedConversationIds: [artifact.conversationId],
           createdAt: artifact.updatedAt,
@@ -1109,6 +1646,89 @@ export const useWorkbenchStore = defineStore('workbench', {
     workspaceTeams(state) {
       return state.teams.filter((team) => team.workspaceId === state.currentWorkspaceId)
     },
+    agentCenterStats(state) {
+      const activeProject = state.projects.find((project) => project.id === state.currentProjectId)
+      const agents = activeProject
+        ? dedupeById(state.agents.filter((agent) =>
+            activeProject.agentIds.includes(agent.id)
+            && (
+              agent.scope === 'project'
+                ? agent.owner === `project:${activeProject.id}`
+                : agent.scope !== 'workspace' || agent.owner === `workspace:${state.currentWorkspaceId}`
+            ),
+          ))
+        : state.agents.filter((agent) => agent.scope === 'workspace' && agent.owner === `workspace:${state.currentWorkspaceId}`)
+      const teams = activeProject
+        ? dedupeById(state.teams.filter((team) =>
+            activeProject.teamIds.includes(team.id)
+            && (team.useScope === 'project' ? team.projectId === activeProject.id : team.workspaceId === state.currentWorkspaceId),
+          ))
+        : state.teams.filter((team) => team.workspaceId === state.currentWorkspaceId && team.useScope === 'workspace')
+      const onlineAgentCount = agents.filter((agent) => agent.status === 'active').length
+      const activeTaskCount = agents.reduce((total, agent) => total + (agent.metrics?.activeTasks ?? 0), 0)
+        + teams.reduce((total, team) => total + (team.metrics?.activeTasks ?? 0), 0)
+
+      return {
+        agentCount: agents.length,
+        teamCount: teams.length,
+        onlineCount: onlineAgentCount,
+        activeTaskCount,
+      }
+    },
+    agentCenterRecommendations(state) {
+      const activeProject = state.projects.find((project) => project.id === state.currentProjectId)
+      const agents = activeProject
+        ? dedupeById(state.agents.filter((agent) =>
+            activeProject.agentIds.includes(agent.id)
+            && (
+              agent.scope === 'project'
+                ? agent.owner === `project:${activeProject.id}`
+                : agent.scope !== 'workspace' || agent.owner === `workspace:${state.currentWorkspaceId}`
+            ),
+          ))
+        : state.agents.filter((agent) => agent.scope === 'workspace' && agent.owner === `workspace:${state.currentWorkspaceId}`)
+      const teams = activeProject
+        ? dedupeById(state.teams.filter((team) =>
+            activeProject.teamIds.includes(team.id)
+            && (team.useScope === 'project' ? team.projectId === activeProject.id : team.workspaceId === state.currentWorkspaceId),
+          ))
+        : state.teams.filter((team) => team.workspaceId === state.currentWorkspaceId && team.useScope === 'workspace')
+
+      return {
+        agents: [...agents]
+          .sort((left, right) => Number(buildAgentCenterSortValue('recent', right)) - Number(buildAgentCenterSortValue('recent', left)))
+          .slice(0, 3),
+        teams: [...teams]
+          .sort((left, right) => Number(buildTeamSortValue('recent', right)) - Number(buildTeamSortValue('recent', left)))
+          .slice(0, 2),
+      }
+    },
+    agentFilterFacets(state) {
+      const activeProject = state.projects.find((project) => project.id === state.currentProjectId)
+      const agents = activeProject
+        ? dedupeById(state.agents.filter((agent) =>
+            activeProject.agentIds.includes(agent.id)
+            && (
+              agent.scope === 'project'
+                ? agent.owner === `project:${activeProject.id}`
+                : agent.scope !== 'workspace' || agent.owner === `workspace:${state.currentWorkspaceId}`
+            ),
+          ))
+        : state.agents.filter((agent) => agent.scope === 'workspace' && agent.owner === `workspace:${state.currentWorkspaceId}`)
+
+      return uniqueValues(agents.flatMap((agent) => buildScenarioTags(agent)))
+    },
+    teamFilterFacets(state) {
+      const activeProject = state.projects.find((project) => project.id === state.currentProjectId)
+      const teams = activeProject
+        ? dedupeById(state.teams.filter((team) =>
+            activeProject.teamIds.includes(team.id)
+            && (team.useScope === 'project' ? team.projectId === activeProject.id : team.workspaceId === state.currentWorkspaceId),
+          ))
+        : state.teams.filter((team) => team.workspaceId === state.currentWorkspaceId && team.useScope === 'workspace')
+
+      return uniqueValues(teams.flatMap((team) => buildTeamScenarioTags(team)))
+    },
     workspaceAutomations(state) {
       return state.automations.filter((automation) => automation.workspaceId === state.currentWorkspaceId)
     },
@@ -1118,8 +1738,22 @@ export const useWorkbenchStore = defineStore('workbench', {
     workspaceModelCatalog(state) {
       return state.modelCatalog
     },
+    workspaceToolDefinitions(state): WorkspaceToolDefinition[] {
+      return state.workspaceTools
+        .filter((tool) => tool.workspaceId === state.currentWorkspaceId)
+        .sort((left, right) => left.name.localeCompare(right.name))
+    },
+    workspaceBuiltinTools(): BuiltinToolDefinition[] {
+      return this.workspaceToolDefinitions.filter((tool) => tool.kind === 'builtin') as BuiltinToolDefinition[]
+    },
+    workspaceSkillTools(): SkillToolDefinition[] {
+      return this.workspaceToolDefinitions.filter((tool) => tool.kind === 'skill') as SkillToolDefinition[]
+    },
+    workspaceMcpTools(): McpToolDefinition[] {
+      return this.workspaceToolDefinitions.filter((tool) => tool.kind === 'mcp') as McpToolDefinition[]
+    },
     toolCatalogGroups(state): ToolCatalogGroup[] {
-      return state.toolCatalog
+      return groupWorkspaceTools(state.workspaceTools, state.currentWorkspaceId)
     },
     workspaceOverview(): WorkspaceOverviewSnapshot {
       const workspaceId = this.currentWorkspaceId
@@ -1368,12 +2002,55 @@ export const useWorkbenchStore = defineStore('workbench', {
     },
   },
   actions: {
+    ensurePetAssignment(userId: string) {
+      const existingPet = this.pets.find((pet) => pet.ownerUserId === userId)
+      if (existingPet) {
+        return existingPet
+      }
+
+      const speciesPool = ['duck', 'goose', 'blob', 'cat', 'dragon', 'octopus', 'owl', 'penguin', 'turtle', 'snail', 'ghost', 'axolotl', 'capybara', 'cactus', 'robot', 'rabbit', 'mushroom', 'chonk'] as const
+      const species = speciesPool[this.pets.length % speciesPool.length]
+      const pet: PetProfile = {
+        id: `pet-${userId}`,
+        species,
+        displayName: `Pet ${species.slice(0, 1).toUpperCase()}${species.slice(1)}`,
+        ownerUserId: userId,
+        avatarLabel: species.slice(0, 2).toUpperCase(),
+        summary: `A companion pet for ${userId}.`,
+        greeting: `你好，我是 ${species}。`,
+        mood: 'curious',
+        favoriteSnack: 'starlight jelly',
+        promptHints: ['和宠物打个招呼'],
+        fallbackAsset: `/src/assets/pets/${species}.svg`,
+        stateMachine: 'PetState',
+      }
+      const timestamp = Date.now()
+      this.pets.push(pet)
+      this.petMessages.push({
+        id: `pet-msg-${timestamp}`,
+        petId: pet.id,
+        sender: 'pet',
+        content: pet.greeting,
+        timestamp,
+      })
+      this.petPresence.push({
+        petId: pet.id,
+        isVisible: true,
+        chatOpen: false,
+        motionState: 'idle',
+        unreadCount: 1,
+        lastInteractionAt: timestamp,
+        position: { x: 24, y: 24 },
+      })
+      return pet
+    },
     switchCurrentUser(userId: string) {
       const user = this.users.find((item) => item.id === userId)
       if (!user) {
         return false
       }
 
+      this.ensurePetAssignment(userId)
       this.currentUserId = userId
 
       const currentWorkspaceMembership = findMembership(this.memberships, this.currentWorkspaceId, userId)
@@ -1428,6 +2105,7 @@ export const useWorkbenchStore = defineStore('workbench', {
         scopeMode: input.scopeMode ?? 'all-projects',
         scopeProjectIds: input.scopeProjectIds ?? [],
       })
+      this.ensurePetAssignment(userId)
 
       return user
     },
@@ -1452,6 +2130,10 @@ export const useWorkbenchStore = defineStore('workbench', {
 
       this.users = this.users.filter((user) => user.id !== userId)
       this.memberships = this.memberships.filter((membership) => membership.userId !== userId)
+      const removedPetIds = this.pets.filter((pet) => pet.ownerUserId === userId).map((pet) => pet.id)
+      this.pets = this.pets.filter((pet) => pet.ownerUserId !== userId)
+      this.petMessages = this.petMessages.filter((message) => !removedPetIds.includes(message.petId))
+      this.petPresence = this.petPresence.filter((presence) => !removedPetIds.includes(presence.petId))
       syncWorkspaceMemberCounts(this.workspaces, this.memberships)
 
       if (this.currentUserId === userId) {
@@ -1754,6 +2436,172 @@ export const useWorkbenchStore = defineStore('workbench', {
       permission.status = permission.status === 'active' ? 'disabled' : 'active'
       return permission.status
     },
+    updateBuiltinTool(toolId: string, patch: UpdateBuiltinToolPatch) {
+      const tool = this.workspaceTools.find((item) => item.id === toolId && item.workspaceId === this.currentWorkspaceId && item.kind === 'builtin')
+      if (!tool || tool.kind !== 'builtin') {
+        return undefined
+      }
+
+      if (patch.description !== undefined) {
+        tool.description = patch.description.trim()
+      }
+      if (patch.availability !== undefined) {
+        tool.availability = patch.availability
+      }
+      if (patch.status !== undefined) {
+        tool.status = patch.status
+      }
+      if (patch.permissionMode !== undefined) {
+        tool.permissionMode = patch.permissionMode
+      }
+
+      return tool
+    },
+    toggleBuiltinToolStatus(toolId: string) {
+      const tool = this.workspaceTools.find((item) => item.id === toolId && item.workspaceId === this.currentWorkspaceId && item.kind === 'builtin')
+      if (!tool) {
+        return undefined
+      }
+
+      tool.status = tool.status === 'active' ? 'disabled' : 'active'
+      return tool.status
+    },
+    createSkillTool(input: CreateSkillToolInput) {
+      const workspaceId = input.workspaceId ?? this.currentWorkspaceId
+      const skill: SkillToolDefinition = {
+        id: nextMockEntityId(`skill-${workspaceId}`, this.workspaceTools),
+        workspaceId,
+        name: input.name.trim(),
+        kind: 'skill',
+        description: input.description.trim(),
+        availability: input.availability ?? 'healthy',
+        status: input.status ?? 'active',
+        permissionMode: input.permissionMode ?? 'allow',
+        content: input.content.trim(),
+      }
+
+      this.workspaceTools.push(skill)
+      return skill
+    },
+    updateSkillTool(toolId: string, patch: UpdateSkillToolPatch) {
+      const tool = this.workspaceTools.find((item) => item.id === toolId && item.workspaceId === this.currentWorkspaceId && item.kind === 'skill')
+      if (!tool || tool.kind !== 'skill') {
+        return undefined
+      }
+
+      if (patch.name !== undefined) {
+        tool.name = patch.name.trim()
+      }
+      if (patch.description !== undefined) {
+        tool.description = patch.description.trim()
+      }
+      if (patch.availability !== undefined) {
+        tool.availability = patch.availability
+      }
+      if (patch.status !== undefined) {
+        tool.status = patch.status
+      }
+      if (patch.permissionMode !== undefined) {
+        tool.permissionMode = patch.permissionMode
+      }
+      if (patch.content !== undefined) {
+        tool.content = patch.content.trim()
+      }
+
+      return tool
+    },
+    deleteSkillTool(toolId: string) {
+      const exists = this.workspaceTools.some((tool) => tool.id === toolId && tool.workspaceId === this.currentWorkspaceId && tool.kind === 'skill')
+      if (!exists) {
+        return false
+      }
+
+      this.workspaceTools = this.workspaceTools.filter((tool) => !(tool.id === toolId && tool.workspaceId === this.currentWorkspaceId && tool.kind === 'skill'))
+      return true
+    },
+    toggleSkillToolStatus(toolId: string) {
+      const tool = this.workspaceTools.find((item) => item.id === toolId && item.workspaceId === this.currentWorkspaceId && item.kind === 'skill')
+      if (!tool) {
+        return undefined
+      }
+
+      tool.status = tool.status === 'active' ? 'disabled' : 'active'
+      return tool.status
+    },
+    createMcpTool(input: CreateMcpToolInput) {
+      const workspaceId = input.workspaceId ?? this.currentWorkspaceId
+      const mcp: McpToolDefinition = {
+        id: nextMockEntityId(`mcp-${workspaceId}`, this.workspaceTools),
+        workspaceId,
+        name: input.name.trim(),
+        kind: 'mcp',
+        description: input.description.trim(),
+        availability: input.availability ?? 'configured',
+        status: input.status ?? 'active',
+        permissionMode: input.permissionMode ?? 'ask',
+        serverName: input.serverName.trim(),
+        endpoint: input.endpoint.trim(),
+        toolNames: uniqueValues((input.toolNames ?? []).map((item) => item.trim()).filter(Boolean)),
+        notes: input.notes?.trim() ?? '',
+      }
+
+      this.workspaceTools.push(mcp)
+      return mcp
+    },
+    updateMcpTool(toolId: string, patch: UpdateMcpToolPatch) {
+      const tool = this.workspaceTools.find((item) => item.id === toolId && item.workspaceId === this.currentWorkspaceId && item.kind === 'mcp')
+      if (!tool || tool.kind !== 'mcp') {
+        return undefined
+      }
+
+      if (patch.name !== undefined) {
+        tool.name = patch.name.trim()
+      }
+      if (patch.description !== undefined) {
+        tool.description = patch.description.trim()
+      }
+      if (patch.availability !== undefined) {
+        tool.availability = patch.availability
+      }
+      if (patch.status !== undefined) {
+        tool.status = patch.status
+      }
+      if (patch.permissionMode !== undefined) {
+        tool.permissionMode = patch.permissionMode
+      }
+      if (patch.serverName !== undefined) {
+        tool.serverName = patch.serverName.trim()
+      }
+      if (patch.endpoint !== undefined) {
+        tool.endpoint = patch.endpoint.trim()
+      }
+      if (patch.toolNames !== undefined) {
+        tool.toolNames = uniqueValues(patch.toolNames.map((item) => item.trim()).filter(Boolean))
+      }
+      if (patch.notes !== undefined) {
+        tool.notes = patch.notes.trim()
+      }
+
+      return tool
+    },
+    deleteMcpTool(toolId: string) {
+      const exists = this.workspaceTools.some((tool) => tool.id === toolId && tool.workspaceId === this.currentWorkspaceId && tool.kind === 'mcp')
+      if (!exists) {
+        return false
+      }
+
+      this.workspaceTools = this.workspaceTools.filter((tool) => !(tool.id === toolId && tool.workspaceId === this.currentWorkspaceId && tool.kind === 'mcp'))
+      return true
+    },
+    toggleMcpToolStatus(toolId: string) {
+      const tool = this.workspaceTools.find((item) => item.id === toolId && item.workspaceId === this.currentWorkspaceId && item.kind === 'mcp')
+      if (!tool) {
+        return undefined
+      }
+
+      tool.status = tool.status === 'active' ? 'disabled' : 'active'
+      return tool.status
+    },
     updateMenu(menuId: string, patch: Partial<Pick<MenuNode, 'label' | 'order' | 'status'>>) {
       const menu = this.menus.find((item) => item.id === menuId && item.workspaceId === this.currentWorkspaceId)
       if (!menu) {
@@ -1853,6 +2701,85 @@ export const useWorkbenchStore = defineStore('workbench', {
         requestedActorKind,
         requestedActorId,
       )
+    },
+    togglePetChat(force?: boolean) {
+      const presence = this.currentUserPetPresence
+      if (!presence) {
+        return false
+      }
+
+      presence.chatOpen = typeof force === 'boolean' ? force : !presence.chatOpen
+      if (presence.chatOpen) {
+        presence.motionState = 'chat'
+        presence.unreadCount = 0
+      }
+      else if (presence.motionState === 'chat') {
+        presence.motionState = 'idle'
+      }
+      presence.lastInteractionAt = Date.now()
+      return presence.chatOpen
+    },
+    setPetMotionState(state: PetMotionState) {
+      const presence = this.currentUserPetPresence
+      if (!presence) {
+        return
+      }
+
+      presence.motionState = state
+      presence.lastInteractionAt = Date.now()
+    },
+    nudgePetPosition(deltaX: number, deltaY: number) {
+      const presence = this.currentUserPetPresence
+      if (!presence) {
+        return
+      }
+
+      presence.position.x = Math.max(16, presence.position.x + deltaX)
+      presence.position.y = Math.max(16, presence.position.y + deltaY)
+      presence.lastInteractionAt = Date.now()
+    },
+    sendPetMessage(content: string) {
+      const pet = this.currentUserPet
+      const presence = this.currentUserPetPresence
+      if (!pet || !presence) {
+        return undefined
+      }
+
+      const trimmed = content.trim()
+      if (!trimmed) {
+        return undefined
+      }
+
+      const timestamp = nextTimestampFrom(
+        this.petMessages
+          .filter((message) => message.petId === pet.id)
+          .map((message) => message.timestamp),
+        Date.now(),
+      )
+
+      const userMessage: PetMessage = {
+        id: `pet-user-${timestamp}`,
+        petId: pet.id,
+        sender: 'user',
+        content: trimmed,
+        timestamp,
+      }
+      const petReply: PetMessage = {
+        id: `pet-reply-${timestamp}`,
+        petId: pet.id,
+        sender: 'pet',
+        content: buildPetReply(trimmed, pet),
+        timestamp: timestamp + 1,
+      }
+
+      this.petMessages.push(userMessage, petReply)
+      presence.chatOpen = true
+      presence.motionState = 'chat'
+      presence.unreadCount = 0
+      presence.lastInteractionAt = petReply.timestamp
+      pet.mood = trimmed.length > 24 ? 'focused' : 'happy'
+
+      return petReply
     },
     syncConversationRunSnapshot(conversationId: string) {
       const conversation = this.conversations.find((item) => item.id === conversationId)
@@ -1977,6 +2904,8 @@ export const useWorkbenchStore = defineStore('workbench', {
         workspaceId: project.workspaceId,
         name: `${artifact.title}.md`,
         kind: 'file',
+        origin: 'generated',
+        sourceArtifactId: artifact.id,
         linkedConversationIds: [conversation.id],
         createdAt: timestamp + 1,
         createdByMessageId: agentMessage.id,
@@ -2257,6 +3186,41 @@ export const useWorkbenchStore = defineStore('workbench', {
       this.conversations.push(conversation)
       this.runs.push(run)
       this.connections.push(connection)
+      this.workspaceTools.push(
+        {
+          id: `builtin-read-${workspaceId}`,
+          workspaceId,
+          builtinKey: 'read',
+          name: 'Read',
+          kind: 'builtin',
+          description: `读取 ${workspace.name} 的工作区文件与上下文。`,
+          availability: 'healthy',
+          status: 'active',
+          permissionMode: 'allow',
+        },
+        {
+          id: `builtin-write-${workspaceId}`,
+          workspaceId,
+          builtinKey: 'write',
+          name: 'Write',
+          kind: 'builtin',
+          description: `修改 ${workspace.name} 的项目文件与产物。`,
+          availability: 'configured',
+          status: 'active',
+          permissionMode: 'ask',
+        },
+        {
+          id: `builtin-terminal-${workspaceId}`,
+          workspaceId,
+          builtinKey: 'terminal',
+          name: 'Terminal',
+          kind: 'builtin',
+          description: `执行 ${workspace.name} 的本地命令与验证脚本。`,
+          availability: 'configured',
+          status: 'disabled',
+          permissionMode: 'deny',
+        },
+      )
       syncWorkspaceMemberCounts(this.workspaces, this.memberships)
 
       this.currentWorkspaceId = workspace.id
@@ -2549,6 +3513,7 @@ export const useWorkbenchStore = defineStore('workbench', {
       this.permissions = this.permissions.filter((permission) => permission.workspaceId !== removedWorkspace.id)
       this.memberships = this.memberships.filter((membership) => membership.workspaceId !== removedWorkspace.id)
       this.menus = this.menus.filter((menu) => menu.workspaceId !== removedWorkspace.id)
+      this.workspaceTools = this.workspaceTools.filter((tool) => tool.workspaceId !== removedWorkspace.id)
       syncWorkspaceMemberCounts(this.workspaces, this.memberships)
 
       const targetWorkspace = this.workspaces[
@@ -2642,6 +3607,7 @@ export const useWorkbenchStore = defineStore('workbench', {
       const sequence = this.resources.filter((resource) => resource.kind === kind).length + 1
       const trimmedName = options.name?.trim()
       const trimmedLocation = options.location?.trim()
+      const origin = options.origin ?? 'source'
       const createdAt = nextTimestampFrom(
         this.resources
           .filter((resource) => resource.projectId === project.id)
@@ -2660,6 +3626,7 @@ export const useWorkbenchStore = defineStore('workbench', {
               : `Mock URL ${sequence}`
         ),
         kind,
+        origin,
         linkedConversationIds: this.currentConversationId ? [this.currentConversationId] : [],
         createdAt,
         sizeLabel: kind === 'file' ? '16 KB' : kind === 'folder' ? '3 items' : 'URL',
@@ -2886,11 +3853,16 @@ export const useWorkbenchStore = defineStore('workbench', {
         name: `Mock Agent ${sequence}`,
         avatar: `M${sequence}`,
         role: isProjectScoped ? 'Project Specialist' : 'Workspace Specialist',
+        title: isProjectScoped ? '项目执行专员' : '工作区能力专员',
         summary: isProjectScoped
           ? '项目级智能体，可在当前项目内独立调整能力与知识范围。'
           : '工作空间级智能体，可被多个项目引用复用。',
+        description: isProjectScoped
+          ? '为项目上下文定制的数字员工，适合承担当前项目内的执行任务。'
+          : '作为工作区模板数字员工，用于沉淀稳定的通用能力。',
         persona: ['结构化', '稳健', '协作'],
         skillTags: isProjectScoped ? ['项目执行', '上下文约束'] : ['跨项目复用', '能力模板'],
+        tags: isProjectScoped ? ['研发', '项目执行'] : ['研发', '模板资产'],
         mcpBindings: [],
         systemPrompt: isProjectScoped
           ? '聚焦当前项目目标，严格遵守项目上下文与权限边界。'
@@ -2917,6 +3889,16 @@ export const useWorkbenchStore = defineStore('workbench', {
           interruptPreference: 'confirm-major-actions',
         },
         approvalPreferences: [],
+        recentTask: isProjectScoped ? '跟进当前项目的新增执行任务' : '维护工作区通用能力模板',
+        lastActiveAt: Date.now(),
+        metrics: {
+          completedToday: 0,
+          avgResponse: '—',
+          cost: '0 credits',
+          activeTasks: 0,
+          successRate: '—',
+          efficiency: 'B'
+        },
         scope,
         owner: isProjectScoped ? `project:${this.currentProjectId}` : `workspace:${this.currentWorkspaceId}`,
         status: 'active',
@@ -3018,6 +4000,7 @@ export const useWorkbenchStore = defineStore('workbench', {
         workspaceId: this.currentWorkspaceId,
         projectId: isProjectScoped ? this.currentProjectId : undefined,
         name: `Mock Team ${sequence}`,
+        title: isProjectScoped ? '项目协同小队' : '工作区协作编组',
         description: isProjectScoped
           ? '项目级团队智能体，面向当前项目的分工与协作。'
           : '工作空间级团队智能体，可在多个项目中被引用。',
@@ -3027,10 +4010,23 @@ export const useWorkbenchStore = defineStore('workbench', {
         avatar: `T${sequence}`,
         mode: TeamMode.HYBRID,
         members,
+        lead: members[0],
         skillTags: isProjectScoped ? ['项目协作', '执行编排'] : ['跨项目协作', '组织协同'],
+        tags: isProjectScoped ? ['研发', '测试'] : ['产品', '研发'],
         mcpBindings: [],
         defaultKnowledgeScope: isProjectScoped ? ['project-brief'] : ['workspace-handbook'],
         defaultOutput: 'Team brief + next actions',
+        workflow: isProjectScoped ? ['需求分析', '开发实现', '测试验收'] : ['方向同步', '能力分工', '协作交付'],
+        recentTask: isProjectScoped ? '启动项目级协作任务' : '维护跨项目协作流程',
+        recentOutcome: isProjectScoped ? '待生成首个项目成果。' : '待沉淀下一次跨项目成果。',
+        lastActiveAt: Date.now(),
+        metrics: {
+          activeTasks: 0,
+          cost: '0 credits',
+          successRate: '—',
+          handoffSpeed: '—',
+          throughput: '0 / week'
+        },
         useScope: scope,
         projectNotes: isProjectScoped ? '新建项目团队智能体。' : '新建工作空间团队智能体。',
         approvalPreferences: [],

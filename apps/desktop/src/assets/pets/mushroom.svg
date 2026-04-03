@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" rx="32" fill="#FEF2F2"/>
+  <circle cx="64" cy="64" r="44" fill="#FCA5A5"/>
+  <circle cx="49" cy="56" r="5" fill="#1F2937"/>
+  <circle cx="79" cy="56" r="5" fill="#1F2937"/>
+  <path d="M46 78c6 7 14 10 18 10s12-3 18-10" stroke="#DC2626" stroke-width="7" stroke-linecap="round"/>
+  <circle cx="30" cy="30" r="14" fill="#DC2626" fill-opacity="0.14"/>
+  <circle cx="102" cy="100" r="10" fill="#DC2626" fill-opacity="0.18"/>
+  <rect x="39" y="22" width="50" height="18" rx="9" fill="#DC2626" fill-opacity="0.18"/>
+  <text x="64" y="35" text-anchor="middle" font-size="14" font-family="Arial, sans-serif" font-weight="700" fill="#DC2626">MU</text>
+</svg>

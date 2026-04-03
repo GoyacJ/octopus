@@ -60,6 +60,7 @@ describe('Conversation surfaces', () => {
 
     await nextTick()
     expect(mounted.container.querySelector('[data-testid="conversation-tabs"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="conversation-tabs-panel"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="conversation-chat-layout"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="conversation-detail-panel"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="conversation-composer"]')).not.toBeNull()
@@ -89,13 +90,14 @@ describe('Conversation surfaces', () => {
     const firstBubble = firstMessageRow?.querySelector('.message-bubble')
     const firstFooter = firstMessageRow?.querySelector('.message-footer')
     const secondProcessSummary = mounted.container.querySelector('[data-testid="conversation-message-process-summary-msg-redesign-2"]')
-    const permissionSelect = mounted.container.querySelector('[data-testid="composer-permission-select"]')
-    const actorSelect = mounted.container.querySelector('[data-testid="composer-actor-select"]')
-    const modelSelect = mounted.container.querySelector('[data-testid="composer-model-select"]')
+    const permissionTrigger = mounted.container.querySelector('[data-testid="composer-permission-trigger"]')
+    const actorTrigger = mounted.container.querySelector('[data-testid="composer-actor-trigger"]')
+    const modelTrigger = mounted.container.querySelector('[data-testid="composer-model-trigger"]')
     expect(messageStream).not.toBeNull()
     expect(scrollRegion).not.toBeNull()
     expect(scrollRegion?.className).toContain('scroll-y')
     expect(composerDock).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="conversation-detail-nav"]')).not.toBeNull()
     expect(mounted.container.querySelector('.conversation-hero')).toBeNull()
     expect(mounted.container.querySelector('.message-card')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="conversation-message-bubble-msg-redesign-1"]')).not.toBeNull()
@@ -115,9 +117,9 @@ describe('Conversation surfaces', () => {
     expect(mounted.container.querySelector('[data-testid="conversation-detail-section-summary"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="conversation-detail-section-memories"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="conversation-detail-section-tools"]')).not.toBeNull()
-    expect(permissionSelect?.closest('.composer-select')?.querySelector('.composer-select-value')?.textContent).toContain('自动')
-    expect(actorSelect?.closest('.composer-select')?.querySelector('.composer-select-value')?.textContent).toContain('默认智能体')
-    expect(modelSelect?.closest('.composer-select')?.querySelector('.composer-select-value')?.textContent).toContain('GPT-4o')
+    expect(permissionTrigger?.textContent).toContain('自动')
+    expect(actorTrigger?.textContent).toContain('默认智能体')
+    expect(modelTrigger?.textContent).toContain('GPT-4o')
 
     mounted.destroy()
   })
@@ -158,51 +160,59 @@ describe('Conversation surfaces', () => {
     const mounted = mountApp()
     const shell = useShellStore()
 
-    await nextTick()
+    try {
+      await nextTick()
 
-    shell.setRightSidebarCollapsed(true)
-    await nextTick()
+      shell.setRightSidebarCollapsed(true)
+      await nextTick()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
 
-    expect(mounted.container.querySelector('[data-testid="conversation-detail-panel"]')).toBeNull()
-    expect(mounted.container.querySelector('[data-testid="conversation-detail-rail"]')).not.toBeNull()
+      expect(mounted.container.querySelector('[data-testid="conversation-detail-panel"]')).toBeNull()
+      expect(mounted.container.querySelector('[data-testid="conversation-detail-rail"]')).not.toBeNull()
+      expect(mounted.container.querySelector('[data-testid="conversation-detail-rail-nav"]')).not.toBeNull()
 
-    const timelineButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-detail-rail-section-timeline"]')
-    expect(timelineButton).not.toBeNull()
+      const timelineButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-detail-rail-section-timeline"]')
+      expect(timelineButton).not.toBeNull()
 
-    timelineButton?.click()
-    await nextTick()
+      timelineButton?.click()
+      await nextTick()
 
-    expect(shell.detailFocus).toBe('timeline')
-    expect(shell.rightSidebarCollapsed).toBe(false)
-    expect(mounted.container.querySelector('[data-testid="conversation-detail-panel"]')).not.toBeNull()
-
-    mounted.destroy()
+      expect(shell.detailFocus).toBe('timeline')
+      expect(shell.rightSidebarCollapsed).toBe(false)
+      expect(mounted.container.querySelector('[data-testid="conversation-detail-panel"]')).not.toBeNull()
+    }
+    finally {
+      mounted.destroy()
+    }
   })
 
   it('routes to the empty conversation landing page when the last conversation is deleted', async () => {
     const mounted = mountApp()
     const workbench = useWorkbenchStore()
 
-    await nextTick()
+    try {
+      await nextTick()
 
-    await router.push('/workspaces/ws-local/projects/proj-governance/conversations/conv-governance')
-    await nextTick()
-    await new Promise((resolve) => window.setTimeout(resolve, 0))
+      await router.push('/workspaces/ws-local/projects/proj-governance/conversations/conv-governance')
+      await nextTick()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
 
-    const deleteButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-tab-delete-conv-governance"]')
-    expect(deleteButton).not.toBeNull()
+      const deleteButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-tab-delete-conv-governance"]')
+      expect(deleteButton).not.toBeNull()
 
-    deleteButton?.click()
-    await nextTick()
-    await new Promise((resolve) => window.setTimeout(resolve, 0))
+      deleteButton?.click()
+      await nextTick()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
 
-    expect(workbench.projectConversations).toHaveLength(0)
-    expect(router.currentRoute.value.name).toBe('project-conversations')
-    expect(mounted.container.querySelector('[data-testid="conversation-empty-state"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="conversation-detail-panel"]')).toBeNull()
-    expect(mounted.container.querySelector('[data-testid="conversation-detail-rail"]')).toBeNull()
-
-    mounted.destroy()
+      expect(workbench.projectConversations).toHaveLength(0)
+      expect(router.currentRoute.value.name).toBe('project-conversations')
+      expect(mounted.container.querySelector('[data-testid="conversation-empty-state"]')).not.toBeNull()
+      expect(mounted.container.querySelector('[data-testid="conversation-detail-panel"]')).toBeNull()
+      expect(mounted.container.querySelector('[data-testid="conversation-detail-rail"]')).toBeNull()
+    }
+    finally {
+      mounted.destroy()
+    }
   })
 
   it('creates the first conversation from the empty conversation landing page', async () => {
@@ -247,24 +257,25 @@ describe('Conversation surfaces', () => {
     }
 
     const textarea = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="conversation-composer-input"]')
-    const modelSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="composer-model-select"]')
-    const permissionSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="composer-permission-select"]')
-    const actorSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="composer-actor-select"]')
+    const modelTrigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="composer-model-trigger"]')
+    const permissionTrigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="composer-permission-trigger"]')
+    const actorTrigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="composer-actor-trigger"]')
     const resourceTrigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="composer-resource-trigger"]')
     const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-composer-send"]')
 
     expect(textarea).not.toBeNull()
-    expect(modelSelect).not.toBeNull()
-    expect(permissionSelect).not.toBeNull()
-    expect(actorSelect).not.toBeNull()
+    expect(modelTrigger).not.toBeNull()
+    expect(permissionTrigger).not.toBeNull()
+    expect(actorTrigger).not.toBeNull()
     expect(resourceTrigger).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="composer-tool-select"]')).toBeNull()
     expect(sendButton).not.toBeNull()
-    expect(actorSelect?.value).toBe('')
+    expect(actorTrigger?.textContent).toContain('默认智能体')
 
     resourceTrigger?.click()
     await nextTick()
 
+    expect(document.body.querySelector('[data-testid="composer-resource-menu"]')).not.toBeNull()
     const uploadFileButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resource-action-upload-file"]')
     expect(uploadFileButton).not.toBeNull()
     uploadFileButton?.click()

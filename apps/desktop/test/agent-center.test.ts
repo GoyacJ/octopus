@@ -65,17 +65,18 @@ describe('Merged agent center', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
   })
 
-  it('renders compact tabs on top and supports icon/list view switching', async () => {
+  it('renders hero, stats, filters, and supports icon/list view switching', async () => {
     const mounted = mountApp()
 
     await nextTick()
 
-    expect(mounted.container.textContent).toContain('智能体')
+    expect(mounted.container.textContent).toContain('数字员工')
+    expect(mounted.container.querySelector('[data-testid="agent-center-hero"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="agent-center-stats"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="agent-center-toolbar"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="agent-center-tab-agent"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="agent-center-tab-team"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="agent-center-view-icon"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="agent-center-view-list"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="agent-center-recommendations"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="agent-center-icon-view-agent"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="agent-center-list-view-agent"]')).toBeNull()
 
@@ -85,7 +86,8 @@ describe('Merged agent center', () => {
     expect(mounted.container.querySelector('[data-testid="agent-center-list-view-agent"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="agent-center-icon-view-agent"]')).toBeNull()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="agent-center-tab-team"]')?.click()
+    const teamTab = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('团队'))
+    teamTab?.click()
     await nextTick()
 
     expect(mounted.container.querySelector('[data-testid="agent-center-list-view-team"]')).not.toBeNull()
@@ -114,19 +116,23 @@ describe('Merged agent center', () => {
     expect(mounted.container.textContent).toContain('每页 20 项')
     expect(mounted.container.textContent).toContain('上一页')
     expect(mounted.container.textContent).toContain('下一页')
-    expect(mounted.container.querySelector('[data-testid="agent-center-item-agent-agent-architect"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="agent-center-item-agent-agent-mock-22"]')).not.toBeNull()
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="agent-center-page-next-agent"]')?.click()
     await nextTick()
 
     expect(mounted.container.querySelector('[data-testid="agent-center-page-info-agent"]')?.textContent).toContain('2 / 2')
-    expect(mounted.container.querySelector('[data-testid="agent-center-item-agent-agent-architect"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="agent-center-item-agent-agent-mock-22"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="agent-center-page-info-team"]')).toBeNull()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="agent-center-item-agent-agent-mock-22"]')?.click()
+    const employeeCards = mounted.container.querySelectorAll<HTMLElement>('[data-testid^="agent-center-item-agent-"]')
+    const selectedCard = employeeCards[employeeCards.length - 1]
+    const selectedAgentId = selectedCard?.dataset.testid?.replace('agent-center-item-agent-', '')
+    selectedCard?.click()
     await nextTick()
 
-    const avatarInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="agent-center-avatar-input"]')
+    const dialogRoot = document.body
+    const avatarInput = dialogRoot.querySelector<HTMLInputElement>('[data-testid="agent-center-avatar-input"]')
     const file = new File(['avatar'], 'agent.png', { type: 'image/png' })
     Object.defineProperty(avatarInput, 'files', {
       configurable: true,
@@ -135,12 +141,12 @@ describe('Merged agent center', () => {
     avatarInput?.dispatchEvent(new Event('change'))
     await nextTick()
 
-    expect(mounted.container.querySelector('[data-testid="agent-center-avatar-preview"]')).not.toBeNull()
+    expect(dialogRoot.querySelector('[data-testid="agent-center-avatar-preview"]')).not.toBeNull()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="agent-center-dialog-save"]')?.click()
+    dialogRoot.querySelector<HTMLButtonElement>('[data-testid="agent-center-dialog-save"]')?.click()
     await nextTick()
 
-    expect(workbench.agents.find((agent) => agent.id === 'agent-mock-22')?.avatar).toContain('data:image/png;base64')
+    expect(workbench.agents.find((agent) => agent.id === selectedAgentId)?.avatar).toContain('data:image/png;base64')
 
     mounted.destroy()
   })
@@ -172,7 +178,8 @@ describe('Merged agent center', () => {
 
     expect(mounted.container.querySelector('[data-testid="agent-center-page-info-agent"]')?.textContent).toContain('2 / 2')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="agent-center-tab-team"]')?.click()
+    const teamTab = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('团队'))
+    teamTab?.click()
     await nextTick()
 
     expect(mounted.container.querySelector('[data-testid="agent-center-page-info-team"]')?.textContent).toContain('1 / 2')
@@ -190,7 +197,8 @@ describe('Merged agent center', () => {
 
     expect(mounted.container.querySelector('[data-testid="agent-center-page-info-team"]')?.textContent).toContain('1 / 2')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="agent-center-tab-agent"]')?.click()
+    const agentTab = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('员工'))
+    agentTab?.click()
     await nextTick()
 
     expect(mounted.container.querySelector('[data-testid="agent-center-page-info-agent"]')?.textContent).toContain('1 / 2')
@@ -207,21 +215,24 @@ describe('Merged agent center', () => {
 
     await nextTick()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="agent-center-item-team-team-redesign-copy"]')?.click()
+    const teamCard = mounted.container.querySelector<HTMLElement>('[data-testid="agent-center-item-team-team-redesign-copy"]')
+    teamCard?.click()
     await nextTick()
 
-    expect(mounted.container.querySelector('[data-testid="agent-center-member-picker"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="agent-center-structure-canvas"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="agent-center-flow-canvas"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="agent-center-flow-node-redesign-node-lead"]')).not.toBeNull()
+    const dialogRoot = document.body
 
-    const memberSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="agent-center-member-picker"]')
+    expect(dialogRoot.querySelector('[data-testid="agent-center-member-picker"]')).not.toBeNull()
+    expect(dialogRoot.querySelector('[data-testid="agent-center-structure-canvas"]')).not.toBeNull()
+    expect(dialogRoot.querySelector('[data-testid="agent-center-flow-canvas"]')).not.toBeNull()
+    expect(dialogRoot.querySelector('[data-testid="agent-center-flow-node-redesign-node-lead"]')).not.toBeNull()
+
+    const memberSelect = dialogRoot.querySelector<HTMLSelectElement>('[data-testid="agent-center-member-picker"]')
     memberSelect!.value = 'agent-architect-copy-proj-redesign'
     memberSelect!.dispatchEvent(new Event('change'))
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="agent-center-member-add"]')?.click()
+    dialogRoot.querySelector<HTMLButtonElement>('[data-testid="agent-center-member-add"]')?.click()
     await nextTick()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="agent-center-dialog-save"]')?.click()
+    dialogRoot.querySelector<HTMLButtonElement>('[data-testid="agent-center-dialog-save"]')?.click()
     await nextTick()
 
     const updatedTeam = workbench.teams.find((team) => team.id === 'team-redesign-copy')
@@ -250,6 +261,21 @@ describe('Merged agent center', () => {
     expect(originCell?.className).toContain('table-origin')
     expect(originCell?.className).toContain('table-body-text')
     expect(originCell?.className).not.toContain('ui-badge')
+
+    mounted.destroy()
+  })
+
+  it('filters the page by scenario chips and updates visible cards', async () => {
+    const mounted = mountApp()
+
+    await nextTick()
+
+    const scenarioChip = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button')).find((button) => button.textContent?.includes('前端开发'))
+    scenarioChip?.click()
+    await nextTick()
+
+    expect(mounted.container.querySelector('[data-testid="agent-center-item-agent-agent-coder"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="agent-center-item-agent-agent-architect"]')).toBeNull()
 
     mounted.destroy()
   })

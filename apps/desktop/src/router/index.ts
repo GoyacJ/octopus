@@ -9,6 +9,7 @@ import ModelsView from '@/views/ModelsView.vue'
 import ProjectDashboardView from '@/views/ProjectDashboardView.vue'
 import ResourcesView from '@/views/ResourcesView.vue'
 import SettingsView from '@/views/SettingsView.vue'
+import TeamsView from '@/views/TeamsView.vue'
 import TraceView from '@/views/TraceView.vue'
 import ToolsView from '@/views/ToolsView.vue'
 import UserCenterView from '@/views/UserCenterView.vue'
@@ -118,11 +119,7 @@ export const router = createRouter({
     {
       path: '/workspaces/:workspaceId/teams',
       name: 'teams',
-      redirect: (to) => ({
-        name: 'agents',
-        params: { workspaceId: to.params.workspaceId },
-        query: { ...to.query, kind: 'team' },
-      }),
+      component: TeamsView,
     },
     {
       path: '/workspaces/:workspaceId/models',
@@ -178,9 +175,14 @@ export const router = createRouter({
       component: AutomationsView,
     },
     {
+      path: '/workspaces/:workspaceId/connections',
+      name: 'workspace-connections',
+      component: ConnectionsView,
+    },
+    {
       path: '/connections',
       name: 'connections',
-      component: ConnectionsView,
+      redirect: `/workspaces/${seed.currentWorkspaceId}/connections`,
     },
     {
       path: '/:pathMatch(.*)*',

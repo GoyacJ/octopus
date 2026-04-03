@@ -1,9 +1,20 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Shield, Users, PanelLeftOpen, Plus, Trash2, Power } from 'lucide-vue-next'
+import { PanelLeftOpen, Plus, Power, Shield, Trash2, Users } from 'lucide-vue-next'
 
-import { UiBadge, UiButton, UiCheckbox, UiField, UiInput, UiSectionHeading, UiSelect, UiSurface, UiTextarea } from '@octopus/ui'
+import {
+  UiBadge,
+  UiButton,
+  UiCheckbox,
+  UiEmptyState,
+  UiField,
+  UiInput,
+  UiMetricCard,
+  UiRecordCard,
+  UiSelect,
+  UiTextarea,
+} from '@octopus/ui'
 
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -26,19 +37,42 @@ const statusOptions = computed(() => [
   { value: 'disabled', label: t('userCenter.common.disabled') },
 ])
 
-const selectedRole = computed(() =>
-  workbench.workspaceRoles.find((item) => item.id === selectedRoleId.value),
+const roleItems = computed(() => workbench.workspaceRoleListItems)
+const selectedRoleSummary = computed(() =>
+  roleItems.value.find((item) => item.id === selectedRoleId.value),
 )
 
 const availableMenus = computed(() =>
   workbench.workspaceMenus.filter((menu) => menu.source === 'user-center' || !menu.parentId),
 )
 
-function memberCount(roleId: string) {
-  return workbench.memberships.filter((membership) =>
-    membership.workspaceId === workbench.currentWorkspaceId && membership.roleIds.includes(roleId),
-  ).length
-}
+const summaryMetrics = computed(() => {
+  const disabledCount = roleItems.value.filter((role) => role.status === 'disabled').length
+  const orphanCount = roleItems.value.filter((role) => role.memberCount === 0).length
+  const broadAccessCount = roleItems.value.filter((role) => role.riskFlags.includes(t('userCenter.risk.broadMenuAccess'))).length
+  return [
+    {
+      id: 'total',
+      label: t('userCenter.roles.metrics.total'),
+      value: String(roleItems.value.length),
+      helper: t('userCenter.roles.metrics.disabledHelper', { count: disabledCount }),
+    },
+    {
+      id: 'orphan',
+      label: t('userCenter.roles.metrics.orphan'),
+      value: String(orphanCount),
+      helper: t('userCenter.roles.metrics.orphanHelper'),
+      tone: 'warning' as const,
+    },
+    {
+      id: 'broad',
+      label: t('userCenter.roles.metrics.broadAccess'),
+      value: String(broadAccessCount),
+      helper: t('userCenter.roles.metrics.broadAccessHelper'),
+      tone: 'accent' as const,
+    },
+  ]
+})
 
 function applyRole(roleId?: string) {
   if (!roleId) {
@@ -115,271 +149,132 @@ function removeRole(roleId: string) {
 </script>
 
 <template>
-  <section class="role-page section-stack">
-    <UiSectionHeading
-      :eyebrow="t('userCenter.roles.title')"
-      :title="t('userCenter.roles.listTitle')"
-      :subtitle="t('userCenter.roles.subtitle')"
-    />
+  <div class="space-y-10">
+    <div class="grid gap-3 sm:grid-cols-3">
+      <UiMetricCard
+        v-for="metric in summaryMetrics"
+        :key="metric.id"
+        :label="metric.label"
+        :value="metric.value"
+        :helper="metric.helper"
+        :tone="metric.tone"
+      />
+    </div>
 
-    <div class="role-layout">
-      <UiSurface class="role-list-surface" :title="t('userCenter.roles.listTitle')" :subtitle="t('userCenter.roles.listSubtitle')">
-        <div class="role-toolbar">
-          <UiButton size="sm" @click="applyRole()">
-            <Plus :size="16" />
-            {{ t('userCenter.roles.create') }}
+    <div class="flex gap-8 border-t border-border-subtle pt-8">
+      
+      <!-- Left: Roles List -->
+      <aside class="w-80 shrink-0 border-r border-border-subtle pr-8 flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div class="space-y-1">
+            <h3 class="text-sm font-bold text-text-primary">{{ t('userCenter.roles.listTitle') }}</h3>
+            <p class="text-[11px] text-text-tertiary">{{ t('userCenter.roles.listSubtitle') }}</p>
+          </div>
+          <UiButton variant="primary" size="icon" class="h-6 w-6 rounded" @click="applyRole()">
+            <Plus :size="14" />
           </UiButton>
         </div>
 
-        <div class="role-list">
-          <article
-            v-for="role in workbench.workspaceRoles"
+        <div v-if="roleItems.length" class="flex-1 overflow-y-auto space-y-2 pr-1">
+          <UiRecordCard
+            v-for="role in roleItems"
             :key="role.id"
-            class="role-card"
-            :class="{ active: selectedRoleId === role.id }"
+            :test-id="`user-center-role-record-${role.id}`"
+            :title="role.name"
+            :active="selectedRoleId === role.id"
+            interactive
             @click="applyRole(role.id)"
           >
-            <div class="role-card-header">
-              <div class="role-card-copy">
-                <strong>{{ role.name }}</strong>
-                <small>{{ role.code }}</small>
-              </div>
-              <UiBadge :label="role.status" :tone="role.status === 'active' ? 'success' : 'warning'" />
-            </div>
-            <p class="role-card-description">{{ role.description }}</p>
-            <div class="role-card-metrics">
-              <span><Shield :size="14" /> {{ t('userCenter.roles.permissionCount', { count: role.permissionIds.length }) }}</span>
-              <span><PanelLeftOpen :size="14" /> {{ t('userCenter.roles.menuCount', { count: role.menuIds.length }) }}</span>
-              <span><Users :size="14" /> {{ t('userCenter.roles.memberCount', { count: memberCount(role.id) }) }}</span>
-            </div>
-            <div class="role-card-actions">
-              <UiButton variant="ghost" size="sm" @click.stop="workbench.toggleRoleStatus(role.id)">
-                <Power :size="14" />
-                {{ role.status === 'active' ? t('userCenter.roles.disable') : t('userCenter.roles.enable') }}
+            <template #eyebrow>{{ role.code }}</template>
+            <template #badges>
+              <UiBadge :label="role.status" :tone="role.status === 'active' ? 'success' : 'warning'" subtle />
+            </template>
+            <template #meta>
+              <span class="inline-flex items-center gap-1 text-[10px]"><Shield :size="12" />{{ role.permissionCount }}</span>
+              <span class="inline-flex items-center gap-1 text-[10px]"><PanelLeftOpen :size="12" />{{ role.menuCount }}</span>
+              <span class="inline-flex items-center gap-1 text-[10px]"><Users :size="12" />{{ role.memberCount }}</span>
+            </template>
+            <template #actions>
+              <UiButton variant="ghost" size="icon" class="h-6 w-6" @click.stop="workbench.toggleRoleStatus(role.id)">
+                <Power :size="12" />
               </UiButton>
-              <UiButton variant="ghost" size="sm" class="role-danger" @click.stop="removeRole(role.id)">
-                <Trash2 :size="14" />
-                {{ t('userCenter.roles.delete') }}
+              <UiButton variant="ghost" size="icon" class="h-6 w-6 text-destructive hover:bg-destructive/10" @click.stop="removeRole(role.id)">
+                <Trash2 :size="12" />
               </UiButton>
+            </template>
+          </UiRecordCard>
+        </div>
+        <UiEmptyState v-else :title="t('userCenter.roles.listTitle')" :description="t('userCenter.roles.listSubtitle')" />
+      </aside>
+
+      <!-- Right: Role Editor Form -->
+      <main class="flex-1 overflow-y-auto pb-8">
+        <header class="space-y-1 mb-8">
+          <h2 class="text-xl font-bold text-text-primary">{{ t(selectedRoleId ? 'userCenter.roles.editTitle' : 'userCenter.roles.createTitle') }}</h2>
+          <p class="text-[13px] text-text-secondary">{{ t('userCenter.roles.formSubtitle') }}</p>
+        </header>
+
+        <div class="grid gap-x-8 gap-y-6 md:grid-cols-2 max-w-2xl">
+          <UiField :label="t('userCenter.roles.nameLabel')">
+            <UiInput v-model="form.name" />
+          </UiField>
+          <UiField :label="t('userCenter.roles.codeLabel')">
+            <UiInput v-model="form.code" />
+          </UiField>
+          <UiField :label="t('userCenter.common.status')">
+            <UiSelect v-model="form.status" :options="statusOptions" />
+          </UiField>
+          <UiField class="md:col-span-2" :label="t('userCenter.roles.descriptionLabel')">
+            <UiTextarea v-model="form.description" :rows="3" />
+          </UiField>
+        </div>
+
+        <div class="mt-8 grid gap-8 xl:grid-cols-2 max-w-4xl pt-8 border-t border-border-subtle">
+          <section class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h4 class="text-[13px] font-bold text-text-primary">{{ t('userCenter.roles.permissionBindingTitle') }}</h4>
+              <UiBadge :label="String(form.permissionIds.length)" subtle />
             </div>
-          </article>
+            <div class="bg-subtle/30 rounded-md border border-border-subtle p-4 space-y-2 max-h-64 overflow-y-auto">
+              <UiCheckbox
+                v-for="permission in workbench.workspacePermissions"
+                :key="permission.id"
+                v-model="form.permissionIds"
+                :value="permission.id"
+                :label="permission.name"
+              />
+            </div>
+          </section>
+
+          <section class="space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="space-y-0.5">
+                <h4 class="text-[13px] font-bold text-text-primary">{{ t('userCenter.roles.menuBindingTitle') }}</h4>
+                <p class="text-[10px] text-text-tertiary">{{ t('userCenter.roles.menuHint') }}</p>
+              </div>
+              <UiBadge :label="String(form.menuIds.length)" subtle />
+            </div>
+            <div class="bg-subtle/30 rounded-md border border-border-subtle p-4 space-y-2 max-h-64 overflow-y-auto">
+              <UiCheckbox
+                v-for="menu in availableMenus"
+                :key="menu.id"
+                v-model="form.menuIds"
+                :value="menu.id"
+                :label="menu.label"
+              />
+            </div>
+          </section>
         </div>
-      </UiSurface>
 
-      <UiSurface
-        class="role-editor-surface"
-        :title="t(selectedRoleId ? 'userCenter.roles.editTitle' : 'userCenter.roles.createTitle')"
-        :subtitle="t('userCenter.roles.formSubtitle')"
-      >
-        <div class="role-editor-shell">
-          <div class="role-form-grid">
-            <UiField :label="t('userCenter.roles.nameLabel')">
-              <UiInput v-model="form.name" />
-            </UiField>
-            <UiField :label="t('userCenter.roles.codeLabel')">
-              <UiInput v-model="form.code" />
-            </UiField>
-            <UiField :label="t('userCenter.common.status')">
-              <UiSelect v-model="form.status" :options="statusOptions" />
-            </UiField>
-            <UiField class="role-form-full" :label="t('userCenter.roles.descriptionLabel')">
-              <UiTextarea v-model="form.description" :rows="4" />
-            </UiField>
-          </div>
-
-          <div class="role-binding-grid">
-            <section class="binding-panel">
-              <div class="binding-header">
-                <strong>{{ t('userCenter.roles.permissionBindingTitle') }}</strong>
-                <UiBadge :label="String(form.permissionIds.length)" subtle />
-              </div>
-              <div class="binding-list">
-                <UiCheckbox
-                  v-for="permission in workbench.workspacePermissions"
-                  :key="permission.id"
-                  v-model="form.permissionIds"
-                  :value="permission.id"
-                  :label="permission.name"
-                />
-              </div>
-            </section>
-
-            <section class="binding-panel">
-              <div class="binding-header">
-                <strong>{{ t('userCenter.roles.menuBindingTitle') }}</strong>
-                <UiBadge :label="String(form.menuIds.length)" subtle />
-              </div>
-              <div class="binding-list">
-                <UiCheckbox
-                  v-for="menu in availableMenus"
-                  :key="menu.id"
-                  v-model="form.menuIds"
-                  :value="menu.id"
-                  :label="menu.label"
-                />
-              </div>
-              <p class="binding-hint">{{ t('userCenter.roles.menuHint') }}</p>
-            </section>
-          </div>
-
-          <div class="role-editor-actions">
-            <UiButton variant="ghost" @click="applyRole(workbench.workspaceRoles[0]?.id)">
-              {{ t('common.cancel') }}
-            </UiButton>
-            <UiButton @click="saveRole">
-              {{ t('common.save') }}
-            </UiButton>
-          </div>
+        <div class="mt-8 flex justify-end gap-3 max-w-4xl">
+          <UiButton variant="ghost" @click="applyRole(workbench.workspaceRoles[0]?.id)">
+            {{ t('common.cancel') }}
+          </UiButton>
+          <UiButton variant="primary" @click="saveRole">
+            {{ t('common.save') }}
+          </UiButton>
         </div>
-      </UiSurface>
+      </main>
     </div>
-  </section>
+  </div>
 </template>
-
-<style scoped>
-.role-page,
-.role-editor-shell,
-.role-card-copy,
-.binding-panel,
-.binding-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.role-layout {
-  display: grid;
-  grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr);
-  gap: 1.1rem;
-}
-
-.role-toolbar,
-.role-card-header,
-.role-card-metrics,
-.role-card-actions,
-.binding-header,
-.role-editor-actions {
-  display: flex;
-  align-items: center;
-}
-
-.role-toolbar,
-.role-card-header,
-.binding-header,
-.role-editor-actions {
-  justify-content: space-between;
-}
-
-.role-list-surface,
-.role-editor-surface {
-  min-height: 0;
-}
-
-.role-list {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.role-card {
-  display: grid;
-  gap: 0.8rem;
-  padding: 1rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
-  border-radius: calc(var(--radius-lg) + 2px);
-  background: color-mix(in srgb, var(--bg-subtle) 68%, transparent);
-  cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-apple), transform var(--duration-fast) var(--ease-apple), box-shadow var(--duration-fast) var(--ease-apple);
-}
-
-.role-card:hover,
-.role-card.active {
-  border-color: color-mix(in srgb, var(--brand-primary) 26%, var(--border-strong));
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-}
-
-.role-card-copy {
-  gap: 0.2rem;
-}
-
-.role-card-copy small,
-.role-card-description,
-.binding-hint {
-  color: var(--text-secondary);
-}
-
-.role-card-description {
-  line-height: 1.6;
-}
-
-.role-card-metrics {
-  gap: 0.85rem;
-  flex-wrap: wrap;
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-}
-
-.role-card-metrics span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.role-card-actions,
-.role-editor-actions {
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-
-.role-danger {
-  color: var(--status-error);
-}
-
-.role-form-grid,
-.role-binding-grid {
-  display: grid;
-  gap: 1rem;
-}
-
-.role-form-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.role-form-full {
-  grid-column: 1 / -1;
-}
-
-.role-binding-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.binding-panel {
-  gap: 0.9rem;
-  min-height: 0;
-  padding: 1rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 90%, transparent);
-  border-radius: calc(var(--radius-lg) + 1px);
-  background: color-mix(in srgb, var(--bg-subtle) 62%, transparent);
-}
-
-.binding-list {
-  gap: 0.7rem;
-}
-
-.binding-hint {
-  font-size: 0.82rem;
-  line-height: 1.55;
-}
-
-@media (max-width: 1180px) {
-  .role-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 860px) {
-  .role-form-grid,
-  .role-binding-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-</style>

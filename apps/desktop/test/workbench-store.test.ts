@@ -25,7 +25,7 @@ describe('useWorkbenchStore', () => {
 
     expect(store.workspaceOverview.workspaceId).toBe('ws-local')
     expect(store.workspaceOverview.userMetrics).toHaveLength(3)
-    expect(store.workspaceOverview.userActivity).toHaveLength(4)
+    expect(store.workspaceOverview.userActivity).toHaveLength(6)
     expect(store.workspaceOverview.workspaceMetrics).toHaveLength(8)
     expect(store.workspaceOverview.projectSummary.projectId).toBe('proj-redesign')
     expect(store.workspaceOverview.projectSummary.conversationTokenTop.slice(0, 1)).toEqual([
@@ -102,8 +102,11 @@ describe('useWorkbenchStore', () => {
 
     expect(workspaceAgent.owner).toBe('workspace:ws-local')
     expect(workspaceAgent.scope).toBe('workspace')
+    expect(workspaceAgent.title).toBe('工作区能力专员')
+    expect(workspaceAgent.metrics?.activeTasks).toBe(0)
     expect(projectAgent.owner).toBe('project:proj-redesign')
     expect(projectAgent.scope).toBe('project')
+    expect(projectAgent.title).toBe('项目执行专员')
     expect(store.activeProject?.agentIds).toContain(projectAgent.id)
   })
 
@@ -116,8 +119,11 @@ describe('useWorkbenchStore', () => {
 
     expect(workspaceTeam.workspaceId).toBe('ws-local')
     expect(workspaceTeam.useScope).toBe('workspace')
+    expect(workspaceTeam.title).toBe('工作区协作编组')
+    expect(workspaceTeam.workflow).toEqual(['方向同步', '能力分工', '协作交付'])
     expect(projectTeam.projectId).toBe('proj-redesign')
     expect(projectTeam.useScope).toBe('project')
+    expect(projectTeam.title).toBe('项目协同小队')
     expect(store.activeProject?.teamIds).toContain(projectTeam.id)
     expect(projectTeam.structureMode).toBe('flow')
     expect(projectTeam.structureNodes[0]).toMatchObject({
@@ -136,6 +142,23 @@ describe('useWorkbenchStore', () => {
     expect(store.workspaceLevelAgents.some((agent) => agent.id === 'agent-architect')).toBe(true)
     expect(store.projectReferencedTeams.some((team) => team.id === 'team-studio')).toBe(false)
     expect(store.workspaceLevelTeams.some((team) => team.id === 'team-studio')).toBe(true)
+  })
+
+  it('builds stats, recommendations, and filter facets for the agent center', () => {
+    const store = useWorkbenchStore()
+
+    store.selectProject('proj-redesign')
+
+    expect(store.agentCenterStats).toMatchObject({
+      agentCount: 2,
+      teamCount: 2,
+      onlineCount: 2,
+    })
+    expect(store.agentCenterStats.activeTaskCount).toBeGreaterThan(0)
+    expect(store.agentCenterRecommendations.agents[0]?.id).toBe('agent-coder')
+    expect(store.agentCenterRecommendations.teams[0]?.id).toBe('team-redesign-copy')
+    expect(store.agentFilterFacets).toContain('前端开发')
+    expect(store.teamFilterFacets).toContain('设计')
   })
 
   it('deletes project-owned assets and removes their project linkage', () => {
@@ -320,6 +343,7 @@ describe('useWorkbenchStore', () => {
 
     expect(store.artifacts.some((artifact) => artifact.id.startsWith('art-generated-'))).toBe(true)
     expect(store.resources.some((resource) => resource.id.startsWith('res-generated-'))).toBe(true)
+    expect(store.resources.find((resource) => resource.id.startsWith('res-generated-'))?.origin).toBe('generated')
     expect(store.knowledge.some((entry) => entry.id.startsWith('knowledge-generated-'))).toBe(true)
     expect(store.conversationMemories.some((memory) => memory.id.startsWith('memory-conversation-'))).toBe(true)
     expect(store.traces.some((trace) => trace.id.startsWith('trace-generated-'))).toBe(true)
@@ -337,6 +361,50 @@ describe('useWorkbenchStore', () => {
     expect(store.activeRun?.currentStep).toBe('runtime.run.rolledBackToCheckpoint')
   })
 
+  it('toggles pet chat, sends pet replies, and keeps per-user pet assignment stable', () => {
+    const store = useWorkbenchStore()
+
+    const originalPetId = store.currentUserPet?.id
+    expect(originalPetId).toBeDefined()
+    expect(store.currentUserPetMessages.at(0)?.sender).toBe('pet')
+
+    expect(store.currentUserPetPresence?.chatOpen).toBe(false)
+    store.togglePetChat(true)
+    expect(store.currentUserPetPresence?.chatOpen).toBe(true)
+    expect(store.currentUserPetPresence?.motionState).toBe('chat')
+
+    const beforeCount = store.currentUserPetMessages.length
+    const reply = store.sendPetMessage('你好，今天的工作安排是什么？')
+    expect(reply?.sender).toBe('pet')
+    expect(store.currentUserPetMessages).toHaveLength(beforeCount + 2)
+    expect(store.currentUserPetMessages.at(-2)).toMatchObject({
+      sender: 'user',
+      content: '你好，今天的工作安排是什么？',
+    })
+    expect(store.currentUserPetMessages.at(-1)?.content).toContain(store.currentUserPet?.displayName ?? '')
+
+    store.switchCurrentUser('user-operator')
+    const operatorPetId = store.currentUserPet?.id
+    expect(operatorPetId).toBeDefined()
+    expect(operatorPetId).not.toBe(originalPetId)
+
+    store.switchCurrentUser('user-admin')
+    expect(store.currentUserPet?.id).toBe(originalPetId)
+  })
+
+  it('moves the pet within bounded screen offsets', () => {
+    const store = useWorkbenchStore()
+    const before = { ...store.currentUserPetPresence!.position }
+
+    store.nudgePetPosition(-100, -100)
+    expect(store.currentUserPetPresence?.position.x).toBeGreaterThanOrEqual(16)
+    expect(store.currentUserPetPresence?.position.y).toBeGreaterThanOrEqual(16)
+
+    store.nudgePetPosition(20, 12)
+    expect(store.currentUserPetPresence?.position.x).toBeGreaterThanOrEqual(before.x)
+    expect(store.currentUserPetPresence?.position.y).toBeGreaterThanOrEqual(before.y)
+  })
+
   it('creates project resources for files and folders and exposes them in the current project scope', () => {
     const store = useWorkbenchStore()
 
@@ -345,8 +413,8 @@ describe('useWorkbenchStore', () => {
     const fileResource = store.createProjectResource('file')
     const folderResource = store.createProjectResource('folder')
 
-    expect(store.projectResources.some((item) => item.id === fileResource.id && item.kind === 'file')).toBe(true)
-    expect(store.projectResources.some((item) => item.id === folderResource.id && item.kind === 'folder')).toBe(true)
+    expect(store.projectResources.some((item) => item.id === fileResource.id && item.kind === 'file' && item.origin === 'source')).toBe(true)
+    expect(store.projectResources.some((item) => item.id === folderResource.id && item.kind === 'folder' && item.origin === 'source')).toBe(true)
     expect(store.activeProject?.resourceIds).toContain(fileResource.id)
     expect(store.activeProject?.resourceIds).toContain(folderResource.id)
   })
@@ -361,7 +429,7 @@ describe('useWorkbenchStore', () => {
       location: 'https://example.com/spec',
     })
 
-    expect(store.projectResources.some((item) => item.id === urlResource.id && item.kind === 'url')).toBe(true)
+    expect(store.projectResources.some((item) => item.id === urlResource.id && item.kind === 'url' && item.origin === 'source')).toBe(true)
     expect(store.activeProject?.resourceIds).toContain(urlResource.id)
 
     store.updateProjectResource(urlResource.id, {
@@ -552,5 +620,83 @@ describe('useWorkbenchStore', () => {
     })
 
     expect(store.effectiveMenuIdsByUser('user-admin')).not.toContain('menu-tools')
+  })
+
+  it('manages workspace tool definitions for builtin, skill, and mcp entries', () => {
+    const store = useWorkbenchStore()
+
+    expect(store.workspaceToolDefinitions.some((tool) => tool.kind === 'builtin')).toBe(true)
+    expect(store.workspaceSkillTools.find((tool) => tool.id === 'skill-vue')?.content).toContain('Composition API')
+    expect(store.workspaceMcpTools.find((tool) => tool.id === 'mcp-figma')?.serverName).toBe('figma-mcp')
+
+    store.updateBuiltinTool('builtin-read', {
+      permissionMode: 'readonly',
+      status: 'disabled',
+    })
+    expect(store.workspaceBuiltinTools.find((tool) => tool.id === 'builtin-read')).toMatchObject({
+      permissionMode: 'readonly',
+      status: 'disabled',
+    })
+
+    const createdSkill = store.createSkillTool({
+      name: 'Release Notes Writer',
+      description: 'Summarize release deltas for desktop handoff.',
+      permissionMode: 'ask',
+      content: 'Generate concise release notes grouped by workspace impact.',
+    })
+    expect(store.workspaceSkillTools.some((tool) => tool.id === createdSkill.id)).toBe(true)
+
+    store.updateSkillTool(createdSkill.id, {
+      name: 'Release Notes Assistant',
+      content: 'Generate concise release notes with rollout cautions.',
+      status: 'disabled',
+    })
+    expect(store.workspaceSkillTools.find((tool) => tool.id === createdSkill.id)).toMatchObject({
+      name: 'Release Notes Assistant',
+      status: 'disabled',
+    })
+
+    store.toggleSkillToolStatus(createdSkill.id)
+    expect(store.workspaceSkillTools.find((tool) => tool.id === createdSkill.id)?.status).toBe('active')
+    expect(store.deleteSkillTool(createdSkill.id)).toBe(true)
+    expect(store.workspaceSkillTools.some((tool) => tool.id === createdSkill.id)).toBe(false)
+
+    const createdMcp = store.createMcpTool({
+      name: 'Release MCP',
+      description: 'Read release policies and checklists.',
+      permissionMode: 'ask',
+      serverName: 'release-mcp',
+      endpoint: 'https://example.test/mcp/release',
+      toolNames: ['get_release', 'list_checks'],
+      notes: 'Used for release coordination.',
+    })
+    expect(store.workspaceMcpTools.some((tool) => tool.id === createdMcp.id)).toBe(true)
+
+    store.updateMcpTool(createdMcp.id, {
+      toolNames: ['get_release', 'list_checks', 'approve_release'],
+      notes: 'Updated release flow.',
+      status: 'disabled',
+    })
+    expect(store.workspaceMcpTools.find((tool) => tool.id === createdMcp.id)).toMatchObject({
+      notes: 'Updated release flow.',
+      status: 'disabled',
+    })
+
+    store.toggleMcpToolStatus(createdMcp.id)
+    expect(store.workspaceMcpTools.find((tool) => tool.id === createdMcp.id)?.status).toBe('active')
+    expect(store.deleteMcpTool(createdMcp.id)).toBe(true)
+    expect(store.workspaceMcpTools.some((tool) => tool.id === createdMcp.id)).toBe(false)
+  })
+
+  it('builds user-center overview and governance summaries from seeded mock data', () => {
+    const store = useWorkbenchStore()
+
+    expect(store.userCenterOverview.metrics).toHaveLength(4)
+    expect(store.userCenterOverview.alerts.length).toBeGreaterThan(0)
+    expect(store.userCenterOverview.quickLinks.length).toBeGreaterThan(0)
+    expect(store.workspaceUserListItems.some((user) => user.id === 'user-intern' && user.roleNames.length === 0)).toBe(true)
+    expect(store.workspaceRoleListItems.some((role) => role.id === 'role-ws-local-observer' && role.riskFlags.length > 0)).toBe(true)
+    expect(store.workspacePermissionListItems.some((permission) => permission.id === 'perm-ws-local-bundle-audit' && permission.riskFlags.length > 0)).toBe(true)
+    expect(store.workspaceMenuTreeItems.some((menu) => menu.id === 'menu-automations' && menu.roleUsageCount > 0)).toBe(true)
   })
 })

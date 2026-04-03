@@ -56,7 +56,8 @@ describe('Workbench search overlay', () => {
     await nextTick()
 
     expect(shell.searchOpen).toBe(true)
-    expect(mounted.container.querySelector('[data-testid="search-overlay"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="search-overlay-dialog"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="search-overlay-panel"]')).not.toBeNull()
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     await nextTick()
@@ -73,14 +74,14 @@ describe('Workbench search overlay', () => {
     shell.openSearch()
     await nextTick()
 
-    const input = mounted.container.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
     expect(input).not.toBeNull()
 
     input!.value = 'conversation'
     input!.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    const conversationResult = mounted.container.querySelector<HTMLButtonElement>('[data-result-id="conversation-conv-redesign"]')
+    const conversationResult = document.body.querySelector<HTMLButtonElement>('[data-result-id="conversation-conv-redesign"]')
     expect(conversationResult).not.toBeNull()
 
     conversationResult?.click()
@@ -99,14 +100,14 @@ describe('Workbench search overlay', () => {
     shell.openSearch()
     await nextTick()
 
-    const input = mounted.container.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
     expect(input).not.toBeNull()
 
     input!.value = '智能体'
     input!.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    const agentsResult = mounted.container.querySelector<HTMLButtonElement>('[data-result-id="nav-agents"]')
+    const agentsResult = document.body.querySelector<HTMLButtonElement>('[data-result-id="nav-agents"]')
     expect(agentsResult).not.toBeNull()
 
     agentsResult?.click()

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { cn } from '../lib/utils'
+
 const props = withDefaults(
   defineProps<{
     title: string
@@ -6,65 +8,39 @@ const props = withDefaults(
     actor: string
     timestampLabel: string
     tone?: 'default' | 'success' | 'warning' | 'error' | 'info'
+    class?: string
   }>(),
   {
     tone: 'default',
+    class: '',
   },
 )
 </script>
 
 <template>
-  <article class="trace-block" :class="`tone-${props.tone}`">
-    <div class="meta">
-      <span>{{ props.actor }}</span>
-      <span>{{ props.timestampLabel }}</span>
+  <article 
+    :class="cn(
+      'flex flex-col gap-1.5 p-3 rounded-md border border-border-subtle bg-background transition-colors',
+      props.tone === 'success' && 'border-status-success/30',
+      props.tone === 'warning' && 'border-status-warning/30',
+      props.tone === 'error' && 'border-status-error/30',
+      props.tone === 'info' && 'border-primary/30',
+      props.class
+    )"
+  >
+    <div class="flex items-center justify-between gap-4 text-[11px] text-text-tertiary font-medium">
+      <span class="truncate">{{ props.actor }}</span>
+      <span class="shrink-0">{{ props.timestampLabel }}</span>
     </div>
-    <strong>{{ props.title }}</strong>
-    <p>{{ props.detail }}</p>
-    <slot name="actions" />
+    
+    <strong class="text-[13px] font-bold text-text-primary leading-tight">{{ props.title }}</strong>
+    
+    <p class="text-[12px] leading-relaxed text-text-secondary break-words">
+      {{ props.detail }}
+    </p>
+    
+    <div v-if="$slots.actions" class="pt-2 flex items-center gap-2">
+      <slot name="actions" />
+    </div>
   </article>
 </template>
-
-<style scoped>
-.trace-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  min-width: 0;
-  padding: 1rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-}
-
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.75rem;
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-}
-
-p {
-  color: var(--text-secondary);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.tone-success {
-  border-color: color-mix(in srgb, var(--status-success) 35%, transparent);
-}
-
-.tone-warning {
-  border-color: color-mix(in srgb, var(--status-warning) 35%, transparent);
-}
-
-.tone-error {
-  border-color: color-mix(in srgb, var(--status-error) 35%, transparent);
-}
-
-.tone-info {
-  border-color: color-mix(in srgb, var(--status-info) 35%, transparent);
-}
-</style>

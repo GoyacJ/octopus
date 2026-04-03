@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createApp, nextTick } from 'vue'
 
@@ -57,22 +57,25 @@ describe('Project resources view', () => {
 
     await nextTick()
 
-    expect(mounted.container.textContent).not.toContain('统一查看文件、文件夹、Artifact 引用和上传资源。')
-    expect(mounted.container.textContent).not.toContain('资源列表')
+    expect(mounted.container.textContent).toContain('项目资源中心')
+    expect(mounted.container.textContent).toContain('原始资源')
+    expect(mounted.container.textContent).toContain('AI 生成')
+    expect(mounted.container.querySelector('[data-testid="resources-toolbar"]')).not.toBeNull()
 
     const addTrigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-add-trigger"]')
     expect(addTrigger).not.toBeNull()
     addTrigger?.click()
     await nextTick()
 
+    expect(document.body.querySelector('[data-testid="resources-add-menu"]')).not.toBeNull()
     const addUrl = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-add-url"]')
     expect(addUrl).not.toBeNull()
     addUrl?.click()
     await nextTick()
 
-    const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="resource-url-name-input"]')
-    const locationInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="resource-url-location-input"]')
-    const confirmButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resource-url-confirm"]')
+    const nameInput = document.body.querySelector<HTMLInputElement>('[data-testid="resource-url-name-input"]')
+    const locationInput = document.body.querySelector<HTMLInputElement>('[data-testid="resource-url-location-input"]')
+    const confirmButton = document.body.querySelector<HTMLButtonElement>('[data-testid="resource-url-confirm"]')
 
     expect(nameInput).not.toBeNull()
     expect(locationInput).not.toBeNull()
@@ -111,6 +114,13 @@ describe('Project resources view', () => {
     expect(visibleItems.length).toBe(1)
     expect(mounted.container.textContent).toContain('Shell Layout Notes')
     expect(mounted.container.textContent).toContain('第 1 / 1 页')
+
+    const generatedTab = mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-generated"]')
+    expect(generatedTab).not.toBeNull()
+    generatedTab?.click()
+    await nextTick()
+
+    expect(mounted.container.textContent).not.toContain('Desktop PRD Folder')
 
     const gridToggle = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-view-grid"]')
     expect(gridToggle).not.toBeNull()
@@ -154,9 +164,10 @@ describe('Project resources view', () => {
     previewButton?.click()
     await nextTick()
 
-    expect(mounted.container.querySelector('[data-testid="resource-preview-modal"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="resource-preview-modal"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="resource-preview-modal"]')?.closest('[data-ui-dialog-content="true"]')).not.toBeNull()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="resource-preview-close"]')?.click()
+    document.body.querySelector<HTMLButtonElement>('[data-testid="resource-preview-close"]')?.click()
     await nextTick()
 
     const editButton = mounted.container.querySelector<HTMLButtonElement>(`[data-testid="resource-edit-${targetResourceId}"]`)
@@ -164,8 +175,9 @@ describe('Project resources view', () => {
     editButton?.click()
     await nextTick()
 
-    const renameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="resource-edit-name-input"]')
-    const saveEdit = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resource-edit-confirm"]')
+    expect(document.body.querySelector('[data-testid="resource-edit-modal"]')?.closest('[data-ui-dialog-content="true"]')).not.toBeNull()
+    const renameInput = document.body.querySelector<HTMLInputElement>('[data-testid="resource-edit-name-input"]')
+    const saveEdit = document.body.querySelector<HTMLButtonElement>('[data-testid="resource-edit-confirm"]')
     expect(renameInput).not.toBeNull()
     expect(saveEdit).not.toBeNull()
 
@@ -181,7 +193,8 @@ describe('Project resources view', () => {
     deleteButton?.click()
     await nextTick()
 
-    const confirmDelete = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resource-delete-confirm"]')
+    expect(document.body.querySelector('[data-testid="resource-delete-modal"]')?.closest('[data-ui-dialog-content="true"]')).not.toBeNull()
+    const confirmDelete = document.body.querySelector<HTMLButtonElement>('[data-testid="resource-delete-confirm"]')
     expect(confirmDelete).not.toBeNull()
     confirmDelete?.click()
     await nextTick()
@@ -190,4 +203,5 @@ describe('Project resources view', () => {
 
     mounted.destroy()
   })
+
 })

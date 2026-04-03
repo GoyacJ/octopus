@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { UiBadge, UiEmptyState, UiField, UiListRow, UiSectionHeading, UiSurface } from '@octopus/ui'
+import { UiBadge, UiButton, UiEmptyState, UiField, UiInput, UiListRow, UiSectionHeading, UiSelect, UiTextarea } from '@octopus/ui'
 
 import { enumLabel, resolveMockField } from '@/i18n/copy'
 import { useWorkbenchStore } from '@/stores/workbench'
@@ -25,6 +25,15 @@ const draft = ref({
 const selectedTeam = computed(() =>
   workbench.workspaceTeams.find((team) => team.id === selectedTeamId.value),
 )
+const modeOptions = computed(() => [
+  { value: 'leadered', label: enumLabel('teamMode', 'leadered') },
+  { value: 'hybrid', label: enumLabel('teamMode', 'hybrid') },
+  { value: 'mesh', label: enumLabel('teamMode', 'mesh') },
+])
+const scopeOptions = computed(() => [
+  { value: 'workspace', label: enumLabel('teamScope', 'workspace') },
+  { value: 'project', label: enumLabel('teamScope', 'project') },
+])
 
 function splitList(value: string): string[] {
   return value
@@ -86,87 +95,93 @@ function saveTeam() {
 </script>
 
 <template>
-  <section class="section-stack">
-    <UiSectionHeading :eyebrow="t('teams.header.eyebrow')" :title="t('teams.header.title')" :subtitle="t('teams.header.subtitle')" />
+  <div class="w-full flex flex-col gap-8 pb-20 h-full min-h-0">
+    <header class="px-2 shrink-0">
+      <UiSectionHeading 
+        :eyebrow="t('teams.header.eyebrow')" 
+        :title="t('teams.header.title')" 
+        :subtitle="t('teams.header.subtitle')" 
+      />
+    </header>
 
-    <div class="surface-grid two">
-      <UiSurface :title="t('teams.list.title')" :subtitle="t('teams.list.subtitle')">
-        <div v-if="workbench.workspaceTeams.length" class="panel-list">
-          <button
+    <div class="flex flex-1 min-h-0 gap-8 px-2">
+      <!-- Left: List -->
+      <aside class="flex flex-col w-80 shrink-0 border-r border-border-subtle pr-8">
+        <div class="space-y-1 mb-4">
+          <h3 class="text-sm font-bold text-text-primary">{{ t('teams.list.title') }}</h3>
+          <p class="text-[11px] text-text-tertiary">{{ t('teams.list.subtitle') }}</p>
+        </div>
+
+        <div data-testid="teams-list" class="flex-1 overflow-y-auto min-h-0 space-y-1 pr-2">
+          <UiListRow
             v-for="team in workbench.workspaceTeams"
             :key="team.id"
-            type="button"
-            class="team-select"
+            :data-testid="`team-row-${team.id}`"
+            :title="resolveMockField('team', team.id, 'name', team.name)"
+            :subtitle="resolveMockField('team', team.id, 'description', team.description)"
+            :eyebrow="enumLabel('teamScope', team.useScope)"
+            :active="team.id === selectedTeamId"
+            interactive
             @click="selectedTeamId = team.id"
           >
-            <UiListRow
-              :title="resolveMockField('team', team.id, 'name', team.name)"
-              :subtitle="resolveMockField('team', team.id, 'description', team.description)"
-              :eyebrow="enumLabel('teamScope', team.useScope)"
-              :active="team.id === selectedTeamId"
-              interactive
-            >
-              <template #meta>
-                <UiBadge :label="team.isProjectCopy ? t('teams.list.projectCopy') : t('teams.list.workspaceTeam')" subtle />
-              </template>
-            </UiListRow>
-          </button>
-        </div>
-        <UiEmptyState v-else :title="t('teams.list.emptyTitle')" :description="t('teams.list.emptyDescription')" />
-      </UiSurface>
+            <template #meta>
+              <UiBadge :label="team.isProjectCopy ? t('teams.list.projectCopy') : t('teams.list.workspaceTeam')" subtle />
+            </template>
+          </UiListRow>
 
-      <UiSurface
-        v-if="selectedTeam"
-        :title="resolveMockField('team', selectedTeam.id, 'name', selectedTeam.name)"
-        :subtitle="resolveMockField('team', selectedTeam.id, 'defaultOutput', selectedTeam.defaultOutput)"
-      >
-        <div class="field-grid">
-          <UiField :label="t('teams.form.name')">
-            <input v-model="draft.name" type="text" />
-          </UiField>
-          <UiField :label="t('teams.form.mode')">
-            <select v-model="draft.mode">
-              <option value="leadered">{{ enumLabel('teamMode', 'leadered') }}</option>
-              <option value="hybrid">{{ enumLabel('teamMode', 'hybrid') }}</option>
-              <option value="mesh">{{ enumLabel('teamMode', 'mesh') }}</option>
-            </select>
-          </UiField>
-          <UiField :label="t('teams.form.useScope')">
-            <select v-model="draft.useScope">
-              <option value="workspace">{{ enumLabel('teamScope', 'workspace') }}</option>
-              <option value="project">{{ enumLabel('teamScope', 'project') }}</option>
-            </select>
-          </UiField>
-          <UiField :label="t('teams.form.defaultOutput')">
-            <input v-model="draft.defaultOutput" type="text" />
-          </UiField>
+          <UiEmptyState 
+            v-if="!workbench.workspaceTeams.length" 
+            :title="t('teams.list.emptyTitle')" 
+            :description="t('teams.list.emptyDescription')" 
+          />
         </div>
-        <UiField :label="t('teams.form.description')">
-          <textarea v-model="draft.description" rows="4" />
-        </UiField>
-        <UiField :label="t('teams.form.projectNotes')">
-          <textarea v-model="draft.projectNotes" rows="4" />
-        </UiField>
-        <UiField :label="t('teams.form.members')">
-          <input v-model="draft.members" type="text" />
-        </UiField>
-        <UiField :label="t('teams.form.approvalPreferences')">
-          <input v-model="draft.approvalPreferences" type="text" />
-        </UiField>
-        <div class="action-row">
-          <button type="button" class="primary-button" @click="saveTeam">{{ t('common.mockSave') }}</button>
-          <button type="button" class="secondary-button" @click="workbench.createProjectTeamCopy(selectedTeam.id)">
-            {{ t('common.createProjectCopy') }}
-          </button>
-        </div>
-      </UiSurface>
+      </aside>
+
+      <!-- Right: Form -->
+      <main class="flex-1 overflow-y-auto min-h-0 pb-8">
+        <template v-if="selectedTeam">
+          <header class="space-y-2 mb-8">
+            <h2 class="text-2xl font-bold text-text-primary">{{ resolveMockField('team', selectedTeam.id, 'name', selectedTeam.name) }}</h2>
+            <p class="text-[14px] text-text-secondary leading-relaxed">{{ resolveMockField('team', selectedTeam.id, 'defaultOutput', selectedTeam.defaultOutput) }}</p>
+          </header>
+
+          <div class="grid gap-x-8 gap-y-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <UiField :label="t('teams.form.name')">
+              <UiInput v-model="draft.name" data-testid="teams-form-name" />
+            </UiField>
+            <UiField :label="t('teams.form.mode')">
+              <UiSelect v-model="draft.mode" :options="modeOptions" />
+            </UiField>
+            <UiField :label="t('teams.form.useScope')">
+              <UiSelect v-model="draft.useScope" :options="scopeOptions" />
+            </UiField>
+            <UiField :label="t('teams.form.defaultOutput')">
+              <UiInput v-model="draft.defaultOutput" />
+            </UiField>
+
+            <UiField class="md:col-span-2 lg:col-span-2" :label="t('teams.form.description')">
+              <UiTextarea v-model="draft.description" :rows="3" />
+            </UiField>
+            <UiField class="md:col-span-2 lg:col-span-2" :label="t('teams.form.projectNotes')">
+              <UiTextarea v-model="draft.projectNotes" :rows="3" />
+            </UiField>
+            
+            <UiField class="md:col-span-2" :label="t('teams.form.members')">
+              <UiInput v-model="draft.members" />
+            </UiField>
+            <UiField class="md:col-span-2" :label="t('teams.form.approvalPreferences')">
+              <UiInput v-model="draft.approvalPreferences" />
+            </UiField>
+          </div>
+
+          <div class="mt-8 pt-6 border-t border-border-subtle flex flex-wrap gap-3">
+            <UiButton variant="primary" data-testid="teams-form-save" @click="saveTeam">{{ t('common.mockSave') }}</UiButton>
+            <UiButton variant="ghost" @click="workbench.createProjectTeamCopy(selectedTeam.id)">
+              {{ t('common.createProjectCopy') }}
+            </UiButton>
+          </div>
+        </template>
+      </main>
     </div>
-  </section>
+  </div>
 </template>
-
-<style scoped>
-.team-select {
-  width: 100%;
-  text-align: left;
-}
-</style>

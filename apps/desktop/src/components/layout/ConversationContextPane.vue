@@ -7,13 +7,12 @@ import {
   BookOpen,
   FileText,
   FolderTree,
-  PanelRightClose,
   Sparkles,
   Waypoints,
   Wrench,
 } from 'lucide-vue-next'
 
-import { UiBadge, UiEmptyState, UiSurface, UiTraceBlock } from '@octopus/ui'
+import { UiBadge, UiButton, UiEmptyState, UiNavCardList, UiSurface, UiTextarea, UiTimelineList } from '@octopus/ui'
 
 import { enumLabel, formatDateTime, resolveCopy, resolveMockField, resolveMockList } from '@/i18n/copy'
 import type { ConversationDetailFocus } from '@/stores/shell'
@@ -42,6 +41,36 @@ const sectionItems = computed(() => [
   { id: 'tools', label: t('conversation.detail.sections.tools'), icon: Wrench },
   { id: 'timeline', label: t('conversation.detail.sections.timeline'), icon: Waypoints },
 ] as const)
+
+const expandedSectionNavItems = computed(() =>
+  sectionItems.value.map((section) => ({
+    id: section.id,
+    label: section.label,
+    icon: section.icon,
+    active: shell.detailFocus === section.id,
+  })),
+)
+
+const artifactItems = computed(() =>
+  workbench.activeConversationArtifacts.map((artifact) => ({
+    id: artifact.id,
+    label: resolveMockField('artifact', artifact.id, 'title', artifact.title),
+    helper: resolveMockField('artifact', artifact.id, 'excerpt', artifact.excerpt),
+    badge: enumLabel('artifactStatus', artifact.status),
+    icon: FileText,
+    active: shell.selectedArtifactId === artifact.id,
+  })),
+)
+
+const timelineItems = computed(() =>
+  workbench.activeConversationTimeline.map((trace) => ({
+    id: trace.id,
+    title: resolveMockField('traceRecord', trace.id, 'title', trace.title),
+    description: resolveMockField('traceRecord', trace.id, 'detail', trace.detail),
+    helper: trace.actor,
+    timestamp: formatDateTime(trace.timestamp),
+  })),
+)
 
 watch(
   selectedArtifact,
@@ -76,18 +105,12 @@ function openArtifact(artifactId: string) {
 }
 
 function saveArtifactDraft() {
-  if (!selectedArtifact.value) {
-    return
-  }
-
+  if (!selectedArtifact.value) return
   workbench.updateArtifactContent(selectedArtifact.value.id, artifactDraft.value)
 }
 
 function requestReview() {
-  if (!selectedArtifact.value) {
-    return
-  }
-
+  if (!selectedArtifact.value) return
   workbench.requestArtifactReview(selectedArtifact.value.id)
   shell.setDetailFocus('timeline')
   shell.setRightSidebarCollapsed(false)
@@ -96,499 +119,214 @@ function requestReview() {
 </script>
 
 <template>
-  <aside
-    v-if="shell.rightSidebarCollapsed"
-    class="detail-rail"
-    data-testid="conversation-detail-rail"
-  >
-    <button
-      type="button"
-      class="detail-rail-toggle"
-      data-testid="conversation-detail-rail-toggle"
-      :title="t('conversation.detail.actions.expand')"
-      @click="shell.toggleRightSidebar()"
+  <div class="h-full flex flex-col bg-sidebar border-l border-border-subtle">
+    <!-- Rail View (Collapsed State: 48px width) -->
+    <aside
+      v-if="shell.rightSidebarCollapsed"
+      class="flex h-full w-[48px] flex-col items-center gap-3 py-6"
+      data-testid="conversation-detail-rail"
     >
-      <PanelRightClose :size="18" />
-    </button>
-    <div class="detail-rail-divider" aria-hidden="true" />
-    <button
-      v-for="section in sectionItems"
-      :key="section.id"
-      type="button"
-      class="detail-rail-link"
-      :data-testid="`conversation-detail-rail-section-${section.id}`"
-      :class="{ active: shell.detailFocus === section.id }"
-      :title="section.label"
-      @click="setDetail(section.id)"
-    >
-      <component :is="section.icon" :size="18" />
-    </button>
-  </aside>
+      <nav class="flex w-full flex-col items-center gap-3">
+        <button
+          v-for="item in expandedSectionNavItems"
+          :key="item.id"
+          class="flex h-9 w-9 items-center justify-center rounded-lg transition-all"
+          :class="item.active 
+            ? 'bg-primary/10 text-primary shadow-xs' 
+            : 'text-text-tertiary hover:bg-accent hover:text-text-secondary'"
+          :title="item.label"
+          @click="setDetail(item.id)"
+        >
+          <component :is="item.icon" :size="18" />
+        </button>
+      </nav>
+    </aside>
 
-  <aside v-else class="detail-panel" data-testid="conversation-detail-panel">
-    <div class="detail-toolbar">
-      <strong>{{ t('conversation.detail.title') }}</strong>
-      <button
-        type="button"
-        class="detail-rail-toggle"
-        data-testid="conversation-detail-collapse"
-        :title="t('conversation.detail.actions.collapse')"
-        @click="shell.toggleRightSidebar()"
-      >
-        <PanelRightClose :size="18" />
-      </button>
-    </div>
+    <!-- Panel View (Expanded State: 360px width) -->
+    <aside v-else class="flex h-full flex-col overflow-hidden w-[360px]" data-testid="conversation-detail-panel">
+      <!-- Fixed Header Area -->
+      <div class="flex shrink-0 items-center px-4 h-11 border-b border-border-subtle bg-sidebar/80 backdrop-blur-md sticky top-0 z-10">
+        <span class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">{{ t('conversation.detail.title') }}</span>
+      </div>
 
-    <div class="detail-section-nav" role="tablist">
-      <button
-        v-for="section in sectionItems"
-        :key="section.id"
-        type="button"
-        class="detail-section-button"
-        :data-testid="`conversation-detail-section-${section.id}`"
-        :class="{ active: shell.detailFocus === section.id }"
-        @click="setDetail(section.id)"
-      >
-        <component :is="section.icon" :size="16" />
-        <span>{{ section.label }}</span>
-      </button>
-    </div>
+      <!-- Fixed Navigation Tabs Area -->
+      <nav class="flex shrink-0 flex-wrap gap-1 border-b border-border-subtle p-2 bg-sidebar/50 sticky top-[44px] z-10">
+        <button
+          v-for="item in expandedSectionNavItems"
+          :key="item.id"
+          class="flex items-center gap-2 rounded px-2.5 py-1.5 text-[11px] font-medium transition-all"
+          :class="item.active 
+            ? 'bg-background shadow-xs text-text-primary border border-border-subtle' 
+            : 'text-text-tertiary hover:bg-accent hover:text-text-secondary border border-transparent'"
+          @click="setDetail(item.id)"
+        >
+          <component :is="item.icon" :size="14" />
+          {{ item.label }}
+        </button>
+      </nav>
 
-    <div class="detail-content scroll-y">
-      <UiSurface
-        v-if="shell.detailFocus === 'summary' && activeConversation"
-        class="detail-surface"
-        :title="t('conversation.detail.summary.title')"
-        :subtitle="t('conversation.detail.summary.subtitle')"
-      >
-        <div class="detail-summary-grid">
-          <div class="detail-copy">
-            <strong>{{ t('common.goal') }}</strong>
-            <p>{{ resolveMockField('conversation', activeConversation.id, 'currentGoal', activeConversation.currentGoal) }}</p>
+      <!-- Independent Content Scroll Area -->
+      <div class="scroll-y flex-1 p-4 bg-background/30">
+        <div v-if="shell.detailFocus === 'summary' && activeConversation" class="flex flex-col gap-6">
+          <div class="space-y-1">
+            <h3 class="text-sm font-bold text-text-primary">{{ t('conversation.detail.summary.title') }}</h3>
+            <p class="text-[12px] text-text-secondary">{{ t('conversation.detail.summary.subtitle') }}</p>
           </div>
-          <div class="detail-copy">
-            <strong>{{ t('conversation.detail.summary.statusNote') }}</strong>
-            <p>{{ resolveCopy(activeConversation.statusNote) }}</p>
-          </div>
-        </div>
-        <div class="detail-copy">
-          <strong>{{ t('common.constraints') }}</strong>
-          <ul>
-            <li
-              v-for="(constraint, index) in resolveMockList('conversation', activeConversation.id, 'constraints', activeConversation.constraints)"
-              :key="`${activeConversation.id}-constraint-${index}`"
-            >
-              {{ constraint }}
-            </li>
-          </ul>
-        </div>
-        <div class="detail-summary-grid">
-          <div class="detail-copy">
-            <strong>{{ t('conversation.detail.summary.currentStep') }}</strong>
-            <p>{{ resolveCopy(workbench.activeRun?.currentStep) }}</p>
-          </div>
-          <div class="detail-copy">
-            <strong>{{ t('conversation.detail.summary.updatedAt') }}</strong>
-            <p>{{ formatDateTime(workbench.activeRun?.updatedAt) }}</p>
-          </div>
-        </div>
-      </UiSurface>
 
-      <UiSurface
-        v-else-if="shell.detailFocus === 'memories'"
-        class="detail-surface"
-        :title="t('conversation.detail.memories.title')"
-        :subtitle="t('conversation.detail.memories.subtitle')"
-      >
-        <div v-if="workbench.activeConversationMemories.length" class="panel-list">
-          <article
-            v-for="memory in workbench.activeConversationMemories"
-            :key="memory.id"
-            class="panel-card"
-          >
-            <div class="meta-row">
-              <UiBadge :label="memory.source === 'agent' ? t('conversation.detail.memories.agentSource') : t('conversation.detail.memories.conversationSource')" subtle />
-              <UiBadge v-if="memory.ownerId" :label="memory.ownerId" subtle />
+          <div class="space-y-4">
+            <div class="space-y-1.5">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('common.goal') }}</span>
+              <p class="text-[13px] leading-relaxed text-text-secondary bg-subtle/30 p-3 rounded-md border border-border-subtle">{{ resolveMockField('conversation', activeConversation.id, 'currentGoal', activeConversation.currentGoal) }}</p>
             </div>
-            <strong>{{ memory.title }}</strong>
-            <p>{{ memory.summary }}</p>
-            <small>{{ formatDateTime(memory.createdAt) }}</small>
-          </article>
-        </div>
-        <UiEmptyState
-          v-else
-          :title="t('conversation.detail.memories.emptyTitle')"
-          :description="t('conversation.detail.memories.emptyDescription')"
-        />
-      </UiSurface>
+            
+            <div class="space-y-1.5">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('conversation.detail.summary.statusNote') }}</span>
+              <p class="text-[13px] leading-relaxed text-text-secondary bg-subtle/30 p-3 rounded-md border border-border-subtle">{{ resolveCopy(activeConversation.statusNote) }}</p>
+            </div>
 
-      <template v-else-if="shell.detailFocus === 'artifacts'">
-        <UiSurface class="detail-surface" :title="t('conversation.detail.artifacts.title')" :subtitle="t('conversation.detail.artifacts.subtitle')">
-          <div v-if="workbench.activeConversationArtifacts.length" class="resource-list">
-            <button
-              v-for="artifact in workbench.activeConversationArtifacts"
-              :key="artifact.id"
-              type="button"
-              class="resource-card"
-              :class="{ active: shell.selectedArtifactId === artifact.id }"
-              @click="openArtifact(artifact.id)"
+            <div class="space-y-1.5">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('common.constraints') }}</span>
+              <ul class="space-y-2 bg-subtle/30 p-3 rounded-md border border-border-subtle">
+                <li
+                  v-for="(constraint, index) in resolveMockList('conversation', activeConversation.id, 'constraints', activeConversation.constraints)"
+                  :key="`${activeConversation.id}-constraint-${index}`"
+                  class="flex gap-2 text-[12px] leading-relaxed text-text-secondary"
+                >
+                  <span class="text-text-tertiary opacity-50">•</span>
+                  {{ constraint }}
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div v-else-if="shell.detailFocus === 'memories'" class="space-y-4">
+          <div v-if="workbench.activeConversationMemories.length" class="space-y-3">
+            <div
+              v-for="memory in workbench.activeConversationMemories"
+              :key="memory.id"
+              class="bg-background rounded-md border border-border-subtle p-3 space-y-2 shadow-xs"
             >
-              <div class="resource-copy">
-                <strong>{{ resolveMockField('artifact', artifact.id, 'title', artifact.title) }}</strong>
-                <small>{{ resolveMockField('artifact', artifact.id, 'excerpt', artifact.excerpt) }}</small>
+              <div class="flex flex-wrap items-center gap-2">
+                <UiBadge :label="memory.source === 'agent' ? t('conversation.detail.memories.agentSource') : t('conversation.detail.memories.conversationSource')" subtle />
               </div>
-              <UiBadge :label="enumLabel('artifactStatus', artifact.status)" subtle />
-            </button>
+              <strong class="block text-[13px] font-bold text-text-primary">{{ memory.title }}</strong>
+              <p class="text-[12px] leading-relaxed text-text-secondary">{{ memory.summary }}</p>
+              <small class="block text-[10px] text-text-tertiary">{{ formatDateTime(memory.createdAt) }}</small>
+            </div>
           </div>
           <UiEmptyState
             v-else
-            :title="t('conversation.detail.artifacts.emptyTitle')"
-            :description="t('conversation.detail.artifacts.emptyDescription')"
-          />
-        </UiSurface>
-
-        <UiSurface
-          v-if="selectedArtifact"
-          class="detail-surface"
-          :title="resolveMockField('artifact', selectedArtifact.id, 'title', selectedArtifact.title)"
-          :subtitle="t('common.updatedAt', { time: formatDateTime(selectedArtifact.updatedAt) })"
-        >
-          <div class="meta-row">
-            <UiBadge :label="resolveMockField('artifact', selectedArtifact.id, 'type', selectedArtifact.type)" subtle />
-            <UiBadge :label="`v${selectedArtifact.version}`" subtle />
-          </div>
-          <textarea v-model="artifactDraft" rows="10" />
-          <div class="action-row">
-            <button type="button" class="secondary-button" @click="saveArtifactDraft">{{ t('common.saveDraft') }}</button>
-            <button type="button" class="primary-button" @click="requestReview">{{ t('common.requestReview') }}</button>
-          </div>
-        </UiSurface>
-      </template>
-
-      <UiSurface
-        v-else-if="shell.detailFocus === 'knowledge'"
-        class="detail-surface"
-        :title="t('conversation.detail.knowledge.title')"
-        :subtitle="t('conversation.detail.knowledge.subtitle')"
-      >
-        <div v-if="workbench.activeConversationKnowledge.length" class="panel-list">
-          <article
-            v-for="entry in workbench.activeConversationKnowledge"
-            :key="entry.id"
-            class="panel-card"
-          >
-            <div class="meta-row">
-              <UiBadge :label="enumLabel('knowledgeStatus', entry.status)" subtle />
-              <UiBadge :label="enumLabel('knowledgeSourceType', entry.sourceType)" subtle />
-            </div>
-            <strong>{{ resolveMockField('knowledgeEntry', entry.id, 'title', entry.title) }}</strong>
-            <p>{{ resolveMockField('knowledgeEntry', entry.id, 'summary', entry.summary) }}</p>
-          </article>
-        </div>
-        <UiEmptyState
-          v-else
-          :title="t('conversation.detail.knowledge.emptyTitle')"
-          :description="t('conversation.detail.knowledge.emptyDescription')"
-        />
-      </UiSurface>
-
-      <UiSurface
-        v-else-if="shell.detailFocus === 'resources'"
-        class="detail-surface"
-        :title="t('conversation.detail.resources.title')"
-        :subtitle="t('conversation.detail.resources.subtitle')"
-      >
-        <div v-if="workbench.activeConversationResources.length" class="panel-list">
-          <article
-            v-for="resource in workbench.activeConversationResources"
-            :key="resource.id"
-            class="panel-card"
-          >
-            <div class="meta-row">
-              <UiBadge :label="resource.kind" subtle />
-              <UiBadge :label="resource.sizeLabel ?? t('common.na')" subtle />
-            </div>
-            <strong>{{ resource.name }}</strong>
-            <p>{{ resource.location ?? t('common.na') }}</p>
-          </article>
-        </div>
-        <UiEmptyState
-          v-else
-          :title="t('conversation.detail.resources.emptyTitle')"
-          :description="t('conversation.detail.resources.emptyDescription')"
-        />
-      </UiSurface>
-
-      <UiSurface
-        v-else-if="shell.detailFocus === 'tools'"
-        class="detail-surface"
-        :title="t('conversation.detail.tools.title')"
-        :subtitle="t('conversation.detail.tools.subtitle')"
-      >
-        <div v-if="workbench.activeConversationToolStats.length" class="panel-list">
-          <article
-            v-for="tool in workbench.activeConversationToolStats"
-            :key="tool.toolId"
-            class="panel-card"
-          >
-            <div class="meta-row">
-              <UiBadge :label="tool.kind" subtle />
-              <UiBadge :label="t('conversation.detail.tools.callCount', { count: tool.count })" subtle />
-            </div>
-            <strong>{{ tool.label }}</strong>
-            <p>{{ tool.toolId }}</p>
-          </article>
-        </div>
-        <UiEmptyState
-          v-else
-          :title="t('conversation.detail.tools.emptyTitle')"
-          :description="t('conversation.detail.tools.emptyDescription')"
-        />
-      </UiSurface>
-
-      <UiSurface
-        v-else
-        class="detail-surface"
-        :title="t('conversation.detail.timeline.title')"
-        :subtitle="t('conversation.detail.timeline.subtitle')"
-      >
-        <div v-if="workbench.activeConversationTimeline.length" class="panel-list">
-          <UiTraceBlock
-            v-for="trace in workbench.activeConversationTimeline"
-            :key="trace.id"
-            :title="resolveMockField('traceRecord', trace.id, 'title', trace.title)"
-            :detail="resolveMockField('traceRecord', trace.id, 'detail', trace.detail)"
-            :actor="trace.actor"
-            :timestamp-label="formatDateTime(trace.timestamp)"
-            :tone="trace.status"
+            :title="t('conversation.detail.memories.emptyTitle')"
+            :description="t('conversation.detail.memories.emptyDescription')"
           />
         </div>
-        <UiEmptyState
-          v-else
-          :title="t('conversation.detail.timeline.emptyTitle')"
-          :description="t('conversation.detail.timeline.emptyDescription')"
-        />
-      </UiSurface>
-    </div>
-  </aside>
+
+        <template v-else-if="shell.detailFocus === 'artifacts'">
+          <div class="space-y-4">
+            <UiNavCardList
+              v-if="artifactItems.length"
+              :items="artifactItems"
+              @select="openArtifact"
+            />
+            <UiEmptyState
+              v-else
+              :title="t('conversation.detail.artifacts.emptyTitle')"
+              :description="t('conversation.detail.artifacts.emptyDescription')"
+            />
+
+            <div v-if="selectedArtifact" class="pt-4 border-t border-border-subtle space-y-4">
+              <div class="flex items-center justify-between">
+                <h4 class="text-[13px] font-bold text-text-primary">{{ resolveMockField('artifact', selectedArtifact.id, 'title', selectedArtifact.title) }}</h4>
+                <UiBadge :label="`v${selectedArtifact.version}`" subtle />
+              </div>
+              <UiTextarea v-model="artifactDraft" class="bg-subtle/30 font-mono text-[12px]" :rows="12" />
+              <div class="flex gap-2">
+                <UiButton variant="ghost" size="sm" class="flex-1" @click="saveArtifactDraft">{{ t('common.saveDraft') }}</UiButton>
+                <UiButton variant="primary" size="sm" class="flex-1" @click="requestReview">{{ t('common.requestReview') }}</UiButton>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <div v-else-if="shell.detailFocus === 'knowledge'" class="space-y-3">
+          <div v-if="workbench.activeConversationKnowledge.length" class="space-y-2">
+            <div
+              v-for="entry in workbench.activeConversationKnowledge"
+              :key="entry.id"
+              class="bg-background rounded-md border border-border-subtle p-3 transition-colors hover:border-border-strong"
+            >
+              <div class="flex items-center gap-2 mb-2">
+                <UiBadge :label="enumLabel('knowledgeStatus', entry.status)" subtle />
+                <UiBadge :label="enumLabel('knowledgeSourceType', entry.sourceType)" subtle />
+              </div>
+              <strong class="block text-[13px] font-bold text-text-primary mb-1">{{ resolveMockField('knowledgeEntry', entry.id, 'title', entry.title) }}</strong>
+              <p class="text-[12px] leading-relaxed text-text-secondary line-clamp-2">{{ resolveMockField('knowledgeEntry', entry.id, 'summary', entry.summary) }}</p>
+            </div>
+          </div>
+          <UiEmptyState
+            v-else
+            :title="t('conversation.detail.knowledge.emptyTitle')"
+            :description="t('conversation.detail.knowledge.emptyDescription')"
+          />
+        </div>
+
+        <div v-else-if="shell.detailFocus === 'resources'" class="space-y-3">
+          <div v-if="workbench.activeConversationResources.length" class="space-y-2">
+            <div
+              v-for="resource in workbench.activeConversationResources"
+              :key="resource.id"
+              class="flex items-center gap-3 bg-background rounded-md border border-border-subtle p-3"
+            >
+              <component :is="resource.kind === 'folder' ? FolderTree : FileText" :size="16" class="text-text-tertiary" />
+              <div class="min-w-0 flex-1">
+                <strong class="block text-[13px] font-bold text-text-primary truncate">{{ resource.name }}</strong>
+                <span class="text-[11px] text-text-tertiary">{{ resource.sizeLabel }}</span>
+              </div>
+            </div>
+          </div>
+          <UiEmptyState
+            v-else
+            :title="t('conversation.detail.resources.emptyTitle')"
+            :description="t('conversation.detail.resources.emptyDescription')"
+          />
+        </div>
+
+        <div v-else-if="shell.detailFocus === 'tools'" class="space-y-3">
+          <div v-if="workbench.activeConversationToolStats.length" class="space-y-2">
+            <div
+              v-for="tool in workbench.activeConversationToolStats"
+              :key="tool.toolId"
+              class="flex items-center justify-between bg-background rounded-md border border-border-subtle p-3"
+            >
+              <div class="min-w-0">
+                <strong class="block text-[13px] font-bold text-text-primary truncate">{{ tool.label }}</strong>
+                <span class="text-[11px] text-text-tertiary">{{ tool.kind }}</span>
+              </div>
+              <UiBadge :label="String(tool.count)" subtle />
+            </div>
+          </div>
+          <UiEmptyState
+            v-else
+            :title="t('conversation.detail.tools.emptyTitle')"
+            :description="t('conversation.detail.tools.emptyDescription')"
+          />
+        </div>
+
+        <div v-else class="space-y-4">
+          <UiTimelineList
+            v-if="timelineItems.length"
+            test-id="conversation-detail-timeline"
+            density="compact"
+            :items="timelineItems"
+          />
+          <UiEmptyState
+            v-else
+            :title="t('conversation.detail.timeline.emptyTitle')"
+            :description="t('conversation.detail.timeline.emptyDescription')"
+          />
+        </div>
+      </div>
+    </aside>
+  </div>
 </template>
-
-<style scoped>
-.detail-panel,
-.detail-copy,
-.resource-copy {
-  display: flex;
-  flex-direction: column;
-}
-
-.detail-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.35rem;
-  min-height: 0;
-  height: 100%;
-  max-height: 100%;
-  width: 100%;
-  padding: 0.15rem 0 0;
-  border-left: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
-  background: transparent;
-}
-
-.detail-panel {
-  display: grid;
-  gap: 0.65rem;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  max-height: 100%;
-  max-width: 100%;
-  padding: 0.15rem 0 0 0.7rem;
-  border-left: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
-  overflow-x: hidden;
-}
-
-.detail-panel > * {
-  min-width: 0;
-}
-
-.detail-content {
-  min-height: 0;
-  padding-right: 0.2rem;
-  padding-bottom: 0.2rem;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-}
-
-.detail-content > * + * {
-  margin-top: 0.85rem;
-}
-
-.detail-toolbar,
-.detail-rail-toggle,
-.detail-rail-link,
-.detail-section-button,
-.meta-row,
-.detail-summary-grid,
-.action-row,
-.resource-card {
-  display: flex;
-}
-
-.detail-toolbar,
-.meta-row,
-.action-row {
-  align-items: center;
-}
-
-.meta-row,
-.action-row {
-  flex-wrap: wrap;
-}
-
-.detail-toolbar {
-  justify-content: space-between;
-  gap: 0.55rem;
-  padding-bottom: 0.55rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
-}
-
-.detail-rail-toggle,
-.detail-rail-link,
-.detail-section-button {
-  justify-content: center;
-  border-radius: 0.78rem;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-}
-
-.detail-rail-toggle,
-.detail-rail-link {
-  width: 2.25rem;
-  height: 2.25rem;
-  align-items: center;
-}
-
-.detail-section-button {
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.42rem 0.58rem;
-  font-size: 0.74rem;
-}
-
-.detail-rail-link.active,
-.detail-section-button.active,
-.resource-card.active {
-  border-color: color-mix(in srgb, var(--brand-primary) 34%, var(--border-subtle));
-  background: color-mix(in srgb, var(--brand-primary) 10%, var(--bg-surface));
-  color: var(--text-primary);
-}
-
-.detail-rail-divider {
-  width: 1px;
-  height: 0.75rem;
-  background: color-mix(in srgb, var(--border-subtle) 92%, transparent);
-  margin: 0.1rem 0 0.2rem;
-}
-
-.detail-section-nav {
-  display: flex;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-  min-width: 0;
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  padding: 0.1rem 0 0.35rem;
-  background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
-}
-
-.detail-summary-grid {
-  display: grid;
-  gap: 0.65rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.detail-copy {
-  gap: 0.25rem;
-  min-width: 0;
-}
-
-.detail-copy p,
-.detail-copy li,
-.detail-copy strong,
-.panel-card p,
-.panel-card strong,
-.panel-card small,
-.resource-copy strong,
-.resource-copy small {
-  color: var(--text-secondary);
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-  font-size: 0.8rem;
-}
-
-.detail-copy strong,
-.panel-card strong,
-.resource-copy strong {
-  color: var(--text-primary);
-}
-
-.panel-list,
-.resource-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
-}
-
-.panel-card,
-.resource-card {
-  min-width: 0;
-  padding: 0.78rem;
-  border-radius: calc(var(--radius-l) + 1px);
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
-  background: color-mix(in srgb, var(--bg-subtle) 78%, transparent);
-}
-
-.panel-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.resource-card {
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  text-align: left;
-}
-
-textarea {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  border-radius: calc(var(--radius-l) + 1px);
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
-  background: color-mix(in srgb, var(--bg-subtle) 72%, transparent);
-  color: var(--text-primary);
-  padding: 0.72rem 0.82rem;
-  font-size: 0.82rem;
-  resize: vertical;
-}
-
-ul {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  padding-left: 1rem;
-}
-
-@media (max-width: 960px) {
-  .detail-summary-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-</style>

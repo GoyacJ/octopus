@@ -9,8 +9,14 @@ const props = defineProps<{
 </script>
 
 <template>
-  <div :class="cn('flex flex-col items-center justify-center gap-2 rounded-[calc(var(--radius-lg)+2px)] border border-dashed border-border-strong/80 bg-subtle/55 px-8 py-10 text-center', props.class)">
-    <strong class="text-[1rem] font-semibold tracking-[-0.02em] text-text-primary">{{ props.title }}</strong>
-    <p class="m-0 max-w-[320px] text-sm leading-7 text-text-secondary break-words">{{ props.description }}</p>
+  <div :class="cn('flex flex-col items-center justify-center py-10 px-4 text-center', props.class)">
+    <div v-if="$slots.icon" class="mb-3 flex size-12 items-center justify-center rounded-lg bg-subtle text-text-tertiary">
+      <slot name="icon" />
+    </div>
+    <strong v-if="props.title" class="block text-sm font-semibold text-text-secondary">{{ props.title }}</strong>
+    <p v-if="props.description" class="mt-1 max-w-sm text-[13px] leading-relaxed text-text-tertiary">{{ props.description }}</p>
+    <div v-if="$slots.actions" class="mt-4 flex flex-wrap items-center justify-center gap-2">
+      <slot name="actions" />
+    </div>
   </div>
 </template>

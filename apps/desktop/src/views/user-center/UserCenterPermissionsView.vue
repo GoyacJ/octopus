@@ -3,8 +3,24 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Blocks, Plus, Power, ShieldCheck, Trash2 } from 'lucide-vue-next'
 
-import { UiBadge, UiButton, UiCheckbox, UiField, UiInput, UiRadioGroup, UiSectionHeading, UiSelect, UiSurface, UiTextarea } from '@octopus/ui'
+import {
+  UiBadge,
+  UiButton,
+  UiCheckbox,
+  UiField,
+  UiInput,
+  UiMetricCard,
+  UiRadioGroup,
+  UiRecordCard,
+  UiSectionHeading,
+  UiSelect,
+  UiSurface,
+  UiTabs,
+  UiTextarea,
+  UiToolbarRow,
+} from '@octopus/ui'
 
+import { enumLabel } from '@/i18n/copy'
 import { useWorkbenchStore } from '@/stores/workbench'
 
 const { t } = useI18n()
@@ -25,8 +41,9 @@ const form = reactive({
   memberPermissionIds: [] as string[],
 })
 
+const permissionItems = computed(() => workbench.workspacePermissionListItems)
 const visiblePermissions = computed(() =>
-  workbench.workspacePermissions.filter((permission) => permission.kind === viewKind.value),
+  permissionItems.value.filter((permission) => permission.kind === viewKind.value),
 )
 
 const targetOptions = computed(() => {
@@ -48,9 +65,42 @@ const targetOptions = computed(() => {
     .map((item) => ({ id: item.id, label: item.name }))
 })
 
-const selectedPermission = computed(() =>
-  workbench.workspacePermissions.find((item) => item.id === selectedPermissionId.value),
+const selectedPermissionSummary = computed(() =>
+  permissionItems.value.find((item) => item.id === selectedPermissionId.value),
 )
+
+const summaryMetrics = computed(() => {
+  const disabledCount = permissionItems.value.filter((item) => item.status === 'disabled').length
+  const bundleCount = permissionItems.value.filter((item) => item.kind === 'bundle').length
+  const riskyCount = permissionItems.value.filter((item) => item.riskFlags.length).length
+  return [
+    {
+      id: 'total',
+      label: t('userCenter.permissions.metrics.total'),
+      value: String(permissionItems.value.length),
+      helper: t('userCenter.permissions.metrics.bundleHelper', { count: bundleCount }),
+    },
+    {
+      id: 'disabled',
+      label: t('userCenter.permissions.metrics.disabled'),
+      value: String(disabledCount),
+      helper: t('userCenter.permissions.metrics.disabledHelper'),
+      tone: 'warning' as const,
+    },
+    {
+      id: 'risky',
+      label: t('userCenter.permissions.metrics.risky'),
+      value: String(riskyCount),
+      helper: t('userCenter.permissions.metrics.riskyHelper'),
+      tone: 'accent' as const,
+    },
+  ]
+})
+
+const kindTabs = computed(() => [
+  { value: 'atomic', label: t('userCenter.permissions.atomicTab') },
+  { value: 'bundle', label: t('userCenter.permissions.bundleTab') },
+])
 
 const statusOptions = computed(() => [
   { value: 'active', label: t('userCenter.common.active') },
@@ -63,11 +113,11 @@ const kindOptions = computed(() => [
 ])
 
 const targetTypeOptions = computed(() => [
-  { value: 'project', label: 'project' },
-  { value: 'agent', label: 'agent' },
-  { value: 'tool', label: 'tool' },
-  { value: 'skill', label: 'skill' },
-  { value: 'mcp', label: 'mcp' },
+  { value: 'project', label: enumLabel('permissionTargetType', 'project') || 'project' },
+  { value: 'agent', label: enumLabel('permissionTargetType', 'agent') || 'agent' },
+  { value: 'tool', label: enumLabel('permissionTargetType', 'tool') || 'tool' },
+  { value: 'skill', label: enumLabel('permissionTargetType', 'skill') || 'skill' },
+  { value: 'mcp', label: enumLabel('permissionTargetType', 'mcp') || 'mcp' },
 ])
 
 function applyPermission(permissionId?: string) {
@@ -149,109 +199,128 @@ function savePermission() {
 </script>
 
 <template>
-  <section class="permission-page section-stack">
+  <section class="section-stack">
+    <div class="grid gap-4 md:grid-cols-3">
+      <UiMetricCard
+        v-for="metric in summaryMetrics"
+        :key="metric.id"
+        :label="metric.label"
+        :value="metric.value"
+        :helper="metric.helper"
+        :tone="metric.tone"
+      />
+    </div>
+
     <UiSectionHeading
       :eyebrow="t('userCenter.permissions.title')"
       :title="t('userCenter.permissions.listTitle')"
       :subtitle="t('userCenter.permissions.subtitle')"
     />
 
-    <div class="permission-layout">
-      <UiSurface class="permission-list-surface" :title="t('userCenter.permissions.listTitle')" :subtitle="t('userCenter.permissions.listSubtitle')">
-        <div class="permission-toolbar">
-          <div class="permission-tabs">
-            <UiButton variant="ghost" size="sm" :class="viewKind === 'atomic' ? 'is-active' : ''" @click="viewKind = 'atomic'">
-              {{ t('userCenter.permissions.atomicTab') }}
+    <div class="grid gap-4 xl:grid-cols-[minmax(22rem,28rem)_minmax(0,1fr)]">
+      <UiSurface :title="t('userCenter.permissions.listTitle')" :subtitle="t('userCenter.permissions.listSubtitle')">
+        <UiToolbarRow test-id="user-center-permissions-toolbar" class="mb-4">
+          <template #tabs>
+            <UiTabs
+              v-model="viewKind"
+              test-id="user-center-permissions-tabs"
+              variant="pill"
+              :tabs="kindTabs"
+            />
+          </template>
+          <template #actions>
+            <UiButton size="sm" @click="applyPermission()">
+              <Plus :size="16" />
+              {{ t('userCenter.permissions.create') }}
             </UiButton>
-            <UiButton variant="ghost" size="sm" :class="viewKind === 'bundle' ? 'is-active' : ''" @click="viewKind = 'bundle'">
-              {{ t('userCenter.permissions.bundleTab') }}
-            </UiButton>
-          </div>
-          <UiButton size="sm" @click="applyPermission()">
-            <Plus :size="16" />
-            {{ t('userCenter.permissions.create') }}
-          </UiButton>
-        </div>
+          </template>
+        </UiToolbarRow>
 
-        <div class="permission-list">
-          <article
+        <div class="space-y-3">
+          <UiRecordCard
             v-for="permission in visiblePermissions"
             :key="permission.id"
-            class="permission-card"
-            :class="{ active: selectedPermissionId === permission.id }"
+            :test-id="`user-center-permission-record-${permission.id}`"
+            :title="permission.name"
+            :description="permission.description"
+            :active="selectedPermissionId === permission.id"
+            interactive
             @click="applyPermission(permission.id)"
           >
-            <div class="permission-card-header">
-              <div class="permission-card-copy">
-                <strong>{{ permission.name }}</strong>
-                <small>{{ permission.code }}</small>
-              </div>
-              <div class="permission-badges">
-                <UiBadge :label="permission.kind" subtle />
-                <UiBadge :label="permission.status" :tone="permission.status === 'active' ? 'success' : 'warning'" />
-              </div>
-            </div>
-            <p class="permission-card-description">{{ permission.description }}</p>
-            <div class="permission-card-meta">
-              <span v-if="permission.kind === 'atomic'">
-                <ShieldCheck :size="14" /> {{ permission.targetType }} / {{ (permission.targetIds ?? []).join(', ') || t('userCenter.common.empty') }}
+            <template #eyebrow>{{ permission.code }}</template>
+            <template #badges>
+              <UiBadge :label="permission.kind" subtle />
+              <UiBadge :label="permission.status" :tone="permission.status === 'active' ? 'success' : 'warning'" />
+            </template>
+            <template #meta>
+              <span v-if="permission.kind === 'atomic'" class="inline-flex items-center gap-1">
+                <ShieldCheck :size="14" />
+                {{ permission.targetSummary }}
               </span>
-              <span v-else>
-                <Blocks :size="14" /> {{ t('userCenter.permissions.bundleMembers', { count: permission.memberPermissionIds?.length ?? 0 }) }}
+              <span v-else class="inline-flex items-center gap-1">
+                <Blocks :size="14" />
+                {{ t('userCenter.permissions.bundleMembers', { count: permission.bundleMemberCount }) }}
               </span>
-            </div>
-            <div class="permission-card-actions">
+              <span>{{ t('userCenter.permissions.usedByRoles', { count: permission.usedByRoleCount }) }}</span>
+              <UiBadge v-for="flag in permission.riskFlags" :key="flag" :label="flag" subtle />
+            </template>
+            <template #actions>
               <UiButton variant="ghost" size="sm" @click.stop="workbench.togglePermissionStatus(permission.id)">
                 <Power :size="14" />
                 {{ permission.status === 'active' ? t('userCenter.permissions.disable') : t('userCenter.permissions.enable') }}
               </UiButton>
-              <UiButton variant="ghost" size="sm" class="permission-danger" @click.stop="workbench.deletePermission(permission.id)">
+              <UiButton variant="ghost" size="sm" @click.stop="workbench.deletePermission(permission.id)">
                 <Trash2 :size="14" />
                 {{ t('userCenter.permissions.delete') }}
               </UiButton>
-            </div>
-          </article>
+            </template>
+          </UiRecordCard>
         </div>
       </UiSurface>
 
       <UiSurface
-        class="permission-editor-surface"
+        data-testid="user-center-permissions-editor"
         :title="t(selectedPermissionId ? 'userCenter.permissions.editTitle' : 'userCenter.permissions.createTitle')"
         :subtitle="t('userCenter.permissions.formSubtitle')"
       >
-        <div class="permission-editor-shell">
-          <div class="permission-form-grid">
-            <UiField :label="t('userCenter.permissions.nameLabel')">
-              <UiInput v-model="form.name" />
-            </UiField>
-            <UiField :label="t('userCenter.permissions.codeLabel')">
-              <UiInput v-model="form.code" />
-            </UiField>
-            <UiField :label="t('userCenter.common.status')">
-              <UiSelect v-model="form.status" :options="statusOptions" />
-            </UiField>
-            <UiField :label="t('userCenter.permissions.kindLabel')">
-              <UiSelect v-model="form.kind" :options="kindOptions" />
-            </UiField>
-            <UiField class="permission-form-full" :label="t('userCenter.permissions.descriptionLabel')">
-              <UiTextarea v-model="form.description" :rows="4" />
-            </UiField>
-          </div>
+        <div v-if="selectedPermissionSummary" class="mb-4 flex flex-wrap items-center gap-2">
+          <UiBadge :label="t('userCenter.permissions.usedByRoles', { count: selectedPermissionSummary.usedByRoleCount })" subtle />
+          <UiBadge v-if="selectedPermissionSummary.kind === 'bundle'" :label="t('userCenter.permissions.bundleMembers', { count: selectedPermissionSummary.bundleMemberCount })" subtle />
+          <UiBadge v-else :label="selectedPermissionSummary.targetSummary" subtle />
+        </div>
 
-          <div v-if="form.kind === 'atomic'" class="permission-binding-grid">
-            <section class="binding-panel">
-              <div class="binding-header">
-                <strong>{{ t('userCenter.permissions.targetTypeTitle') }}</strong>
-              </div>
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <UiField :label="t('userCenter.permissions.nameLabel')">
+            <UiInput v-model="form.name" />
+          </UiField>
+          <UiField :label="t('userCenter.permissions.codeLabel')">
+            <UiInput v-model="form.code" />
+          </UiField>
+          <UiField :label="t('userCenter.common.status')">
+            <UiSelect v-model="form.status" :options="statusOptions" />
+          </UiField>
+          <UiField :label="t('userCenter.permissions.kindLabel')">
+            <UiSelect v-model="form.kind" :options="kindOptions" />
+          </UiField>
+          <UiField class="md:col-span-2 xl:col-span-4" :label="t('userCenter.permissions.descriptionLabel')">
+            <UiTextarea v-model="form.description" :rows="4" />
+          </UiField>
+        </div>
+
+        <div
+          class="mt-4 grid gap-4"
+          :class="form.kind === 'atomic' ? 'xl:grid-cols-[minmax(16rem,18rem)_minmax(0,1fr)_minmax(14rem,16rem)]' : 'xl:grid-cols-1'"
+        >
+          <template v-if="form.kind === 'atomic'">
+            <UiSurface variant="subtle" padding="sm" :title="t('userCenter.permissions.targetTypeTitle')">
               <UiRadioGroup v-model="form.targetType" direction="vertical" :options="targetTypeOptions" />
-            </section>
+            </UiSurface>
 
-            <section class="binding-panel">
-              <div class="binding-header">
-                <strong>{{ t('userCenter.permissions.targetBindingTitle') }}</strong>
+            <UiSurface variant="subtle" padding="sm" :title="t('userCenter.permissions.targetBindingTitle')">
+              <div class="mb-3 flex items-center justify-between">
                 <UiBadge :label="String(form.targetIds.length)" subtle />
               </div>
-              <div class="binding-list">
+              <div class="space-y-2">
                 <UiCheckbox
                   v-for="item in targetOptions"
                   :key="item.id"
@@ -260,198 +329,38 @@ function savePermission() {
                   :label="item.label"
                 />
               </div>
-            </section>
+            </UiSurface>
 
-            <section class="binding-panel binding-panel-compact">
-              <div class="binding-header">
-                <strong>{{ t('userCenter.permissions.actionTitle') }}</strong>
-              </div>
+            <UiSurface variant="subtle" padding="sm" :title="t('userCenter.permissions.actionTitle')">
               <UiInput v-model="form.action" />
-            </section>
-          </div>
+            </UiSurface>
+          </template>
 
-          <div v-else class="permission-binding-grid permission-binding-grid-single">
-            <section class="binding-panel">
-              <div class="binding-header">
-                <strong>{{ t('userCenter.permissions.bundleComposeTitle') }}</strong>
-                <UiBadge :label="String(form.memberPermissionIds.length)" subtle />
-              </div>
-              <div class="binding-list">
-                <UiCheckbox
-                  v-for="permission in workbench.workspacePermissions.filter((item) => item.kind === 'atomic')"
-                  :key="permission.id"
-                  v-model="form.memberPermissionIds"
-                  :value="permission.id"
-                  :label="permission.name"
-                />
-              </div>
-            </section>
-          </div>
+          <UiSurface v-else variant="subtle" padding="sm" :title="t('userCenter.permissions.bundleComposeTitle')">
+            <div class="mb-3 flex items-center justify-between">
+              <UiBadge :label="String(form.memberPermissionIds.length)" subtle />
+            </div>
+            <div class="space-y-2">
+              <UiCheckbox
+                v-for="permission in workbench.workspacePermissions.filter((item) => item.kind === 'atomic')"
+                :key="permission.id"
+                v-model="form.memberPermissionIds"
+                :value="permission.id"
+                :label="permission.name"
+              />
+            </div>
+          </UiSurface>
+        </div>
 
-          <div class="permission-editor-actions">
-            <UiButton variant="ghost" @click="applyPermission(visiblePermissions[0]?.id)">
-              {{ t('common.cancel') }}
-            </UiButton>
-            <UiButton @click="savePermission">
-              {{ t('common.save') }}
-            </UiButton>
-          </div>
+        <div class="mt-4 flex flex-wrap justify-end gap-3">
+          <UiButton variant="ghost" @click="applyPermission(visiblePermissions[0]?.id)">
+            {{ t('common.cancel') }}
+          </UiButton>
+          <UiButton @click="savePermission">
+            {{ t('common.save') }}
+          </UiButton>
         </div>
       </UiSurface>
     </div>
   </section>
 </template>
-
-<style scoped>
-.permission-page,
-.permission-editor-shell,
-.permission-card-copy,
-.binding-panel,
-.binding-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.permission-layout {
-  display: grid;
-  grid-template-columns: minmax(20rem, 28rem) minmax(0, 1fr);
-  gap: 1.1rem;
-}
-
-.permission-toolbar,
-.permission-tabs,
-.permission-card-header,
-.permission-badges,
-.permission-card-meta,
-.permission-card-actions,
-.binding-header,
-.permission-editor-actions {
-  display: flex;
-  align-items: center;
-}
-
-.permission-toolbar,
-.permission-card-header,
-.binding-header,
-.permission-editor-actions {
-  justify-content: space-between;
-}
-
-.permission-toolbar,
-.permission-card-actions,
-.permission-editor-actions {
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-
-.permission-tabs .is-active {
-  border-color: color-mix(in srgb, var(--brand-primary) 26%, var(--border-strong));
-  background: color-mix(in srgb, var(--brand-primary) 10%, transparent);
-  color: var(--text-primary);
-}
-
-.permission-list {
-  display: grid;
-  gap: 0.85rem;
-}
-
-.permission-card {
-  display: grid;
-  gap: 0.8rem;
-  padding: 1rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
-  border-radius: calc(var(--radius-lg) + 2px);
-  background: color-mix(in srgb, var(--bg-subtle) 68%, transparent);
-  cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-apple), transform var(--duration-fast) var(--ease-apple), box-shadow var(--duration-fast) var(--ease-apple);
-}
-
-.permission-card:hover,
-.permission-card.active {
-  border-color: color-mix(in srgb, var(--brand-primary) 26%, var(--border-strong));
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
-}
-
-.permission-card-copy {
-  gap: 0.2rem;
-}
-
-.permission-card-copy small,
-.permission-card-description,
-.permission-card-meta {
-  color: var(--text-secondary);
-}
-
-.permission-card-description {
-  line-height: 1.6;
-}
-
-.permission-card-meta {
-  gap: 0.65rem;
-  flex-wrap: wrap;
-  font-size: 0.8rem;
-}
-
-.permission-card-meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-
-.permission-danger {
-  color: var(--status-error);
-}
-
-.permission-form-grid,
-.permission-binding-grid {
-  display: grid;
-  gap: 1rem;
-}
-
-.permission-form-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.permission-form-full {
-  grid-column: 1 / -1;
-}
-
-.permission-binding-grid {
-  grid-template-columns: minmax(16rem, 18rem) minmax(0, 1fr) minmax(14rem, 16rem);
-}
-
-.permission-binding-grid-single {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.binding-panel {
-  gap: 0.9rem;
-  min-height: 0;
-  padding: 1rem;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 90%, transparent);
-  border-radius: calc(var(--radius-lg) + 1px);
-  background: color-mix(in srgb, var(--bg-subtle) 62%, transparent);
-}
-
-.binding-panel-compact {
-  justify-content: flex-start;
-}
-
-.binding-list {
-  gap: 0.7rem;
-}
-
-@media (max-width: 1240px) {
-  .permission-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 980px) {
-  .permission-form-grid,
-  .permission-binding-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-</style>

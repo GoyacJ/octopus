@@ -7,56 +7,15 @@ const props = defineProps<{
 </script>
 
 <template>
-  <header class="ui-section-heading">
-    <p v-if="props.eyebrow" class="eyebrow">{{ props.eyebrow }}</p>
-    <h2>{{ props.title }}</h2>
-    <p v-if="props.subtitle" class="subtitle">{{ props.subtitle }}</p>
+  <header class="flex flex-col gap-1 min-w-0">
+    <p v-if="props.eyebrow" class="m-0 text-text-tertiary text-[10px] font-bold tracking-[0.1em] uppercase">
+      {{ props.eyebrow }}
+    </p>
+    <h2 class="m-0 text-lg font-bold tracking-tight text-text-primary min-w-0 truncate">
+      {{ props.title }}
+    </h2>
+    <p v-if="props.subtitle" class="m-0 max-w-3xl text-[13px] leading-relaxed text-text-secondary min-w-0 break-words line-clamp-2">
+      {{ props.subtitle }}
+    </p>
   </header>
 </template>
-
-<style scoped>
-.ui-section-heading {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  min-width: 0;
-}
-
-.eyebrow {
-  margin: 0;
-  color: var(--brand-primary);
-  font-size: 0.72rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  font-weight: 700;
-}
-
-h2 {
-  margin: 0;
-  font-size: clamp(1.28rem, 1.8vw, 1.9rem);
-  line-height: 1.12;
-  letter-spacing: -0.03em;
-  font-weight: 700;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.subtitle {
-  margin: 0;
-  max-width: 60rem;
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-  line-height: 1.6;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow-wrap: anywhere;
-}
-</style>

@@ -15,8 +15,8 @@ export default {
         sidebar: 'var(--bg-sidebar)',
         subtle: 'var(--bg-subtle)',
         muted: 'var(--muted)',
-        card: 'var(--card)',
-        popover: 'var(--popover)',
+        card: 'var(--bg-card)',
+        popover: 'var(--bg-popover)',
         accent: 'var(--accent)',
         secondary: 'var(--secondary)',
         glass: 'var(--bg-glass)',
@@ -50,14 +50,16 @@ export default {
         'secondary-foreground': 'var(--secondary-foreground)',
       },
       borderRadius: {
+        xs: 'var(--radius-xs)',
         s: 'var(--radius-s)',
         m: 'var(--radius-m)',
         l: 'var(--radius-l)',
         xl: 'var(--radius-xl)',
+        '2xl': 'var(--radius-2xl)',
         full: 'var(--radius-full)',
       },
       fontFamily: {
-        sans: ['SF Pro Display', 'SF Pro Text', 'Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
+        sans: ['Inter', 'SF Pro Display', 'SF Pro Text', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
         mono: ['SF Mono', 'JetBrains Mono', 'Fira Code', 'monospace'],
       },
       boxShadow: {

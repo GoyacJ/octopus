@@ -56,7 +56,7 @@ function createBootstrap(backendReady: boolean): ShellBootstrap {
     backend: {
       baseUrl: 'http://127.0.0.1:43127',
       authToken: 'desktop-test-token',
-      ready: backendReady,
+      state: backendReady ? 'ready' : 'unavailable',
       transport: 'http',
     },
   }
