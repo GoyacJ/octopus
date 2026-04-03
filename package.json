@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "pnpm -C apps/desktop dev",
     "build": "pnpm -C apps/desktop build",
+    "check:frontend": "pnpm check:frontend-governance && pnpm -C apps/desktop typecheck && pnpm -C apps/desktop test",
+    "check:frontend-governance": "node scripts/check-frontend-governance.mjs",
     "test": "pnpm -C apps/desktop test",
     "tauri": "tauri"
   },

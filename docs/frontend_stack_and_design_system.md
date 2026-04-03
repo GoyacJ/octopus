@@ -1,8 +1,8 @@
 # Octopus Desktop — Frontend Stack And Design System Governance
 
 > **Purpose:** Define the tracked frontend baseline for the desktop app, the ownership boundary between `apps/desktop` and `packages/ui`, and the mandatory implementation rules for future UI work.
-> **Scope:** Governance and documentation only. This document does not migrate pages, install dependencies, or repair current runtime drift.
-> **Last verified against repo state:** 2026-04-02
+> **Scope:** Governance and documentation only. This document defines the steady-state frontend rules and verification bar after the migration program completed.
+> **Last verified against repo state:** 2026-04-03
 
 ---
 
@@ -18,11 +18,13 @@ Future frontend work must treat this document and the root `AGENTS.md` as bindin
 
 - business pages consume `@octopus/ui`, not ad-hoc UI libraries
 - missing shared components are added to `packages/ui` before page usage
+- repeated hero, panel, metric, ranking, timeline, toolbar, and nav-card visuals move into `packages/ui` before reuse
 - accessibility-sensitive overlays and composite widgets standardize on `Reka UI`
 - data entry standardizes on `vee-validate + zod`
 - structured data display standardizes on `@tanstack/vue-table` and `@tanstack/vue-virtual`
 - editor-like text surfaces default to `CodeMirror`
 - desktop behaviors prefer Tauri native capabilities
+- page-level hero, action, and info cards should prefer shared `UiPageHero`, `UiActionCard`, and `UiInfoCard` before adding new page-local variants
 
 ---
 
@@ -41,89 +43,77 @@ Current repo evidence:
 
 ### 2.2 Shared UI Package State
 
-`packages/ui` already exists and is the intended shared design-system package.
+`packages/ui` is now the enforced shared design-system package and the only approved UI entrypoint for app code.
 
 Current repo evidence:
 
-- `packages/ui/package.json` exposes only `.`, `./main.css`, and `./tokens.css`
-- `packages/ui/src/index.ts` exports only a narrow subset of the available `Ui*` components
-- `packages/ui/src/components/` already contains many more components than the public export surface exposes, including:
+- `packages/ui/package.json` exports `.`, `./main.css`, and `./tokens.css` and declares the runtime dependencies used by shared primitives, including `reka-ui`, `@tanstack/vue-table`, `@tanstack/vue-virtual`, `@iconify/vue`, `@rive-app/canvas`, and `@lottiefiles/dotlottie-vue`
+- `packages/ui/src/index.ts` exposes the shared surface used across the desktop app, including:
   - base controls: `UiButton`, `UiInput`, `UiTextarea`, `UiCheckbox`, `UiSwitch`, `UiSelect`, `UiRadioGroup`
-  - overlay and navigation: `UiDialog`, `UiPopover`, `UiDropdownMenu`, `UiCombobox`, `UiTabs`, `UiAccordion`, `UiContextMenu`
-  - data display: `UiDataTable`, `UiVirtualList`, `UiBadge`, `UiSurface`, `UiEmptyState`
+  - overlay and navigation: `UiDialog`, `UiPopover`, `UiDropdownMenu`, `UiCombobox`, `UiTabs`, `UiAccordion`, `UiContextMenu`, `UiSelectionMenu`
+  - page and shell abstractions: `UiPageHero`, `UiPanelFrame`, `UiToolbarRow`, `UiNavCardList`
+  - data display: `UiBadge`, `UiSurface`, `UiEmptyState`, `UiMetricCard`, `UiRankingList`, `UiTimelineList`, `UiRecordCard`, `UiListRow`, `UiDataTable`, `UiVirtualList`
   - media and editor: `UiCodeEditor`, `UiIcon`, `UiDotLottie`, `UiRiveCanvas`
 
 Conclusion:
 
-- `@octopus/ui` is already the correct package boundary
-- its public export surface is incomplete
-- package-level dependency ownership is also incomplete because `packages/ui/package.json` currently declares no runtime dependencies for the libraries imported by several `Ui*` components
+- `@octopus/ui` is stable as the package boundary for shared frontend UI
+- design tokens, shared shell abstractions, and shared interaction primitives are no longer migration-era gaps
+- remaining frontend debt is now about steady-state correctness, accessibility, and contract drift rather than export-surface expansion
 
-### 2.3 Accessibility-Sensitive Components Are Still Hand-Rolled
+### 2.3 Accessibility-Sensitive Components Are Standardized On `Reka UI`
 
-Several complex components exist today, but they are not yet consistently standardized on `Reka UI` primitives.
+The desktop app now routes shared overlays and composite interactions through `Reka UI`-backed primitives in `packages/ui`.
 
-Observed examples:
+Current repo evidence:
 
-- `packages/ui/src/components/UiDialog.vue` manually manages `Escape` handling, `body.style.overflow`, overlay clicks, and `Teleport`
-- `packages/ui/src/components/UiPopover.vue` manually registers and removes document click listeners
-- `packages/ui/src/components/UiDropdownMenu.vue` manually handles open state, outside click, and item selection
-- `packages/ui/src/components/UiContextMenu.vue` layers custom positioning over `UiDropdownMenu`
-- `packages/ui/src/components/UiTabs.vue` and `UiAccordion.vue` currently implement controlled selection/toggle behavior directly
+- `UiDialog`, `UiPopover`, `UiDropdownMenu`, `UiCombobox`, `UiTabs`, `UiAccordion`, and `UiContextMenu` are all implemented in `packages/ui/src/components/*`
+- business pages consume those wrappers through `@octopus/ui` instead of importing `reka-ui` directly
+- current closure work focuses on keeping those wrappers type-safe and a11y-clean, not replacing hand-rolled modal/menu systems page by page
 
 Governance decision:
 
-- `Dialog`, `Popover`, `DropdownMenu`, `Combobox`, `Tabs`, `Accordion`, and `ContextMenu` must move to `Reka UI` primitives before broad UI migration work begins
+- no new accessibility-sensitive composite widget may be hand-rolled in business code
+- any new overlay or navigation primitive must land in `packages/ui` and satisfy the same shared accessibility contract
 
-### 2.4 Business Pages Still Bypass The Intended UI Abstractions
+### 2.4 Business Pages Now Consume Shared UI Abstractions By Default
 
-Business views are not yet consistently routed through shared form and interaction primitives.
+The broad migration phase is complete. Business views now compose `@octopus/ui` primitives and page abstractions instead of maintaining page-local visual systems.
 
-Observed examples:
+Current repo evidence:
 
-- `apps/desktop/src/views/user-center/UserCenterUsersView.vue` uses raw `<input>`, `<select>`, `<option>`, checkbox, and radio controls inside a page-local form
-- `apps/desktop/src/views/SettingsView.vue` uses raw `<select>`, `<input type="checkbox">`, and a page-local primary action button
-- page-local `<style scoped>` blocks still define business-surface presentation details directly in several views
+- the five migration batches retired the previous hero, panel, metric, ranking, timeline, toolbar, nav-card, modal-card, record-card, and tag-chip variants from business pages
+- `scripts/check-frontend-governance.mjs` now enforces the steady-state rules for business surfaces:
+  - no deep imports from `packages/ui/src/components/*`
+  - no unapproved UI libraries in app code
+  - no oversized scoped-style debt outside an explicit allowlist
+  - no reusable visual-pattern class names in business surfaces
+  - no native form controls in non-allowlisted business surfaces
+- `legacyAllowlist` is empty, so new work starts from zero migration debt by default
 
 Governance decision:
 
-- page-level features should use `Ui*` abstractions backed by shared tokens and Tailwind utilities
-- if the shared abstraction is missing, it should be created in `packages/ui` first
+- page-level features use `Ui*` abstractions backed by shared tokens and Tailwind utilities
+- if the shared abstraction is missing, it must be created in `packages/ui` first
 
-### 2.5 Current Build And Test Drift
+### 2.5 Current Verification State
 
-Observed on 2026-04-02 from local verification:
+Observed on 2026-04-03 from local verification:
 
-#### `pnpm -C apps/desktop build`
+- `pnpm check:frontend-governance` passes
+- `pnpm -C apps/desktop test` passes across the tracked desktop suite
+- `pnpm -C apps/desktop typecheck` and `pnpm -C apps/desktop build` are part of the steady-state frontend closure gate
 
-Current build fails in `apps/desktop/src/stores/runtime.ts` because the file references runtime types and client APIs that are not currently exported by the tracked schema and Tauri client layer.
+Current governance implication:
 
-Observed failure classes:
-
-- missing exports from `@octopus/schema`, including `ProviderConfig`, `RuntimeApprovalRequest`, `RuntimeEventEnvelope`, `RuntimeMessage`, `RuntimeRunSnapshot`, `RuntimeSessionDetail`, `RuntimeSessionSummary`, and `RuntimeTraceItem`
-- missing exports from `@/tauri/client`, including `bootstrapRuntime`, `createRuntimeSession`, `loadRuntimeSession`, `pollRuntimeEvents`, `resolveRuntimeApproval`, and `submitRuntimeUserTurn`
-- object-shape drift such as `rollbackEnabled` not existing on the current `Message` type
-
-#### `pnpm -C apps/desktop test`
-
-Current desktop tests are not green.
-
-Observed failure classes:
-
-- `test/tauri-client.test.ts` fails because desktop runtime transport helpers are missing, including `client.bootstrapRuntime`
-- `test/runtime-store.test.ts` and `test/trace-view.test.ts` fail because no active runtime session is established under current runtime wiring
-- `test/app-backend-guard.test.ts` fails because the expected desktop backend guard UI is not rendered as asserted
-- `test/ui-primitives.test.ts` fails because `UiTabs` is unresolved from `@octopus/ui` and several shared component mounts fail with `Invalid value used as weak map key`
-
-Governance implication:
-
-- do not start broad page migration while runtime/schema drift and `@octopus/ui` export drift are unresolved
+- broad UI migration is no longer blocked
+- the remaining bar for frontend quality is now quiet-green verification: governance, typecheck, tests, and build should all pass without accessibility warnings or schema drift
 
 ---
 
 ## 3. Adoption Matrix
 
-The following matrix records the governance target against tracked repo state as of 2026-04-02.
+The following matrix records the governance target against tracked repo state as of 2026-04-03.
 
 | Capability | Status | Current repo state |
 |---|---|---|
@@ -133,21 +123,21 @@ The following matrix records the governance target against tracked repo state as
 | `Vue Router` | Already present | Declared and wired through `router`. |
 | `Vue I18n` | Already present | Declared and wired through `plugins/i18n.ts`. |
 | `Tauri 2` | Already present | Declared through `@tauri-apps/api` and `src-tauri` config/code. |
-| `@octopus/ui` | Partially present | Package exists, but exports and dependency ownership are incomplete. |
+| `@octopus/ui` | Already present | Shared package boundary, public export surface, and package dependency ownership are now in place for app-facing `Ui*` primitives. |
 | `Tailwind CSS + tokens` | Already present | Root and desktop Tailwind configs exist; `@octopus/ui` ships `main.css` and `tokens.css`. |
-| `Reka UI` for composite widgets | Partially present | Target library exists in workspace state, but tracked `Ui*` composites are still hand-rolled. |
+| `Reka UI` for composite widgets | Already present | Shared dialog, popover, dropdown, combobox, tabs, accordion, and context menu primitives are standardized through `packages/ui`. |
 | `vee-validate + zod` | Not yet adopted | Not declared in tracked app or UI package manifests, and page forms still use raw controls. |
-| `@tanstack/vue-table` | Partially present | `UiDataTable.vue` uses it, but `packages/ui/package.json` does not declare the dependency. |
-| `@tanstack/vue-virtual` | Partially present | `UiVirtualList.vue` uses it, but `packages/ui/package.json` does not declare the dependency. |
+| `@tanstack/vue-table` | Already present | `UiDataTable.vue` uses it and `packages/ui/package.json` declares the dependency. |
+| `@tanstack/vue-virtual` | Already present | `UiVirtualList.vue` uses it and `packages/ui/package.json` declares the dependency. |
 | `CodeMirror` | Partially present | `UiCodeEditor.vue` exists, but it is currently a textarea wrapper rather than a CodeMirror-based editor. |
 | `Monaco` only for IDE-class use | Not yet adopted | No tracked Monaco integration is currently in use. |
 | `lucide-vue-next` | Already present | Declared in `apps/desktop/package.json` and used in app views/components. |
-| `Iconify + unplugin-icons` | Partially present | `UiIcon.vue` references `@iconify/vue`, but package manifests and public export policy are not complete. |
+| `Iconify + unplugin-icons` | Partially present | `UiIcon.vue` and package ownership are in place; `unplugin-icons` remains optional until a concrete app-side need appears. |
 | `motion-v` | Not yet adopted | No tracked usage in app or UI source. |
 | `AutoAnimate` | Not yet adopted | No tracked usage in app or UI source. |
 | `GSAP` | Not yet adopted | No tracked usage in app or UI source. |
-| `Rive` | Partially present | `UiRiveCanvas.vue` exists, but package dependency ownership/export policy is incomplete. |
-| `dotLottie` | Partially present | `UiDotLottie.vue` exists, but package dependency ownership/export policy is incomplete. |
+| `Rive` | Already present | `UiRiveCanvas.vue` exists and `packages/ui/package.json` owns the dependency. |
+| `dotLottie` | Already present | `UiDotLottie.vue` exists and `packages/ui/package.json` owns the dependency. |
 | `unDraw` | Not yet adopted | No tracked illustration integration in app or UI source. |
 
 Status definitions:
@@ -189,11 +179,125 @@ Mandatory rules:
 - app code consumes `@octopus/ui`, not `packages/ui/src/components/*`
 - package dependencies imported by `Ui*` components must be declared in `packages/ui/package.json`
 - tests for shared UI should import through the same public surface used by the app
+- shared visual shells and repeated surface patterns belong in `@octopus/ui`, including:
+  - `UiPanelFrame`
+  - `UiMetricCard`
+  - `UiRankingList`
+  - `UiTimelineList`
+  - `UiToolbarRow`
+  - `UiNavCardList`
 
 Why this matters:
 
-- current app and test failures already show drift between component files and the package export surface
+- public surface drift turns design-system reuse into a regression risk, so stable exports remain mandatory even after migration closure
 - public surface discipline is required before design-system reuse can scale safely
+
+---
+
+## 5.1 Page Styling Rules
+
+Business pages may keep `<style scoped>` blocks, but only for:
+
+- page layout and responsive grid orchestration
+- view-local spacing adjustments
+- small compatibility patches that do not define a reusable visual language
+- chart, illustration, or visualization-specific drawing details that are local to a single surface
+
+Business pages must not define reusable visual component styles for:
+
+- hero or overview shells
+- metric, stat, action, or info cards
+- ranking, timeline, toolbar, nav-card, and modal-card patterns
+- shared modal, menu, dropdown, popover, tab, or accordion appearances
+- generic primary or secondary button looks
+
+Required page-layer defaults:
+
+- prefer `@octopus/ui` primitives and page abstractions first
+- prefer Tailwind utilities plus tokens over large named style clusters
+- if a visual block repeats across more than one screen, move it into `packages/ui`
+- if a new interaction primitive is needed, add it to `@octopus/ui` before app usage
+- feature-local components may exist, but they may only compose shared `Ui*` primitives and must not become a second visual system
+- new shared visual abstractions must land in `packages/ui` before page adoption
+
+First batch migrated toward this rule set:
+
+- `apps/desktop/src/components/layout/ConversationTabsBar.vue`
+- `apps/desktop/src/components/layout/WorkbenchSearchOverlay.vue`
+- `apps/desktop/src/components/layout/WorkbenchTopbar.vue`
+- `apps/desktop/src/views/ProjectDashboardView.vue`
+- `apps/desktop/src/views/WorkspaceOverviewView.vue`
+- `apps/desktop/src/views/KnowledgeView.vue`
+- `apps/desktop/src/views/UserCenterView.vue`
+
+Second batch migrated the conversation workbench core path into the same shared skeleton:
+
+- `apps/desktop/src/components/layout/WorkbenchSidebar.vue`
+- `apps/desktop/src/components/layout/ConversationContextPane.vue`
+- `apps/desktop/src/views/ConversationView.vue`
+- `apps/desktop/src/views/ResourcesView.vue`
+
+Third batch migrated the management-panel family into the same shared skeleton:
+
+- `apps/desktop/src/views/user-center/UserCenterPermissionsView.vue`
+- `apps/desktop/src/views/user-center/UserCenterRolesView.vue`
+- `apps/desktop/src/views/user-center/UserCenterUsersView.vue`
+- `apps/desktop/src/views/user-center/UserCenterMenusView.vue`
+- `apps/desktop/src/views/user-center/UserCenterProfileView.vue`
+- `apps/desktop/src/views/ToolsView.vue`
+- `apps/desktop/src/views/SettingsView.vue`
+- `apps/desktop/src/views/ConnectionsView.vue`
+- `apps/desktop/src/views/AutomationsView.vue`
+- `apps/desktop/src/views/TeamsView.vue`
+
+This batch standardized management screens on shared `UiMetricCard`, `UiToolbarRow`, `UiTabs`, `UiRecordCard`, `UiListRow`, `UiTimelineList`, and shared `UiField` form primitives. Local `metric-card`, `toolbar`, `card`, `editor-shell`, `binding-panel`, and `timeline` systems were removed instead of being preserved page-by-page.
+
+Fourth batch migrated the Agents family into the same shared skeleton:
+
+- `apps/desktop/src/views/AgentsView.vue`
+- `apps/desktop/src/views/agents/AgentsFilterBar.vue`
+- `apps/desktop/src/views/agents/AgentEmployeeCard.vue`
+- `apps/desktop/src/views/agents/TeamUnitCard.vue`
+- `apps/desktop/src/views/agents/AgentsRecommendations.vue`
+- `apps/desktop/src/views/agents/AgentsHeroSection.vue`
+- `apps/desktop/src/views/agents/AgentsEmptyState.vue`
+
+This batch standardized the agent center on shared `UiPageHero`, `UiToolbarRow`, `UiFilterChipGroup`, `UiRecordCard`, `UiListRow`, and `UiDialog` shells. Local hero, toolbar, tag-chip, record-card, recommendation-panel, table-shell, and dialog-shell systems were removed instead of being preserved as feature-local styling debt.
+
+Final tail-cleanup batch retired the last dashboard-family allowlist debt:
+
+- `apps/desktop/src/views/ProjectDashboardView.vue`
+- `apps/desktop/src/views/WorkspaceOverviewView.vue`
+- `apps/desktop/src/views/KnowledgeView.vue`
+
+This batch removed the remaining page-local progress, trend, toolbar-search, and panel-heading visual systems from the dashboard family. Those surfaces now compose shared `UiPageHero`, `UiPanelFrame`, `UiToolbarRow`, `UiFilterChipGroup`, `UiMetricCard`, `UiRankingList`, `UiTimelineList`, `UiNavCardList`, and `UiSurface` primitives with layout-only page orchestration.
+
+Current governance status after the five migration batches:
+
+- `legacyAllowlist` is empty
+- dashboard / overview / knowledge no longer rely on scoped-style escape hatches
+- frontend style governance has moved from migration mode to steady-state enforcement for new work
+
+---
+
+## 5.2 Governance Checks
+
+Use the root commands below as the steady-state frontend gate:
+
+- `pnpm check:frontend-governance`
+- `pnpm check:frontend`
+
+Current automated checks cover:
+
+- forbid deep imports from `packages/ui/src/components/*`
+- forbid business code from importing disallowed UI libraries directly
+- hard-fail new business views and layout panes that keep oversized scoped-style debt without an explicit allowlist entry
+- freeze scoped-style debt for any temporary allowlisted legacy files so style-line counts cannot grow
+- forbid reusable visual-pattern class names in non-allowlisted business surfaces
+- forbid native form controls in non-allowlisted business surfaces
+- keep the allowlist as a temporary debt register that should remain empty by default and only be used for explicitly approved migrations
+
+`pnpm check:frontend-governance` is the style-and-boundary backstop. `pnpm check:frontend` is the steady-state verification gate that combines governance, typecheck, and tests. The allowlist remains a temporary migration ledger, not a permanent escape hatch.
 
 ---
 
@@ -246,8 +350,8 @@ Examples:
 
 Rules:
 
-- these components are the highest-priority candidates for `Reka UI` standardization
-- do not add new hand-rolled accessibility-sensitive composite widgets in business code
+- these components are already standardized through `Reka UI` wrappers in `packages/ui`
+- keep shared overlay contracts quiet-green: no accessibility warnings in tests, no page-local dialog/menu systems, and no direct business-page imports from `reka-ui`
 
 ### 6.4 Data Display Primitives
 
@@ -347,26 +451,23 @@ These rules apply to all future desktop frontend work.
 
 ---
 
-## 9. Current Backlog And Blockers
+## 9. Current Backlog And Steady-State Focus
 
-The following items are blockers to broad migration work.
+Broad migration work is complete. The remaining steady-state backlog is narrower:
 
-1. Complete the `@octopus/ui` public export surface so shared components can be consumed through stable package exports.
-2. Declare actual `packages/ui` dependencies instead of relying on incidental workspace availability.
-3. Replace hand-rolled accessibility-sensitive components with `Reka UI` implementations.
-4. Converge raw page forms onto shared validated form primitives backed by `vee-validate + zod`.
-5. Repair current runtime/schema drift so `apps/desktop` build and runtime-related tests match the tracked backend contract.
-6. Repair current shared UI test drift so package exports and primitive behavior are aligned before page migration begins.
+1. Keep `pnpm check:frontend-governance`, `pnpm -C apps/desktop typecheck`, `pnpm -C apps/desktop test`, and `pnpm -C apps/desktop build` green together.
+2. Keep shared overlay primitives, especially `UiDialog`, free of accessibility warnings in test output.
+3. Continue converging future form work onto shared validated form primitives backed by `vee-validate + zod`.
+4. Continue converging editor-like text surfaces on `CodeMirror` where the current textarea wrapper is no longer sufficient.
+5. Treat future schema/runtime drift as ordinary maintenance work, not as justification to bypass shared UI or governance rules.
 
 ---
 
 ## 10. Non-Goals For This Round
 
-This governance round does not:
+This governance document does not:
 
-- migrate business pages
-- add or remove runtime APIs
-- install the full target stack immediately
-- repair the current `apps/desktop` build/test failures
-
-Those tasks should follow this document, but are intentionally out of scope for this specific change.
+- re-open page-family migration work that is already complete
+- authorize page-local visual systems, scoped-style escape hatches, or direct third-party UI usage in app code
+- require installing every optional frontend capability before a real product need exists
+- replace normal engineering verification; governance rules and green commands remain mandatory for code changes

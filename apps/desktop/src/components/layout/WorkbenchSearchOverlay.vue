@@ -5,10 +5,19 @@ import { useRouter } from 'vue-router'
 import { ArrowRight, Blocks, FolderKanban, MessageSquare, Search, Waypoints } from 'lucide-vue-next'
 import type { RouteLocationRaw } from 'vue-router'
 
+import {
+  UiButton,
+  UiDialog,
+  UiInput,
+  UiPanelFrame,
+} from '@octopus/ui'
+
 import { resolveMockField } from '@/i18n/copy'
 import { createProjectConversationTarget, createProjectSurfaceTarget, createWorkspaceOverviewTarget } from '@/i18n/navigation'
 import { useShellStore } from '@/stores/shell'
 import { useWorkbenchStore } from '@/stores/workbench'
+
+type SearchResultKind = 'conversation' | 'project' | 'workspace' | 'navigation'
 
 interface SearchResult {
   id: string
@@ -16,6 +25,7 @@ interface SearchResult {
   subtitle: string
   section: string
   keywords: string[]
+  kind: SearchResultKind
   to: RouteLocationRaw
 }
 
@@ -25,7 +35,7 @@ const shell = useShellStore()
 const workbench = useWorkbenchStore()
 
 const query = ref('')
-const searchInput = ref<HTMLInputElement | null>(null)
+const searchInput = ref<{ focus: () => void } | null>(null)
 const workspaceConversationIds = computed(() =>
   new Set(workbench.workspaceProjects.flatMap((project) => project.conversationIds)),
 )
@@ -35,13 +45,14 @@ const results = computed<SearchResult[]>(() => {
   const conversations: SearchResult[] = workbench.conversations
     .filter((conversation) => workspaceConversationIds.value.has(conversation.id))
     .map((conversation) => ({
-    id: `conversation-${conversation.id}`,
-    title: resolveMockField('conversation', conversation.id, 'title', conversation.title),
-    subtitle: resolveMockField('conversation', conversation.id, 'summary', conversation.summary),
-    section: t('searchOverlay.sections.conversations'),
-    keywords: ['conversation', 'chat', conversation.id],
-    to: createProjectConversationTarget(workbench.currentWorkspaceId, conversation.projectId, conversation.id),
-  }))
+      id: `conversation-${conversation.id}`,
+      title: resolveMockField('conversation', conversation.id, 'title', conversation.title),
+      subtitle: resolveMockField('conversation', conversation.id, 'summary', conversation.summary),
+      section: t('searchOverlay.sections.conversations'),
+      keywords: ['conversation', 'chat', conversation.id],
+      kind: 'conversation',
+      to: createProjectConversationTarget(workbench.currentWorkspaceId, conversation.projectId, conversation.id),
+    }))
 
   const projects: SearchResult[] = workbench.workspaceProjects.map((project) => ({
     id: `project-${project.id}`,
@@ -49,6 +60,7 @@ const results = computed<SearchResult[]>(() => {
     subtitle: resolveMockField('project', project.id, 'summary', project.summary),
     section: t('searchOverlay.sections.projects'),
     keywords: ['project', project.id],
+    kind: 'project',
     to: createWorkspaceOverviewTarget(project.workspaceId, project.id),
   }))
 
@@ -58,6 +70,7 @@ const results = computed<SearchResult[]>(() => {
     subtitle: resolveMockField('workspace', workspace.id, 'description', workspace.description),
     section: t('searchOverlay.sections.workspaces'),
     keywords: ['workspace', workspace.id],
+    kind: 'workspace',
     to: createWorkspaceOverviewTarget(workspace.id, workspace.projectIds[0]),
   }))
 
@@ -68,6 +81,7 @@ const results = computed<SearchResult[]>(() => {
       subtitle: t('searchOverlay.navigation.console'),
       section: t('searchOverlay.sections.navigation'),
       keywords: ['dashboard', 'console', '控制台', '仪表盘', 'home'],
+      kind: 'navigation',
       to: createWorkspaceOverviewTarget(workbench.currentWorkspaceId, workbench.currentProjectId),
     },
     {
@@ -76,6 +90,7 @@ const results = computed<SearchResult[]>(() => {
       subtitle: t('searchOverlay.navigation.conversation'),
       section: t('searchOverlay.sections.navigation'),
       keywords: ['conversation', 'chat', '会话'],
+      kind: 'navigation',
       to: createProjectConversationTarget(
         workbench.currentWorkspaceId,
         workbench.currentProjectId,
@@ -88,6 +103,7 @@ const results = computed<SearchResult[]>(() => {
       subtitle: t('searchOverlay.navigation.agents'),
       section: t('searchOverlay.sections.navigation'),
       keywords: ['agent', 'agents', '智能体'],
+      kind: 'navigation',
       to: {
         name: 'agents',
         params: {
@@ -101,6 +117,7 @@ const results = computed<SearchResult[]>(() => {
       subtitle: t('searchOverlay.navigation.resources'),
       section: t('searchOverlay.sections.navigation'),
       keywords: ['resource', 'resources', '资源', 'file', 'folder'],
+      kind: 'navigation',
       to: createProjectSurfaceTarget('resources', workbench.currentWorkspaceId, workbench.currentProjectId),
     },
     {
@@ -109,6 +126,7 @@ const results = computed<SearchResult[]>(() => {
       subtitle: t('searchOverlay.navigation.knowledge'),
       section: t('searchOverlay.sections.navigation'),
       keywords: ['knowledge', '知识'],
+      kind: 'navigation',
       to: createProjectSurfaceTarget('knowledge', workbench.currentWorkspaceId, workbench.currentProjectId),
     },
     {
@@ -117,6 +135,7 @@ const results = computed<SearchResult[]>(() => {
       subtitle: t('searchOverlay.navigation.trace'),
       section: t('searchOverlay.sections.navigation'),
       keywords: ['trace', '追踪'],
+      kind: 'navigation',
       to: createProjectSurfaceTarget('trace', workbench.currentWorkspaceId, workbench.currentProjectId),
     },
     {
@@ -125,6 +144,7 @@ const results = computed<SearchResult[]>(() => {
       subtitle: t('searchOverlay.navigation.models'),
       section: t('searchOverlay.sections.navigation'),
       keywords: ['model', 'models', '模型'],
+      kind: 'navigation',
       to: {
         name: 'models',
         params: {
@@ -138,6 +158,7 @@ const results = computed<SearchResult[]>(() => {
       subtitle: t('searchOverlay.navigation.tools'),
       section: t('searchOverlay.sections.navigation'),
       keywords: ['tool', 'tools', 'skill', 'mcp', '工具'],
+      kind: 'navigation',
       to: {
         name: 'tools',
         params: {
@@ -151,6 +172,7 @@ const results = computed<SearchResult[]>(() => {
       subtitle: t('searchOverlay.navigation.settings'),
       section: t('searchOverlay.sections.navigation'),
       keywords: ['settings', 'preferences', '设置'],
+      kind: 'navigation',
       to: {
         name: 'settings',
         params: {
@@ -179,152 +201,91 @@ watch(
     }
 
     await nextTick()
+    await nextTick()
     searchInput.value?.focus()
   },
 )
 
+function resultIcon(kind: SearchResultKind) {
+  if (kind === 'conversation') {
+    return MessageSquare
+  }
+  if (kind === 'project') {
+    return FolderKanban
+  }
+  if (kind === 'workspace') {
+    return Blocks
+  }
+  return Waypoints
+}
+
+function closeOverlay() {
+  shell.closeSearch()
+}
+
 async function selectResult(item: SearchResult) {
   await router.push(item.to)
-  shell.closeSearch()
+  closeOverlay()
 }
 </script>
 
 <template>
-  <div
-    v-if="shell.searchOpen"
-    class="search-overlay-shell"
-    data-testid="search-overlay"
+  <UiDialog
+    :open="shell.searchOpen"
+    :title="t('topbar.searchPlaceholder')"
+    :description="t('searchOverlay.emptyDescription')"
+    :close-label="t('common.cancel')"
+    @update:open="(open) => { if (!open) closeOverlay() }"
   >
-    <button type="button" class="search-overlay-backdrop" @click="shell.closeSearch()" />
-    <section class="search-panel">
-      <div class="search-panel-header">
-        <Search :size="18" />
-        <input
-          ref="searchInput"
-          v-model="query"
-          data-testid="search-overlay-input"
-          :placeholder="t('searchOverlay.placeholder')"
-        />
-      </div>
+    <div data-testid="search-overlay-dialog">
+      <UiPanelFrame
+        data-testid="search-overlay-panel"
+        variant="hero"
+        padding="none"
+      >
+        <div class="space-y-4">
+          <div class="border-b border-border/70 px-5 py-4">
+            <div class="flex items-center gap-3 rounded-[calc(var(--radius-lg)+2px)] border border-border/70 bg-background/85 px-4 py-3 shadow-xs">
+              <Search :size="18" class="shrink-0 text-text-secondary" />
+              <UiInput
+                ref="searchInput"
+                v-model="query"
+                data-testid="search-overlay-input"
+                :placeholder="t('searchOverlay.placeholder')"
+                class="h-auto border-0 bg-transparent px-0 py-0 shadow-none focus-visible:ring-0"
+              />
+            </div>
+          </div>
 
-      <div v-if="results.length" class="search-result-list">
-        <button
-          v-for="(item, index) in results"
-          :key="item.id"
-          type="button"
-          class="search-result"
-          :data-testid="`search-result-${index}`"
-          :data-result-id="item.id"
-          @click="selectResult(item)"
-        >
-          <span class="search-result-icon">
-            <MessageSquare v-if="item.section === t('searchOverlay.sections.conversations')" :size="16" />
-            <FolderKanban v-else-if="item.section === t('searchOverlay.sections.projects')" :size="16" />
-            <Blocks v-else-if="item.section === t('searchOverlay.sections.workspaces')" :size="16" />
-            <Waypoints v-else :size="16" />
-          </span>
-          <span class="search-result-copy">
-            <strong>{{ item.title }}</strong>
-            <small>{{ item.section }} · {{ item.subtitle }}</small>
-          </span>
-          <ArrowRight :size="15" />
-        </button>
-      </div>
-      <div v-else class="search-empty">
-        <strong>{{ t('searchOverlay.emptyTitle') }}</strong>
-        <small>{{ t('searchOverlay.emptyDescription') }}</small>
-      </div>
-    </section>
-  </div>
+          <div class="px-3 pb-3">
+            <div v-if="results.length" class="space-y-2">
+              <UiButton
+                v-for="(item, index) in results"
+                :key="item.id"
+                variant="ghost"
+                class="flex h-auto w-full items-center justify-start gap-3 rounded-[calc(var(--radius-lg)+2px)] px-3 py-3 text-left hover:bg-accent/80"
+                :data-testid="`search-result-${index}`"
+                :data-result-id="item.id"
+                @click="selectResult(item)"
+              >
+                <span class="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary/[0.12] text-primary">
+                  <component :is="resultIcon(item.kind)" :size="16" />
+                </span>
+                <span class="min-w-0 flex-1">
+                  <strong class="block truncate text-sm font-semibold text-text-primary">{{ item.title }}</strong>
+                  <small class="block truncate pt-1 text-xs text-text-secondary">{{ item.section }} · {{ item.subtitle }}</small>
+                </span>
+                <ArrowRight :size="15" class="shrink-0 text-text-tertiary" />
+              </UiButton>
+            </div>
+
+            <div v-else class="rounded-[calc(var(--radius-lg)+2px)] border border-dashed border-border/80 bg-background/70 px-4 py-6 text-center">
+              <strong class="block text-sm font-semibold text-text-primary">{{ t('searchOverlay.emptyTitle') }}</strong>
+              <small class="block pt-2 text-xs leading-6 text-text-secondary">{{ t('searchOverlay.emptyDescription') }}</small>
+            </div>
+          </div>
+        </div>
+      </UiPanelFrame>
+    </div>
+  </UiDialog>
 </template>
-
-<style scoped>
-.search-overlay-shell {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-}
-
-.search-overlay-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.52);
-}
-
-.search-panel {
-  position: relative;
-  z-index: 1;
-  width: min(720px, calc(100vw - 2rem));
-  margin: 7rem auto 0;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--bg-surface) 96%, transparent);
-  box-shadow: var(--shadow-lg);
-  overflow: hidden;
-}
-
-.search-panel-header {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 1rem 1.1rem;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.search-panel-header input {
-  border: none;
-  background: transparent;
-  padding: 0;
-  box-shadow: none;
-}
-
-.search-result-list,
-.search-empty {
-  display: flex;
-  flex-direction: column;
-}
-
-.search-result {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 0.95rem 1.1rem;
-  border-radius: 0;
-  border-bottom: 1px solid var(--border-subtle);
-  background: transparent;
-  text-align: left;
-}
-
-.search-result:last-child {
-  border-bottom: none;
-}
-
-.search-result-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-  min-width: 0;
-}
-
-.search-result-copy small,
-.search-empty small {
-  color: var(--text-secondary);
-}
-
-.search-result-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--brand-primary) 14%, transparent);
-  color: var(--brand-primary);
-}
-
-.search-empty {
-  gap: 0.45rem;
-  padding: 1.25rem 1.1rem;
-}
-</style>
