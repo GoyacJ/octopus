@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   PopoverContent,
+  PopoverPortal,
   PopoverRoot,
   PopoverTrigger,
 } from 'reka-ui'
@@ -26,32 +27,9 @@ const emit = defineEmits<{
 const root = ref<HTMLElement | null>(null)
 
 const contentClasses = computed(() => cn(
-  'absolute z-40 min-w-[14rem] rounded-md border border-border-strong bg-popover p-1.5 shadow-[0_4px_12px_rgba(15,15,15,0.1)] outline-none',
-  props.align === 'end' ? 'right-0' : 'left-0',
+  'z-50 min-w-[14rem] rounded-md border border-border-subtle dark:border-white/[0.08] bg-background p-1.5 shadow-lg outline-none',
   props.class,
 ))
-
-function handlePointerDown(event: Event) {
-  if (!props.open) {
-    return
-  }
-
-  if (root.value?.contains(event.target as Node)) {
-    return
-  }
-
-  emit('update:open', false)
-}
-
-onMounted(() => {
-  window.addEventListener('pointerdown', handlePointerDown)
-  window.addEventListener('mousedown', handlePointerDown)
-})
-
-onBeforeUnmount(() => {
-  window.removeEventListener('pointerdown', handlePointerDown)
-  window.removeEventListener('mousedown', handlePointerDown)
-})
 </script>
 
 <template>
@@ -64,14 +42,16 @@ onBeforeUnmount(() => {
       <PopoverTrigger as-child>
         <slot name="trigger" />
       </PopoverTrigger>
-      <PopoverContent
-        :align="props.align"
-        :side="props.side"
-        :side-offset="4"
-        :class="contentClasses"
-      >
-        <slot />
-      </PopoverContent>
+      <PopoverPortal>
+        <PopoverContent
+          :align="props.align"
+          :side="props.side"
+          :side-offset="4"
+          :class="contentClasses"
+        >
+          <slot />
+        </PopoverContent>
+      </PopoverPortal>
     </PopoverRoot>
   </div>
 </template>
