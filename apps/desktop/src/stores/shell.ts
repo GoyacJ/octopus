@@ -1,23 +1,21 @@
 import { defineStore } from 'pinia'
 
-import type { ConnectionProfile, HostState, ShellBootstrap, ShellPreferences } from '@octopus/schema'
+import type {
+  ConnectionProfile,
+  ConversationDetailFocus,
+  HostBackendConnection,
+  HostState,
+  ShellBootstrap,
+  ShellPreferences,
+  ShellRouteState,
+} from '@octopus/schema'
+import {
+  createDefaultShellPreferences,
+  createFallbackHostState,
+  normalizeConversationDetailFocus,
+} from '@octopus/schema'
 
-import { bootstrapShellHost, savePreferences } from '@/tauri/client'
-
-export type ConversationDetailFocus =
-  | 'summary'
-  | 'memories'
-  | 'artifacts'
-  | 'knowledge'
-  | 'resources'
-  | 'tools'
-  | 'timeline'
-
-interface RouteSyncState {
-  detail?: string
-  pane?: string
-  artifact?: string
-}
+import { bootstrapShellHost, healthcheck, restartDesktopBackend, savePreferences } from '@/tauri/client'
 
 function hasPreferencePatchKey<K extends keyof ShellPreferences>(
   patch: Partial<ShellPreferences>,
@@ -51,56 +49,6 @@ function mergeSavedPreferences(
   }
 }
 
-function createDefaultPreferences(defaultWorkspaceId: string, defaultProjectId: string): ShellPreferences {
-  return {
-    theme: 'system',
-    locale: 'zh-CN',
-    compactSidebar: false,
-    leftSidebarCollapsed: false,
-    rightSidebarCollapsed: false,
-    defaultWorkspaceId,
-    lastVisitedRoute: `/workspaces/${defaultWorkspaceId}/overview?project=${defaultProjectId}`,
-  }
-}
-
-function createFallbackHostState(): HostState {
-  return {
-    platform: 'web',
-    mode: 'local',
-    appVersion: '0.1.0',
-    cargoWorkspace: false,
-    shell: 'browser',
-  }
-}
-
-function normalizeDetail(detail?: string, legacyPane?: string): ConversationDetailFocus {
-  if (
-    detail === 'summary'
-    || detail === 'memories'
-    || detail === 'artifacts'
-    || detail === 'knowledge'
-    || detail === 'resources'
-    || detail === 'tools'
-    || detail === 'timeline'
-  ) {
-    return detail
-  }
-
-  if (legacyPane === 'artifacts') {
-    return 'artifacts'
-  }
-
-  if (legacyPane === 'inbox') {
-    return 'timeline'
-  }
-
-  if (legacyPane === 'trace') {
-    return 'timeline'
-  }
-
-  return 'summary'
-}
-
 export const useShellStore = defineStore('shell', {
   state: () => ({
     defaultWorkspaceId: 'ws-local',
@@ -111,19 +59,25 @@ export const useShellStore = defineStore('shell', {
     rightSidebarCollapsed: false,
     searchOpen: false,
     bootstrapPayload: null as ShellBootstrap | null,
+    backendConnectionState: undefined as HostBackendConnection | undefined,
     preferencesState: null as ShellPreferences | null,
     loading: false,
+    syncingBackend: false,
+    restartingBackend: false,
     error: '',
   }),
   getters: {
     preferences(state): ShellPreferences {
-      return state.preferencesState ?? createDefaultPreferences(state.defaultWorkspaceId, state.defaultProjectId)
+      return state.preferencesState ?? createDefaultShellPreferences(state.defaultWorkspaceId, state.defaultProjectId)
     },
     hostState(state): HostState {
       return state.bootstrapPayload?.hostState ?? createFallbackHostState()
     },
     bootstrapConnections(state): ConnectionProfile[] {
       return state.bootstrapPayload?.connections ?? []
+    },
+    backendConnection(state): HostBackendConnection | undefined {
+      return state.backendConnectionState
     },
   },
   actions: {
@@ -143,14 +97,16 @@ export const useShellStore = defineStore('shell', {
       try {
         const payload = await bootstrapShellHost(defaultWorkspaceId, defaultProjectId, mockConnections)
         this.bootstrapPayload = payload
+        this.backendConnectionState = payload.backend
         this.applyShellPreferences(payload.preferences)
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to bootstrap shell host'
         this.bootstrapPayload = {
           hostState: createFallbackHostState(),
-          preferences: createDefaultPreferences(defaultWorkspaceId, defaultProjectId),
+          preferences: createDefaultShellPreferences(defaultWorkspaceId, defaultProjectId),
           connections: mockConnections,
         }
+        this.backendConnectionState = undefined
         this.applyShellPreferences(this.bootstrapPayload.preferences)
       } finally {
         this.loading = false
@@ -172,8 +128,8 @@ export const useShellStore = defineStore('shell', {
         this.selectedArtifactId = artifactIds[0]
       }
     },
-    syncFromRoute(routeState: RouteSyncState) {
-      this.detailFocus = normalizeDetail(routeState.detail, routeState.pane)
+    syncFromRoute(routeState: ShellRouteState) {
+      this.detailFocus = normalizeConversationDetailFocus(routeState.detail, routeState.pane)
       if (routeState.artifact) {
         this.selectedArtifactId = routeState.artifact
       }
@@ -223,6 +179,45 @@ export const useShellStore = defineStore('shell', {
       await this.updatePreferences({
         lastVisitedRoute: route,
       })
+    },
+    syncBackendConnection(nextConnection: HostBackendConnection | undefined) {
+      this.backendConnectionState = nextConnection
+    },
+    async refreshBackendStatus() {
+      this.syncingBackend = true
+      this.error = ''
+
+      try {
+        const status = await healthcheck()
+        const nextConnection = this.backendConnection
+          ? {
+              ...this.backendConnection,
+              state: status.backend.state,
+              transport: status.backend.transport,
+            }
+          : {
+              state: status.backend.state,
+              transport: status.backend.transport,
+            }
+        this.syncBackendConnection(nextConnection)
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to refresh backend status'
+      } finally {
+        this.syncingBackend = false
+      }
+    },
+    async restartBackend() {
+      this.restartingBackend = true
+      this.error = ''
+
+      try {
+        await restartDesktopBackend()
+        await this.refreshBackendStatus()
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to restart desktop backend'
+      } finally {
+        this.restartingBackend = false
+      }
     },
   },
 })

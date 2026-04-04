@@ -103,7 +103,7 @@ const workspaceModelRankingItems = computed(() => toRankingItems(modelUsageVisua
     </header>
 
     <!-- Active Project Spotlight -->
-    <section v-if="currentProject" class="px-2 space-y-4">
+    <section v-if="currentProject" class="px-2 space-y-4" data-testid="workspace-overview-hero">
       <h3 class="text-lg font-bold text-text-primary">{{ t('overview.sections.project.title') }}</h3>
       
       <div class="bg-subtle/30 border border-border-subtle p-6 rounded-lg space-y-6">
@@ -127,12 +127,12 @@ const workspaceModelRankingItems = computed(() => toRankingItems(modelUsageVisua
         </div>
 
         <div class="flex gap-3">
-          <RouterLink class="min-w-[160px] block" :to="createProjectDashboardTarget(currentProject.workspaceId, currentProject.id)">
+          <RouterLink class="min-w-[160px] block" :to="createProjectDashboardTarget(currentProject.workspaceId, currentProject.id)" data-testid="workspace-overview-action-dashboard">
             <UiActionCard :title="t('overview.sections.project.openDashboard')">
               <template #icon><LayoutDashboard :size="16" /></template>
             </UiActionCard>
           </RouterLink>
-          <RouterLink class="min-w-[160px] block" :to="createProjectConversationTarget(currentProject.workspaceId, currentProject.id, currentConversationId)">
+          <RouterLink class="min-w-[160px] block" :to="createProjectConversationTarget(currentProject.workspaceId, currentProject.id, currentConversationId)" data-testid="workspace-overview-action-conversation">
             <UiActionCard :title="t('overview.sections.project.openConversation')">
               <template #icon><MessageSquare :size="16" /></template>
             </UiActionCard>

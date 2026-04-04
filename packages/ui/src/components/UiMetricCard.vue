@@ -33,11 +33,11 @@ const normalizedProgress = computed(() => {
 <template>
   <article
     :class="cn(
-      'flex flex-col gap-2 rounded-md border border-border-subtle p-4 transition-colors bg-background',
-      props.tone === 'accent' && 'border-primary/20 bg-primary/5',
-      props.tone === 'muted' && 'bg-subtle',
-      props.tone === 'success' && 'border-status-success/20 bg-status-success/5',
-      props.tone === 'warning' && 'border-status-warning/20 bg-status-warning/5',
+      'flex flex-col gap-2 rounded-md border border-border/40 dark:border-white/[0.03] p-4 transition-colors bg-background',
+      props.tone === 'accent' && 'border-primary/50 dark:border-primary/5 bg-primary/5',
+      props.tone === 'muted' && 'bg-subtle/50',
+      props.tone === 'success' && 'border-status-success/15 bg-status-success/5',
+      props.tone === 'warning' && 'border-status-warning/15 bg-status-warning/5',
       props.class,
     )"
   >

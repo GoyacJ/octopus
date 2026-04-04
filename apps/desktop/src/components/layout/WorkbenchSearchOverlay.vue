@@ -12,7 +12,6 @@ import {
   UiPanelFrame,
 } from '@octopus/ui'
 
-import { resolveMockField } from '@/i18n/copy'
 import { createProjectConversationTarget, createProjectSurfaceTarget, createWorkspaceOverviewTarget } from '@/i18n/navigation'
 import { useShellStore } from '@/stores/shell'
 import { useWorkbenchStore } from '@/stores/workbench'
@@ -46,8 +45,8 @@ const results = computed<SearchResult[]>(() => {
     .filter((conversation) => workspaceConversationIds.value.has(conversation.id))
     .map((conversation) => ({
       id: `conversation-${conversation.id}`,
-      title: resolveMockField('conversation', conversation.id, 'title', conversation.title),
-      subtitle: resolveMockField('conversation', conversation.id, 'summary', conversation.summary),
+      title: workbench.conversationDisplayTitle(conversation.id),
+      subtitle: workbench.conversationDisplaySummary(conversation.id),
       section: t('searchOverlay.sections.conversations'),
       keywords: ['conversation', 'chat', conversation.id],
       kind: 'conversation',
@@ -56,8 +55,8 @@ const results = computed<SearchResult[]>(() => {
 
   const projects: SearchResult[] = workbench.workspaceProjects.map((project) => ({
     id: `project-${project.id}`,
-    title: resolveMockField('project', project.id, 'name', project.name),
-    subtitle: resolveMockField('project', project.id, 'summary', project.summary),
+    title: workbench.projectDisplayName(project.id),
+    subtitle: workbench.projectDisplaySummary(project.id),
     section: t('searchOverlay.sections.projects'),
     keywords: ['project', project.id],
     kind: 'project',
@@ -66,8 +65,8 @@ const results = computed<SearchResult[]>(() => {
 
   const workspaces: SearchResult[] = workbench.workspaces.map((workspace) => ({
     id: `workspace-${workspace.id}`,
-    title: resolveMockField('workspace', workspace.id, 'name', workspace.name),
-    subtitle: resolveMockField('workspace', workspace.id, 'description', workspace.description),
+    title: workbench.workspaceDisplayName(workspace.id),
+    subtitle: workbench.workspaceDisplayDescription(workspace.id),
     section: t('searchOverlay.sections.workspaces'),
     keywords: ['workspace', workspace.id],
     kind: 'workspace',

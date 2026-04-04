@@ -35,7 +35,6 @@ import {
 } from '@octopus/ui'
 
 import { usePagination } from '@/composables/usePagination'
-import { resolveMockField } from '@/i18n/copy'
 import { createProjectConversationTarget } from '@/i18n/navigation'
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -148,7 +147,7 @@ const {
 })
 
 function resourceLabel(resource: ProjectResource): string {
-  return resolveMockField('projectResource', resource.id, 'name', resource.name)
+  return workbench.projectResourceDisplayName(resource.id)
 }
 
 function resourceKindLabel(resource: ProjectResource): string {
@@ -379,7 +378,7 @@ function confirmDelete() {
     <input ref="fileInputRef" class="hidden" type="file" @change="handleFileSelection" >
     <input ref="folderInputRef" class="hidden" type="file" webkitdirectory directory multiple @change="handleFolderSelection" >
 
-    <div class="px-2 flex flex-wrap items-center justify-between gap-4 border-b border-border-subtle pb-4">
+    <div class="px-2 flex flex-wrap items-center justify-between gap-4 border-b border-border-subtle dark:border-white/[0.05] pb-4">
       <UiTabs v-model="activeTab" :tabs="tabItems" />
       
       <div class="flex items-center gap-2">
@@ -390,7 +389,7 @@ function confirmDelete() {
 
         <div class="h-4 w-px bg-border-subtle mx-1" />
 
-        <div class="flex items-center gap-1 bg-subtle/50 rounded-md p-0.5 border border-border-subtle">
+        <div class="flex items-center gap-1 bg-subtle/50 rounded-md p-0.5 border border-border-subtle dark:border-white/[0.08]">
           <UiButton variant="ghost" size="icon" class="h-6 w-6 rounded" :class="viewMode === 'list' ? 'bg-background shadow-sm text-text-primary' : 'text-text-tertiary'" @click="viewMode = 'list'">
             <List :size="14" />
           </UiButton>
@@ -483,7 +482,7 @@ function confirmDelete() {
         :description="t('resources.empty.emptyDescription')"
       />
 
-      <div v-if="totalPages > 1" class="pt-4 flex justify-center border-t border-border-subtle mt-8">
+      <div v-if="totalPages > 1" class="pt-4 flex justify-center border-t border-border-subtle dark:border-white/[0.05] mt-8">
         <UiPagination :page="currentPage" :page-count="totalPages" @update:page="setPage" />
       </div>
     </main>
@@ -516,14 +515,14 @@ function confirmDelete() {
           </div>
         </div>
 
-        <div class="grid gap-4 sm:grid-cols-2 text-[13px] border-y border-border-subtle py-4">
+        <div class="grid gap-4 sm:grid-cols-2 text-[13px] border-y border-border-subtle dark:border-white/[0.05] py-4">
           <div><strong class="block text-text-tertiary text-[10px] uppercase mb-1">{{ t('resources.preview.size') }}</strong><span>{{ resourceMetaLabel(previewResource) }}</span></div>
           <div><strong class="block text-text-tertiary text-[10px] uppercase mb-1">{{ t('resources.preview.linkedConversations') }}</strong><span>{{ previewResource.linkedConversationIds.length }}</span></div>
           <div><strong class="block text-text-tertiary text-[10px] uppercase mb-1">{{ t('resources.preview.location') }}</strong><span class="break-all">{{ resourceSecondaryText(previewResource) }}</span></div>
           <div><strong class="block text-text-tertiary text-[10px] uppercase mb-1">{{ t('resources.preview.tags') }}</strong><span>{{ previewResource.tags.join(', ') || t('common.na') }}</span></div>
         </div>
 
-        <div v-if="previewArtifact" class="bg-subtle/30 rounded-md border border-border-subtle p-3">
+        <div v-if="previewArtifact" class="bg-subtle/30 rounded-md border border-border-subtle dark:border-white/[0.08] p-3">
           <pre class="text-[12px] text-text-secondary whitespace-pre-wrap font-mono">{{ previewArtifact.content }}</pre>
         </div>
 

@@ -1,13 +1,16 @@
 import { createMemoryHistory, createRouter, createWebHashHistory } from 'vue-router'
 
-import AgentsView from '@/views/AgentsView.vue'
+import WorkspaceAgentsView from '@/views/WorkspaceAgentsView.vue'
+import ProjectAgentsView from '@/views/ProjectAgentsView.vue'
+import WorkspaceResourcesView from '@/views/WorkspaceResourcesView.vue'
+import ProjectResourcesView from '@/views/ProjectResourcesView.vue'
 import AutomationsView from '@/views/AutomationsView.vue'
 import ConnectionsView from '@/views/ConnectionsView.vue'
 import ConversationView from '@/views/ConversationView.vue'
-import KnowledgeView from '@/views/KnowledgeView.vue'
+import ProjectKnowledgeView from '@/views/ProjectKnowledgeView.vue'
+import WorkspaceKnowledgeView from '@/views/WorkspaceKnowledgeView.vue'
 import ModelsView from '@/views/ModelsView.vue'
 import ProjectDashboardView from '@/views/ProjectDashboardView.vue'
-import ResourcesView from '@/views/ResourcesView.vue'
 import SettingsView from '@/views/SettingsView.vue'
 import TeamsView from '@/views/TeamsView.vue'
 import TraceView from '@/views/TraceView.vue'
@@ -23,8 +26,6 @@ import UserCenterProfileView from '@/views/user-center/UserCenterProfileView.vue
 import UserCenterRolesView from '@/views/user-center/UserCenterRolesView.vue'
 import UserCenterUsersView from '@/views/user-center/UserCenterUsersView.vue'
 
-const seed = createMockWorkbenchSeed()
-
 function resolveUserCenterEntry(workspaceId: string) {
   const workbench = useWorkbenchStore()
   const routeName = workbench.firstAccessibleUserCenterRouteForWorkspace(workspaceId, workbench.currentUserId)
@@ -37,7 +38,7 @@ function resolveUserCenterEntry(workspaceId: string) {
     }
   }
 
-  const fallbackProjectId = workbench.projects.find((project) => project.workspaceId === workspaceId)?.id ?? seed.currentProjectId
+  const fallbackProjectId = workbench.projects.find((project) => project.workspaceId === workspaceId)?.id ?? ''
   return {
     name: 'workspace-overview',
     params: {
@@ -54,11 +55,16 @@ export const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: {
-        path: `/workspaces/${seed.currentWorkspaceId}/overview`,
-        query: {
-          project: seed.currentProjectId,
-        },
+      redirect: (to) => {
+        const workbench = useWorkbenchStore()
+        const workspaceId = workbench.currentWorkspaceId || 'default'
+        const projectId = workbench.currentProjectId || ''
+        return {
+          path: `/workspaces/${workspaceId}/overview`,
+          query: {
+            project: projectId,
+          },
+        }
       },
     },
     {
@@ -94,17 +100,17 @@ export const router = createRouter({
     {
       path: '/workspaces/:workspaceId/projects/:projectId/agents',
       name: 'project-agents',
-      component: AgentsView,
+      component: ProjectAgentsView,
     },
     {
       path: '/workspaces/:workspaceId/projects/:projectId/resources',
       name: 'resources',
-      component: ResourcesView,
+      component: ProjectResourcesView,
     },
     {
       path: '/workspaces/:workspaceId/projects/:projectId/knowledge',
       name: 'knowledge',
-      component: KnowledgeView,
+      component: ProjectKnowledgeView,
     },
     {
       path: '/workspaces/:workspaceId/projects/:projectId/trace',
@@ -114,7 +120,17 @@ export const router = createRouter({
     {
       path: '/workspaces/:workspaceId/agents',
       name: 'agents',
-      component: AgentsView,
+      component: WorkspaceAgentsView,
+    },
+    {
+      path: '/workspaces/:workspaceId/knowledge',
+      name: 'workspace-knowledge',
+      component: WorkspaceKnowledgeView,
+    },
+    {
+      path: '/workspaces/:workspaceId/resources',
+      name: 'workspace-resources',
+      component: WorkspaceResourcesView,
     },
     {
       path: '/workspaces/:workspaceId/teams',
@@ -140,7 +156,10 @@ export const router = createRouter({
       path: '/workspaces/:workspaceId/user-center',
       name: 'user-center',
       component: UserCenterView,
-      redirect: (to) => resolveUserCenterEntry(String(to.params.workspaceId ?? seed.currentWorkspaceId)),
+      redirect: (to) => {
+        const workbench = useWorkbenchStore()
+        return resolveUserCenterEntry(String(to.params.workspaceId ?? workbench.currentWorkspaceId))
+      },
       children: [
         {
           path: 'profile',
@@ -182,11 +201,21 @@ export const router = createRouter({
     {
       path: '/connections',
       name: 'connections',
-      redirect: `/workspaces/${seed.currentWorkspaceId}/connections`,
+      redirect: (to) => {
+        const workbench = useWorkbenchStore()
+        const workspaceId = workbench.currentWorkspaceId || 'default'
+        return `/workspaces/${workspaceId}/connections`
+      },
     },
     {
       path: '/:pathMatch(.*)*',
-      redirect: `/workspaces/${seed.currentWorkspaceId}/projects/${seed.currentProjectId}/conversations/${seed.currentConversationId}`,
+      redirect: (to) => {
+        const workbench = useWorkbenchStore()
+        const workspaceId = workbench.currentWorkspaceId || 'default'
+        const projectId = workbench.currentProjectId || ''
+        const conversationId = workbench.currentConversationId || ''
+        return `/workspaces/${workspaceId}/projects/${projectId}/conversations/${conversationId}`
+      },
     },
   ],
 })

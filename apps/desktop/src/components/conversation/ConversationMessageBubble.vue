@@ -50,9 +50,8 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
       class="group relative flex gap-3 transition-all"
       :class="[
         isUserMessage 
-          ? 'flex-row-reverse p-3 rounded-xl bg-white dark:bg-white/5 border border-border-strong shadow-xs' 
-          : 'flex-row p-1 bg-transparent border-none shadow-none',
-        'max-w-[90%]'
+          ? 'flex-row-reverse p-3 rounded-xl bg-card border border-border-strong shadow-xs'
+          : 'flex-row p-1 bg-transparent border-none shadow-none',        'max-w-[90%]'
       ]"
     >
       <!-- Avatar Column -->
@@ -130,7 +129,7 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
           <button
             v-for="resource in resources"
             :key="resource.id"
-            class="flex items-center gap-2 rounded-lg border border-border-subtle bg-white dark:bg-white/5 px-2.5 py-1.5 text-[12px] font-medium hover:bg-accent transition-all shadow-xs"
+            class="flex items-center gap-2 rounded-lg border border-border-subtle bg-card px-2.5 py-1.5 text-[12px] font-medium hover:bg-accent transition-all shadow-xs"
             @click="emit('open-resource', resource.id)"
           >
             <FolderOpen v-if="resource.kind === 'folder'" :size="13" class="text-text-tertiary" />

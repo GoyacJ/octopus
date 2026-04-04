@@ -1,9 +1,13 @@
 import { defineStore } from 'pinia'
 
+import { enumLabel, resolveRunDisplayValue } from '@/i18n/copy'
+
 import type {
+  CreateRuntimeSessionInput,
   Message,
   PermissionMode,
   ProviderConfig,
+  ResolveRuntimeApprovalInput,
   RuntimeApprovalRequest,
   RuntimeDecisionAction,
   RuntimeEventEnvelope,
@@ -12,6 +16,7 @@ import type {
   RuntimeSessionDetail,
   RuntimeSessionSummary,
   RuntimeTraceItem,
+  SubmitRuntimeTurnInput,
   ToolCatalogKind,
 } from '@octopus/schema'
 
@@ -24,17 +29,9 @@ import {
   submitRuntimeUserTurn,
 } from '@/tauri/client'
 
-interface EnsureRuntimeSessionInput {
-  conversationId: string
-  projectId: string
-  title: string
-  workingDir?: string
-}
+type EnsureRuntimeSessionInput = CreateRuntimeSessionInput
 
-interface RuntimeSubmitTurnInput {
-  content: string
-  modelId: string
-  permissionMode: PermissionMode
+type RuntimeSubmitTurnInput = SubmitRuntimeTurnInput & {
   actorLabel: string
 }
 
@@ -135,6 +132,24 @@ export const useRuntimeStore = defineStore('runtime', {
     pendingApproval(): RuntimeApprovalRequest | null {
       return this.activeSession?.pendingApproval ?? null
     },
+    activeRunStatusLabel(): string {
+      const status = this.activeRun?.status
+      if (!status) {
+        return 'N/A'
+      }
+
+      try {
+        return enumLabel('runStatus', status)
+      } catch {
+        return status
+      }
+    },
+    activeRunCurrentStepLabel(): string {
+      return resolveRunDisplayValue(this.activeRun?.currentStep)
+    },
+    activeRunNextActionLabel(): string {
+      return resolveRunDisplayValue(this.activeRun?.nextAction)
+    },
     activeQueue(state): RuntimeQueueItem[] {
       return state.activeSessionId ? state.queuedTurns[state.activeSessionId] ?? [] : []
     },
@@ -207,12 +222,7 @@ export const useRuntimeStore = defineStore('runtime', {
       }
 
       try {
-        const detail = await createRuntimeSession(
-          input.conversationId,
-          input.projectId,
-          input.title,
-          input.workingDir,
-        )
+        const detail = await createRuntimeSession(input)
         this.setActiveSession(detail)
         return detail
       } catch (error) {
@@ -283,12 +293,11 @@ export const useRuntimeStore = defineStore('runtime', {
       this.error = ''
 
       try {
-        const run = await submitRuntimeUserTurn(
-          this.activeSessionId,
-          trimmed,
-          input.modelId,
-          input.permissionMode,
-        )
+        const run = await submitRuntimeUserTurn(this.activeSessionId, {
+          content: trimmed,
+          modelId: input.modelId,
+          permissionMode: input.permissionMode,
+        })
 
         const activeSession = this.activeSession
         if (activeSession) {
@@ -424,7 +433,8 @@ export const useRuntimeStore = defineStore('runtime', {
       this.error = ''
 
       try {
-        await resolveRuntimeApproval(this.activeSessionId, this.pendingApproval.id, decision)
+        const input: ResolveRuntimeApprovalInput = { decision }
+        await resolveRuntimeApproval(this.activeSessionId, this.pendingApproval.id, input)
         const activeSession = this.activeSession
         if (activeSession) {
           this.cacheSessionDetail({

@@ -11,7 +11,6 @@ import {
   UiSectionHeading,
 } from '@octopus/ui'
 
-import { resolveMockField } from '@/i18n/copy'
 import { getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -22,7 +21,7 @@ const workbench = useWorkbenchStore()
 
 const workspaceName = computed(() =>
   workbench.activeWorkspace
-    ? resolveMockField('workspace', workbench.activeWorkspace.id, 'name', workbench.activeWorkspace.name)
+    ? workbench.workspaceDisplayName(workbench.activeWorkspace.id)
     : t('common.na'),
 )
 
@@ -139,7 +138,7 @@ watch(
 
     <!-- Overview Hero Area -->
     <div class="px-2">
-      <div class="flex flex-col md:flex-row md:items-start justify-between gap-6 bg-subtle/30 rounded-lg border border-border-subtle p-6">
+      <div class="flex flex-col md:flex-row md:items-start justify-between gap-6 bg-subtle/30 rounded-lg border border-border-subtle dark:border-white/[0.08] p-6">
         <div class="space-y-4">
           <div class="flex flex-wrap gap-2">
             <UiBadge :label="workspaceName" tone="info" subtle />
@@ -192,10 +191,10 @@ watch(
     </div>
 
     <!-- Main Content Split View -->
-    <div class="flex flex-1 min-h-0 gap-8 px-2 border-t border-border-subtle pt-8">
+    <div class="flex flex-1 min-h-0 gap-8 px-2 border-t border-border-subtle dark:border-white/[0.05] pt-8">
       
       <!-- Left: Navigation Sidebar -->
-      <aside class="w-64 shrink-0 border-r border-border-subtle pr-8">
+      <aside class="w-64 shrink-0 border-r border-border-subtle dark:border-white/[0.05] pr-8">
         <h3 class="text-sm font-bold text-text-primary mb-4">{{ t('userCenter.nav.title') }}</h3>
         <nav class="flex flex-col gap-1">
           <RouterLink

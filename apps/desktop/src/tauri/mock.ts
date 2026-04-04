@@ -13,10 +13,11 @@ import type {
 } from '@octopus/schema'
 
 import {
-  fallbackBackendConnection,
-  fallbackHostState,
-  loadStoredPreferences,
-} from './shared'
+  createFallbackBackendConnection,
+  createFallbackHostState,
+} from '@octopus/schema'
+
+import { loadStoredPreferences } from './shared'
 
 function buildMockRuntimeBootstrap(): RuntimeBootstrap {
   return {
@@ -116,15 +117,15 @@ export function resolveMockShellBootstrap(
   mockConnections: ConnectionProfile[],
 ): ShellBootstrap {
   return {
-    hostState: fallbackHostState(),
+    hostState: createFallbackHostState(),
     preferences: loadStoredPreferences(defaultWorkspaceId, defaultProjectId),
     connections: mockConnections,
-    backend: fallbackBackendConnection(),
+    backend: createFallbackBackendConnection(),
   }
 }
 
 export function resolveMockRuntimeBackendConnection(): HostBackendConnection | undefined {
-  return shouldUseMockRuntime() ? undefined : fallbackBackendConnection('unavailable')
+  return shouldUseMockRuntime() ? undefined : createFallbackBackendConnection('unavailable')
 }
 
 export function bootstrapMockRuntime(): RuntimeBootstrap {

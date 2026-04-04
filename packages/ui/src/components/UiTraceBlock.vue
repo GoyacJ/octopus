@@ -20,11 +20,11 @@ const props = withDefaults(
 <template>
   <article 
     :class="cn(
-      'flex flex-col gap-1.5 p-3 rounded-md border border-border-subtle bg-background transition-colors',
+      'flex flex-col gap-1.5 p-3 rounded-md border border-border dark:border-white/[0.03] transition-colors',
       props.tone === 'success' && 'border-status-success/30',
       props.tone === 'warning' && 'border-status-warning/30',
       props.tone === 'error' && 'border-status-error/30',
-      props.tone === 'info' && 'border-primary/30',
+      props.tone === 'info' && 'border-primary/30 dark:border-primary/20',
       props.class
     )"
   >

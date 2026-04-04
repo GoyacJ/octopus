@@ -19,6 +19,7 @@
     "confirm": "Confirm",
     "save": "Save",
     "edit": "Edit",
+    "delete": "Delete",
     "mockSave": "Mock Save",
     "createProjectCopy": "Create Project Copy",
     "goal": "Goal",
@@ -496,6 +497,25 @@
       "unknown": "Unknown"
     }
   },
+  "runtime": {
+    "run": {
+      "idle": "Idle",
+      "awaitingInput": "Awaiting input",
+      "waitingApproval": "Waiting for approval",
+      "awaitingApproval": "Awaiting approval decision",
+      "completed": "Completed",
+      "resuming": "Resuming after approval",
+      "blocked": "Blocked",
+      "manualRecovery": "Manual recovery required",
+      "ingestingConstraints": "Ingesting conversation constraints",
+      "awaitingFollowUp": "Awaiting follow-up input",
+      "rolledBackToCheckpoint": "Rolled back to the selected checkpoint",
+      "pausedByUser": "Paused by user",
+      "resumedFromCheckpoint": "Resumed from checkpoint",
+      "approvalReceived": "Approval received and execution resumed",
+      "reroutedAfterRejection": "Rerouted after rejection"
+    }
+  },
   "trace": {
     "header": {
       "eyebrow": "Trace",
@@ -775,11 +795,52 @@
     }
   },
   "agents": {
+    "header": {
+      "title": "Agents & Teams",
+      "subtitleProject": "Manage agents and team collaboration for this project.",
+      "subtitleWorkspace": "Manage your workspace-level agents and team configurations."
+    },
+    "tabs": {
+      "agents": "Agents",
+      "teams": "Teams"
+    },
+    "actions": {
+      "new": "New",
+      "addAgent": "New Agent",
+      "addTeam": "New Team",
+      "filter": "Filter",
+      "sort": "Sort",
+      "searchPlaceholder": "Search by name, role or description…"
+    },
+    "view": {
+      "gallery": "Gallery View",
+      "list": "List View"
+    },
     "list": {
       "title": "Agent List",
       "subtitle": "Manage personal and workspace agent capabilities.",
       "emptyTitle": "No agents yet",
-      "emptyDescription": "No reusable agents have been configured yet."
+      "emptyDescription": "No reusable agents have been configured yet.",
+      "columns": {
+        "name": "Name",
+        "role": "Role",
+        "status": "Status",
+        "tags": "Tags",
+        "actions": "Actions"
+      }
+    },
+    "dialog": {
+      "createTitle": "Create Agent",
+      "editTitle": "Agent Details",
+      "name": "Name",
+      "namePlaceholder": "Agent name",
+      "role": "Role",
+      "rolePlaceholder": "e.g. Frontend Expert",
+      "model": "Model",
+      "tags": "Tags",
+      "tagsPlaceholder": "Add tags...",
+      "description": "Description",
+      "descriptionPlaceholder": "What does this agent do?"
     }
   },
   "automations": {
@@ -832,6 +893,20 @@
     "automation": {
       "auto-launch-daily": {
         "description": "Run the launch readiness automation every day."
+      }
+    },
+    "run": {
+      "run-redesign": {
+        "currentStep": "Awaiting permission to write shared artifacts",
+        "nextAction": "Approve the review request to continue the execution chain."
+      },
+      "run-governance": {
+        "currentStep": "Syncing audit and settings panels",
+        "nextAction": "Review policy copy and confirm labels."
+      },
+      "run-launch": {
+        "currentStep": "Waiting on budget approval for final sign-off",
+        "nextAction": "Resolve the blocking inbox item and rerun the checklist."
       }
     },
     "connection": {

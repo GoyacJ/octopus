@@ -42,8 +42,8 @@ function emitClick(event: MouseEvent | KeyboardEvent) {
       props.layout === 'tile' && 'gap-3 p-4',
       props.layout === 'compact' && 'gap-1.5 p-2',
       props.active
-        ? 'is-active border-border-strong bg-accent/80'
-        : 'border-border-subtle bg-background',
+        ? 'is-active border-border/60 dark:border-white/[0.08] bg-accent/80'
+        : 'border-border/40 dark:border-white/[0.08] bg-background',
       props.interactive && !props.active && 'cursor-pointer hover:bg-accent/40',
       props.class,
     )"
@@ -90,7 +90,7 @@ function emitClick(event: MouseEvent | KeyboardEvent) {
 
     <div
       v-if="$slots.meta || $slots.actions"
-      class="flex flex-col gap-2 pt-2 mt-auto border-t border-border-subtle/50 sm:flex-row sm:items-center sm:justify-between"
+      class="flex flex-col gap-2 pt-2 mt-auto border-t border-border/20 dark:border-white/[0.05] sm:flex-row sm:items-center sm:justify-between"
     >
       <div v-if="$slots.meta" class="flex min-w-0 flex-wrap items-center gap-2">
         <slot name="meta" />

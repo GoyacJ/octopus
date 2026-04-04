@@ -49,8 +49,8 @@ defineSlots<{
         'rounded-[calc(var(--radius-lg)+2px)] border transition-all duration-fast ease-apple',
         props.density === 'rail' ? 'w-full max-w-[3.25rem]' : '',
         item.active
-          ? 'is-active border-primary/30 bg-primary/[0.08] shadow-sm'
-          : 'border-border/80 bg-[color-mix(in_srgb,var(--bg-surface)_94%,transparent)] hover:border-border-strong hover:shadow-sm',
+          ? 'is-active border-primary/30 dark:border-white/[0.05] bg-primary/[0.08] shadow-sm'
+          : 'border-transparent dark:border-transparent bg-[color-mix(in_srgb,var(--bg-surface)_94%,transparent)] hover:border-border/60 dark:hover:border-white/[0.05] hover:shadow-sm',
       )"
     >
       <slot name="item" :item="item" :active="Boolean(item.active)" :select="() => emit('select', item.id)" :density="props.density">

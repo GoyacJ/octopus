@@ -8,12 +8,12 @@ const surfaceVariants = cva(
   {
     variants: {
       variant: {
-        flat: 'bg-transparent shadow-none border-transparent',
-        raised: 'bg-white dark:bg-white/5 border border-border-subtle shadow-xs rounded-md',
-        overlay: 'bg-popover border border-border-strong shadow-lg rounded-lg ring-1 ring-black/5',
-        panel: 'border border-border-subtle bg-subtle/30 dark:bg-white/5 rounded-md',
-        interactive: 'border border-border-subtle bg-white dark:bg-white/5 shadow-xs hover:border-border-strong hover:bg-accent rounded-md active:scale-[0.995]',
-        subtle: 'bg-subtle dark:bg-white/[0.02] border-transparent shadow-none rounded-md',
+        flat: 'bg-transparent shadow-none border-none',
+        raised: 'bg-white dark:bg-white/[0.03] border border-border dark:border-white/[0.04] shadow-xs rounded-lg',
+        overlay: 'bg-popover border border-border/50 dark:border-white/[0.04] shadow-md rounded-lg',
+        panel: 'bg-subtle/40 dark:bg-white/[0.02] border-none rounded-lg',
+        interactive: 'bg-white dark:bg-white/[0.03] border border-border dark:border-white/[0.04] shadow-xs hover:border-border/50 hover:bg-accent rounded-lg active:scale-[0.995]',
+        subtle: 'bg-subtle/50 dark:bg-white/[0.01] border-none shadow-none rounded-lg',
       },
       padding: {
         none: 'p-0',

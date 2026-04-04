@@ -14,7 +14,7 @@ const props = defineProps<{
 <template>
   <article 
     :class="cn(
-      'flex flex-col gap-2 p-3 rounded-md border border-border-subtle bg-background transition-all hover:border-border-strong',
+      'flex flex-col gap-2 p-3 rounded-md border border-border/40 dark:border-white/[0.08] bg-background transition-all hover:border-border/60',
       props.class
     )"
   >
@@ -29,7 +29,7 @@ const props = defineProps<{
       {{ props.excerpt }}
     </p>
     
-    <footer class="flex items-center justify-between gap-4 pt-1 mt-auto border-t border-border-subtle/50 pt-2">
+    <footer class="flex items-center justify-between gap-4 pt-1 mt-auto border-t border-border/20 dark:border-white/[0.05] pt-2">
       <span class="text-[11px] font-medium text-text-tertiary">{{ props.statusLabel }}</span>
       <div v-if="$slots.actions" class="flex items-center gap-1.5">
         <slot name="actions" />

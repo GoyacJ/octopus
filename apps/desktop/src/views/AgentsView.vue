@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { LayoutGrid, List, Plus, Search, Filter, ArrowUpDown } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { LayoutGrid, List, Plus, Search, Filter, ArrowUpDown, Bot, Users, MoreHorizontal } from 'lucide-vue-next'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -14,10 +14,12 @@ import {
   UiSelect,
   UiSurface,
   UiTextarea,
+  UiDropdownMenu,
+  type UiMenuItem
 } from '@octopus/ui'
 import type { Agent, Team } from '@octopus/schema'
 
-import { enumLabel, resolveMockField } from '@/i18n/copy'
+import { enumLabel } from '@/i18n/copy'
 import { usePagination } from '@/composables/usePagination'
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -30,22 +32,45 @@ const workbench = useWorkbenchStore()
 const isProjectScope = computed(() => route.name === 'project-agents')
 const searchQuery = ref('')
 const activeTab = ref<'agent' | 'team'>(route.query.kind === 'team' ? 'team' : 'agent')
-const viewMode = ref<'icon' | 'list'>('icon')
+const viewMode = ref<'gallery' | 'list'>('gallery')
 const dialogMode = ref<'create' | 'edit' | null>(null)
 const editingId = ref('')
 
 const allAgents = computed(() => isProjectScope.value ? [...workbench.projectReferencedAgents, ...workbench.projectOwnedAgents] : workbench.workspaceLevelAgents)
 const allTeams = computed(() => isProjectScope.value ? [...workbench.projectReferencedTeams, ...workbench.projectOwnedTeams] : workbench.workspaceLevelTeams)
 
-const filteredAgents = computed(() => allAgents.value.filter(a => 
-  !searchQuery.value || resolveMockField('agent', a.id, 'name', a.name).toLowerCase().includes(searchQuery.value.toLowerCase())
+const filteredAgents = computed(() => allAgents.value.filter((agent) =>
+  !searchQuery.value
+  || workbench.agentDisplayName(agent.id).toLowerCase().includes(searchQuery.value.toLowerCase())
+  || (agent.role && workbench.agentDisplayRole(agent.id).toLowerCase().includes(searchQuery.value.toLowerCase()))
+))
+
+const filteredTeams = computed(() => allTeams.value.filter((team) =>
+  !searchQuery.value
+  || workbench.teamDisplayName(team.id).toLowerCase().includes(searchQuery.value.toLowerCase())
 ))
 
 const { pagedItems: pagedAgents, currentPage: agentPage, pageCount: agentPageCount, setPage: setAgentPage } = usePagination(filteredAgents, { pageSize })
+const { pagedItems: pagedTeams, currentPage: teamPage, pageCount: teamPageCount, setPage: setTeamPage } = usePagination(filteredTeams, { pageSize })
+
+const addItems: UiMenuItem[] = [
+  { key: 'agent', label: t('agents.actions.addAgent') },
+  { key: 'team', label: t('agents.actions.addTeam') },
+]
 
 async function setActiveTab(tab: 'agent' | 'team') {
   activeTab.value = tab
   await router.replace({ query: { ...route.query, kind: tab === 'team' ? 'team' : undefined } })
+}
+
+function handleAdd(key: string) {
+  if (key === 'agent') {
+    activeTab.value = 'agent'
+    openCreateDialog()
+  } else {
+    activeTab.value = 'team'
+    openCreateDialog()
+  }
 }
 
 function openCreateDialog() {
@@ -61,146 +86,313 @@ function openEditDialog(id: string) {
 <template>
   <div class="flex flex-col gap-8 pb-20">
     <!-- Notion Style Page Header -->
-    <header class="space-y-4 px-2">
+    <header class="space-y-4 px-2 pt-4">
       <div class="flex items-center gap-3">
-        <div class="p-2 bg-primary/10 rounded-lg text-primary">
+        <div class="p-2.5 bg-primary/10 rounded-xl text-primary shadow-sm">
           <Bot v-if="activeTab === 'agent'" :size="32" />
           <Users v-else :size="32" />
         </div>
         <div>
-          <h1 class="text-3xl font-bold text-text-primary">{{ activeTab === 'agent' ? 'Agents' : 'Teams' }}</h1>
-          <p class="text-text-secondary">{{ isProjectScope ? 'Manage agents for this project' : 'Manage your workspace agents' }}</p>
+          <h1 class="text-3xl font-bold text-text-primary tracking-tight">{{ t('agents.header.title') }}</h1>
+          <p class="text-text-secondary font-medium">{{ isProjectScope ? t('agents.header.subtitleProject') : t('agents.header.subtitleWorkspace') }}</p>
         </div>
       </div>
 
       <!-- Simple Filter Bar -->
-      <div class="flex items-center justify-between border-y border-border-subtle py-2">
+      <div class="flex items-center justify-between border-y border-border-subtle dark:border-white/[0.05] py-2">
         <div class="flex items-center gap-1">
           <UiButton 
             variant="ghost" 
             size="sm" 
-            :class="activeTab === 'agent' ? 'bg-accent font-medium' : ''"
+            :class="activeTab === 'agent' ? 'bg-accent font-semibold text-text-primary' : 'text-text-secondary'"
             @click="setActiveTab('agent')"
           >
-            Agents
+            {{ t('agents.tabs.agents') }}
           </UiButton>
           <UiButton 
             variant="ghost" 
             size="sm" 
-            :class="activeTab === 'team' ? 'bg-accent font-medium' : ''"
+            :class="activeTab === 'team' ? 'bg-accent font-semibold text-text-primary' : 'text-text-secondary'"
             @click="setActiveTab('team')"
           >
-            Teams
+            {{ t('agents.tabs.teams') }}
           </UiButton>
         </div>
 
         <div class="flex items-center gap-2">
-          <div class="relative w-48">
-            <Search :size="14" class="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" />
-            <UiInput v-model="searchQuery" placeholder="Search..." class="pl-8 h-7 text-xs bg-transparent border-none shadow-none focus:bg-accent" />
+          <div class="flex items-center gap-1 bg-subtle p-0.5 rounded-md border border-border-subtle dark:border-white/[0.05] mr-2">
+            <button 
+              class="p-1.5 rounded transition-colors" 
+              :class="viewMode === 'gallery' ? 'bg-background shadow-sm text-primary' : 'text-text-tertiary hover:text-text-secondary'"
+              :title="t('agents.view.gallery')"
+              @click="viewMode = 'gallery'"
+            >
+              <LayoutGrid :size="14" />
+            </button>
+            <button 
+              class="p-1.5 rounded transition-colors" 
+              :class="viewMode === 'list' ? 'bg-background shadow-sm text-primary' : 'text-text-tertiary hover:text-text-secondary'"
+              :title="t('agents.view.list')"
+              @click="viewMode = 'list'"
+            >
+              <List :size="14" />
+            </button>
           </div>
-          <UiButton variant="ghost" size="sm" class="h-7 text-xs gap-1.5">
+
+          <div class="relative w-64 group">
+            <Search :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary group-focus-within:text-primary transition-colors z-10" />
+            <UiInput 
+              v-model="searchQuery" 
+              :placeholder="t('agents.actions.searchPlaceholder')" 
+              class="pl-9 h-8 text-xs bg-subtle border-none shadow-none focus:bg-accent transition-all focus:ring-1 focus:ring-primary/20" 
+            />
+          </div>
+          
+          <UiButton variant="ghost" size="sm" class="h-8 text-xs gap-1.5 text-text-secondary">
             <Filter :size="14" />
-            <span>Filter</span>
+            <span>{{ t('agents.actions.filter') }}</span>
           </UiButton>
-          <UiButton variant="ghost" size="sm" class="h-7 text-xs gap-1.5">
+          
+          <UiButton variant="ghost" size="sm" class="h-8 text-xs gap-1.5 text-text-secondary">
             <ArrowUpDown :size="14" />
-            <span>Sort</span>
+            <span>{{ t('agents.actions.sort') }}</span>
           </UiButton>
+          
           <div class="w-px h-4 bg-border-subtle mx-1"></div>
-          <UiButton variant="primary" size="sm" class="h-7 px-3 gap-1.5" @click="openCreateDialog">
-            <Plus :size="14" />
-            <span>New</span>
-          </UiButton>
+          
+          <UiDropdownMenu :items="addItems" align="end" @select="handleAdd">
+            <template #trigger>
+              <UiButton variant="primary" size="sm" class="h-8 px-3 gap-1.5 shadow-sm">
+                <Plus :size="14" />
+                <span>{{ t('agents.actions.new') }}</span>
+              </UiButton>
+            </template>
+          </UiDropdownMenu>
         </div>
       </div>
     </header>
 
-    <!-- Gallery View -->
+    <!-- Content Area -->
     <main class="px-2">
-      <div v-if="activeTab === 'agent'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        <div 
-          v-for="agent in pagedAgents" 
-          :key="agent.id"
-          class="group flex flex-col border border-border-subtle rounded-lg bg-white hover:bg-accent/30 transition-all cursor-pointer overflow-hidden shadow-xs hover:shadow-sm"
-          @click="openEditDialog(agent.id)"
-        >
-          <!-- Card Content -->
-          <div class="p-4 space-y-3">
-            <div class="flex items-start justify-between">
-              <div class="flex h-10 w-10 items-center justify-center rounded-md bg-primary/5 text-primary text-xl font-bold">
-                {{ agent.avatar?.length < 3 ? agent.avatar : resolveMockField('agent', agent.id, 'name', agent.name).slice(0, 1) }}
+      <!-- Gallery View -->
+      <div v-if="viewMode === 'gallery'">
+        <div v-if="activeTab === 'agent'" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div 
+            v-for="agent in pagedAgents" 
+            :key="agent.id"
+            class="group flex flex-col border border-border-subtle dark:border-white/[0.08] rounded-xl bg-card hover:bg-accent/30 transition-all cursor-pointer overflow-hidden shadow-xs hover:shadow-md hover:-translate-y-0.5"
+            @click="openEditDialog(agent.id)"
+          >
+            <div class="p-5 space-y-4">
+              <div class="flex items-start justify-between">
+                <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/5 text-primary text-2xl font-bold shadow-inner">
+                  {{ workbench.actorDisplayInitial('agent', agent.id, agent.avatar, agent.name) }}
+                </div>
+                <UiBadge :label="enumLabel('runStatus', agent.status)" :variant="agent.status === 'running' ? 'primary' : 'outline'" subtle class="text-[10px] px-2 py-0.5" />
               </div>
-              <UiBadge :label="agent.status" subtle class="text-[10px]" />
-            </div>
-            
-            <div class="space-y-1">
-              <h3 class="font-bold text-text-primary truncate">{{ resolveMockField('agent', agent.id, 'name', agent.name) }}</h3>
-              <p class="text-xs text-text-secondary font-medium">{{ agent.title || resolveMockField('agent', agent.id, 'role', agent.role) }}</p>
-            </div>
-            
-            <p class="text-xs text-text-tertiary line-clamp-2 leading-relaxed min-h-[32px]">
-              {{ agent.description || agent.summary }}
-            </p>
+              
+              <div class="space-y-1.5">
+                <h3 class="font-bold text-text-primary truncate text-base">{{ workbench.agentDisplayName(agent.id) }}</h3>
+                <p class="text-xs text-text-secondary font-semibold uppercase tracking-wider">{{ agent.role ? workbench.agentDisplayRole(agent.id) : 'Standard Agent' }}</p>
+              </div>
+              
+              <p class="text-sm text-text-tertiary line-clamp-2 leading-relaxed min-h-[40px]">
+                {{ agent.description || agent.summary || 'No description provided.' }}
+              </p>
 
-            <div class="flex flex-wrap gap-1 pt-1">
-              <span v-for="tag in agent.skillTags.slice(0, 3)" :key="tag" class="px-1.5 py-0.5 bg-subtle text-[10px] rounded text-text-secondary">
-                {{ tag }}
-              </span>
+              <div class="flex flex-wrap gap-1.5 pt-1">
+                <span v-for="tag in agent.skillTags.slice(0, 3)" :key="tag" class="px-2 py-0.5 bg-secondary/50 text-[10px] font-medium rounded-full text-text-secondary border border-border-subtle/50">
+                  {{ tag }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div 
+            v-for="team in pagedTeams" 
+            :key="team.id"
+            class="group flex flex-col border border-border-subtle dark:border-white/[0.08] rounded-xl bg-card hover:bg-accent/30 transition-all cursor-pointer overflow-hidden shadow-xs hover:shadow-md hover:-translate-y-0.5"
+            @click="openEditDialog(team.id)"
+          >
+            <div class="p-5 space-y-4">
+              <div class="flex items-start justify-between">
+                <div class="flex h-12 w-12 items-center justify-center rounded-lg bg-primary/5 text-primary text-2xl font-bold shadow-inner">
+                  {{ workbench.actorDisplayInitial('team', team.id, team.avatar, team.name) }}
+                </div>
+                <div class="flex -space-x-2">
+                  <div v-for="i in 3" :key="i" class="w-6 h-6 rounded-full bg-accent border-2 border-card flex items-center justify-center text-[8px] font-bold">
+                    {{ i }}
+                  </div>
+                </div>
+              </div>
+              
+              <div class="space-y-1.5">
+                <h3 class="font-bold text-text-primary truncate text-base">{{ workbench.teamDisplayName(team.id) }}</h3>
+                <p class="text-xs text-text-secondary font-semibold uppercase tracking-wider">{{ enumLabel('teamMode', team.mode) }}</p>
+              </div>
+              
+              <p class="text-sm text-text-tertiary line-clamp-2 leading-relaxed min-h-[40px]">
+                {{ team.description || 'Collaborative intelligence squad.' }}
+              </p>
             </div>
           </div>
         </div>
       </div>
 
+      <!-- List View -->
+      <div v-else class="border border-border-subtle dark:border-white/[0.05] rounded-xl overflow-hidden bg-card">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-subtle/50 text-[11px] font-bold uppercase tracking-wider text-text-tertiary border-b border-border-subtle dark:border-white/[0.05]">
+              <th class="px-4 py-3">{{ t('agents.list.columns.name') }}</th>
+              <th class="px-4 py-3">{{ t('agents.list.columns.role') }}</th>
+              <th class="px-4 py-3">{{ t('agents.list.columns.status') }}</th>
+              <th class="px-4 py-3">{{ t('agents.list.columns.tags') }}</th>
+              <th class="px-4 py-3 text-right">{{ t('agents.list.columns.actions') }}</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border-subtle dark:divide-white/[0.05]">
+            <template v-if="activeTab === 'agent'">
+              <tr 
+                v-for="agent in pagedAgents" 
+                :key="agent.id"
+                class="group hover:bg-accent/20 cursor-pointer transition-colors"
+                @click="openEditDialog(agent.id)"
+              >
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-3">
+                    <div class="flex h-8 w-8 items-center justify-center rounded bg-primary/5 text-primary text-sm font-bold">
+                      {{ workbench.actorDisplayInitial('agent', agent.id, agent.avatar, agent.name) }}
+                    </div>
+                    <span class="font-semibold text-text-primary">{{ workbench.agentDisplayName(agent.id) }}</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-sm text-text-secondary">
+                  {{ agent.role ? workbench.agentDisplayRole(agent.id) : '—' }}
+                </td>
+                <td class="px-4 py-3">
+                  <UiBadge :label="enumLabel('runStatus', agent.status)" :variant="agent.status === 'running' ? 'primary' : 'outline'" subtle class="text-[10px]" />
+                </td>
+                <td class="px-4 py-3">
+                  <div class="flex gap-1">
+                    <span v-for="tag in agent.skillTags.slice(0, 2)" :key="tag" class="px-1.5 py-0.5 bg-subtle text-[10px] rounded text-text-tertiary border border-border-subtle/30">
+                      {{ tag }}
+                    </span>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <button class="p-1 rounded hover:bg-accent text-text-tertiary opacity-0 group-hover:opacity-100 transition-all">
+                    <MoreHorizontal :size="14" />
+                  </button>
+                </td>
+              </tr>
+            </template>
+            <template v-else>
+              <tr 
+                v-for="team in pagedTeams" 
+                :key="team.id"
+                class="group hover:bg-accent/20 cursor-pointer transition-colors"
+                @click="openEditDialog(team.id)"
+              >
+                <td class="px-4 py-3">
+                  <div class="flex items-center gap-3">
+                    <div class="flex h-8 w-8 items-center justify-center rounded bg-primary/5 text-primary text-sm font-bold">
+                      {{ workbench.actorDisplayInitial('team', team.id, team.avatar, team.name) }}
+                    </div>
+                    <span class="font-semibold text-text-primary">{{ workbench.teamDisplayName(team.id) }}</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-sm text-text-secondary">
+                  {{ enumLabel('teamMode', team.mode) }}
+                </td>
+                <td class="px-4 py-3">
+                  <UiBadge label="Active" variant="outline" subtle class="text-[10px]" />
+                </td>
+                <td class="px-4 py-3 text-text-tertiary text-xs">
+                  Collaborative Intelligence
+                </td>
+                <td class="px-4 py-3 text-right">
+                  <button class="p-1 rounded hover:bg-accent text-text-tertiary opacity-0 group-hover:opacity-100 transition-all">
+                    <MoreHorizontal :size="14" />
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
       <!-- Pagination -->
-      <div v-if="activeTab === 'agent' && agentPageCount > 1" class="mt-8 flex justify-center">
-        <UiPagination :page="agentPage" :page-count="agentPageCount" @update:page="setAgentPage" />
+      <div class="mt-8 flex justify-center">
+        <UiPagination 
+          v-if="activeTab === 'agent' && agentPageCount > 1" 
+          :page="agentPage" 
+          :page-count="agentPageCount" 
+          @update:page="setAgentPage" 
+        />
+        <UiPagination 
+          v-if="activeTab === 'team' && teamPageCount > 1" 
+          :page="teamPage" 
+          :page-count="teamPageCount" 
+          @update:page="setTeamPage" 
+        />
       </div>
     </main>
   </div>
 
-  <!-- Agent Dialog (Notion Style Side Peek or Dialog) -->
+  <!-- Agent Dialog -->
   <UiDialog
     v-model:open="dialogMode"
-    :title="dialogMode === 'create' ? 'Create Agent' : 'Agent Details'"
+    :title="dialogMode === 'create' ? t('agents.dialog.createTitle') : t('agents.dialog.editTitle')"
     class="max-w-2xl"
   >
     <div class="space-y-6">
-      <div class="flex items-center gap-6 pb-6 border-b border-border-subtle">
-        <div class="flex h-20 w-20 items-center justify-center rounded-xl bg-primary/5 text-primary text-3xl font-bold">
-          AG
+      <div class="flex items-center gap-6 pb-6 border-b border-border-subtle dark:border-white/[0.05]">
+        <div class="flex h-20 w-20 items-center justify-center rounded-xl bg-primary/5 text-primary text-3xl font-bold shadow-inner">
+          {{ activeTab === 'agent' ? 'AG' : 'TM' }}
         </div>
         <div class="flex-1 space-y-4">
-          <UiField label="Name">
-            <UiInput placeholder="Agent name" class="text-lg font-bold h-10" />
+          <UiField :label="t('agents.dialog.name')">
+            <UiInput :placeholder="t('agents.dialog.namePlaceholder')" class="text-lg font-bold h-10 bg-subtle border-none" />
           </UiField>
         </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
-        <UiField label="Role">
-          <UiInput placeholder="e.g. Frontend Expert" />
+        <UiField :label="t('agents.dialog.role')">
+          <UiInput :placeholder="t('agents.dialog.rolePlaceholder')" class="bg-subtle border-none" />
         </UiField>
-        <UiField label="Model">
-          <UiSelect :options="[{label: 'GPT-4o', value: 'gpt-4o'}]" />
+        <UiField :label="t('agents.dialog.model')">
+          <UiSelect :options="[{label: 'GPT-4o', value: 'gpt-4o'}]" class="bg-subtle border-none" />
         </UiField>
-        <UiField label="Tags" class="md:col-span-2">
-          <UiInput placeholder="Add tags..." />
+        <UiField :label="t('agents.dialog.tags')" class="md:col-span-2">
+          <UiInput :placeholder="t('agents.dialog.tagsPlaceholder')" class="bg-subtle border-none" />
         </UiField>
-        <UiField label="Description" class="md:col-span-2">
-          <UiTextarea :rows="4" placeholder="What does this agent do?" />
+        <UiField :label="t('agents.dialog.description')" class="md:col-span-2">
+          <UiTextarea :rows="4" :placeholder="t('agents.dialog.descriptionPlaceholder')" class="bg-subtle border-none resize-none" />
         </UiField>
       </div>
     </div>
     
     <template #footer>
       <div class="flex justify-between w-full">
-        <UiButton variant="ghost" class="text-destructive hover:bg-destructive/10">Delete</UiButton>
+        <UiButton variant="ghost" class="text-destructive hover:bg-destructive/10">{{ t('common.delete') }}</UiButton>
         <div class="flex gap-2">
-          <UiButton variant="ghost" @click="dialogMode = null">Cancel</UiButton>
-          <UiButton variant="primary">Save Changes</UiButton>
+          <UiButton variant="ghost" @click="dialogMode = null">{{ t('common.cancel') }}</UiButton>
+          <UiButton variant="primary" class="shadow-sm">{{ t('common.confirm') }}</UiButton>
         </div>
       </div>
     </template>
   </UiDialog>
 </template>
+
+<style scoped>
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+</style>

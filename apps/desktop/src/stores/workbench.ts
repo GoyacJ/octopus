@@ -5,6 +5,7 @@ import {
   type AgentAssetKind,
   type Artifact,
   type BuiltinToolDefinition,
+  createConnectionProfile,
   type ConnectionProfile,
   type Conversation,
   type ConversationActorKind,
@@ -17,6 +18,8 @@ import {
   type DashboardMetric,
   type DashboardSnapshot,
   type DecisionAction,
+  type DesktopSettingsSection,
+  type DesktopSettingsTab,
   type InboxItem,
   type KnowledgeEntry,
   type McpToolDefinition,
@@ -26,6 +29,7 @@ import {
   type MessageUsage,
   type MenuNode,
   type PermissionMode,
+  createWorkspaceRecord,
   type PetMessage,
   type PetMotionState,
   type PetPresenceState,
@@ -67,12 +71,25 @@ import {
   type WorkspaceToolStatus,
 } from '@octopus/schema'
 
-import { mockKey, resolveMockField, translate } from '@/i18n/copy'
+import { countLabel, mockKey, resolveCopy, resolveMockField, resolveRunDisplayValue, translate } from '@/i18n/copy'
 import { createMockWorkbenchSeed } from '@/mock/data'
 import { MENU_DEFINITIONS, USER_CENTER_MENU_IDS, buildWorkspaceMenuNodes, getAncestorMenuIds, getMenuDefinition } from '@/navigation/menuRegistry'
 
 function cloneSeed<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+function deriveWorkingDirFromResourceLocation(location?: string): string | undefined {
+  const trimmedLocation = location?.trim()
+  if (!trimmedLocation) {
+    return undefined
+  }
+
+  if (!trimmedLocation.startsWith('/')) {
+    return undefined
+  }
+
+  return trimmedLocation.replace(/\/[^/]+$/, '') || '/'
 }
 
 interface CreateProjectResourceOptions {
@@ -169,6 +186,7 @@ interface UpdateProjectDetailsPatch {
   goal?: string
   phase?: string
   summary?: string
+  workingDir?: string
 }
 
 function formatMetric(value: number): string {
@@ -1384,6 +1402,306 @@ export const useWorkbenchStore = defineStore('workbench', {
     activeConversation(state) {
       return state.conversations.find((conversation) => conversation.id === state.currentConversationId)
     },
+    workspaceDisplayName(state) {
+      return (workspaceId: string) => {
+        const workspace = state.workspaces.find((item) => item.id === workspaceId)
+        return workspace?.name ?? workspaceId
+      }
+    },
+    workspaceDisplayDescription(state) {
+      return (workspaceId: string) => {
+        const workspace = state.workspaces.find((item) => item.id === workspaceId)
+        return workspace?.description ?? ''
+      }
+    },
+    workspaceDisplayRoleSummary(state) {
+      return (workspaceId: string) => {
+        const workspace = state.workspaces.find((item) => item.id === workspaceId)
+        return workspace?.roleSummary ?? ''
+      }
+    },
+    workspaceDisplayMemberCountLabel(state) {
+      return (workspaceId: string) => {
+        const workspace = state.workspaces.find((item) => item.id === workspaceId)
+        return countLabel('common.members', workspace?.memberCount ?? 0)
+      }
+    },
+    settingsTabDisplayLabel() {
+      return (tab: DesktopSettingsTab) => resolveCopy(tab.label)
+    },
+    settingsSectionDisplayTitle() {
+      return (section: DesktopSettingsSection) => resolveCopy(section.title)
+    },
+    settingsSectionDisplayDescription() {
+      return (section: DesktopSettingsSection) => resolveCopy(section.description)
+    },
+    settingsSectionDisplayItems() {
+      return (section: DesktopSettingsSection) => section.items.map((item) => resolveCopy(item))
+    },
+    projectDisplayName(state) {
+      return (projectId: string) => {
+        const project = state.projects.find((item) => item.id === projectId)
+        return project?.name ?? projectId
+      }
+    },
+    projectDisplaySummary(state) {
+      return (projectId: string) => {
+        const project = state.projects.find((item) => item.id === projectId)
+        return project?.summary ?? ''
+      }
+    },
+    projectDisplayGoal(state) {
+      return (projectId: string) => {
+        const project = state.projects.find((item) => item.id === projectId)
+        return project?.goal ?? ''
+      }
+    },
+    projectDisplayPhase(state) {
+      return (projectId: string) => {
+        const project = state.projects.find((item) => item.id === projectId)
+        return project?.phase ?? ''
+      }
+    },
+    projectDisplayRecentDecision(state) {
+      return (projectId: string) => {
+        const project = state.projects.find((item) => item.id === projectId)
+        return project?.recentDecision ?? ''
+      }
+    },
+    projectDisplayArtifactCountLabel(state) {
+      return (projectId: string) => {
+        const project = state.projects.find((item) => item.id === projectId)
+        return countLabel('common.artifacts', project?.artifactIds.length ?? 0)
+      }
+    },
+    projectDisplayConversationCountLabel(state) {
+      return (projectId: string) => {
+        const project = state.projects.find((item) => item.id === projectId)
+        return countLabel('common.conversations', project?.conversationIds.length ?? 0)
+      }
+    },
+    teamDisplayName(state) {
+      return (teamId: string) => {
+        const team = state.teams.find((item) => item.id === teamId)
+        return team?.name ?? teamId
+      }
+    },
+    teamDisplayDescription(state) {
+      return (teamId: string) => {
+        const team = state.teams.find((item) => item.id === teamId)
+        return team?.description ?? ''
+      }
+    },
+    teamDisplayDefaultOutput(state) {
+      return (teamId: string) => {
+        const team = state.teams.find((item) => item.id === teamId)
+        return team?.defaultOutput ?? ''
+      }
+    },
+    teamDisplayProjectNotes(state) {
+      return (teamId: string) => {
+        const team = state.teams.find((item) => item.id === teamId)
+        return team?.projectNotes ?? ''
+      }
+    },
+    conversationDisplayTitle(state) {
+      return (conversationId: string) => {
+        const conversation = state.conversations.find((item) => item.id === conversationId)
+        return conversation?.title ?? conversationId
+      }
+    },
+    conversationDisplaySummary(state) {
+      return (conversationId: string) => {
+        const conversation = state.conversations.find((item) => item.id === conversationId)
+        return conversation?.summary ?? ''
+      }
+    },
+    conversationDisplayGoal(state) {
+      return (conversationId: string) => {
+        const conversation = state.conversations.find((item) => item.id === conversationId)
+        return conversation?.currentGoal ?? ''
+      }
+    },
+    conversationDisplayStatusNote(state) {
+      return (conversationId: string) => {
+        const conversation = state.conversations.find((item) => item.id === conversationId)
+        return resolveCopy(conversation?.statusNote)
+      }
+    },
+    conversationDisplayConstraints(state) {
+      return (conversationId: string) => {
+        const conversation = state.conversations.find((item) => item.id === conversationId)
+        return conversation?.constraints ?? []
+      }
+    },
+    agentDisplayName(state) {
+      return (agentId: string) => {
+        const agent = state.agents.find((item) => item.id === agentId)
+        return agent?.name ?? agentId
+      }
+    },
+    agentDisplayRole(state) {
+      return (agentId: string) => {
+        const agent = state.agents.find((item) => item.id === agentId)
+        return agent?.role ?? ''
+      }
+    },
+    actorDisplayName(state) {
+      return (kind: 'agent' | 'team', id: string, fallback = id) => {
+        if (kind === 'agent') {
+          return state.agents.find((item) => item.id === id)?.name ?? fallback
+        }
+        return state.teams.find((item) => item.id === id)?.name ?? fallback
+      }
+    },
+    actorDisplayInitial() {
+      return (kind: 'agent' | 'team', id: string, avatar?: string, fallback = id) => {
+        if (avatar && avatar.length < 3) {
+          return avatar
+        }
+        return this.actorDisplayName(kind, id, fallback).slice(0, 1)
+      }
+    },
+    conversationDefaultActorLabel() {
+      const actor = this.activeConversationDefaultActor
+      if (!actor) {
+        return 'Octopus'
+      }
+
+      return `默认智能体 · ${this.actorDisplayName(actor.actorKind, actor.actorId)}`
+    },
+    artifactDisplayTitle(state) {
+      return (artifactId: string) => {
+        const artifact = state.artifacts.find((item) => item.id === artifactId)
+        return artifact?.title ?? artifactId
+      }
+    },
+    artifactDisplayExcerpt(state) {
+      return (artifactId: string) => {
+        const artifact = state.artifacts.find((item) => item.id === artifactId)
+        return artifact?.excerpt ?? ''
+      }
+    },
+    artifactDisplayContent(state) {
+      return (artifactId: string) => {
+        const artifact = state.artifacts.find((item) => item.id === artifactId)
+        return artifact?.content ?? ''
+      }
+    },
+    artifactDisplayTypeLabel(state) {
+      return (artifactId: string) => {
+        const artifact = state.artifacts.find((item) => item.id === artifactId)
+        return artifact?.type ?? ''
+      }
+    },
+    knowledgeEntryDisplayTitle(state) {
+      return (entryId: string) => {
+        const entry = state.knowledge.find((item) => item.id === entryId)
+        return entry?.title ?? entryId
+      }
+    },
+    knowledgeEntryDisplaySummary(state) {
+      return (entryId: string) => {
+        const entry = state.knowledge.find((item) => item.id === entryId)
+        return entry?.summary ?? ''
+      }
+    },
+    projectResourceDisplayName(state) {
+      return (resourceId: string) => {
+        const resource = state.resources.find((item) => item.id === resourceId)
+        const artifact = state.artifacts.find((item) => item.id === resourceId)
+        return resource?.name ?? artifact?.title ?? resourceId
+      }
+    },
+    traceDisplayTitle(state) {
+      return (traceId: string) => {
+        const trace = state.traces.find((item) => item.id === traceId)
+        return trace?.title ?? traceId
+      }
+    },
+    traceDisplayDetail(state) {
+      return (traceId: string) => {
+        const trace = state.traces.find((item) => item.id === traceId)
+        return trace?.detail ?? ''
+      }
+    },
+    runDisplayTitle(state) {
+      return (runId: string) => {
+        const run = state.runs.find((item) => item.id === runId)
+        return run?.title ?? runId
+      }
+    },
+    runDisplayCurrentStep(state) {
+      return (runId: string) => {
+        const run = state.runs.find((item) => item.id === runId)
+        return resolveRunDisplayValue(run?.currentStep, { runId: run?.id, field: 'currentStep' })
+      }
+    },
+    runDisplayNextAction(state) {
+      return (runId: string) => {
+        const run = state.runs.find((item) => item.id === runId)
+        return resolveRunDisplayValue(run?.nextAction, { runId: run?.id, field: 'nextAction' })
+      }
+    },
+    runDisplayBlockers(state) {
+      return (runId: string) => {
+        const run = state.runs.find((item) => item.id === runId)
+        return run?.blockers ?? []
+      }
+    },
+    conversationResumePointLabels(state) {
+      return (conversationId: string) => {
+        const conversation = state.conversations.find((item) => item.id === conversationId)
+        return (conversation?.resumePoints ?? []).map((resumePoint) => resumePoint.label)
+      }
+    },
+    dashboardMetricLabel() {
+      return (metric: DashboardMetric) => resolveCopy(metric.label)
+    },
+    dashboardMetricValue() {
+      return (metric: DashboardMetric) => resolveCopy(metric.value)
+    },
+    dashboardHighlightTitle() {
+      return (highlight: DashboardHighlight) => resolveCopy(highlight.title)
+    },
+    dashboardHighlightDescription() {
+      return (highlight: DashboardHighlight) => resolveCopy(highlight.description)
+    },
+    projectDashboardCurrentStepLabel(state) {
+      const project = state.projects.find((item) => item.id === state.currentProjectId)
+      if (!project) {
+        return ''
+      }
+
+      const projectConversations = state.conversations.filter((conversation) => conversation.projectId === project.id)
+      const mainConversation = projectConversations.find((conversation) => conversation.id === project.conversationIds[0]) ?? projectConversations[0]
+      const run = mainConversation?.recentRun ?? state.runs.find((item) => item.conversationId === mainConversation?.id)
+      return resolveRunDisplayValue(run?.currentStep, { runId: run?.id, field: 'currentStep' })
+    },
+    inboxItemDisplayTitle(state) {
+      return (itemId: string) => {
+        const item = state.inbox.find((entry) => entry.id === itemId)
+        return resolveCopy(item?.title)
+      }
+    },
+    inboxItemDisplayDescription(state) {
+      return (itemId: string) => {
+        const item = state.inbox.find((entry) => entry.id === itemId)
+        return resolveCopy(item?.description)
+      }
+    },
+    inboxItemDisplayImpact(state) {
+      return (itemId: string) => {
+        const item = state.inbox.find((entry) => entry.id === itemId)
+        return resolveCopy(item?.impact)
+      }
+    },
+    inboxItemDisplayRiskNote(state) {
+      return (itemId: string) => {
+        const item = state.inbox.find((entry) => entry.id === itemId)
+        return resolveCopy(item?.riskNote)
+      }
+    },
     activeConversationDefaultActor(state) {
       const project = state.projects.find((item) => item.id === state.currentProjectId)
       const conversation = state.conversations.find((item) => item.id === state.currentConversationId)
@@ -1491,6 +1809,9 @@ export const useWorkbenchStore = defineStore('workbench', {
     projectKnowledge(state) {
       return state.knowledge.filter((item) => item.projectId === state.currentProjectId)
     },
+    workspaceKnowledge(state) {
+      return state.knowledge.filter((item) => item.workspaceId === state.currentWorkspaceId)
+    },
     activeConversationKnowledge(): KnowledgeEntry[] {
       const artifactIds = new Set(this.activeConversationArtifacts.map((artifact) => artifact.id))
       const runIds = new Set(this.runs
@@ -1515,6 +1836,13 @@ export const useWorkbenchStore = defineStore('workbench', {
         resource.linkedConversationIds.includes(conversationId)
         || (resource.kind === 'artifact' && artifactIds.has(resource.sourceArtifactId ?? resource.id)),
       )
+    },
+    projectWorkingDir(): string | undefined {
+      return this.activeProject?.workingDir
+        ?? this.projectResources
+          .map((resource) => resource.location)
+          .map((location) => deriveWorkingDirFromResourceLocation(location))
+          .find((location) => !!location)
     },
     activeConversationToolStats(): MessageToolCall[] {
       return aggregateToolCalls(
@@ -1731,6 +2059,36 @@ export const useWorkbenchStore = defineStore('workbench', {
     },
     workspaceAutomations(state) {
       return state.automations.filter((automation) => automation.workspaceId === state.currentWorkspaceId)
+    },
+    automationDisplayTitle(state) {
+      return (automationId: string) => {
+        const automation = state.automations.find((item) => item.id === automationId)
+        return automation?.title ?? automationId
+      }
+    },
+    automationDisplayDescription(state) {
+      return (automationId: string) => {
+        const automation = state.automations.find((item) => item.id === automationId)
+        return automation?.description ?? ''
+      }
+    },
+    automationDisplayCadence(state) {
+      return (automationId: string) => {
+        const automation = state.automations.find((item) => item.id === automationId)
+        return automation?.cadence ?? ''
+      }
+    },
+    automationDisplayOutput(state) {
+      return (automationId: string) => {
+        const automation = state.automations.find((item) => item.id === automationId)
+        return automation?.output ?? ''
+      }
+    },
+    connectionDisplayLabel(state) {
+      return (connectionId: string) => {
+        const connection = state.connections.find((item) => item.id === connectionId)
+        return connection?.label ?? connectionId
+      }
     },
     activeConnections(state) {
       return state.connections.filter((connection) => connection.workspaceId === state.currentWorkspaceId)
@@ -3119,16 +3477,14 @@ export const useWorkbenchStore = defineStore('workbench', {
       const workspaceId = `ws-mock-${sequence}`
       const roleId = `role-${workspaceId}-admin`
 
-      const workspace: Workspace = {
+      const workspace: Workspace = createWorkspaceRecord({
         id: workspaceId,
         name: `Workspace ${sequence}`,
         avatar: `W${sequence}`,
-        isLocal: true,
         description: `Mock workspace ${sequence} for shell interaction demos.`,
         roleSummary: 'Owner · Mock Runtime',
-        memberCount: 0,
         projectIds: [projectId],
-      }
+      })
 
       const project: Project = {
         id: projectId,
@@ -3138,6 +3494,7 @@ export const useWorkbenchStore = defineStore('workbench', {
         goal: `Track mock project ${sequence} inside the desktop workbench shell.`,
         phase: 'Planning',
         summary: 'Fresh mock project created from the account workspace menu.',
+        workingDir: `/mock/${projectId}`,
         blockerIds: [],
         recentDecision: 'Created from the topbar account menu.',
         conversationIds: [conversationId],
@@ -3152,14 +3509,13 @@ export const useWorkbenchStore = defineStore('workbench', {
       const run = createMockRun(sequence, project.id, conversationId, `Workspace ${sequence} bootstrap run`, timestamp)
       const conversation = createMockConversation(sequence, project.id, `Starter Conversation ${sequence}`, timestamp, run)
 
-      const connection: ConnectionProfile = {
+      const connection: ConnectionProfile = createConnectionProfile({
         id: `conn-mock-${sequence}`,
         mode: 'local',
         label: `Mock Workspace ${sequence}`,
         workspaceId: workspace.id,
-        state: 'local-ready',
         lastSyncAt: timestamp,
-      }
+      })
       const role: RbacRole = {
         id: roleId,
         workspaceId,
@@ -3253,6 +3609,7 @@ export const useWorkbenchStore = defineStore('workbench', {
         goal: `Track mock project ${projectSequence} inside the desktop workbench shell.`,
         phase: 'Planning',
         summary: 'Fresh mock project created from the left sidebar controls.',
+        workingDir: `/mock/${projectId}`,
         blockerIds: [],
         recentDecision: 'Created from the sidebar project controls.',
         conversationIds: [conversationId],
@@ -3308,6 +3665,10 @@ export const useWorkbenchStore = defineStore('workbench', {
         if (nextSummary) {
           project.summary = nextSummary
         }
+      }
+      if (patch.workingDir !== undefined) {
+        const nextWorkingDir = patch.workingDir.trim()
+        project.workingDir = nextWorkingDir || undefined
       }
 
       return project
@@ -3930,7 +4291,7 @@ export const useWorkbenchStore = defineStore('workbench', {
       const copy: Agent = {
         ...cloneSeed(source),
         id: copyId,
-        name: `${resolveMockField('agent', source.id, 'name', source.name)} · ${translate('runtime.copy.projectSuffix')}`,
+        name: `${source.name} · ${translate('runtime.copy.projectSuffix')}`,
         scope: 'project',
         owner: `project:${this.currentProjectId}`,
         isProjectCopy: true,
@@ -4061,7 +4422,7 @@ export const useWorkbenchStore = defineStore('workbench', {
       this.teams.unshift({
         ...cloneSeed(source),
         id: copyId,
-        name: `${resolveMockField('team', source.id, 'name', source.name)} · ${translate('runtime.copy.projectSuffix')}`,
+        name: `${source.name} · ${translate('runtime.copy.projectSuffix')}`,
         workspaceId: this.currentWorkspaceId,
         projectId: this.currentProjectId,
         useScope: 'project',

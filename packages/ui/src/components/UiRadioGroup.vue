@@ -48,7 +48,7 @@ function select(value: string, disabled?: boolean) {
       <div 
         class="relative flex size-[14px] shrink-0 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         :class="[
-          props.modelValue === option.value ? 'border-primary bg-primary' : 'bg-transparent border-border-strong hover:border-text-tertiary'
+          props.modelValue === option.value ? 'border-primary bg-primary' : 'bg-transparent border-border/60 dark:border-white/[0.1] hover:border-text-tertiary'
         ]"
       >
         <div 

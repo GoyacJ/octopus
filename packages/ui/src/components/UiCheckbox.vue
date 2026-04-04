@@ -56,7 +56,7 @@ function onChange() {
     <div 
       class="flex size-[14px] shrink-0 items-center justify-center rounded-sm border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       :class="[
-        checked ? 'bg-primary border-primary text-primary-foreground' : 'bg-transparent border-border-strong hover:border-text-tertiary'
+        checked ? 'bg-primary border-primary dark:border-white/[0.1] text-primary-foreground' : 'bg-transparent border-border/60 dark:border-white/[0.1] hover:border-text-tertiary'
       ]"
     >
       <Check v-if="checked" :size="10" stroke-width="3" />

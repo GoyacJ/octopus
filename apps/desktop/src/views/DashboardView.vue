@@ -13,7 +13,7 @@ import {
   UiButton
 } from '@octopus/ui'
 import { ArrowRight, MessageSquare, Library, Activity } from 'lucide-vue-next'
-import { countLabel, enumLabel, resolveCopy, resolveMockField } from '@/i18n/copy'
+import { enumLabel } from '@/i18n/copy'
 import { createProjectConversationTarget } from '@/i18n/navigation'
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -25,6 +25,56 @@ const conversationTarget = computed(() =>
     workbench.currentProjectId,
     workbench.currentConversationId,
   ),
+)
+const activeWorkspaceName = computed(() =>
+  workbench.activeWorkspace
+    ? workbench.workspaceDisplayName(workbench.activeWorkspace.id)
+    : t('dashboard.header.titleFallback'),
+)
+const activeWorkspaceDescription = computed(() =>
+  workbench.activeWorkspace
+    ? workbench.workspaceDisplayDescription(workbench.activeWorkspace.id)
+    : t('dashboard.summary.subtitleFallback'),
+)
+const activeWorkspaceRoleSummary = computed(() =>
+  workbench.activeWorkspace
+    ? workbench.workspaceDisplayRoleSummary(workbench.activeWorkspace.id)
+    : t('common.na'),
+)
+const activeWorkspaceMemberCountLabel = computed(() =>
+  workbench.activeWorkspace
+    ? workbench.workspaceDisplayMemberCountLabel(workbench.activeWorkspace.id)
+    : workbench.workspaceDisplayMemberCountLabel(''),
+)
+const activeProjectSummary = computed(() =>
+  workbench.activeProject
+    ? workbench.projectDisplaySummary(workbench.activeProject.id)
+    : t('dashboard.header.subtitleFallback'),
+)
+const activeProjectGoal = computed(() =>
+  workbench.activeProject
+    ? workbench.projectDisplayGoal(workbench.activeProject.id)
+    : '',
+)
+const activeProjectRecentDecision = computed(() =>
+  workbench.activeProject
+    ? workbench.projectDisplayRecentDecision(workbench.activeProject.id)
+    : t('dashboard.project.subtitleFallback'),
+)
+const activeProjectPhase = computed(() =>
+  workbench.activeProject
+    ? workbench.projectDisplayPhase(workbench.activeProject.id)
+    : t('common.na'),
+)
+const activeProjectArtifactCountLabel = computed(() =>
+  workbench.activeProject
+    ? workbench.projectDisplayArtifactCountLabel(workbench.activeProject.id)
+    : workbench.projectDisplayArtifactCountLabel(''),
+)
+const activeProjectConversationCountLabel = computed(() =>
+  workbench.activeProject
+    ? workbench.projectDisplayConversationCountLabel(workbench.activeProject.id)
+    : workbench.projectDisplayConversationCountLabel(''),
 )
 
 const pendingInbox = computed(() => workbench.workspaceInbox.filter((item) => item.status === 'pending'))
@@ -42,8 +92,8 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
     <header class="px-2 shrink-0">
       <UiSectionHeading
         :eyebrow="t('dashboard.header.eyebrow')"
-        :title="workbench.activeWorkspace ? resolveMockField('workspace', workbench.activeWorkspace.id, 'name', workbench.activeWorkspace.name) : t('dashboard.header.titleFallback')"
-        :subtitle="workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'summary', workbench.activeProject.summary) : t('dashboard.header.subtitleFallback')"
+        :title="activeWorkspaceName"
+        :subtitle="activeProjectSummary"
       />
     </header>
 
@@ -51,8 +101,8 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
       <UiStatTile
         v-for="metric in workbench.workspaceDashboard.workspaceMetrics"
         :key="metric.label"
-        :label="resolveCopy(metric.label)"
-        :value="resolveCopy(metric.value)"
+        :label="workbench.dashboardMetricLabel(metric)"
+        :value="workbench.dashboardMetricValue(metric)"
         :tone="toneForMetric(metric.tone)"
       />
     </div>
@@ -60,18 +110,18 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 px-2">
       <UiSurface
         :title="t('dashboard.summary.title')"
-        :subtitle="workbench.activeWorkspace ? resolveMockField('workspace', workbench.activeWorkspace.id, 'description', workbench.activeWorkspace.description) : t('dashboard.summary.subtitleFallback')"
+        :subtitle="activeWorkspaceDescription"
       >
         <div class="flex flex-wrap gap-2 mb-3">
           <UiBadge
-            :label="workbench.activeWorkspace ? resolveMockField('workspace', workbench.activeWorkspace.id, 'roleSummary', workbench.activeWorkspace.roleSummary) : t('common.na')"
+            :label="activeWorkspaceRoleSummary"
             tone="info"
             subtle
           />
-          <UiBadge :label="countLabel('common.members', workbench.activeWorkspace?.memberCount ?? 0)" subtle />
+          <UiBadge :label="activeWorkspaceMemberCountLabel" subtle />
         </div>
         <p class="text-text-secondary leading-relaxed text-[14px]">
-          {{ workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'goal', workbench.activeProject.goal) : '' }}
+          {{ activeProjectGoal }}
         </p>
         <div class="flex flex-wrap gap-3 mt-6">
           <UiButton 
@@ -95,19 +145,19 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
 
       <UiSurface
         :title="t('dashboard.project.title')"
-        :subtitle="workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'recentDecision', workbench.activeProject.recentDecision) : t('dashboard.project.subtitleFallback')"
+        :subtitle="activeProjectRecentDecision"
       >
         <div class="flex flex-wrap gap-2 mb-3">
           <UiBadge
-            :label="workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'phase', workbench.activeProject.phase) : t('common.na')"
+            :label="activeProjectPhase"
             tone="info"
             subtle
           />
-          <UiBadge :label="countLabel('common.artifacts', workbench.activeProject?.artifactIds.length ?? 0)" subtle />
-          <UiBadge :label="countLabel('common.conversations', workbench.activeProject?.conversationIds.length ?? 0)" subtle />
+          <UiBadge :label="activeProjectArtifactCountLabel" subtle />
+          <UiBadge :label="activeProjectConversationCountLabel" subtle />
         </div>
         <p class="text-text-secondary leading-relaxed text-[14px]">
-          {{ workbench.activeProject ? resolveMockField('project', workbench.activeProject.id, 'summary', workbench.activeProject.summary) : '' }}
+          {{ activeProjectSummary }}
         </p>
         <div class="flex flex-wrap gap-3 mt-6">
           <UiButton 
@@ -140,7 +190,7 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
       </UiSurface>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 px-2 border-t border-border-subtle pt-10">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 px-2 border-t border-border-subtle dark:border-white/[0.05] pt-10">
       <section class="space-y-4">
         <h3 class="text-lg font-bold text-text-primary px-1">{{ t('dashboard.highlights.title') }}</h3>
         <div class="grid gap-3 sm:grid-cols-2">
@@ -148,13 +198,13 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
             v-for="highlight in workbench.workspaceDashboard.highlights"
             :key="highlight.id"
             :to="highlight.route"
-            class="group flex flex-col gap-2 rounded-md border border-border-subtle bg-subtle/30 p-4 transition-all hover:bg-accent"
+            class="group flex flex-col gap-2 rounded-md border border-primary/50 dark:border-primary/50 bg-subtle/30 p-4 transition-all hover:bg-accent"
           >
             <div class="flex items-center justify-between gap-4">
-              <strong class="text-sm font-bold text-text-primary line-clamp-1">{{ resolveCopy(highlight.title) }}</strong>
+              <strong class="text-sm font-bold text-text-primary line-clamp-1">{{ workbench.dashboardHighlightTitle(highlight) }}</strong>
               <ArrowRight :size="14" class="text-text-tertiary group-hover:text-primary transition-colors" />
             </div>
-            <p class="text-[12px] text-text-secondary leading-relaxed line-clamp-2">{{ resolveCopy(highlight.description) }}</p>
+            <p class="text-[12px] text-text-secondary leading-relaxed line-clamp-2">{{ workbench.dashboardHighlightDescription(highlight) }}</p>
           </RouterLink>
         </div>
       </section>
@@ -165,12 +215,12 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
           <UiInboxBlock
             v-for="item in pendingInbox"
             :key="item.id"
-            :title="resolveMockField('inboxItem', item.id, 'title', resolveCopy(item.title))"
-            :description="resolveMockField('inboxItem', item.id, 'description', resolveCopy(item.description))"
+            :title="workbench.inboxItemDisplayTitle(item.id)"
+            :description="workbench.inboxItemDisplayDescription(item.id)"
             :priority-label="enumLabel('riskLevel', item.priority)"
             :status-label="enumLabel('inboxStatus', item.status)"
-            :impact="resolveMockField('inboxItem', item.id, 'impact', resolveCopy(item.impact))"
-            :risk-note="resolveMockField('inboxItem', item.id, 'riskNote', resolveCopy(item.riskNote))"
+            :impact="workbench.inboxItemDisplayImpact(item.id)"
+            :risk-note="workbench.inboxItemDisplayRiskNote(item.id)"
             :status-heading="t('common.status')"
             :impact-heading="t('common.impact')"
             :risk-heading="t('common.risk')"
@@ -180,15 +230,15 @@ function toneForMetric(tone?: string): 'default' | 'success' | 'warning' | 'erro
       </section>
     </div>
 
-    <section class="space-y-6 px-2 border-t border-border-subtle pt-10">
+    <section class="space-y-6 px-2 border-t border-border-subtle dark:border-white/[0.05] pt-10">
       <h3 class="text-lg font-bold text-text-primary px-1">{{ t('dashboard.artifacts.title') }}</h3>
       <div v-if="workbench.activeConversationArtifacts.length" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
         <UiArtifactBlock
           v-for="artifact in workbench.activeConversationArtifacts"
           :key="artifact.id"
-          :title="resolveMockField('artifact', artifact.id, 'title', artifact.title)"
-          :excerpt="resolveMockField('artifact', artifact.id, 'excerpt', artifact.excerpt)"
-          :type-label="resolveMockField('artifact', artifact.id, 'type', artifact.type)"
+          :title="workbench.artifactDisplayTitle(artifact.id)"
+          :excerpt="workbench.artifactDisplayExcerpt(artifact.id)"
+          :type-label="workbench.artifactDisplayTypeLabel(artifact.id)"
           :version-label="`v${artifact.version}`"
           :status-label="enumLabel('artifactStatus', artifact.status)"
         />

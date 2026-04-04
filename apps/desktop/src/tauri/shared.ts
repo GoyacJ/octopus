@@ -1,94 +1,29 @@
-import type {
-  HostBackendConnection,
-  HostState,
-  ShellPreferences,
+import type { HostBackendConnection, ShellPreferences } from '@octopus/schema'
+import {
+  createDefaultShellPreferences,
+  normalizeShellPreferences,
 } from '@octopus/schema'
 
 const PREFERENCES_STORAGE_KEY = 'octopus-shell-preferences'
-const DEFAULT_BACKEND_BASE_URL = 'http://127.0.0.1:43127'
 
 export function isTauriRuntime(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 }
 
-export function createDefaultPreferences(defaultWorkspaceId: string, defaultProjectId: string): ShellPreferences {
-  return {
-    theme: 'system',
-    locale: 'zh-CN',
-    compactSidebar: false,
-    leftSidebarCollapsed: false,
-    rightSidebarCollapsed: false,
-    defaultWorkspaceId,
-    lastVisitedRoute: `/workspaces/${defaultWorkspaceId}/overview?project=${defaultProjectId}`,
-  }
-}
-
-export function extractProjectIdFromRoute(lastVisitedRoute: string): string {
-  if (lastVisitedRoute.includes('?project=')) {
-    return lastVisitedRoute.split('?project=')[1]?.split('&')[0] ?? 'proj-redesign'
-  }
-
-  const projectMatch = lastVisitedRoute.match(/\/projects\/([^/]+)/)
-  return projectMatch?.[1] ?? 'proj-redesign'
-}
-
-export function normalizePreferences(
-  value: Partial<ShellPreferences>,
-  defaultWorkspaceId: string,
-  defaultProjectId: string,
-): ShellPreferences {
-  const defaults = createDefaultPreferences(defaultWorkspaceId, defaultProjectId)
-  const leftSidebarCollapsed = typeof value.leftSidebarCollapsed === 'boolean'
-    ? value.leftSidebarCollapsed
-    : Boolean(value.compactSidebar)
-
-  return {
-    ...defaults,
-    ...value,
-    compactSidebar: typeof value.compactSidebar === 'boolean' ? value.compactSidebar : leftSidebarCollapsed,
-    leftSidebarCollapsed,
-    rightSidebarCollapsed: typeof value.rightSidebarCollapsed === 'boolean' ? value.rightSidebarCollapsed : defaults.rightSidebarCollapsed,
-  }
-}
-
-export function fallbackHostState(): HostState {
-  return {
-    platform: 'web',
-    mode: 'local',
-    appVersion: '0.1.0',
-    cargoWorkspace: false,
-    shell: 'browser',
-  }
-}
-
-export function fallbackBackendConnection(
-  state: HostBackendConnection['state'] = 'ready',
-  transport: HostBackendConnection['transport'] = 'mock',
-): HostBackendConnection {
-  const isReady = state === 'ready'
-
-  return {
-    baseUrl: isReady ? DEFAULT_BACKEND_BASE_URL : undefined,
-    authToken: isReady ? 'desktop-mock-token' : undefined,
-    state,
-    transport,
-  }
-}
-
 export function loadStoredPreferences(defaultWorkspaceId: string, defaultProjectId: string): ShellPreferences {
   if (typeof window === 'undefined' || !window.localStorage) {
-    return createDefaultPreferences(defaultWorkspaceId, defaultProjectId)
+    return createDefaultShellPreferences(defaultWorkspaceId, defaultProjectId)
   }
 
   const raw = window.localStorage.getItem(PREFERENCES_STORAGE_KEY)
   if (!raw) {
-    return createDefaultPreferences(defaultWorkspaceId, defaultProjectId)
+    return createDefaultShellPreferences(defaultWorkspaceId, defaultProjectId)
   }
 
   try {
-    return normalizePreferences(JSON.parse(raw) as Partial<ShellPreferences>, defaultWorkspaceId, defaultProjectId)
+    return normalizeShellPreferences(JSON.parse(raw) as Partial<ShellPreferences>, defaultWorkspaceId, defaultProjectId)
   } catch {
-    return createDefaultPreferences(defaultWorkspaceId, defaultProjectId)
+    return createDefaultShellPreferences(defaultWorkspaceId, defaultProjectId)
   }
 }
 

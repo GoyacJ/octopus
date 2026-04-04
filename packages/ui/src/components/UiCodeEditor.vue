@@ -29,7 +29,7 @@ const displayValue = computed(() => props.modelValue)
 </script>
 
 <template>
-  <div class="rounded-md border border-border-strong bg-subtle/30 p-1.5 transition-colors">
+  <div class="rounded-md border border-border/60 bg-subtle/30 p-1.5 transition-colors">
     <div class="mb-1 flex items-center justify-between px-1.5 text-[10px] font-bold uppercase tracking-wider text-text-tertiary opacity-60">
       <span>{{ props.language }}</span>
       <span>{{ props.theme }}</span>

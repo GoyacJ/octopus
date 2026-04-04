@@ -35,6 +35,8 @@ onBeforeUnmount(() => {
     <!-- Notion Style: Sidebar is full height -->
     <WorkbenchSidebar />
 
+    <div v-if="shell.leftSidebarCollapsed" data-testid="sidebar-rail" class="hidden" />
+
     <div class="flex flex-1 flex-col min-w-0 relative">
       <WorkbenchTopbar />
       

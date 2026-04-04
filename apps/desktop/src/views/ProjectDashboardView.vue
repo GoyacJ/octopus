@@ -21,7 +21,7 @@ import {
   UiTextarea,
 } from '@octopus/ui'
 
-import { enumLabel, resolveCopy } from '@/i18n/copy'
+import { enumLabel } from '@/i18n/copy'
 import { createProjectConversationTarget } from '@/i18n/navigation'
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -187,7 +187,7 @@ const rankingItems = computed(() =>
       </p>
 
       <template #actions>
-        <RouterLink :to="conversationTarget" class="block min-w-0 no-underline">
+        <RouterLink :to="conversationTarget" class="block min-w-0 no-underline" data-testid="project-dashboard-action-conversation">
           <UiActionCard
             :title="t('projectDashboard.actions.openConversation')"
             :description="t('projectDashboard.actions.openConversationHint')"
@@ -200,6 +200,7 @@ const rankingItems = computed(() =>
         <RouterLink
           :to="{ name: 'knowledge', params: { workspaceId: workbench.currentWorkspaceId, projectId: workbench.currentProjectId } }"
           class="block min-w-0 no-underline"
+          data-testid="project-dashboard-action-knowledge"
         >
           <UiActionCard
             :title="t('projectDashboard.actions.openKnowledge')"
@@ -213,6 +214,7 @@ const rankingItems = computed(() =>
         <RouterLink
           :to="{ name: 'trace', params: { workspaceId: workbench.currentWorkspaceId, projectId: workbench.currentProjectId } }"
           class="block min-w-0 no-underline"
+          data-testid="project-dashboard-action-trace"
         >
           <UiActionCard
             :title="t('projectDashboard.actions.openTrace')"
@@ -231,6 +233,7 @@ const rankingItems = computed(() =>
           :helper="snapshot.progress.runStatus ? enumLabel('runStatus', snapshot.progress.runStatus) : t('common.na')"
           :progress="progressPercent"
           tone="accent"
+          class="dark:border-white/5"
         />
       </template>
     </UiPageHero>
@@ -246,8 +249,9 @@ const rankingItems = computed(() =>
           <UiMetricCard :label="t('projectDashboard.progress.pendingInbox')" :value="snapshot.progress.pendingInboxCount" />
           <UiMetricCard
             :label="t('projectDashboard.progress.currentStep')"
-            :value="snapshot.progress.currentStep ? resolveCopy(snapshot.progress.currentStep) : t('common.na')"
+            :value="snapshot.progress.currentStep ? workbench.projectDashboardCurrentStepLabel : t('common.na')"
             tone="accent"
+            class="dark:border-white/5"
           />
         </div>
       </section>
@@ -268,7 +272,7 @@ const rankingItems = computed(() =>
     </div>
 
     <!-- Data Overview -->
-    <section class="space-y-4 px-2 pt-8 border-t border-border-subtle">
+    <section class="space-y-4 px-2 pt-8 border-t border-border-subtle dark:border-white/[0.02]">
       <h3 class="text-lg font-bold text-text-primary">{{ t('projectDashboard.data.title') }}</h3>
       <div class="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
         <UiMetricCard
@@ -282,10 +286,10 @@ const rankingItems = computed(() =>
       </div>
     </section>
 
-    <div class="grid gap-12 lg:grid-cols-2 px-2 pt-8 border-t border-border-subtle">
+    <div class="grid gap-12 lg:grid-cols-2 px-2 pt-8 border-t border-border-subtle dark:border-white/[0.02]">
       <section class="space-y-4">
         <h3 class="text-lg font-bold text-text-primary">{{ t('projectDashboard.activity.title') }}</h3>
-        <div class="bg-subtle/20 rounded-lg p-5 border border-border-subtle h-[400px] overflow-y-auto">
+        <div class="bg-subtle/20 rounded-lg p-5 border border-border-subtle dark:border-white/[0.02] h-[400px] overflow-y-auto">
           <UiTimelineList v-if="activityTimelineItems.length" :items="activityTimelineItems" />
           <UiEmptyState v-else :title="t('projectDashboard.empty.activityTitle')" :description="t('projectDashboard.empty.activityDescription')" />
         </div>
@@ -293,7 +297,7 @@ const rankingItems = computed(() =>
 
       <section class="space-y-4">
         <h3 class="text-lg font-bold text-text-primary">{{ t('projectDashboard.data.conversationTop') }}</h3>
-        <div class="bg-subtle/20 rounded-lg p-5 border border-border-subtle h-[400px] overflow-y-auto">
+        <div class="bg-subtle/20 rounded-lg p-5 border border-border-subtle dark:border-white/[0.02] h-[400px] overflow-y-auto">
           <UiRankingList v-if="rankingItems.length" :items="rankingItems" />
           <UiEmptyState v-else :title="t('projectDashboard.empty.rankingTitle')" :description="t('projectDashboard.empty.rankingDescription')" />
         </div>
@@ -301,23 +305,23 @@ const rankingItems = computed(() =>
     </div>
 
     <!-- Project Settings -->
-    <section class="space-y-8 px-2 pt-8 border-t border-border-subtle">
+    <section class="space-y-8 px-2 pt-8 border-t border-border-subtle dark:border-white/[0.02]">
       <div class="flex items-center justify-between">
         <h3 class="text-lg font-bold text-text-primary">{{ t('projectDashboard.info.title') }}</h3>
         <div class="flex gap-2">
-          <UiButton v-if="!editing" variant="ghost" size="sm" @click="startEdit">{{ t('common.edit') }}</UiButton>
+          <UiButton v-if="!editing" variant="ghost" size="sm" data-testid="project-dashboard-edit" @click="startEdit">{{ t('common.edit') }}</UiButton>
           <template v-else>
             <UiButton variant="ghost" size="sm" @click="cancelEdit">{{ t('common.cancel') }}</UiButton>
-            <UiButton variant="primary" size="sm" @click="saveProject">{{ t('common.save') }}</UiButton>
+            <UiButton variant="primary" size="sm" data-testid="project-dashboard-save" @click="saveProject">{{ t('common.save') }}</UiButton>
           </template>
         </div>
       </div>
 
       <div v-if="editing" class="grid gap-8 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 max-w-full">
-        <UiField :label="t('projectDashboard.fields.name')"><UiInput v-model="draft.name" /></UiField>
+        <UiField :label="t('projectDashboard.fields.name')"><UiInput v-model="draft.name" data-testid="project-dashboard-edit-name" /></UiField>
         <UiField :label="t('projectDashboard.fields.phase')"><UiInput v-model="draft.phase" /></UiField>
         <UiField :label="t('projectDashboard.fields.goal')" class="md:col-span-2 lg:col-span-1"><UiTextarea v-model="draft.goal" :rows="2" /></UiField>
-        <UiField :label="t('projectDashboard.fields.summary')" class="md:col-span-2 lg:col-span-2"><UiTextarea v-model="draft.summary" :rows="3" /></UiField>
+        <UiField :label="t('projectDashboard.fields.summary')" class="md:col-span-2 lg:col-span-2"><UiTextarea v-model="draft.summary" data-testid="project-dashboard-edit-summary" :rows="3" /></UiField>
       </div>
 
       <div v-else class="grid gap-y-8 gap-x-16 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 max-w-full text-[13px]">

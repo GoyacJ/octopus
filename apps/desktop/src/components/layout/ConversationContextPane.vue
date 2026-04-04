@@ -14,8 +14,9 @@ import {
 
 import { UiBadge, UiButton, UiEmptyState, UiNavCardList, UiSurface, UiTextarea, UiTimelineList } from '@octopus/ui'
 
-import { enumLabel, formatDateTime, resolveCopy, resolveMockField, resolveMockList } from '@/i18n/copy'
-import type { ConversationDetailFocus } from '@/stores/shell'
+import type { ConversationDetailFocus } from '@octopus/schema'
+
+import { enumLabel, formatDateTime } from '@/i18n/copy'
 import { useShellStore } from '@/stores/shell'
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -54,8 +55,8 @@ const expandedSectionNavItems = computed(() =>
 const artifactItems = computed(() =>
   workbench.activeConversationArtifacts.map((artifact) => ({
     id: artifact.id,
-    label: resolveMockField('artifact', artifact.id, 'title', artifact.title),
-    helper: resolveMockField('artifact', artifact.id, 'excerpt', artifact.excerpt),
+    label: workbench.artifactDisplayTitle(artifact.id),
+    helper: workbench.artifactDisplayExcerpt(artifact.id),
     badge: enumLabel('artifactStatus', artifact.status),
     icon: FileText,
     active: shell.selectedArtifactId === artifact.id,
@@ -65,8 +66,8 @@ const artifactItems = computed(() =>
 const timelineItems = computed(() =>
   workbench.activeConversationTimeline.map((trace) => ({
     id: trace.id,
-    title: resolveMockField('traceRecord', trace.id, 'title', trace.title),
-    description: resolveMockField('traceRecord', trace.id, 'detail', trace.detail),
+    title: workbench.traceDisplayTitle(trace.id),
+    description: workbench.traceDisplayDetail(trace.id),
     helper: trace.actor,
     timestamp: formatDateTime(trace.timestamp),
   })),
@@ -75,7 +76,7 @@ const timelineItems = computed(() =>
 watch(
   selectedArtifact,
   (artifact) => {
-    artifactDraft.value = artifact ? resolveMockField('artifact', artifact.id, 'content', artifact.content) : ''
+    artifactDraft.value = artifact ? workbench.artifactDisplayContent(artifact.id) : ''
   },
   { immediate: true },
 )
@@ -119,22 +120,23 @@ function requestReview() {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-sidebar border-l border-border-subtle">
+  <div class="h-full flex flex-col bg-sidebar border-l border-border-subtle dark:border-white/[0.05]">
     <!-- Rail View (Collapsed State: 48px width) -->
     <aside
       v-if="shell.rightSidebarCollapsed"
       class="flex h-full w-[48px] flex-col items-center gap-3 py-6"
       data-testid="conversation-detail-rail"
     >
-      <nav class="flex w-full flex-col items-center gap-3">
+      <nav class="flex w-full flex-col items-center gap-3" data-testid="conversation-detail-rail-nav">
         <button
           v-for="item in expandedSectionNavItems"
           :key="item.id"
           class="flex h-9 w-9 items-center justify-center rounded-lg transition-all"
-          :class="item.active 
-            ? 'bg-primary/10 text-primary shadow-xs' 
+          :class="item.active
+            ? 'bg-primary/10 text-primary shadow-xs'
             : 'text-text-tertiary hover:bg-accent hover:text-text-secondary'"
           :title="item.label"
+          :data-testid="`conversation-detail-rail-section-${item.id}`"
           @click="setDetail(item.id)"
         >
           <component :is="item.icon" :size="18" />
@@ -145,12 +147,12 @@ function requestReview() {
     <!-- Panel View (Expanded State: 360px width) -->
     <aside v-else class="flex h-full flex-col overflow-hidden w-[360px]" data-testid="conversation-detail-panel">
       <!-- Fixed Header Area -->
-      <div class="flex shrink-0 items-center px-4 h-11 border-b border-border-subtle bg-sidebar/80 backdrop-blur-md sticky top-0 z-10">
+      <div class="flex shrink-0 items-center px-4 h-11 border-b border-border-subtle dark:border-white/[0.05] bg-sidebar/80 backdrop-blur-md sticky top-0 z-10">
         <span class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">{{ t('conversation.detail.title') }}</span>
       </div>
 
       <!-- Fixed Navigation Tabs Area -->
-      <nav class="flex shrink-0 flex-wrap gap-1 border-b border-border-subtle p-2 bg-sidebar/50 sticky top-[44px] z-10">
+      <nav class="flex shrink-0 flex-wrap gap-1 border-b border-border-subtle dark:border-white/[0.05] p-2 bg-sidebar/50 sticky top-[44px] z-10">
         <button
           v-for="item in expandedSectionNavItems"
           :key="item.id"
@@ -176,19 +178,19 @@ function requestReview() {
           <div class="space-y-4">
             <div class="space-y-1.5">
               <span class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('common.goal') }}</span>
-              <p class="text-[13px] leading-relaxed text-text-secondary bg-subtle/30 p-3 rounded-md border border-border-subtle">{{ resolveMockField('conversation', activeConversation.id, 'currentGoal', activeConversation.currentGoal) }}</p>
+              <p class="text-[13px] leading-relaxed text-text-secondary bg-subtle/30 p-3 rounded-md border border-border-subtle dark:border-white/[0.08]">{{ workbench.conversationDisplayGoal(activeConversation.id) }}</p>
             </div>
             
             <div class="space-y-1.5">
               <span class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('conversation.detail.summary.statusNote') }}</span>
-              <p class="text-[13px] leading-relaxed text-text-secondary bg-subtle/30 p-3 rounded-md border border-border-subtle">{{ resolveCopy(activeConversation.statusNote) }}</p>
+              <p class="text-[13px] leading-relaxed text-text-secondary bg-subtle/30 p-3 rounded-md border border-border-subtle dark:border-white/[0.08]">{{ workbench.conversationDisplayStatusNote(activeConversation.id) }}</p>
             </div>
 
             <div class="space-y-1.5">
               <span class="text-[10px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('common.constraints') }}</span>
-              <ul class="space-y-2 bg-subtle/30 p-3 rounded-md border border-border-subtle">
+              <ul class="space-y-2 bg-subtle/30 p-3 rounded-md border border-border-subtle dark:border-white/[0.08]">
                 <li
-                  v-for="(constraint, index) in resolveMockList('conversation', activeConversation.id, 'constraints', activeConversation.constraints)"
+                  v-for="(constraint, index) in workbench.conversationDisplayConstraints(activeConversation.id)"
                   :key="`${activeConversation.id}-constraint-${index}`"
                   class="flex gap-2 text-[12px] leading-relaxed text-text-secondary"
                 >
@@ -205,7 +207,7 @@ function requestReview() {
             <div
               v-for="memory in workbench.activeConversationMemories"
               :key="memory.id"
-              class="bg-background rounded-md border border-border-subtle p-3 space-y-2 shadow-xs"
+              class="bg-background rounded-md border border-border-subtle dark:border-white/[0.08] p-3 space-y-2 shadow-xs"
             >
               <div class="flex flex-wrap items-center gap-2">
                 <UiBadge :label="memory.source === 'agent' ? t('conversation.detail.memories.agentSource') : t('conversation.detail.memories.conversationSource')" subtle />
@@ -235,9 +237,9 @@ function requestReview() {
               :description="t('conversation.detail.artifacts.emptyDescription')"
             />
 
-            <div v-if="selectedArtifact" class="pt-4 border-t border-border-subtle space-y-4">
+            <div v-if="selectedArtifact" class="pt-4 border-t border-border-subtle dark:border-white/[0.05] space-y-4">
               <div class="flex items-center justify-between">
-                <h4 class="text-[13px] font-bold text-text-primary">{{ resolveMockField('artifact', selectedArtifact.id, 'title', selectedArtifact.title) }}</h4>
+                <h4 class="text-[13px] font-bold text-text-primary">{{ workbench.artifactDisplayTitle(selectedArtifact.id) }}</h4>
                 <UiBadge :label="`v${selectedArtifact.version}`" subtle />
               </div>
               <UiTextarea v-model="artifactDraft" class="bg-subtle/30 font-mono text-[12px]" :rows="12" />
@@ -254,14 +256,14 @@ function requestReview() {
             <div
               v-for="entry in workbench.activeConversationKnowledge"
               :key="entry.id"
-              class="bg-background rounded-md border border-border-subtle p-3 transition-colors hover:border-border-strong"
+              class="bg-background rounded-md border border-border-subtle dark:border-white/[0.08] p-3 transition-colors hover:border-border-strong"
             >
               <div class="flex items-center gap-2 mb-2">
                 <UiBadge :label="enumLabel('knowledgeStatus', entry.status)" subtle />
                 <UiBadge :label="enumLabel('knowledgeSourceType', entry.sourceType)" subtle />
               </div>
-              <strong class="block text-[13px] font-bold text-text-primary mb-1">{{ resolveMockField('knowledgeEntry', entry.id, 'title', entry.title) }}</strong>
-              <p class="text-[12px] leading-relaxed text-text-secondary line-clamp-2">{{ resolveMockField('knowledgeEntry', entry.id, 'summary', entry.summary) }}</p>
+              <strong class="block text-[13px] font-bold text-text-primary mb-1">{{ workbench.knowledgeEntryDisplayTitle(entry.id) }}</strong>
+              <p class="text-[12px] leading-relaxed text-text-secondary line-clamp-2">{{ workbench.knowledgeEntryDisplaySummary(entry.id) }}</p>
             </div>
           </div>
           <UiEmptyState
@@ -276,7 +278,7 @@ function requestReview() {
             <div
               v-for="resource in workbench.activeConversationResources"
               :key="resource.id"
-              class="flex items-center gap-3 bg-background rounded-md border border-border-subtle p-3"
+              class="flex items-center gap-3 bg-background rounded-md border border-border-subtle dark:border-white/[0.08] p-3"
             >
               <component :is="resource.kind === 'folder' ? FolderTree : FileText" :size="16" class="text-text-tertiary" />
               <div class="min-w-0 flex-1">
@@ -297,7 +299,7 @@ function requestReview() {
             <div
               v-for="tool in workbench.activeConversationToolStats"
               :key="tool.toolId"
-              class="flex items-center justify-between bg-background rounded-md border border-border-subtle p-3"
+              class="flex items-center justify-between bg-background rounded-md border border-border-subtle dark:border-white/[0.08] p-3"
             >
               <div class="min-w-0">
                 <strong class="block text-[13px] font-bold text-text-primary truncate">{{ tool.label }}</strong>

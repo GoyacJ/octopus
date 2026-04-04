@@ -19,6 +19,7 @@
     "confirm": "确定",
     "save": "保存",
     "edit": "编辑",
+    "delete": "删除",
     "mockSave": "Mock 保存",
     "createProjectCopy": "创建项目副本",
     "goal": "目标",
@@ -496,6 +497,25 @@
       "unknown": "未知"
     }
   },
+  "runtime": {
+    "run": {
+      "idle": "空闲",
+      "awaitingInput": "等待输入",
+      "waitingApproval": "等待审批",
+      "awaitingApproval": "等待审批结果",
+      "completed": "已完成",
+      "resuming": "审批通过后恢复中",
+      "blocked": "已阻塞",
+      "manualRecovery": "需要手动恢复",
+      "ingestingConstraints": "正在吸收会话约束",
+      "awaitingFollowUp": "等待后续输入",
+      "rolledBackToCheckpoint": "已回滚到所选检查点",
+      "pausedByUser": "已由用户暂停",
+      "resumedFromCheckpoint": "已从检查点恢复",
+      "approvalReceived": "已收到批准并恢复执行",
+      "reroutedAfterRejection": "驳回后已重新路由"
+    }
+  },
   "trace": {
     "header": {
       "eyebrow": "Trace",
@@ -775,11 +795,52 @@
     }
   },
   "agents": {
+    "header": {
+      "title": "智能体与团队",
+      "subtitleProject": "管理当前项目的智能体与团队协作。",
+      "subtitleWorkspace": "管理您的工作区级智能体与团队配置。"
+    },
+    "tabs": {
+      "agents": "智能体",
+      "teams": "团队"
+    },
+    "actions": {
+      "new": "新建",
+      "addAgent": "新建智能体",
+      "addTeam": "新建团队",
+      "filter": "筛选",
+      "sort": "排序",
+      "searchPlaceholder": "搜索名称、角色或描述…"
+    },
+    "view": {
+      "gallery": "图标视图",
+      "list": "列表视图"
+    },
     "list": {
       "title": "智能体列表",
       "subtitle": "管理个人与工作区级智能体能力。",
       "emptyTitle": "暂无智能体",
-      "emptyDescription": "当前还没有可复用的智能体配置。"
+      "emptyDescription": "当前还没有可复用的智能体配置。",
+      "columns": {
+        "name": "名称",
+        "role": "角色",
+        "status": "状态",
+        "tags": "标签",
+        "actions": "操作"
+      }
+    },
+    "dialog": {
+      "createTitle": "新建智能体",
+      "editTitle": "智能体详情",
+      "name": "名称",
+      "namePlaceholder": "智能体名称",
+      "role": "角色",
+      "rolePlaceholder": "例如：前端专家",
+      "model": "模型",
+      "tags": "标签",
+      "tagsPlaceholder": "添加标签...",
+      "description": "描述",
+      "descriptionPlaceholder": "这个智能体是做什么的？"
     }
   },
   "automations": {
@@ -832,6 +893,20 @@
     "automation": {
       "auto-launch-daily": {
         "description": "每天执行一次上线准备自动化任务。"
+      }
+    },
+    "run": {
+      "run-redesign": {
+        "currentStep": "等待批准写入共享产物",
+        "nextAction": "批准审阅请求以继续执行链路。"
+      },
+      "run-governance": {
+        "currentStep": "正在同步审计与设置面板",
+        "nextAction": "审阅策略文案并确认标签。"
+      },
+      "run-launch": {
+        "currentStep": "等待预算批准以完成最终签署",
+        "nextAction": "解决阻塞收件项后重新执行检查清单。"
       }
     },
     "connection": {

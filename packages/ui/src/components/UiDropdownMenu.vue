@@ -29,7 +29,7 @@ const emit = defineEmits<{
 }>()
 
 const contentClasses = computed(() => [
-  'z-50 min-w-[10rem] rounded-md border border-border-strong bg-popover p-1 shadow-[0_4px_12px_rgba(15,15,15,0.1)] outline-none',
+  'z-50 min-w-[10rem] rounded-md border border-border/60 dark:border-white/[0.12] bg-popover p-1 shadow-[0_4px_12px_rgba(15,15,15,0.1)] outline-none',
   props.align === 'end' ? 'origin-top-right' : 'origin-top-left',
 ].join(' '))
 

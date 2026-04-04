@@ -47,8 +47,8 @@ function selectItem(value: string) {
       :class="cn(
         'inline-flex min-h-9 items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-all duration-fast ease-apple',
         props.modelValue === item.value
-          ? 'border-primary/30 bg-primary/[0.08] text-text-primary shadow-xs'
-          : 'border-border/70 bg-[color-mix(in_srgb,var(--bg-surface)_92%,transparent)] text-text-secondary hover:border-border-strong hover:text-text-primary',
+          ? 'border-primary/30 dark:border-white/[0.08] bg-primary/[0.08] text-text-primary shadow-xs'
+          : 'border-border/70 dark:border-white/[0.03] bg-[color-mix(in_srgb,var(--bg-surface)_92%,transparent)] text-text-secondary hover:border-border/60 hover:text-text-primary',
         item.disabled && 'cursor-not-allowed opacity-50',
       )"
       @click="selectItem(item.value)"

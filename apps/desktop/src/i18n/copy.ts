@@ -1,9 +1,25 @@
 import i18n from '@/plugins/i18n'
 
 type TranslationValues = Record<string, string | number>
+type RunDisplayField = 'currentStep' | 'nextAction'
 
 function hasKey(key: string): boolean {
   return i18n.global.te(key)
+}
+
+export function mockKey(scope: string, id: string, field: string, fallback = ''): string {
+  const key = `mock.${scope}.${id}.${field}`
+  return hasKey(key) ? key : fallback
+}
+
+export function resolveMockField(
+  scope: string,
+  id: string,
+  field: string,
+  fallback = '',
+  values?: TranslationValues,
+): string {
+  return resolveCopy(mockKey(scope, id, field, fallback), values)
 }
 
 export function translate(key: string, values?: TranslationValues): string {
@@ -22,33 +38,24 @@ export function resolveCopy(value?: string | null, values?: TranslationValues): 
   return hasKey(value) ? translate(value, values) : value
 }
 
-export function resolveMockField(entity: string, id: string | undefined, field: string, fallback = ''): string {
-  if (!id) {
-    return fallback
+export function resolveRunDisplayValue(
+  value?: string | null,
+  options?: { runId?: string, field?: RunDisplayField },
+  values?: TranslationValues,
+): string {
+  if (!value) {
+    return ''
   }
 
-  const key = mockKey(entity, id, field, fallback)
-  return hasKey(key) ? translate(key) : resolveCopy(fallback)
-}
-
-export function resolveMockList(entity: string, id: string | undefined, field: string, fallback: string[] = []): string[] {
-  if (!id) {
-    return fallback.map((item) => resolveCopy(item))
+  if (hasKey(value)) {
+    return resolveCopy(value, values)
   }
 
-  return fallback.map((item, index) => {
-    const key = `mock.${entity}.${id}.${field}.${index}`
-    return hasKey(key) ? translate(key) : resolveCopy(item)
-  })
-}
+  const resolvedValue = options?.runId && options.field
+    ? mockKey('run', options.runId, options.field, value)
+    : value
 
-export function mockKey(entity: string, id: string | undefined, field: string, fallback = ''): string {
-  if (!id) {
-    return fallback
-  }
-
-  const key = `mock.${entity}.${id}.${field}`
-  return hasKey(key) ? key : fallback
+  return resolveCopy(resolvedValue, values)
 }
 
 export function enumLabel(group: string, value?: string | null): string {

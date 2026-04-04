@@ -27,7 +27,7 @@ const emit = defineEmits<{
     <TabsList
       data-testid="ui-tabs-list"
       :class="cn(
-        'inline-flex min-w-0 flex-wrap gap-1 border-b border-border-subtle w-full',
+        'inline-flex min-w-0 flex-wrap gap-1 border-b border-border/50 dark:border-white/[0.08] w-full',
       )"
     >
       <TabsTrigger

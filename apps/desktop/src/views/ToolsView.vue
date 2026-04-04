@@ -281,7 +281,7 @@ function availabilityTone(availability: 'healthy' | 'configured' | 'attention') 
     </header>
 
     <!-- Unified Filter Bar -->
-    <div class="px-2 flex flex-wrap items-center justify-between gap-6 border-b border-border-subtle pb-6">
+    <div class="px-2 flex flex-wrap items-center justify-between gap-6 border-b border-border-subtle dark:border-white/[0.05] pb-6">
       <UiTabs v-model="activeTab" :tabs="tabs" />
       
       <div class="flex items-center gap-3">
@@ -304,7 +304,7 @@ function availabilityTone(availability: 'healthy' | 'configured' | 'attention') 
     <div class="flex flex-1 min-h-0 gap-12 px-2">
       
       <!-- Left: Tool List (Wider for full screen) -->
-      <aside class="flex flex-col w-[420px] shrink-0 border-r border-border-subtle pr-12 gap-6">
+      <aside class="flex flex-col w-[420px] shrink-0 border-r border-border-subtle dark:border-white/[0.05] pr-12 gap-6">
         <div class="flex items-center justify-between">
           <h3 class="text-[15px] font-bold text-text-primary">{{ activeGroup?.title ?? t('tools.header.title') }}</h3>
           <span class="text-[12px] text-text-tertiary font-medium">{{ filteredItems.length }} items</span>
@@ -344,7 +344,7 @@ function availabilityTone(availability: 'healthy' | 'configured' | 'attention') 
           <UiEmptyState v-else :title="t('tools.emptyTitle')" :description="t('tools.emptyDescription')" />
         </div>
         
-        <div v-if="pageCount > 1" class="pt-6 border-t border-border-subtle shrink-0">
+        <div v-if="pageCount > 1" class="pt-6 border-t border-border-subtle dark:border-white/[0.05] shrink-0">
           <UiPagination :page="currentPage" :page-count="pageCount" @update:page="setPage" />
         </div>
       </aside>
@@ -397,7 +397,7 @@ function availabilityTone(availability: 'healthy' | 'configured' | 'attention') 
           </template>
         </div>
 
-        <div class="pt-8 border-t border-border-subtle flex gap-4 max-w-5xl">
+        <div class="pt-8 border-t border-border-subtle dark:border-white/[0.05] flex gap-4 max-w-5xl">
           <UiButton variant="primary" class="h-10 px-8" @click="saveTool">
             {{ t('common.save') }}
           </UiButton>

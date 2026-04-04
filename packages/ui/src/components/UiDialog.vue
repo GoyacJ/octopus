@@ -51,7 +51,7 @@ const accessibleDescription = computed(() => visibleDescription.value || accessi
         :data-testid="props.contentTestId"
         data-ui-dialog-content="true"
         :class="cn(
-          'fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-lg border border-border-strong bg-background p-5 shadow-[0_12px_24px_-8px_rgba(15,15,15,0.15)] md:w-full md:p-6',
+          'fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-lg border border-border/50 dark:border-white/[0.12] bg-background p-5 shadow-[0_12px_24px_-8px_rgba(15,15,15,0.15)] md:w-full md:p-6',
           props.contentClass,
         )"
       >
@@ -64,7 +64,7 @@ const accessibleDescription = computed(() => visibleDescription.value || accessi
 
         <header
           v-if="$slots.header || props.title || props.description"
-          class="flex items-start justify-between gap-3 pb-2 border-b border-border-subtle"
+          class="flex items-start justify-between gap-3 pb-2 border-b border-border/50 dark:border-white/[0.08]"
         >
           <div class="min-w-0 flex-1">
             <slot name="header">

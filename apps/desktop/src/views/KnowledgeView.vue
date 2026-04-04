@@ -19,7 +19,7 @@ import {
   UiToolbarRow,
 } from '@octopus/ui'
 
-import { enumLabel, formatDateTime, resolveMockField } from '@/i18n/copy'
+import { enumLabel, formatDateTime } from '@/i18n/copy'
 import { createProjectConversationTarget, createProjectSurfaceTarget } from '@/i18n/navigation'
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -47,7 +47,7 @@ const kindChipItems = computed(() =>
 const normalizedSearch = computed(() => searchQuery.value.trim().toLowerCase())
 const activeProjectName = computed(() =>
   workbench.activeProject
-    ? resolveMockField('project', workbench.activeProject.id, 'name', workbench.activeProject.name)
+    ? workbench.projectDisplayName(workbench.activeProject.id)
     : t('knowledge.header.titleFallback'),
 )
 const knowledgeEntries = computed(() => [...workbench.projectKnowledge])
@@ -215,27 +215,27 @@ watch(
 )
 
 function entryTitle(entry: KnowledgeEntry): string {
-  return resolveMockField('knowledgeEntry', entry.id, 'title', entry.title)
+  return workbench.knowledgeEntryDisplayTitle(entry.id)
 }
 
 function entrySummary(entry: KnowledgeEntry): string {
-  return resolveMockField('knowledgeEntry', entry.id, 'summary', entry.summary)
+  return workbench.knowledgeEntryDisplaySummary(entry.id)
 }
 
 function conversationTitle(conversation: Conversation): string {
-  return resolveMockField('conversation', conversation.id, 'title', conversation.title)
+  return workbench.conversationDisplayTitle(conversation.id)
 }
 
 function conversationSummary(conversation: Conversation): string {
-  return resolveMockField('conversation', conversation.id, 'summary', conversation.summary)
+  return workbench.conversationDisplaySummary(conversation.id)
 }
 
 function artifactTitle(artifact: Artifact): string {
-  return resolveMockField('artifact', artifact.id, 'title', artifact.title)
+  return workbench.artifactDisplayTitle(artifact.id)
 }
 
 function resourceTitle(resource: ProjectResource): string {
-  return resolveMockField('projectResource', resource.id, 'name', resource.name)
+  return workbench.projectResourceDisplayName(resource.id)
 }
 
 function traceRankLabel(level: KnowledgeEntry['trustLevel']): string {
@@ -359,7 +359,7 @@ function resolveLineageItem(itemId: string): { id: string, type: LineageItemType
 
   const trace = workbench.traces.find((entry) => entry.id === itemId)
   if (trace) {
-    return { id: itemId, type: 'trace', label: resolveMockField('traceRecord', trace.id, 'title', trace.title) }
+    return { id: itemId, type: 'trace', label: workbench.traceDisplayTitle(trace.id) }
   }
 
   return { id: itemId, type: 'unknown', label: itemId }
@@ -397,7 +397,7 @@ function resolveLineageItem(itemId: string): { id: string, type: LineageItemType
 
     <div class="flex flex-1 min-h-0 gap-10 px-2">
       <!-- Left Sidebar: Filters & List (Slightly wider for full width layout) -->
-      <aside class="flex flex-col w-96 shrink-0 border-r border-border-subtle pr-10 gap-6">
+      <aside class="flex flex-col w-96 shrink-0 border-r border-border-subtle dark:border-white/[0.05] pr-10 gap-6">
         <div class="space-y-4">
           <UiInput
             v-model="searchQuery"
@@ -444,7 +444,7 @@ function resolveLineageItem(itemId: string): { id: string, type: LineageItemType
               </div>
             </header>
 
-            <div class="grid gap-x-12 gap-y-8 sm:grid-cols-2 md:grid-cols-4 text-[13px] border-t border-border-subtle pt-8">
+            <div class="grid gap-x-12 gap-y-8 sm:grid-cols-2 md:grid-cols-4 text-[13px] border-t border-border-subtle dark:border-white/[0.05] pt-8">
               <div>
                 <span class="block text-text-tertiary text-[10px] uppercase font-bold tracking-wider mb-1.5">{{ t('knowledge.detail.fields.owner') }}</span>
                 <span class="text-text-primary font-medium text-sm">{{ selectedEntry.ownerId ?? t('common.workspace') }}</span>
@@ -464,10 +464,10 @@ function resolveLineageItem(itemId: string): { id: string, type: LineageItemType
             </div>
           </section>
 
-          <section class="space-y-6 border-t border-border-subtle pt-12 max-w-5xl">
+          <section class="space-y-6 border-t border-border-subtle dark:border-white/[0.05] pt-12 max-w-5xl">
             <h3 class="text-xl font-bold text-text-primary">{{ t('knowledge.detail.sourceTitle') }}</h3>
             
-            <div class="bg-subtle/30 rounded-lg border border-border-subtle p-6 space-y-4">
+            <div class="bg-subtle/30 rounded-lg border border-border-subtle dark:border-white/[0.08] p-6 space-y-4">
               <div class="flex flex-wrap gap-2.5">
                 <UiBadge :label="enumLabel('knowledgeSourceType', selectedEntry.sourceType)" subtle />
                 <UiBadge :label="selectedEntry.sourceId" subtle />
@@ -490,7 +490,7 @@ function resolveLineageItem(itemId: string): { id: string, type: LineageItemType
             </div>
           </section>
 
-          <section class="space-y-6 border-t border-border-subtle pt-12">
+          <section class="space-y-6 border-t border-border-subtle dark:border-white/[0.05] pt-12">
             <h3 class="text-xl font-bold text-text-primary">{{ t('knowledge.detail.contextTitle') }}</h3>
             
             <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">

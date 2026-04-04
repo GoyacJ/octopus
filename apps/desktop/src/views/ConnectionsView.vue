@@ -1,9 +1,10 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { UiBadge, UiEmptyState, UiRecordCard, UiSectionHeading } from '@octopus/ui'
 
-import { enumLabel, resolveMockField } from '@/i18n/copy'
+import { enumLabel } from '@/i18n/copy'
 import { useShellStore } from '@/stores/shell'
 import { useWorkbenchStore } from '@/stores/workbench'
 
@@ -11,9 +12,28 @@ const { t } = useI18n()
 const shell = useShellStore()
 const workbench = useWorkbenchStore()
 
+const hostBackendBadges = computed(() => {
+  if (!shell.backendConnection) {
+    return []
+  }
+
+  return [
+    {
+      id: 'state',
+      label: enumLabel('backendConnectionState', shell.backendConnection.state),
+      tone: shell.backendConnection.state === 'ready' ? 'success' : 'warning' as const,
+    },
+    {
+      id: 'transport',
+      label: enumLabel('backendTransport', shell.backendConnection.transport),
+      tone: 'info' as const,
+    },
+  ]
+})
+
 function workspaceLabel(workspaceId: string): string {
   const workspace = workbench.workspaces.find((item) => item.id === workspaceId)
-  return workspace ? resolveMockField('workspace', workspace.id, 'name', workspace.name) : workspaceId
+  return workspace ? workbench.workspaceDisplayName(workspace.id) : workspaceId
 }
 </script>
 
@@ -30,7 +50,7 @@ function workspaceLabel(workspaceId: string): string {
     <main class="grid gap-8 xl:grid-cols-2 px-2">
       <!-- Product Connections -->
       <section class="space-y-6">
-        <div class="space-y-1 border-b border-border-subtle pb-4">
+        <div class="space-y-1 border-b border-border-subtle dark:border-white/[0.05] pb-4">
           <h3 class="text-lg font-bold text-text-primary">{{ t('connections.product.title') }}</h3>
           <p class="text-[13px] text-text-secondary">{{ t('connections.product.subtitle') }}</p>
         </div>
@@ -40,7 +60,7 @@ function workspaceLabel(workspaceId: string): string {
             v-for="connection in workbench.connections"
             :key="connection.id"
             :test-id="`connection-record-${connection.id}`"
-            :title="resolveMockField('connection', connection.id, 'label', connection.label)"
+            :title="workbench.connectionDisplayLabel(connection.id)"
             :description="t('common.workspaceLabel', { workspace: workspaceLabel(connection.workspaceId) })"
           >
             <template #badges>
@@ -58,17 +78,36 @@ function workspaceLabel(workspaceId: string): string {
 
       <!-- Host Connections -->
       <section class="space-y-6">
-        <div class="space-y-1 border-b border-border-subtle pb-4">
+        <div class="space-y-1 border-b border-border-subtle dark:border-white/[0.05] pb-4">
           <h3 class="text-lg font-bold text-text-primary">{{ t('connections.host.title') }}</h3>
           <p class="text-[13px] text-text-secondary">{{ t('connections.host.subtitle') }}</p>
         </div>
 
         <div data-testid="connections-host-list" class="space-y-4">
           <UiRecordCard
+            v-if="shell.backendConnection"
+            test-id="host-backend-connection"
+            :title="t('connections.host.backendTitle')"
+            :description="t('connections.host.backendSubtitle')"
+          >
+            <template #badges>
+              <UiBadge
+                v-for="badge in hostBackendBadges"
+                :key="badge.id"
+                :label="badge.label"
+                :tone="badge.tone"
+              />
+            </template>
+            <template #meta>
+              <span class="truncate text-[12px] text-text-tertiary font-mono">{{ shell.backendConnection.baseUrl ?? t('common.noBaseUrl') }}</span>
+            </template>
+          </UiRecordCard>
+
+          <UiRecordCard
             v-for="connection in shell.bootstrapConnections"
             :key="connection.id"
             :test-id="`connection-record-${connection.id}`"
-            :title="resolveMockField('connection', connection.id, 'label', connection.label)"
+            :title="workbench.connectionDisplayLabel(connection.id)"
             :description="t('common.workspaceLabel', { workspace: workspaceLabel(connection.workspaceId) })"
           >
             <template #badges>
@@ -81,7 +120,7 @@ function workspaceLabel(workspaceId: string): string {
           </UiRecordCard>
 
           <UiEmptyState
-            v-if="!shell.bootstrapConnections.length"
+            v-if="!shell.backendConnection && !shell.bootstrapConnections.length"
             :title="t('connections.host.emptyTitle')"
             :description="t('connections.host.emptyDescription')"
           />

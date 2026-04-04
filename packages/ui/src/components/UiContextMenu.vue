@@ -32,7 +32,7 @@ function handleSelect(item: UiMenuItem) {
     </ContextMenuTrigger>
 
     <ContextMenuContent
-      class="z-50 min-w-44 rounded-xl border border-border bg-popover p-1 shadow-lg outline-none"
+      class="z-50 min-w-44 rounded-xl border border-border dark:border-white/[0.12] bg-popover p-1 shadow-lg outline-none"
       :side-offset="8"
     >
       <ContextMenuItem

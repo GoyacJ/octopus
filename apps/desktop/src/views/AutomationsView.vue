@@ -3,7 +3,7 @@ import { useI18n } from 'vue-i18n'
 
 import { UiBadge, UiEmptyState, UiRecordCard, UiSectionHeading } from '@octopus/ui'
 
-import { enumLabel, resolveMockField } from '@/i18n/copy'
+import { enumLabel } from '@/i18n/copy'
 import { useWorkbenchStore } from '@/stores/workbench'
 
 const { t } = useI18n()
@@ -31,15 +31,15 @@ const workbench = useWorkbenchStore()
           v-for="automation in workbench.workspaceAutomations"
           :key="automation.id"
           :test-id="`automation-record-${automation.id}`"
-          :title="resolveMockField('automation', automation.id, 'title', automation.title)"
-          :description="resolveMockField('automation', automation.id, 'description', automation.description)"
+          :title="workbench.automationDisplayTitle(automation.id)"
+          :description="workbench.automationDisplayDescription(automation.id)"
         >
           <template #badges>
             <UiBadge :label="enumLabel('automationStatus', automation.status)" :tone="automation.status === 'active' ? 'success' : 'warning'" />
-            <UiBadge :label="resolveMockField('automation', automation.id, 'cadence', automation.cadence)" subtle />
+            <UiBadge :label="workbench.automationDisplayCadence(automation.id)" subtle />
           </template>
           <template #meta>
-            <span class="text-[12px] text-text-secondary">{{ resolveMockField('automation', automation.id, 'output', automation.output) }}</span>
+            <span class="text-[12px] text-text-secondary">{{ workbench.automationDisplayOutput(automation.id) }}</span>
           </template>
         </UiRecordCard>
       </div>

@@ -8,15 +8,17 @@ import type {
   ShellBootstrap,
   ShellPreferences,
 } from '@octopus/schema'
-
-import { resolveMockShellBootstrap, shouldUseMockRuntime } from './mock'
 import {
-  fallbackBackendConnection,
-  fallbackHostState,
-  extractProjectIdFromRoute,
+  createFallbackBackendConnection,
+  createFallbackHostState,
+  extractProjectIdFromShellRoute,
+  normalizeShellPreferences,
+} from '@octopus/schema'
+
+import { resolveMockShellBootstrap } from './mock'
+import {
   isTauriRuntime,
   loadStoredPreferences,
-  normalizePreferences,
   saveStoredPreferences,
 } from './shared'
 
@@ -29,6 +31,18 @@ async function resolveDesktopShellBootstrap(): Promise<ShellBootstrap | null> {
     return await invoke<ShellBootstrap>('bootstrap_shell')
   } catch {
     return null
+  }
+}
+
+async function resolveDesktopBackendConnection(): Promise<HostBackendConnection | undefined> {
+  if (!isTauriRuntime()) {
+    return undefined
+  }
+
+  try {
+    return await invoke<HostBackendConnection>('get_backend_connection')
+  } catch {
+    return undefined
   }
 }
 
@@ -49,19 +63,15 @@ export async function bootstrapShellHost(
   }
 
   const preferences = desktopBootstrap.preferences
-    ? normalizePreferences(desktopBootstrap.preferences, defaultWorkspaceId, defaultProjectId)
+    ? normalizeShellPreferences(desktopBootstrap.preferences, defaultWorkspaceId, defaultProjectId)
     : fallbackPreferences
   saveStoredPreferences(preferences)
 
   return {
-    hostState: desktopBootstrap.hostState ?? fallbackHostState(),
+    hostState: desktopBootstrap.hostState ?? createFallbackHostState(),
     preferences,
-    connections: shouldUseMockRuntime()
-      ? mockConnections
-      : desktopBootstrap.connections ?? mockConnections,
-    backend: shouldUseMockRuntime()
-      ? fallbackBackendConnection()
-      : desktopBootstrap.backend ?? fallbackBackendConnection(),
+    connections: desktopBootstrap.connections ?? mockConnections,
+    backend: desktopBootstrap.backend ?? createFallbackBackendConnection('unavailable', 'http'),
   }
 }
 
@@ -72,7 +82,7 @@ export async function loadPreferences(defaultWorkspaceId: string, defaultProject
   }
 
   try {
-    const preferences = normalizePreferences(await invoke<ShellPreferences>('load_preferences'), defaultWorkspaceId, defaultProjectId)
+    const preferences = normalizeShellPreferences(await invoke<ShellPreferences>('load_preferences'), defaultWorkspaceId, defaultProjectId)
     saveStoredPreferences(preferences)
     return preferences
   } catch {
@@ -81,13 +91,13 @@ export async function loadPreferences(defaultWorkspaceId: string, defaultProject
 }
 
 export async function savePreferences(preferences: ShellPreferences): Promise<ShellPreferences> {
-  const normalizedPreferences = normalizePreferences(
+  const normalizedPreferences = normalizeShellPreferences(
     {
       ...preferences,
       compactSidebar: preferences.leftSidebarCollapsed,
     },
     preferences.defaultWorkspaceId,
-    extractProjectIdFromRoute(preferences.lastVisitedRoute),
+    extractProjectIdFromShellRoute(preferences.lastVisitedRoute),
   )
   saveStoredPreferences(normalizedPreferences)
   if (!isTauriRuntime()) {
@@ -95,10 +105,10 @@ export async function savePreferences(preferences: ShellPreferences): Promise<Sh
   }
 
   try {
-    const savedPreferences = normalizePreferences(
+    const savedPreferences = normalizeShellPreferences(
       await invoke<ShellPreferences>('save_preferences', { preferences: normalizedPreferences }),
       normalizedPreferences.defaultWorkspaceId,
-      extractProjectIdFromRoute(normalizedPreferences.lastVisitedRoute),
+      extractProjectIdFromShellRoute(normalizedPreferences.lastVisitedRoute),
     )
     saveStoredPreferences(savedPreferences)
     return savedPreferences
@@ -109,13 +119,13 @@ export async function savePreferences(preferences: ShellPreferences): Promise<Sh
 
 export async function getHostState(): Promise<HostState> {
   if (!isTauriRuntime()) {
-    return fallbackHostState()
+    return createFallbackHostState()
   }
 
   try {
     return await invoke<HostState>('get_host_state')
   } catch {
-    return fallbackHostState()
+    return createFallbackHostState()
   }
 }
 
@@ -174,10 +184,5 @@ export async function restartDesktopBackend(): Promise<void> {
 }
 
 export async function resolveRuntimeBackendConnection(): Promise<HostBackendConnection | undefined> {
-  if (!isTauriRuntime()) {
-    return undefined
-  }
-
-  const shellBootstrap = await resolveDesktopShellBootstrap()
-  return shellBootstrap?.backend
+  return await resolveDesktopBackendConnection()
 }

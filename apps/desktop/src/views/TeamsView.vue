@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import { UiBadge, UiButton, UiEmptyState, UiField, UiInput, UiListRow, UiSectionHeading, UiSelect, UiTextarea } from '@octopus/ui'
 
-import { enumLabel, resolveMockField } from '@/i18n/copy'
+import { enumLabel } from '@/i18n/copy'
 import { useWorkbenchStore } from '@/stores/workbench'
 
 const { t } = useI18n()
@@ -49,12 +49,12 @@ function syncDraft() {
   }
 
   draft.value = {
-    name: resolveMockField('team', team.id, 'name', team.name),
-    description: resolveMockField('team', team.id, 'description', team.description),
+    name: workbench.teamDisplayName(team.id),
+    description: workbench.teamDisplayDescription(team.id),
     mode: team.mode,
     useScope: team.useScope,
-    defaultOutput: resolveMockField('team', team.id, 'defaultOutput', team.defaultOutput),
-    projectNotes: resolveMockField('team', team.id, 'projectNotes', team.projectNotes),
+    defaultOutput: workbench.teamDisplayDefaultOutput(team.id),
+    projectNotes: workbench.teamDisplayProjectNotes(team.id),
     members: team.members.join(', '),
     approvalPreferences: team.approvalPreferences.join(', '),
   }
@@ -117,8 +117,8 @@ function saveTeam() {
             v-for="team in workbench.workspaceTeams"
             :key="team.id"
             :data-testid="`team-row-${team.id}`"
-            :title="resolveMockField('team', team.id, 'name', team.name)"
-            :subtitle="resolveMockField('team', team.id, 'description', team.description)"
+            :title="workbench.teamDisplayName(team.id)"
+            :subtitle="workbench.teamDisplayDescription(team.id)"
             :eyebrow="enumLabel('teamScope', team.useScope)"
             :active="team.id === selectedTeamId"
             interactive
@@ -141,8 +141,8 @@ function saveTeam() {
       <main class="flex-1 overflow-y-auto min-h-0 pb-8">
         <template v-if="selectedTeam">
           <header class="space-y-2 mb-8">
-            <h2 class="text-2xl font-bold text-text-primary">{{ resolveMockField('team', selectedTeam.id, 'name', selectedTeam.name) }}</h2>
-            <p class="text-[14px] text-text-secondary leading-relaxed">{{ resolveMockField('team', selectedTeam.id, 'defaultOutput', selectedTeam.defaultOutput) }}</p>
+            <h2 class="text-2xl font-bold text-text-primary">{{ workbench.teamDisplayName(selectedTeam.id) }}</h2>
+            <p class="text-[14px] text-text-secondary leading-relaxed">{{ workbench.teamDisplayDefaultOutput(selectedTeam.id) }}</p>
           </header>
 
           <div class="grid gap-x-8 gap-y-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

@@ -75,14 +75,14 @@ function handleOpenChange(value: boolean) {
         <ComboboxInput
           :model-value="query"
           :placeholder="props.placeholder"
-          class="flex h-8 w-full rounded-md border border-border-strong bg-background px-3 py-1.5 text-sm text-text-primary shadow-[inset_0_1px_2px_rgba(15,15,15,0.05)] placeholder:text-text-tertiary transition-all duration-fast focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          class="flex h-8 w-full rounded-md border border-border/60 dark:border-white/[0.1] bg-background px-3 py-1.5 text-sm text-text-primary shadow-[inset_0_1px_2px_rgba(15,15,15,0.05)] placeholder:text-text-tertiary transition-all duration-fast focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="ui-combobox-input"
           @update:model-value="query = String($event)"
         />
       </ComboboxAnchor>
 
       <ComboboxContent
-        class="z-40 overflow-hidden rounded-md border border-border-subtle bg-popover shadow-sm outline-none mt-1 w-full"
+        class="z-40 overflow-hidden rounded-md border border-border/40 dark:border-white/[0.12] bg-popover shadow-sm outline-none mt-1 w-full"
         :side-offset="4"
         position="popper"
       >

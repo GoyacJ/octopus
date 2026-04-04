@@ -21,8 +21,8 @@ const props = withDefaults(
     class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 min-w-0 p-3 rounded-md transition-colors border border-transparent"
     :class="[
       props.active 
-        ? 'bg-accent/50 border-border-subtle' 
-        : 'border-b border-b-border-subtle rounded-none sm:rounded-md sm:border-b-transparent',
+        ? 'bg-accent/50 border-border/40 dark:border-white/[0.08]' 
+        : 'border-b border-b-border/15 dark:border-b-white/[0.02] rounded-none sm:rounded-md sm:border-b-transparent',
       props.interactive && !props.active ? 'hover:bg-accent' : '',
       props.interactive ? 'cursor-pointer' : ''
     ]"
