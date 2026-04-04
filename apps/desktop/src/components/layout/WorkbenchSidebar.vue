@@ -245,21 +245,22 @@ async function confirmRemoveProject() {
     class="flex h-full min-h-0 flex-col bg-sidebar transition-all duration-300 ease-in-out border-r border-border-subtle dark:border-white/[0.05]"
     :class="shell.leftSidebarCollapsed ? 'w-0 opacity-0' : 'w-[240px] opacity-100'"
   >
+    <!-- App Header -->
+    <header class="p-4 flex items-center gap-3">
+      <img src="/logo.png" alt="Octopus" class="w-8 h-8 rounded-lg shadow-sm" />
+      <span class="text-lg font-bold tracking-tight text-text-primary">Octopus</span>
+    </header>
+
     <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-4" data-testid="sidebar-project-tree-scroll">
       <!-- Fast Actions -->
       <nav class="space-y-0.5">
-        <button @click="shell.openSearch" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-text-secondary hover:bg-accent group">
-          <Search :size="16" />
-          <span>{{ t('topbar.searchPlaceholder') }}</span>
-          <kbd class="ml-auto text-[10px] opacity-40 group-hover:opacity-100">⌘K</kbd>
+        <button class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-text-secondary hover:bg-accent group">
+          <MessageSquareText :size="16" />
+          <span>{{ t('sidebar.workspaceMenu.items.conversations') }}</span>
         </button>
-        <RouterLink :to="{ name: 'settings', params: { workspaceId: workbench.currentWorkspaceId } }" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-text-secondary hover:bg-accent">
-          <Settings :size="16" />
-          <span>{{ t('topbar.settings') }}</span>
-        </RouterLink>
-        <button class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-text-secondary hover:bg-accent">
+        <button class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-text-secondary hover:bg-accent group">
           <Bell :size="16" />
-          <span>{{ t('topbar.inbox') }}</span>
+          <span>待办事项</span>
         </button>
       </nav>
 
