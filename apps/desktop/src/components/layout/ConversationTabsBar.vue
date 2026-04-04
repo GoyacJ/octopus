@@ -2,17 +2,18 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { MessageSquareText, Plus, X } from 'lucide-vue-next'
+import { MessageSquareText, Plus, X, PanelRight } from 'lucide-vue-next'
 
 import { UiButton, UiPanelFrame } from '@octopus/ui'
 
-import { resolveMockField } from '@/i18n/copy'
 import { createProjectConversationTarget } from '@/i18n/navigation'
+import { useShellStore } from '@/stores/shell'
 import { useWorkbenchStore } from '@/stores/workbench'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const shell = useShellStore()
 const workbench = useWorkbenchStore()
 
 const conversations = computed(() => workbench.projectConversations)
@@ -73,48 +74,64 @@ async function removeConversation(conversationId: string) {
       padding="none"
       class="px-2 py-1.5"
     >
-      <div class="flex items-center gap-1.5 overflow-x-auto">
-        <div
-          v-for="conversation in conversations"
-          :key="conversation.id"
-          class="flex shrink-0 items-center gap-0.5"
-        >
-          <UiButton
-            variant="ghost"
-            class="flex h-8 min-w-0 max-w-[14rem] items-center gap-2 rounded-lg border border-transparent px-2.5 text-text-secondary hover:border-border/60 hover:bg-background/60 hover:text-text-primary"
-            :class="conversation.id === workbench.currentConversationId ? 'active border-primary/20 bg-primary/[0.06] text-text-primary shadow-xs' : ''"
-            :data-testid="conversation.id === workbench.currentConversationId ? 'conversation-tab-active' : `conversation-tab-${conversation.id}`"
-            :aria-current="conversation.id === workbench.currentConversationId ? 'page' : undefined"
-            @click="openConversation(conversation.id)"
+      <div class="flex items-center justify-between gap-2">
+        <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+          <div
+            v-for="conversation in conversations"
+            :key="conversation.id"
+            class="flex shrink-0 items-center gap-0.5"
           >
-            <MessageSquareText :size="12" class="shrink-0" />
-            <span class="truncate text-xs font-medium">
-              {{ resolveMockField('conversation', conversation.id, 'title', conversation.title) }}
-            </span>
-          </UiButton>
+            <UiButton
+              variant="ghost"
+              class="flex h-8 min-w-0 max-w-[14rem] items-center gap-2 rounded-lg border border-transparent px-2.5 text-text-secondary hover:border-border/60 hover:bg-background/60 hover:text-text-primary"
+              :class="conversation.id === workbench.currentConversationId ? 'active border-primary/20 bg-primary/[0.06] text-text-primary shadow-xs' : ''"
+              :data-testid="conversation.id === workbench.currentConversationId ? 'conversation-tab-active' : `conversation-tab-${conversation.id}`"
+              :aria-current="conversation.id === workbench.currentConversationId ? 'page' : undefined"
+              @click="openConversation(conversation.id)"
+            >
+              <MessageSquareText :size="12" class="shrink-0" />
+              <span class="truncate text-xs font-medium">
+                {{ workbench.conversationDisplayTitle(conversation.id) }}
+              </span>
+            </UiButton>
+
+            <UiButton
+              variant="ghost"
+              size="icon"
+              class="size-7 shrink-0 text-text-tertiary hover:bg-muted/80 hover:text-text-primary"
+              :data-testid="`conversation-tab-delete-${conversation.id}`"
+              :title="t('conversation.tabs.delete')"
+              @click.stop="removeConversation(conversation.id)"
+            >
+              <X :size="10" />
+            </UiButton>
+          </div>
 
           <UiButton
-            variant="ghost"
+            variant="outline"
             size="icon"
-            class="size-7 shrink-0 text-text-tertiary hover:bg-muted/80 hover:text-text-primary"
-            :data-testid="`conversation-tab-delete-${conversation.id}`"
-            :title="t('conversation.tabs.delete')"
-            @click.stop="removeConversation(conversation.id)"
+            class="ml-1 h-7 w-7 shrink-0 rounded-md"
+            data-testid="conversation-tab-create"
+            :title="t('conversation.tabs.create')"
+            @click="createConversation"
           >
-            <X :size="10" />
+            <Plus :size="12" />
           </UiButton>
         </div>
 
-        <UiButton
-          variant="outline"
-          size="icon"
-          class="ml-1 h-7 w-7 shrink-0 rounded-md"
-          data-testid="conversation-tab-create"
-          :title="t('conversation.tabs.create')"
-          @click="createConversation"
-        >
-          <Plus :size="12" />
-        </UiButton>
+        <div class="flex shrink-0 items-center border-l border-border/40 pl-2">
+          <UiButton
+            variant="ghost"
+            size="icon"
+            class="h-8 w-8 text-text-tertiary hover:bg-muted/80 hover:text-text-primary"
+            :class="{ 'text-primary': !shell.rightSidebarCollapsed }"
+            data-testid="toggle-conversation-details"
+            :title="t('conversation.tabs.toggleDetails')"
+            @click="shell.toggleRightSidebar()"
+          >
+            <PanelRight :size="16" />
+          </UiButton>
+        </div>
       </div>
 
       <div
