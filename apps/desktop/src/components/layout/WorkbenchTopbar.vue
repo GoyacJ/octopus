@@ -32,7 +32,7 @@ const accountMenuOpen = ref(false)
 const workspaceLabel = computed(() =>
   workbench.activeWorkspace
     ? workbench.workspaceDisplayName(workbench.activeWorkspace.id)
-    : 'Octopus',
+    : '网易Lobster',
 )
 
 const currentPageName = computed(() => {
@@ -159,9 +159,9 @@ async function removeWorkspace(workspaceId: string) {
         </UiButton>
 
         <div class="brand-logo-image flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-xs font-bold text-primary">
-          O
+          L
         </div>
-        <span data-testid="brand-title" class="text-sm font-semibold text-text-primary">Octopus</span>
+        <span data-testid="brand-title" class="text-sm font-semibold text-text-primary">网易Lobster</span>
       </div>
 
       <div class="hidden min-w-0 items-center gap-2 text-sm text-text-secondary md:flex">

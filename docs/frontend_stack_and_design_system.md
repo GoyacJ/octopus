@@ -13,6 +13,11 @@ The desktop application is standardized on:
 - `Vue 3 + Vite + Pinia + Vue Router + Vue I18n + Tauri 2`
 - `@octopus/ui` as the only approved shared UI entrypoint for app code
 - `Tailwind CSS + design tokens` as the only approved styling foundation
+- **`Minimalist Refined Foundation`** (Notion-inspired) as the mandatory visual aesthetic:
+  - **Whisper-quiet borders**: `border-border/40` or `dark:border-white/[0.08]`
+  - **Apple-style easing**: `cubic-bezier(0.32, 0.72, 0, 1)`
+  - **Hierarchical Typography**: Bold titles, tight tracking, uppercase tracked-out eyebrows
+  - **Refined Surfaces**: Subtle shadows and background gradients via `UiSurface`
 
 Future frontend work must treat this document and the root `AGENTS.md` as binding constraints:
 
@@ -49,10 +54,11 @@ Current repo evidence:
 
 - `packages/ui/package.json` exports `.`, `./main.css`, and `./tokens.css` and declares the runtime dependencies used by shared primitives, including `reka-ui`, `@tanstack/vue-table`, `@tanstack/vue-virtual`, `@iconify/vue`, `@rive-app/canvas`, and `@lottiefiles/dotlottie-vue`
 - `packages/ui/src/index.ts` exposes the shared surface used across the desktop app, including:
-  - base controls: `UiButton`, `UiInput`, `UiTextarea`, `UiCheckbox`, `UiSwitch`, `UiSelect`, `UiRadioGroup`
+  - base controls: `UiButton`, `UiInput`, `UiTextarea`, `UiCheckbox`, `UiSwitch`, `UiSelect`, `UiRadioGroup`, `UiSectionHeading`
   - overlay and navigation: `UiDialog`, `UiPopover`, `UiDropdownMenu`, `UiCombobox`, `UiTabs`, `UiAccordion`, `UiContextMenu`, `UiSelectionMenu`
-  - page and shell abstractions: `UiPageHero`, `UiPanelFrame`, `UiToolbarRow`, `UiNavCardList`
-  - data display: `UiBadge`, `UiSurface`, `UiEmptyState`, `UiMetricCard`, `UiRankingList`, `UiTimelineList`, `UiRecordCard`, `UiListRow`, `UiDataTable`, `UiVirtualList`
+  - page and shell abstractions: `UiPageHero`, `UiPanelFrame`, `UiToolbarRow`, `UiNavCardList`, `UiSurface`
+  - data display: `UiBadge`, `UiEmptyState`, `UiMetricCard`, `UiRankingList`, `UiTimelineList`, `UiRecordCard`, `UiListRow`, `UiStatTile`, `UiPagination`, `UiDataTable`, `UiVirtualList`
+  - context-specific blocks: `UiArtifactBlock`, `UiTraceBlock`, `UiInboxBlock`
   - media and editor: `UiCodeEditor`, `UiIcon`, `UiDotLottie`, `UiRiveCanvas`
 
 Conclusion:
@@ -316,11 +322,13 @@ Examples:
 - `UiSwitch`
 - `UiSelect`
 - `UiRadioGroup`
+- `UiSectionHeading`
 
 Rules:
 
 - expose consistent variants, sizes, disabled/loading states, and token usage
 - do not duplicate button/input styling in business pages
+- `UiSectionHeading` should be used for internal surface grouping
 
 ### 6.2 Form Wrappers And Validation Adapters
 
@@ -347,6 +355,7 @@ Examples:
 - `UiTabs`
 - `UiAccordion`
 - `UiContextMenu`
+- `UiSelectionMenu`
 
 Rules:
 
@@ -371,8 +380,23 @@ Rules:
 
 - table and large-list experiences should converge on the TanStack wrappers owned by `packages/ui`
 - page-level list shells should compose these primitives instead of redefining row/table states locally
+- `UiSurface` is the foundation for all "raised" or "panel" visual containers
 
-### 6.5 Editors, Media, And Icons
+### 6.5 Context-Specific Blocks
+
+Examples:
+
+- `UiArtifactBlock`
+- `UiTraceBlock`
+- `UiInboxBlock`
+- `UiRecordCard`
+
+Rules:
+
+- use these for specific domain concepts (artifacts, logs, notifications, records) to maintain visual consistency across different views
+- these blocks must follow the `Minimalist Refined` aesthetic (whisper borders, tight typography)
+
+### 6.6 Editors, Media, And Icons
 
 Examples:
 

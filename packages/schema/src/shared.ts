@@ -32,7 +32,7 @@ export type TeamScope = 'workspace' | 'project'
 export type AgentAssetKind = 'agent' | 'team'
 export type AgentStatus = 'active' | 'archived'
 export type TeamStatus = 'active' | 'archived'
-export type ArtifactStatus = 'draft' | 'review' | 'approved'
+export type ArtifactStatus = 'draft' | 'review' | 'approved' | 'published'
 export type PetSpecies =
   | 'duck'
   | 'goose'

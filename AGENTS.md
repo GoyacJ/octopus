@@ -3,6 +3,11 @@
 ## Frontend Governance
 
 - Desktop frontend baseline: `Vue 3 + Vite + Pinia + Vue Router + Vue I18n + Tauri 2`.
+- **Design System Aesthetic**: `Minimalist Refined Foundation` (Notion-inspired). Focus on:
+  - **Whisper-quiet borders**: `border-border/40` or `dark:border-white/[0.08]`.
+  - **Apple-style easing**: `cubic-bezier(0.32, 0.72, 0, 1)`.
+  - **Hierarchical Typography**: Bold titles, tight tracking, small uppercase eyebrows with wide tracking.
+  - **Refined Surfaces**: `UiSurface` with subtle shadows and background gradients.
 - Frontend-first delivery uses mock data by default. Pages, stores, and view models must be able to complete their primary flows without requiring a live backend or Tauri host response.
 - Real Tauri or backend integration may remain behind the existing adapter layer, but it must not become the default path for new frontend feature development in the current phase.
 - Shared schemas in `packages/schema` must be defined in feature-based files under `packages/schema/src/*`. `packages/schema/src/index.ts` is the public export surface only and must not keep accumulating schema definitions.
@@ -12,6 +17,13 @@
   1. Reuse `@octopus/ui`.
   2. If missing, reference `shadcn-vue` interaction and structure patterns, but implement the component inside `@octopus/ui`.
   3. `Dialog`, `Popover`, `DropdownMenu`, `Combobox`, `Tabs`, `Accordion`, and `ContextMenu` must be built on `Reka UI` primitives.
+- Shared UI Component Catalog:
+  - Base: `UiButton`, `UiInput`, `UiTextarea`, `UiCheckbox`, `UiSwitch`, `UiSelect`, `UiRadioGroup`, `UiSectionHeading`.
+  - Layout: `UiSurface`, `UiPanelFrame`, `UiToolbarRow`, `UiPageHero`, `UiNavCardList`.
+  - Data Display: `UiBadge`, `UiEmptyState`, `UiMetricCard`, `UiRankingList`, `UiTimelineList`, `UiRecordCard`, `UiListRow`, `UiStatTile`, `UiPagination`.
+  - Context Blocks: `UiArtifactBlock`, `UiTraceBlock`, `UiInboxBlock`.
+  - Composite: `UiDialog`, `UiPopover`, `UiDropdownMenu`, `UiCombobox`, `UiTabs`, `UiAccordion`, `UiContextMenu`, `UiSelectionMenu`, `UiDataTable`, `UiVirtualList`.
+  - Media/Editor: `UiCodeEditor`, `UiIcon`, `UiDotLottie`, `UiRiveCanvas`.
 - Styling must use `Tailwind CSS + design tokens` only. Do not mix multiple styling systems in the same surface.
 - Forms default to `vee-validate + zod`.
 - Tables default to `@tanstack/vue-table`.

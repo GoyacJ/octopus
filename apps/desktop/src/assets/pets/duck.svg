@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
-  <rect width="128" height="128" rx="32" fill="#E8F2FF"/>
-  <circle cx="64" cy="64" r="44" fill="#FFE082"/>
-  <circle cx="49" cy="56" r="5" fill="#1F2937"/>
-  <circle cx="79" cy="56" r="5" fill="#1F2937"/>
-  <path d="M46 78c6 7 14 10 18 10s12-3 18-10" stroke="#F59E0B" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="30" cy="30" r="14" fill="#F59E0B" fill-opacity="0.14"/>
-  <circle cx="102" cy="100" r="10" fill="#F59E0B" fill-opacity="0.18"/>
-  <rect x="39" y="22" width="50" height="18" rx="9" fill="#F59E0B" fill-opacity="0.18"/>
-  <text x="64" y="35" text-anchor="middle" font-size="14" font-family="Arial, sans-serif" font-weight="700" fill="#F59E0B">DU</text>
+  <g class="pet-body">
+
+    <circle cx="64" cy="74" r="40" fill="#FFD54F"/>
+    <circle cx="64" cy="44" r="30" fill="#FFD54F"/>
+    <circle cx="50" cy="38" r="4" fill="#1F2937"/>
+    <circle cx="78" cy="38" r="4" fill="#1F2937"/>
+    <path d="M54 50 Q 64 60 74 50 Z" fill="#FF8F00"/>
+  
+  </g>
 </svg>

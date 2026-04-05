@@ -1,11 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
-  <rect width="128" height="128" rx="32" fill="#FAFAF9"/>
-  <circle cx="64" cy="64" r="44" fill="#D6D3D1"/>
-  <circle cx="49" cy="56" r="5" fill="#1F2937"/>
-  <circle cx="79" cy="56" r="5" fill="#1F2937"/>
-  <path d="M46 78c6 7 14 10 18 10s12-3 18-10" stroke="#57534E" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="30" cy="30" r="14" fill="#57534E" fill-opacity="0.14"/>
-  <circle cx="102" cy="100" r="10" fill="#57534E" fill-opacity="0.18"/>
-  <rect x="39" y="22" width="50" height="18" rx="9" fill="#57534E" fill-opacity="0.18"/>
-  <text x="64" y="35" text-anchor="middle" font-size="14" font-family="Arial, sans-serif" font-weight="700" fill="#57534E">OW</text>
+  <g class="pet-body">
+
+    <circle cx="64" cy="64" r="44" fill="#A1887F"/>
+    <circle cx="46" cy="50" r="16" fill="#FFFFFF"/>
+    <circle cx="82" cy="50" r="16" fill="#FFFFFF"/>
+    <circle cx="46" cy="50" r="5" fill="#1F2937"/>
+    <circle cx="82" cy="50" r="5" fill="#1F2937"/>
+    <polygon points="56,64 72,64 64,76" fill="#FFB300"/>
+    <path d="M20 64 Q 10 74 24 94 M 108 64 Q 118 74 104 94" stroke="#8D6E63" stroke-width="10" stroke-linecap="round" fill="none"/>
+  
+  </g>
 </svg>

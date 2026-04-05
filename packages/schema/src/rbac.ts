@@ -23,6 +23,28 @@ export interface Workspace {
   projectIds: string[]
 }
 
+export function createWorkspaceRecord(input: {
+  id: string
+  name: string
+  avatar?: string
+  isLocal?: boolean
+  description?: string
+  roleSummary?: string
+  memberCount?: number
+  projectIds?: string[]
+}): Workspace {
+  return {
+    id: input.id,
+    name: input.name,
+    avatar: input.avatar,
+    isLocal: input.isLocal ?? true,
+    description: input.description ?? '',
+    roleSummary: input.roleSummary ?? '',
+    memberCount: input.memberCount ?? 1,
+    projectIds: input.projectIds ?? [],
+  }
+}
+
 export interface UserAccount {
   id: string
   username: string

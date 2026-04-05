@@ -1035,7 +1035,7 @@ export const useWorkbenchStore = defineStore('workbench', {
     },
     currentUserRoles(): RbacRole[] {
       const roleIds = new Set(this.currentMembership?.roleIds ?? [])
-      return this.workspaceRoles.filter((role) => roleIds.has(role.id))
+      return this.workspaceRoles.filter((role: RbacRole) => roleIds.has(role.id))
     },
     effectivePermissionIdsForWorkspace(state) {
       return (workspaceId: string, userId = state.currentUserId) => resolveEffectivePermissionIds(
@@ -1554,7 +1554,7 @@ export const useWorkbenchStore = defineStore('workbench', {
         return state.teams.find((item) => item.id === id)?.name ?? fallback
       }
     },
-    actorDisplayInitial() {
+    actorDisplayInitial(): (kind: 'agent' | 'team', id: string, avatar?: string, fallback?: string) => string {
       return (kind: 'agent' | 'team', id: string, avatar?: string, fallback = id) => {
         if (avatar && avatar.length < 3) {
           return avatar
@@ -1562,13 +1562,17 @@ export const useWorkbenchStore = defineStore('workbench', {
         return this.actorDisplayName(kind, id, fallback).slice(0, 1)
       }
     },
-    conversationDefaultActorLabel() {
+    conversationDefaultActorLabel(state): string {
       const actor = this.activeConversationDefaultActor
       if (!actor) {
         return 'Octopus'
       }
 
-      return `默认智能体 · ${this.actorDisplayName(actor.actorKind, actor.actorId)}`
+      const label = actor.actorKind === 'agent'
+        ? state.agents.find((item) => item.id === actor.actorId)?.name
+        : state.teams.find((item) => item.id === actor.actorId)?.name
+
+      return `默认智能体 · ${label ?? actor.actorId}`
     },
     artifactDisplayTitle(state) {
       return (artifactId: string) => {

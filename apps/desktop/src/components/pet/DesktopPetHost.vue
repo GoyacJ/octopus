@@ -40,8 +40,6 @@ function setChatOpen(value: boolean) {
           :pet="pet"
           :motion-state="presence.motionState"
           :unread-count="presence.unreadCount"
-          @open="workbench.togglePetChat(true)"
-          @nudge="workbench.nudgePetPosition"
           @hover-state="workbench.setPetMotionState"
         />
       </template>
@@ -53,7 +51,7 @@ function setChatOpen(value: boolean) {
 <style scoped>
 .desktop-pet-host {
   position: fixed;
-  z-index: 45;
+  z-index: 60;
 }
 
 .desktop-pet-popover :deep(.relative.inline-flex) {

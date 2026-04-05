@@ -47,3 +47,108 @@ export interface ShellBootstrap {
   connections: ConnectionProfile[]
   backend?: HostBackendConnection
 }
+
+export type ConversationDetailFocus = 'summary' | 'memories' | 'artifacts' | 'knowledge' | 'resources' | 'tools' | 'timeline'
+
+export interface ShellRouteState {
+  detail?: string | null
+  pane?: string | null
+  artifact?: string | null
+}
+
+export function createDefaultShellPreferences(defaultWorkspaceId: string, defaultProjectId: string): ShellPreferences {
+  return {
+    theme: 'system',
+    locale: 'zh-CN',
+    compactSidebar: false,
+    leftSidebarCollapsed: false,
+    rightSidebarCollapsed: false,
+    defaultWorkspaceId,
+    lastVisitedRoute: `/workspaces/${defaultWorkspaceId}/overview?project=${defaultProjectId}`,
+  }
+}
+
+export function normalizeShellPreferences(
+  preferences: Partial<ShellPreferences> | undefined,
+  defaultWorkspaceId: string,
+  defaultProjectId: string,
+): ShellPreferences {
+  const fallback = createDefaultShellPreferences(defaultWorkspaceId, defaultProjectId)
+  const nextWorkspaceId = preferences?.defaultWorkspaceId || fallback.defaultWorkspaceId
+  const nextProjectId = extractProjectIdFromShellRoute(preferences?.lastVisitedRoute) || defaultProjectId
+  const nextRoute = preferences?.lastVisitedRoute || `/workspaces/${nextWorkspaceId}/overview?project=${nextProjectId}`
+  const leftSidebarCollapsed = typeof preferences?.leftSidebarCollapsed === 'boolean'
+    ? preferences.leftSidebarCollapsed
+    : typeof preferences?.compactSidebar === 'boolean'
+      ? preferences.compactSidebar
+      : fallback.leftSidebarCollapsed
+
+  return {
+    theme: preferences?.theme ?? fallback.theme,
+    locale: preferences?.locale ?? fallback.locale,
+    compactSidebar: typeof preferences?.compactSidebar === 'boolean'
+      ? preferences.compactSidebar
+      : leftSidebarCollapsed,
+    leftSidebarCollapsed,
+    rightSidebarCollapsed: preferences?.rightSidebarCollapsed ?? fallback.rightSidebarCollapsed,
+    defaultWorkspaceId: nextWorkspaceId,
+    lastVisitedRoute: nextRoute,
+  }
+}
+
+export function createFallbackHostState(platform: HostPlatform = 'web'): HostState {
+  return {
+    platform,
+    mode: 'local',
+    appVersion: '0.1.0',
+    cargoWorkspace: false,
+    shell: platform === 'tauri' ? 'tauri2' : 'web',
+  }
+}
+
+export function createFallbackBackendConnection(
+  state: BackendConnectionState = 'ready',
+  transport: BackendTransport = 'mock',
+): HostBackendConnection {
+  return {
+    state,
+    transport,
+  }
+}
+
+export function extractProjectIdFromShellRoute(route?: string | null): string {
+  if (!route) {
+    return 'proj-redesign'
+  }
+
+  const projectMatch = route.match(/\/projects\/([^/?#]+)/)
+  if (projectMatch?.[1]) {
+    return decodeURIComponent(projectMatch[1])
+  }
+
+  const queryMatch = route.match(/[?&]project=([^&#]+)/)
+  if (queryMatch?.[1]) {
+    return decodeURIComponent(queryMatch[1])
+  }
+
+  return 'proj-redesign'
+}
+
+export function normalizeConversationDetailFocus(
+  detail?: string | null,
+  pane?: string | null,
+): ConversationDetailFocus {
+  const value = detail ?? pane
+  switch (value) {
+    case 'summary':
+    case 'memories':
+    case 'artifacts':
+    case 'knowledge':
+    case 'resources':
+    case 'tools':
+    case 'timeline':
+      return value
+    default:
+      return 'summary'
+  }
+}

@@ -456,6 +456,7 @@ export interface Project {
   goal: string
   phase: string
   summary: string
+  workingDir?: string
   blockerIds: string[]
   recentDecision: string
   conversationIds: string[]

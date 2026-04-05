@@ -117,7 +117,7 @@ export function resolveMockShellBootstrap(
   mockConnections: ConnectionProfile[],
 ): ShellBootstrap {
   return {
-    hostState: createFallbackHostState(),
+    hostState: createFallbackHostState('tauri'),
     preferences: loadStoredPreferences(defaultWorkspaceId, defaultProjectId),
     connections: mockConnections,
     backend: createFallbackBackendConnection(),

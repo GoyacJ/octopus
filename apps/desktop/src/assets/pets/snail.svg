@@ -1,11 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
-  <rect width="128" height="128" rx="32" fill="#FFFBEB"/>
-  <circle cx="64" cy="64" r="44" fill="#FCD34D"/>
-  <circle cx="49" cy="56" r="5" fill="#1F2937"/>
-  <circle cx="79" cy="56" r="5" fill="#1F2937"/>
-  <path d="M46 78c6 7 14 10 18 10s12-3 18-10" stroke="#B45309" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="30" cy="30" r="14" fill="#B45309" fill-opacity="0.14"/>
-  <circle cx="102" cy="100" r="10" fill="#B45309" fill-opacity="0.18"/>
-  <rect x="39" y="22" width="50" height="18" rx="9" fill="#B45309" fill-opacity="0.18"/>
-  <text x="64" y="35" text-anchor="middle" font-size="14" font-family="Arial, sans-serif" font-weight="700" fill="#B45309">SN</text>
+  <g class="pet-body">
+
+    <path d="M24 94 L 104 94 Q 104 84 94 84 L 24 84 Z" fill="#FFCC80"/>
+    <circle cx="24" cy="74" r="4" fill="#FFCC80"/>
+    <circle cx="24" cy="64" r="3" fill="#1F2937"/>
+    <circle cx="64" cy="64" r="30" fill="#8D6E63"/>
+    <circle cx="64" cy="64" r="20" fill="#A1887F" stroke="#795548" stroke-width="3"/>
+    <path d="M64 44 Q 84 44 84 64" stroke="#795548" stroke-width="3" fill="none"/>
+  
+  </g>
 </svg>

@@ -40,7 +40,11 @@ async function resolveDesktopBackendConnection(): Promise<HostBackendConnection 
   }
 
   try {
-    return await invoke<HostBackendConnection>('get_backend_connection')
+    const payload = await invoke<HostBackendConnection | ShellBootstrap>('get_backend_connection')
+    if (payload && typeof payload === 'object' && 'backend' in payload) {
+      return payload.backend
+    }
+    return payload as HostBackendConnection | undefined
   } catch {
     return undefined
   }
@@ -58,6 +62,7 @@ export async function bootstrapShellHost(
   if (!desktopBootstrap) {
     return {
       ...mockBootstrap,
+      hostState: createFallbackHostState('web'),
       preferences: fallbackPreferences,
     }
   }
@@ -68,10 +73,12 @@ export async function bootstrapShellHost(
   saveStoredPreferences(preferences)
 
   return {
-    hostState: desktopBootstrap.hostState ?? createFallbackHostState(),
+    hostState: desktopBootstrap.hostState ?? createFallbackHostState('web'),
     preferences,
     connections: desktopBootstrap.connections ?? mockConnections,
-    backend: desktopBootstrap.backend ?? createFallbackBackendConnection('unavailable', 'http'),
+    backend: desktopBootstrap.backend?.state === 'ready'
+      ? createFallbackBackendConnection('ready', 'mock')
+      : createFallbackBackendConnection('unavailable', 'mock'),
   }
 }
 
@@ -119,13 +126,13 @@ export async function savePreferences(preferences: ShellPreferences): Promise<Sh
 
 export async function getHostState(): Promise<HostState> {
   if (!isTauriRuntime()) {
-    return createFallbackHostState()
+    return createFallbackHostState('web')
   }
 
   try {
     return await invoke<HostState>('get_host_state')
   } catch {
-    return createFallbackHostState()
+    return createFallbackHostState('web')
   }
 }
 
@@ -184,5 +191,10 @@ export async function restartDesktopBackend(): Promise<void> {
 }
 
 export async function resolveRuntimeBackendConnection(): Promise<HostBackendConnection | undefined> {
-  return await resolveDesktopBackendConnection()
+  if (!isTauriRuntime()) {
+    return undefined
+  }
+
+  const backend = await resolveDesktopBackendConnection()
+  return backend?.state === 'ready' ? backend : undefined
 }

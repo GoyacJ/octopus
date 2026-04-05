@@ -46,6 +46,26 @@ export interface ConnectionProfile {
   lastSyncAt?: number
 }
 
+export function createConnectionProfile(input: {
+  id: string
+  mode: ConnectionMode
+  label: string
+  workspaceId: string
+  baseUrl?: string
+  state?: ConnectionState
+  lastSyncAt?: number
+}): ConnectionProfile {
+  return {
+    id: input.id,
+    mode: input.mode,
+    label: input.label,
+    workspaceId: input.workspaceId,
+    baseUrl: input.baseUrl,
+    state: input.state ?? (input.mode === 'local' ? 'local-ready' : 'connected'),
+    lastSyncAt: input.lastSyncAt,
+  }
+}
+
 export interface ModelCatalogItem {
   id: string
   label: string

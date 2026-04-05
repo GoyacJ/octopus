@@ -1,4 +1,4 @@
-import type { DecisionAction, RiskLevel, RunStatus, TraceKind, TraceTone } from './shared'
+import type { DecisionAction, PermissionMode, RiskLevel, RunStatus, TraceKind, TraceTone } from './shared'
 
 export interface ProviderConfig {
   provider: string
@@ -107,4 +107,20 @@ export interface RuntimeSessionDetail {
 export interface RuntimeBootstrap {
   provider: ProviderConfig
   sessions: RuntimeSessionSummary[]
+}
+
+export interface CreateRuntimeSessionInput {
+  conversationId: string
+  projectId: string
+  title: string
+}
+
+export interface SubmitRuntimeTurnInput {
+  content: string
+  modelId: string
+  permissionMode: PermissionMode
+}
+
+export interface ResolveRuntimeApprovalInput {
+  decision: RuntimeDecisionAction
 }

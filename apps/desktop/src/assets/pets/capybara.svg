@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
-  <rect width="128" height="128" rx="32" fill="#FAF5EF"/>
-  <circle cx="64" cy="64" r="44" fill="#D6BFA6"/>
-  <circle cx="49" cy="56" r="5" fill="#1F2937"/>
-  <circle cx="79" cy="56" r="5" fill="#1F2937"/>
-  <path d="M46 78c6 7 14 10 18 10s12-3 18-10" stroke="#8B5E34" stroke-width="7" stroke-linecap="round"/>
-  <circle cx="30" cy="30" r="14" fill="#8B5E34" fill-opacity="0.14"/>
-  <circle cx="102" cy="100" r="10" fill="#8B5E34" fill-opacity="0.18"/>
-  <rect x="39" y="22" width="50" height="18" rx="9" fill="#8B5E34" fill-opacity="0.18"/>
-  <text x="64" y="35" text-anchor="middle" font-size="14" font-family="Arial, sans-serif" font-weight="700" fill="#8B5E34">CA</text>
+  <g class="pet-body">
+
+    <rect x="24" y="44" width="80" height="60" rx="30" fill="#8D6E63"/>
+    <circle cx="44" cy="34" r="10" fill="#795548"/>
+    <circle cx="34" cy="60" r="4" fill="#1F2937"/>
+    <path d="M24 70 Q 30 74 28 80" stroke="#1F2937" stroke-width="3" fill="none"/>
+    <rect x="64" y="44" width="20" height="10" rx="5" fill="#5D4037"/>
+  
+  </g>
 </svg>

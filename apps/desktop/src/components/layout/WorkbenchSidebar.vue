@@ -53,7 +53,7 @@ async function selectLocale(locale: 'zh-CN' | 'en-US') {
 const workspaceLabel = computed(() =>
   workbench.activeWorkspace
     ? workbench.workspaceDisplayName(workbench.activeWorkspace.id)
-    : 'Octopus',
+    : '网易Lobster',
 )
 
 interface NavigationItem {
@@ -247,8 +247,8 @@ async function confirmRemoveProject() {
   >
     <!-- App Header -->
     <header class="p-4 flex items-center gap-3">
-      <img src="/logo.png" alt="Octopus" class="w-8 h-8 rounded-lg shadow-sm" />
-      <span class="text-lg font-bold tracking-tight text-text-primary">Octopus</span>
+      <img src="/logo.png" alt="网易Lobster" class="w-8 h-8 rounded-lg shadow-sm" />
+      <span class="text-lg font-bold tracking-tight text-text-primary">网易Lobster</span>
     </header>
 
     <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-4" data-testid="sidebar-project-tree-scroll">
