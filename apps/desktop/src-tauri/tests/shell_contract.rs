@@ -3,7 +3,8 @@ use std::{path::{Path, PathBuf}, process::Command, sync::Arc};
 use octopus_core::{default_preferences, DesktopBackendConnection, HostState, ShellPreferences};
 use octopus_desktop_shell::backend::BackendSupervisor;
 use octopus_desktop_shell::bootstrap::{
-  bootstrap_shell_payload, healthcheck_payload, load_shell_preferences, save_shell_preferences,
+  bootstrap_shell_payload, get_backend_connection_payload, healthcheck_payload, load_shell_preferences,
+  save_shell_preferences,
 };
 use octopus_desktop_shell::services::PreferencesService;
 use octopus_desktop_shell::state::ShellState;
@@ -112,6 +113,19 @@ fn healthcheck_reflects_tauri_local_workspace_status() {
   assert_eq!(payload.backend.transport, "http");
 }
 
+#[test]
+fn backend_connection_payload_exposes_supervisor_state() {
+  let temp = tempdir().expect("tempdir");
+  let state = test_state(temp.path().to_path_buf());
+
+  let connection = get_backend_connection_payload(&state);
+
+  assert_eq!(connection.state, "unavailable");
+  assert_eq!(connection.transport, "http");
+  assert_eq!(connection.base_url, None);
+  assert_eq!(connection.auth_token, None);
+}
+
 #[tokio::test]
 async fn bootstrap_and_healthcheck_reflect_ready_backend_after_supervisor_start() {
   ensure_backend_binary_exists();
@@ -147,6 +161,43 @@ async fn bootstrap_and_healthcheck_reflect_ready_backend_after_supervisor_start(
   assert!(backend.auth_token.is_some());
   assert_eq!(backend.base_url, connection.base_url);
   assert_eq!(backend.auth_token, connection.auth_token);
+
+  supervisor.shutdown();
+}
+
+#[tokio::test]
+async fn backend_host_token_does_not_grant_workspace_api_access() {
+  ensure_backend_binary_exists();
+
+  let temp = tempdir().expect("tempdir");
+  let runtime_root = temp.path().join("runtime");
+  let supervisor = BackendSupervisor::new(
+    Arc::new(RwLock::new(DesktopBackendConnection {
+      base_url: None,
+      auth_token: None,
+      state: "unavailable".into(),
+      transport: "http".into(),
+    })),
+    runtime_root,
+  );
+  let state = test_state_with_supervisor(temp.path().to_path_buf(), supervisor.clone());
+
+  let connection = supervisor
+    .start_dev(&state.host_state, state.preferences_service.path())
+    .await
+    .expect("backend should start in dev mode");
+
+  let response = reqwest::Client::new()
+    .get(format!(
+      "{}/api/v1/workspace",
+      connection.base_url.expect("backend base url")
+    ))
+    .bearer_auth(connection.auth_token.expect("backend auth token"))
+    .send()
+    .await
+    .expect("workspace request");
+
+  assert_eq!(response.status(), reqwest::StatusCode::UNAUTHORIZED);
 
   supervisor.shutdown();
 }
