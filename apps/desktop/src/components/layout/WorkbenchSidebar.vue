@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute } from 'vue-router'
 import {
   Bell,
   Bot,
+  ChevronsUpDown,
   Cpu,
   FolderKanban,
   FolderOpen,
@@ -19,7 +20,7 @@ import {
   Wrench,
 } from 'lucide-vue-next'
 
-import { UiButton } from '@octopus/ui'
+import { UiButton, UiPopover } from '@octopus/ui'
 
 import { createProjectConversationTarget, createProjectDashboardTarget, createProjectSurfaceTarget, createWorkspaceOverviewTarget } from '@/i18n/navigation'
 import { type MenuIconKey } from '@/navigation/menuRegistry'
@@ -34,6 +35,15 @@ const shell = useShellStore()
 const workspaceStore = useWorkspaceStore()
 const userCenterStore = useUserCenterStore()
 const runtime = useRuntimeStore()
+
+const workspaceMenuOpen = ref(false)
+const workspaceLabel = computed(() => {
+  const connection = shell.activeWorkspaceConnection
+  if (connection?.transportSecurity === 'loopback') {
+    return t('topbar.localWorkspace')
+  }
+  return connection?.label ?? workspaceStore.activeWorkspace?.name ?? t('common.workspace')
+})
 
 type NavigationItem = {
   id: string
@@ -242,22 +252,10 @@ function isProjectModuleActive(projectId: string, routeNames: string[]) {
       </UiButton>
     </div>
 
-    <nav class="mt-6 space-y-1">
-      <div class="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-text-tertiary">Workspace</div>
-      <RouterLink
-        v-for="item in workspaceNavigation"
-        :key="item.id"
-        :to="item.to"
-        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors"
-        :class="isRouteActive(item.routeNames) ? 'bg-primary/[0.08] text-text-primary' : 'text-text-secondary hover:bg-accent'"
-      >
-        <component :is="item.icon" :size="16" />
-        <span class="truncate">{{ item.label }}</span>
-      </RouterLink>
-    </nav>
-
     <div class="mt-6 min-h-0 flex-1 overflow-y-auto">
-      <div class="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-text-tertiary">Projects</div>
+      <div class="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
+        {{ t('sidebar.projectTree.title') }}
+      </div>
       <div class="space-y-3">
         <div
           v-for="project in workspaceStore.projects"
@@ -288,15 +286,58 @@ function isProjectModuleActive(projectId: string, routeNames: string[]) {
       </div>
     </div>
 
-    <div class="mt-4 space-y-1 border-t border-border-subtle pt-4 dark:border-white/[0.05]">
-      <RouterLink
-        :to="{ name: 'app-settings' }"
-        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm"
-        :class="isRouteActive(['app-settings']) ? 'bg-primary/[0.08] text-text-primary' : 'text-text-secondary hover:bg-accent'"
-      >
-        <Settings :size="16" />
-        <span>{{ t('topbar.settings') }}</span>
-      </RouterLink>
+    <div class="mt-4 border-t border-border-subtle pt-4 dark:border-white/[0.05]">
+      <UiPopover v-model:open="workspaceMenuOpen" align="start" side="top" class="w-[256px] p-2">
+        <template #trigger>
+          <button
+            type="button"
+            class="group flex w-full items-center gap-3 rounded-xl border border-transparent p-2 text-left transition-all hover:border-border-subtle hover:bg-accent/50 active:scale-[0.98]"
+            :class="{ 'border-border-subtle bg-accent/50 shadow-sm': workspaceMenuOpen }"
+          >
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-inner">
+              <LayoutDashboard :size="18" />
+            </div>
+            <div class="flex min-w-0 flex-1 flex-col">
+              <div class="truncate text-sm font-bold text-text-primary leading-tight">
+                {{ workspaceLabel }}
+              </div>
+              <div class="truncate text-[11px] font-medium text-text-tertiary leading-tight mt-0.5 uppercase tracking-wider">
+                {{ t('sidebar.workspace.label') }}
+              </div>
+            </div>
+            <ChevronsUpDown :size="14" class="shrink-0 text-text-tertiary transition-colors group-hover:text-text-secondary" />
+          </button>
+        </template>
+
+        <div class="flex flex-col gap-0.5">
+          <div class="px-2 py-1.5 mb-1 text-[11px] font-bold uppercase tracking-widest text-text-tertiary/70">
+            {{ t('sidebar.workspaceMenu.title') }}
+          </div>
+          <RouterLink
+            v-for="item in workspaceNavigation"
+            :key="item.id"
+            :to="item.to"
+            class="flex items-center gap-3 rounded-md px-3 py-2 text-[13px] transition-colors"
+            :class="isRouteActive(item.routeNames) ? 'bg-primary/10 text-primary font-medium' : 'text-text-secondary hover:bg-accent hover:text-text-primary'"
+            @click="workspaceMenuOpen = false"
+          >
+            <component :is="item.icon" :size="16" />
+            <span class="truncate">{{ item.label }}</span>
+          </RouterLink>
+
+          <div class="my-1.5 border-t border-border-subtle dark:border-white/[0.05]" />
+
+          <RouterLink
+            :to="{ name: 'app-settings' }"
+            class="flex items-center gap-3 rounded-md px-3 py-2 text-[13px] transition-colors"
+            :class="isRouteActive(['app-settings']) ? 'bg-primary/10 text-primary font-medium' : 'text-text-secondary hover:bg-accent hover:text-text-primary'"
+            @click="workspaceMenuOpen = false"
+          >
+            <Settings :size="16" />
+            <span>{{ t('topbar.settings') }}</span>
+          </RouterLink>
+        </div>
+      </UiPopover>
     </div>
   </aside>
 </template>
