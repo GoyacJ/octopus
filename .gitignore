@@ -11,3 +11,11 @@ dist/
 output/
 target/
 crates/rusty-claude-cli/.claw/
+
+# Octopus local workspace state
+config/workspace.toml
+config/runtime/
+data/
+logs/
+runtime/
+tmp/
