@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, Menu, Monitor, MoonStar, Search, Settings, SunMedium, UserRound } from 'lucide-vue-next'
@@ -87,6 +87,21 @@ function closeMenus() {
   accountMenuOpen.value = false
 }
 
+function handleClickOutside(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (!target.closest('.dropdown-trigger') && !target.closest('.dropdown-menu')) {
+    closeMenus()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('click', handleClickOutside)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleClickOutside)
+})
+
 async function selectTheme(theme: 'light' | 'dark' | 'system') {
   await shell.updatePreferences({ theme })
   themeMenuOpen.value = false
@@ -132,8 +147,7 @@ async function openUserCenter() {
       </UiButton>
 
       <div class="flex items-center gap-2">
-        <div class="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-xs font-bold text-primary">O</div>
-        <span class="text-sm font-semibold text-text-primary">Octopus</span>
+        <span class="text-sm font-semibold text-text-primary">网易Lobster</span>
       </div>
 
       <div class="hidden min-w-0 items-center gap-2 text-sm text-text-secondary md:flex">
@@ -155,10 +169,10 @@ async function openUserCenter() {
       </button>
 
       <div class="relative">
-        <UiButton variant="ghost" size="icon" data-testid="topbar-theme-toggle" class="h-8 w-8" @click="themeMenuOpen = !themeMenuOpen">
+        <UiButton variant="ghost" size="icon" data-testid="topbar-theme-toggle" class="dropdown-trigger h-8 w-8" @click="themeMenuOpen = !themeMenuOpen">
           <component :is="themeIcons[shell.preferences.theme]" :size="15" />
         </UiButton>
-        <div v-if="themeMenuOpen" class="absolute right-0 top-10 z-40 w-44 rounded-lg border border-border-subtle bg-background p-1 shadow-lg dark:border-white/[0.08]">
+        <div v-if="themeMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-44 rounded-lg border border-border-subtle bg-background p-1 shadow-lg dark:border-white/[0.08]">
           <button
             v-for="(icon, key) in themeIcons"
             :key="key"
@@ -176,10 +190,10 @@ async function openUserCenter() {
       </div>
 
       <div class="relative">
-        <UiButton variant="ghost" size="icon" data-testid="topbar-locale-toggle" class="h-8 w-8" @click="localeMenuOpen = !localeMenuOpen">
+        <UiButton variant="ghost" size="icon" data-testid="topbar-locale-toggle" class="dropdown-trigger h-8 w-8" @click="localeMenuOpen = !localeMenuOpen">
           <span class="text-[11px] font-bold uppercase">{{ shell.preferences.locale === 'zh-CN' ? '中' : 'EN' }}</span>
         </UiButton>
-        <div v-if="localeMenuOpen" class="absolute right-0 top-10 z-40 w-40 rounded-lg border border-border-subtle bg-background p-1 shadow-lg dark:border-white/[0.08]">
+        <div v-if="localeMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-40 rounded-lg border border-border-subtle bg-background p-1 shadow-lg dark:border-white/[0.08]">
           <button
             v-for="locale in localeOptions"
             :key="locale"
@@ -210,7 +224,7 @@ async function openUserCenter() {
         <button
           type="button"
           data-testid="topbar-profile-trigger"
-          class="flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+          class="dropdown-trigger flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
           @click="accountMenuOpen = !accountMenuOpen"
         >
           <div class="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white uppercase">
@@ -219,7 +233,7 @@ async function openUserCenter() {
           <UserRound :size="14" class="text-text-tertiary" />
         </button>
 
-        <div v-if="accountMenuOpen" class="absolute right-0 top-10 z-40 w-64 rounded-lg border border-border-subtle bg-background p-3 shadow-lg dark:border-white/[0.08]">
+        <div v-if="accountMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-64 rounded-lg border border-border-subtle bg-background p-3 shadow-lg dark:border-white/[0.08]">
           <div class="space-y-3">
             <div class="flex items-center gap-3">
               <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-bold text-white uppercase">
