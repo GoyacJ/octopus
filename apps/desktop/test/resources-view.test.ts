@@ -7,6 +7,7 @@ import { createApp, nextTick } from 'vue'
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -44,164 +45,62 @@ function mountApp() {
   }
 }
 
+async function waitForText(container: HTMLElement, value: string, timeoutMs = 2000) {
+  const startedAt = Date.now()
+  while (!(container.textContent?.includes(value) ?? false)) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`Timed out waiting for text: ${value}`)
+    }
+    await nextTick()
+    await new Promise(resolve => window.setTimeout(resolve, 20))
+  }
+}
+
 describe('Project resources view', () => {
   beforeEach(async () => {
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+    installWorkspaceApiFixture()
     await router.push('/workspaces/ws-local/projects/proj-redesign/resources')
     await router.isReady()
     document.body.innerHTML = ''
-    window.confirm = () => true
   })
 
-  it('supports creating url resources, filtering, and switching between list and grid views', async () => {
+  it('renders project resources from the workspace API and filters them by search', async () => {
     const mounted = mountApp()
 
-    await nextTick()
+    await waitForText(mounted.container, 'Desktop Redesign Brief')
 
-    expect(mounted.container.textContent).toContain('项目资源中心')
-    expect(mounted.container.textContent).toContain('原始资源')
-    expect(mounted.container.textContent).toContain('AI 生成')
-    expect(mounted.container.querySelector('[data-testid="resources-toolbar"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('Desktop Redesign')
+    expect(mounted.container.textContent).toContain('Desktop Redesign Brief')
+    expect(mounted.container.textContent).toContain('Desktop Redesign API')
 
-    const addTrigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-add-trigger"]')
-    expect(addTrigger).not.toBeNull()
-    addTrigger?.click()
-    await nextTick()
-
-    expect(document.body.querySelector('[data-testid="resources-add-menu"]')).not.toBeNull()
-    const addUrl = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-add-url"]')
-    expect(addUrl).not.toBeNull()
-    addUrl?.click()
-    await nextTick()
-
-    const nameInput = document.body.querySelector<HTMLInputElement>('[data-testid="resource-url-name-input"]')
-    const locationInput = document.body.querySelector<HTMLInputElement>('[data-testid="resource-url-location-input"]')
-    const confirmButton = document.body.querySelector<HTMLButtonElement>('[data-testid="resource-url-confirm"]')
-
-    expect(nameInput).not.toBeNull()
-    expect(locationInput).not.toBeNull()
-    expect(confirmButton).not.toBeNull()
-
-    nameInput!.value = 'API docs'
-    nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    locationInput!.value = 'https://example.com/docs'
-    locationInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-    confirmButton?.click()
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('API docs')
-
-    for (let index = 0; index < 12; index += 1) {
-      const addTrigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-add-trigger"]')
-      addTrigger?.click()
-      await nextTick()
-      mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-add-file"]')?.click()
-      await nextTick()
-    }
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-pagination-next"]')?.click()
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('第 2 / 4 页')
-
-    const searchInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="resources-search-input"]')
+    const searchInput = mounted.container.querySelector<HTMLInputElement>('input')
     expect(searchInput).not.toBeNull()
-    searchInput!.value = 'Shell Layout'
+    searchInput!.value = 'api'
     searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    const visibleItems = mounted.container.querySelectorAll('[data-testid^="resource-item-"]')
-    expect(visibleItems.length).toBe(1)
-    expect(mounted.container.textContent).toContain('Shell Layout Notes')
-    expect(mounted.container.textContent).toContain('第 1 / 1 页')
-
-    const generatedTab = mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-generated"]')
-    expect(generatedTab).not.toBeNull()
-    generatedTab?.click()
-    await nextTick()
-
-    expect(mounted.container.textContent).not.toContain('Desktop PRD Folder')
-
-    const gridToggle = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-view-grid"]')
-    expect(gridToggle).not.toBeNull()
-    gridToggle?.click()
-    await nextTick()
-
-    expect(mounted.container.querySelector('[data-testid="resources-grid"]')).not.toBeNull()
-    expect(mounted.container.textContent).toContain('第 1 / 1 页')
+    expect(mounted.container.textContent).toContain('Desktop Redesign API')
+    expect(mounted.container.textContent).not.toContain('Desktop Redesign Brief')
 
     mounted.destroy()
   })
 
-  it('supports previewing, editing, deleting, and paginating resources', async () => {
+  it('shows the real empty state when the search has no matches', async () => {
     const mounted = mountApp()
 
+    await waitForText(mounted.container, 'Desktop Redesign Brief')
+
+    const searchInput = mounted.container.querySelector<HTMLInputElement>('input')
+    expect(searchInput).not.toBeNull()
+    searchInput!.value = 'not-found-resource'
+    searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    for (let index = 0; index < 12; index += 1) {
-      const addTrigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-add-trigger"]')
-      addTrigger?.click()
-      await nextTick()
-      mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-add-file"]')?.click()
-      await nextTick()
-    }
-
-    const nextPage = mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-pagination-next"]')
-    expect(nextPage).not.toBeNull()
-    expect(nextPage?.disabled).toBe(false)
-    nextPage?.click()
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('Mock File')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="resources-pagination-prev"]')?.click()
-    await nextTick()
-
-    const previewButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid^="resource-preview-res-file-mock-"]')
-    expect(previewButton).not.toBeNull()
-    const targetResourceId = previewButton?.getAttribute('data-testid')?.replace('resource-preview-', '')
-    expect(targetResourceId).toBeTruthy()
-    previewButton?.click()
-    await nextTick()
-
-    expect(document.body.querySelector('[data-testid="resource-preview-modal"]')).not.toBeNull()
-    expect(document.body.querySelector('[data-testid="resource-preview-modal"]')?.closest('[data-ui-dialog-content="true"]')).not.toBeNull()
-
-    document.body.querySelector<HTMLButtonElement>('[data-testid="resource-preview-close"]')?.click()
-    await nextTick()
-
-    const editButton = mounted.container.querySelector<HTMLButtonElement>(`[data-testid="resource-edit-${targetResourceId}"]`)
-    expect(editButton).not.toBeNull()
-    editButton?.click()
-    await nextTick()
-
-    expect(document.body.querySelector('[data-testid="resource-edit-modal"]')?.closest('[data-ui-dialog-content="true"]')).not.toBeNull()
-    const renameInput = document.body.querySelector<HTMLInputElement>('[data-testid="resource-edit-name-input"]')
-    const saveEdit = document.body.querySelector<HTMLButtonElement>('[data-testid="resource-edit-confirm"]')
-    expect(renameInput).not.toBeNull()
-    expect(saveEdit).not.toBeNull()
-
-    renameInput!.value = 'Renamed layout notes.md'
-    renameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    saveEdit?.click()
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('Renamed layout notes')
-
-    const deleteButton = mounted.container.querySelector<HTMLButtonElement>(`[data-testid="resource-delete-${targetResourceId}"]`)
-    expect(deleteButton).not.toBeNull()
-    deleteButton?.click()
-    await nextTick()
-
-    expect(document.body.querySelector('[data-testid="resource-delete-modal"]')?.closest('[data-ui-dialog-content="true"]')).not.toBeNull()
-    const confirmDelete = document.body.querySelector<HTMLButtonElement>('[data-testid="resource-delete-confirm"]')
-    expect(confirmDelete).not.toBeNull()
-    confirmDelete?.click()
-    await nextTick()
-
-    expect(mounted.container.textContent).not.toContain('Renamed layout notes')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('resources.empty.title')))
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('resources.empty.description')))
 
     mounted.destroy()
   })
-
 })

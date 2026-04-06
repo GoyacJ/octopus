@@ -7,10 +7,11 @@ use std::{
 use api as _;
 use async_trait::async_trait;
 use octopus_core::{
-    timestamp_now, AppError, ApprovalRequestRecord, AuditRecord, CostLedgerEntry,
-    CreateRuntimeSessionInput, ProviderConfig, ResolveRuntimeApprovalInput, RuntimeBootstrap,
-    RuntimeEventEnvelope, RuntimeMessage, RuntimeRunSnapshot, RuntimeSessionDetail,
-    RuntimeSessionSummary, RuntimeTraceItem, SubmitRuntimeTurnInput, TraceEventRecord,
+    normalize_runtime_permission_mode_label, timestamp_now, AppError, ApprovalRequestRecord,
+    AuditRecord, CostLedgerEntry, CreateRuntimeSessionInput, ProviderConfig,
+    ResolveRuntimeApprovalInput, RuntimeBootstrap, RuntimeEventEnvelope, RuntimeMessage,
+    RuntimeRunSnapshot, RuntimeSessionDetail, RuntimeSessionSummary, RuntimeTraceItem,
+    SubmitRuntimeTurnInput, TraceEventRecord, RUNTIME_PERMISSION_WORKSPACE_WRITE,
 };
 use octopus_infra::WorkspacePaths;
 use octopus_platform::{
@@ -18,6 +19,7 @@ use octopus_platform::{
 };
 use plugins as _;
 use runtime as _;
+use serde_json::json;
 use tokio::sync::broadcast;
 use tools as _;
 use uuid::Uuid;
@@ -40,6 +42,14 @@ struct RuntimeState {
 struct RuntimeAggregate {
     detail: RuntimeSessionDetail,
     events: Vec<RuntimeEventEnvelope>,
+}
+
+fn optional_project_id(project_id: &str) -> Option<String> {
+    if project_id.is_empty() {
+        None
+    } else {
+        Some(project_id.to_string())
+    }
 }
 
 impl RuntimeAdapter {
@@ -95,7 +105,7 @@ impl RuntimeAdapter {
     async fn emit_event(
         &self,
         session_id: &str,
-        event: RuntimeEventEnvelope,
+        mut event: RuntimeEventEnvelope,
     ) -> Result<(), AppError> {
         let mut sessions = self
             .state
@@ -105,6 +115,14 @@ impl RuntimeAdapter {
         let aggregate = sessions
             .get_mut(session_id)
             .ok_or_else(|| AppError::not_found("runtime session"))?;
+        event.sequence = aggregate
+            .events
+            .last()
+            .map(|existing| existing.sequence + 1)
+            .unwrap_or(1);
+        if event.kind.is_none() {
+            event.kind = Some(event.event_type.clone());
+        }
         aggregate.events.push(event.clone());
         self.persist_session(session_id, aggregate)?;
         drop(sessions);
@@ -204,11 +222,19 @@ impl RuntimeSessionService for RuntimeAdapter {
 
         let event = RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
-            kind: "session_updated".into(),
+            event_type: "runtime.session.updated".into(),
+            kind: Some("runtime.session.updated".into()),
+            workspace_id: self.state.workspace_id.clone(),
+            project_id: optional_project_id(&detail.summary.project_id),
             session_id: session_id.clone(),
             conversation_id,
             run_id: Some(detail.run.id.clone()),
             emitted_at: now,
+            sequence: 0,
+            payload: Some(json!({
+                "summary": detail.summary.clone(),
+                "run": detail.run.clone(),
+            })),
             run: Some(detail.run.clone()),
             message: None,
             trace: None,
@@ -267,6 +293,13 @@ impl RuntimeExecutionService for RuntimeAdapter {
         input: SubmitRuntimeTurnInput,
     ) -> Result<RuntimeRunSnapshot, AppError> {
         let now = timestamp_now();
+        let normalized_permission_mode = normalize_runtime_permission_mode_label(&input.permission_mode)
+            .ok_or_else(|| AppError::invalid_input(format!(
+                "unsupported permission mode: {}",
+                input.permission_mode
+            )))?;
+        let requires_approval = normalized_permission_mode == RUNTIME_PERMISSION_WORKSPACE_WRITE;
+
         let (message, trace, approval, run, conversation_id, project_id) = {
             let mut sessions = self
                 .state
@@ -286,7 +319,11 @@ impl RuntimeExecutionService for RuntimeAdapter {
                 content: input.content.clone(),
                 timestamp: now,
                 model_id: Some(input.model_id.clone()),
-                status: "waiting_approval".into(),
+                status: if requires_approval {
+                    "waiting_approval".into()
+                } else {
+                    "completed".into()
+                },
             };
             aggregate.detail.messages.push(message.clone());
 
@@ -297,8 +334,18 @@ impl RuntimeExecutionService for RuntimeAdapter {
                 conversation_id: aggregate.detail.summary.conversation_id.clone(),
                 kind: "step".into(),
                 title: "Turn submitted".into(),
-                detail: input.content.clone(),
-                tone: "info".into(),
+                detail: if requires_approval {
+                    format!(
+                        "Permission mode {} requires explicit approval before execution.",
+                        normalized_permission_mode
+                    )
+                } else {
+                    format!(
+                        "Turn submitted and completed with permission mode {}.",
+                        normalized_permission_mode
+                    )
+                },
+                tone: if requires_approval { "warning".into() } else { "success".into() },
                 timestamp: now,
                 actor: "user".into(),
                 related_message_id: Some(message.id.clone()),
@@ -306,7 +353,7 @@ impl RuntimeExecutionService for RuntimeAdapter {
             };
             aggregate.detail.trace.push(trace.clone());
 
-            let approval = ApprovalRequestRecord {
+            let approval = requires_approval.then(|| ApprovalRequestRecord {
                 id: format!("approval-{}", Uuid::new_v4()),
                 session_id: session_id.into(),
                 conversation_id: aggregate.detail.summary.conversation_id.clone(),
@@ -315,22 +362,38 @@ impl RuntimeExecutionService for RuntimeAdapter {
                 summary: "Turn requires approval".into(),
                 detail: format!(
                     "Permission mode {} requires explicit approval.",
-                    input.permission_mode
+                    normalized_permission_mode
                 ),
                 risk_level: "medium".into(),
                 created_at: now,
                 status: "pending".into(),
-            };
-            aggregate.detail.pending_approval = Some(approval.clone());
+            });
+            aggregate.detail.pending_approval = approval.clone();
 
-            aggregate.detail.summary.status = "waiting_approval".into();
+            aggregate.detail.summary.status = if requires_approval {
+                "waiting_approval".into()
+            } else {
+                "completed".into()
+            };
             aggregate.detail.summary.updated_at = now;
             aggregate.detail.summary.last_message_preview = Some(input.content.clone());
-            aggregate.detail.run.status = "waiting_approval".into();
-            aggregate.detail.run.current_step = "awaiting_approval".into();
+            aggregate.detail.run.status = if requires_approval {
+                "waiting_approval".into()
+            } else {
+                "completed".into()
+            };
+            aggregate.detail.run.current_step = if requires_approval {
+                "awaiting_approval".into()
+            } else {
+                "completed".into()
+            };
             aggregate.detail.run.updated_at = now;
             aggregate.detail.run.model_id = Some(input.model_id);
-            aggregate.detail.run.next_action = Some("approval".into());
+            aggregate.detail.run.next_action = Some(if requires_approval {
+                "approval".into()
+            } else {
+                "idle".into()
+            });
 
             let run = aggregate.detail.run.clone();
             let conversation_id = aggregate.detail.summary.conversation_id.clone();
@@ -363,7 +426,7 @@ impl RuntimeExecutionService for RuntimeAdapter {
                 actor_id: session_id.into(),
                 action: "runtime.submit_turn".into(),
                 resource: run.id.clone(),
-                outcome: "waiting_approval".into(),
+                outcome: run.status.clone(),
                 created_at: now,
             })
             .await?;
@@ -372,7 +435,7 @@ impl RuntimeExecutionService for RuntimeAdapter {
             .append_cost(CostLedgerEntry {
                 id: format!("cost-{}", Uuid::new_v4()),
                 workspace_id: self.state.workspace_id.clone(),
-                project_id: Some(project_id),
+                project_id: Some(project_id.clone()),
                 run_id: Some(run.id.clone()),
                 metric: "turns".into(),
                 amount: 1,
@@ -381,14 +444,21 @@ impl RuntimeExecutionService for RuntimeAdapter {
             })
             .await?;
 
-        for event in [
+        let mut events = vec![
             RuntimeEventEnvelope {
                 id: format!("evt-{}", Uuid::new_v4()),
-                kind: "message_created".into(),
+                event_type: "runtime.message.created".into(),
+                kind: Some("runtime.message.created".into()),
+                workspace_id: self.state.workspace_id.clone(),
+                project_id: optional_project_id(&project_id),
                 session_id: session_id.into(),
                 conversation_id: conversation_id.clone(),
                 run_id: Some(run.id.clone()),
                 emitted_at: now,
+                sequence: 0,
+                payload: Some(json!({
+                    "message": message.clone(),
+                })),
                 run: None,
                 message: Some(message),
                 trace: None,
@@ -399,11 +469,18 @@ impl RuntimeExecutionService for RuntimeAdapter {
             },
             RuntimeEventEnvelope {
                 id: format!("evt-{}", Uuid::new_v4()),
-                kind: "trace_emitted".into(),
+                event_type: "runtime.trace.emitted".into(),
+                kind: Some("runtime.trace.emitted".into()),
+                workspace_id: self.state.workspace_id.clone(),
+                project_id: optional_project_id(&project_id),
                 session_id: session_id.into(),
                 conversation_id: conversation_id.clone(),
                 run_id: Some(run.id.clone()),
                 emitted_at: now,
+                sequence: 0,
+                payload: Some(json!({
+                    "trace": trace.clone(),
+                })),
                 run: None,
                 message: None,
                 trace: Some(trace),
@@ -412,13 +489,24 @@ impl RuntimeExecutionService for RuntimeAdapter {
                 summary: None,
                 error: None,
             },
-            RuntimeEventEnvelope {
+        ];
+
+        if let Some(approval) = approval.clone() {
+            events.push(RuntimeEventEnvelope {
                 id: format!("evt-{}", Uuid::new_v4()),
-                kind: "approval_requested".into(),
+                event_type: "runtime.approval.requested".into(),
+                kind: Some("runtime.approval.requested".into()),
+                workspace_id: self.state.workspace_id.clone(),
+                project_id: optional_project_id(&project_id),
                 session_id: session_id.into(),
                 conversation_id: conversation_id.clone(),
                 run_id: Some(run.id.clone()),
                 emitted_at: now,
+                sequence: 0,
+                payload: Some(json!({
+                    "approval": approval.clone(),
+                    "run": run.clone(),
+                })),
                 run: Some(run.clone()),
                 message: None,
                 trace: None,
@@ -426,23 +514,33 @@ impl RuntimeExecutionService for RuntimeAdapter {
                 decision: None,
                 summary: None,
                 error: None,
-            },
-            RuntimeEventEnvelope {
-                id: format!("evt-{}", Uuid::new_v4()),
-                kind: "run_updated".into(),
-                session_id: session_id.into(),
-                conversation_id,
-                run_id: Some(run.id.clone()),
-                emitted_at: now,
-                run: Some(run.clone()),
-                message: None,
-                trace: None,
-                approval: None,
-                decision: None,
-                summary: None,
-                error: None,
-            },
-        ] {
+            });
+        }
+
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "runtime.run.updated".into(),
+            kind: Some("runtime.run.updated".into()),
+            workspace_id: self.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id,
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            payload: Some(json!({
+                "run": run.clone(),
+            })),
+            run: Some(run.clone()),
+            message: None,
+            trace: None,
+            approval: None,
+            decision: None,
+            summary: None,
+            error: None,
+        });
+
+        for event in events {
             self.emit_event(session_id, event).await?;
         }
 
@@ -522,7 +620,7 @@ impl RuntimeExecutionService for RuntimeAdapter {
             .append_audit(AuditRecord {
                 id: format!("audit-{}", Uuid::new_v4()),
                 workspace_id: self.state.workspace_id.clone(),
-                project_id: Some(project_id),
+                project_id: Some(project_id.clone()),
                 actor_type: "session".into(),
                 actor_id: session_id.into(),
                 action: "runtime.resolve_approval".into(),
@@ -535,11 +633,20 @@ impl RuntimeExecutionService for RuntimeAdapter {
         for event in [
             RuntimeEventEnvelope {
                 id: format!("evt-{}", Uuid::new_v4()),
-                kind: "approval_resolved".into(),
+                event_type: "runtime.approval.resolved".into(),
+                kind: Some("runtime.approval.resolved".into()),
+                workspace_id: self.state.workspace_id.clone(),
+                project_id: optional_project_id(&project_id),
                 session_id: session_id.into(),
                 conversation_id: conversation_id.clone(),
                 run_id: Some(run.id.clone()),
                 emitted_at: now,
+                sequence: 0,
+                payload: Some(json!({
+                    "approval": approval.clone(),
+                    "decision": input.decision.clone(),
+                    "run": run.clone(),
+                })),
                 run: Some(run.clone()),
                 message: None,
                 trace: None,
@@ -550,11 +657,20 @@ impl RuntimeExecutionService for RuntimeAdapter {
             },
             RuntimeEventEnvelope {
                 id: format!("evt-{}", Uuid::new_v4()),
-                kind: "run_updated".into(),
+                event_type: "runtime.run.updated".into(),
+                kind: Some("runtime.run.updated".into()),
+                workspace_id: self.state.workspace_id.clone(),
+                project_id: optional_project_id(&project_id),
                 session_id: session_id.into(),
                 conversation_id,
                 run_id: Some(run.id.clone()),
                 emitted_at: now,
+                sequence: 0,
+                payload: Some(json!({
+                    "approval": approval.clone(),
+                    "decision": input.decision.clone(),
+                    "run": run.clone(),
+                })),
                 run: Some(run.clone()),
                 message: None,
                 trace: None,

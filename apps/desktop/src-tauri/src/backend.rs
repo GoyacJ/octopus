@@ -274,6 +274,12 @@ fn spawn_dev_backend(
         .arg(&host_state.app_version)
         .arg("--cargo-workspace")
         .arg(host_state.cargo_workspace.to_string())
+        .arg("--host-platform")
+        .arg(&host_state.platform)
+        .arg("--host-mode")
+        .arg(&host_state.mode)
+        .arg("--host-shell")
+        .arg(&host_state.shell)
         .arg("--preferences-path")
         .arg(preferences_path)
         .arg("--runtime-root")
@@ -311,6 +317,12 @@ fn spawn_sidecar_backend(
             } else {
                 "false"
             },
+            "--host-platform",
+            &host_state.platform,
+            "--host-mode",
+            &host_state.mode,
+            "--host-shell",
+            &host_state.shell,
             "--preferences-path",
             &preferences_path.display().to_string(),
             "--runtime-root",

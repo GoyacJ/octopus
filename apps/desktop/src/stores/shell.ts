@@ -8,14 +8,100 @@ import type {
   ShellBootstrap,
   ShellPreferences,
   ShellRouteState,
+  TransportSecurityLevel,
+  WorkspaceConnectionRecord,
+  WorkspaceSessionTokenEnvelope,
 } from '@octopus/schema'
 import {
   createDefaultShellPreferences,
-  createFallbackHostState,
   normalizeConversationDetailFocus,
 } from '@octopus/schema'
 
-import { bootstrapShellHost, healthcheck, restartDesktopBackend, savePreferences } from '@/tauri/client'
+import * as tauriClient from '@/tauri/client'
+import {
+  clearStoredWorkspaceSession,
+  loadStoredWorkspaceSessions,
+  saveStoredWorkspaceSession,
+} from '@/tauri/shared'
+
+function createInitialHostState(): HostState {
+  return import.meta.env.VITE_HOST_RUNTIME === 'browser'
+    ? {
+        platform: 'web',
+        mode: 'local',
+        appVersion: '0.1.0',
+        cargoWorkspace: false,
+        shell: 'browser',
+      }
+    : {
+        platform: 'tauri',
+        mode: 'local',
+        appVersion: '0.1.0',
+        cargoWorkspace: false,
+        shell: 'tauri2',
+      }
+}
+
+const INITIAL_HOST_STATE = createInitialHostState()
+
+function resolveTransportSecurity(mode: ConnectionProfile['mode']): TransportSecurityLevel {
+  switch (mode) {
+    case 'local':
+      return 'loopback'
+    case 'shared':
+      return 'trusted'
+    case 'remote':
+      return 'public'
+    default:
+      return 'trusted'
+  }
+}
+
+function resolveWorkspaceConnectionStatus(
+  connection: ConnectionProfile,
+  backend?: HostBackendConnection,
+): WorkspaceConnectionRecord['status'] {
+  if (connection.mode === 'local') {
+    return backend?.state === 'ready' ? 'connected' : 'unreachable'
+  }
+
+  return connection.state === 'disconnected' ? 'disconnected' : 'connected'
+}
+
+function resolveWorkspaceConnectionBaseUrl(
+  connection: ConnectionProfile,
+  backend?: HostBackendConnection,
+): string {
+  return connection.baseUrl ?? backend?.baseUrl ?? 'http://127.0.0.1'
+}
+
+function deriveWorkspaceConnections(
+  bootstrap: ShellBootstrap | null,
+): WorkspaceConnectionRecord[] {
+  if (bootstrap?.workspaceConnections?.length) {
+    return bootstrap.workspaceConnections
+  }
+
+  return (bootstrap?.connections ?? []).map(connection => ({
+    workspaceConnectionId: connection.id,
+    workspaceId: connection.workspaceId,
+    label: connection.label,
+    baseUrl: resolveWorkspaceConnectionBaseUrl(connection, bootstrap?.backend),
+    transportSecurity: resolveTransportSecurity(connection.mode),
+    authMode: 'session-token',
+    lastUsedAt: connection.lastSyncAt,
+    status: resolveWorkspaceConnectionStatus(connection, bootstrap?.backend),
+  }))
+}
+
+function resolveActiveWorkspaceConnectionId(
+  connections: WorkspaceConnectionRecord[],
+  workspaceId: string,
+): string {
+  return connections.find(connection => connection.workspaceId === workspaceId)?.workspaceConnectionId
+    ?? connections[0]?.workspaceConnectionId
+    ?? ''
+}
 
 function hasPreferencePatchKey<K extends keyof ShellPreferences>(
   patch: Partial<ShellPreferences>,
@@ -35,6 +121,9 @@ function mergeSavedPreferences(
     ...savedPreferences,
     theme: hasPreferencePatchKey(patch, 'theme') ? savedPreferences.theme : currentPreferences.theme,
     locale: hasPreferencePatchKey(patch, 'locale') ? savedPreferences.locale : currentPreferences.locale,
+    fontSize: hasPreferencePatchKey(patch, 'fontSize') ? savedPreferences.fontSize : currentPreferences.fontSize,
+    fontFamily: hasPreferencePatchKey(patch, 'fontFamily') ? savedPreferences.fontFamily : currentPreferences.fontFamily,
+    fontStyle: hasPreferencePatchKey(patch, 'fontStyle') ? savedPreferences.fontStyle : currentPreferences.fontStyle,
     compactSidebar: updatesLeftSidebar ? savedPreferences.compactSidebar : currentPreferences.compactSidebar,
     leftSidebarCollapsed: updatesLeftSidebar ? savedPreferences.leftSidebarCollapsed : currentPreferences.leftSidebarCollapsed,
     rightSidebarCollapsed: hasPreferencePatchKey(patch, 'rightSidebarCollapsed')
@@ -49,6 +138,10 @@ function mergeSavedPreferences(
   }
 }
 
+function toShellErrorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
 export const useShellStore = defineStore('shell', {
   state: () => ({
     defaultWorkspaceId: 'ws-local',
@@ -61,6 +154,9 @@ export const useShellStore = defineStore('shell', {
     bootstrapPayload: null as ShellBootstrap | null,
     backendConnectionState: undefined as HostBackendConnection | undefined,
     preferencesState: null as ShellPreferences | null,
+    workspaceConnectionsState: [] as WorkspaceConnectionRecord[],
+    workspaceSessionsState: {} as Record<string, WorkspaceSessionTokenEnvelope>,
+    activeWorkspaceConnectionId: '',
     loading: false,
     syncingBackend: false,
     restartingBackend: false,
@@ -71,13 +167,27 @@ export const useShellStore = defineStore('shell', {
       return state.preferencesState ?? createDefaultShellPreferences(state.defaultWorkspaceId, state.defaultProjectId)
     },
     hostState(state): HostState {
-      return state.bootstrapPayload?.hostState ?? createFallbackHostState()
+      return state.bootstrapPayload?.hostState ?? INITIAL_HOST_STATE
     },
     bootstrapConnections(state): ConnectionProfile[] {
       return state.bootstrapPayload?.connections ?? []
     },
     backendConnection(state): HostBackendConnection | undefined {
       return state.backendConnectionState
+    },
+    workspaceConnections(state): WorkspaceConnectionRecord[] {
+      return state.workspaceConnectionsState
+    },
+    activeWorkspaceConnection(state): WorkspaceConnectionRecord | null {
+      return state.workspaceConnectionsState.find(connection => connection.workspaceConnectionId === state.activeWorkspaceConnectionId) ?? null
+    },
+    activeWorkspaceSession(state): WorkspaceSessionTokenEnvelope | null {
+      return state.activeWorkspaceConnectionId
+        ? state.workspaceSessionsState[state.activeWorkspaceConnectionId] ?? null
+        : null
+    },
+    canRestartBackend(): boolean {
+      return this.hostState.platform === 'tauri'
     },
   },
   actions: {
@@ -88,26 +198,28 @@ export const useShellStore = defineStore('shell', {
       this.leftSidebarCollapsed = preserveLeftSidebar ? this.leftSidebarCollapsed : preferences.leftSidebarCollapsed
       this.rightSidebarCollapsed = preserveRightSidebar ? this.rightSidebarCollapsed : preferences.rightSidebarCollapsed
     },
-    async bootstrap(defaultWorkspaceId: string, defaultProjectId: string, mockConnections: ConnectionProfile[]) {
+    async bootstrap(defaultWorkspaceId: string, defaultProjectId: string) {
       this.defaultWorkspaceId = defaultWorkspaceId
       this.defaultProjectId = defaultProjectId
       this.loading = true
       this.error = ''
 
       try {
-        const payload = await bootstrapShellHost(defaultWorkspaceId, defaultProjectId, mockConnections)
+        const payload = await tauriClient.bootstrapShellHost(defaultWorkspaceId, defaultProjectId)
         this.bootstrapPayload = payload
         this.backendConnectionState = payload.backend
         this.applyShellPreferences(payload.preferences)
+        this.workspaceSessionsState = loadStoredWorkspaceSessions()
+        this.workspaceConnectionsState = deriveWorkspaceConnections(payload)
+        this.activeWorkspaceConnectionId = resolveActiveWorkspaceConnectionId(this.workspaceConnectionsState, payload.preferences.defaultWorkspaceId)
       } catch (error) {
-        this.error = error instanceof Error ? error.message : 'Failed to bootstrap shell host'
-        this.bootstrapPayload = {
-          hostState: createFallbackHostState(),
-          preferences: createDefaultShellPreferences(defaultWorkspaceId, defaultProjectId),
-          connections: mockConnections,
-        }
+        this.error = toShellErrorMessage(error, 'Failed to bootstrap shell host')
+        this.bootstrapPayload = null
         this.backendConnectionState = undefined
-        this.applyShellPreferences(this.bootstrapPayload.preferences)
+        this.applyShellPreferences(createDefaultShellPreferences(defaultWorkspaceId, defaultProjectId))
+        this.workspaceSessionsState = loadStoredWorkspaceSessions()
+        this.workspaceConnectionsState = []
+        this.activeWorkspaceConnectionId = ''
       } finally {
         this.loading = false
       }
@@ -134,9 +246,14 @@ export const useShellStore = defineStore('shell', {
         this.selectedArtifactId = routeState.artifact
       }
     },
+    persistPreferencesLater(patch: Partial<ShellPreferences>) {
+      void this.updatePreferences(patch).catch((error) => {
+        this.error = toShellErrorMessage(error, 'Failed to save shell preferences')
+      })
+    },
     setLeftSidebarCollapsed(collapsed: boolean) {
       this.leftSidebarCollapsed = collapsed
-      void this.updatePreferences({
+      this.persistPreferencesLater({
         leftSidebarCollapsed: collapsed,
       })
     },
@@ -145,7 +262,7 @@ export const useShellStore = defineStore('shell', {
     },
     setRightSidebarCollapsed(collapsed: boolean) {
       this.rightSidebarCollapsed = collapsed
-      void this.updatePreferences({
+      this.persistPreferencesLater({
         rightSidebarCollapsed: collapsed,
       })
     },
@@ -172,7 +289,7 @@ export const useShellStore = defineStore('shell', {
             : this.preferences.leftSidebarCollapsed,
       }
 
-      const savedPreferences = await savePreferences(nextPreferences)
+      const savedPreferences = await tauriClient.savePreferences(nextPreferences)
       this.applyShellPreferences(mergeSavedPreferences(this.preferences, savedPreferences, patch))
     },
     async persistLastRoute(route: string) {
@@ -180,15 +297,60 @@ export const useShellStore = defineStore('shell', {
         lastVisitedRoute: route,
       })
     },
+    async activateWorkspaceConnection(workspaceConnectionId: string) {
+      const connection = this.workspaceConnections.find(item => item.workspaceConnectionId === workspaceConnectionId)
+      if (!connection) {
+        return
+      }
+
+      this.activeWorkspaceConnectionId = connection.workspaceConnectionId
+      if (this.preferences.defaultWorkspaceId !== connection.workspaceId) {
+        await this.updatePreferences({
+          defaultWorkspaceId: connection.workspaceId,
+        })
+      }
+    },
+    async activateWorkspaceByWorkspaceId(workspaceId: string) {
+      const connection = this.workspaceConnections.find(item => item.workspaceId === workspaceId)
+      if (!connection) {
+        return
+      }
+
+      await this.activateWorkspaceConnection(connection.workspaceConnectionId)
+    },
+    setWorkspaceSession(session: WorkspaceSessionTokenEnvelope) {
+      saveStoredWorkspaceSession(session)
+      this.workspaceSessionsState = {
+        ...this.workspaceSessionsState,
+        [session.workspaceConnectionId]: session,
+      }
+    },
+    clearWorkspaceSession(workspaceConnectionId: string) {
+      clearStoredWorkspaceSession(workspaceConnectionId)
+      const nextSessions = { ...this.workspaceSessionsState }
+      delete nextSessions[workspaceConnectionId]
+      this.workspaceSessionsState = nextSessions
+    },
     syncBackendConnection(nextConnection: HostBackendConnection | undefined) {
       this.backendConnectionState = nextConnection
+      this.workspaceConnectionsState = this.workspaceConnectionsState.map((connection) => {
+        if (connection.transportSecurity !== 'loopback') {
+          return connection
+        }
+
+        return {
+          ...connection,
+          baseUrl: nextConnection?.baseUrl ?? connection.baseUrl,
+          status: nextConnection?.state === 'ready' ? 'connected' : 'unreachable',
+        }
+      })
     },
     async refreshBackendStatus() {
       this.syncingBackend = true
       this.error = ''
 
       try {
-        const status = await healthcheck()
+        const status = await tauriClient.healthcheck()
         const nextConnection = this.backendConnection
           ? {
               ...this.backendConnection,
@@ -211,7 +373,7 @@ export const useShellStore = defineStore('shell', {
       this.error = ''
 
       try {
-        await restartDesktopBackend()
+        await tauriClient.restartDesktopBackend()
         await this.refreshBackendStatus()
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to restart desktop backend'

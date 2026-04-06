@@ -23,4 +23,9 @@ export interface SystemBootstrapStatus {
   setupRequired: boolean
   ownerReady: boolean
   registeredApps: import('./app').ClientAppRecord[]
+  protocolVersion: string
+  apiBasePath: string
+  transportSecurity: import('./workspace-protocol').TransportSecurityLevel
+  authMode: import('./workspace-protocol').WorkspaceAuthMode
+  capabilities: import('./workspace-protocol').WorkspaceCapabilitySet
 }

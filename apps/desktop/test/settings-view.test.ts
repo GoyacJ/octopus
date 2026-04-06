@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createApp, nextTick } from 'vue'
 
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -44,9 +45,22 @@ function mountApp() {
   }
 }
 
+async function waitForSelector(container: HTMLElement, selector: string, timeoutMs = 2000) {
+  const startedAt = Date.now()
+  while (!container.querySelector(selector)) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`Timed out waiting for selector: ${selector}`)
+    }
+    await nextTick()
+    await new Promise(resolve => window.setTimeout(resolve, 20))
+  }
+}
+
 describe('Settings view', () => {
   beforeEach(async () => {
-    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+    installWorkspaceApiFixture()
     await router.push('/settings')
     await router.isReady()
     document.body.innerHTML = ''
@@ -55,15 +69,16 @@ describe('Settings view', () => {
   it('uses shared tabs and record/list rows for general and version sections', async () => {
     const mounted = mountApp()
 
-    await nextTick()
+    await waitForSelector(mounted.container, '[data-testid="settings-tabs"]')
 
     expect(mounted.container.querySelector('[data-testid="settings-tabs"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="settings-layout-row-leftSidebarCollapsed"]')).not.toBeNull()
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-version"]')?.click()
-    await nextTick()
+    await waitForSelector(mounted.container, '[data-testid="settings-version-row-shell"]')
 
     expect(mounted.container.querySelector('[data-testid="settings-version-row-shell"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('tauri2')
 
     mounted.destroy()
   })

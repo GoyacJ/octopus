@@ -1,48 +1,70 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { UiEmptyState, UiSectionHeading, UiListRow, UiBadge } from '@octopus/ui'
-import { useWorkbenchStore } from '@/stores/workbench'
+import { UiBadge, UiEmptyState, UiRecordCard, UiSectionHeading } from '@octopus/ui'
+
+import { useCatalogStore } from '@/stores/catalog'
+import { useShellStore } from '@/stores/shell'
 
 const { t } = useI18n()
-const workbench = useWorkbenchStore()
+const catalogStore = useCatalogStore()
+const shell = useShellStore()
+
+watch(
+  () => shell.activeWorkspaceConnectionId,
+  (connectionId) => {
+    if (connectionId) {
+      void catalogStore.load(connectionId)
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
-  <div class="w-full flex flex-col gap-10 pb-20 h-full min-h-0">
-    <header class="px-2 shrink-0">
-      <UiSectionHeading
-        :eyebrow="t('models.header.eyebrow')"
-        :title="t('models.header.title')"
-        :subtitle="t('models.header.subtitle')"
-      />
+  <div class="flex w-full flex-col gap-6 pb-20">
+    <header class="px-2">
+      <UiSectionHeading :eyebrow="t('models.header.eyebrow')" :title="t('sidebar.navigation.models')" :subtitle="catalogStore.error || t('models.header.subtitle')" />
     </header>
 
-    <main class="flex-1 px-2 space-y-6">
-      <div class="space-y-1">
-        <h3 class="text-lg font-bold text-text-primary">{{ t('models.list.title') }}</h3>
-        <p class="text-[13px] text-text-secondary">{{ t('models.list.subtitle') }}</p>
-      </div>
-
-      <div v-if="workbench.workspaceModelCatalog.length" class="flex flex-col gap-1">
-        <UiListRow
-          v-for="model in workbench.workspaceModelCatalog"
+    <section class="space-y-4 px-2">
+      <h3 class="text-lg font-semibold text-text-primary">{{ t('models.catalog.title') }}</h3>
+      <div v-if="catalogStore.models.length" class="grid gap-3 lg:grid-cols-2">
+        <UiRecordCard
+          v-for="model in catalogStore.models"
           :key="model.id"
           :title="model.label"
-          :subtitle="model.recommendedFor"
-          :eyebrow="model.provider"
+          :description="model.description"
         >
-          <template #meta>
-            <UiBadge :label="model.availability" :tone="model.availability === 'healthy' ? 'success' : 'warning'" subtle />
+          <template #badges>
+            <UiBadge :label="model.provider" subtle />
             <UiBadge :label="model.defaultPermission" subtle />
           </template>
-        </UiListRow>
+          <template #meta>
+            <span class="text-xs text-text-tertiary">{{ model.recommendedFor }}</span>
+          </template>
+        </UiRecordCard>
       </div>
-      <UiEmptyState 
-        v-else 
-        :title="t('models.list.emptyTitle')" 
-        :description="t('models.list.emptyDescription')" 
-      />
-    </main>
+      <UiEmptyState v-else :title="t('models.empty.title')" :description="t('models.empty.description')" />
+    </section>
+
+    <section class="space-y-4 px-2">
+      <h3 class="text-lg font-semibold text-text-primary">{{ t('models.credentials.title') }}</h3>
+      <div v-if="catalogStore.providerCredentials.length" class="grid gap-3 lg:grid-cols-2">
+        <UiRecordCard
+          v-for="credential in catalogStore.providerCredentials"
+          :key="credential.id"
+          :title="credential.name"
+          :description="credential.baseUrl || credential.provider"
+        >
+          <template #badges>
+            <UiBadge :label="credential.provider" subtle />
+            <UiBadge :label="credential.status" subtle />
+          </template>
+        </UiRecordCard>
+      </div>
+      <UiEmptyState v-else :title="t('models.credentials.emptyTitle')" :description="t('models.credentials.emptyDescription')" />
+    </section>
   </div>
 </template>

@@ -1,372 +1,163 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Blocks, Plus, Power, ShieldCheck, Trash2 } from 'lucide-vue-next'
 
-import {
-  UiBadge,
-  UiButton,
-  UiCheckbox,
-  UiField,
-  UiInput,
-  UiMetricCard,
-  UiRadioGroup,
-  UiRecordCard,
-  UiSectionHeading,
-  UiSelect,
-  UiSurface,
-  UiTabs,
-  UiTextarea,
-  UiToolbarRow,
-} from '@octopus/ui'
+import type { PermissionRecord } from '@octopus/schema'
+import { UiBadge, UiButton, UiField, UiInput, UiRecordCard, UiSelect, UiTextarea } from '@octopus/ui'
 
-import { enumLabel } from '@/i18n/copy'
-import { useWorkbenchStore } from '@/stores/workbench'
+import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
-const workbench = useWorkbenchStore()
+const userCenterStore = useUserCenterStore()
+const workspaceStore = useWorkspaceStore()
 
-const viewKind = ref<'atomic' | 'bundle'>('atomic')
-const selectedPermissionId = ref<string>('')
-
+const selectedPermissionId = ref('')
 const form = reactive({
   name: '',
   code: '',
   description: '',
-  status: 'active' as 'active' | 'disabled',
-  kind: 'atomic' as 'atomic' | 'bundle',
-  targetType: 'project' as 'workspace' | 'project' | 'user' | 'role' | 'permission' | 'menu' | 'agent' | 'tool' | 'skill' | 'mcp',
-  targetIds: [] as string[],
+  status: 'active',
+  kind: 'atomic',
+  targetType: 'project',
+  targetIds: '',
   action: 'view',
-  memberPermissionIds: [] as string[],
+  memberPermissionIds: '',
 })
 
-const canManagePermissions = computed(() =>
-  workbench.hasPermission('permission:manage:update', 'update'),
-)
+const statusOptions = [
+  { value: 'active', label: 'active' },
+  { value: 'disabled', label: 'disabled' },
+]
 
-const permissionItems = computed(() => workbench.workspacePermissionListItems)
-const visiblePermissions = computed(() =>
-  permissionItems.value.filter((permission) => permission.kind === viewKind.value),
-)
+const kindOptions = [
+  { value: 'atomic', label: 'atomic' },
+  { value: 'bundle', label: 'bundle' },
+]
 
-const targetOptions = computed(() => {
-  if (form.targetType === 'project') {
-    return workbench.workspaceProjects.map((project) => ({ id: project.id, label: project.name }))
-  }
+const targetTypeOptions = [
+  { value: 'workspace', label: 'workspace' },
+  { value: 'project', label: 'project' },
+  { value: 'agent', label: 'agent' },
+  { value: 'tool', label: 'tool' },
+  { value: 'skill', label: 'skill' },
+  { value: 'mcp', label: 'mcp' },
+]
 
-  if (form.targetType === 'agent') {
-    return workbench.workspaceAgents.map((agent) => ({ id: agent.id, label: agent.name }))
-  }
-
-  return workbench.toolCatalogGroups
-    .flatMap((group) => group.items)
-    .filter((item) =>
-      form.targetType === 'tool'
-        ? item.kind === 'builtin'
-        : item.kind === form.targetType,
-    )
-    .map((item) => ({ id: item.id, label: item.name }))
-})
-
-const selectedPermissionSummary = computed(() =>
-  permissionItems.value.find((item) => item.id === selectedPermissionId.value),
-)
-
-const summaryMetrics = computed(() => {
-  const disabledCount = permissionItems.value.filter((item) => item.status === 'disabled').length
-  const bundleCount = permissionItems.value.filter((item) => item.kind === 'bundle').length
-  const riskyCount = permissionItems.value.filter((item) => item.riskFlags.length).length
-  return [
-    {
-      id: 'total',
-      label: t('userCenter.permissions.metrics.total'),
-      value: String(permissionItems.value.length),
-      helper: t('userCenter.permissions.metrics.bundleHelper', { count: bundleCount }),
-    },
-    {
-      id: 'disabled',
-      label: t('userCenter.permissions.metrics.disabled'),
-      value: String(disabledCount),
-      helper: t('userCenter.permissions.metrics.disabledHelper'),
-      tone: 'warning' as const,
-    },
-    {
-      id: 'risky',
-      label: t('userCenter.permissions.metrics.risky'),
-      value: String(riskyCount),
-      helper: t('userCenter.permissions.metrics.riskyHelper'),
-      tone: 'accent' as const,
-    },
-  ]
-})
-
-const kindTabs = computed(() => [
-  { value: 'atomic', label: t('userCenter.permissions.atomicTab') },
-  { value: 'bundle', label: t('userCenter.permissions.bundleTab') },
+const metrics = computed(() => [
+  { id: 'total', label: t('userCenter.permissions.metrics.total'), value: String(userCenterStore.permissions.length) },
+  { id: 'bundle', label: t('userCenter.permissions.metrics.bundleHelper'), value: String(userCenterStore.permissions.filter(permission => permission.kind === 'bundle').length) },
 ])
-
-const statusOptions = computed(() => [
-  { value: 'active', label: t('userCenter.common.active') },
-  { value: 'disabled', label: t('userCenter.common.disabled') },
-])
-
-const kindOptions = computed(() => [
-  { value: 'atomic', label: t('userCenter.permissions.atomicTab') },
-  { value: 'bundle', label: t('userCenter.permissions.bundleTab') },
-])
-
-const targetTypeOptions = computed(() => [
-  { value: 'project', label: enumLabel('permissionTargetType', 'project') || 'project' },
-  { value: 'agent', label: enumLabel('permissionTargetType', 'agent') || 'agent' },
-  { value: 'tool', label: enumLabel('permissionTargetType', 'tool') || 'tool' },
-  { value: 'skill', label: enumLabel('permissionTargetType', 'skill') || 'skill' },
-  { value: 'mcp', label: enumLabel('permissionTargetType', 'mcp') || 'mcp' },
-])
-
-function applyPermission(permissionId?: string) {
-  if (!permissionId) {
-    selectedPermissionId.value = ''
-    form.name = ''
-    form.code = ''
-    form.description = ''
-    form.status = 'active'
-    form.kind = viewKind.value
-    form.targetType = 'project'
-    form.targetIds = []
-    form.action = 'view'
-    form.memberPermissionIds = []
-    return
-  }
-
-  const permission = workbench.workspacePermissions.find((item) => item.id === permissionId)
-  if (!permission) {
-    applyPermission()
-    return
-  }
-
-  selectedPermissionId.value = permission.id
-  form.name = permission.name
-  form.code = permission.code
-  form.description = permission.description
-  form.status = permission.status
-  form.kind = permission.kind
-  form.targetType = permission.targetType ?? 'project'
-  form.targetIds = [...(permission.targetIds ?? [])]
-  form.action = permission.action ?? 'view'
-  form.memberPermissionIds = [...(permission.memberPermissionIds ?? [])]
-}
 
 watch(
-  () => [viewKind.value, workbench.currentWorkspaceId, workbench.workspacePermissions.map((permission) => permission.id).join('|')],
+  () => userCenterStore.permissions.map(permission => permission.id).join('|'),
   () => {
-    const currentVisible = visiblePermissions.value
-    if (!selectedPermissionId.value || !currentVisible.some((permission) => permission.id === selectedPermissionId.value)) {
-      applyPermission(currentVisible[0]?.id)
+    if (!selectedPermissionId.value || !userCenterStore.permissions.some(permission => permission.id === selectedPermissionId.value)) {
+      applyPermission(userCenterStore.permissions[0]?.id)
       return
     }
-
     applyPermission(selectedPermissionId.value)
   },
   { immediate: true },
 )
 
-function savePermission() {
-  if (selectedPermissionId.value) {
-    workbench.updatePermission(selectedPermissionId.value, {
-      name: form.name,
-      code: form.code,
-      description: form.description,
-      status: form.status,
-      kind: form.kind,
-      targetType: form.kind === 'atomic' ? form.targetType : undefined,
-      targetIds: form.kind === 'atomic' ? form.targetIds : undefined,
-      action: form.kind === 'atomic' ? form.action : undefined,
-      memberPermissionIds: form.kind === 'bundle' ? form.memberPermissionIds : undefined,
-    })
+function applyPermission(permissionId?: string) {
+  const permission = userCenterStore.permissions.find(item => item.id === permissionId)
+  selectedPermissionId.value = permission?.id ?? ''
+  form.name = permission?.name ?? ''
+  form.code = permission?.code ?? ''
+  form.description = permission?.description ?? ''
+  form.status = permission?.status ?? 'active'
+  form.kind = permission?.kind ?? 'atomic'
+  form.targetType = permission?.targetType ?? 'project'
+  form.targetIds = permission?.targetIds.join(', ') ?? ''
+  form.action = permission?.action ?? 'view'
+  form.memberPermissionIds = permission?.memberPermissionIds.join(', ') ?? ''
+}
+
+async function savePermission() {
+  if (!workspaceStore.currentWorkspaceId || !form.name.trim() || !form.code.trim()) {
     return
   }
 
-  const permission = workbench.createPermission({
-    name: form.name,
-    code: form.code,
-    description: form.description,
-    status: form.status,
-    kind: form.kind,
-    targetType: form.kind === 'atomic' ? form.targetType : undefined,
-    targetIds: form.kind === 'atomic' ? form.targetIds : undefined,
-    action: form.kind === 'atomic' ? form.action : undefined,
-    memberPermissionIds: form.kind === 'bundle' ? form.memberPermissionIds : undefined,
-  })
-  applyPermission(permission.id)
+  const record: PermissionRecord = {
+    id: selectedPermissionId.value || `permission-${Date.now()}`,
+    workspaceId: workspaceStore.currentWorkspaceId,
+    name: form.name.trim(),
+    code: form.code.trim(),
+    description: form.description.trim(),
+    status: form.status as PermissionRecord['status'],
+    kind: form.kind as PermissionRecord['kind'],
+    targetType: form.targetType as PermissionRecord['targetType'],
+    targetIds: form.targetIds.split(',').map(item => item.trim()).filter(Boolean),
+    action: form.action.trim() || undefined,
+    memberPermissionIds: form.memberPermissionIds.split(',').map(item => item.trim()).filter(Boolean),
+  }
+
+  if (selectedPermissionId.value) {
+    await userCenterStore.updatePermission(selectedPermissionId.value, record)
+  } else {
+    const created = await userCenterStore.createPermission(record)
+    selectedPermissionId.value = created.id
+  }
 }
 </script>
 
 <template>
-  <section class="section-stack">
-    <div class="grid gap-4 md:grid-cols-3">
-      <UiMetricCard
-        v-for="metric in summaryMetrics"
-        :key="metric.id"
-        :label="metric.label"
-        :value="metric.value"
-        :helper="metric.helper"
-        :tone="metric.tone"
-      />
-    </div>
-
-    <UiSectionHeading
-      :eyebrow="t('userCenter.permissions.title')"
-      :title="t('userCenter.permissions.listTitle')"
-      :subtitle="t('userCenter.permissions.subtitle')"
-    />
-
-    <div class="grid gap-4 xl:grid-cols-[minmax(22rem,28rem)_minmax(0,1fr)]">
-      <UiSurface :title="t('userCenter.permissions.listTitle')" :subtitle="t('userCenter.permissions.listSubtitle')">
-        <UiToolbarRow test-id="user-center-permissions-toolbar" class="mb-4">
-          <template #tabs>
-            <UiTabs
-              v-model="viewKind"
-              test-id="user-center-permissions-tabs"
-              variant="pill"
-              :tabs="kindTabs"
-            />
-          </template>
-          <template #actions>
-            <UiButton v-if="canManagePermissions" size="sm" @click="applyPermission()">
-              <Plus :size="16" />
-              {{ t('userCenter.permissions.create') }}
-            </UiButton>
-          </template>
-        </UiToolbarRow>
-
-        <div class="space-y-3">
-          <UiRecordCard
-            v-for="permission in visiblePermissions"
-            :key="permission.id"
-            :test-id="`user-center-permission-record-${permission.id}`"
-            :title="permission.name"
-            :description="permission.description"
-            :active="selectedPermissionId === permission.id"
-            interactive
-            @click="applyPermission(permission.id)"
-          >
-            <template #eyebrow>{{ permission.code }}</template>
-            <template #badges>
-              <UiBadge :label="permission.kind" subtle />
-              <UiBadge :label="permission.status" :tone="permission.status === 'active' ? 'success' : 'warning'" />
-            </template>
-            <template #meta>
-              <span v-if="permission.kind === 'atomic'" class="inline-flex items-center gap-1">
-                <ShieldCheck :size="14" />
-                {{ permission.targetSummary }}
-              </span>
-              <span v-else class="inline-flex items-center gap-1">
-                <Blocks :size="14" />
-                {{ t('userCenter.permissions.bundleMembers', { count: permission.bundleMemberCount }) }}
-              </span>
-              <span>{{ t('userCenter.permissions.usedByRoles', { count: permission.usedByRoleCount }) }}</span>
-              <UiBadge v-for="flag in permission.riskFlags" :key="flag" :label="flag" subtle />
-            </template>
-            <template #actions>
-              <UiButton v-if="canManagePermissions" variant="ghost" size="sm" @click.stop="workbench.togglePermissionStatus(permission.id)">
-                <Power :size="14" />
-                {{ permission.status === 'active' ? t('userCenter.permissions.disable') : t('userCenter.permissions.enable') }}
-              </UiButton>
-              <UiButton v-if="canManagePermissions" variant="ghost" size="sm" @click.stop="workbench.deletePermission(permission.id)">
-                <Trash2 :size="14" />
-                {{ t('userCenter.permissions.delete') }}
-              </UiButton>
-            </template>
-          </UiRecordCard>
+  <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+    <section class="space-y-3">
+      <div class="grid gap-3 md:grid-cols-2">
+        <div v-for="metric in metrics" :key="metric.id" class="rounded-xl border border-border-subtle p-4 dark:border-white/[0.05]">
+          <div class="text-xs text-text-secondary">{{ metric.label }}</div>
+          <div class="mt-2 text-2xl font-semibold text-text-primary">{{ metric.value }}</div>
         </div>
-      </UiSurface>
-
-      <UiSurface
-        data-testid="user-center-permissions-editor"
-        :title="t(selectedPermissionId ? 'userCenter.permissions.editTitle' : 'userCenter.permissions.createTitle')"
-        :subtitle="t('userCenter.permissions.formSubtitle')"
+      </div>
+      <UiRecordCard
+        v-for="permission in userCenterStore.permissions"
+        :key="permission.id"
+        :title="permission.name"
+        :description="permission.description"
+        interactive
+        class="cursor-pointer"
+        :class="selectedPermissionId === permission.id ? 'ring-1 ring-primary' : ''"
+        @click="applyPermission(permission.id)"
       >
-        <div v-if="selectedPermissionSummary" class="mb-4 flex flex-wrap items-center gap-2">
-          <UiBadge :label="t('userCenter.permissions.usedByRoles', { count: selectedPermissionSummary.usedByRoleCount })" subtle />
-          <UiBadge v-if="selectedPermissionSummary.kind === 'bundle'" :label="t('userCenter.permissions.bundleMembers', { count: selectedPermissionSummary.bundleMemberCount })" subtle />
-          <UiBadge v-else :label="selectedPermissionSummary.targetSummary" subtle />
-        </div>
+        <template #badges>
+          <UiBadge :label="permission.kind" subtle />
+          <UiBadge :label="permission.status" subtle />
+        </template>
+      </UiRecordCard>
+    </section>
 
-        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <UiField :label="t('userCenter.permissions.nameLabel')">
-            <UiInput v-model="form.name" :disabled="!canManagePermissions" />
-          </UiField>
-          <UiField :label="t('userCenter.permissions.codeLabel')">
-            <UiInput v-model="form.code" :disabled="!canManagePermissions" />
-          </UiField>
-          <UiField :label="t('userCenter.common.status')">
-            <UiSelect v-model="form.status" :options="statusOptions" :disabled="!canManagePermissions" />
-          </UiField>
-          <UiField :label="t('userCenter.permissions.kindLabel')">
-            <UiSelect v-model="form.kind" :options="kindOptions" :disabled="!canManagePermissions" />
-          </UiField>
-          <UiField class="md:col-span-2 xl:col-span-4" :label="t('userCenter.permissions.descriptionLabel')">
-            <UiTextarea v-model="form.description" :rows="4" :disabled="!canManagePermissions" />
-          </UiField>
-        </div>
-
-        <div
-          class="mt-4 grid gap-4"
-          :class="form.kind === 'atomic' ? 'xl:grid-cols-[minmax(16rem,18rem)_minmax(0,1fr)_minmax(14rem,16rem)]' : 'xl:grid-cols-1'"
-        >
-          <template v-if="form.kind === 'atomic'">
-            <UiSurface variant="subtle" padding="sm" :title="t('userCenter.permissions.targetTypeTitle')">
-              <UiRadioGroup v-model="form.targetType" direction="vertical" :options="targetTypeOptions" :disabled="!canManagePermissions" />
-            </UiSurface>
-
-            <UiSurface variant="subtle" padding="sm" :title="t('userCenter.permissions.targetBindingTitle')">
-              <div class="mb-3 flex items-center justify-between">
-                <UiBadge :label="String(form.targetIds.length)" subtle />
-              </div>
-              <div class="space-y-2">
-                <UiCheckbox
-                  v-for="item in targetOptions"
-                  :key="item.id"
-                  v-model="form.targetIds"
-                  :value="item.id"
-                  :label="item.label"
-                  :disabled="!canManagePermissions"
-                />
-              </div>
-            </UiSurface>
-
-            <UiSurface variant="subtle" padding="sm" :title="t('userCenter.permissions.actionTitle')">
-              <UiInput v-model="form.action" :disabled="!canManagePermissions" />
-            </UiSurface>
-          </template>
-
-          <UiSurface v-else variant="subtle" padding="sm" :title="t('userCenter.permissions.bundleComposeTitle')">
-            <div class="mb-3 flex items-center justify-between">
-              <UiBadge :label="String(form.memberPermissionIds.length)" subtle />
-            </div>
-            <div class="space-y-2">
-              <UiCheckbox
-                v-for="permission in workbench.workspacePermissions.filter((item) => item.kind === 'atomic')"
-                :key="permission.id"
-                v-model="form.memberPermissionIds"
-                :value="permission.id"
-                :label="permission.name"
-                :disabled="!canManagePermissions"
-              />
-            </div>
-          </UiSurface>
-        </div>
-
-        <div class="mt-4 flex flex-wrap justify-end gap-3">
-          <UiButton variant="ghost" @click="applyPermission(visiblePermissions[0]?.id)">
-            {{ t('common.cancel') }}
-          </UiButton>
-          <UiButton v-if="canManagePermissions" @click="savePermission">
-            {{ t('common.save') }}
-          </UiButton>
-        </div>
-      </UiSurface>
-    </div>
-  </section>
+    <section class="space-y-4 rounded-xl border border-border-subtle p-5 dark:border-white/[0.05]">
+      <UiField :label="t('userCenter.permissions.fields.name')">
+        <UiInput v-model="form.name" />
+      </UiField>
+      <UiField :label="t('userCenter.permissions.fields.code')">
+        <UiInput v-model="form.code" />
+      </UiField>
+      <UiField :label="t('common.status')">
+        <UiSelect v-model="form.status" :options="statusOptions" />
+      </UiField>
+      <UiField :label="t('userCenter.permissions.fields.kind')">
+        <UiSelect v-model="form.kind" :options="kindOptions" />
+      </UiField>
+      <UiField :label="t('userCenter.permissions.fields.targetType')">
+        <UiSelect v-model="form.targetType" :options="targetTypeOptions" />
+      </UiField>
+      <UiField :label="t('userCenter.permissions.fields.action')">
+        <UiInput v-model="form.action" />
+      </UiField>
+      <UiField :label="t('userCenter.permissions.fields.targetIds')">
+        <UiTextarea v-model="form.targetIds" :rows="3" />
+      </UiField>
+      <UiField :label="t('userCenter.permissions.fields.memberPermissionIds')">
+        <UiTextarea v-model="form.memberPermissionIds" :rows="3" />
+      </UiField>
+      <UiField :label="t('userCenter.permissions.fields.description')">
+        <UiTextarea v-model="form.description" :rows="5" />
+      </UiField>
+      <UiButton @click="savePermission">{{ t('common.save') }}</UiButton>
+    </section>
+  </div>
 </template>

@@ -415,7 +415,7 @@ export interface ProjectOverviewSummary {
   conversationTokenTop: UsageRankingItem[]
 }
 
-export interface WorkspaceOverviewSnapshot {
+export interface LegacyWorkspaceOverviewSnapshot {
   workspaceId: string
   projectId?: string
   userMetrics: DashboardMetric[]
@@ -438,7 +438,7 @@ export interface ProjectDashboardProgress {
   pendingInboxCount: number
 }
 
-export interface ProjectDashboardSnapshot {
+export interface LegacyProjectDashboardSnapshot {
   workspaceId: string
   project: Project
   resourceMetrics: DashboardMetric[]

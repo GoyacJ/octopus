@@ -1,25 +1,9 @@
 import i18n from '@/plugins/i18n'
 
 type TranslationValues = Record<string, string | number>
-type RunDisplayField = 'currentStep' | 'nextAction'
 
 function hasKey(key: string): boolean {
   return i18n.global.te(key)
-}
-
-export function mockKey(scope: string, id: string, field: string, fallback = ''): string {
-  const key = `mock.${scope}.${id}.${field}`
-  return hasKey(key) ? key : fallback
-}
-
-export function resolveMockField(
-  scope: string,
-  id: string,
-  field: string,
-  fallback = '',
-  values?: TranslationValues,
-): string {
-  return resolveCopy(mockKey(scope, id, field, fallback), values)
 }
 
 export function translate(key: string, values?: TranslationValues): string {
@@ -40,22 +24,13 @@ export function resolveCopy(value?: string | null, values?: TranslationValues): 
 
 export function resolveRunDisplayValue(
   value?: string | null,
-  options?: { runId?: string, field?: RunDisplayField },
   values?: TranslationValues,
 ): string {
   if (!value) {
     return ''
   }
 
-  if (hasKey(value)) {
-    return resolveCopy(value, values)
-  }
-
-  const resolvedValue = options?.runId && options.field
-    ? mockKey('run', options.runId, options.field, value)
-    : value
-
-  return resolveCopy(resolvedValue, values)
+  return resolveCopy(value, values)
 }
 
 export function enumLabel(group: string, value?: string | null): string {

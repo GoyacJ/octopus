@@ -1,187 +1,154 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { UiBadge, UiButton, UiEmptyState, UiField, UiInput, UiListRow, UiSectionHeading, UiSelect, UiTextarea } from '@octopus/ui'
+import type { TeamRecord } from '@octopus/schema'
+import { UiBadge, UiButton, UiEmptyState, UiField, UiInput, UiMetricCard, UiRecordCard, UiSectionHeading, UiSelect, UiTextarea } from '@octopus/ui'
 
-import { enumLabel } from '@/i18n/copy'
-import { useWorkbenchStore } from '@/stores/workbench'
+import { formatDateTime } from '@/i18n/copy'
+import { useShellStore } from '@/stores/shell'
+import { useTeamStore } from '@/stores/team'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
-const workbench = useWorkbenchStore()
+const shell = useShellStore()
+const teamStore = useTeamStore()
+const workspaceStore = useWorkspaceStore()
 
-const selectedTeamId = ref(workbench.workspaceTeams[0]?.id ?? '')
-const draft = ref({
+const selectedTeamId = ref('')
+const form = reactive({
   name: '',
   description: '',
-  mode: 'leadered',
-  useScope: 'workspace',
-  defaultOutput: '',
-  projectNotes: '',
-  members: '',
-  approvalPreferences: '',
+  status: 'active',
+  memberIds: '',
 })
 
-const selectedTeam = computed(() =>
-  workbench.workspaceTeams.find((team) => team.id === selectedTeamId.value),
-)
-const modeOptions = computed(() => [
-  { value: 'leadered', label: enumLabel('teamMode', 'leadered') },
-  { value: 'hybrid', label: enumLabel('teamMode', 'hybrid') },
-  { value: 'mesh', label: enumLabel('teamMode', 'mesh') },
-])
-const scopeOptions = computed(() => [
-  { value: 'workspace', label: enumLabel('teamScope', 'workspace') },
-  { value: 'project', label: enumLabel('teamScope', 'project') },
-])
-
-function splitList(value: string): string[] {
-  return value
-    .split(',')
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function syncDraft() {
-  const team = selectedTeam.value
-  if (!team) {
-    return
-  }
-
-  draft.value = {
-    name: workbench.teamDisplayName(team.id),
-    description: workbench.teamDisplayDescription(team.id),
-    mode: team.mode,
-    useScope: team.useScope,
-    defaultOutput: workbench.teamDisplayDefaultOutput(team.id),
-    projectNotes: workbench.teamDisplayProjectNotes(team.id),
-    members: team.members.join(', '),
-    approvalPreferences: team.approvalPreferences.join(', '),
-  }
-}
+const statusOptions = [
+  { value: 'active', label: 'active' },
+  { value: 'archived', label: 'archived' },
+]
 
 watch(
-  () => workbench.workspaceTeams.map((team) => team.id).join('|'),
-  () => {
-    if (!selectedTeamId.value && workbench.workspaceTeams[0]) {
-      selectedTeamId.value = workbench.workspaceTeams[0].id
+  () => shell.activeWorkspaceConnectionId,
+  (connectionId) => {
+    if (connectionId) {
+      void teamStore.load(connectionId)
     }
-    syncDraft()
   },
   { immediate: true },
 )
 
-watch(selectedTeamId, () => {
-  syncDraft()
-})
+watch(
+  () => teamStore.workspaceTeams.map(team => team.id).join('|'),
+  () => {
+    if (!selectedTeamId.value || !teamStore.workspaceTeams.some(team => team.id === selectedTeamId.value)) {
+      applyTeam(teamStore.workspaceTeams[0]?.id)
+      return
+    }
+    applyTeam(selectedTeamId.value)
+  },
+  { immediate: true },
+)
 
-function saveTeam() {
-  const team = selectedTeam.value
-  if (!team) {
+const metrics = computed(() => [
+  { id: 'total', label: t('teams.metrics.total'), value: String(teamStore.workspaceTeams.length) },
+  { id: 'active', label: t('teams.metrics.active'), value: String(teamStore.workspaceTeams.filter(team => team.status === 'active').length) },
+])
+
+function applyTeam(teamId?: string) {
+  const team = teamStore.workspaceTeams.find(item => item.id === teamId)
+  selectedTeamId.value = team?.id ?? ''
+  form.name = team?.name ?? ''
+  form.description = team?.description ?? ''
+  form.status = team?.status ?? 'active'
+  form.memberIds = team?.memberIds.join(', ') ?? ''
+}
+
+async function saveTeam() {
+  if (!workspaceStore.currentWorkspaceId || !form.name.trim()) {
     return
   }
 
-  workbench.updateTeam(team.id, {
-    name: draft.value.name,
-    description: draft.value.description,
-    mode: draft.value.mode as typeof team.mode,
-    useScope: draft.value.useScope as typeof team.useScope,
-    defaultOutput: draft.value.defaultOutput,
-    projectNotes: draft.value.projectNotes,
-    members: splitList(draft.value.members),
-    approvalPreferences: splitList(draft.value.approvalPreferences),
-  })
+  const record: TeamRecord = {
+    id: selectedTeamId.value || `team-${Date.now()}`,
+    workspaceId: workspaceStore.currentWorkspaceId,
+    scope: 'workspace',
+    name: form.name.trim(),
+    description: form.description.trim(),
+    status: form.status as TeamRecord['status'],
+    memberIds: form.memberIds.split(',').map(item => item.trim()).filter(Boolean),
+    updatedAt: Date.now(),
+  }
+
+  if (selectedTeamId.value) {
+    await teamStore.update(selectedTeamId.value, record)
+  } else {
+    const created = await teamStore.create(record)
+    selectedTeamId.value = created.id
+  }
+}
+
+async function removeTeam() {
+  if (!selectedTeamId.value) {
+    return
+  }
+  await teamStore.remove(selectedTeamId.value)
+  applyTeam(teamStore.workspaceTeams[0]?.id)
 }
 </script>
 
 <template>
-  <div class="w-full flex flex-col gap-8 pb-20 h-full min-h-0">
-    <header class="px-2 shrink-0">
-      <UiSectionHeading 
-        :eyebrow="t('teams.header.eyebrow')" 
-        :title="t('teams.header.title')" 
-        :subtitle="t('teams.header.subtitle')" 
-      />
+  <div class="flex w-full flex-col gap-6 pb-20">
+    <header class="space-y-4 px-2">
+      <UiSectionHeading :eyebrow="t('teams.header.eyebrow')" :title="t('sidebar.navigation.teams')" :subtitle="teamStore.error || t('teams.header.subtitle')" />
+      <div class="grid gap-3 sm:grid-cols-2">
+        <UiMetricCard v-for="metric in metrics" :key="metric.id" :label="metric.label" :value="metric.value" />
+      </div>
     </header>
 
-    <div class="flex flex-1 min-h-0 gap-8 px-2">
-      <!-- Left: List -->
-      <aside class="flex flex-col w-80 shrink-0 border-r border-border-subtle pr-8">
-        <div class="space-y-1 mb-4">
-          <h3 class="text-sm font-bold text-text-primary">{{ t('teams.list.title') }}</h3>
-          <p class="text-[11px] text-text-tertiary">{{ t('teams.list.subtitle') }}</p>
+    <div class="grid gap-6 px-2 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section class="space-y-3">
+        <UiRecordCard
+          v-for="team in teamStore.workspaceTeams"
+          :key="team.id"
+          :title="team.name"
+          :description="team.description"
+          interactive
+          class="cursor-pointer"
+          :class="selectedTeamId === team.id ? 'ring-1 ring-primary' : ''"
+          @click="applyTeam(team.id)"
+        >
+          <template #badges>
+            <UiBadge :label="team.status" subtle />
+            <UiBadge :label="`${team.memberIds.length} members`" subtle />
+          </template>
+          <template #meta>
+            <span class="text-xs text-text-tertiary">{{ formatDateTime(team.updatedAt) }}</span>
+          </template>
+        </UiRecordCard>
+        <UiEmptyState v-if="!teamStore.workspaceTeams.length" :title="t('teams.empty.title')" :description="t('teams.empty.description')" />
+      </section>
+
+      <section class="space-y-4 rounded-xl border border-border-subtle p-5 dark:border-white/[0.05]">
+        <h3 class="text-base font-semibold text-text-primary">{{ selectedTeamId ? t('teams.actions.edit') : t('teams.actions.create') }}</h3>
+        <UiField :label="t('teams.fields.name')">
+          <UiInput v-model="form.name" />
+        </UiField>
+        <UiField :label="t('common.status')">
+          <UiSelect v-model="form.status" :options="statusOptions" />
+        </UiField>
+        <UiField :label="t('teams.fields.memberIds')">
+          <UiInput v-model="form.memberIds" />
+        </UiField>
+        <UiField :label="t('teams.fields.description')">
+          <UiTextarea v-model="form.description" :rows="6" />
+        </UiField>
+        <div class="flex gap-3">
+          <UiButton @click="saveTeam">{{ t('common.save') }}</UiButton>
+          <UiButton variant="ghost" @click="applyTeam()">{{ t('common.reset') }}</UiButton>
+          <UiButton v-if="selectedTeamId" variant="ghost" @click="removeTeam">{{ t('common.delete') }}</UiButton>
         </div>
-
-        <div data-testid="teams-list" class="flex-1 overflow-y-auto min-h-0 space-y-1 pr-2">
-          <UiListRow
-            v-for="team in workbench.workspaceTeams"
-            :key="team.id"
-            :data-testid="`team-row-${team.id}`"
-            :title="workbench.teamDisplayName(team.id)"
-            :subtitle="workbench.teamDisplayDescription(team.id)"
-            :eyebrow="enumLabel('teamScope', team.useScope)"
-            :active="team.id === selectedTeamId"
-            interactive
-            @click="selectedTeamId = team.id"
-          >
-            <template #meta>
-              <UiBadge :label="team.isProjectCopy ? t('teams.list.projectCopy') : t('teams.list.workspaceTeam')" subtle />
-            </template>
-          </UiListRow>
-
-          <UiEmptyState 
-            v-if="!workbench.workspaceTeams.length" 
-            :title="t('teams.list.emptyTitle')" 
-            :description="t('teams.list.emptyDescription')" 
-          />
-        </div>
-      </aside>
-
-      <!-- Right: Form -->
-      <main class="flex-1 overflow-y-auto min-h-0 pb-8">
-        <template v-if="selectedTeam">
-          <header class="space-y-2 mb-8">
-            <h2 class="text-2xl font-bold text-text-primary">{{ workbench.teamDisplayName(selectedTeam.id) }}</h2>
-            <p class="text-[14px] text-text-secondary leading-relaxed">{{ workbench.teamDisplayDefaultOutput(selectedTeam.id) }}</p>
-          </header>
-
-          <div class="grid gap-x-8 gap-y-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            <UiField :label="t('teams.form.name')">
-              <UiInput v-model="draft.name" data-testid="teams-form-name" />
-            </UiField>
-            <UiField :label="t('teams.form.mode')">
-              <UiSelect v-model="draft.mode" :options="modeOptions" />
-            </UiField>
-            <UiField :label="t('teams.form.useScope')">
-              <UiSelect v-model="draft.useScope" :options="scopeOptions" />
-            </UiField>
-            <UiField :label="t('teams.form.defaultOutput')">
-              <UiInput v-model="draft.defaultOutput" />
-            </UiField>
-
-            <UiField class="md:col-span-2 lg:col-span-2" :label="t('teams.form.description')">
-              <UiTextarea v-model="draft.description" :rows="3" />
-            </UiField>
-            <UiField class="md:col-span-2 lg:col-span-2" :label="t('teams.form.projectNotes')">
-              <UiTextarea v-model="draft.projectNotes" :rows="3" />
-            </UiField>
-            
-            <UiField class="md:col-span-2" :label="t('teams.form.members')">
-              <UiInput v-model="draft.members" />
-            </UiField>
-            <UiField class="md:col-span-2" :label="t('teams.form.approvalPreferences')">
-              <UiInput v-model="draft.approvalPreferences" />
-            </UiField>
-          </div>
-
-          <div class="mt-8 pt-6 border-t border-border-subtle flex flex-wrap gap-3">
-            <UiButton variant="primary" data-testid="teams-form-save" @click="saveTeam">{{ t('common.mockSave') }}</UiButton>
-            <UiButton variant="ghost" @click="workbench.createProjectTeamCopy(selectedTeam.id)">
-              {{ t('common.createProjectCopy') }}
-            </UiButton>
-          </div>
-        </template>
-      </main>
+      </section>
     </div>
   </div>
 </template>

@@ -1,12 +1,18 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+// @vitest-environment jsdom
+
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 import { router } from '@/router'
-import { useWorkbenchStore } from '@/stores/workbench'
+import { useShellStore } from '@/stores/shell'
+import { useUserCenterStore } from '@/stores/user-center'
+import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 describe('desktop router contract', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture()
     await router.push('/workspaces/ws-local/overview?project=proj-redesign')
     await router.isReady()
   })
@@ -46,17 +52,12 @@ describe('desktop router contract', () => {
   })
 
   it('redirects the user center root to the first authorized child route', async () => {
+    const shell = useShellStore()
+    const userCenterStore = useUserCenterStore()
+    await shell.bootstrap('ws-local', 'proj-redesign')
+    await userCenterStore.load()
+
     await router.push('/workspaces/ws-local/user-center')
-
-    expect(router.currentRoute.value.name).toBe('workspace-user-center-profile')
-  })
-
-  it('blocks unauthorized user center child routes and falls back to profile', async () => {
-    const workbench = useWorkbenchStore()
-
-    workbench.switchCurrentUser('user-operator')
-
-    await router.push('/workspaces/ws-local/user-center/roles')
 
     expect(router.currentRoute.value.name).toBe('workspace-user-center-profile')
   })

@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createApp, nextTick } from 'vue'
 
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
-import { useWorkbenchStore } from '@/stores/workbench'
+import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -36,7 +36,6 @@ function mountApp() {
   app.mount(container)
 
   return {
-    app,
     container,
     destroy() {
       app.unmount()
@@ -45,105 +44,60 @@ function mountApp() {
   }
 }
 
+async function waitForText(container: HTMLElement, value: string, timeoutMs = 2000) {
+  const startedAt = Date.now()
+  while (!(container.textContent?.includes(value) ?? false)) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`Timed out waiting for text: ${value}`)
+    }
+    await nextTick()
+    await new Promise(resolve => window.setTimeout(resolve, 20))
+  }
+}
+
 describe('workspace and project agents pages', () => {
-  beforeEach(async () => {
-    await router.push('/workspaces/ws-local/agents')
-    await router.isReady()
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture()
     document.body.innerHTML = ''
   })
 
-  it('renders the workspace agents library and switches to teams', async () => {
+  it('renders workspace agents and supports updating the selected agent', async () => {
+    await router.push('/workspaces/ws-local/agents')
+    await router.isReady()
+
     const mounted = mountApp()
+    await waitForText(mounted.container, 'Architect Agent')
 
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('Agents Library')
-    expect(mounted.container.textContent).toContain('Reusable intelligence assets available for all projects in this workspace.')
     expect(mounted.container.textContent).toContain('Architect Agent')
     expect(mounted.container.textContent).toContain('Coder Agent')
-    expect(mounted.container.textContent).not.toContain('Launch Readiness Team')
 
-    const teamTab = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.includes('Teams'))
-    teamTab?.click()
+    const nameInput = mounted.container.querySelectorAll('input')[0] as HTMLInputElement
+    expect(nameInput).not.toBeNull()
+    nameInput.value = 'Architect Agent Updated'
+    nameInput.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    expect(mounted.container.textContent).toContain('Team Library')
-    expect(mounted.container.textContent).toContain('Studio Direction Team')
-    expect(mounted.container.textContent).not.toContain('Launch Readiness Team')
+    const saveButton = Array.from(mounted.container.querySelectorAll('button')).find(button =>
+      button.textContent?.includes(String(i18n.global.t('common.save'))))
+    saveButton?.click()
+    await waitForText(mounted.container, 'Architect Agent Updated')
+
+    expect(mounted.container.textContent).toContain('Architect Agent Updated')
 
     mounted.destroy()
   })
 
-  it('filters workspace agents by search text', async () => {
-    const mounted = mountApp()
-
-    await nextTick()
-
-    const searchInput = mounted.container.querySelector<HTMLInputElement>('input[placeholder="Search workspace library..."]')
-    expect(searchInput).not.toBeNull()
-
-    searchInput!.value = 'coder'
-    searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('Coder Agent')
-    expect(mounted.container.textContent).not.toContain('Architect Agent')
-
-    mounted.destroy()
-  })
-
-  it('shows pagination on the workspace teams tab when enough teams exist', async () => {
-    const mounted = mountApp()
-    const workbench = useWorkbenchStore()
-
-    await nextTick()
-
-    for (let index = 0; index < 22; index += 1) {
-      workbench.createTeam('workspace')
-    }
-
-    await nextTick()
-
-    const teamTab = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.includes('Teams'))
-    teamTab?.click()
-    await nextTick()
-
-    expect(mounted.container.querySelector('[data-testid="ui-pagination"]')).not.toBeNull()
-    expect(mounted.container.textContent).toContain('1 / 2')
-
-    const nextButtons = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button'))
-      .filter((button) => button.textContent?.includes('Next'))
-    nextButtons[nextButtons.length - 1]?.click()
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('2 / 2')
-
-    mounted.destroy()
-  })
-
-  it('renders the project agents page and separates project teams via query state', async () => {
+  it('renders project-scoped agents for the current project', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/agents')
-    await nextTick()
+    await router.isReady()
 
     const mounted = mountApp()
+    await waitForText(mounted.container, 'Redesign Copilot')
 
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('Project Agents')
-    expect(mounted.container.textContent).toContain('Manage intelligence specialized for this project.')
-    expect(mounted.container.textContent).toContain('Architect Agent')
-    expect(mounted.container.textContent).toContain('Coder Agent')
-
-    const teamTab = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button'))
-      .find((button) => button.textContent?.includes('Teams'))
-    teamTab?.click()
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('Project Teams')
-    expect(mounted.container.textContent).toContain('Studio Direction Team')
-    expect(mounted.container.textContent).toContain('Redesign Tiger Team')
+    expect(mounted.container.textContent).toContain('Desktop Redesign')
+    expect(mounted.container.textContent).toContain('Redesign Copilot')
+    expect(mounted.container.textContent).not.toContain('Governance Agent')
 
     mounted.destroy()
   })

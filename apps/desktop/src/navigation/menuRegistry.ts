@@ -19,6 +19,7 @@ export type MenuIconKey =
   | 'settings'
   | 'connections'
   | 'teams'
+  | 'bell'
 
 export type MenuSection = 'app' | 'project' | 'workspace' | 'user-center'
 

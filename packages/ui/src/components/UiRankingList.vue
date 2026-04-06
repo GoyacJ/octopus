@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { vAutoAnimate } from '@formkit/auto-animate/vue'
 import { cn } from '../lib/utils'
 
 export interface UiRankingListItem {
@@ -26,6 +27,7 @@ defineSlots<{
 <template>
   <component
     :is="props.ordered ? 'ol' : 'ul'"
+    v-auto-animate
     :class="cn('flex flex-col gap-3', props.class)"
   >
     <li

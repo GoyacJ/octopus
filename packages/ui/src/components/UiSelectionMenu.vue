@@ -25,7 +25,7 @@ export interface UiSelectionMenuSection {
 
 const props = withDefaults(defineProps<{
   open?: boolean
-  align?: 'start' | 'end'
+  align?: 'start' | 'center' | 'end'
   side?: 'top' | 'right' | 'bottom' | 'left'
   title?: string
   description?: string

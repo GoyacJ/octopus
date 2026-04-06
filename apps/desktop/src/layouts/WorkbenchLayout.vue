@@ -4,7 +4,6 @@ import { onBeforeUnmount, onMounted } from 'vue'
 import WorkbenchSearchOverlay from '@/components/layout/WorkbenchSearchOverlay.vue'
 import WorkbenchSidebar from '@/components/layout/WorkbenchSidebar.vue'
 import WorkbenchTopbar from '@/components/layout/WorkbenchTopbar.vue'
-import DesktopPetHost from '@/components/pet/DesktopPetHost.vue'
 import { useShellStore } from '@/stores/shell'
 
 const shell = useShellStore()
@@ -49,7 +48,6 @@ onBeforeUnmount(() => {
     </div>
 
     <WorkbenchSearchOverlay />
-    <DesktopPetHost />
   </div>
 </template>
 

@@ -69,11 +69,36 @@ export function createConnectionProfile(input: {
 export interface ModelCatalogItem {
   id: string
   label: string
-  provider: string
+  provider: 'Anthropic' | 'OpenAI' | 'xAI' | 'Custom' | string
   description: string
   recommendedFor: string
   availability: ViewStatus
   defaultPermission: PermissionMode
+
+  // Model parameters and capabilities
+  contextWindow?: number
+  maxTokens?: number
+  capabilities?: string[]
+
+  // Custom model configuration
+  isCustom?: boolean
+  customBaseUrl?: string
+
+  // Statistics and cost
+  estimatedMonthlyCost?: number
+  cacheHitRate?: number
+
+  // Defaults
+  defaultSystemPrompt?: string
+}
+
+export interface ProviderCredential {
+  id: string
+  provider: 'Anthropic' | 'OpenAI' | 'xAI'
+  name: string
+  apiKey: string
+  baseUrl?: string
+  status: 'healthy' | 'error' | 'unconfigured'
 }
 
 interface WorkspaceToolBase {

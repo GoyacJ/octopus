@@ -13,15 +13,16 @@
     "saveDraft": "Save Draft",
     "requestReview": "Request Review",
     "savePreferences": "Save Preferences",
+    "resetToDefault": "Reset to Default",
     "pause": "Pause",
     "resume": "Resume",
     "cancel": "Cancel",
     "confirm": "Confirm",
     "confirmDelete": "Delete this item?",
     "save": "Save",
+    "reset": "Reset",
     "edit": "Edit",
     "delete": "Delete",
-    "mockSave": "Mock Save",
     "createProjectCopy": "Create Project Copy",
     "goal": "Goal",
     "constraints": "Constraints",
@@ -39,6 +40,7 @@
     "artifacts": "{count} artifacts",
     "teams": "{count} teams",
     "conversations": "{count} conversations",
+    "items": "{count} items",
     "progress": "{value}% progress",
     "updatedAt": "Updated {time}",
     "currentShell": "Current shell: {shell}",
@@ -65,15 +67,25 @@
       "en-US": "English"
     },
     "inbox": "Inbox",
-    "settings": "Open settings",
+    "settings": "Settings",
     "workspaceMenu": "Current workspace",
     "localWorkspace": "Local workbench",
     "sharedWorkspace": "Shared workspace",
     "profileRole": "Lead operator",
+    "accountSectionTitle": "Accounts",
     "workspaceSectionTitle": "Workspaces",
-    "workspaceSectionSubtitle": "Switch scope or create a new mock workspace.",
+    "workspaceSectionSubtitle": "Switch scope or add a new workspace connection.",
     "addWorkspace": "Add workspace",
     "removeWorkspace": "Remove workspace"
+  },
+  "app": {
+    "hostUnavailable": {
+      "eyebrow": "Host Unavailable",
+      "title": "Unable to connect to the current desktop workspace node",
+      "description": "The host control plane or local workspace backend is unavailable, so business surfaces are paused.",
+      "retry": "Retry connection",
+      "restart": "Restart backend"
+    }
   },
   "searchOverlay": {
     "placeholder": "Type to jump anywhere…",
@@ -126,9 +138,9 @@
       "caption": "Current workspace scope",
       "create": "Add project",
       "remove": "Remove project",
-      "removeConfirm": "Delete this project and all of its mock conversations?",
+      "removeConfirm": "Delete this project and all of its conversations?",
       "dialogTitle": "Create project",
-      "dialogDescription": "Enter a project name to create a new mock project inside the current workspace.",
+      "dialogDescription": "Enter a project name to create a new project inside the current workspace.",
       "inputPlaceholder": "Project name"
     },
     "projectModules": {
@@ -210,33 +222,58 @@
     }
   },
   "overview": {
+    "greeting": {
+      "night": "Good night",
+      "morning": "Good morning",
+      "afternoon": "Good afternoon",
+      "evening": "Good evening"
+    },
+    "status": {
+      "online": "Systems Operational"
+    },
     "header": {
       "eyebrow": "Workspace Overview",
       "titleFallback": "No workspace selected",
-      "subtitleFallback": "Review core metrics for users, projects, and the overall workspace."
+      "subtitleFallback": "Core metrics for users, projects, and the workspace."
+    },
+    "insights": {
+      "topAgent": "Agent {name} has been very active this week with {value} runs.",
+      "default": "Your workspace is running smoothly."
     },
     "sections": {
       "user": {
-        "title": "User Data",
-        "subtitle": "Workspace members, activity, and token consumption statistics.",
-        "activity": "Latest user activities"
+        "title": "User Activity",
+        "subtitle": "Stats for workspace members, activity, and token consumption.",
+        "activity": "Latest user actions"
       },
       "project": {
-        "title": "Project Summary",
-        "subtitle": "Core runtime metrics for the currently selected project.",
-        "openDashboard": "Open Project Console",
-        "openConversation": "Open Project Sessions",
-        "activity": "Recent project activity",
-        "conversationTop": "Top conversations by token spend"
+        "title": "Recent Project",
+        "enter": "Enter",
+        "subtitle": "Core operational metrics for the selected project.",
+        "openDashboard": "Go to Dashboard",
+        "openConversation": "Go to Conversation",
+        "activity": "Latest project activity",
+        "conversationTop": "Top Conversations"
       },
       "workspace": {
-        "title": "Workspace-wide Data",
-        "subtitle": "Distribution of resources, models, and tools across the workspace.",
-        "projectRanking": "Project Ranking",
-        "agentRanking": "Agent Usage",
-        "teamRanking": "Team Usage",
-        "toolRanking": "Tool Ranking",
+        "title": "Global Workspace Data",
+        "subtitle": "Distribution of resources, models, and tools.",
+        "projectRanking": "Top Projects",
+        "agentRanking": "Agent Usage Ranking",
+        "teamRanking": "Team Ranking",
+        "toolRanking": "Tool Usage Ranking",
         "modelRanking": "Model Ranking"
+      }
+    },
+    "charts": {
+      "activity": {
+        "title": "Workspace Activity Trend",
+        "subtitle": "Overall resource consumption trend (Tokens/Tasks)",
+        "label": "Usage"
+      },
+      "mix": {
+        "title": "Model Distribution",
+        "total": "Total"
       }
     },
     "user": {
@@ -255,17 +292,45 @@
       "tokens": "Total Tokens"
     },
     "empty": {
+      "projectsTitle": "No projects yet",
+      "projectsDescription": "Create or connect a project to populate this workspace overview.",
       "projectTitle": "No active project",
       "projectDescription": "Select a project to view detailed analytics.",
       "activityTitle": "No activity yet",
       "activityDescription": "No operation logs found for this scope.",
+      "conversationsTitle": "No conversations yet",
+      "conversationsDescription": "Runtime conversations will appear here after sessions start running.",
       "rankingTitle": "No rankings yet",
       "rankingDescription": "There is not enough data to support rankings."
+    },
+    "projects": {
+      "title": "Projects",
+      "openDashboard": "Open dashboard"
+    },
+    "activity": {
+      "title": "Activity"
+    },
+    "conversations": {
+      "title": "Recent conversations"
     }
   },
   "projectDashboard": {
     "header": {
-      "eyebrow": "Project Console"
+      "eyebrow": "Project Console",
+      "titleFallback": "Project Dashboard",
+      "subtitleFallback": "Review project metrics, activity, and recent conversations."
+    },
+    "conversations": {
+      "title": "Recent conversations"
+    },
+    "activity": {
+      "title": "Project activity"
+    },
+    "empty": {
+      "conversationsTitle": "No project conversations yet",
+      "conversationsDescription": "Project runtime sessions will appear here after conversations start.",
+      "activityTitle": "No project activity yet",
+      "activityDescription": "Project events will appear here once activity is recorded."
     },
     "info": {
       "title": "Project Details",
@@ -323,6 +388,8 @@
       "title": "Recent Project Activity"
     },
     "empty": {
+      "conversationsTitle": "No project conversations yet",
+      "conversationsDescription": "Project runtime sessions will appear here after conversations start.",
       "activityTitle": "No project activity yet",
       "activityDescription": "There are no project logs available.",
       "rankingTitle": "No session rankings yet",
@@ -344,6 +411,7 @@
     },
     "empty": {
       "title": "Session Workspace",
+      "description": "Choose a project in the active workspace and create a new session. Messages, approvals, and traces stay scoped to that workspace.",
       "guideTitle": "Start your first session",
       "guideDescription": "Click the '+' button above to begin structured collaboration with AI.",
       "create": "New Session"
@@ -353,18 +421,34 @@
       "emptyTitle": "No messages",
       "emptyDescription": "The conversation will start here."
     },
+    "messages": {
+      "emptyTitle": "No runtime messages yet",
+      "emptyDescription": "Start a turn to stream messages into this conversation."
+    },
     "composer": {
       "placeholder": "Type your message, instruction, or next plan…",
       "modelLabel": "Select Model",
+      "agentSection": "Agents",
+      "permissionLabel": "Permission Mode",
       "autoPermission": "Auto Mode",
       "readonlyPermission": "Read-only",
+      "dangerPermission": "Full Access",
+      "dangerPermissionHint": "Allow AI to execute sensitive write operations",
+      "dangerDialog": {
+        "title": "Enable Full Access Mode",
+        "description": "In Full Access mode, AI will be able to automatically execute sensitive write operations, including deletions and modifications, without requiring step-by-step approval from you.",
+        "warningTitle": "Security Warning",
+        "warningBody": "Enabling Full Access mode means you fully trust this agent. When handling files, databases, or sensitive configurations, AI misoperation may result in data loss or environment damage. Proceed with caution and ensure necessary backups are made.",
+        "confirm": "Confirm"
+      },
       "actorLabel": "Agent",
       "defaultActorOption": "Default actor · {name}",
       "agentGroup": "Personal Agents",
       "teamGroup": "Team Agents",
       "uploadFile": "Upload File",
       "uploadFolder": "Upload Folder",
-      "attachExisting": "Link Project Resource"
+      "attachExisting": "Link Project Resource",
+      "send": "Send"
     },
     "controls": {
       "title": "Session Controls"
@@ -423,8 +507,10 @@
     "header": {
       "eyebrow": "Project Knowledge",
       "workspaceEyebrow": "Global Knowledge Base",
+      "projectEyebrow": "Project Knowledge",
       "titleFallback": "Knowledge Hub",
       "subtitle": "Manage knowledge assets and source lineage for this project.",
+      "projectSubtitle": "Manage knowledge records scoped to the active project.",
       "workspaceSubtitle": "Manage global knowledge assets across all projects in the workspace."
     },
     "hero": {
@@ -531,24 +617,31 @@
     "runState": {
       "title": "Run State",
       "subtitle": "Detailed logs of progress, timestamps, and state transitions.",
-      "emptyTitle": "No active Run"
+      "emptyTitle": "No active Run",
+      "emptyDescription": "This session has not entered execution yet."
     },
     "recovery": {
       "title": "Recovery",
       "subtitle": "Breakpoint recovery support based on session snapshots.",
-      "emptyTitle": "No resume points available"
+      "emptyTitle": "No resume points available",
+      "emptyDescription": "There are no pending approvals or resumable checkpoints right now."
     },
     "timeline": {
       "title": "Execution Timeline",
       "subtitle": "Full record of tool calls, thinking paths, and system feedback.",
-      "emptyTitle": "Timeline is empty"
+      "emptyTitle": "Timeline is empty",
+      "emptyDescription": "Start a new run to stream events into this timeline."
     }
   },
   "resources": {
     "header": {
       "eyebrow": "Resource Center",
       "title": "Project Assets",
+      "projectTitleFallback": "Project Assets",
       "subtitle": "Manage files, links, and generated outputs."
+    },
+    "filters": {
+      "searchPlaceholder": "Search by name, path, type, or tag…"
     },
     "search": {
       "placeholder": "Search name, tag, or path…"
@@ -565,6 +658,8 @@
       "artifact": "Artifacts"
     },
     "empty": {
+      "title": "No resources yet",
+      "description": "Create or connect a resource to populate this list.",
       "emptyTitle": "No project resources",
       "emptyDescription": "Upload your first project resource from the top right."
     },
@@ -613,12 +708,22 @@
   "tools": {
     "header": {
       "eyebrow": "Tools",
-      "title": "Tool Integration Center"
+      "title": "TOOLS",
+      "subtitle": "Manage workspace tool definitions and permission policies."
     },
     "tabs": {
       "builtin": "System Built-in",
       "skill": "Skill Tools",
       "mcp": "MCP Connectors"
+    },
+    "tabs": {
+      "builtin": "System Built-in",
+      "skill": "Skill Tools",
+      "mcp": "MCP Connectors"
+    },
+    "empty": {
+      "title": "No integrations yet",
+      "description": "Create a tool or connector to make it available to the workspace."
     },
     "emptyTitle": "No integrations yet",
     "search": {
@@ -630,7 +735,9 @@
     },
     "fields": {
       "name": "Name",
+      "kind": "Kind",
       "description": "Description",
+      "permissionMode": "Permission Mode",
       "permission": "Permissions",
       "status": "Status",
       "availability": "Connectivity",
@@ -641,11 +748,18 @@
       "notes": "Dev Notes"
     },
     "actions": {
+      "create": "Create tool",
+      "edit": "Edit tool",
       "createSkill": "New Skill",
+      "createEmptySkill": "New Blank Skill",
+      "importZip": "Import from ZIP",
+      "importFolder": "Import from Folder",
       "createMcp": "New MCP",
       "enable": "Enable",
       "disable": "Disable",
-      "delete": "Delete"
+      "delete": "Delete",
+      "deleteConfirmTitle": "Confirm deletion?",
+      "deleteConfirmDesc": "This action cannot be undone. Any agents relying on this tool will no longer be able to use it."
     },
     "permissions": {
       "allow": "Always Allow",
@@ -676,15 +790,17 @@
       "subtitle": "Personalize your dedicated AI workspace."
     },
     "tabs": {
-      "general": "General Layout",
+      "general": "General Settings",
       "theme": "Aesthetics",
-      "i18n": "Locale",
       "version": "About"
     },
     "preferences": {
       "title": "Preferences",
       "theme": "Interface appearance",
       "locale": "Language",
+      "fontSize": "Font Size",
+      "fontFamily": "System Font",
+      "fontStyle": "Font Style",
       "leftSidebarCollapsed": "Collapse sidebar by default",
       "rightSidebarCollapsed": "Collapse detail panel by default",
       "themeOptions": {
@@ -695,10 +811,17 @@
       "localeOptions": {
         "zh-CN": "简体中文 (China)",
         "en-US": "English (US)"
+      },
+      "fontStyleOptions": {
+        "sans": "Sans-serif",
+        "serif": "Serif",
+        "mono": "Monospace"
       }
     },
     "general": {
-      "layoutTitle": "Page Layout",
+      "title": "General Settings",
+      "layoutTitle": "Layout",
+      "i18nTitle": "Language & Region",
       "leftSidebarHint": "Hide the navigation rail on the next launch",
       "rightSidebarHint": "Hide the detail pane on the next launch"
     },
@@ -757,7 +880,7 @@
   "userCenter": {
     "header": {
       "eyebrow": "User Center",
-      "title": "Governance & RBAC",
+      "title": "Permission Management",
       "subtitle": "Manage workspace roles, permission assignments, and navigation control.",
       "heroTitle": "Unified identity and capability governance board",
       "heroSubtitle": "Clear visibility of member and permission boundaries for compliance."
@@ -841,6 +964,12 @@
       "enable": "Enable member",
       "roleBindingTitle": "Role bindings",
       "scopeTitle": "Project scope",
+      "fields": {
+        "username": "Username",
+        "nickname": "Display name",
+        "roleIds": "Role IDs",
+        "scopeProjectIds": "Project scope IDs"
+      },
       "metrics": {
         "total": "Total members",
         "activeHelper": "{count} members are currently active",
@@ -864,8 +993,16 @@
       "permissionBindingTitle": "Permission bindings",
       "menuBindingTitle": "Menu bindings",
       "menuHint": "Only select navigation entries this role should be able to see.",
+      "fields": {
+        "name": "Role name",
+        "code": "Role code",
+        "permissionIds": "Permission IDs",
+        "menuIds": "Menu IDs",
+        "description": "Description"
+      },
       "metrics": {
         "total": "Total roles",
+        "disabled": "Disabled roles",
         "disabledHelper": "{count} roles are currently disabled.",
         "orphan": "Orphan roles",
         "orphanHelper": "Roles that are not currently assigned to any members.",
@@ -897,6 +1034,16 @@
       "disable": "Disable",
       "enable": "Enable",
       "delete": "Delete",
+      "fields": {
+        "name": "Permission name",
+        "code": "Permission code",
+        "kind": "Permission type",
+        "targetType": "Target type",
+        "action": "Action",
+        "targetIds": "Target IDs",
+        "memberPermissionIds": "Member permission IDs",
+        "description": "Description"
+      },
       "metrics": {
         "total": "Total permissions",
         "bundleHelper": "{count} of them are permission bundles.",
@@ -918,6 +1065,13 @@
       "orderLabel": "Sort order",
       "parentHint": "Parent relationships are controlled by the registry and shown here for reference only.",
       "toggleStatus": "Toggle status",
+      "fields": {
+        "label": "Menu label",
+        "source": "Source",
+        "routeName": "Route name",
+        "parentId": "Parent menu ID",
+        "order": "Sort order"
+      },
       "metrics": {
         "total": "Total menus",
         "userCenterHelper": "{count} menus come from user center configuration.",
@@ -930,15 +1084,35 @@
   },
   "agents": {
     "header": {
+      "eyebrow": "Agent Center",
       "title": "Agents & Teams",
       "subtitleProject": "Manage agents and team collaboration for this project.",
       "subtitleWorkspace": "Manage your workspace-level agents and team configurations."
+    },
+    "workspace": {
+      "descriptionAgent": "Manage reusable workspace agents available across projects."
+    },
+    "project": {
+      "titleFallback": "Project Agents",
+      "descriptionAgent": "Manage agents assigned to the active project."
+    },
+    "stats": {
+      "total": "Total agents",
+      "active": "Active agents"
+    },
+    "empty": {
+      "workspaceTitle": "No workspace agents yet",
+      "workspaceDescription": "Create the first reusable agent for this workspace.",
+      "projectTitle": "No project agents yet",
+      "projectDescription": "Create the first project-scoped agent for this project."
     },
     "tabs": {
       "agents": "Agents",
       "teams": "Teams"
     },
     "actions": {
+      "create": "Create agent",
+      "edit": "Edit agent",
       "new": "New",
       "addAgent": "New Agent",
       "addTeam": "New Team",
@@ -975,19 +1149,34 @@
       "tagsPlaceholder": "Add tags...",
       "description": "Description",
       "descriptionPlaceholder": "What does this agent do?"
+    },
+    "fields": {
+      "name": "Name",
+      "title": "Title",
+      "description": "Description"
     }
   },
   "automations": {
-    "placeholder": {
+    "header": {
       "eyebrow": "Automations",
-      "title": "No automations yet",
-      "subtitle": "Review workspace automation flows, cadences, and output states from one place."
+      "subtitle": "Manage workspace automation owners, cadence, output contracts, and execution state in one place."
     },
-    "list": {
-      "title": "Automation roster",
-      "subtitle": "Browse configured workspace automations and their latest outputs.",
-      "emptyTitle": "No automation records",
-      "emptyDescription": "There are no workspace automations to display yet."
+    "empty": {
+      "title": "No automations yet",
+      "description": "Once you create an automation, this view will show its orchestration state and latest output."
+    },
+    "actions": {
+      "create": "Create automation",
+      "edit": "Edit automation"
+    },
+    "fields": {
+      "title": "Title",
+      "ownerType": "Owner type",
+      "ownerId": "Owner",
+      "status": "Status",
+      "cadence": "Cadence",
+      "description": "Description",
+      "output": "Output contract"
     }
   },
   "teams": {
@@ -996,80 +1185,22 @@
       "title": "Team orchestration",
       "subtitle": "Maintain workspace squads, scope modes, and default output strategies."
     },
-    "list": {
-      "title": "Team List",
-      "subtitle": "Manage pre-configured AI collaborative squads.",
-      "emptyTitle": "No teams yet",
-      "emptyDescription": "No team agents have been created yet.",
-      "projectCopy": "Project Copy",
-      "workspaceTeam": "Workspace Team"
+    "metrics": {
+      "total": "Total teams",
+      "active": "Active teams"
     },
-    "form": {
+    "empty": {
+      "title": "No teams yet",
+      "description": "Create a team to manage workspace coordination groups and member scope here."
+    },
+    "actions": {
+      "create": "Create team",
+      "edit": "Edit team"
+    },
+    "fields": {
       "name": "Team name",
-      "mode": "Collaboration mode",
-      "useScope": "Scope",
-      "defaultOutput": "Default output",
-      "description": "Description",
-      "projectNotes": "Project notes",
-      "members": "Members",
-      "approvalPreferences": "Approval preferences"
-    }
-  },
-  "mock": {
-    "workspace": {
-      "ws-local": {
-        "name": "Local Workspace"
-      }
-    },
-    "project": {
-      "proj-redesign": {
-        "summary": "Refine the desktop shell and conversation architecture."
-      }
-    },
-    "conversation": {
-      "conv-redesign": {
-        "title": "Desktop shell GA refactor",
-        "summary": "Track the runtime-first desktop conversation refactor."
-      }
-    },
-    "agent": {
-      "agent-coder": {
-        "role": "Implementation Agent"
-      }
-    },
-    "team": {
-      "team-launch": {
-        "description": "Cross-functional launch squad for rollout planning."
-      }
-    },
-    "settingsPage": {
-      "version-meta": {
-        "description": "Version metadata and host runtime diagnostics."
-      }
-    },
-    "automation": {
-      "auto-launch-daily": {
-        "description": "Run the launch readiness automation every day."
-      }
-    },
-    "run": {
-      "run-redesign": {
-        "currentStep": "Awaiting permission to write shared artifacts",
-        "nextAction": "Approve the review request to continue the execution chain."
-      },
-      "run-governance": {
-        "currentStep": "Syncing audit and settings panels",
-        "nextAction": "Review policy copy and confirm labels."
-      },
-      "run-launch": {
-        "currentStep": "Waiting on budget approval for final sign-off",
-        "nextAction": "Resolve the blocking inbox item and rerun the checklist."
-      }
-    },
-    "connection": {
-      "conn-shared-enterprise": {
-        "label": "Shared Enterprise Connection"
-      }
+      "memberIds": "Member IDs",
+      "description": "Description"
     }
   },
   "enum": {
@@ -1078,7 +1209,6 @@
       "unavailable": "Unavailable"
     },
     "backendTransport": {
-      "mock": "Mock",
       "http": "HTTP",
       "sse": "SSE",
       "ws": "WebSocket"

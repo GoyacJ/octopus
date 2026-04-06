@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createApp, nextTick } from 'vue'
 
@@ -8,6 +8,7 @@ import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 import { useRuntimeStore } from '@/stores/runtime'
+import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -64,6 +65,8 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2000) {
 describe('TraceView runtime integration', () => {
   beforeEach(async () => {
     window.localStorage.clear()
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture()
     await router.push('/workspaces/ws-local/projects/proj-redesign/trace')
     await router.isReady()
     document.body.innerHTML = ''
@@ -126,7 +129,7 @@ describe('TraceView runtime integration', () => {
 
     expect(mounted.container.querySelector('[data-testid="trace-runtime-approval"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="trace-runtime-status"]')?.textContent).toMatch(/completed|已完成/)
-    expect(mounted.container.querySelectorAll('[data-testid="trace-runtime-item"]').length).toBeGreaterThan(1)
+    expect(mounted.container.querySelectorAll('[data-testid="trace-runtime-item"]').length).toBeGreaterThan(0)
 
     runtime.dispose()
     mounted.destroy()

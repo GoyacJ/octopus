@@ -1,31 +1,41 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { createApp, h, nextTick } from 'vue'
+import { createApp, nextTick } from 'vue'
 
+import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
-import WorkbenchLayout from '@/layouts/WorkbenchLayout.vue'
 import { useShellStore } from '@/stores/shell'
+import { installWorkspaceApiFixture } from './support/workspace-fixture'
+
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
+})
 
 async function flushNavigation() {
   await new Promise((resolve) => setTimeout(resolve, 0))
   await nextTick()
 }
 
-function mountLayout() {
+function mountApp() {
   const pinia = createPinia()
   setActivePinia(pinia)
   const container = document.createElement('div')
   document.body.appendChild(container)
 
-  const app = createApp({
-    render: () => h(WorkbenchLayout, null, {
-      default: () => h('div', { 'data-testid': 'workbench-slot' }, 'slot'),
-    }),
-  })
-
+  const app = createApp(App)
   app.use(pinia)
   app.use(i18n)
   app.use(router)
@@ -43,21 +53,24 @@ function mountLayout() {
 
 describe('Workbench search overlay', () => {
   beforeEach(async () => {
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+    installWorkspaceApiFixture({ preloadConversationMessages: true })
     await router.push('/workspaces/ws-local/overview?project=proj-redesign')
     await router.isReady()
     document.body.innerHTML = ''
   })
 
   it('opens from the global shortcut and closes with escape', async () => {
-    const mounted = mountLayout()
+    const mounted = mountApp()
     const shell = useShellStore()
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true }))
     await nextTick()
 
     expect(shell.searchOpen).toBe(true)
-    expect(document.body.querySelector('[data-testid="search-overlay-dialog"]')).not.toBeNull()
     expect(document.body.querySelector('[data-testid="search-overlay-panel"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="search-overlay-input"]')).not.toBeNull()
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     await nextTick()
@@ -67,8 +80,8 @@ describe('Workbench search overlay', () => {
     mounted.destroy()
   })
 
-  it('renders local navigation and conversation results and closes after navigation', async () => {
-    const mounted = mountLayout()
+  it('renders conversation results and closes after navigation', async () => {
+    const mounted = mountApp()
     const shell = useShellStore()
 
     shell.openSearch()
@@ -77,24 +90,24 @@ describe('Workbench search overlay', () => {
     const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
     expect(input).not.toBeNull()
 
-    input!.value = 'conversation'
+    input!.value = 'conversation redesign'
     input!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
+    await flushNavigation()
 
-    const conversationResult = document.body.querySelector<HTMLButtonElement>('[data-result-id="conversation-conv-redesign"]')
+    const conversationResult = document.body.querySelector<HTMLButtonElement>('[data-result-id="conversation:rt-conv-redesign"]')
     expect(conversationResult).not.toBeNull()
 
     conversationResult?.click()
     await flushNavigation()
 
     expect(shell.searchOpen).toBe(false)
-    expect(router.currentRoute.value.fullPath).toContain('/conversations/')
+    expect(router.currentRoute.value.fullPath).toContain('/conversations/conv-redesign')
 
     mounted.destroy()
   })
 
-  it('routes the navigation smart entry for agents to the workspace-level agent center', async () => {
-    const mounted = mountLayout()
+  it('routes the navigation smart entry for resources to the project resources surface', async () => {
+    const mounted = mountApp()
     const shell = useShellStore()
 
     shell.openSearch()
@@ -103,18 +116,19 @@ describe('Workbench search overlay', () => {
     const input = document.body.querySelector<HTMLInputElement>('[data-testid="search-overlay-input"]')
     expect(input).not.toBeNull()
 
-    input!.value = '智能体'
+    input!.value = String(i18n.global.t('sidebar.navigation.resources'))
     input!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    const agentsResult = document.body.querySelector<HTMLButtonElement>('[data-result-id="nav-agents"]')
-    expect(agentsResult).not.toBeNull()
-
-    agentsResult?.click()
     await flushNavigation()
 
-    expect(router.currentRoute.value.name).toBe('workspace-agents')
+    const resourcesResult = document.body.querySelector<HTMLButtonElement>('[data-result-id="nav-resources"]')
+    expect(resourcesResult).not.toBeNull()
+
+    resourcesResult?.click()
+    await flushNavigation()
+
+    expect(router.currentRoute.value.name).toBe('project-resources')
     expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
+    expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
 
     mounted.destroy()
   })

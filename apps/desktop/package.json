@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc --noEmit && vite build",
+    "dev:ui": "node ../../scripts/run-desktop-ui.mjs dev tauri",
+    "build:ui": "node ../../scripts/run-desktop-ui.mjs build tauri",
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "vue-tsc --noEmit --pretty false"
@@ -15,6 +15,7 @@
     "@octopus/ui": "workspace:*",
     "@tauri-apps/api": "^2.10.0",
     "@vue-flow/core": "1.48.2",
+    "jszip": "^3.10.1",
     "lucide-vue-next": "^0.400.0",
     "pinia": "^2.2.0",
     "vue": "^3.5.0",

@@ -1,195 +1,139 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink } from 'vue-router'
-import { ArrowRight, LayoutDashboard, MessageSquare } from 'lucide-vue-next'
+import { RouterLink, useRoute } from 'vue-router'
 
-import {
-  UiActionCard,
-  UiBadge,
-  UiEmptyState,
-  UiInfoCard,
-  UiMetricCard,
-  UiPageHero,
-  UiPanelFrame,
-  UiRankingList,
-  UiSectionHeading,
-  UiTimelineList,
-} from '@octopus/ui'
+import { UiEmptyState, UiMetricCard, UiRecordCard, UiSectionHeading, UiTimelineList } from '@octopus/ui'
 
+import { formatDateTime } from '@/i18n/copy'
 import { createProjectConversationTarget, createProjectDashboardTarget } from '@/i18n/navigation'
-import { useWorkbenchStore } from '@/stores/workbench'
+import { useWorkspaceStore } from '@/stores/workspace'
+
+type MetricTone = 'default' | 'accent' | 'muted' | 'success' | 'warning'
 
 const { t } = useI18n()
-const workbench = useWorkbenchStore()
+const route = useRoute()
+const workspaceStore = useWorkspaceStore()
 
-const snapshot = computed(() => workbench.workspaceOverview)
-const currentProject = computed(() =>
-  snapshot.value.projectId
-    ? workbench.projects.find((project) => project.id === snapshot.value.projectId)
-    : undefined,
-)
-const currentConversationId = computed(() => currentProject.value?.conversationIds[0])
-
-function metricNumber(value: string | number) {
-  if (typeof value === 'number') {
-    return value
+async function loadOverview() {
+  await workspaceStore.bootstrap()
+  const projectId = typeof route.query.project === 'string' ? route.query.project : workspaceStore.currentProjectId
+  if (projectId) {
+    await workspaceStore.loadProjectDashboard(projectId)
   }
-
-  const normalized = String(value).replace(/,/g, '').replace(/[^0-9.]/g, '')
-  return Number(normalized) || 0
 }
 
-function withRatio<T extends { value: string | number }>(items: T[], minRatio = 0.12) {
-  const entries = items.map((item) => ({
-    ...item,
-    numeric: metricNumber(item.value),
-  }))
-  const max = Math.max(1, ...entries.map((item) => item.numeric))
+onMounted(() => {
+  void loadOverview()
+})
 
-  return entries.map((item) => ({
-    ...item,
-    ratio: Math.max(minRatio, item.numeric / max),
-  }))
-}
+watch(() => route.query.project, () => {
+  void loadOverview()
+})
 
-function toTimelineItems(items: Array<{ id: string, title: string, description: string, timestamp: number }>) {
-  return items.map((item) => ({
+const snapshot = computed(() => workspaceStore.activeOverview)
+const metrics = computed(() => snapshot.value?.metrics ?? [])
+const projects = computed(() => snapshot.value?.projects ?? [])
+const conversations = computed(() => snapshot.value?.recentConversations ?? [])
+const activities = computed(() =>
+  (snapshot.value?.recentActivity ?? []).map(item => ({
     id: item.id,
     title: item.title,
     description: item.description,
-    timestamp: new Date(item.timestamp).toLocaleString(),
-  }))
+    timestamp: formatDateTime(item.timestamp),
+  })),
+)
+
+function resolveMetricTone(tone?: string): MetricTone {
+  switch (tone) {
+    case 'success':
+    case 'warning':
+    case 'accent':
+      return tone
+    case 'error':
+      return 'warning'
+    case 'info':
+      return 'muted'
+    default:
+      return 'default'
+  }
 }
-
-function toRankingItems(items: Array<{ id: string, label: string, value: string | number, secondary?: string, ratio: number }>) {
-  return items.map((item) => ({
-    id: item.id,
-    label: item.label,
-    helper: item.secondary,
-    value: item.value,
-    ratio: item.ratio,
-  }))
-}
-
-const userVisuals = computed(() => withRatio(snapshot.value.userMetrics, 0.18))
-const projectVisuals = computed(() => withRatio(snapshot.value.projectSummary.metrics))
-const workspaceVisuals = computed(() => withRatio(snapshot.value.workspaceMetrics))
-const projectTokenVisuals = computed(() => withRatio(snapshot.value.projectTokenTop, 0.18))
-const agentUsageVisuals = computed(() => withRatio(snapshot.value.agentUsage, 0.18))
-const teamUsageVisuals = computed(() => withRatio(snapshot.value.teamUsage, 0.18))
-const toolUsageVisuals = computed(() => withRatio(snapshot.value.toolUsage, 0.18))
-const modelUsageVisuals = computed(() => withRatio(snapshot.value.modelUsage, 0.18))
-const conversationTopVisuals = computed(() => withRatio(snapshot.value.projectSummary.conversationTokenTop, 0.18))
-
-const userTimelineItems = computed(() => toTimelineItems(snapshot.value.userActivity))
-const projectTimelineItems = computed(() => toTimelineItems(snapshot.value.projectSummary.activity))
-const conversationTopItems = computed(() => toRankingItems(conversationTopVisuals.value))
-const workspaceProjectRankingItems = computed(() => toRankingItems(projectTokenVisuals.value))
-const workspaceAgentRankingItems = computed(() => toRankingItems(agentUsageVisuals.value))
-const workspaceTeamRankingItems = computed(() => toRankingItems(teamUsageVisuals.value))
-const workspaceToolRankingItems = computed(() => toRankingItems(toolUsageVisuals.value))
-const workspaceModelRankingItems = computed(() => toRankingItems(modelUsageVisuals.value))
 </script>
 
 <template>
-  <div class="w-full space-y-16 pb-20">
-    <header class="space-y-2 px-2">
+  <div class="flex w-full flex-col gap-8 pb-20">
+    <header class="px-2">
       <UiSectionHeading
         :eyebrow="t('overview.header.eyebrow')"
-        :title="workbench.activeWorkspace?.name ?? t('overview.header.titleFallback')"
-        :subtitle="workbench.activeWorkspace?.description ?? t('overview.header.subtitleFallback')"
+        :title="snapshot?.workspace.name ?? t('overview.header.titleFallback')"
+        :subtitle="snapshot?.workspace.listenAddress ?? t('overview.header.subtitleFallback')"
       />
     </header>
 
-    <!-- Active Project Spotlight -->
-    <section v-if="currentProject" class="px-2 space-y-4" data-testid="workspace-overview-hero">
-      <h3 class="text-lg font-bold text-text-primary">{{ t('overview.sections.project.title') }}</h3>
-      
-      <div class="bg-subtle/30 border border-border-subtle p-6 rounded-lg space-y-6">
-        <div class="flex items-start justify-between">
-          <div class="space-y-1">
-            <h4 class="text-xl font-bold text-text-primary">{{ currentProject.name }}</h4>
-            <p class="text-sm text-text-secondary">{{ currentProject.summary }}</p>
-          </div>
-          <UiBadge :label="currentProject.phase" subtle />
-        </div>
-
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <UiMetricCard
-            v-for="metric in projectVisuals"
-            :key="metric.label"
-            :label="t(metric.label)"
-            :value="metric.value"
-            :progress="metric.ratio * 100"
-            tone="accent"
-          />
-        </div>
-
-        <div class="flex gap-3">
-          <RouterLink class="min-w-[160px] block" :to="createProjectDashboardTarget(currentProject.workspaceId, currentProject.id)" data-testid="workspace-overview-action-dashboard">
-            <UiActionCard :title="t('overview.sections.project.openDashboard')">
-              <template #icon><LayoutDashboard :size="16" /></template>
-            </UiActionCard>
-          </RouterLink>
-          <RouterLink class="min-w-[160px] block" :to="createProjectConversationTarget(currentProject.workspaceId, currentProject.id, currentConversationId)" data-testid="workspace-overview-action-conversation">
-            <UiActionCard :title="t('overview.sections.project.openConversation')">
-              <template #icon><MessageSquare :size="16" /></template>
-            </UiActionCard>
-          </RouterLink>
-        </div>
-      </div>
+    <section class="grid gap-3 px-2 sm:grid-cols-2 xl:grid-cols-4">
+      <UiMetricCard
+        v-for="metric in metrics"
+        :key="metric.id"
+        :label="metric.label"
+        :value="metric.value"
+        :helper="metric.helper"
+        :tone="resolveMetricTone(metric.tone)"
+      />
     </section>
 
-    <!-- User Section -->
-    <section class="px-2 space-y-6 border-t border-border-subtle pt-8">
-      <h3 class="text-lg font-bold text-text-primary">{{ t('overview.sections.user.title') }}</h3>
-      <div class="grid gap-6 md:grid-cols-3">
-        <div class="space-y-3">
-          <UiMetricCard
-            v-for="metric in userVisuals"
-            :key="metric.label"
-            :label="t(metric.label)"
-            :value="metric.value"
-            :progress="metric.ratio * 100"
-          />
+    <div class="grid gap-8 px-2 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section class="space-y-4">
+        <h3 class="text-lg font-semibold text-text-primary">{{ t('overview.projects.title') }}</h3>
+        <div v-if="projects.length" class="grid gap-3 lg:grid-cols-2">
+          <UiRecordCard
+            v-for="project in projects"
+            :key="project.id"
+            :title="project.name"
+            :description="project.description"
+          >
+            <template #meta>
+              <RouterLink
+                class="text-sm font-medium text-primary hover:underline"
+                :to="createProjectDashboardTarget(project.workspaceId, project.id)"
+              >
+                {{ t('overview.projects.openDashboard') }}
+              </RouterLink>
+            </template>
+          </UiRecordCard>
         </div>
-        <div class="md:col-span-2 bg-subtle/20 border border-border-subtle rounded-lg p-4 h-64 overflow-y-auto">
-          <UiTimelineList v-if="userTimelineItems.length" :items="userTimelineItems" />
-          <UiEmptyState v-else :title="t('overview.empty.activityTitle')" :description="t('overview.empty.activityDescription')" />
-        </div>
-      </div>
-    </section>
+        <UiEmptyState v-else :title="t('overview.empty.projectsTitle')" :description="t('overview.empty.projectsDescription')" />
+      </section>
 
-    <!-- Workspace Overview Section -->
-    <section class="px-2 space-y-6 border-t border-border-subtle pt-8">
-      <h3 class="text-lg font-bold text-text-primary">{{ t('overview.sections.workspace.title') }}</h3>
-      
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <UiMetricCard
-          v-for="metric in workspaceVisuals"
-          :key="metric.label"
-          :label="t(metric.label)"
-          :value="metric.value"
-          :progress="metric.ratio * 100"
-          tone="muted"
+      <section class="space-y-4">
+        <h3 class="text-lg font-semibold text-text-primary">{{ t('overview.activity.title') }}</h3>
+        <UiTimelineList
+          v-if="activities.length"
+          :items="activities"
         />
-      </div>
+        <UiEmptyState v-else :title="t('overview.empty.activityTitle')" :description="t('overview.empty.activityDescription')" />
+      </section>
+    </div>
 
-      <div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3 pt-4">
-        <div class="space-y-3">
-          <h4 class="text-[12px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('overview.sections.workspace.projectRanking') }}</h4>
-          <UiRankingList :items="workspaceProjectRankingItems" />
-        </div>
-        <div class="space-y-3">
-          <h4 class="text-[12px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('overview.sections.workspace.agentRanking') }}</h4>
-          <UiRankingList :items="workspaceAgentRankingItems" />
-        </div>
-        <div class="space-y-3">
-          <h4 class="text-[12px] font-bold uppercase tracking-wider text-text-tertiary">{{ t('overview.sections.workspace.toolRanking') }}</h4>
-          <UiRankingList :items="workspaceToolRankingItems" />
-        </div>
+    <section class="space-y-4 px-2">
+      <h3 class="text-lg font-semibold text-text-primary">{{ t('overview.conversations.title') }}</h3>
+      <div v-if="conversations.length" class="grid gap-3 lg:grid-cols-2">
+        <UiRecordCard
+          v-for="conversation in conversations"
+          :key="conversation.id"
+          :title="conversation.title"
+          :description="conversation.lastMessagePreview ?? conversation.status"
+        >
+          <template #meta>
+            <RouterLink
+              class="text-sm font-medium text-primary hover:underline"
+              :to="createProjectConversationTarget(conversation.workspaceId, conversation.projectId, conversation.id)"
+            >
+              {{ formatDateTime(conversation.updatedAt) }}
+            </RouterLink>
+          </template>
+        </UiRecordCard>
       </div>
+      <UiEmptyState v-else :title="t('overview.empty.conversationsTitle')" :description="t('overview.empty.conversationsDescription')" />
     </section>
   </div>
 </template>

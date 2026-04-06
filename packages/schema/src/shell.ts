@@ -7,6 +7,10 @@ import type {
   Locale,
   ThemeMode,
 } from './shared'
+import type {
+  WorkspaceConnectionRecord,
+  WorkspaceSessionTokenEnvelope,
+} from './workspace-protocol'
 
 export interface HostState {
   platform: HostPlatform
@@ -34,6 +38,9 @@ export interface HealthcheckStatus {
 export interface ShellPreferences {
   theme: ThemeMode
   locale: Locale
+  fontSize: number
+  fontFamily: string
+  fontStyle: string
   compactSidebar: boolean
   leftSidebarCollapsed: boolean
   rightSidebarCollapsed: boolean
@@ -46,6 +53,8 @@ export interface ShellBootstrap {
   preferences: ShellPreferences
   connections: ConnectionProfile[]
   backend?: HostBackendConnection
+  workspaceConnections?: WorkspaceConnectionRecord[]
+  workspaceSessions?: WorkspaceSessionTokenEnvelope[]
 }
 
 export type ConversationDetailFocus = 'summary' | 'memories' | 'artifacts' | 'knowledge' | 'resources' | 'tools' | 'timeline'
@@ -60,6 +69,9 @@ export function createDefaultShellPreferences(defaultWorkspaceId: string, defaul
   return {
     theme: 'system',
     locale: 'zh-CN',
+    fontSize: 14,
+    fontFamily: 'Inter, sans-serif',
+    fontStyle: 'sans',
     compactSidebar: false,
     leftSidebarCollapsed: false,
     rightSidebarCollapsed: false,
@@ -86,6 +98,9 @@ export function normalizeShellPreferences(
   return {
     theme: preferences?.theme ?? fallback.theme,
     locale: preferences?.locale ?? fallback.locale,
+    fontSize: preferences?.fontSize ?? fallback.fontSize,
+    fontFamily: preferences?.fontFamily ?? fallback.fontFamily,
+    fontStyle: preferences?.fontStyle ?? fallback.fontStyle,
     compactSidebar: typeof preferences?.compactSidebar === 'boolean'
       ? preferences.compactSidebar
       : leftSidebarCollapsed,
@@ -108,7 +123,7 @@ export function createFallbackHostState(platform: HostPlatform = 'web'): HostSta
 
 export function createFallbackBackendConnection(
   state: BackendConnectionState = 'ready',
-  transport: BackendTransport = 'mock',
+  transport: BackendTransport = 'http',
 ): HostBackendConnection {
   return {
     state,

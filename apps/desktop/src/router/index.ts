@@ -22,31 +22,44 @@ import UserCenterPermissionsView from '@/views/workspace/user/UserCenterPermissi
 import UserCenterProfileView from '@/views/workspace/user/UserCenterProfileView.vue'
 import UserCenterRolesView from '@/views/workspace/user/UserCenterRolesView.vue'
 import UserCenterUsersView from '@/views/workspace/user/UserCenterUsersView.vue'
-import { createMockWorkbenchSeed } from '@/mock/data'
+import UserRecentConversationsView from '@/views/workspace/user/UserRecentConversationsView.vue'
+import UserTodoListView from '@/views/workspace/user/UserTodoListView.vue'
 import { USER_CENTER_MENU_IDS, getRouteMenuId } from '@/navigation/menuRegistry'
-import { useWorkbenchStore } from '@/stores/workbench'
+import { useShellStore } from '@/stores/shell'
+import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceStore } from '@/stores/workspace'
+
+function resolveWorkspaceId(): string {
+  const shell = useShellStore()
+  const workspaceStore = useWorkspaceStore()
+  return shell.activeWorkspaceConnection?.workspaceId
+    || workspaceStore.currentWorkspaceId
+    || shell.preferences.defaultWorkspaceId
+    || 'ws-local'
+}
+
+function resolveProjectId(): string {
+  const workspaceStore = useWorkspaceStore()
+  return workspaceStore.currentProjectId
+    || workspaceStore.projects[0]?.id
+    || ''
+}
 
 function resolveUserCenterEntry(workspaceId: string) {
-  const workbench = useWorkbenchStore()
-  const routeName = workbench.firstAccessibleUserCenterRouteForWorkspace(workspaceId, workbench.currentUserId)
+  const userCenterStore = useUserCenterStore()
+  const workspaceStore = useWorkspaceStore()
+  const routeName = userCenterStore.firstAccessibleUserCenterRouteName
   if (routeName) {
     return {
       name: routeName,
-      params: {
-        workspaceId,
-      },
+      params: { workspaceId },
     }
   }
 
-  const fallbackProjectId = workbench.projects.find((project) => project.workspaceId === workspaceId)?.id ?? ''
   return {
     name: 'workspace-overview',
-    params: {
-      workspaceId,
-    },
-    query: {
-      project: fallbackProjectId,
-    },
+    params: { workspaceId },
+    query: workspaceStore.currentProjectId ? { project: workspaceStore.currentProjectId } : undefined,
   }
 }
 
@@ -55,15 +68,13 @@ export const router = createRouter({
   routes: [
     {
       path: '/',
-      redirect: (to) => {
-        const workbench = useWorkbenchStore()
-        const workspaceId = workbench.currentWorkspaceId || 'default'
-        const projectId = workbench.currentProjectId || ''
+      redirect: () => {
+        const workspaceId = resolveWorkspaceId()
+        const projectId = resolveProjectId()
         return {
-          path: `/workspaces/${workspaceId}/overview`,
-          query: {
-            project: projectId,
-          },
+          name: 'workspace-overview',
+          params: { workspaceId },
+          query: projectId ? { project: projectId } : undefined,
         }
       },
     },
@@ -156,10 +167,11 @@ export const router = createRouter({
       path: '/workspaces/:workspaceId/user-center',
       name: 'workspace-user-center',
       component: UserCenterView,
-      redirect: (to) => {
-        const workbench = useWorkbenchStore()
-        return resolveUserCenterEntry(String(to.params.workspaceId ?? workbench.currentWorkspaceId))
-      },
+      redirect: (to) => resolveUserCenterEntry(
+        typeof to.params.workspaceId === 'string' && to.params.workspaceId
+          ? to.params.workspaceId
+          : resolveWorkspaceId(),
+      ),
       children: [
         {
           path: 'profile',
@@ -186,6 +198,16 @@ export const router = createRouter({
           name: 'workspace-user-center-menus',
           component: UserCenterMenusView,
         },
+        {
+          path: 'recent-conversations',
+          name: 'workspace-user-center-recent-conversations',
+          component: UserRecentConversationsView,
+        },
+        {
+          path: 'todos',
+          name: 'workspace-user-center-todos',
+          component: UserTodoListView,
+        },
       ],
     },
     {
@@ -200,12 +222,13 @@ export const router = createRouter({
     },
     {
       path: '/:pathMatch(.*)*',
-      redirect: (to) => {
-        const workbench = useWorkbenchStore()
-        const workspaceId = workbench.currentWorkspaceId || 'default'
-        const projectId = workbench.currentProjectId || ''
-        const conversationId = workbench.currentConversationId || ''
-        return `/workspaces/${workspaceId}/projects/${projectId}/conversations/${conversationId}`
+      redirect: () => {
+        const workspaceId = resolveWorkspaceId()
+        const projectId = resolveProjectId()
+        return {
+          name: projectId ? 'project-conversations' : 'workspace-overview',
+          params: projectId ? { workspaceId, projectId } : { workspaceId },
+        }
       },
     },
   ],
@@ -215,17 +238,16 @@ router.beforeEach((to) => {
   const workspaceId = typeof to.params.workspaceId === 'string' ? to.params.workspaceId : undefined
   const routeMenuId = getRouteMenuId(typeof to.name === 'string' ? to.name : undefined)
 
-  if (!workspaceId || !routeMenuId) {
+  if (!workspaceId || !routeMenuId || !USER_CENTER_MENU_IDS.includes(routeMenuId)) {
     return true
   }
 
-  if (!USER_CENTER_MENU_IDS.includes(routeMenuId)) {
+  const userCenterStore = useUserCenterStore()
+  if (!userCenterStore.menus.length && !userCenterStore.roles.length && !userCenterStore.currentUser) {
     return true
   }
 
-  const workbench = useWorkbenchStore()
-  const accessibleMenuIds = workbench.effectiveMenuIdsForWorkspace(workspaceId, workbench.currentUserId)
-  if (accessibleMenuIds.includes(routeMenuId)) {
+  if (userCenterStore.currentEffectiveMenuIds.includes(routeMenuId)) {
     return true
   }
 

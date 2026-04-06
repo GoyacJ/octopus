@@ -1,207 +1,125 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Power, Save } from 'lucide-vue-next'
 
-import {
-  UiBadge,
-  UiButton,
-  UiField,
-  UiInput,
-  UiMetricCard,
-  UiRecordCard,
-  UiSectionHeading,
-  UiSelect,
-  UiSurface,
-} from '@octopus/ui'
+import type { MenuRecord } from '@octopus/schema'
+import { UiBadge, UiButton, UiField, UiInput, UiRecordCard, UiSelect } from '@octopus/ui'
 
-import { useWorkbenchStore } from '@/stores/workbench'
+import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
-const workbench = useWorkbenchStore()
+const userCenterStore = useUserCenterStore()
+const workspaceStore = useWorkspaceStore()
 
-const selectedMenuId = ref<string>('')
-
+const selectedMenuId = ref('')
 const form = reactive({
   label: '',
-  order: 0,
-  status: 'active' as 'active' | 'disabled',
+  source: 'user-center',
+  routeName: '',
+  parentId: '',
+  status: 'active',
+  order: '0',
 })
 
-const canManageMenus = computed(() =>
-  workbench.hasPermission('menu:manage:update', 'update'),
-)
+const sourceOptions = [
+  { value: 'main-sidebar', label: 'main-sidebar' },
+  { value: 'user-center', label: 'user-center' },
+]
 
-const flattenedMenus = computed(() => workbench.workspaceMenuTreeItems)
-const selectedMenu = computed(() =>
-  workbench.workspaceMenus.find((item) => item.id === selectedMenuId.value),
-)
-const selectedMenuSummary = computed(() =>
-  flattenedMenus.value.find((item) => item.id === selectedMenuId.value),
-)
-
-const statusOptions = computed(() => [
-  { value: 'active', label: t('userCenter.common.active') },
-  { value: 'disabled', label: t('userCenter.common.disabled') },
-])
-
-const summaryMetrics = computed(() => {
-  const disabledCount = flattenedMenus.value.filter((menu) => menu.status === 'disabled').length
-  const userCenterCount = flattenedMenus.value.filter((menu) => menu.source === 'user-center').length
-  const unusedCount = flattenedMenus.value.filter((menu) => menu.roleUsageCount === 0).length
-  return [
-    {
-      id: 'total',
-      label: t('userCenter.menus.metrics.total'),
-      value: String(flattenedMenus.value.length),
-      helper: t('userCenter.menus.metrics.userCenterHelper', { count: userCenterCount }),
-    },
-    {
-      id: 'disabled',
-      label: t('userCenter.menus.metrics.disabled'),
-      value: String(disabledCount),
-      helper: t('userCenter.menus.metrics.disabledHelper'),
-      tone: 'warning' as const,
-    },
-    {
-      id: 'unused',
-      label: t('userCenter.menus.metrics.unused'),
-      value: String(unusedCount),
-      helper: t('userCenter.menus.metrics.unusedHelper'),
-      tone: 'accent' as const,
-    },
-  ]
-})
-
-function applyMenu(menuId?: string) {
-  if (!menuId) {
-    selectedMenuId.value = ''
-    form.label = ''
-    form.order = 0
-    form.status = 'active'
-    return
-  }
-
-  const menu = workbench.workspaceMenus.find((item) => item.id === menuId)
-  if (!menu) {
-    applyMenu()
-    return
-  }
-
-  selectedMenuId.value = menu.id
-  form.label = menu.label
-  form.order = menu.order
-  form.status = menu.status
-}
+const statusOptions = [
+  { value: 'active', label: 'active' },
+  { value: 'disabled', label: 'disabled' },
+]
 
 watch(
-  () => [workbench.currentWorkspaceId, flattenedMenus.value.map((menu) => menu.id).join('|')],
+  () => userCenterStore.menus.map(menu => menu.id).join('|'),
   () => {
-    if (!selectedMenuId.value || !flattenedMenus.value.some((menu) => menu.id === selectedMenuId.value)) {
-      applyMenu(flattenedMenus.value[0]?.id)
+    if (!selectedMenuId.value || !userCenterStore.menus.some(menu => menu.id === selectedMenuId.value)) {
+      applyMenu(userCenterStore.menus[0]?.id)
       return
     }
-
     applyMenu(selectedMenuId.value)
   },
   { immediate: true },
 )
 
-function saveMenu() {
-  if (!selectedMenuId.value) {
+function applyMenu(menuId?: string) {
+  const menu = userCenterStore.menus.find(item => item.id === menuId)
+  selectedMenuId.value = menu?.id ?? ''
+  form.label = menu?.label ?? ''
+  form.source = menu?.source ?? 'user-center'
+  form.routeName = menu?.routeName ?? ''
+  form.parentId = menu?.parentId ?? ''
+  form.status = menu?.status ?? 'active'
+  form.order = String(menu?.order ?? 0)
+}
+
+async function saveMenu() {
+  if (!workspaceStore.currentWorkspaceId || !form.label.trim()) {
     return
   }
 
-  workbench.updateMenu(selectedMenuId.value, {
-    label: form.label,
-    order: form.order,
-    status: form.status,
-  })
+  const record: MenuRecord = {
+    id: selectedMenuId.value || `menu-${Date.now()}`,
+    workspaceId: workspaceStore.currentWorkspaceId,
+    label: form.label.trim(),
+    source: form.source as MenuRecord['source'],
+    routeName: form.routeName.trim() || undefined,
+    parentId: form.parentId.trim() || undefined,
+    status: form.status as MenuRecord['status'],
+    order: Number.parseInt(form.order, 10) || 0,
+  }
+
+  if (selectedMenuId.value) {
+    await userCenterStore.updateMenu(selectedMenuId.value, record)
+  } else {
+    const created = await userCenterStore.createMenu(record)
+    selectedMenuId.value = created.id
+  }
 }
 </script>
 
 <template>
-  <section class="section-stack">
-    <div class="grid gap-4 md:grid-cols-3">
-      <UiMetricCard
-        v-for="metric in summaryMetrics"
-        :key="metric.id"
-        :label="metric.label"
-        :value="metric.value"
-        :helper="metric.helper"
-        :tone="metric.tone"
-      />
-    </div>
-
-    <UiSectionHeading
-      :eyebrow="t('userCenter.menus.title')"
-      :title="t('userCenter.menus.editTitle')"
-      :subtitle="t('userCenter.menus.subtitle')"
-    />
-
-    <div class="grid gap-4 xl:grid-cols-[minmax(22rem,28rem)_minmax(0,1fr)]">
-      <UiSurface :title="t('userCenter.menus.title')" :subtitle="t('userCenter.menus.subtitle')">
-        <div data-testid="user-center-menus-tree" class="space-y-3">
-          <UiRecordCard
-            v-for="menu in flattenedMenus"
-            :key="menu.id"
-            :test-id="`user-center-menu-record-${menu.id}`"
-            :title="menu.label"
-            :description="menu.routeName || t('userCenter.menus.nonNavigable')"
-            :active="selectedMenuId === menu.id"
-            interactive
-            @click="applyMenu(menu.id)"
-          >
-            <template #eyebrow>{{ menu.source }}</template>
-            <template #badges>
-              <UiBadge :label="menu.status" :tone="menu.status === 'active' ? 'success' : 'warning'" />
-            </template>
-            <template #meta>
-              <span :style="{ paddingLeft: `${menu.depth * 0.8}rem` }">{{ t('userCenter.menus.roleUsage', { count: menu.roleUsageCount }) }}</span>
-              <UiBadge v-if="menu.parentLabel" :label="menu.parentLabel" subtle />
-            </template>
-          </UiRecordCard>
-        </div>
-      </UiSurface>
-
-      <UiSurface
-        data-testid="user-center-menus-editor"
-        :title="t('userCenter.menus.editTitle')"
-        :subtitle="t('userCenter.menus.formSubtitle')"
+  <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+    <section class="space-y-3">
+      <UiRecordCard
+        v-for="menu in userCenterStore.menus"
+        :key="menu.id"
+        :title="menu.label"
+        :description="menu.routeName || menu.id"
+        interactive
+        class="cursor-pointer"
+        :class="selectedMenuId === menu.id ? 'ring-1 ring-primary' : ''"
+        @click="applyMenu(menu.id)"
       >
-        <div v-if="selectedMenuSummary" class="mb-4 flex flex-wrap items-center gap-2">
-          <UiBadge :label="t('userCenter.menus.roleUsage', { count: selectedMenuSummary.roleUsageCount })" subtle />
-          <UiBadge :label="selectedMenuSummary.parentLabel ?? t('userCenter.menus.rootNode')" subtle />
-          <UiBadge :label="selectedMenuSummary.source" subtle />
-        </div>
+        <template #badges>
+          <UiBadge :label="menu.source" subtle />
+          <UiBadge :label="menu.status" subtle />
+        </template>
+      </UiRecordCard>
+    </section>
 
-        <UiSurface variant="subtle" padding="sm" class="mb-4" :title="selectedMenu?.label ?? t('common.na')" :subtitle="selectedMenu?.routeName || t('userCenter.menus.nonNavigable')" />
-
-        <div class="grid gap-4 md:grid-cols-2">
-          <UiField class="md:col-span-2" :label="t('userCenter.menus.labelLabel')">
-            <UiInput v-model="form.label" :disabled="!canManageMenus" />
-          </UiField>
-          <UiField :label="t('userCenter.menus.orderLabel')">
-            <UiInput v-model="form.order" type="number" :disabled="!canManageMenus" />
-          </UiField>
-          <UiField :label="t('userCenter.common.status')">
-            <UiSelect v-model="form.status" :options="statusOptions" :disabled="!canManageMenus" />
-          </UiField>
-        </div>
-
-        <p class="mt-4 text-sm leading-6 text-text-secondary">{{ t('userCenter.menus.parentHint') }}</p>
-
-        <div class="mt-4 flex flex-wrap justify-end gap-3">
-          <UiButton v-if="canManageMenus" variant="ghost" @click="selectedMenuId && workbench.toggleMenuStatus(selectedMenuId)">
-            <Power :size="14" />
-            {{ t('userCenter.menus.toggleStatus') }}
-          </UiButton>
-          <UiButton v-if="canManageMenus" @click="saveMenu">
-            <Save :size="14" />
-            {{ t('common.save') }}
-          </UiButton>
-        </div>
-      </UiSurface>
-    </div>
-  </section>
+    <section class="space-y-4 rounded-xl border border-border-subtle p-5 dark:border-white/[0.05]">
+      <UiField :label="t('userCenter.menus.fields.label')">
+        <UiInput v-model="form.label" />
+      </UiField>
+      <UiField :label="t('userCenter.menus.fields.source')">
+        <UiSelect v-model="form.source" :options="sourceOptions" />
+      </UiField>
+      <UiField :label="t('userCenter.menus.fields.routeName')">
+        <UiInput v-model="form.routeName" />
+      </UiField>
+      <UiField :label="t('userCenter.menus.fields.parentId')">
+        <UiInput v-model="form.parentId" />
+      </UiField>
+      <UiField :label="t('common.status')">
+        <UiSelect v-model="form.status" :options="statusOptions" />
+      </UiField>
+      <UiField :label="t('userCenter.menus.fields.order')">
+        <UiInput v-model="form.order" />
+      </UiField>
+      <UiButton @click="saveMenu">{{ t('common.save') }}</UiButton>
+    </section>
+  </div>
 </template>

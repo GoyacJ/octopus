@@ -9,10 +9,14 @@ const { bootstrapShellHostMock, savePreferencesMock } = vi.hoisted(() => ({
   savePreferencesMock: vi.fn(),
 }))
 
-vi.mock('@/tauri/client', () => ({
-  bootstrapShellHost: bootstrapShellHostMock,
-  savePreferences: savePreferencesMock,
-}))
+vi.mock('@/tauri/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/tauri/client')>()
+  return {
+    ...actual,
+    bootstrapShellHost: bootstrapShellHostMock,
+    savePreferences: savePreferencesMock,
+  }
+})
 
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
@@ -89,7 +93,7 @@ async function flushUi() {
   await nextTick()
 }
 
-describe('App mock-first shell bootstrap', () => {
+describe('App host bootstrap guard', () => {
   beforeEach(async () => {
     bootstrapShellHostMock.mockReset()
     savePreferencesMock.mockReset()
@@ -100,28 +104,29 @@ describe('App mock-first shell bootstrap', () => {
     await router.isReady()
   })
 
-  it('renders the routed content even when the injected backend is marked unavailable', async () => {
+  it('renders an explicit host failure state when the backend is unavailable', async () => {
     bootstrapShellHostMock.mockResolvedValue(createBootstrap(false))
 
     const mounted = mountApp()
 
     await flushUi()
 
-    expect(mounted.container.querySelector('[data-testid="desktop-backend-guard"]')).toBeNull()
-    expect(mounted.container.querySelector('[data-testid="conversation-chat-layout"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="desktop-backend-guard"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('app.hostUnavailable.title')))
+    expect(mounted.container.textContent).not.toContain(String(i18n.global.t('conversation.composer.send')))
 
     mounted.destroy()
   })
 
-  it('does not expose backend recovery actions in mock-first mode', async () => {
+  it('exposes backend recovery actions when the host guard is active', async () => {
     bootstrapShellHostMock.mockResolvedValue(createBootstrap(false))
 
     const mounted = mountApp()
 
     await flushUi()
 
-    expect(mounted.container.querySelector('[data-testid="desktop-backend-retry"]')).toBeNull()
-    expect(mounted.container.querySelector('[data-testid="desktop-backend-restart"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="desktop-backend-retry"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="desktop-backend-restart"]')).not.toBeNull()
 
     mounted.destroy()
   })

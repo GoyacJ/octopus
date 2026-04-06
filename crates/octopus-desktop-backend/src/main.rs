@@ -1,6 +1,9 @@
-use std::{env, net::SocketAddr, path::PathBuf};
+use std::{collections::HashMap, env, net::SocketAddr, path::PathBuf, sync::{Arc, Mutex}};
 
-use octopus_core::{AppError, DEFAULT_WORKSPACE_ID};
+use octopus_core::{
+    default_connection_stubs, default_preferences, AppError, HostState,
+    DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
+};
 use octopus_infra::build_infra_bundle;
 use octopus_platform::PlatformServices;
 use octopus_runtime_adapter::RuntimeAdapter;
@@ -12,6 +15,9 @@ struct BackendArgs {
     auth_token: String,
     app_version: String,
     cargo_workspace: bool,
+    host_platform: String,
+    host_mode: String,
+    host_shell: String,
     preferences_path: PathBuf,
     runtime_root: PathBuf,
 }
@@ -46,6 +52,24 @@ async fn main() -> Result<(), AppError> {
     let router = build_router(ServerState {
         services,
         host_auth_token: args.auth_token.clone(),
+        transport_security: "loopback".into(),
+        idempotency_cache: Arc::new(Mutex::new(HashMap::new())),
+        host_state: HostState {
+            platform: args.host_platform.clone(),
+            mode: args.host_mode.clone(),
+            app_version: args.app_version.clone(),
+            cargo_workspace: args.cargo_workspace,
+            shell: args.host_shell.clone(),
+        },
+        host_connections: default_connection_stubs(),
+        host_preferences_path: args.preferences_path.clone(),
+        host_default_preferences: default_preferences(DEFAULT_WORKSPACE_ID, DEFAULT_PROJECT_ID),
+        backend_connection: octopus_core::DesktopBackendConnection {
+            base_url: Some(format!("http://127.0.0.1:{}", args.port)),
+            auth_token: Some(args.auth_token.clone()),
+            state: "ready".into(),
+            transport: "http".into(),
+        },
     });
 
     let address = SocketAddr::from(([127, 0, 0, 1], args.port));
@@ -70,6 +94,9 @@ impl BackendArgs {
         let mut auth_token = None;
         let mut app_version = None;
         let mut cargo_workspace = None;
+        let mut host_platform = None;
+        let mut host_mode = None;
+        let mut host_shell = None;
         let mut preferences_path = None;
         let mut runtime_root = None;
 
@@ -89,6 +116,9 @@ impl BackendArgs {
                 "--cargo-workspace" => {
                     cargo_workspace = Some(matches!(value.as_str(), "true" | "1" | "yes"))
                 }
+                "--host-platform" => host_platform = Some(value),
+                "--host-mode" => host_mode = Some(value),
+                "--host-shell" => host_shell = Some(value),
                 "--preferences-path" => preferences_path = Some(PathBuf::from(value)),
                 "--runtime-root" => runtime_root = Some(PathBuf::from(value)),
                 _ => return Err(AppError::invalid_input(format!("unknown argument {flag}"))),
@@ -103,6 +133,12 @@ impl BackendArgs {
                 .ok_or_else(|| AppError::invalid_input("missing --app-version"))?,
             cargo_workspace: cargo_workspace
                 .ok_or_else(|| AppError::invalid_input("missing --cargo-workspace"))?,
+            host_platform: host_platform
+                .ok_or_else(|| AppError::invalid_input("missing --host-platform"))?,
+            host_mode: host_mode
+                .ok_or_else(|| AppError::invalid_input("missing --host-mode"))?,
+            host_shell: host_shell
+                .ok_or_else(|| AppError::invalid_input("missing --host-shell"))?,
             preferences_path: preferences_path
                 .ok_or_else(|| AppError::invalid_input("missing --preferences-path"))?,
             runtime_root: runtime_root
@@ -128,6 +164,12 @@ mod tests {
             "0.1.0".into(),
             "--cargo-workspace".into(),
             "true".into(),
+            "--host-platform".into(),
+            "web".into(),
+            "--host-mode".into(),
+            "local".into(),
+            "--host-shell".into(),
+            "browser".into(),
             "--preferences-path".into(),
             "/tmp/preferences.json".into(),
             "--runtime-root".into(),
@@ -137,6 +179,8 @@ mod tests {
 
         assert_eq!(args.port, 43127);
         assert!(args.cargo_workspace);
+        assert_eq!(args.host_platform, "web");
+        assert_eq!(args.host_shell, "browser");
         assert_eq!(args.runtime_root, PathBuf::from("/tmp/runtime"));
     }
 }

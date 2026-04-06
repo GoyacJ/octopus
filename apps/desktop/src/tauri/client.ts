@@ -2,19 +2,13 @@ export {
   bootstrapShellHost,
   getHostState,
   healthcheck,
-  listConnectionsStub,
+  hostClient,
   loadPreferences,
-  resolveRuntimeBackendConnection,
   restartDesktopBackend,
   savePreferences,
 } from './shell'
 
 export {
-  bootstrapRuntime,
-  createRuntimeSession,
-  listRuntimeSessions,
-  loadRuntimeSession,
-  pollRuntimeEvents,
-  resolveRuntimeApproval,
-  submitRuntimeUserTurn,
-} from './runtime'
+  createIdempotencyKey,
+  createWorkspaceClient,
+} from './workspace-client'

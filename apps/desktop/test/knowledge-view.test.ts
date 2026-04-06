@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createApp, nextTick } from 'vue'
 
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -44,50 +45,53 @@ function mountApp() {
   }
 }
 
+async function waitForText(container: HTMLElement, value: string, timeoutMs = 2000) {
+  const startedAt = Date.now()
+  while (!(container.textContent?.includes(value) ?? false)) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`Timed out waiting for text: ${value}`)
+    }
+    await nextTick()
+    await new Promise(resolve => window.setTimeout(resolve, 20))
+  }
+}
+
 describe('Knowledge view', () => {
   beforeEach(async () => {
-    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+    installWorkspaceApiFixture()
     await router.push('/workspaces/ws-local/projects/proj-redesign/knowledge')
     await router.isReady()
     document.body.innerHTML = ''
   })
 
-  it('renders the reading-first hero and selected knowledge detail', async () => {
+  it('renders project knowledge from the workspace API fixture', async () => {
     const mounted = mountApp()
 
-    await nextTick()
+    await waitForText(mounted.container, 'Desktop Redesign Notes')
 
-    expect(mounted.container.querySelector('[data-testid="knowledge-hero-summary"]')?.textContent).toContain('偏浏览')
-    expect(mounted.container.querySelector('[data-testid="knowledge-stat-total"]')?.textContent).toContain('1')
-    expect(mounted.container.querySelector('[data-testid="knowledge-detail-title"]')?.textContent).toContain('Architect')
-    expect(mounted.container.querySelector('[data-testid="knowledge-source-card"]')?.textContent).toContain('conv-redesign')
-    expect(mounted.container.querySelector('[data-testid="knowledge-related-conversation-link"]')?.textContent).toContain('Desktop shell GA refactor')
-    expect(mounted.container.querySelector('[data-testid="knowledge-lineage-list"]')?.textContent).toContain('会话')
+    expect(mounted.container.textContent).toContain('Desktop Redesign')
+    expect(mounted.container.textContent).toContain('Desktop Redesign Notes')
+    expect(mounted.container.textContent).toContain('Knowledge entries scoped to Desktop Redesign.')
 
     mounted.destroy()
   })
 
-  it('supports kind tabs and search-driven empty states', async () => {
+  it('shows the project knowledge empty state when search has no matches', async () => {
     const mounted = mountApp()
 
-    await nextTick()
+    await waitForText(mounted.container, 'Desktop Redesign Notes')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-filter-chip-shared"]')?.click()
-    await nextTick()
-
-    expect(mounted.container.querySelector('[data-testid="knowledge-empty-state"]')?.textContent).toContain('没有匹配的知识')
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-filter-chip-all"]')?.click()
-    await nextTick()
-
-    const searchInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="knowledge-search-input"]')
+    const searchInput = mounted.container.querySelector<HTMLInputElement>('input')
     expect(searchInput).not.toBeNull()
 
     searchInput!.value = '不存在的关键字'
     searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    expect(mounted.container.querySelector('[data-testid="knowledge-empty-state"]')?.textContent).toContain('没有匹配的知识')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('knowledge.empty.projectTitle')))
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('knowledge.empty.projectDescription')))
 
     mounted.destroy()
   })

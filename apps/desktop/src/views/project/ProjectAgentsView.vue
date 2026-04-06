@@ -1,117 +1,156 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { Bot, Users, Plus, Search, Filter, ArrowUpDown } from 'lucide-vue-next'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 
-import {
-  UiBadge,
-  UiButton,
-  UiDialog,
-  UiField,
-  UiInput,
-  UiPagination,
-  UiSelect,
-  UiTextarea,
-} from '@octopus/ui'
+import type { AgentRecord } from '@octopus/schema'
+import { UiBadge, UiButton, UiEmptyState, UiField, UiInput, UiMetricCard, UiRecordCard, UiSectionHeading, UiSelect, UiTextarea } from '@octopus/ui'
 
-import { usePagination } from '@/composables/usePagination'
-import { useWorkbenchStore } from '@/stores/workbench'
+import { formatDateTime } from '@/i18n/copy'
+import { useAgentStore } from '@/stores/agent'
+import { useShellStore } from '@/stores/shell'
+import { useWorkspaceStore } from '@/stores/workspace'
 
-const PAGE_SIZE = 12
 const { t } = useI18n()
 const route = useRoute()
-const router = useRouter()
-const workbench = useWorkbenchStore()
+const agentStore = useAgentStore()
+const shell = useShellStore()
+const workspaceStore = useWorkspaceStore()
 
-const searchQuery = ref('')
-const activeTab = ref<'agent' | 'team'>(route.query.kind === 'team' ? 'team' : 'agent')
-const dialogMode = ref<'create' | 'edit' | null>(null)
-const editingId = ref('')
-
-// Project scope logic
-const allAgents = computed(() => [...workbench.projectReferencedAgents, ...workbench.projectOwnedAgents])
-const allTeams = computed(() => [...workbench.projectReferencedTeams, ...workbench.projectOwnedTeams])
-
-const filteredItems = computed(() => {
-  const items = activeTab.value === 'agent' ? allAgents.value : allTeams.value
-  return items.filter((item) =>
-    !searchQuery.value || workbench.actorDisplayName(activeTab.value, item.id, (item as any).name).toLowerCase().includes(searchQuery.value.toLowerCase())
-  )
+const selectedAgentId = ref('')
+const form = reactive({
+  name: '',
+  title: '',
+  description: '',
+  status: 'active',
 })
 
-const { pagedItems, currentPage, pageCount, setPage } = usePagination(filteredItems, { pageSize: PAGE_SIZE })
+const statusOptions = [
+  { value: 'active', label: 'active' },
+  { value: 'archived', label: 'archived' },
+]
 
-async function setActiveTab(tab: 'agent' | 'team') {
-  activeTab.value = tab
-  await router.replace({ query: { ...route.query, kind: tab === 'team' ? 'team' : undefined } })
+watch(
+  () => [shell.activeWorkspaceConnectionId, route.params.projectId],
+  ([connectionId]) => {
+    if (typeof connectionId === 'string' && connectionId) {
+      void agentStore.load(connectionId)
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [route.params.projectId, agentStore.projectAgents.map(agent => agent.id).join('|')],
+  () => {
+    if (!selectedAgentId.value || !agentStore.projectAgents.some(agent => agent.id === selectedAgentId.value)) {
+      applyAgent(agentStore.projectAgents[0]?.id)
+      return
+    }
+    applyAgent(selectedAgentId.value)
+  },
+  { immediate: true },
+)
+
+const metrics = computed(() => [
+  { id: 'total', label: t('agents.stats.total'), value: String(agentStore.projectAgents.length) },
+  { id: 'active', label: t('agents.stats.active'), value: String(agentStore.projectAgents.filter(agent => agent.status === 'active').length) },
+])
+
+function applyAgent(agentId?: string) {
+  const agent = agentStore.projectAgents.find(item => item.id === agentId)
+  selectedAgentId.value = agent?.id ?? ''
+  form.name = agent?.name ?? ''
+  form.title = agent?.title ?? ''
+  form.description = agent?.description ?? ''
+  form.status = agent?.status ?? 'active'
 }
 
-function openEditDialog(id: string) {
-  editingId.value = id
-  dialogMode.value = 'edit'
+async function saveAgent() {
+  if (!workspaceStore.currentWorkspaceId || !workspaceStore.currentProjectId || !form.name.trim()) {
+    return
+  }
+
+  const record: AgentRecord = {
+    id: selectedAgentId.value || `agent-${Date.now()}`,
+    workspaceId: workspaceStore.currentWorkspaceId,
+    projectId: workspaceStore.currentProjectId,
+    scope: 'project',
+    name: form.name.trim(),
+    title: form.title.trim(),
+    description: form.description.trim(),
+    status: form.status as AgentRecord['status'],
+    updatedAt: Date.now(),
+  }
+
+  if (selectedAgentId.value) {
+    await agentStore.update(selectedAgentId.value, record)
+  } else {
+    const created = await agentStore.create(record)
+    selectedAgentId.value = created.id
+  }
+}
+
+async function removeAgent() {
+  if (!selectedAgentId.value) {
+    return
+  }
+  await agentStore.remove(selectedAgentId.value)
+  applyAgent(agentStore.projectAgents[0]?.id)
 }
 </script>
 
 <template>
-  <div class="w-full flex flex-col gap-8 pb-20">
+  <div class="flex w-full flex-col gap-6 pb-20">
     <header class="space-y-4 px-2">
-      <div class="flex items-center gap-3">
-        <div class="p-2 bg-primary/10 rounded-lg text-primary">
-          <Bot v-if="activeTab === 'agent'" :size="32" />
-          <Users v-else :size="32" />
-        </div>
-        <div>
-          <h1 class="text-3xl font-bold text-text-primary">{{ activeTab === 'agent' ? 'Project Agents' : 'Project Teams' }}</h1>
-          <p class="text-text-secondary">Manage intelligence specialized for this project.</p>
-        </div>
-      </div>
-
-      <div class="flex items-center justify-between border-y border-border-subtle dark:border-white/[0.05] py-2">
-        <div class="flex items-center gap-1">
-          <UiButton variant="ghost" size="sm" :class="activeTab === 'agent' ? 'bg-accent font-medium text-text-primary' : ''" @click="setActiveTab('agent')">Agents</UiButton>
-          <UiButton variant="ghost" size="sm" :class="activeTab === 'team' ? 'bg-accent font-medium text-text-primary' : ''" @click="setActiveTab('team')">Teams</UiButton>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <div class="relative w-64">
-            <Search :size="14" class="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
-            <UiInput v-model="searchQuery" placeholder="Search project items..." class="pl-9 h-8 bg-subtle/30" />
-          </div>
-          <UiButton variant="ghost" size="sm" class="h-8 text-xs gap-1.5"><Filter :size="14" /> Filter</UiButton>
-          <div class="w-px h-4 bg-border-subtle mx-1"></div>
-          <UiButton variant="primary" size="sm" class="h-8 gap-1.5"><Plus :size="14" /> Add to Project</UiButton>
-        </div>
+      <UiSectionHeading :eyebrow="t('agents.header.eyebrow')" :title="workspaceStore.activeProject?.name ?? t('agents.project.titleFallback')" :subtitle="agentStore.error || workspaceStore.activeProject?.description || t('agents.project.descriptionAgent')" />
+      <div class="grid gap-3 sm:grid-cols-2">
+        <UiMetricCard v-for="metric in metrics" :key="metric.id" :label="metric.label" :value="metric.value" />
       </div>
     </header>
 
-    <main class="px-2">
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6 gap-4">
-        <div 
-          v-for="item in pagedItems" 
-          :key="item.id"
-          class="group flex flex-col border border-border-subtle dark:border-white/[0.08] rounded-xl bg-card hover:bg-accent/30 transition-all cursor-pointer overflow-hidden shadow-xs hover:shadow-sm"
-          @click="openEditDialog(item.id)"
+    <div class="grid gap-6 px-2 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <section class="space-y-3">
+        <UiRecordCard
+          v-for="agent in agentStore.projectAgents"
+          :key="agent.id"
+          :title="agent.name"
+          :description="agent.description"
+          interactive
+          class="cursor-pointer"
+          :class="selectedAgentId === agent.id ? 'ring-1 ring-primary' : ''"
+          @click="applyAgent(agent.id)"
         >
-          <div class="p-4 space-y-3">
-            <div class="flex items-start justify-between">
-              <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/5 text-primary text-xl font-bold">
-                {{ workbench.actorDisplayInitial(activeTab, item.id, (item as any).avatar, (item as any).name) }}
-              </div>
-              <UiBadge :label="(item as any).status" subtle class="text-[10px]" />
-            </div>
-            <div class="space-y-1">
-              <h3 class="font-bold text-text-primary truncate">{{ workbench.actorDisplayName(activeTab, item.id, (item as any).name) }}</h3>
-              <p class="text-xs text-text-secondary font-medium truncate">{{ (item as any).title }}</p>
-            </div>
-            <p class="text-xs text-text-tertiary line-clamp-2 leading-relaxed min-h-[32px]">{{ (item as any).description }}</p>
-          </div>
-        </div>
-      </div>
+          <template #badges>
+            <UiBadge :label="agent.status" subtle />
+          </template>
+          <template #meta>
+            <span class="text-xs text-text-tertiary">{{ formatDateTime(agent.updatedAt) }}</span>
+          </template>
+        </UiRecordCard>
+        <UiEmptyState v-if="!agentStore.projectAgents.length" :title="t('agents.empty.projectTitle')" :description="t('agents.empty.projectDescription')" />
+      </section>
 
-      <div v-if="pageCount > 1" class="mt-10 flex justify-center">
-        <UiPagination :page="currentPage" :page-count="pageCount" @update:page="setPage" />
-      </div>
-    </main>
+      <section class="space-y-4 rounded-xl border border-border-subtle p-5 dark:border-white/[0.05]">
+        <h3 class="text-base font-semibold text-text-primary">{{ selectedAgentId ? t('agents.actions.edit') : t('agents.actions.create') }}</h3>
+        <UiField :label="t('agents.fields.name')">
+          <UiInput v-model="form.name" />
+        </UiField>
+        <UiField :label="t('agents.fields.title')">
+          <UiInput v-model="form.title" />
+        </UiField>
+        <UiField :label="t('common.status')">
+          <UiSelect v-model="form.status" :options="statusOptions" />
+        </UiField>
+        <UiField :label="t('agents.fields.description')">
+          <UiTextarea v-model="form.description" :rows="6" />
+        </UiField>
+        <div class="flex gap-3">
+          <UiButton @click="saveAgent">{{ t('common.save') }}</UiButton>
+          <UiButton variant="ghost" @click="applyAgent()">{{ t('common.reset') }}</UiButton>
+          <UiButton v-if="selectedAgentId" variant="ghost" @click="removeAgent">{{ t('common.delete') }}</UiButton>
+        </div>
+      </section>
+    </div>
   </div>
 </template>

@@ -1,4 +1,6 @@
 import type { DecisionAction, PermissionMode, RiskLevel, RunStatus, TraceKind, TraceTone } from './shared'
+import type { RuntimePermissionMode } from './permissions'
+import type { SseEventEnvelope } from './workspace-protocol'
 
 export interface ProviderConfig {
   provider: string
@@ -9,13 +11,13 @@ export interface ProviderConfig {
 
 export type RuntimeActorType = 'user' | 'assistant' | 'system'
 export type RuntimeEventKind =
-  | 'run_updated'
-  | 'message_created'
-  | 'trace_emitted'
-  | 'approval_requested'
-  | 'approval_resolved'
-  | 'session_updated'
-  | 'error'
+  | 'runtime.run.updated'
+  | 'runtime.message.created'
+  | 'runtime.trace.emitted'
+  | 'runtime.approval.requested'
+  | 'runtime.approval.resolved'
+  | 'runtime.session.updated'
+  | 'runtime.error'
 
 export interface RuntimeSessionSummary {
   id: string
@@ -76,17 +78,14 @@ export interface RuntimeApprovalRequest {
   detail: string
   riskLevel: RiskLevel
   createdAt: number
+  status?: 'pending' | 'approved' | 'rejected'
 }
 
 export type RuntimeDecisionAction = DecisionAction
 
-export interface RuntimeEventEnvelope {
-  id: string
-  kind: RuntimeEventKind
-  sessionId: string
-  conversationId: string
-  runId?: string
-  emittedAt: number
+export interface RuntimeEventEnvelope extends SseEventEnvelope {
+  eventType: RuntimeEventKind
+  kind?: RuntimeEventKind
   run?: RuntimeRunSnapshot
   message?: RuntimeMessage
   trace?: RuntimeTraceItem
@@ -118,7 +117,7 @@ export interface CreateRuntimeSessionInput {
 export interface SubmitRuntimeTurnInput {
   content: string
   modelId: string
-  permissionMode: PermissionMode
+  permissionMode: PermissionMode | RuntimePermissionMode
 }
 
 export interface ResolveRuntimeApprovalInput {

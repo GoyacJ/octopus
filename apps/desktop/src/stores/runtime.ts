@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 
 import { enumLabel, resolveRunDisplayValue } from '@/i18n/copy'
+import * as tauriClient from '@/tauri/client'
+import { useShellStore } from '@/stores/shell'
 
 import type {
   CreateRuntimeSessionInput,
   Message,
-  PermissionMode,
   ProviderConfig,
   ResolveRuntimeApprovalInput,
   RuntimeApprovalRequest,
@@ -20,15 +21,6 @@ import type {
   ToolCatalogKind,
 } from '@octopus/schema'
 
-import {
-  bootstrapRuntime,
-  createRuntimeSession,
-  loadRuntimeSession,
-  pollRuntimeEvents,
-  resolveRuntimeApproval,
-  submitRuntimeUserTurn,
-} from '@/tauri/client'
-
 type EnsureRuntimeSessionInput = CreateRuntimeSessionInput
 
 type RuntimeSubmitTurnInput = SubmitRuntimeTurnInput & {
@@ -39,6 +31,36 @@ export interface RuntimeQueueItem extends RuntimeSubmitTurnInput {
   id: string
   sessionId: string
   createdAt: number
+}
+
+type RuntimeTransportMode = 'idle' | 'sse' | 'polling'
+
+interface RuntimeWorkspaceSnapshot {
+  provider: ProviderConfig | null
+  bootstrapped: boolean
+  loading: boolean
+  sessions: RuntimeSessionSummary[]
+  sessionDetails: Record<string, RuntimeSessionDetail>
+  activeSessionId: string
+  activeConversationId: string
+  queuedTurns: Record<string, RuntimeQueueItem[]>
+  lastEventIds: Record<string, string>
+  error: string
+}
+
+function createRuntimeWorkspaceSnapshot(): RuntimeWorkspaceSnapshot {
+  return {
+    provider: null,
+    bootstrapped: false,
+    loading: false,
+    sessions: [],
+    sessionDetails: {},
+    activeSessionId: '',
+    activeConversationId: '',
+    queuedTurns: {},
+    lastEventIds: {},
+    error: '',
+  }
 }
 
 function createQueueId(): string {
@@ -102,6 +124,10 @@ function buildToolStats(trace: RuntimeTraceItem[]): Array<{
   return [...counts.values()].sort((left, right) => right.count - left.count)
 }
 
+function resolveRuntimeEventType(event: RuntimeEventEnvelope): string {
+  return event.eventType ?? event.kind ?? 'runtime.error'
+}
+
 export const useRuntimeStore = defineStore('runtime', {
   state: () => ({
     provider: null as ProviderConfig | null,
@@ -112,6 +138,12 @@ export const useRuntimeStore = defineStore('runtime', {
     activeSessionId: '',
     activeConversationId: '',
     queuedTurns: {} as Record<string, RuntimeQueueItem[]>,
+    lastEventIds: {} as Record<string, string>,
+    activeWorkspaceConnectionId: '',
+    workspaceStateSnapshots: {} as Record<string, RuntimeWorkspaceSnapshot>,
+    transportMode: 'idle' as RuntimeTransportMode,
+    streamSessionId: '',
+    streamSubscription: null as { close: () => void } | null,
     pollingSessionId: '',
     pollingTimer: null as ReturnType<typeof setInterval> | null,
     error: '',
@@ -161,6 +193,80 @@ export const useRuntimeStore = defineStore('runtime', {
     },
   },
   actions: {
+    saveActiveWorkspaceSnapshot() {
+      if (!this.activeWorkspaceConnectionId) {
+        return
+      }
+
+      this.workspaceStateSnapshots = {
+        ...this.workspaceStateSnapshots,
+        [this.activeWorkspaceConnectionId]: {
+          provider: this.provider,
+          bootstrapped: this.bootstrapped,
+          loading: this.loading,
+          sessions: this.sessions,
+          sessionDetails: this.sessionDetails,
+          activeSessionId: this.activeSessionId,
+          activeConversationId: this.activeConversationId,
+          queuedTurns: this.queuedTurns,
+          lastEventIds: this.lastEventIds,
+          error: this.error,
+        },
+      }
+    },
+    restoreWorkspaceSnapshot(workspaceConnectionId: string) {
+      const snapshot = this.workspaceStateSnapshots[workspaceConnectionId] ?? createRuntimeWorkspaceSnapshot()
+      this.provider = snapshot.provider
+      this.bootstrapped = snapshot.bootstrapped
+      this.loading = snapshot.loading
+      this.sessions = snapshot.sessions
+      this.sessionDetails = snapshot.sessionDetails
+      this.activeSessionId = snapshot.activeSessionId
+      this.activeConversationId = snapshot.activeConversationId
+      this.queuedTurns = snapshot.queuedTurns
+      this.lastEventIds = snapshot.lastEventIds
+      this.error = snapshot.error
+    },
+    syncWorkspaceScopeFromShell() {
+      const shell = useShellStore()
+      const nextConnectionId = shell.activeWorkspaceConnection?.workspaceConnectionId ?? ''
+      if (!nextConnectionId) {
+        this.saveActiveWorkspaceSnapshot()
+        this.stopRealtimeTransport()
+        this.activeWorkspaceConnectionId = ''
+        this.restoreWorkspaceSnapshot('')
+        return
+      }
+
+      if (this.activeWorkspaceConnectionId === nextConnectionId) {
+        return
+      }
+
+      this.saveActiveWorkspaceSnapshot()
+      this.stopRealtimeTransport()
+      this.activeWorkspaceConnectionId = nextConnectionId
+      this.restoreWorkspaceSnapshot(nextConnectionId)
+    },
+    resolveWorkspaceClient(workspaceConnectionId?: string) {
+      const shell = useShellStore()
+      const targetConnectionId = workspaceConnectionId ?? shell.activeWorkspaceConnection?.workspaceConnectionId ?? ''
+      if (!targetConnectionId) {
+        return null
+      }
+
+      const connection = shell.workspaceConnections.find(item => item.workspaceConnectionId === targetConnectionId)
+      if (!connection) {
+        return null
+      }
+
+      return {
+        connectionId: connection.workspaceConnectionId,
+        client: tauriClient.createWorkspaceClient({
+          connection,
+          session: shell.workspaceSessionsState[connection.workspaceConnectionId],
+        }),
+      }
+    },
     cacheSessionDetail(detail: RuntimeSessionDetail) {
       this.sessionDetails = {
         ...this.sessionDetails,
@@ -175,7 +281,14 @@ export const useRuntimeStore = defineStore('runtime', {
       this.cacheSessionDetail(detail)
     },
     async bootstrap() {
-      if (this.bootstrapped) {
+      this.syncWorkspaceScopeFromShell()
+      const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+      if (!resolvedClient) {
+        return
+      }
+      const { connectionId, client } = resolvedClient
+
+      if (this.bootstrapped && this.activeWorkspaceConnectionId === connectionId) {
         return
       }
 
@@ -183,10 +296,15 @@ export const useRuntimeStore = defineStore('runtime', {
       this.error = ''
 
       try {
-        const payload = await bootstrapRuntime()
+        const payload = await client.runtime.bootstrap()
+        if (this.activeWorkspaceConnectionId !== connectionId) {
+          return
+        }
+
         this.provider = payload.provider
         this.sessions = payload.sessions
         this.bootstrapped = true
+        this.saveActiveWorkspaceSnapshot()
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to bootstrap runtime'
       } finally {
@@ -200,30 +318,125 @@ export const useRuntimeStore = defineStore('runtime', {
       }
 
       this.pollingSessionId = ''
+      if (this.transportMode === 'polling') {
+        this.transportMode = 'idle'
+      }
     },
-    startPolling(sessionId: string) {
+    stopRealtimeTransport() {
+      if (this.streamSubscription) {
+        this.streamSubscription.close()
+        this.streamSubscription = null
+      }
+
+      this.streamSessionId = ''
+      this.stopPolling()
+      this.transportMode = 'idle'
+    },
+    startPolling(sessionId: string, workspaceConnectionId?: string) {
+      const targetWorkspaceConnectionId = workspaceConnectionId ?? this.activeWorkspaceConnectionId
       if (this.pollingTimer && this.pollingSessionId === sessionId) {
         return
       }
 
       this.stopPolling()
+      this.transportMode = 'polling'
       this.pollingSessionId = sessionId
       this.pollingTimer = setInterval(() => {
-        void this.pollSessionEvents(sessionId)
-      }, 60)
-      void this.pollSessionEvents(sessionId)
+        void this.pollSessionEvents(sessionId, targetWorkspaceConnectionId)
+      }, 250)
+      void this.pollSessionEvents(sessionId, targetWorkspaceConnectionId)
+    },
+    async startEventTransport(sessionId: string) {
+      const workspaceConnectionId = this.activeWorkspaceConnectionId
+      const resolvedClient = this.resolveWorkspaceClient(workspaceConnectionId)
+      if (!resolvedClient) {
+        return
+      }
+      const { client } = resolvedClient
+
+      if (this.streamSubscription && this.streamSessionId === sessionId) {
+        return
+      }
+
+      this.stopRealtimeTransport()
+
+      try {
+        const subscription = await client.runtime.subscribeEvents(sessionId, {
+          lastEventId: this.lastEventIds[sessionId],
+          onEvent: (event) => {
+            if (workspaceConnectionId !== this.activeWorkspaceConnectionId) {
+              return
+            }
+
+            this.applyRuntimeEvent(event)
+            void this.finishTransportCycle(sessionId, workspaceConnectionId)
+          },
+          onError: (error) => {
+            if (workspaceConnectionId !== this.activeWorkspaceConnectionId) {
+              return
+            }
+
+            this.error = error.message
+            this.startPolling(sessionId, workspaceConnectionId)
+          },
+        })
+
+        if (workspaceConnectionId !== this.activeWorkspaceConnectionId) {
+          subscription.close()
+          return
+        }
+
+        this.streamSubscription = subscription
+        this.streamSessionId = sessionId
+        this.transportMode = 'sse'
+      } catch {
+        if (workspaceConnectionId === this.activeWorkspaceConnectionId) {
+          this.startPolling(sessionId, workspaceConnectionId)
+        }
+      }
+    },
+    async finishTransportCycle(sessionId: string, workspaceConnectionId?: string) {
+      const targetWorkspaceConnectionId = workspaceConnectionId ?? this.activeWorkspaceConnectionId
+      if (targetWorkspaceConnectionId !== this.activeWorkspaceConnectionId || sessionId !== this.activeSessionId) {
+        return
+      }
+
+      const status = this.activeRun?.status
+      if ((status === 'waiting_approval' && this.pendingApproval) || status === 'blocked' || status === 'failed') {
+        this.stopRealtimeTransport()
+        return
+      }
+
+      if (status === 'completed' || status === 'idle') {
+        this.stopRealtimeTransport()
+        await this.flushQueuedTurn()
+      }
     },
     async ensureSession(input: EnsureRuntimeSessionInput): Promise<RuntimeSessionDetail | null> {
       await this.bootstrap()
+      const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+      if (!resolvedClient) {
+        return null
+      }
+
       const existingSession = this.sessions.find((session) => session.conversationId === input.conversationId)
+      const { connectionId, client } = resolvedClient
 
       if (existingSession) {
         return await this.loadSession(existingSession.id)
       }
 
       try {
-        const detail = await createRuntimeSession(input)
+        const detail = await client.runtime.createSession(
+          input,
+          tauriClient.createIdempotencyKey(`runtime-session-${connectionId}-${input.conversationId}`),
+        )
+        if (this.activeWorkspaceConnectionId !== connectionId) {
+          return null
+        }
+
         this.setActiveSession(detail)
+        this.saveActiveWorkspaceSnapshot()
         return detail
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to create runtime session'
@@ -231,14 +444,26 @@ export const useRuntimeStore = defineStore('runtime', {
       }
     },
     async loadSession(sessionId: string): Promise<RuntimeSessionDetail | null> {
+      this.syncWorkspaceScopeFromShell()
+      const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+      if (!resolvedClient) {
+        return null
+      }
+      const { connectionId, client } = resolvedClient
+
       try {
-        const detail = await loadRuntimeSession(sessionId)
+        const detail = await client.runtime.loadSession(sessionId)
+        if (this.activeWorkspaceConnectionId !== connectionId) {
+          return null
+        }
+
         this.setActiveSession(detail)
         if (isBusyStatus(detail.run.status)) {
-          this.startPolling(detail.summary.id)
-        } else if (this.pollingSessionId === detail.summary.id) {
-          this.stopPolling()
+          await this.startEventTransport(detail.summary.id)
+        } else if (this.pollingSessionId === detail.summary.id || this.streamSessionId === detail.summary.id) {
+          this.stopRealtimeTransport()
         }
+        this.saveActiveWorkspaceSnapshot()
         return detail
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to load runtime session'
@@ -261,6 +486,7 @@ export const useRuntimeStore = defineStore('runtime', {
         ...this.queuedTurns,
         [this.activeSessionId]: [...queued, nextQueueItem],
       }
+      this.saveActiveWorkspaceSnapshot()
     },
     removeQueuedTurn(queueId: string) {
       if (!this.activeSessionId) {
@@ -271,6 +497,7 @@ export const useRuntimeStore = defineStore('runtime', {
         ...this.queuedTurns,
         [this.activeSessionId]: (this.queuedTurns[this.activeSessionId] ?? []).filter((item) => item.id !== queueId),
       }
+      this.saveActiveWorkspaceSnapshot()
     },
     async submitTurn(input: RuntimeSubmitTurnInput) {
       if (!this.activeSessionId) {
@@ -291,13 +518,21 @@ export const useRuntimeStore = defineStore('runtime', {
       }
 
       this.error = ''
+      const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+      if (!resolvedClient) {
+        throw new Error('No active workspace connection selected')
+      }
+      const { connectionId, client } = resolvedClient
 
       try {
-        const run = await submitRuntimeUserTurn(this.activeSessionId, {
+        const run = await client.runtime.submitUserTurn(this.activeSessionId, {
           content: trimmed,
           modelId: input.modelId,
           permissionMode: input.permissionMode,
-        })
+        }, tauriClient.createIdempotencyKey(`runtime-turn-${connectionId}-${this.activeSessionId}`))
+        if (this.activeWorkspaceConnectionId !== connectionId) {
+          return
+        }
 
         const activeSession = this.activeSession
         if (activeSession) {
@@ -311,7 +546,8 @@ export const useRuntimeStore = defineStore('runtime', {
             },
           })
         }
-        this.startPolling(this.activeSessionId)
+        await this.startEventTransport(this.activeSessionId)
+        this.saveActiveWorkspaceSnapshot()
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to submit runtime turn'
       }
@@ -320,6 +556,11 @@ export const useRuntimeStore = defineStore('runtime', {
       const existing = this.sessionDetails[event.sessionId]
       if (!existing) {
         return
+      }
+
+      this.lastEventIds = {
+        ...this.lastEventIds,
+        [event.sessionId]: event.id,
       }
 
       const nextSummary = event.summary
@@ -352,11 +593,12 @@ export const useRuntimeStore = defineStore('runtime', {
         nextDetail.trace.push(event.trace)
       }
 
-      if (event.kind === 'approval_requested') {
+      const eventType = resolveRuntimeEventType(event)
+      if (eventType === 'runtime.approval.requested') {
         nextDetail.pendingApproval = event.approval
       }
 
-      if (event.kind === 'approval_resolved') {
+      if (eventType === 'runtime.approval.resolved') {
         nextDetail.pendingApproval = undefined
       }
 
@@ -365,40 +607,42 @@ export const useRuntimeStore = defineStore('runtime', {
       }
 
       this.cacheSessionDetail(nextDetail)
+      this.saveActiveWorkspaceSnapshot()
     },
-    async pollSessionEvents(sessionId?: string) {
+    async pollSessionEvents(sessionId?: string, workspaceConnectionId?: string) {
+      const targetWorkspaceConnectionId = workspaceConnectionId ?? this.activeWorkspaceConnectionId
       const targetSessionId = sessionId ?? this.activeSessionId
       if (!targetSessionId) {
         return
       }
 
+      const resolvedClient = this.resolveWorkspaceClient(targetWorkspaceConnectionId)
+      if (!resolvedClient) {
+        return
+      }
+      const { client } = resolvedClient
+
       try {
-        const events = await pollRuntimeEvents(targetSessionId)
+        const events = await client.runtime.pollEvents(targetSessionId, {
+          after: this.lastEventIds[targetSessionId],
+        })
+        if (targetWorkspaceConnectionId !== this.activeWorkspaceConnectionId) {
+          return
+        }
+
         for (const event of events) {
           this.applyRuntimeEvent(event)
         }
 
         if (!events.length) {
-          const detail = await loadRuntimeSession(targetSessionId)
-          if (detail) {
-            this.cacheSessionDetail(detail)
+          const detail = await client.runtime.loadSession(targetSessionId)
+          if (targetWorkspaceConnectionId !== this.activeWorkspaceConnectionId) {
+            return
           }
+          this.cacheSessionDetail(detail)
         }
 
-        if (targetSessionId !== this.activeSessionId) {
-          return
-        }
-
-        const status = this.activeRun?.status
-        if (status === 'waiting_approval' || status === 'blocked' || status === 'failed') {
-          this.stopPolling()
-          return
-        }
-
-        if (status === 'completed' || status === 'idle') {
-          this.stopPolling()
-          await this.flushQueuedTurn()
-        }
+        await this.finishTransportCycle(targetSessionId, targetWorkspaceConnectionId)
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to poll runtime events'
         this.stopPolling()
@@ -422,6 +666,7 @@ export const useRuntimeStore = defineStore('runtime', {
         ...this.queuedTurns,
         [this.activeSessionId]: rest,
       }
+      this.saveActiveWorkspaceSnapshot()
 
       await this.submitTurn(nextQueuedTurn)
     },
@@ -431,10 +676,25 @@ export const useRuntimeStore = defineStore('runtime', {
       }
 
       this.error = ''
+      const pendingApprovalId = this.pendingApproval.id
+      const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+      if (!resolvedClient) {
+        return
+      }
+      const { connectionId, client } = resolvedClient
 
       try {
         const input: ResolveRuntimeApprovalInput = { decision }
-        await resolveRuntimeApproval(this.activeSessionId, this.pendingApproval.id, input)
+        await client.runtime.resolveApproval(
+          this.activeSessionId,
+          pendingApprovalId,
+          input,
+          tauriClient.createIdempotencyKey(`runtime-approval-${connectionId}-${pendingApprovalId}`),
+        )
+        if (this.activeWorkspaceConnectionId !== connectionId) {
+          return
+        }
+
         const activeSession = this.activeSession
         if (activeSession) {
           this.cacheSessionDetail({
@@ -442,13 +702,15 @@ export const useRuntimeStore = defineStore('runtime', {
             pendingApproval: undefined,
           })
         }
-        this.startPolling(this.activeSessionId)
+        await this.startEventTransport(this.activeSessionId)
+        this.saveActiveWorkspaceSnapshot()
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to resolve runtime approval'
       }
     },
     dispose() {
-      this.stopPolling()
+      this.saveActiveWorkspaceSnapshot()
+      this.stopRealtimeTransport()
     },
   },
 })

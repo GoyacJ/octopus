@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createApp, nextTick } from 'vue'
 
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -44,32 +45,45 @@ function mountApp() {
   }
 }
 
+async function waitForText(container: HTMLElement, value: string, timeoutMs = 2000) {
+  const startedAt = Date.now()
+  while (!(container.textContent?.includes(value) ?? false)) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`Timed out waiting for text: ${value}`)
+    }
+    await nextTick()
+    await new Promise(resolve => window.setTimeout(resolve, 20))
+  }
+}
+
 describe('Teams view', () => {
   beforeEach(async () => {
-    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+    installWorkspaceApiFixture()
     await router.push('/workspaces/ws-local/teams')
     await router.isReady()
     document.body.innerHTML = ''
   })
 
-  it('renders shared team rows and saves edited team details', async () => {
+  it('renders workspace teams and saves edited team details', async () => {
     const mounted = mountApp()
 
-    await nextTick()
+    await waitForText(mounted.container, 'Studio Direction Team')
 
-    expect(mounted.container.querySelector('[data-testid="teams-list"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid^="team-row-"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('Studio Direction Team')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('teams.metrics.total')))
 
-    const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="teams-form-name"]')
+    const nameInput = mounted.container.querySelector<HTMLInputElement>('input')
     expect(nameInput).not.toBeNull()
     nameInput!.value = 'Unified Team Name'
     nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="teams-form-save"]')?.click()
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('Unified Team Name')
+    Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button'))
+      .find(button => button.textContent?.includes(String(i18n.global.t('common.save'))))
+      ?.click()
+    await waitForText(mounted.container, 'Unified Team Name')
 
     mounted.destroy()
   })

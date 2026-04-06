@@ -14,3 +14,13 @@ declare module '*.png' {
   const src: string
   export default src
 }
+
+interface ImportMetaEnv {
+  readonly VITE_HOST_RUNTIME?: 'tauri' | 'browser'
+  readonly VITE_HOST_API_BASE_URL?: string
+  readonly VITE_HOST_AUTH_TOKEN?: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
+}

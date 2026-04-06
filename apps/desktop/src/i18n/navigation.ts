@@ -1,4 +1,4 @@
-import type { Project, Workspace } from '@octopus/schema'
+import type { ProjectRecord, WorkspaceSummary } from '@octopus/schema'
 import type { RouteLocationNamedRaw } from 'vue-router'
 
 export function createWorkspaceOverviewTarget(workspaceId: string, projectId?: string) {
@@ -19,15 +19,21 @@ export function createProjectDashboardTarget(workspaceId: string, projectId: str
   }
 }
 
-export function createWorkspaceSwitchTarget(workspaces: Workspace[], workspaceId: string) {
+export function createWorkspaceSwitchTarget(
+  workspaces: Array<Pick<WorkspaceSummary, 'id' | 'defaultProjectId'>>,
+  workspaceId: string,
+) {
   const workspace = workspaces.find((item) => item.id === workspaceId)
-  return createWorkspaceOverviewTarget(workspaceId, workspace?.projectIds[0])
+  return createWorkspaceOverviewTarget(workspaceId, workspace?.defaultProjectId)
 }
 
 export const createWorkspaceDashboardTarget = createWorkspaceOverviewTarget
 
-export function getProjectFirstConversationId(projects: Pick<Project, 'id' | 'conversationIds'>[], projectId: string): string | undefined {
-  return projects.find((item) => item.id === projectId)?.conversationIds[0]
+export function getProjectFirstConversationId(
+  _projects: Pick<ProjectRecord, 'id'>[],
+  _projectId: string,
+): string | undefined {
+  return undefined
 }
 
 export function createProjectConversationTarget(workspaceId: string, projectId: string, conversationId?: string | null): RouteLocationNamedRaw {

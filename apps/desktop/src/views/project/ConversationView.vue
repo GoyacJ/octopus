@@ -2,143 +2,146 @@
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { Bot, FolderOpen, SendHorizontal, Sparkles } from 'lucide-vue-next'
+import { AlertTriangle, Plus, SendHorizontal } from 'lucide-vue-next'
 
-import { type Message, type PermissionMode } from '@octopus/schema'
-import { UiButton, UiEmptyState, UiTextarea } from '@octopus/ui'
+import type { Message, PermissionMode } from '@octopus/schema'
+import { UiButton, UiEmptyState, UiField, UiSelect, UiTextarea } from '@octopus/ui'
 
 import ConversationMessageBubble from '@/components/conversation/ConversationMessageBubble.vue'
 import ConversationQueueList from '@/components/conversation/ConversationQueueList.vue'
 import ConversationContextPane from '@/components/layout/ConversationContextPane.vue'
 import ConversationTabsBar from '@/components/layout/ConversationTabsBar.vue'
 import { createProjectConversationTarget } from '@/i18n/navigation'
+import { useAgentStore } from '@/stores/agent'
+import { useCatalogStore } from '@/stores/catalog'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
-import { useWorkbenchStore } from '@/stores/workbench'
+import { useWorkspaceStore } from '@/stores/workspace'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const runtime = useRuntimeStore()
 const shell = useShellStore()
-const workbench = useWorkbenchStore()
+const catalogStore = useCatalogStore()
+const agentStore = useAgentStore()
+const workspaceStore = useWorkspaceStore()
 
 const messageDraft = ref('')
-const selectedModelId = ref('gpt-4o')
+const selectedModelId = ref('')
 const selectedPermissionMode = ref<PermissionMode>('auto')
+const selectedActorLabel = ref('')
 const expandedMessageIds = ref<string[]>([])
 const scrollContainer = ref<HTMLElement | null>(null)
 
-const activeConversation = computed(() => workbench.activeConversation)
-const runtimeOwnsConversation = computed(() =>
-  !!activeConversation.value && runtime.activeConversationId === activeConversation.value.id,
+const conversationId = computed(() =>
+  typeof route.params.conversationId === 'string' ? route.params.conversationId : '',
 )
-const renderedMessages = computed<Message[]>(() =>
-  runtimeOwnsConversation.value && runtime.activeMessages.length
+const projectId = computed(() =>
+  typeof route.params.projectId === 'string' ? route.params.projectId : workspaceStore.currentProjectId,
+)
+const workspaceId = computed(() =>
+  typeof route.params.workspaceId === 'string' ? route.params.workspaceId : workspaceStore.currentWorkspaceId,
+)
+
+const modelOptions = computed(() =>
+  catalogStore.models.map(model => ({ value: model.id, label: model.label })),
+)
+const actorOptions = computed(() =>
+  [...agentStore.projectAgents, ...agentStore.workspaceAgents].map(agent => ({
+    value: agent.name,
+    label: agent.name,
+  })),
+)
+const permissionOptions = computed(() => [
+  { value: 'auto', label: t('conversation.composer.autoPermission') },
+  { value: 'readonly', label: t('conversation.composer.readonlyPermission') },
+  { value: 'danger-full-access', label: t('conversation.composer.dangerPermission') },
+])
+
+const renderedMessages = computed<Message[]>(() => (
+  conversationId.value && runtime.activeConversationId === conversationId.value
     ? runtime.activeMessages
-    : workbench.conversationMessages,
-)
+    : []
+))
+
 const queueItems = computed(() =>
-  runtime.activeQueue.map((item) => ({
+  runtime.activeQueue.map(item => ({
     id: item.id,
     content: item.content,
     actorLabel: item.actorLabel,
     createdAt: item.createdAt,
   })),
 )
-const detailPaneWidth = computed(() => (shell.rightSidebarCollapsed ? '48px' : '360px'))
-const selectedModelLabel = computed(() =>
-  workbench.workspaceModelCatalog.find((item) => item.id === selectedModelId.value)?.label ?? selectedModelId.value,
-)
-const defaultActor = computed(() => workbench.activeConversationDefaultActor)
-const selectedActorLabel = computed(() => workbench.conversationDefaultActorLabel)
-const permissionLabel = computed(() =>
-  selectedPermissionMode.value === 'readonly' ? t('conversation.composer.readonlyPermission') : t('conversation.composer.autoPermission'),
-)
 
-function messageSenderLabel(message: Message) {
-  if (message.senderType === 'user') {
-    return 'You'
+function createConversationId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `conversation-${crypto.randomUUID()}`
   }
-
-  if (message.senderId === 'Octopus Runtime') {
-    return 'Octopus Runtime'
-  }
-
-  return selectedActorLabel.value.replace('默认智能体 · ', '') || 'Octopus'
+  return `conversation-${Date.now()}`
 }
 
-function messageAvatarLabel(message: Message) {
-  if (message.senderType === 'user') {
-    return 'Y'
+async function ensureRuntimeSession() {
+  if (!conversationId.value || !projectId.value) {
+    return
   }
 
-  return 'O'
+  await Promise.all([
+    catalogStore.load(),
+    agentStore.load(),
+  ])
+
+  if (!selectedModelId.value) {
+    selectedModelId.value = catalogStore.models[0]?.id ?? 'gpt-4o'
+  }
+  if (!selectedActorLabel.value) {
+    selectedActorLabel.value = agentStore.projectAgents[0]?.name ?? agentStore.workspaceAgents[0]?.name ?? 'Assistant'
+  }
+
+  await runtime.ensureSession({
+    conversationId: conversationId.value,
+    projectId: projectId.value,
+    title: `Conversation ${conversationId.value.slice(-6)}`,
+  })
 }
 
-function scrollToBottom() {
+watch(renderedMessages, () => {
   nextTick(() => {
     if (scrollContainer.value) {
       scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
     }
   })
-}
-
-watch(renderedMessages, scrollToBottom, { deep: true })
+}, { deep: true })
 
 watch(
-  () => route.params.conversationId,
-  async (conversationId) => {
-    if (typeof conversationId === 'string') {
-      workbench.selectConversation(conversationId)
-      await ensureRuntimeSession()
+  () => [conversationId.value, projectId.value, shell.activeWorkspaceConnectionId, shell.activeWorkspaceSession?.token],
+  () => {
+    if (shell.activeWorkspaceConnectionId && shell.activeWorkspaceSession?.token) {
+      void ensureRuntimeSession()
     }
   },
   { immediate: true },
 )
 
-watch(
-  () => route.params.projectId,
-  (projectId) => {
-    if (typeof projectId === 'string') {
-      workbench.selectProject(projectId)
-    }
-  },
-  { immediate: true },
-)
-
-onMounted(async () => {
-  await ensureRuntimeSession()
+onMounted(() => {
+  void ensureRuntimeSession()
 })
 
-async function ensureRuntimeSession() {
-  if (!activeConversation.value) {
-    return
-  }
-
-  await runtime.ensureSession({
-    conversationId: activeConversation.value.id,
-    projectId: workbench.currentProjectId,
-    title: workbench.conversationDisplayTitle(activeConversation.value.id),
-  })
-}
-
 async function createConversationFromEmpty() {
-  const conversation = workbench.createConversation(workbench.currentProjectId)
-  await router.push(createProjectConversationTarget(workbench.currentWorkspaceId, workbench.currentProjectId, conversation.id))
+  await router.push(createProjectConversationTarget(workspaceId.value, projectId.value, createConversationId()))
 }
 
 async function submitRuntimeTurn() {
-  if (!activeConversation.value || !messageDraft.value.trim()) {
+  if (!messageDraft.value.trim()) {
     return
   }
 
   await ensureRuntimeSession()
   await runtime.submitTurn({
     content: messageDraft.value,
-    modelId: selectedModelId.value,
+    modelId: selectedModelId.value || 'gpt-4o',
     permissionMode: selectedPermissionMode.value,
-    actorLabel: selectedActorLabel.value,
+    actorLabel: selectedActorLabel.value || 'Assistant',
   })
   messageDraft.value = ''
 }
@@ -150,127 +153,93 @@ function handleComposerKeydown(event: KeyboardEvent) {
   }
 }
 
-function toggleMessageDetail(messageId: string) {
+function toggleDetail(messageId: string) {
   expandedMessageIds.value = expandedMessageIds.value.includes(messageId)
-    ? expandedMessageIds.value.filter((item) => item !== messageId)
+    ? expandedMessageIds.value.filter(id => id !== messageId)
     : [...expandedMessageIds.value, messageId]
-}
-
-function removeQueuedTurn(queueItemId: string) {
-  runtime.removeQueuedTurn(queueItemId)
 }
 </script>
 
 <template>
-  <div class="flex h-full w-full overflow-hidden bg-background flex-col">
-    <ConversationTabsBar v-if="activeConversation || workbench.projectConversations.length" />
+  <div class="flex h-full min-h-0 w-full">
+    <div class="flex min-w-0 flex-1 flex-col px-2 pb-6">
+      <ConversationTabsBar />
 
-    <div v-if="!activeConversation" class="flex flex-1 min-h-0 overflow-hidden">
-      <main class="flex flex-1 items-center justify-center px-6" data-testid="conversation-empty-state">
-        <UiEmptyState
-          :title="t('conversation.empty.guideTitle')"
-          :description="t('conversation.empty.guideDescription')"
-        >
+      <div v-if="!conversationId" class="flex flex-1 items-center justify-center">
+        <UiEmptyState :title="t('conversation.empty.title')" :description="t('conversation.empty.description')">
           <template #actions>
-            <UiButton data-testid="conversation-empty-create" @click="createConversationFromEmpty">
+            <UiButton @click="createConversationFromEmpty">
+              <Plus :size="14" />
               {{ t('conversation.empty.create') }}
             </UiButton>
           </template>
         </UiEmptyState>
-      </main>
-    </div>
+      </div>
 
-    <div v-else data-testid="conversation-chat-layout" class="flex flex-1 min-h-0 overflow-hidden">
-      <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <main
-          ref="scrollContainer"
-          data-testid="conversation-message-scroll"
-          class="message-stream flex-1 overflow-y-auto px-6 py-6"
-        >
+      <template v-else>
+        <ConversationQueueList :items="queueItems" @remove="runtime.removeQueuedTurn" />
+
+        <div ref="scrollContainer" class="flex-1 overflow-y-auto py-4">
           <ConversationMessageBubble
             v-for="message in renderedMessages"
             :key="message.id"
             :message="message"
-            :sender-label="messageSenderLabel(message)"
-            :avatar-label="messageAvatarLabel(message)"
+            :sender-label="message.senderType === 'user' ? 'You' : message.senderId"
+            :avatar-label="message.senderType === 'user' ? 'Y' : 'O'"
             :actor-label="selectedActorLabel"
-            :permission-label="permissionLabel"
+            :permission-label="selectedPermissionMode"
             :resources="[]"
-            :attachments="message.attachments ?? []"
+            :attachments="[]"
             :artifacts="[]"
             :is-expanded="expandedMessageIds.includes(message.id)"
-            @toggle-detail="toggleMessageDetail"
+            @toggle-detail="toggleDetail"
           />
-        </main>
 
-        <footer data-testid="conversation-composer" class="shrink-0 border-t border-border-subtle dark:border-white/[0.05] bg-background px-6 py-4">
-          <div class="mx-auto flex max-w-[960px] flex-col gap-3" data-testid="conversation-composer-dock">
-            <ConversationQueueList :items="queueItems" @remove="removeQueuedTurn" />
+          <UiEmptyState
+            v-if="!renderedMessages.length"
+            :title="t('conversation.messages.emptyTitle')"
+            :description="t('conversation.messages.emptyDescription')"
+          />
+        </div>
 
-            <div class="rounded-2xl border border-border-subtle dark:border-white/[0.08] bg-background p-4 shadow-sm">
-              <UiTextarea
-                v-model="messageDraft"
-                data-testid="conversation-runtime-composer-input"
-                class="w-full resize-none border-0 bg-transparent p-0 text-[15px] shadow-none focus-visible:ring-0"
-                :placeholder="t('conversation.composer.placeholder')"
-                auto-height
-                @keydown="handleComposerKeydown"
-              />
-
-              <div class="mt-4 flex items-center justify-between gap-3">
-                <div class="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    data-testid="composer-actor-trigger"
-                    class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-[12px] font-bold text-text-secondary hover:bg-accent"
-                  >
-                    <Bot :size="14" class="text-primary opacity-80" />
-                    {{ selectedActorLabel }}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="composer-model-trigger"
-                    class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-[12px] font-bold text-text-secondary hover:bg-accent"
-                  >
-                    <Sparkles :size="14" class="text-primary opacity-80" />
-                    {{ selectedModelLabel }}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="composer-permission-trigger"
-                    class="rounded-lg px-3 py-1.5 text-[12px] font-bold text-text-secondary hover:bg-accent"
-                  >
-                    {{ permissionLabel }}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="composer-resource-trigger"
-                    class="flex items-center gap-2 rounded-lg px-3 py-1.5 text-[12px] font-bold text-text-secondary hover:bg-accent"
-                  >
-                    <FolderOpen :size="14" class="text-text-tertiary" />
-                    {{ t('conversation.composer.attachExisting') }}
-                  </button>
-                </div>
-
-                <UiButton
-                  data-testid="conversation-runtime-send"
-                  variant="primary"
-                  size="icon"
-                  class="h-9 w-9 rounded-xl"
-                  :disabled="!messageDraft.trim()"
-                  @click="submitRuntimeTurn"
-                >
-                  <SendHorizontal :size="18" />
-                </UiButton>
-              </div>
+        <div class="mt-4 rounded-2xl border border-border-subtle bg-card p-4 dark:border-white/[0.05]">
+          <div v-if="runtime.pendingApproval" class="mb-4 flex items-start gap-3 rounded-xl border border-status-warning/20 bg-status-warning/5 p-3">
+            <AlertTriangle :size="16" class="mt-0.5 text-status-warning" />
+            <div class="space-y-1">
+              <div class="text-sm font-semibold text-text-primary">{{ runtime.pendingApproval.summary }}</div>
+              <div class="text-sm text-text-secondary">{{ runtime.pendingApproval.detail }}</div>
             </div>
           </div>
-        </footer>
-      </div>
 
-      <aside class="shrink-0 overflow-hidden border-l border-border-subtle dark:border-white/[0.05] bg-sidebar transition-all duration-300" :style="{ width: detailPaneWidth }">
-        <ConversationContextPane class="h-full w-[360px]" />
-      </aside>
+          <div class="grid gap-3 md:grid-cols-3">
+            <UiField :label="t('conversation.composer.modelLabel')">
+              <UiSelect v-model="selectedModelId" :options="modelOptions" />
+            </UiField>
+            <UiField :label="t('conversation.composer.agentSection')">
+              <UiSelect v-model="selectedActorLabel" :options="actorOptions" />
+            </UiField>
+            <UiField :label="t('conversation.composer.permissionLabel')">
+              <UiSelect v-model="selectedPermissionMode" :options="permissionOptions" />
+            </UiField>
+          </div>
+
+          <div class="mt-3 flex items-end gap-3">
+            <UiTextarea
+              v-model="messageDraft"
+              class="min-h-[120px] flex-1"
+              :rows="5"
+              :placeholder="t('conversation.composer.placeholder')"
+              @keydown="handleComposerKeydown"
+            />
+            <UiButton class="shrink-0" @click="submitRuntimeTurn">
+              <SendHorizontal :size="14" />
+              {{ t('conversation.composer.send') }}
+            </UiButton>
+          </div>
+        </div>
+      </template>
     </div>
+
+    <ConversationContextPane />
   </div>
 </template>

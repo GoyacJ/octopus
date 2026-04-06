@@ -2,10 +2,14 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { ShellBootstrap } from '@octopus/schema'
+import type {
+  ShellBootstrap,
+  WorkspaceConnectionRecord,
+  WorkspaceSessionTokenEnvelope,
+} from '@octopus/schema'
 
-const invokeMock = vi.fn()
-const fetchMock = vi.fn()
+const invokeSpy = vi.fn()
+const fetchSpy = vi.fn()
 
 function createHostBootstrap(overrides: Partial<ShellBootstrap> = {}): ShellBootstrap {
   return {
@@ -22,6 +26,9 @@ function createHostBootstrap(overrides: Partial<ShellBootstrap> = {}): ShellBoot
       compactSidebar: false,
       leftSidebarCollapsed: false,
       rightSidebarCollapsed: false,
+      fontSize: 16,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'sans',
       defaultWorkspaceId: 'ws-local',
       lastVisitedRoute: '/workspaces/ws-local/overview?project=proj-redesign',
     },
@@ -44,20 +51,51 @@ function createHostBootstrap(overrides: Partial<ShellBootstrap> = {}): ShellBoot
   }
 }
 
+function createWorkspaceSession(
+  connection: WorkspaceConnectionRecord,
+  overrides: Partial<WorkspaceSessionTokenEnvelope> = {},
+): WorkspaceSessionTokenEnvelope {
+  return {
+    workspaceConnectionId: connection.workspaceConnectionId,
+    token: 'workspace-session-token',
+    issuedAt: 1,
+    session: {
+      id: 'sess-1',
+      workspaceId: connection.workspaceId,
+      userId: 'user-owner',
+      clientAppId: 'octopus-desktop',
+      token: 'workspace-session-token',
+      status: 'active',
+      createdAt: 1,
+      expiresAt: undefined,
+      roleIds: ['owner'],
+      scopeProjectIds: [],
+    },
+    ...overrides,
+  }
+}
+
+function firstRequest(): RequestInit {
+  const calls = (fetchSpy as unknown as { ['mock']: { calls: unknown[][] } })['mock'].calls
+  return calls[0]?.[1] as RequestInit
+}
+
 async function loadClientModule() {
   vi.resetModules()
   vi.doMock('@tauri-apps/api/core', () => ({
-    invoke: invokeMock,
+    invoke: invokeSpy,
   }))
 
   return await import('@/tauri/client')
 }
 
-describe('desktop tauri client transport', () => {
+describe('host client transport', () => {
   beforeEach(() => {
-    invokeMock.mockReset()
-    fetchMock.mockReset()
-    vi.stubGlobal('fetch', fetchMock)
+    invokeSpy.mockReset()
+    fetchSpy.mockReset()
+    vi.stubGlobal('fetch', fetchSpy)
+    vi.unstubAllEnvs()
+    vi.stubEnv('VITE_HOST_RUNTIME', 'tauri')
     Object.defineProperty(window, '__TAURI_INTERNALS__', {
       configurable: true,
       value: {},
@@ -66,95 +104,272 @@ describe('desktop tauri client transport', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    vi.unstubAllEnvs()
     delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
   })
 
-  it('keeps shell bootstrap mock-first even inside tauri', async () => {
-    invokeMock.mockResolvedValue(createHostBootstrap())
+  it('exposes host backend metadata without turning it into the business transport', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
 
     const client = await loadClientModule()
     const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
 
-    expect(invokeMock).toHaveBeenCalledWith('bootstrap_shell')
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(invokeSpy).toHaveBeenCalledWith('bootstrap_shell')
+    expect(fetchSpy).not.toHaveBeenCalled()
     expect(payload.hostState.platform).toBe('tauri')
-    expect(payload.backend?.transport).toBe('mock')
+    expect(payload.backend?.transport).toBe('http')
+    expect(payload.workspaceConnections?.[0]).toMatchObject({
+      workspaceConnectionId: 'conn-local',
+      workspaceId: 'ws-local',
+      transportSecurity: 'loopback',
+      authMode: 'session-token',
+      status: 'connected',
+    })
   })
 
-  it('keeps shell bootstrap mock-first when desktop backend is unavailable', async () => {
-    invokeMock.mockResolvedValue(createHostBootstrap({
-      backend: {
-        baseUrl: 'http://127.0.0.1:43127',
-        authToken: 'desktop-test-token',
-        state: 'unavailable',
-        transport: 'http',
-      },
-    }))
+  it('does not expose the removed legacy runtime helper exports', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+
+    const client = await loadClientModule()
+
+    expect('bootstrapRuntime' in client).toBe(false)
+    expect('createRuntimeSession' in client).toBe(false)
+    expect('loadRuntimeSession' in client).toBe(false)
+    expect('listRuntimeSessions' in client).toBe(false)
+    expect('pollRuntimeEvents' in client).toBe(false)
+    expect('resolveRuntimeApproval' in client).toBe(false)
+    expect('submitRuntimeUserTurn' in client).toBe(false)
+  })
+
+  it('requires a workspace session token before workspace-plane calls can be made', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
 
     const client = await loadClientModule()
     const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
 
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(payload.hostState.platform).toBe('tauri')
-    expect(payload.backend?.transport).toBe('mock')
+    expect(connection).toBeDefined()
+
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+    })
+
+    await expect(workspaceClient.workspace.get()).rejects.toThrow(/workspace session/i)
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('falls back to mock runtime when desktop backend is unavailable', async () => {
-    invokeMock.mockResolvedValue(createHostBootstrap({
-      backend: {
-        baseUrl: 'http://127.0.0.1:43127',
-        authToken: 'desktop-test-token',
-        state: 'unavailable',
-        transport: 'http',
-      },
-      preferences: {
-        theme: 'light',
-        locale: 'en-US',
-        compactSidebar: false,
-        leftSidebarCollapsed: false,
-        rightSidebarCollapsed: false,
-        defaultWorkspaceId: 'ws-local',
-        lastVisitedRoute: '/workspaces/ws-local/overview?project=proj-redesign',
-      },
-    }))
-
-    const client = await loadClientModule()
-    const payload = await client.bootstrapRuntime()
-
-    expect(payload.provider.provider).toBe('anthropic')
-    expect(payload.sessions).toEqual([])
-    expect(fetchMock).not.toHaveBeenCalled()
-  })
-
-  it('uses desktop backend HTTP for runtime calls when tauri backend is ready', async () => {
-    invokeMock.mockResolvedValue(createHostBootstrap())
-    fetchMock.mockResolvedValue({
+  it('uses the workspace HTTP protocol and workspace session token for authenticated read calls', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
       ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
       json: async () => ({
-        provider: {
-          provider: 'anthropic',
-          defaultModel: 'claude-sonnet-4-5',
-        },
-        sessions: [{
-          id: 'runtime-session-conv-1',
-          conversationId: 'conv-1',
-          projectId: 'proj-1',
-          title: 'Conversation',
-          status: 'completed',
-          updatedAt: 1,
-        }],
+        id: 'ws-local',
+        name: 'Local Workspace',
+        slug: 'local-workspace',
+        deployment: 'local',
+        bootstrapStatus: 'ready',
+        host: '127.0.0.1',
+        listenAddress: 'http://127.0.0.1:43127',
+        defaultProjectId: 'proj-redesign',
       }),
     })
 
     const client = await loadClientModule()
-    const payload = await client.bootstrapRuntime()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const session = createWorkspaceSession(connection!)
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session,
+    })
 
-    expect(fetchMock).toHaveBeenCalledWith('http://127.0.0.1:43127/runtime/bootstrap', expect.objectContaining({
-      method: 'GET',
-      headers: expect.any(Headers),
-    }))
-    expect(payload.sessions).toHaveLength(1)
-    expect(payload.sessions[0]?.id).toBe('runtime-session-conv-1')
+    const workspace = await workspaceClient.workspace.get()
+
+    expect(workspace.name).toBe('Local Workspace')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
+    expect(headers.get('X-Workspace-Id')).toBe('ws-local')
+    expect(headers.get('X-Request-Id')).toMatch(/^req-/)
   })
 
+  it('normalizes permission mode and forwards idempotency headers on runtime write requests', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'runtime-run-conv-1',
+        sessionId: 'runtime-session-conv-1',
+        conversationId: 'conv-1',
+        status: 'completed',
+        currentStep: 'runtime.run.completed',
+        startedAt: 1,
+        updatedAt: 2,
+        modelId: 'claude-sonnet-4-5',
+        nextAction: 'runtime.run.idle',
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.runtime.submitUserTurn('runtime-session-conv-1', {
+      content: 'hello',
+      modelId: 'claude-sonnet-4-5',
+      permissionMode: 'auto',
+    }, 'idem-turn-1')
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      content: 'hello',
+      modelId: 'claude-sonnet-4-5',
+      permissionMode: 'workspace-write',
+    })
+    expect(headers.get('Idempotency-Key')).toBe('idem-turn-1')
+  })
+
+  it('preserves danger-full-access for authenticated runtime requests', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'runtime-run-conv-2',
+        sessionId: 'runtime-session-conv-2',
+        conversationId: 'conv-2',
+        status: 'completed',
+        currentStep: 'runtime.run.completed',
+        startedAt: 1,
+        updatedAt: 2,
+        modelId: 'claude-sonnet-4-5',
+        nextAction: 'runtime.run.idle',
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.runtime.submitUserTurn('runtime-session-conv-2', {
+      content: 'hello',
+      modelId: 'claude-sonnet-4-5',
+      permissionMode: 'danger-full-access',
+    })
+
+    const request = firstRequest()
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      permissionMode: 'danger-full-access',
+    })
+  })
+
+  it('uses browser host HTTP endpoints when VITE_HOST_RUNTIME=browser', async () => {
+    vi.stubEnv('VITE_HOST_RUNTIME', 'browser')
+    vi.stubEnv('VITE_HOST_API_BASE_URL', 'http://127.0.0.1:43127')
+    vi.stubEnv('VITE_HOST_AUTH_TOKEN', 'browser-host-token')
+    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => createHostBootstrap({
+        hostState: {
+          platform: 'web',
+          mode: 'local',
+          appVersion: '0.1.0-test',
+          cargoWorkspace: true,
+          shell: 'browser',
+        },
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign')
+
+    expect(invokeSpy).not.toHaveBeenCalled()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/host/bootstrap',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer browser-host-token')
+    expect(payload.hostState.platform).toBe('web')
+    expect(payload.workspaceConnections?.[0]?.workspaceConnectionId).toBe('conn-local')
+  })
+
+  it('persists browser host preferences through the host HTTP API instead of local storage fallback', async () => {
+    vi.stubEnv('VITE_HOST_RUNTIME', 'browser')
+    vi.stubEnv('VITE_HOST_API_BASE_URL', 'http://127.0.0.1:43127')
+    vi.stubEnv('VITE_HOST_AUTH_TOKEN', 'browser-host-token')
+    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        theme: 'dark',
+        locale: 'en-US',
+        compactSidebar: true,
+        leftSidebarCollapsed: true,
+        rightSidebarCollapsed: false,
+        fontSize: 15,
+        fontFamily: 'Inter, sans-serif',
+        fontStyle: 'sans',
+        defaultWorkspaceId: 'ws-local',
+        lastVisitedRoute: '/workspaces/ws-local/overview?project=proj-redesign',
+      }),
+    })
+
+    const client = await loadClientModule()
+    const preferences = await client.savePreferences({
+      theme: 'dark',
+      locale: 'en-US',
+      compactSidebar: true,
+      leftSidebarCollapsed: true,
+      rightSidebarCollapsed: false,
+      fontSize: 15,
+      fontFamily: 'Inter, sans-serif',
+      fontStyle: 'sans',
+      defaultWorkspaceId: 'ws-local',
+      lastVisitedRoute: '/workspaces/ws-local/overview?project=proj-redesign',
+    })
+
+    expect(preferences.theme).toBe('dark')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/host/preferences',
+      expect.objectContaining({
+        method: 'PUT',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer browser-host-token')
+    expect(headers.get('Content-Type')).toBe('application/json')
+  })
 })

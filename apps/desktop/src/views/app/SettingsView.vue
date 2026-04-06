@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { RotateCcw } from 'lucide-vue-next'
+import { createDefaultShellPreferences } from '@octopus/schema'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
@@ -6,17 +8,23 @@ import { UiBadge, UiButton, UiField, UiListRow, UiSectionHeading, UiSelect, UiSw
 
 import { enumLabel } from '@/i18n/copy'
 import { useShellStore } from '@/stores/shell'
-import { useWorkbenchStore } from '@/stores/workbench'
 
 const { t } = useI18n()
 const shell = useShellStore()
-const workbench = useWorkbenchStore()
 
-const activeTab = ref<'general' | 'theme' | 'i18n' | 'version'>('general')
+const activeTab = ref<'general' | 'theme' | 'version'>('general')
 const theme = ref(shell.preferences.theme)
 const locale = ref(shell.preferences.locale)
+const fontSize = ref(String(shell.preferences.fontSize))
+const fontFamily = ref(shell.preferences.fontFamily)
+const fontStyle = ref(shell.preferences.fontStyle)
 const leftSidebarCollapsed = ref(shell.preferences.leftSidebarCollapsed)
 const rightSidebarCollapsed = ref(shell.preferences.rightSidebarCollapsed)
+const tabs = computed(() => [
+  { value: 'general', label: t('settings.tabs.general') },
+  { value: 'theme', label: t('settings.tabs.theme') },
+  { value: 'version', label: t('settings.tabs.version') },
+])
 
 const themeOptions = computed(() => [
   { value: 'system', label: t('settings.preferences.themeOptions.system') },
@@ -29,32 +37,15 @@ const localeOptions = computed(() => [
   { value: 'en-US', label: t('settings.preferences.localeOptions.en-US') },
 ])
 
-const fallbackSettingsPage = {
-  tabs: [
-    { value: 'general', label: 'settings.tabs.general' },
-    { value: 'theme', label: 'settings.tabs.theme' },
-    { value: 'i18n', label: 'settings.tabs.i18n' },
-    { value: 'version', label: 'settings.tabs.version' },
-  ],
-  sections: [],
-} as const
-
-const settingsPage = computed(() => workbench.settingsPage ?? fallbackSettingsPage)
-
-const tabs = computed(() =>
-  settingsPage.value.tabs.map((tab) => ({
-    value: tab.value,
-    label: workbench.settingsTabDisplayLabel(tab),
-  })),
-)
-
-const activeSections = computed(() =>
-  settingsPage.value.sections.filter((section) => section.tab === activeTab.value),
-)
+const fontStyleOptions = computed(() => [
+  { value: 'sans', label: t('settings.preferences.fontStyleOptions.sans') },
+  { value: 'serif', label: t('settings.preferences.fontStyleOptions.serif') },
+  { value: 'mono', label: t('settings.preferences.fontStyleOptions.mono') },
+])
 
 const activeWorkspaceName = computed(() =>
-  workbench.activeWorkspace
-    ? workbench.workspaceDisplayName(workbench.activeWorkspace.id)
+  shell.activeWorkspaceConnection
+    ? shell.activeWorkspaceConnection.label
     : t('common.na'),
 )
 
@@ -85,30 +76,47 @@ const versionRows = computed(() => [
   },
 ])
 
-const canManageSettings = computed(() =>
-  workbench.hasPermission('settings:manage:update', 'update', 'workspace', workbench.currentWorkspaceId),
-)
+const canManageSettings = computed(() => true)
 const canManageDesktopBackend = computed(() => canManageSettings.value && !!shell.backendConnection)
 
+// Update local state when store changes
 watch(
   () => shell.preferences,
   (preferences) => {
-    theme.value = preferences.theme
-    locale.value = preferences.locale
-    leftSidebarCollapsed.value = preferences.leftSidebarCollapsed
-    rightSidebarCollapsed.value = preferences.rightSidebarCollapsed
+    if (theme.value !== preferences.theme) theme.value = preferences.theme
+    if (locale.value !== preferences.locale) locale.value = preferences.locale
+    if (fontSize.value !== String(preferences.fontSize)) fontSize.value = String(preferences.fontSize)
+    if (fontFamily.value !== preferences.fontFamily) fontFamily.value = preferences.fontFamily
+    if (fontStyle.value !== preferences.fontStyle) fontStyle.value = preferences.fontStyle
+    if (leftSidebarCollapsed.value !== preferences.leftSidebarCollapsed) leftSidebarCollapsed.value = preferences.leftSidebarCollapsed
+    if (rightSidebarCollapsed.value !== preferences.rightSidebarCollapsed) rightSidebarCollapsed.value = preferences.rightSidebarCollapsed
   },
   { deep: true, immediate: true },
 )
 
-async function savePreferences() {
-  await shell.updatePreferences({
-    theme: theme.value,
-    locale: locale.value,
-    leftSidebarCollapsed: leftSidebarCollapsed.value,
-    rightSidebarCollapsed: rightSidebarCollapsed.value,
-  })
-}
+// Automatically save changes to the store
+watch(
+  [theme, locale, fontSize, fontFamily, fontStyle, leftSidebarCollapsed, rightSidebarCollapsed],
+  async ([nextTheme, nextLocale, nextFontSize, nextFontFamily, nextFontStyle, nextLeftSidebar, nextRightSidebar]) => {
+    if (!canManageSettings.value) return
+
+    const patch: any = {}
+    if (nextTheme !== shell.preferences.theme) patch.theme = nextTheme
+    if (nextLocale !== shell.preferences.locale) patch.locale = nextLocale
+    const parsedFontSize = Number.parseInt(nextFontSize, 10)
+    if (!Number.isNaN(parsedFontSize) && parsedFontSize !== shell.preferences.fontSize) {
+      patch.fontSize = parsedFontSize
+    }
+    if (nextFontFamily !== shell.preferences.fontFamily) patch.fontFamily = nextFontFamily
+    if (nextFontStyle !== shell.preferences.fontStyle) patch.fontStyle = nextFontStyle
+    if (nextLeftSidebar !== shell.preferences.leftSidebarCollapsed) patch.leftSidebarCollapsed = nextLeftSidebar
+    if (nextRightSidebar !== shell.preferences.rightSidebarCollapsed) patch.rightSidebarCollapsed = nextRightSidebar
+
+    if (Object.keys(patch).length > 0) {
+      await shell.updatePreferences(patch)
+    }
+  }
+)
 
 async function refreshBackendStatus() {
   await shell.refreshBackendStatus()
@@ -116,6 +124,11 @@ async function refreshBackendStatus() {
 
 async function restartBackend() {
   await shell.restartBackend()
+}
+
+async function resetToDefault() {
+  const defaults = createDefaultShellPreferences(shell.defaultWorkspaceId, shell.defaultProjectId)
+  await shell.updatePreferences(defaults)
 }
 </script>
 
@@ -127,84 +140,108 @@ async function restartBackend() {
         :title="t('settings.header.title')"
         :subtitle="t('settings.header.subtitle')"
       />
-      <div data-testid="settings-tabs">
+      <div data-testid="settings-tabs" class="max-w-xl">
         <UiTabs v-model="activeTab" :tabs="tabs" />
       </div>
     </header>
 
-    <main class="grid gap-12 lg:grid-cols-[1fr_360px] items-start px-2">
-      <!-- Main Settings Form Area -->
-      <div class="flex flex-col gap-10">
-        
-        <!-- General Tab -->
+    <main class="px-2">
+      <div class="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px] items-start">
+        <div class="flex flex-col gap-10">
         <section v-if="activeTab === 'general'" class="space-y-8">
-          <div class="space-y-1">
-            <h3 class="text-xl font-bold text-text-primary">{{ t('settings.general.layoutTitle') }}</h3>
-            <p class="text-[14px] text-text-secondary">{{ t('settings.header.subtitle') }}</p>
+          <div class="flex items-center justify-between">
+            <div class="space-y-1">
+              <h3 class="text-xl font-bold text-text-primary">{{ t('settings.general.title') }}</h3>
+              <p class="text-[14px] text-text-secondary">{{ t('settings.header.subtitle') }}</p>
+            </div>
+            <UiButton variant="ghost" size="sm" class="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors" @click="resetToDefault">
+              <RotateCcw :size="14" />
+              <span>{{ t('common.resetToDefault') }}</span>
+            </UiButton>
           </div>
 
-          <div class="space-y-2 bg-subtle/10 rounded-lg border border-border-subtle/30 dark:border-white/[0.08] p-2">
-            <div data-testid="settings-layout-row-leftSidebarCollapsed">
-              <UiListRow
-                :title="t('settings.preferences.leftSidebarCollapsed')"
-                :subtitle="t('settings.general.leftSidebarHint')"
-              >
-                <template #actions>
-                  <UiSwitch v-model="leftSidebarCollapsed" />
-                </template>
-              </UiListRow>
+          <div class="space-y-6">
+            <div class="space-y-3">
+              <h4 class="text-[14px] font-bold text-text-primary px-1">{{ t('settings.general.layoutTitle') }}</h4>
+              <div class="space-y-2 bg-subtle/10 rounded-lg border border-border-subtle/30 dark:border-white/[0.08] p-2">
+                <div data-testid="settings-layout-row-leftSidebarCollapsed">
+                  <UiListRow
+                    :title="t('settings.preferences.leftSidebarCollapsed')"
+                    :subtitle="t('settings.general.leftSidebarHint')"
+                  >
+                    <template #actions>
+                      <UiSwitch v-model="leftSidebarCollapsed" />
+                    </template>
+                  </UiListRow>
+                </div>
+
+                <div data-testid="settings-layout-row-rightSidebarCollapsed">
+                  <UiListRow
+                    :title="t('settings.preferences.rightSidebarCollapsed')"
+                    :subtitle="t('settings.general.rightSidebarHint')"
+                  >
+                    <template #actions>
+                      <UiSwitch v-model="rightSidebarCollapsed" />
+                    </template>
+                  </UiListRow>
+                </div>
+              </div>
             </div>
 
-            <div data-testid="settings-layout-row-rightSidebarCollapsed">
-              <UiListRow
-                :title="t('settings.preferences.rightSidebarCollapsed')"
-                :subtitle="t('settings.general.rightSidebarHint')"
-              >
-                <template #actions>
-                  <UiSwitch v-model="rightSidebarCollapsed" />
-                </template>
-              </UiListRow>
+            <div class="space-y-3">
+              <h4 class="text-[14px] font-bold text-text-primary px-1">{{ t('settings.general.i18nTitle') }}</h4>
+              <div class="max-w-md px-1">
+                <UiField :label="t('settings.preferences.locale')">
+                  <UiSelect v-model="locale" :options="localeOptions" />
+                </UiField>
+              </div>
             </div>
-          </div>
-
-          <div class="pt-6 border-t border-border-subtle/30 dark:border-white/[0.08] flex justify-end">
-            <UiButton v-if="canManageSettings" variant="primary" @click="savePreferences">{{ t('common.savePreferences') }}</UiButton>
           </div>
         </section>
 
         <!-- Theme Tab -->
         <section v-else-if="activeTab === 'theme'" class="space-y-8">
-          <div class="space-y-1">
-            <h3 class="text-xl font-bold text-text-primary">{{ t('settings.preferences.title') }}</h3>
-            <p class="text-[14px] text-text-secondary">{{ t('settings.header.subtitle') }}</p>
+          <div class="flex items-center justify-between">
+            <div class="space-y-1">
+              <h3 class="text-xl font-bold text-text-primary">{{ t('settings.preferences.title') }}</h3>
+              <p class="text-[14px] text-text-secondary">{{ t('settings.header.subtitle') }}</p>
+            </div>
+            <UiButton variant="ghost" size="sm" class="flex items-center gap-2 text-text-secondary hover:text-text-primary transition-colors" @click="resetToDefault">
+              <RotateCcw :size="14" />
+              <span>{{ t('common.resetToDefault') }}</span>
+            </UiButton>
           </div>
 
-          <div class="max-w-md">
-            <UiField :label="t('settings.preferences.theme')">
-              <UiSelect v-model="theme" :options="themeOptions" />
-            </UiField>
-          </div>
+          <div class="space-y-6">
+            <div class="max-w-md">
+              <UiField :label="t('settings.preferences.theme')">
+                <UiSelect v-model="theme" :options="themeOptions" />
+              </UiField>
+            </div>
 
-          <div class="pt-6 border-t border-border-subtle/30 dark:border-white/[0.08] flex justify-end">
-            <UiButton v-if="canManageSettings" variant="primary" @click="savePreferences">{{ t('common.savePreferences') }}</UiButton>
-          </div>
-        </section>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl">
+              <UiField :label="t('settings.preferences.fontFamily')">
+                <UiSelect v-model="fontFamily" :options="[
+                  { value: 'Inter, sans-serif', label: 'Inter' },
+                  { value: 'system-ui, sans-serif', label: 'System UI' },
+                  { value: 'monospace', label: 'Monospace' }
+                ]" />
+              </UiField>
 
-        <!-- i18n Tab -->
-        <section v-else-if="activeTab === 'i18n'" class="space-y-8">
-          <div class="space-y-1">
-            <h3 class="text-xl font-bold text-text-primary">{{ t('settings.i18n.title') }}</h3>
-            <p class="text-[14px] text-text-secondary">{{ t('settings.header.subtitle') }}</p>
-          </div>
+              <UiField :label="t('settings.preferences.fontSize')">
+                <UiSelect v-model="fontSize" :options="[
+                  { value: '12', label: '12px' },
+                  { value: '13', label: '13px' },
+                  { value: '14', label: '14px' },
+                  { value: '15', label: '15px' },
+                  { value: '16', label: '16px' }
+                ]" />
+              </UiField>
 
-          <div class="max-w-md">
-            <UiField :label="t('settings.preferences.locale')">
-              <UiSelect v-model="locale" :options="localeOptions" />
-            </UiField>
-          </div>
-
-          <div class="pt-6 border-t border-border-subtle/30 dark:border-white/[0.08] flex justify-end">
-            <UiButton v-if="canManageSettings" variant="primary" @click="savePreferences">{{ t('common.savePreferences') }}</UiButton>
+              <UiField :label="t('settings.preferences.fontStyle')">
+                <UiSelect v-model="fontStyle" :options="fontStyleOptions" />
+              </UiField>
+            </div>
           </div>
         </section>
 
@@ -254,23 +291,21 @@ async function restartBackend() {
             </div>
           </div>
         </section>
-
-      </div>
-
-      <!-- Right Sidebar (Expanded for full width) -->
-      <aside class="flex flex-col gap-6">
-        <div
-          v-for="section in activeSections"
-          :key="section.id"
-          class="bg-subtle/20 rounded-lg border border-border-subtle/30 dark:border-white/[0.08] p-6 space-y-4"
-        >
-          <strong class="block text-[14px] font-bold text-text-primary">{{ workbench.settingsSectionDisplayTitle(section) }}</strong>
-          <p v-if="section.description" class="text-[13px] text-text-secondary leading-relaxed">{{ workbench.settingsSectionDisplayDescription(section) }}</p>
-          <ul class="list-disc pl-5 space-y-2 text-[13px] text-text-secondary mt-2">
-            <li v-for="item in workbench.settingsSectionDisplayItems(section)" :key="item">{{ item }}</li>
-          </ul>
         </div>
-      </aside>
+
+        <aside class="space-y-4">
+          <div class="rounded-lg border border-border-subtle/30 bg-subtle/20 p-5">
+            <h4 class="text-sm font-bold text-text-primary">{{ t('settings.version.fields.workspace') }}</h4>
+            <p class="mt-2 text-sm text-text-secondary">{{ activeWorkspaceName }}</p>
+          </div>
+          <div class="rounded-lg border border-border-subtle/30 bg-subtle/20 p-5">
+            <h4 class="text-sm font-bold text-text-primary">{{ t('settings.version.fields.backendState') }}</h4>
+            <p class="mt-2 text-sm text-text-secondary">
+              {{ shell.backendConnection ? enumLabel('backendConnectionState', shell.backendConnection.state) : t('common.na') }}
+            </p>
+          </div>
+        </aside>
+      </div>
     </main>
   </div>
 </template>

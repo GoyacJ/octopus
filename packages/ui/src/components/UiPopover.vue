@@ -11,13 +11,15 @@ import { cn } from '../lib/utils'
 
 const props = withDefaults(defineProps<{
   open?: boolean
-  align?: 'start' | 'end'
+  align?: 'start' | 'center' | 'end'
   side?: 'top' | 'right' | 'bottom' | 'left'
   class?: string
+  rootClass?: string
 }>(), {
   open: false,
   align: 'start',
   class: '',
+  rootClass: '',
 })
 
 const emit = defineEmits<{
@@ -33,7 +35,7 @@ const contentClasses = computed(() => cn(
 </script>
 
 <template>
-  <div ref="root" class="relative inline-flex">
+  <div ref="root" :class="cn('relative inline-flex', props.rootClass)">
     <PopoverRoot
       :open="props.open"
       :modal="false"

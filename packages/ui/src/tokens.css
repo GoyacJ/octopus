@@ -15,10 +15,14 @@
   --space-12: 48px;
 
   --radius-xs: 2px;
+  --radius-s: 4px;
   --radius-sm: 4px;
+  --radius-m: 6px;
   --radius-md: 6px;
+  --radius-l: 8px;
   --radius-lg: 8px;
   --radius-xl: 12px;
+  --radius-2xl: 16px;
   --radius-full: 9999px;
 
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
@@ -55,6 +59,9 @@
   --color-warning: #cb912f;
   --color-destructive: #eb5757;
 
+  --destructive: #eb5757;
+  --destructive-foreground: #ffffff;
+
   --primary: #37352F;
   --background: var(--bg-main);
   --ring: rgba(55, 53, 47, 0.1);
@@ -85,6 +92,10 @@
   --border-input: rgba(255, 255, 255, 0.08);
   --bg-card: #1d1d1d;
   --bg-popover: #222222;
+
+  --color-destructive: #eb5757;
+  --destructive: #eb5757;
+  --destructive-foreground: #ffffff;
 
   --color-primary: #2eaadc;
   --primary: #ffffff;

@@ -7,194 +7,327 @@ import type {
   HostState,
   ShellBootstrap,
   ShellPreferences,
+  TransportSecurityLevel,
+  WorkspaceConnectionRecord,
 } from '@octopus/schema'
 import {
-  createFallbackBackendConnection,
-  createFallbackHostState,
   extractProjectIdFromShellRoute,
   normalizeShellPreferences,
 } from '@octopus/schema'
 
-import { resolveMockShellBootstrap } from './mock'
 import {
+  fetchHostApi,
   isTauriRuntime,
-  loadStoredPreferences,
-  saveStoredPreferences,
+  resolveBrowserHostApiBaseUrl,
+  resolveBrowserHostAuthToken,
+  resolveHostRuntime,
 } from './shared'
 
-async function resolveDesktopShellBootstrap(): Promise<ShellBootstrap | null> {
+function assertTauriHostAvailable(): void {
   if (!isTauriRuntime()) {
-    return null
-  }
-
-  try {
-    return await invoke<ShellBootstrap>('bootstrap_shell')
-  } catch {
-    return null
+    throw new Error('Tauri host runtime is unavailable')
   }
 }
 
-async function resolveDesktopBackendConnection(): Promise<HostBackendConnection | undefined> {
-  if (!isTauriRuntime()) {
-    return undefined
+function resolveTransportSecurity(mode: ConnectionProfile['mode']): TransportSecurityLevel {
+  switch (mode) {
+    case 'local':
+      return 'loopback'
+    case 'shared':
+      return 'trusted'
+    case 'remote':
+      return 'public'
+    default:
+      return 'trusted'
+  }
+}
+
+function resolveWorkspaceConnectionStatus(
+  connection: ConnectionProfile,
+  backend?: HostBackendConnection,
+): WorkspaceConnectionRecord['status'] {
+  if (connection.mode === 'local') {
+    if (backend?.state === 'ready') {
+      return 'connected'
+    }
+
+    return backend?.state === 'unavailable' ? 'unreachable' : 'disconnected'
   }
 
-  try {
-    const payload = await invoke<HostBackendConnection | ShellBootstrap>('get_backend_connection')
-    if (payload && typeof payload === 'object' && 'backend' in payload) {
-      return payload.backend
-    }
-    return payload as HostBackendConnection | undefined
-  } catch {
-    return undefined
+  switch (connection.state) {
+    case 'connected':
+    case 'local-ready':
+      return 'connected'
+    case 'disconnected':
+      return 'disconnected'
+    default:
+      return 'disconnected'
   }
+}
+
+function resolveWorkspaceConnectionBaseUrl(
+  connection: ConnectionProfile,
+  backend?: HostBackendConnection,
+): string {
+  if (connection.baseUrl) {
+    return connection.baseUrl
+  }
+
+  if (connection.mode === 'local' && backend?.baseUrl) {
+    return backend.baseUrl
+  }
+
+  return 'http://127.0.0.1'
+}
+
+function toWorkspaceConnectionRecord(
+  connection: ConnectionProfile,
+  backend?: HostBackendConnection,
+): WorkspaceConnectionRecord {
+  return {
+    workspaceConnectionId: connection.id,
+    workspaceId: connection.workspaceId,
+    label: connection.label,
+    baseUrl: resolveWorkspaceConnectionBaseUrl(connection, backend),
+    transportSecurity: resolveTransportSecurity(connection.mode),
+    authMode: 'session-token',
+    lastUsedAt: connection.lastSyncAt,
+    status: resolveWorkspaceConnectionStatus(connection, backend),
+  }
+}
+
+function resolveWorkspaceConnections(
+  connections: ConnectionProfile[],
+  backend?: HostBackendConnection,
+): WorkspaceConnectionRecord[] {
+  return connections.map((connection) => toWorkspaceConnectionRecord(connection, backend))
+}
+
+function normalizeShellBootstrap(
+  payload: ShellBootstrap,
+  defaultWorkspaceId: string,
+  defaultProjectId: string,
+): ShellBootstrap {
+  const preferences = normalizeShellPreferences(
+    payload.preferences,
+    defaultWorkspaceId,
+    defaultProjectId,
+  )
+
+  return {
+    ...payload,
+    preferences,
+    workspaceConnections: resolveWorkspaceConnections(
+      payload.connections ?? [],
+      payload.backend,
+    ),
+  }
+}
+
+async function resolveDesktopShellBootstrap(): Promise<ShellBootstrap> {
+  assertTauriHostAvailable()
+  return await invoke<ShellBootstrap>('bootstrap_shell')
+}
+
+async function resolveDesktopBackendConnection(): Promise<HostBackendConnection | undefined> {
+  assertTauriHostAvailable()
+  return await invoke<HostBackendConnection>('get_backend_connection')
+}
+
+async function bootstrapShellHostTauri(
+  defaultWorkspaceId: string,
+  defaultProjectId: string,
+): Promise<ShellBootstrap> {
+  return normalizeShellBootstrap(
+    await resolveDesktopShellBootstrap(),
+    defaultWorkspaceId,
+    defaultProjectId,
+  )
+}
+
+async function loadPreferencesTauri(
+  defaultWorkspaceId: string,
+  defaultProjectId: string,
+): Promise<ShellPreferences> {
+  assertTauriHostAvailable()
+  return normalizeShellPreferences(
+    await invoke<ShellPreferences>('load_preferences'),
+    defaultWorkspaceId,
+    defaultProjectId,
+  )
+}
+
+async function savePreferencesTauri(
+  preferences: ShellPreferences,
+): Promise<ShellPreferences> {
+  assertTauriHostAvailable()
+  return normalizeShellPreferences(
+    await invoke<ShellPreferences>('save_preferences', { preferences }),
+    preferences.defaultWorkspaceId,
+    extractProjectIdFromShellRoute(preferences.lastVisitedRoute),
+  )
+}
+
+async function getHostStateTauri(): Promise<HostState> {
+  assertTauriHostAvailable()
+  return await invoke<HostState>('get_host_state')
+}
+
+async function healthcheckTauri(): Promise<HealthcheckStatus> {
+  assertTauriHostAvailable()
+  return await invoke<HealthcheckStatus>('healthcheck')
+}
+
+async function restartDesktopBackendTauri(): Promise<void> {
+  assertTauriHostAvailable()
+  await invoke('restart_desktop_backend')
+}
+
+function resolveBrowserHostConfig(): { baseUrl: string, authToken: string } {
+  return {
+    baseUrl: resolveBrowserHostApiBaseUrl(),
+    authToken: resolveBrowserHostAuthToken(),
+  }
+}
+
+async function bootstrapShellHostBrowser(
+  defaultWorkspaceId: string,
+  defaultProjectId: string,
+): Promise<ShellBootstrap> {
+  const { baseUrl, authToken } = resolveBrowserHostConfig()
+  const payload = await fetchHostApi<ShellBootstrap>(
+    baseUrl,
+    authToken,
+    '/api/v1/host/bootstrap',
+    { method: 'GET' },
+  )
+
+  return normalizeShellBootstrap(payload, defaultWorkspaceId, defaultProjectId)
+}
+
+async function loadPreferencesBrowser(
+  defaultWorkspaceId: string,
+  defaultProjectId: string,
+): Promise<ShellPreferences> {
+  const { baseUrl, authToken } = resolveBrowserHostConfig()
+  return normalizeShellPreferences(
+    await fetchHostApi<ShellPreferences>(
+      baseUrl,
+      authToken,
+      '/api/v1/host/preferences',
+      { method: 'GET' },
+    ),
+    defaultWorkspaceId,
+    defaultProjectId,
+  )
+}
+
+async function savePreferencesBrowser(
+  preferences: ShellPreferences,
+): Promise<ShellPreferences> {
+  const { baseUrl, authToken } = resolveBrowserHostConfig()
+  return normalizeShellPreferences(
+    await fetchHostApi<ShellPreferences>(
+      baseUrl,
+      authToken,
+      '/api/v1/host/preferences',
+      {
+        method: 'PUT',
+        body: JSON.stringify(preferences),
+      },
+    ),
+    preferences.defaultWorkspaceId,
+    extractProjectIdFromShellRoute(preferences.lastVisitedRoute),
+  )
+}
+
+async function getHostStateBrowser(
+  defaultWorkspaceId = 'ws-local',
+  defaultProjectId = 'proj-redesign',
+): Promise<HostState> {
+  return (await bootstrapShellHostBrowser(defaultWorkspaceId, defaultProjectId)).hostState
+}
+
+async function healthcheckBrowser(): Promise<HealthcheckStatus> {
+  const { baseUrl, authToken } = resolveBrowserHostConfig()
+  return await fetchHostApi<HealthcheckStatus>(
+    baseUrl,
+    authToken,
+    '/api/v1/host/health',
+    { method: 'GET' },
+  )
+}
+
+async function restartDesktopBackendBrowser(): Promise<void> {
+  throw new Error('Browser host runtime does not support desktop backend restart')
+}
+
+async function resolveDesktopBackendConnectionBrowser(
+  defaultWorkspaceId = 'ws-local',
+  defaultProjectId = 'proj-redesign',
+): Promise<HostBackendConnection | undefined> {
+  return (await bootstrapShellHostBrowser(defaultWorkspaceId, defaultProjectId)).backend
 }
 
 export async function bootstrapShellHost(
   defaultWorkspaceId: string,
   defaultProjectId: string,
-  mockConnections: ConnectionProfile[],
 ): Promise<ShellBootstrap> {
-  const fallbackPreferences = loadStoredPreferences(defaultWorkspaceId, defaultProjectId)
-  const mockBootstrap = resolveMockShellBootstrap(defaultWorkspaceId, defaultProjectId, mockConnections)
-  const desktopBootstrap = await resolveDesktopShellBootstrap()
-
-  if (!desktopBootstrap) {
-    return {
-      ...mockBootstrap,
-      hostState: createFallbackHostState('web'),
-      preferences: fallbackPreferences,
-    }
-  }
-
-  const preferences = desktopBootstrap.preferences
-    ? normalizeShellPreferences(desktopBootstrap.preferences, defaultWorkspaceId, defaultProjectId)
-    : fallbackPreferences
-  saveStoredPreferences(preferences)
-
-  return {
-    hostState: desktopBootstrap.hostState ?? createFallbackHostState('web'),
-    preferences,
-    connections: desktopBootstrap.connections ?? mockConnections,
-    backend: desktopBootstrap.backend?.state === 'ready'
-      ? createFallbackBackendConnection('ready', 'mock')
-      : createFallbackBackendConnection('unavailable', 'mock'),
-  }
+  return resolveHostRuntime() === 'browser'
+    ? await bootstrapShellHostBrowser(defaultWorkspaceId, defaultProjectId)
+    : await bootstrapShellHostTauri(defaultWorkspaceId, defaultProjectId)
 }
 
-export async function loadPreferences(defaultWorkspaceId: string, defaultProjectId: string): Promise<ShellPreferences> {
-  const fallbackPreferences = loadStoredPreferences(defaultWorkspaceId, defaultProjectId)
-  if (!isTauriRuntime()) {
-    return fallbackPreferences
-  }
-
-  try {
-    const preferences = normalizeShellPreferences(await invoke<ShellPreferences>('load_preferences'), defaultWorkspaceId, defaultProjectId)
-    saveStoredPreferences(preferences)
-    return preferences
-  } catch {
-    return fallbackPreferences
-  }
+export async function loadPreferences(
+  defaultWorkspaceId: string,
+  defaultProjectId: string,
+): Promise<ShellPreferences> {
+  return resolveHostRuntime() === 'browser'
+    ? await loadPreferencesBrowser(defaultWorkspaceId, defaultProjectId)
+    : await loadPreferencesTauri(defaultWorkspaceId, defaultProjectId)
 }
 
-export async function savePreferences(preferences: ShellPreferences): Promise<ShellPreferences> {
-  const normalizedPreferences = normalizeShellPreferences(
-    {
-      ...preferences,
-      compactSidebar: preferences.leftSidebarCollapsed,
-    },
-    preferences.defaultWorkspaceId,
-    extractProjectIdFromShellRoute(preferences.lastVisitedRoute),
-  )
-  saveStoredPreferences(normalizedPreferences)
-  if (!isTauriRuntime()) {
-    return normalizedPreferences
-  }
-
-  try {
-    const savedPreferences = normalizeShellPreferences(
-      await invoke<ShellPreferences>('save_preferences', { preferences: normalizedPreferences }),
-      normalizedPreferences.defaultWorkspaceId,
-      extractProjectIdFromShellRoute(normalizedPreferences.lastVisitedRoute),
-    )
-    saveStoredPreferences(savedPreferences)
-    return savedPreferences
-  } catch {
-    return normalizedPreferences
-  }
+export async function savePreferences(
+  preferences: ShellPreferences,
+): Promise<ShellPreferences> {
+  return resolveHostRuntime() === 'browser'
+    ? await savePreferencesBrowser(preferences)
+    : await savePreferencesTauri(preferences)
 }
 
 export async function getHostState(): Promise<HostState> {
-  if (!isTauriRuntime()) {
-    return createFallbackHostState('web')
-  }
-
-  try {
-    return await invoke<HostState>('get_host_state')
-  } catch {
-    return createFallbackHostState('web')
-  }
-}
-
-export async function listConnectionsStub(): Promise<ConnectionProfile[]> {
-  if (!isTauriRuntime()) {
-    return []
-  }
-
-  try {
-    return await invoke<ConnectionProfile[]>('list_connections_stub')
-  } catch {
-    return []
-  }
+  return resolveHostRuntime() === 'browser'
+    ? await getHostStateBrowser()
+    : await getHostStateTauri()
 }
 
 export async function healthcheck(): Promise<HealthcheckStatus> {
-  if (!isTauriRuntime()) {
-    return {
-      status: 'ok',
-      host: 'web',
-      mode: 'local',
-      cargoWorkspace: false,
-      backend: {
-        state: 'ready',
-        transport: 'mock',
-      },
-    }
-  }
-
-  try {
-    return await invoke<HealthcheckStatus>('healthcheck')
-  } catch {
-    return {
-      status: 'ok',
-      host: 'tauri',
-      mode: 'local',
-      cargoWorkspace: false,
-      backend: {
-        state: 'unavailable',
-        transport: 'http',
-      },
-    }
-  }
+  return resolveHostRuntime() === 'browser'
+    ? await healthcheckBrowser()
+    : await healthcheckTauri()
 }
 
 export async function restartDesktopBackend(): Promise<void> {
-  if (!isTauriRuntime()) {
+  if (resolveHostRuntime() === 'browser') {
+    await restartDesktopBackendBrowser()
     return
   }
 
-  try {
-    await invoke('restart_desktop_backend')
-  } catch {
-    return
-  }
+  await restartDesktopBackendTauri()
 }
 
-export async function resolveRuntimeBackendConnection(): Promise<HostBackendConnection | undefined> {
-  if (!isTauriRuntime()) {
-    return undefined
-  }
+export async function resolveDesktopBackendConnectionForHost(): Promise<HostBackendConnection | undefined> {
+  return resolveHostRuntime() === 'browser'
+    ? await resolveDesktopBackendConnectionBrowser()
+    : await resolveDesktopBackendConnection()
+}
 
-  const backend = await resolveDesktopBackendConnection()
-  return backend?.state === 'ready' ? backend : undefined
+export const hostClient = {
+  bootstrapShellHost,
+  loadPreferences,
+  savePreferences,
+  getHostState,
+  healthcheck,
+  restartDesktopBackend,
+  resolveDesktopBackendConnection: resolveDesktopBackendConnectionForHost,
 }

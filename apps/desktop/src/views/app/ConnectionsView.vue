@@ -6,11 +6,9 @@ import { UiBadge, UiEmptyState, UiRecordCard, UiSectionHeading } from '@octopus/
 
 import { enumLabel } from '@/i18n/copy'
 import { useShellStore } from '@/stores/shell'
-import { useWorkbenchStore } from '@/stores/workbench'
 
 const { t } = useI18n()
 const shell = useShellStore()
-const workbench = useWorkbenchStore()
 
 const hostBackendBadges = computed((): Array<{ id: string, label: string, tone: 'info' | 'success' | 'warning' }> => {
   if (!shell.backendConnection) {
@@ -32,8 +30,7 @@ const hostBackendBadges = computed((): Array<{ id: string, label: string, tone: 
 })
 
 function workspaceLabel(workspaceId: string): string {
-  const workspace = workbench.workspaces.find((item) => item.id === workspaceId)
-  return workspace ? workbench.workspaceDisplayName(workspace.id) : workspaceId
+  return shell.workspaceConnections.find((item) => item.workspaceId === workspaceId)?.label ?? workspaceId
 }
 </script>
 
@@ -57,22 +54,22 @@ function workspaceLabel(workspaceId: string): string {
 
         <div data-testid="connections-product-list" class="space-y-4">
           <UiRecordCard
-            v-for="connection in workbench.connections"
-            :key="connection.id"
-            :test-id="`connection-record-${connection.id}`"
-            :title="workbench.connectionDisplayLabel(connection.id)"
+            v-for="connection in shell.workspaceConnections"
+            :key="connection.workspaceConnectionId"
+            :test-id="`connection-record-${connection.workspaceConnectionId}`"
+            :title="connection.label"
             :description="t('common.workspaceLabel', { workspace: workspaceLabel(connection.workspaceId) })"
           >
             <template #badges>
-              <UiBadge :label="enumLabel('connectionMode', connection.mode)" :tone="connection.mode === 'local' ? 'info' : 'success' as const" />
-              <UiBadge :label="enumLabel('connectionState', connection.state)" subtle />
+              <UiBadge :label="enumLabel('transportSecurityLevel', connection.transportSecurity)" :tone="connection.transportSecurity === 'loopback' ? 'info' : 'success' as const" />
+              <UiBadge :label="enumLabel('workspaceConnectionStatus', connection.status)" subtle />
             </template>
             <template #meta>
               <span class="truncate text-[12px] text-text-tertiary font-mono">{{ connection.baseUrl ?? t('common.noRemoteBaseUrl') }}</span>
             </template>
           </UiRecordCard>
 
-          <UiEmptyState v-if="!workbench.connections.length" :title="t('connections.empty.title')" :description="t('connections.empty.description')" />
+          <UiEmptyState v-if="!shell.workspaceConnections.length" :title="t('connections.empty.title')" :description="t('connections.empty.description')" />
         </div>
       </section>
 
@@ -107,7 +104,7 @@ function workspaceLabel(workspaceId: string): string {
             v-for="connection in shell.bootstrapConnections"
             :key="connection.id"
             :test-id="`connection-record-${connection.id}`"
-            :title="workbench.connectionDisplayLabel(connection.id)"
+            :title="connection.label"
             :description="t('common.workspaceLabel', { workspace: workspaceLabel(connection.workspaceId) })"
           >
             <template #badges>

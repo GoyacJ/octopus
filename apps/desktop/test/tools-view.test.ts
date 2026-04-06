@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createApp, nextTick } from 'vue'
 
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -44,128 +45,108 @@ function mountApp() {
   }
 }
 
+async function waitForText(container: HTMLElement, value: string, timeoutMs = 2000) {
+  const startedAt = Date.now()
+  while (!(container.textContent?.includes(value) ?? false)) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`Timed out waiting for text: ${value}`)
+    }
+    await nextTick()
+    await new Promise(resolve => window.setTimeout(resolve, 20))
+  }
+}
+
+async function waitForTextToDisappear(container: HTMLElement, value: string, timeoutMs = 2000) {
+  const startedAt = Date.now()
+  while (container.textContent?.includes(value) ?? false) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`Timed out waiting for text to disappear: ${value}`)
+    }
+    await nextTick()
+    await new Promise(resolve => window.setTimeout(resolve, 20))
+  }
+}
+
+function findButton(container: ParentNode, label: string) {
+  return Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+    .find(button => button.textContent?.includes(label))
+}
+
 describe('Workspace tools view', () => {
   beforeEach(async () => {
-    setActivePinia(createPinia())
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+    installWorkspaceApiFixture()
     await router.push('/workspaces/ws-local/tools')
     await router.isReady()
     document.body.innerHTML = ''
   })
 
-  it('uses agent-style top tabs and removes the extra tools definition heading', async () => {
+  it('renders workspace tools from the real catalog store', async () => {
     const mounted = mountApp()
 
-    await nextTick()
+    await waitForText(mounted.container, 'Terminal')
 
-    expect(mounted.container.querySelector('[data-testid="tools-title"]')?.textContent).toContain('工具集成中心')
-    expect(mounted.container.querySelector('[data-testid="tools-tabs"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-builtin"]')?.textContent).toContain('系统内置')
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-skill"]')?.textContent).toContain('Skill 工具')
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-mcp"]')?.textContent).toContain('MCP 连接器')
-    expect(mounted.container.textContent).not.toContain('工具定义')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('sidebar.navigation.tools')))
+    expect(mounted.container.textContent).toContain('Read')
+    expect(mounted.container.textContent).toContain('Terminal')
 
     mounted.destroy()
   })
 
-  it('keeps description read-only and supports creating and deleting skill entries', async () => {
+  it('updates the selected tool through the workspace API store', async () => {
     const mounted = mountApp()
 
+    await waitForText(mounted.container, 'Terminal')
+
+    const toolCards = mounted.container.querySelectorAll<HTMLElement>('article[role="button"]')
+    expect(toolCards.length).toBeGreaterThan(1)
+    toolCards[1]?.click()
     await nextTick()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-skill"]')?.click()
-    await nextTick()
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="tools-create-button"]')?.click()
-    await nextTick()
-
-    const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="tools-form-name"]')
-    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="tools-form-description"]')
-    const contentInput = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="tools-form-content"]')
-
+    const nameInput = mounted.container.querySelector<HTMLInputElement>('input')
+    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('textarea')
     expect(nameInput).not.toBeNull()
     expect(descriptionInput).not.toBeNull()
-    expect(descriptionInput?.disabled).toBe(false)
-    expect(contentInput).not.toBeNull()
 
-    nameInput!.value = 'Incident Playbook'
+    nameInput!.value = 'Terminal Updated'
     nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    contentInput!.value = 'Collect impact, timeline, and next mitigation steps.'
-    contentInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    descriptionInput!.value = 'Execute shell commands safely.'
+    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="tools-form-save"]')?.click()
-    await nextTick()
+    findButton(mounted.container, String(i18n.global.t('common.save')))?.click()
+    await waitForText(mounted.container, 'Terminal Updated')
 
-    expect(mounted.container.textContent).toContain('Incident Playbook')
-    expect(mounted.container.querySelector('[data-testid="tools-record-list"]')).not.toBeNull()
-
-    const deleteButton = Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('[data-testid^="tool-delete-"]'))
-      .find((button) => button.getAttribute('data-testid')?.includes('skill-ws-local'))
-    expect(deleteButton).not.toBeUndefined()
-
-    deleteButton?.click()
-    await nextTick()
-
-    expect(mounted.container.textContent).not.toContain('Incident Playbook')
+    expect(mounted.container.textContent).toContain('Terminal Updated')
 
     mounted.destroy()
   })
 
-  it('supports search, pagination, mcp creation, and builtin disable toggles', async () => {
+  it('creates and deletes a new tool record without any mock fallback', async () => {
     const mounted = mountApp()
 
+    await waitForText(mounted.container, 'Terminal')
+
+    findButton(mounted.container, String(i18n.global.t('common.reset')))?.click()
     await nextTick()
 
-    const searchInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="tools-search-input"]')
-    expect(searchInput).not.toBeNull()
-    searchInput!.value = 'terminal'
-    searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('Terminal')
-    expect(mounted.container.textContent).not.toContain('Write')
-
-    searchInput!.value = ''
-    searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-mcp"]')?.click()
-    await nextTick()
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="tools-create-button"]')?.click()
-    await nextTick()
-
-    const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="tools-form-name"]')
-    const endpointInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="tools-form-endpoint"]')
-    const serverInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="tools-form-server-name"]')
-    const toolNamesInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="tools-form-tool-names"]')
+    const nameInput = mounted.container.querySelector<HTMLInputElement>('input')
+    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('textarea')
+    expect(nameInput).not.toBeNull()
+    expect(descriptionInput).not.toBeNull()
 
     nameInput!.value = 'Ops MCP'
     nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    serverInput!.value = 'ops-mcp'
-    serverInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    endpointInput!.value = 'https://example.test/mcp/ops'
-    endpointInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    toolNamesInput!.value = 'list_ops, get_ops'
-    toolNamesInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    descriptionInput!.value = 'Remote operations connector.'
+    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="tools-form-save"]')?.click()
-    await nextTick()
+    findButton(mounted.container, String(i18n.global.t('common.save')))?.click()
+    await waitForText(mounted.container, 'Ops MCP')
 
-    expect(mounted.container.textContent).toContain('Ops MCP')
-    expect(mounted.container.querySelector('[data-testid="tools-pagination-summary"]')).toBeNull()
-
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-builtin"]')?.click()
-    await nextTick()
-
-    const toggleButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="tool-toggle-builtin-read"]')
-    expect(toggleButton).not.toBeNull()
-    toggleButton?.click()
-    await nextTick()
-
-    expect(mounted.container.textContent).toContain('Read')
-    expect(mounted.container.textContent).toContain('已禁用')
+    findButton(mounted.container, String(i18n.global.t('common.delete')))?.click()
+    await waitForTextToDisappear(mounted.container, 'Ops MCP')
 
     mounted.destroy()
   })
