@@ -4,6 +4,7 @@ export {
   healthcheck,
   hostClient,
   loadPreferences,
+  pickAvatarImage,
   restartDesktopBackend,
   savePreferences,
 } from './shell'

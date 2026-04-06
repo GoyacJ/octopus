@@ -8,10 +8,10 @@
   - **Apple-style easing**: `cubic-bezier(0.32, 0.72, 0, 1)`.
   - **Hierarchical Typography**: Bold titles, tight tracking, small uppercase eyebrows with wide tracking.
   - **Refined Surfaces**: `UiSurface` with subtle shadows and background gradients.
-- Frontend-first delivery uses mock data by default. Pages, stores, and view models must be able to complete their primary flows without requiring a live backend or Tauri host response.
-- Real Tauri or backend integration may remain behind the existing adapter layer, but it must not become the default path for new frontend feature development in the current phase.
+- Desktop frontend delivery uses real workspace and host APIs through the shared adapter layer by default.
+- Real Tauri and browser-host integration must stay behind the existing adapter layer so pages, stores, and view models consume one contract surface.
 - Shared schemas in `packages/schema` must be defined in feature-based files under `packages/schema/src/*`. `packages/schema/src/index.ts` is the public export surface only and must not keep accumulating schema definitions.
-- Frontend mock data must reuse `@octopus/schema` contracts so mock flows and later real integrations stay aligned.
+- Any local fixtures, tests, or seeded development data must reuse `@octopus/schema` contracts so non-production helpers stay aligned with real API payloads.
 - Shared UI must go through `@octopus/ui`. Business pages must not introduce ad-hoc third-party UI styles or bypass the shared design system.
 - Component selection order:
   1. Reuse `@octopus/ui`.
@@ -45,17 +45,17 @@
 
 ## Request Contract Governance
 
-- Shared request/response contracts must be defined in `packages/schema/src/*` and consumed from `@octopus/schema` by both frontend and backend. Do not invent view-local API shapes for host, backend, or mock data.
+- Shared request/response contracts must be defined in `packages/schema/src/*` and consumed from `@octopus/schema` by both frontend and backend. Do not invent view-local API shapes for host or backend requests.
 - `apps/desktop` business code must not call `fetch` directly for workspace business APIs. Use the existing adapter boundary:
   - shell/host requests through `apps/desktop/src/tauri/shell.ts`
   - workspace/domain requests through `apps/desktop/src/tauri/workspace-client.ts`
   - shared header/session helpers through `apps/desktop/src/tauri/shared.ts`
 - Pages should talk to Pinia stores or view-model actions. Stores talk to the adapter client. Views must not embed backend request assembly, auth header logic, or idempotency logic.
 - Browser host and Tauri host must expose the same contract shape through the same adapter surface. New capabilities should extend the adapter and schema first, then be consumed by stores/pages.
-- Frontend-first and mock-first remain mandatory:
-  - every new primary flow must have a mock-capable path
-  - workspace fixtures and mocks must return the same `@octopus/schema` payloads as real clients
-  - frontend stores must not depend on a live backend as their default execution path
+- Frontend integration is adapter-first and real-API-first:
+  - every new primary flow must have a real adapter-backed path
+  - browser host and Tauri host must return the same `@octopus/schema` payloads through the same adapter surface
+  - frontend stores must not bypass the adapter layer with ad-hoc transport logic
 - Request headers and transport conventions are standardized:
   - every backend request carries `X-Request-Id`
   - workspace-scoped requests carry `X-Workspace-Id`
@@ -74,7 +74,7 @@
 - When adding a new endpoint or command:
   - update `@octopus/schema`
   - update the client adapter
-  - update mock fixtures
+  - update relevant fixtures or test stubs if they cover the same contract
   - add or update store usage
   - add tests for client/store/server as appropriate
 
@@ -109,12 +109,13 @@
 ## Runtime Config And Runtime Persistence Rules
 
 - Runtime config remains file-first. `main.db` must not become the canonical source of runtime settings.
-- The canonical runtime config model is the layered loader in `crates/runtime`:
-  - user scope
-  - project/shared scope
-  - local machine scope
-  - precedence and merge behavior must remain compatible with `ConfigLoader`
-- Desktop settings may provide full runtime config editing, but writes must go back to the correct scope file instead of replacing the layered model.
+- The canonical runtime config model for Octopus is ownership-driven:
+  - `workspace` scope stored at `config/runtime/workspace.json`
+  - `project` scope stored at `config/runtime/projects/<project-id>.json`
+  - `user` scope stored at `config/runtime/users/<user-id>.json`
+  - merge precedence is `workspace < project < user`
+  - deep-merge, validation, and patch behavior continue to reuse `crates/runtime`, but `.claw` path discovery is not the Octopus runtime source model
+- Desktop settings only edit workspace runtime config. User runtime config belongs to the user center, and project runtime config belongs to the project workspace surface.
 - Runtime config saves must use partial patch semantics:
   - preserve unknown keys
   - preserve hand-maintained content outside the edited patch
@@ -125,6 +126,7 @@
   - listing config sources and override order
   - validating a scoped patch before save
   - saving a scoped patch
+  - exposing public source metadata via `scope`, `ownerId`, `displayPath`, and `sourceKey` without leaking absolute filesystem paths
   - reporting secret reference presence/missing state without leaking plaintext
 - Session/run persistence rules:
   - runtime sessions, runs, and approvals keep their current projection in SQLite
@@ -133,11 +135,11 @@
 - Config snapshot rules:
   - every session/run start records a `config_snapshot`
   - session/run records reference `config_snapshot_id`, `effective_config_hash`, and `started_from_scope_set`
-  - snapshots capture source files and hashes, not an uncontrolled duplicate config body everywhere
+  - snapshots capture `sourceRefs` and hashes, not absolute source paths or an uncontrolled duplicate config body everywhere
 - Live session behavior:
   - a running session is bound to the effective config captured at start
   - config edits affect only new sessions unless explicit hot-reload support is designed and documented
   - do not silently mutate active runtime sessions because a config file changed on disk
 - Host consistency rule:
   - Tauri host and browser host must expose the same runtime config and runtime session behavior through shared adapter contracts
-  - mocks should mirror those contracts closely enough for stores and settings flows to work without a real backend
+  - host-specific transport code may differ, but public runtime contracts and adapter return shapes must stay identical

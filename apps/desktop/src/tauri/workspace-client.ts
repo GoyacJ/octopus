@@ -1,6 +1,5 @@
 import type {
   AgentRecord,
-  ApiErrorEnvelope,
   AutomationRecord,
   CreateRuntimeSessionInput,
   KnowledgeRecord,
@@ -12,6 +11,8 @@ import type {
   ProjectDashboardSnapshot,
   ProjectRecord,
   ProviderCredentialRecord,
+  RegisterWorkspaceOwnerRequest,
+  RegisterWorkspaceOwnerResponse,
   ResolveRuntimeApprovalInput,
   RoleRecord,
   RuntimeBootstrap,
@@ -38,6 +39,7 @@ import { resolveRuntimePermissionMode } from '@octopus/schema'
 
 import {
   createWorkspaceHeaders,
+  decodeApiError,
   fetchWorkspaceApi,
   joinBaseUrl,
 } from './shared'
@@ -71,6 +73,7 @@ export interface WorkspaceClient {
   }
   auth: {
     login: (input: LoginRequest) => Promise<LoginResponse>
+    registerOwner: (input: RegisterWorkspaceOwnerRequest) => Promise<RegisterWorkspaceOwnerResponse>
     logout: () => Promise<void>
     session: () => Promise<WorkspaceSessionTokenEnvelope['session']>
   }
@@ -136,7 +139,13 @@ export interface WorkspaceClient {
     bootstrap: () => Promise<RuntimeBootstrap>
     getConfig: () => Promise<RuntimeEffectiveConfig>
     validateConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeConfigValidationResult>
-    saveConfig: (scope: string, patch: RuntimeConfigPatch) => Promise<RuntimeEffectiveConfig>
+    saveConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeEffectiveConfig>
+    getProjectConfig: (projectId: string) => Promise<RuntimeEffectiveConfig>
+    validateProjectConfig: (projectId: string, patch: RuntimeConfigPatch) => Promise<RuntimeConfigValidationResult>
+    saveProjectConfig: (projectId: string, patch: RuntimeConfigPatch) => Promise<RuntimeEffectiveConfig>
+    getUserConfig: () => Promise<RuntimeEffectiveConfig>
+    validateUserConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeConfigValidationResult>
+    saveUserConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeEffectiveConfig>
     listSessions: () => Promise<RuntimeSessionSummary[]>
     createSession: (input: CreateRuntimeSessionInput, idempotencyKey?: string) => Promise<RuntimeSessionDetail>
     loadSession: (sessionId: string) => Promise<RuntimeSessionDetail>
@@ -160,11 +169,14 @@ export function createIdempotencyKey(scope: string): string {
   return `${scope}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
 }
 
-function assertWorkspaceRequestReady(context: WorkspaceClientContext): WorkspaceSessionTokenEnvelope {
+function assertWorkspaceConnectionReady(context: WorkspaceClientContext): void {
   if (!context.connection.baseUrl || context.connection.status !== 'connected') {
     throw new Error(`Workspace connection ${context.connection.workspaceConnectionId} is unavailable`)
   }
+}
 
+function assertWorkspaceRequestReady(context: WorkspaceClientContext): WorkspaceSessionTokenEnvelope {
+  assertWorkspaceConnectionReady(context)
   if (!context.session?.token) {
     throw new Error(`Workspace session is unavailable for ${context.connection.workspaceConnectionId}`)
   }
@@ -223,6 +235,20 @@ async function fetchWorkspace<T>(
   })
 }
 
+async function fetchWorkspaceWithoutSession<T>(
+  context: WorkspaceClientContext,
+  path: string,
+  init?: RequestInit & {
+    idempotencyKey?: string
+  },
+): Promise<T> {
+  assertWorkspaceConnectionReady(context)
+  return await fetchWorkspaceApi<T>(context.connection, path, {
+    ...init,
+    idempotencyKey: init?.idempotencyKey,
+  })
+}
+
 async function fetchWorkspaceVoid(
   context: WorkspaceClientContext,
   path: string,
@@ -243,16 +269,7 @@ async function fetchWorkspaceVoid(
     headers,
   })
   if (!response.ok) {
-    let errorMessage = `Workspace request failed: ${response.status} (${requestId})`
-    try {
-      const payload = await response.json() as ApiErrorEnvelope
-      if (payload.error.message) {
-        errorMessage = payload.error.message
-      }
-    } catch {
-      // Ignore body parse failure and fall back to the status-based error above.
-    }
-    throw new Error(errorMessage)
+    throw await decodeApiError(response, requestId, context.connection.workspaceConnectionId)
   }
 }
 
@@ -284,7 +301,11 @@ async function openRuntimeSseStream(
   })
 
   if (!response.ok) {
-    throw new Error(`Runtime event stream failed: ${response.status}`)
+    throw await decodeApiError(
+      response,
+      headers.get('X-Request-Id') ?? 'req-unknown',
+      context.connection.workspaceConnectionId,
+    )
   }
 
   if (!response.headers.get('Content-Type')?.includes('text/event-stream')) {
@@ -362,6 +383,16 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
             method: 'POST',
             body: JSON.stringify(input),
             workspace: context.connection,
+          },
+        )
+      },
+      async registerOwner(input) {
+        return await fetchWorkspaceWithoutSession<RegisterWorkspaceOwnerResponse>(
+          context,
+          `${API_BASE}/auth/register-owner`,
+          {
+            method: 'POST',
+            body: JSON.stringify(input),
           },
         )
       },
@@ -648,18 +679,52 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
         })
       },
       async getConfig() {
-        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${RUNTIME_API_BASE}/config`, {
+        return await fetchWorkspaceWithoutSession<RuntimeEffectiveConfig>(context, `${RUNTIME_API_BASE}/config`, {
           method: 'GET',
         })
       },
       async validateConfig(patch) {
-        return await fetchWorkspace<RuntimeConfigValidationResult>(context, `${RUNTIME_API_BASE}/config/validate`, {
+        return await fetchWorkspaceWithoutSession<RuntimeConfigValidationResult>(context, `${RUNTIME_API_BASE}/config/validate`, {
           method: 'POST',
           body: JSON.stringify(patch),
         })
       },
-      async saveConfig(scope, patch) {
-        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${RUNTIME_API_BASE}/config/scopes/${scope}`, {
+      async saveConfig(patch) {
+        return await fetchWorkspaceWithoutSession<RuntimeEffectiveConfig>(context, `${RUNTIME_API_BASE}/config/scopes/workspace`, {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        })
+      },
+      async getProjectConfig(projectId) {
+        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${API_BASE}/projects/${projectId}/runtime-config`, {
+          method: 'GET',
+        })
+      },
+      async validateProjectConfig(projectId, patch) {
+        return await fetchWorkspace<RuntimeConfigValidationResult>(context, `${API_BASE}/projects/${projectId}/runtime-config/validate`, {
+          method: 'POST',
+          body: JSON.stringify(patch),
+        })
+      },
+      async saveProjectConfig(projectId, patch) {
+        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${API_BASE}/projects/${projectId}/runtime-config`, {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        })
+      },
+      async getUserConfig() {
+        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${API_BASE}/workspace/user-center/profile/runtime-config`, {
+          method: 'GET',
+        })
+      },
+      async validateUserConfig(patch) {
+        return await fetchWorkspace<RuntimeConfigValidationResult>(context, `${API_BASE}/workspace/user-center/profile/runtime-config/validate`, {
+          method: 'POST',
+          body: JSON.stringify(patch),
+        })
+      },
+      async saveUserConfig(patch) {
+        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${API_BASE}/workspace/user-center/profile/runtime-config`, {
           method: 'PATCH',
           body: JSON.stringify(patch),
         })

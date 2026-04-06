@@ -60,7 +60,9 @@ async function saveUser() {
     id: selectedUserId.value || `user-${Date.now()}`,
     username: form.username.trim(),
     displayName: form.displayName.trim(),
+    avatar: userCenterStore.users.find(user => user.id === selectedUserId.value)?.avatar,
     status: form.status as UserRecordSummary['status'],
+    passwordState: userCenterStore.users.find(user => user.id === selectedUserId.value)?.passwordState ?? 'reset-required',
     roleIds: form.roleIds.split(',').map(item => item.trim()).filter(Boolean),
     scopeProjectIds: form.scopeProjectIds.split(',').map(item => item.trim()).filter(Boolean),
   }
@@ -93,8 +95,15 @@ async function saveUser() {
         :class="selectedUserId === user.id ? 'ring-1 ring-primary' : ''"
         @click="applyUser(user.id)"
       >
+        <template #leading>
+          <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-border/60 bg-accent text-xs font-semibold uppercase text-text-secondary">
+            <img v-if="user.avatar" :src="user.avatar" alt="" class="h-full w-full object-cover">
+            <span v-else>{{ user.displayName.slice(0, 1) }}</span>
+          </div>
+        </template>
         <template #badges>
           <UiBadge :label="user.status" subtle />
+          <UiBadge :label="user.passwordState" subtle />
         </template>
       </UiRecordCard>
     </section>

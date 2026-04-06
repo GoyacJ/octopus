@@ -58,7 +58,7 @@ export function createProjectConversationTarget(workspaceId: string, projectId: 
 }
 
 export function createProjectSurfaceTarget(
-  routeName: 'project-agents' | 'project-resources' | 'project-knowledge' | 'project-trace',
+  routeName: 'project-agents' | 'project-resources' | 'project-knowledge' | 'project-trace' | 'project-runtime',
   workspaceId: string,
   projectId: string,
 ): RouteLocationNamedRaw {

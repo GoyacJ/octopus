@@ -1,6 +1,7 @@
 import { watch } from 'vue'
 import { useRoute } from 'vue-router'
 
+import { useAuthStore } from '@/stores/auth'
 import { useUserCenterStore } from '@/stores/user-center'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
@@ -8,6 +9,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 
 export function useWorkbenchRouteSync(): void {
   const route = useRoute()
+  const auth = useAuthStore()
   const runtime = useRuntimeStore()
   const shell = useShellStore()
   const workspaceStore = useWorkspaceStore()
@@ -18,6 +20,8 @@ export function useWorkbenchRouteSync(): void {
       route.fullPath,
       shell.activeWorkspaceConnectionId,
       shell.activeWorkspaceSession?.token ?? '',
+      auth.isReady,
+      auth.isAuthenticated,
     ],
     async () => {
       const workspaceId = typeof route.params.workspaceId === 'string' ? route.params.workspaceId : undefined
@@ -41,16 +45,16 @@ export function useWorkbenchRouteSync(): void {
       })
 
       if (shell.activeWorkspaceConnectionId) {
-        await workspaceStore.bootstrap(shell.activeWorkspaceConnectionId)
-        await userCenterStore.load(shell.activeWorkspaceConnectionId)
-        if (shell.activeWorkspaceSession?.token) {
+        if (auth.isReady && auth.isAuthenticated) {
+          await workspaceStore.bootstrap(shell.activeWorkspaceConnectionId)
+          await userCenterStore.load(shell.activeWorkspaceConnectionId)
           await runtime.bootstrap()
         }
       }
 
-      if (projectId) {
+      if (auth.isReady && auth.isAuthenticated && projectId) {
         await workspaceStore.loadProjectDashboard(projectId, shell.activeWorkspaceConnectionId)
-      } else if (overviewProjectId) {
+      } else if (auth.isReady && auth.isAuthenticated && overviewProjectId) {
         await workspaceStore.loadProjectDashboard(overviewProjectId, shell.activeWorkspaceConnectionId)
       }
 

@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     fs::{self, OpenOptions},
     io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
@@ -52,6 +52,25 @@ struct RuntimeAggregate {
     events: Vec<RuntimeEventEnvelope>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RuntimeConfigScopeKind {
+    Workspace,
+    Project,
+    User,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct RuntimeConfigDocumentRecord {
+    scope: RuntimeConfigScopeKind,
+    owner_id: Option<String>,
+    source_key: String,
+    display_path: String,
+    storage_path: PathBuf,
+    exists: bool,
+    loaded: bool,
+    document: Option<std::collections::BTreeMap<String, JsonValue>>,
+}
+
 fn optional_project_id(project_id: &str) -> Option<String> {
     if project_id.is_empty() {
         None
@@ -66,7 +85,7 @@ impl RuntimeAdapter {
         paths: WorkspacePaths,
         observation: Arc<dyn ObservationService>,
     ) -> Self {
-        let config_loader = ConfigLoader::new(&paths.root, paths.config_dir.join(".claw"));
+        let config_loader = ConfigLoader::new(&paths.root, paths.runtime_config_dir.clone());
         let adapter = Self {
             state: Arc::new(RuntimeState {
                 workspace_id: workspace_id.into(),
@@ -310,13 +329,13 @@ impl RuntimeAdapter {
         self.open_db()?
             .execute(
                 "INSERT OR REPLACE INTO runtime_config_snapshots
-                 (id, effective_config_hash, started_from_scope_set, source_paths, created_at)
+                 (id, effective_config_hash, started_from_scope_set, source_refs, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![
                     snapshot.id,
                     snapshot.effective_config_hash,
                     serde_json::to_string(&snapshot.started_from_scope_set)?,
-                    serde_json::to_string(&snapshot.source_paths)?,
+                    serde_json::to_string(&snapshot.source_refs)?,
                     snapshot.created_at as i64,
                 ],
             )
@@ -356,23 +375,195 @@ impl RuntimeAdapter {
             .map_err(|error| AppError::invalid_input(error.to_string()))
     }
 
-    fn scope_label(scope: ConfigSource) -> &'static str {
+    fn public_scope_label(scope: RuntimeConfigScopeKind) -> &'static str {
         match scope {
-            ConfigSource::User => "user",
-            ConfigSource::Project => "project",
-            ConfigSource::Local => "local",
+            RuntimeConfigScopeKind::Workspace => "workspace",
+            RuntimeConfigScopeKind::Project => "project",
+            RuntimeConfigScopeKind::User => "user",
         }
     }
 
-    fn parse_scope(scope: &str) -> Result<ConfigSource, AppError> {
+    fn parse_scope(scope: &str) -> Result<RuntimeConfigScopeKind, AppError> {
         match scope {
-            "user" => Ok(ConfigSource::User),
-            "project" => Ok(ConfigSource::Project),
-            "local" => Ok(ConfigSource::Local),
+            "workspace" => Ok(RuntimeConfigScopeKind::Workspace),
+            "project" => Ok(RuntimeConfigScopeKind::Project),
+            "user" => Ok(RuntimeConfigScopeKind::User),
             other => Err(AppError::invalid_input(format!(
                 "unsupported runtime config scope: {other}"
             ))),
         }
+    }
+
+    fn internal_scope(scope: RuntimeConfigScopeKind) -> ConfigSource {
+        match scope {
+            RuntimeConfigScopeKind::Workspace => ConfigSource::User,
+            RuntimeConfigScopeKind::Project => ConfigSource::Project,
+            RuntimeConfigScopeKind::User => ConfigSource::Local,
+        }
+    }
+
+    fn workspace_config_path(&self) -> PathBuf {
+        self.state.paths.runtime_config_dir.join("workspace.json")
+    }
+
+    fn project_config_path(&self, project_id: &str) -> PathBuf {
+        self.state
+            .paths
+            .runtime_project_config_dir
+            .join(format!("{project_id}.json"))
+    }
+
+    fn user_config_path(&self, user_id: &str) -> PathBuf {
+        self.state
+            .paths
+            .runtime_user_config_dir
+            .join(format!("{user_id}.json"))
+    }
+
+    fn ensure_runtime_config_layout(&self) -> Result<(), AppError> {
+        fs::create_dir_all(&self.state.paths.runtime_config_dir)?;
+        fs::create_dir_all(&self.state.paths.runtime_project_config_dir)?;
+        fs::create_dir_all(&self.state.paths.runtime_user_config_dir)?;
+        Ok(())
+    }
+
+    fn read_optional_runtime_document(
+        path: &Path,
+    ) -> Result<Option<BTreeMap<String, JsonValue>>, AppError> {
+        match fs::read_to_string(path) {
+            Ok(raw) => {
+                let trimmed = raw.trim();
+                if trimmed.is_empty() {
+                    return Ok(None);
+                }
+                let parsed = JsonValue::parse(trimmed)
+                    .map_err(|error| AppError::runtime(error.to_string()))?;
+                parsed
+                    .as_object()
+                    .cloned()
+                    .map(Some)
+                    .ok_or_else(|| AppError::runtime("runtime config document must be a JSON object"))
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error.into()),
+        }
+    }
+
+    fn write_runtime_document(
+        &self,
+        path: &Path,
+        document: &BTreeMap<String, JsonValue>,
+    ) -> Result<(), AppError> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let rendered = serde_json::to_vec_pretty(&Self::runtime_json_to_serde(
+            &JsonValue::Object(document.clone()),
+        ))?;
+        fs::write(path, rendered)?;
+        Ok(())
+    }
+
+    fn migrate_legacy_workspace_config_if_needed(&self) -> Result<(), AppError> {
+        let workspace_path = self.workspace_config_path();
+        if workspace_path.exists() {
+            return Ok(());
+        }
+
+        self.ensure_runtime_config_layout()?;
+
+        let mut merged = BTreeMap::new();
+        let mut found = false;
+        for legacy_path in [
+            self.state.paths.config_dir.join(".claw").join("settings.json"),
+            self.state.paths.root.join(".claw.json"),
+            self.state.paths.root.join(".claw").join("settings.json"),
+        ] {
+            if let Some(document) = Self::read_optional_runtime_document(&legacy_path)? {
+                apply_config_patch(&mut merged, &document);
+                found = true;
+            }
+        }
+
+        if found {
+            self.write_runtime_document(&workspace_path, &merged)?;
+        }
+
+        Ok(())
+    }
+
+    fn config_document_record(
+        &self,
+        scope: RuntimeConfigScopeKind,
+        owner_id: Option<&str>,
+        storage_path: PathBuf,
+        display_path: String,
+        source_key: String,
+    ) -> Result<RuntimeConfigDocumentRecord, AppError> {
+        let document = Self::read_optional_runtime_document(&storage_path)?;
+        Ok(RuntimeConfigDocumentRecord {
+            scope,
+            owner_id: owner_id.map(ToOwned::to_owned),
+            source_key,
+            display_path,
+            exists: storage_path.exists(),
+            loaded: document.is_some(),
+            storage_path,
+            document,
+        })
+    }
+
+    fn resolve_documents(
+        &self,
+        project_id: Option<&str>,
+        user_id: Option<&str>,
+    ) -> Result<Vec<RuntimeConfigDocumentRecord>, AppError> {
+        self.ensure_runtime_config_layout()?;
+        self.migrate_legacy_workspace_config_if_needed()?;
+
+        let mut documents = vec![self.config_document_record(
+            RuntimeConfigScopeKind::Workspace,
+            None,
+            self.workspace_config_path(),
+            "config/runtime/workspace.json".to_string(),
+            "workspace".to_string(),
+        )?];
+
+        if let Some(project_id) = project_id.filter(|value| !value.is_empty()) {
+            documents.push(self.config_document_record(
+                RuntimeConfigScopeKind::Project,
+                Some(project_id),
+                self.project_config_path(project_id),
+                format!("config/runtime/projects/{project_id}.json"),
+                format!("project:{project_id}"),
+            )?);
+        }
+
+        if let Some(user_id) = user_id.filter(|value| !value.is_empty()) {
+            documents.push(self.config_document_record(
+                RuntimeConfigScopeKind::User,
+                Some(user_id),
+                self.user_config_path(user_id),
+                format!("config/runtime/users/{user_id}.json"),
+                format!("user:{user_id}"),
+            )?);
+        }
+
+        Ok(documents)
+    }
+
+    fn to_internal_documents(documents: &[RuntimeConfigDocumentRecord]) -> Vec<ConfigDocument> {
+        documents
+            .iter()
+            .map(|document| ConfigDocument {
+                source: Self::internal_scope(document.scope),
+                path: document.storage_path.clone(),
+                exists: document.exists,
+                loaded: document.loaded,
+                document: document.document.clone(),
+            })
+            .collect()
     }
 
     fn is_sensitive_key(key: &str) -> bool {
@@ -500,9 +691,10 @@ impl RuntimeAdapter {
 
     fn validate_documents(
         &self,
-        documents: &[ConfigDocument],
+        documents: &[RuntimeConfigDocumentRecord],
     ) -> Result<RuntimeConfigValidationResult, AppError> {
-        match self.state.config_loader.load_from_documents(documents) {
+        let internal_documents = Self::to_internal_documents(documents);
+        match self.state.config_loader.load_from_documents(&internal_documents) {
             Ok(_) => Ok(RuntimeConfigValidationResult {
                 valid: true,
                 errors: Vec::new(),
@@ -518,12 +710,13 @@ impl RuntimeAdapter {
 
     fn build_effective_config(
         &self,
-        documents: &[ConfigDocument],
+        documents: &[RuntimeConfigDocumentRecord],
     ) -> Result<RuntimeEffectiveConfig, AppError> {
+        let internal_documents = Self::to_internal_documents(documents);
         let runtime_config = self
             .state
             .config_loader
-            .load_from_documents(documents)
+            .load_from_documents(&internal_documents)
             .map_err(|error| AppError::runtime(error.to_string()))?;
         let mut secret_references = Vec::new();
         let effective_value = Self::runtime_json_to_serde(&runtime_config.as_json());
@@ -540,7 +733,7 @@ impl RuntimeAdapter {
                     .map(|value| Self::runtime_json_to_serde(&JsonValue::Object(value.clone())));
                 let redacted_document = document_value.as_ref().map(|value| {
                     Self::redact_config_value(
-                        Self::scope_label(document.source),
+                        Self::public_scope_label(document.scope),
                         "",
                         value,
                         &mut secret_references,
@@ -552,8 +745,10 @@ impl RuntimeAdapter {
                     .transpose()?;
 
                 Ok(RuntimeConfigSource {
-                    scope: Self::scope_label(document.source).to_string(),
-                    path: document.path.display().to_string(),
+                    scope: Self::public_scope_label(document.scope).to_string(),
+                    owner_id: document.owner_id.clone(),
+                    display_path: document.display_path.clone(),
+                    source_key: document.source_key.clone(),
                     exists: document.exists,
                     loaded: document.loaded,
                     content_hash,
@@ -577,25 +772,24 @@ impl RuntimeAdapter {
 
     fn patched_documents(
         &self,
-        scope: &str,
+        scope: RuntimeConfigScopeKind,
+        owner_id: Option<&str>,
         patch: &serde_json::Value,
-    ) -> Result<Vec<ConfigDocument>, AppError> {
-        let target_scope = Self::parse_scope(scope)?;
+    ) -> Result<Vec<RuntimeConfigDocumentRecord>, AppError> {
         let patch = Self::serde_to_runtime_json(patch)?;
         let patch_object = patch.as_object().ok_or_else(|| {
             AppError::invalid_input("runtime config patch must be a JSON object")
         })?;
 
-        let target_path = self.state.config_loader.writable_path(target_scope);
-        let mut documents = self
-            .state
-            .config_loader
-            .load_documents()
-            .map_err(|error| AppError::runtime(error.to_string()))?;
+        let mut documents = match scope {
+            RuntimeConfigScopeKind::Workspace => self.resolve_documents(None, None)?,
+            RuntimeConfigScopeKind::Project => self.resolve_documents(owner_id, None)?,
+            RuntimeConfigScopeKind::User => self.resolve_documents(None, owner_id)?,
+        };
 
         let target_document = documents
             .iter_mut()
-            .find(|document| document.path == target_path)
+            .find(|document| document.scope == scope)
             .ok_or_else(|| AppError::not_found("runtime config document"))?;
         let mut next = target_document.document.clone().unwrap_or_default();
         apply_config_patch(&mut next, patch_object);
@@ -608,41 +802,29 @@ impl RuntimeAdapter {
 
     fn write_document(
         &self,
-        scope: &str,
-        document: &ConfigDocument,
+        document: &RuntimeConfigDocumentRecord,
     ) -> Result<(), AppError> {
-        let path = self.state.config_loader.writable_path(Self::parse_scope(scope)?);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let document = document
-            .document
-            .as_ref()
-            .cloned()
-            .unwrap_or_default();
-        let rendered = serde_json::to_vec_pretty(&Self::runtime_json_to_serde(&JsonValue::Object(
-            document,
-        )))?;
-        fs::write(path, rendered)?;
-        Ok(())
+        self.write_runtime_document(
+            &document.storage_path,
+            &document.document.clone().unwrap_or_default(),
+        )
     }
 
-    fn current_config_snapshot(&self) -> Result<RuntimeConfigSnapshotSummary, AppError> {
-        let documents = self
-            .state
-            .config_loader
-            .load_documents()
-            .map_err(|error| AppError::runtime(error.to_string()))?;
+    fn current_config_snapshot(
+        &self,
+        project_id: Option<&str>,
+        user_id: Option<&str>,
+    ) -> Result<RuntimeConfigSnapshotSummary, AppError> {
+        let documents = self.resolve_documents(project_id, user_id)?;
         let effective = self.build_effective_config(&documents)?;
-        let source_paths = documents
+        let source_refs = documents
             .iter()
             .filter(|document| document.loaded)
-            .map(|document| document.path.display().to_string())
+            .map(|document| document.source_key.clone())
             .collect::<Vec<_>>();
         let mut started_from_scope_set = Vec::new();
         for document in &documents {
-            let scope = Self::scope_label(document.source).to_string();
+            let scope = Self::public_scope_label(document.scope).to_string();
             if document.loaded && !started_from_scope_set.iter().any(|existing| existing == &scope) {
                 started_from_scope_set.push(scope);
             }
@@ -652,7 +834,7 @@ impl RuntimeAdapter {
             id: format!("cfgsnap-{}", Uuid::new_v4()),
             effective_config_hash: effective.effective_config_hash,
             started_from_scope_set,
-            source_paths,
+            source_refs,
             created_at: timestamp_now(),
         })
     }
@@ -728,6 +910,7 @@ impl RuntimeSessionService for RuntimeAdapter {
     async fn create_session(
         &self,
         input: CreateRuntimeSessionInput,
+        user_id: &str,
     ) -> Result<RuntimeSessionDetail, AppError> {
         let session_id = format!("rt-{}", Uuid::new_v4());
         let conversation_id = if input.conversation_id.is_empty() {
@@ -737,14 +920,18 @@ impl RuntimeSessionService for RuntimeAdapter {
         };
         let run_id = format!("run-{}", Uuid::new_v4());
         let now = timestamp_now();
-        let snapshot = self.current_config_snapshot()?;
+        let project_id = input.project_id.clone();
+        let snapshot = self.current_config_snapshot(
+            optional_project_id(&project_id).as_deref(),
+            Some(user_id),
+        )?;
         self.persist_config_snapshot(&snapshot)?;
 
         let detail = RuntimeSessionDetail {
             summary: RuntimeSessionSummary {
                 id: session_id.clone(),
                 conversation_id: conversation_id.clone(),
-                project_id: input.project_id,
+                project_id,
                 title: input.title,
                 status: "draft".into(),
                 updated_at: now,
@@ -856,11 +1043,21 @@ impl RuntimeSessionService for RuntimeAdapter {
 #[async_trait]
 impl RuntimeConfigService for RuntimeAdapter {
     async fn get_config(&self) -> Result<RuntimeEffectiveConfig, AppError> {
-        let documents = self
-            .state
-            .config_loader
-            .load_documents()
-            .map_err(|error| AppError::runtime(error.to_string()))?;
+        let documents = self.resolve_documents(None, None)?;
+        let mut effective = self.build_effective_config(&documents)?;
+        effective.validation = self.validate_documents(&documents)?;
+        Ok(effective)
+    }
+
+    async fn get_project_config(&self, project_id: &str) -> Result<RuntimeEffectiveConfig, AppError> {
+        let documents = self.resolve_documents(Some(project_id), None)?;
+        let mut effective = self.build_effective_config(&documents)?;
+        effective.validation = self.validate_documents(&documents)?;
+        Ok(effective)
+    }
+
+    async fn get_user_config(&self, user_id: &str) -> Result<RuntimeEffectiveConfig, AppError> {
+        let documents = self.resolve_documents(None, Some(user_id))?;
         let mut effective = self.build_effective_config(&documents)?;
         effective.validation = self.validate_documents(&documents)?;
         Ok(effective)
@@ -870,7 +1067,33 @@ impl RuntimeConfigService for RuntimeAdapter {
         &self,
         patch: RuntimeConfigPatch,
     ) -> Result<RuntimeConfigValidationResult, AppError> {
-        let documents = self.patched_documents(&patch.scope, &patch.patch)?;
+        let documents = self.patched_documents(Self::parse_scope(&patch.scope)?, None, &patch.patch)?;
+        self.validate_documents(&documents)
+    }
+
+    async fn validate_project_config(
+        &self,
+        project_id: &str,
+        patch: RuntimeConfigPatch,
+    ) -> Result<RuntimeConfigValidationResult, AppError> {
+        let documents = self.patched_documents(
+            Self::parse_scope(&patch.scope)?,
+            Some(project_id),
+            &patch.patch,
+        )?;
+        self.validate_documents(&documents)
+    }
+
+    async fn validate_user_config(
+        &self,
+        user_id: &str,
+        patch: RuntimeConfigPatch,
+    ) -> Result<RuntimeConfigValidationResult, AppError> {
+        let documents = self.patched_documents(
+            Self::parse_scope(&patch.scope)?,
+            Some(user_id),
+            &patch.patch,
+        )?;
         self.validate_documents(&documents)
     }
 
@@ -885,25 +1108,78 @@ impl RuntimeConfigService for RuntimeAdapter {
             ));
         }
 
-        let documents = self.patched_documents(scope, &patch.patch)?;
+        let target_scope = Self::parse_scope(scope)?;
+        let documents = self.patched_documents(target_scope, None, &patch.patch)?;
         let validation = self.validate_documents(&documents)?;
         if !validation.valid {
             return Err(AppError::invalid_input(validation.errors.join("; ")));
         }
 
-        let target_scope = Self::parse_scope(scope)?;
-        let target_path = self.state.config_loader.writable_path(target_scope);
         let target = documents
             .iter()
-            .find(|document| document.path == target_path)
+            .find(|document| document.scope == target_scope)
             .ok_or_else(|| AppError::not_found("runtime config document"))?;
-        self.write_document(scope, target)?;
+        self.write_document(target)?;
 
-        let reloaded = self
-            .state
-            .config_loader
-            .load_documents()
-            .map_err(|error| AppError::runtime(error.to_string()))?;
+        let reloaded = self.resolve_documents(None, None)?;
+        let mut effective = self.build_effective_config(&reloaded)?;
+        effective.validation = validation;
+        Ok(effective)
+    }
+
+    async fn save_project_config(
+        &self,
+        project_id: &str,
+        patch: RuntimeConfigPatch,
+    ) -> Result<RuntimeEffectiveConfig, AppError> {
+        if patch.scope != "project" {
+            return Err(AppError::invalid_input(
+                "project runtime config patch scope must be project",
+            ));
+        }
+
+        let documents = self.patched_documents(RuntimeConfigScopeKind::Project, Some(project_id), &patch.patch)?;
+        let validation = self.validate_documents(&documents)?;
+        if !validation.valid {
+            return Err(AppError::invalid_input(validation.errors.join("; ")));
+        }
+
+        let target = documents
+            .iter()
+            .find(|document| document.scope == RuntimeConfigScopeKind::Project)
+            .ok_or_else(|| AppError::not_found("project runtime config document"))?;
+        self.write_document(target)?;
+
+        let reloaded = self.resolve_documents(Some(project_id), None)?;
+        let mut effective = self.build_effective_config(&reloaded)?;
+        effective.validation = validation;
+        Ok(effective)
+    }
+
+    async fn save_user_config(
+        &self,
+        user_id: &str,
+        patch: RuntimeConfigPatch,
+    ) -> Result<RuntimeEffectiveConfig, AppError> {
+        if patch.scope != "user" {
+            return Err(AppError::invalid_input(
+                "user runtime config patch scope must be user",
+            ));
+        }
+
+        let documents = self.patched_documents(RuntimeConfigScopeKind::User, Some(user_id), &patch.patch)?;
+        let validation = self.validate_documents(&documents)?;
+        if !validation.valid {
+            return Err(AppError::invalid_input(validation.errors.join("; ")));
+        }
+
+        let target = documents
+            .iter()
+            .find(|document| document.scope == RuntimeConfigScopeKind::User)
+            .ok_or_else(|| AppError::not_found("user runtime config document"))?;
+        self.write_document(target)?;
+
+        let reloaded = self.resolve_documents(None, Some(user_id))?;
         let mut effective = self.build_effective_config(&reloaded)?;
         effective.validation = validation;
         Ok(effective)

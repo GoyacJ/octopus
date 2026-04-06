@@ -23,11 +23,12 @@ use octopus_core::{
     ConversationRecord, DesktopBackendConnection, HealthcheckBackendStatus, HealthcheckStatus,
     HostState, KnowledgeRecord, LoginRequest, MenuRecord, ModelCatalogSnapshot,
     PermissionRecord, ProjectDashboardSnapshot, ProjectRecord, ProviderCredentialRecord,
-    ResolveRuntimeApprovalInput, RoleRecord, RuntimeConfigPatch,
-    RuntimeConfigValidationResult, RuntimeEffectiveConfig, SessionRecord, ShellBootstrap,
-    ShellPreferences, SubmitRuntimeTurnInput, TeamRecord, ToolRecord, UserCenterAlertRecord,
-    UserCenterOverviewSnapshot, UserRecordSummary, WorkspaceActivityRecord,
-    WorkspaceMetricRecord, WorkspaceOverviewSnapshot, WorkspaceResourceRecord,
+    RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse, ResolveRuntimeApprovalInput,
+    RoleRecord, RuntimeConfigPatch, RuntimeConfigValidationResult, RuntimeEffectiveConfig,
+    SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput, TeamRecord,
+    ToolRecord, UserCenterAlertRecord, UserCenterOverviewSnapshot, UserRecordSummary,
+    WorkspaceActivityRecord, WorkspaceMetricRecord, WorkspaceOverviewSnapshot,
+    WorkspaceResourceRecord,
 };
 use octopus_platform::PlatformServices;
 use serde::Deserialize;
@@ -82,6 +83,7 @@ impl IntoResponse for ApiError {
             }
             AppError::Auth(_) => (StatusCode::UNAUTHORIZED, "UNAUTHENTICATED", false),
             AppError::NotFound(_) => (StatusCode::NOT_FOUND, "NOT_FOUND", false),
+            AppError::Conflict(_) => (StatusCode::CONFLICT, "CONFLICT", false),
             AppError::InvalidInput(_) => (StatusCode::BAD_REQUEST, "INVALID_INPUT", false),
             AppError::Database(_) | AppError::Runtime(_) => {
                 (StatusCode::SERVICE_UNAVAILABLE, "UNAVAILABLE", true)
@@ -264,6 +266,7 @@ pub fn build_router(state: ServerState) -> Router {
         .route("/api/v1/system/health", get(healthcheck))
         .route("/api/v1/system/bootstrap", get(system_bootstrap))
         .route("/api/v1/auth/login", post(login))
+        .route("/api/v1/auth/register-owner", post(register_owner))
         .route("/api/v1/auth/logout", post(logout))
         .route("/api/v1/auth/session", get(current_session))
         .route("/api/v1/apps", get(list_apps).post(register_app))
@@ -306,6 +309,14 @@ pub fn build_router(state: ServerState) -> Router {
             "/api/v1/workspace/user-center/overview",
             get(user_center_overview),
         )
+        .route(
+            "/api/v1/workspace/user-center/profile/runtime-config",
+            get(get_user_runtime_config_route).patch(save_user_runtime_config_route),
+        )
+        .route(
+            "/api/v1/workspace/user-center/profile/runtime-config/validate",
+            post(validate_user_runtime_config_route),
+        )
         .route("/api/v1/workspace/rbac/users", get(list_users).post(create_user))
         .route(
             "/api/v1/workspace/rbac/users/:user_id",
@@ -333,6 +344,14 @@ pub fn build_router(state: ServerState) -> Router {
         .route(
             "/api/v1/projects/:project_id/dashboard",
             get(project_dashboard),
+        )
+        .route(
+            "/api/v1/projects/:project_id/runtime-config",
+            get(get_project_runtime_config_route).patch(save_project_runtime_config_route),
+        )
+        .route(
+            "/api/v1/projects/:project_id/runtime-config/validate",
+            post(validate_project_runtime_config_route),
         )
         .route(
             "/api/v1/projects/:project_id/resources",
@@ -486,6 +505,13 @@ async fn login(
     Json(request): Json<LoginRequest>,
 ) -> Result<Json<octopus_core::LoginResponse>, ApiError> {
     Ok(Json(state.services.auth.login(request).await?))
+}
+
+async fn register_owner(
+    State(state): State<ServerState>,
+    Json(request): Json<RegisterWorkspaceOwnerRequest>,
+) -> Result<Json<RegisterWorkspaceOwnerResponse>, ApiError> {
+    Ok(Json(state.services.auth.register_owner(request).await?))
 }
 
 async fn logout(
@@ -1002,32 +1028,108 @@ async fn runtime_bootstrap(
 
 async fn get_runtime_config(
     State(state): State<ServerState>,
-    headers: HeaderMap,
+    _headers: HeaderMap,
 ) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
-    ensure_authorized_session(&state, &headers, "runtime.read", None).await?;
     Ok(Json(state.services.runtime_config.get_config().await?))
 }
 
 async fn validate_runtime_config_route(
     State(state): State<ServerState>,
-    headers: HeaderMap,
+    _headers: HeaderMap,
     Json(patch): Json<RuntimeConfigPatch>,
 ) -> Result<Json<RuntimeConfigValidationResult>, ApiError> {
-    ensure_authorized_session(&state, &headers, "runtime.read", None).await?;
     Ok(Json(state.services.runtime_config.validate_config(patch).await?))
 }
 
 async fn save_runtime_config_route(
     State(state): State<ServerState>,
-    headers: HeaderMap,
+    _headers: HeaderMap,
     Path(scope): Path<String>,
     Json(patch): Json<RuntimeConfigPatch>,
 ) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
-    ensure_authorized_session(&state, &headers, "runtime.read", None).await?;
     Ok(Json(state
         .services
         .runtime_config
         .save_config(&scope, patch)
+        .await?))
+}
+
+async fn get_project_runtime_config_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
+    Ok(Json(state
+        .services
+        .runtime_config
+        .get_project_config(&project_id)
+        .await?))
+}
+
+async fn validate_project_runtime_config_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+    Json(patch): Json<RuntimeConfigPatch>,
+) -> Result<Json<RuntimeConfigValidationResult>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
+    Ok(Json(state
+        .services
+        .runtime_config
+        .validate_project_config(&project_id, patch)
+        .await?))
+}
+
+async fn save_project_runtime_config_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+    Json(patch): Json<RuntimeConfigPatch>,
+) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
+    Ok(Json(state
+        .services
+        .runtime_config
+        .save_project_config(&project_id, patch)
+        .await?))
+}
+
+async fn get_user_runtime_config_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
+    let session = ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
+    Ok(Json(state
+        .services
+        .runtime_config
+        .get_user_config(&session.user_id)
+        .await?))
+}
+
+async fn validate_user_runtime_config_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(patch): Json<RuntimeConfigPatch>,
+) -> Result<Json<RuntimeConfigValidationResult>, ApiError> {
+    let session = ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
+    Ok(Json(state
+        .services
+        .runtime_config
+        .validate_user_config(&session.user_id, patch)
+        .await?))
+}
+
+async fn save_user_runtime_config_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(patch): Json<RuntimeConfigPatch>,
+) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
+    let session = ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
+    Ok(Json(state
+        .services
+        .runtime_config
+        .save_user_config(&session.user_id, patch)
         .await?))
 }
 
@@ -1147,7 +1249,11 @@ async fn create_runtime_session(
         }
     }
 
-    let detail = state.services.runtime_session.create_session(input).await?;
+    let detail = state
+        .services
+        .runtime_session
+        .create_session(input, &session.user_id)
+        .await?;
     if let Some(scope) = idempotency_scope.as_deref() {
         store_idempotent_response(&state, scope, &detail, &request_id)?;
     }
@@ -1472,6 +1578,7 @@ mod tests {
     use axum::{body::{to_bytes, Body}, http::{Method, Request}};
     use octopus_core::{
         ApiErrorEnvelope, CreateRuntimeSessionInput, LoginRequest, LoginResponse,
+        RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse,
         ResolveRuntimeApprovalInput, RuntimeConfigPatch, RuntimeConfigValidationResult,
         RuntimeEffectiveConfig, RuntimeEventEnvelope, RuntimeSessionDetail, RuntimeRunSnapshot,
         SessionRecord, SubmitRuntimeTurnInput,
@@ -1545,6 +1652,39 @@ mod tests {
         serde_json::from_slice(&bytes).expect("json body")
     }
 
+    async fn register_owner_session(router: &Router, client_app_id: &str) -> SessionRecord {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/auth/register-owner")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&RegisterWorkspaceOwnerRequest {
+                            client_app_id: client_app_id.into(),
+                            username: "owner".into(),
+                            display_name: "Workspace Owner".into(),
+                            password: "owner-owner".into(),
+                            confirm_password: "owner-owner".into(),
+                            avatar: octopus_core::AvatarUploadPayload {
+                                file_name: "owner-avatar.png".into(),
+                                content_type: "image/png".into(),
+                                data_base64: "iVBORw0KGgo=".into(),
+                                byte_size: 8,
+                            },
+                            workspace_id: None,
+                        })
+                        .expect("json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        decode_json::<RegisterWorkspaceOwnerResponse>(response).await.session
+    }
+
     async fn login_owner_session(router: &Router, client_app_id: &str) -> SessionRecord {
         let response = router
             .clone()
@@ -1557,7 +1697,7 @@ mod tests {
                         serde_json::to_vec(&LoginRequest {
                             client_app_id: client_app_id.into(),
                             username: "owner".into(),
-                            password: "owner".into(),
+                            password: "owner-owner".into(),
                             workspace_id: None,
                         })
                         .expect("json"),
@@ -1566,6 +1706,9 @@ mod tests {
             )
             .await
             .expect("response");
+        if response.status() == StatusCode::UNAUTHORIZED {
+            return register_owner_session(router, client_app_id).await;
+        }
         assert_eq!(response.status(), StatusCode::OK);
         decode_json::<LoginResponse>(response).await.session
     }
@@ -1625,9 +1768,24 @@ mod tests {
         decode_json::<RuntimeEffectiveConfig>(response).await
     }
 
-    async fn validate_runtime_config(
+    async fn get_runtime_config_without_session(router: &Router) -> RuntimeEffectiveConfig {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/v1/runtime/config")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        decode_json::<RuntimeEffectiveConfig>(response).await
+    }
+
+    async fn validate_runtime_config_without_session(
         router: &Router,
-        token: &str,
         patch: RuntimeConfigPatch,
     ) -> RuntimeConfigValidationResult {
         let response = router
@@ -1636,7 +1794,6 @@ mod tests {
                 Request::builder()
                     .method(Method::POST)
                     .uri("/api/v1/runtime/config/validate")
-                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(serde_json::to_vec(&patch).expect("json")))
                     .expect("request"),
@@ -1660,6 +1817,27 @@ mod tests {
                     .method(Method::PATCH)
                     .uri(format!("/api/v1/runtime/config/scopes/{scope}"))
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&patch).expect("json")))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        decode_json::<RuntimeEffectiveConfig>(response).await
+    }
+
+    async fn save_runtime_config_without_session(
+        router: &Router,
+        scope: &str,
+        patch: RuntimeConfigPatch,
+    ) -> RuntimeEffectiveConfig {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::PATCH)
+                    .uri(format!("/api/v1/runtime/config/scopes/{scope}"))
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(serde_json::to_vec(&patch).expect("json")))
                     .expect("request"),
@@ -1830,6 +2008,40 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(bootstrap_response.status(), StatusCode::OK);
+        let bootstrap: serde_json::Value = decode_json(bootstrap_response).await;
+        assert_eq!(bootstrap["setupRequired"], true);
+        assert_eq!(bootstrap["ownerReady"], false);
+
+        let register_response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/auth/register-owner")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&RegisterWorkspaceOwnerRequest {
+                            client_app_id: "octopus-desktop".into(),
+                            username: "owner".into(),
+                            display_name: "Workspace Owner".into(),
+                            password: "owner-owner".into(),
+                            confirm_password: "owner-owner".into(),
+                            avatar: octopus_core::AvatarUploadPayload {
+                                file_name: "owner-avatar.png".into(),
+                                content_type: "image/png".into(),
+                                data_base64: "iVBORw0KGgo=".into(),
+                                byte_size: 8,
+                            },
+                            workspace_id: None,
+                        })
+                        .expect("json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(register_response.status(), StatusCode::OK);
 
         let login_response = harness
             .router
@@ -1843,7 +2055,7 @@ mod tests {
                         serde_json::to_vec(&LoginRequest {
                             client_app_id: "octopus-desktop".into(),
                             username: "owner".into(),
-                            password: "owner".into(),
+                            password: "owner-owner".into(),
                             workspace_id: None,
                         })
                         .expect("json"),
@@ -2349,21 +2561,19 @@ mod tests {
     #[tokio::test]
     async fn runtime_config_routes_load_validate_and_save_scoped_documents() {
         let harness = test_harness();
-        let session = login_owner_session(&harness.router, "octopus-desktop").await;
 
-        let initial = get_runtime_config(&harness.router, &session.token).await;
+        let initial = get_runtime_config_without_session(&harness.router).await;
         assert!(initial.validation.valid);
-        assert_eq!(initial.sources.len(), 5);
+        assert_eq!(initial.sources.len(), 1);
         assert!(initial
             .sources
             .iter()
-            .any(|source| source.scope == "project" && !source.exists));
+            .any(|source| source.scope == "workspace" && !source.exists));
 
-        let validation = validate_runtime_config(
+        let validation = validate_runtime_config_without_session(
             &harness.router,
-            &session.token,
             RuntimeConfigPatch {
-                scope: "project".into(),
+                scope: "workspace".into(),
                 patch: serde_json::json!({
                     "model": "claude-sonnet-4-5",
                     "permissions": {
@@ -2375,12 +2585,11 @@ mod tests {
         .await;
         assert!(validation.valid);
 
-        let saved = save_runtime_config(
+        let saved = save_runtime_config_without_session(
             &harness.router,
-            &session.token,
-            "project",
+            "workspace",
             RuntimeConfigPatch {
-                scope: "project".into(),
+                scope: "workspace".into(),
                 patch: serde_json::json!({
                     "model": "claude-sonnet-4-5",
                     "permissions": {
@@ -2396,15 +2605,42 @@ mod tests {
             Some(&serde_json::json!("claude-sonnet-4-5"))
         );
         assert!(saved.sources.iter().any(|source| {
-            source.scope == "project"
-                && source.path.ends_with(".claw/settings.json")
+            source.scope == "workspace"
+                && source.source_key == "workspace"
+                && source.display_path == "config/runtime/workspace.json"
                 && source.exists
         }));
 
-        let project_settings = harness.infra.paths.root.join(".claw").join("settings.json");
-        let written = std::fs::read_to_string(project_settings).expect("project settings written");
+        let workspace_settings = harness
+            .infra
+            .paths
+            .config_dir
+            .join("runtime")
+            .join("workspace.json");
+        let written =
+            std::fs::read_to_string(workspace_settings).expect("workspace settings written");
         assert!(written.contains("\"model\": \"claude-sonnet-4-5\""));
         assert!(written.contains("\"defaultMode\": \"plan\""));
+    }
+
+    #[tokio::test]
+    async fn runtime_config_routes_expose_workspace_relative_source_metadata() {
+        let harness = test_harness();
+
+        let config = get_runtime_config_without_session(&harness.router).await;
+        let serialized = serde_json::to_value(&config).expect("serialize config");
+
+        let workspace_source = config
+            .sources
+            .iter()
+            .find(|source| source.scope == "workspace")
+            .expect("workspace source");
+
+        assert_eq!(workspace_source.source_key, "workspace");
+        assert_eq!(workspace_source.display_path, "config/runtime/workspace.json");
+        assert!(workspace_source.owner_id.is_none());
+        assert!(serialized.to_string().contains("\"displayPath\""));
+        assert!(!serialized.to_string().contains("\"path\""));
     }
 
     #[tokio::test]
@@ -2412,10 +2648,10 @@ mod tests {
         let harness = test_harness();
         let session = login_owner_session(&harness.router, "octopus-desktop").await;
 
-        let project_dir = harness.infra.paths.root.join(".claw");
-        std::fs::create_dir_all(&project_dir).expect("project settings dir");
+        let project_dir = harness.infra.paths.config_dir.join("runtime");
+        std::fs::create_dir_all(&project_dir).expect("workspace settings dir");
         std::fs::write(
-            project_dir.join("settings.json"),
+            project_dir.join("workspace.json"),
             r#"{
               "provider": {
                 "apiKey": "super-secret-key"
@@ -2437,8 +2673,8 @@ mod tests {
         let project_source = config
             .sources
             .iter()
-            .find(|source| source.scope == "project" && source.path.ends_with(".claw/settings.json"))
-            .expect("project source");
+            .find(|source| source.scope == "workspace" && source.display_path == "config/runtime/workspace.json")
+            .expect("workspace source");
 
         assert_eq!(
             project_source
@@ -2465,9 +2701,9 @@ mod tests {
         let _saved = save_runtime_config(
             &harness.router,
             &session.token,
-            "project",
+            "workspace",
             RuntimeConfigPatch {
-                scope: "project".into(),
+                scope: "workspace".into(),
                 patch: serde_json::json!({
                     "model": "claude-sonnet-4-5",
                     "permissions": {
@@ -2487,7 +2723,7 @@ mod tests {
             .summary
             .started_from_scope_set
             .iter()
-            .any(|scope| scope == "project"));
+            .any(|scope| scope == "workspace"));
         assert_eq!(
             created.run.config_snapshot_id,
             created.summary.config_snapshot_id
@@ -2513,5 +2749,14 @@ mod tests {
             )
             .expect("runtime config snapshot");
         assert_eq!(stored_hash, created.summary.effective_config_hash);
+
+        let stored_source_refs: String = connection
+            .query_row(
+                "SELECT source_refs FROM runtime_config_snapshots WHERE id = ?1",
+                [&created.summary.config_snapshot_id],
+                |row| row.get(0),
+            )
+            .expect("runtime config source refs");
+        assert_eq!(stored_source_refs, serde_json::json!(["workspace"]).to_string());
     }
 }

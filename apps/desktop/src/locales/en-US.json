@@ -87,6 +87,39 @@
       "restart": "Restart backend"
     }
   },
+  "authGate": {
+    "eyebrow": "Workspace Authentication",
+    "closeLabel": "Close authentication dialog",
+    "login": {
+      "title": "Sign in to the local workspace",
+      "description": "An account already exists for this workspace, but the local session is missing or expired. Sign in to continue in place."
+    },
+    "register": {
+      "title": "Register the first administrator",
+      "description": "This local workspace is starting for the first time. Create the first owner account to finish setup and enter the current workspace."
+    },
+    "fields": {
+      "username": "Username",
+      "displayName": "Display name",
+      "avatar": "Avatar",
+      "avatarHint": "PNG, JPEG, and WEBP are supported. Avatar is required.",
+      "password": "Password",
+      "confirmPassword": "Confirm password"
+    },
+    "actions": {
+      "login": "Sign in",
+      "register": "Register and continue",
+      "pickAvatar": "Choose avatar"
+    },
+    "validation": {
+      "usernameRequired": "Enter a username.",
+      "displayNameRequired": "Enter a display name.",
+      "avatarRequired": "Choose an avatar image.",
+      "passwordRequired": "Enter a password.",
+      "passwordMinLength": "Password must be at least 8 characters.",
+      "passwordMismatch": "Passwords do not match."
+    }
+  },
   "searchOverlay": {
     "placeholder": "Type to jump anywhere…",
     "emptyTitle": "No matching results",
@@ -154,6 +187,7 @@
       "resources": "Resources",
       "knowledge": "Knowledge",
       "trace": "Trace",
+      "runtime": "Runtime",
       "agents": "Agents",
       "teams": "Teams",
       "models": "Models",
@@ -395,6 +429,23 @@
       "rankingTitle": "No session rankings yet",
       "rankingDescription": "Insufficient data for rankings."
     }
+  },
+  "projectRuntime": {
+    "header": {
+      "eyebrow": "Project Runtime",
+      "title": "Project Runtime Config",
+      "subtitle": "Manage runtime overrides for the active project without exposing host filesystem paths."
+    },
+    "editor": {
+      "title": "Project Override",
+      "description": "Edit the current project's runtime override document."
+    },
+    "effective": {
+      "title": "Project Effective Preview",
+      "description": "Preview the merged runtime config for new sessions started from this project."
+    },
+    "emptyTitle": "Project runtime config is unavailable",
+    "emptyDescription": "No project runtime config could be loaded for the active project."
   },
   "conversation": {
     "header": {
@@ -839,7 +890,7 @@
       "actions": {
         "reload": "Reload",
         "validate": "Validate",
-        "save": "Save scope"
+        "save": "Save"
       },
       "validation": {
         "idle": "Not validated",
@@ -851,19 +902,9 @@
         "loaded": "Loaded",
         "detected": "Detected"
       },
-      "scopes": {
-        "user": {
-          "label": "User Overrides",
-          "description": "Personal overrides stored in the user scope."
-        },
-        "project": {
-          "label": "Project Defaults",
-          "description": "Shared runtime defaults for the current workspace or project."
-        },
-        "local": {
-          "label": "Local Machine Overrides",
-          "description": "Host-local settings that should not be shared across machines."
-        }
+      "workspace": {
+        "title": "Workspace Runtime Config",
+        "description": "Edit the workspace-level runtime config stored under config/runtime/workspace.json."
       },
       "effective": {
         "title": "Effective Runtime Preview",
@@ -991,6 +1032,12 @@
         "permissionHelper": "Total permissions inherited by the current account.",
         "menuHelper": "Navigation entries currently visible to this account.",
         "roleHelper": "Roles currently assigned to this account."
+      },
+      "runtime": {
+        "title": "Runtime Config",
+        "description": "Edit your personal runtime override for the current workspace.",
+        "effectiveTitle": "Effective Preview",
+        "effectiveDescription": "Preview the runtime config that will apply to new sessions for your user."
       }
     },
     "users": {

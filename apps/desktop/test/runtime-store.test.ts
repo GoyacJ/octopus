@@ -263,22 +263,22 @@ describe('useRuntimeStore', () => {
     runtime.dispose()
   })
 
-  it('loads and saves runtime config through the shared workspace client', async () => {
+  it('loads and saves workspace runtime config through the shared workspace client', async () => {
     const { runtime } = await prepareRuntimeStore()
 
     await runtime.loadConfig()
 
     expect(runtime.config?.effectiveConfigHash).toContain('cfg-hash')
-    expect(runtime.configDrafts.project).toContain('claude-sonnet-4-5')
+    expect(runtime.configDrafts.workspace).toContain('claude-sonnet-4-5')
 
-    runtime.configDrafts.project = JSON.stringify({
+    runtime.configDrafts.workspace = JSON.stringify({
       model: 'gpt-4o',
       permissions: {
         defaultMode: 'plan',
       },
     }, null, 2)
 
-    await runtime.saveConfig('project')
+    await runtime.saveConfig('workspace')
 
     expect(runtime.config?.effectiveConfig).toMatchObject({
       model: 'gpt-4o',
@@ -286,9 +286,22 @@ describe('useRuntimeStore', () => {
         defaultMode: 'plan',
       },
     })
-    expect(runtime.config?.sources.find(source => source.scope === 'project')?.document).toMatchObject({
+    expect(runtime.config?.sources.find(source => source.scope === 'workspace')?.document).toMatchObject({
       model: 'gpt-4o',
     })
+
+    runtime.dispose()
+  })
+
+  it('loads runtime config for the settings flow even when the workspace session is missing', async () => {
+    const { runtime, shell } = await prepareRuntimeStore()
+
+    shell.clearWorkspaceSession('conn-local')
+
+    await runtime.loadConfig(true)
+
+    expect(runtime.config?.effectiveConfigHash).toContain('cfg-hash')
+    expect(runtime.configError).toBe('')
 
     runtime.dispose()
   })

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink, useRoute } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
   Bell,
   Bot,
@@ -30,6 +30,7 @@ import { useUserCenterStore } from '@/stores/user-center'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const route = useRoute()
+const router = useRouter()
 const { t } = useI18n()
 const shell = useShellStore()
 const workspaceStore = useWorkspaceStore()
@@ -60,6 +61,7 @@ const iconMap: Record<MenuIconKey, unknown> = {
   resources: FolderOpen,
   knowledge: LibraryBig,
   trace: Bell,
+  runtime: Settings,
   models: Cpu,
   tools: Wrench,
   automations: Workflow,
@@ -225,6 +227,13 @@ function projectModules(projectId: string): NavigationItem[] {
       icon: iconMap.trace,
       to: createProjectSurfaceTarget('project-trace', workspaceId, projectId),
     },
+    {
+      id: `${projectId}:runtime`,
+      label: t('sidebar.navigation.runtime'),
+      routeNames: ['project-runtime'],
+      icon: iconMap.runtime,
+      to: createProjectSurfaceTarget('project-runtime', workspaceId, projectId),
+    },
   ]
 }
 
@@ -234,6 +243,12 @@ function isRouteActive(routeNames: string[]) {
 
 function isProjectModuleActive(projectId: string, routeNames: string[]) {
   return currentProjectId.value === projectId && isRouteActive(routeNames)
+}
+
+async function switchWorkspace(workspaceConnectionId: string, workspaceId: string) {
+  workspaceMenuOpen.value = false
+  await shell.activateWorkspaceConnection(workspaceConnectionId)
+  await router.push(createWorkspaceOverviewTarget(workspaceId))
 }
 </script>
 
@@ -253,6 +268,27 @@ function isProjectModuleActive(projectId: string, routeNames: string[]) {
     </div>
 
     <div class="mt-6 min-h-0 flex-1 overflow-y-auto">
+      <div class="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
+        {{ t('topbar.workspaceSectionTitle') }}
+      </div>
+      <div class="mb-4 space-y-1">
+        <button
+          v-for="connection in shell.workspaceConnections"
+          :key="connection.workspaceConnectionId"
+          type="button"
+          class="flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition-colors"
+          :class="connection.workspaceConnectionId === shell.activeWorkspaceConnectionId
+            ? 'border-primary/30 bg-primary/[0.08] text-text-primary'
+            : 'border-border-subtle text-text-secondary hover:bg-accent dark:border-white/[0.05]'"
+          @click="switchWorkspace(connection.workspaceConnectionId, connection.workspaceId)"
+        >
+          <span class="truncate text-sm font-medium">{{ connection.label }}</span>
+          <span class="truncate pl-3 text-[11px] uppercase tracking-[0.18em] text-text-tertiary">
+            {{ connection.transportSecurity === 'loopback' ? t('topbar.localWorkspace') : t('topbar.sharedWorkspace') }}
+          </span>
+        </button>
+      </div>
+
       <div class="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
         {{ t('sidebar.projectTree.title') }}
       </div>

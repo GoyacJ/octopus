@@ -4,12 +4,15 @@ import type {
   AgentRecord,
   AutomationRecord,
   KnowledgeRecord,
+  LoginResponse,
   MenuRecord,
   ModelCatalogSnapshot,
   PermissionRecord,
   ProjectDashboardSnapshot,
   ProjectRecord,
   ProviderCredentialRecord,
+  RegisterWorkspaceOwnerRequest,
+  RegisterWorkspaceOwnerResponse,
   RoleRecord,
   RuntimeApprovalRequest,
   RuntimeBootstrap,
@@ -36,10 +39,16 @@ import type {
 import { resolveRuntimePermissionMode } from '@octopus/schema'
 
 import type { WorkspaceClient } from '@/tauri/workspace-client'
+import { WorkspaceApiError } from '@/tauri/shared'
 import * as tauriClient from '@/tauri/client'
 
 interface FixtureOptions {
   preloadConversationMessages?: boolean
+  localRuntimeConfigTransform?: (config: RuntimeEffectiveConfig) => RuntimeEffectiveConfig
+  localOwnerReady?: boolean
+  localSetupRequired?: boolean
+  preloadWorkspaceSessions?: boolean
+  localSessionValid?: boolean
 }
 
 interface RuntimeSessionState {
@@ -69,7 +78,9 @@ interface WorkspaceFixtureState {
   permissions: PermissionRecord[]
   menus: MenuRecord[]
   runtimeSessions: Map<string, RuntimeSessionState>
-  runtimeConfig: RuntimeEffectiveConfig
+  runtimeWorkspaceConfig: RuntimeEffectiveConfig
+  runtimeProjectConfigs: Record<string, RuntimeEffectiveConfig>
+  runtimeUserConfig: RuntimeEffectiveConfig
 }
 
 const WORKSPACE_CONNECTIONS: WorkspaceConnectionRecord[] = [
@@ -113,6 +124,61 @@ const WORKSPACE_SESSIONS: WorkspaceSessionTokenEnvelope[] = WORKSPACE_CONNECTION
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+function createRuntimeConfigSource(
+  scope: 'workspace' | 'project' | 'user',
+  workspaceId: string,
+  ownerId?: string,
+): RuntimeEffectiveConfig['sources'][number] {
+  if (scope === 'workspace') {
+    return {
+      scope,
+      displayPath: 'config/runtime/workspace.json',
+      sourceKey: 'workspace',
+      exists: true,
+      loaded: true,
+      contentHash: `${workspaceId}-workspace-runtime-source-hash`,
+      document: {
+        model: 'claude-sonnet-4-5',
+        permissions: {
+          defaultMode: 'plan',
+        },
+      },
+    }
+  }
+
+  if (scope === 'project') {
+    return {
+      scope,
+      ownerId,
+      displayPath: `config/runtime/projects/${ownerId}.json`,
+      sourceKey: `project:${ownerId}`,
+      exists: true,
+      loaded: true,
+      contentHash: `${workspaceId}-${ownerId}-project-runtime-source-hash`,
+      document: {
+        approvals: {
+          defaultMode: 'manual',
+        },
+      },
+    }
+  }
+
+  return {
+    scope,
+    ownerId,
+    displayPath: `config/runtime/users/${ownerId}.json`,
+    sourceKey: `user:${ownerId}`,
+    exists: true,
+    loaded: true,
+    contentHash: `${workspaceId}-${ownerId}-user-runtime-source-hash`,
+    document: {
+      provider: {
+        defaultModel: 'claude-sonnet-4-5',
+      },
+    },
+  }
 }
 
 function createHostBootstrap(): ShellBootstrap {
@@ -163,15 +229,20 @@ function createHostBootstrap(): ShellBootstrap {
   }
 }
 
-function createWorkspaceFixtureState(connection: WorkspaceConnectionRecord): WorkspaceFixtureState {
+function createWorkspaceFixtureState(
+  connection: WorkspaceConnectionRecord,
+  options: FixtureOptions = {},
+): WorkspaceFixtureState {
   const local = connection.workspaceId === 'ws-local'
+  const ownerReady = local ? options.localOwnerReady ?? true : true
+  const setupRequired = local ? options.localSetupRequired ?? false : false
   const workspace = {
     id: connection.workspaceId,
     name: local ? 'Local Workspace' : 'Enterprise Workspace',
     slug: local ? 'local-workspace' : 'enterprise-workspace',
     deployment: local ? 'local' : 'remote',
-    bootstrapStatus: 'ready',
-    ownerUserId: 'user-owner',
+    bootstrapStatus: setupRequired ? 'setup_required' : 'ready',
+    ownerUserId: ownerReady ? 'user-owner' : undefined,
     host: local ? '127.0.0.1' : 'enterprise.example.test',
     listenAddress: connection.baseUrl,
     defaultProjectId: local ? 'proj-redesign' : 'proj-launch',
@@ -514,19 +585,25 @@ function createWorkspaceFixtureState(connection: WorkspaceConnectionRecord): Wor
     : []
 
   const users: UserRecordSummary[] = [
-    {
-      id: 'user-owner',
-      username: 'owner',
-      displayName: local ? 'Lobster Owner' : 'Enterprise Owner',
-      status: 'active',
-      roleIds: ['role-owner'],
-      scopeProjectIds: [],
-    },
+    ...(ownerReady
+      ? [{
+          id: 'user-owner',
+          username: 'owner',
+          displayName: local ? 'Lobster Owner' : 'Enterprise Owner',
+          avatar: 'data:image/png;base64,iVBORw0KGgo=',
+          status: 'active',
+          passwordState: 'set' as const,
+          roleIds: ['role-owner'],
+          scopeProjectIds: [],
+        }]
+      : []),
     {
       id: 'user-operator',
       username: 'operator',
       displayName: 'Lin Zhou',
+      avatar: 'data:image/png;base64,iVBORw0KGgo=',
       status: 'active',
+      passwordState: 'set',
       roleIds: ['role-operator'],
       scopeProjectIds: projects.map(project => project.id),
     },
@@ -662,7 +739,7 @@ function createWorkspaceFixtureState(connection: WorkspaceConnectionRecord): Wor
   const userCenterOverview: UserCenterOverviewSnapshot = {
     workspaceId: workspace.id,
     currentUser: users[0],
-    roleNames: ['Owner'],
+    roleNames: ownerReady ? ['Owner'] : ['Operator'],
     metrics: [
       { id: 'users', label: 'Users', value: String(users.length), tone: 'accent' },
       { id: 'roles', label: 'Roles', value: String(roles.length), tone: 'info' },
@@ -671,7 +748,7 @@ function createWorkspaceFixtureState(connection: WorkspaceConnectionRecord): Wor
     quickLinks: menus.slice(0, 2),
   }
 
-  const runtimeConfig: RuntimeEffectiveConfig = {
+  const runtimeWorkspaceConfig: RuntimeEffectiveConfig = {
     effectiveConfig: {
       model: 'claude-sonnet-4-5',
       permissions: {
@@ -680,31 +757,50 @@ function createWorkspaceFixtureState(connection: WorkspaceConnectionRecord): Wor
     },
     effectiveConfigHash: `${workspace.id}-cfg-hash-1`,
     sources: [
-      {
-        scope: 'user',
-        path: `${workspace.id}/config/.claw/settings.json`,
-        exists: false,
-        loaded: false,
-      },
-      {
-        scope: 'project',
-        path: `${workspace.id}/.claw/settings.json`,
-        exists: true,
-        loaded: true,
-        contentHash: `${workspace.id}-source-hash-1`,
-        document: {
-          model: 'claude-sonnet-4-5',
-          permissions: {
-            defaultMode: 'plan',
-          },
+      createRuntimeConfigSource('workspace', workspace.id),
+    ],
+    validation: {
+      valid: true,
+      errors: [],
+      warnings: [],
+    },
+    secretReferences: [],
+  }
+
+  const runtimeProjectConfigs = Object.fromEntries(projects.map(project => [
+    project.id,
+    {
+      effectiveConfig: {
+        ...clone(runtimeWorkspaceConfig.effectiveConfig),
+        approvals: {
+          defaultMode: 'manual',
         },
       },
-      {
-        scope: 'local',
-        path: `${workspace.id}/.claw/settings.local.json`,
-        exists: false,
-        loaded: false,
+      effectiveConfigHash: `${workspace.id}-${project.id}-project-cfg-hash-1`,
+      sources: [
+        createRuntimeConfigSource('workspace', workspace.id),
+        createRuntimeConfigSource('project', workspace.id, project.id),
+      ],
+      validation: {
+        valid: true,
+        errors: [],
+        warnings: [],
       },
+      secretReferences: [],
+    } satisfies RuntimeEffectiveConfig,
+  ]))
+
+  const runtimeUserConfig: RuntimeEffectiveConfig = {
+    effectiveConfig: {
+      ...clone(runtimeWorkspaceConfig.effectiveConfig),
+      provider: {
+        defaultModel: 'claude-sonnet-4-5',
+      },
+    },
+    effectiveConfigHash: `${workspace.id}-user-owner-runtime-cfg-hash-1`,
+    sources: [
+      createRuntimeConfigSource('workspace', workspace.id),
+      createRuntimeConfigSource('user', workspace.id, 'user-owner'),
     ],
     validation: {
       valid: true,
@@ -717,8 +813,8 @@ function createWorkspaceFixtureState(connection: WorkspaceConnectionRecord): Wor
   return {
     systemBootstrap: {
       workspace,
-      setupRequired: false,
-      ownerReady: true,
+      setupRequired,
+      ownerReady,
       registeredApps: [],
       protocolVersion: '1.0.0-test',
       apiBasePath: '/api/v1',
@@ -750,7 +846,9 @@ function createWorkspaceFixtureState(connection: WorkspaceConnectionRecord): Wor
     permissions,
     menus,
     runtimeSessions: new Map(),
-    runtimeConfig,
+    runtimeWorkspaceConfig,
+    runtimeProjectConfigs,
+    runtimeUserConfig,
   }
 }
 
@@ -905,6 +1003,7 @@ function eventsAfter(state: RuntimeSessionState, after?: string): RuntimeEventEn
 function createWorkspaceClientFixture(
   connection: WorkspaceConnectionRecord,
   workspaceState: WorkspaceFixtureState,
+  options: FixtureOptions = {},
 ): WorkspaceClient {
   const ensureRuntimeState = (sessionId: string): RuntimeSessionState => {
     const state = workspaceState.runtimeSessions.get(sessionId)
@@ -914,6 +1013,14 @@ function createWorkspaceClientFixture(
     return state
   }
 
+  const defaultSession = clone(WORKSPACE_SESSIONS.find(item => item.workspaceConnectionId === connection.workspaceConnectionId)!)
+
+  const buildSession = (userId: string, token = defaultSession.token): WorkspaceSessionTokenEnvelope['session'] => ({
+    ...clone(defaultSession.session),
+    userId,
+    token,
+  })
+
   return {
     system: {
       async bootstrap() {
@@ -922,13 +1029,74 @@ function createWorkspaceClientFixture(
     },
     auth: {
       async login() {
+        const user = workspaceState.users.find(record => record.id === workspaceState.workspace.ownerUserId) ?? workspaceState.users[0]
         return {
-          tokenEnvelope: clone(WORKSPACE_SESSIONS.find(item => item.workspaceConnectionId === connection.workspaceConnectionId)!),
+          session: buildSession(user?.id ?? 'user-owner'),
+          workspace: clone(workspaceState.workspace),
+        }
+      },
+      async registerOwner(request: RegisterWorkspaceOwnerRequest): Promise<RegisterWorkspaceOwnerResponse> {
+        const ownerId = 'user-owner'
+        const ownerAvatar = `data:${request.avatar.contentType};base64,${request.avatar.dataBase64}`
+        const ownerRecord: UserRecordSummary = {
+          id: ownerId,
+          username: request.username,
+          displayName: request.displayName,
+          avatar: ownerAvatar,
+          status: 'active',
+          passwordState: 'set',
+          roleIds: ['role-owner'],
+          scopeProjectIds: [],
+        }
+
+        workspaceState.workspace = {
+          ...workspaceState.workspace,
+          bootstrapStatus: 'ready',
+          ownerUserId: ownerId,
+        }
+        workspaceState.systemBootstrap = {
+          ...workspaceState.systemBootstrap,
+          workspace: clone(workspaceState.workspace),
+          setupRequired: false,
+          ownerReady: true,
+        }
+        workspaceState.overview = {
+          ...workspaceState.overview,
+          workspace: clone(workspaceState.workspace),
+        }
+        workspaceState.users = [
+          ownerRecord,
+          ...workspaceState.users.filter(record => record.id !== ownerId),
+        ]
+        workspaceState.userCenterOverview = {
+          ...workspaceState.userCenterOverview,
+          currentUser: clone(ownerRecord),
+          roleNames: ['Owner'],
+          metrics: workspaceState.userCenterOverview.metrics.map(metric =>
+            metric.id === 'users'
+              ? { ...metric, value: String(workspaceState.users.length) }
+              : metric),
+        }
+
+        return {
+          session: buildSession(ownerId, 'token-owner'),
+          workspace: clone(workspaceState.workspace),
         }
       },
       async logout() {},
       async session() {
-        return clone(WORKSPACE_SESSIONS.find(item => item.workspaceConnectionId === connection.workspaceConnectionId)!.session)
+        if (connection.workspaceId === 'ws-local' && options.localSessionValid === false) {
+          throw new WorkspaceApiError({
+            message: 'session expired',
+            status: 401,
+            requestId: 'req-fixture-session-expired',
+            retryable: false,
+            code: 'SESSION_EXPIRED',
+          })
+        }
+
+        const user = workspaceState.users.find(record => record.id === workspaceState.workspace.ownerUserId) ?? workspaceState.users[0]
+        return buildSession(user?.id ?? 'user-owner')
       },
     },
     workspace: {
@@ -1102,7 +1270,7 @@ function createWorkspaceClientFixture(
         }
       },
       async getConfig(): Promise<RuntimeEffectiveConfig> {
-        return clone(workspaceState.runtimeConfig)
+        return clone(workspaceState.runtimeWorkspaceConfig)
       },
       async validateConfig(_patch: RuntimeConfigPatch): Promise<RuntimeConfigValidationResult> {
         return {
@@ -1111,8 +1279,8 @@ function createWorkspaceClientFixture(
           warnings: [],
         }
       },
-      async saveConfig(scope: string, patch: RuntimeConfigPatch): Promise<RuntimeEffectiveConfig> {
-        const source = workspaceState.runtimeConfig.sources.find(item => item.scope === scope)
+      async saveConfig(patch: RuntimeConfigPatch): Promise<RuntimeEffectiveConfig> {
+        const source = workspaceState.runtimeWorkspaceConfig.sources.find(item => item.scope === 'workspace')
         if (source) {
           const current = (source.document ?? {}) as Record<string, any>
           source.document = applyJsonMergePatch(current, patch.patch as Record<string, any>)
@@ -1120,10 +1288,10 @@ function createWorkspaceClientFixture(
           source.loaded = true
         }
 
-        workspaceState.runtimeConfig = {
-          ...workspaceState.runtimeConfig,
+        workspaceState.runtimeWorkspaceConfig = {
+          ...workspaceState.runtimeWorkspaceConfig,
           effectiveConfig: applyJsonMergePatch(
-            workspaceState.runtimeConfig.effectiveConfig as Record<string, any>,
+            workspaceState.runtimeWorkspaceConfig.effectiveConfig as Record<string, any>,
             patch.patch as Record<string, any>,
           ),
           effectiveConfigHash: `${workspaceState.workspace.id}-cfg-hash-${Date.now()}`,
@@ -1134,7 +1302,74 @@ function createWorkspaceClientFixture(
           },
         }
 
-        return clone(workspaceState.runtimeConfig)
+        return clone(workspaceState.runtimeWorkspaceConfig)
+      },
+      async getProjectConfig(projectId: string): Promise<RuntimeEffectiveConfig> {
+        return clone(workspaceState.runtimeProjectConfigs[projectId])
+      },
+      async validateProjectConfig(_projectId: string, _patch: RuntimeConfigPatch): Promise<RuntimeConfigValidationResult> {
+        return {
+          valid: true,
+          errors: [],
+          warnings: [],
+        }
+      },
+      async saveProjectConfig(projectId: string, patch: RuntimeConfigPatch): Promise<RuntimeEffectiveConfig> {
+        const config = workspaceState.runtimeProjectConfigs[projectId]
+        const source = config.sources.find(item => item.scope === 'project')
+        if (source) {
+          const current = (source.document ?? {}) as Record<string, any>
+          source.document = applyJsonMergePatch(current, patch.patch as Record<string, any>)
+          source.exists = true
+          source.loaded = true
+        }
+        workspaceState.runtimeProjectConfigs[projectId] = {
+          ...config,
+          effectiveConfig: applyJsonMergePatch(
+            config.effectiveConfig as Record<string, any>,
+            patch.patch as Record<string, any>,
+          ),
+          effectiveConfigHash: `${workspaceState.workspace.id}-${projectId}-project-cfg-hash-${Date.now()}`,
+          validation: {
+            valid: true,
+            errors: [],
+            warnings: [],
+          },
+        }
+        return clone(workspaceState.runtimeProjectConfigs[projectId])
+      },
+      async getUserConfig(): Promise<RuntimeEffectiveConfig> {
+        return clone(workspaceState.runtimeUserConfig)
+      },
+      async validateUserConfig(_patch: RuntimeConfigPatch): Promise<RuntimeConfigValidationResult> {
+        return {
+          valid: true,
+          errors: [],
+          warnings: [],
+        }
+      },
+      async saveUserConfig(patch: RuntimeConfigPatch): Promise<RuntimeEffectiveConfig> {
+        const source = workspaceState.runtimeUserConfig.sources.find(item => item.scope === 'user')
+        if (source) {
+          const current = (source.document ?? {}) as Record<string, any>
+          source.document = applyJsonMergePatch(current, patch.patch as Record<string, any>)
+          source.exists = true
+          source.loaded = true
+        }
+        workspaceState.runtimeUserConfig = {
+          ...workspaceState.runtimeUserConfig,
+          effectiveConfig: applyJsonMergePatch(
+            workspaceState.runtimeUserConfig.effectiveConfig as Record<string, any>,
+            patch.patch as Record<string, any>,
+          ),
+          effectiveConfigHash: `${workspaceState.workspace.id}-user-owner-runtime-cfg-hash-${Date.now()}`,
+          validation: {
+            valid: true,
+            errors: [],
+            warnings: [],
+          },
+        }
+        return clone(workspaceState.runtimeUserConfig)
       },
       async listSessions(): Promise<RuntimeSessionSummary[]> {
         return [...workspaceState.runtimeSessions.values()].map(state => clone(state.detail.summary))
@@ -1299,8 +1534,23 @@ function createWorkspaceClientFixture(
 export function installWorkspaceApiFixture(options: FixtureOptions = {}): void {
   const hostBootstrap = createHostBootstrap()
   const workspaceStates = new Map(
-    WORKSPACE_CONNECTIONS.map(connection => [connection.workspaceConnectionId, createWorkspaceFixtureState(connection)]),
+    WORKSPACE_CONNECTIONS.map(connection => [connection.workspaceConnectionId, createWorkspaceFixtureState(connection, options)]),
   )
+
+  const syncStoredSessions = () => {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    if (options.preloadWorkspaceSessions === false) {
+      window.localStorage.removeItem('octopus-workspace-sessions')
+      return
+    }
+
+    window.localStorage.setItem('octopus-workspace-sessions', JSON.stringify(
+      Object.fromEntries(WORKSPACE_SESSIONS.map(session => [session.workspaceConnectionId, session])),
+    ))
+  }
 
   if (options.preloadConversationMessages) {
     const state = workspaceStates.get('conn-local')
@@ -1339,13 +1589,19 @@ export function installWorkspaceApiFixture(options: FixtureOptions = {}): void {
     }
   }
 
-  if (typeof window !== 'undefined') {
-    window.localStorage.setItem('octopus-workspace-sessions', JSON.stringify(
-      Object.fromEntries(WORKSPACE_SESSIONS.map(session => [session.workspaceConnectionId, session])),
-    ))
+  if (options.localRuntimeConfigTransform) {
+    const localState = workspaceStates.get('conn-local')
+    if (localState) {
+      localState.runtimeWorkspaceConfig = options.localRuntimeConfigTransform(clone(localState.runtimeWorkspaceConfig))
+    }
   }
 
-  vi.spyOn(tauriClient, 'bootstrapShellHost').mockResolvedValue(clone(hostBootstrap))
+  syncStoredSessions()
+
+  vi.spyOn(tauriClient, 'bootstrapShellHost').mockImplementation(async () => {
+    syncStoredSessions()
+    return clone(hostBootstrap)
+  })
   vi.spyOn(tauriClient, 'savePreferences').mockImplementation(async (preferences) => clone(preferences))
   vi.spyOn(tauriClient, 'healthcheck').mockResolvedValue({
     backend: { state: 'ready', transport: 'http' },
@@ -1361,6 +1617,6 @@ export function installWorkspaceApiFixture(options: FixtureOptions = {}): void {
     if (!workspaceState) {
       throw new Error(`Unknown workspace connection ${connection.workspaceConnectionId}`)
     }
-    return createWorkspaceClientFixture(connection, workspaceState) as unknown as ReturnType<typeof tauriClient.createWorkspaceClient>
+    return createWorkspaceClientFixture(connection, workspaceState, options) as unknown as ReturnType<typeof tauriClient.createWorkspaceClient>
   })
 }

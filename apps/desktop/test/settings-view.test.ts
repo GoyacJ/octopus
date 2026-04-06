@@ -83,16 +83,50 @@ describe('Settings view', () => {
     mounted.destroy()
   })
 
-  it('renders runtime config editors and effective preview on the runtime tab', async () => {
+  it('renders only the workspace runtime editor and effective preview on the runtime tab', async () => {
     const mounted = mountApp()
 
     await waitForSelector(mounted.container, '[data-testid="settings-tabs"]')
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-runtime"]')?.click()
-    await waitForSelector(mounted.container, '[data-testid="settings-runtime-editor-project"]')
+    await waitForSelector(mounted.container, '[data-testid="settings-runtime-editor-workspace"]')
 
-    expect(mounted.container.querySelector('[data-testid="settings-runtime-editor-project"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="settings-runtime-editor-workspace"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="settings-runtime-editor-project"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="settings-runtime-editor-user"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="settings-runtime-effective-preview"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('shows workspace displayPath metadata instead of absolute source paths', async () => {
+    installWorkspaceApiFixture({
+      localRuntimeConfigTransform(config) {
+        return {
+          ...config,
+          sources: [
+            {
+              scope: 'workspace',
+              displayPath: 'config/runtime/workspace.json',
+              sourceKey: 'workspace',
+              exists: false,
+              loaded: false,
+            },
+          ],
+        }
+      },
+    })
+
+    const mounted = mountApp()
+
+    await waitForSelector(mounted.container, '[data-testid="settings-tabs"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-runtime"]')?.click()
+    await waitForSelector(mounted.container, '[data-testid="settings-runtime-editor-workspace"]')
+
+    const workspaceCard = mounted.container.querySelector('[data-testid="settings-runtime-editor-workspace"]')
+    expect(workspaceCard?.textContent).toContain('config/runtime/workspace.json')
+    expect(workspaceCard?.textContent).not.toContain('/tmp/octopus-workspace')
 
     mounted.destroy()
   })

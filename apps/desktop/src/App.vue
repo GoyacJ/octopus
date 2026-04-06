@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { RouterView } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import { UiButton } from '@octopus/ui'
 
+import AuthGateDialog from '@/components/auth/AuthGateDialog.vue'
 import i18n from '@/plugins/i18n'
 import { useWorkbenchRouteSync } from '@/composables/useWorkbenchRouteSync'
 import WorkbenchLayout from '@/layouts/WorkbenchLayout.vue'
+import { useAuthStore } from '@/stores/auth'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
+import { WORKSPACE_AUTH_FAILURE_EVENT, type WorkspaceAuthFailureDetail } from '@/tauri/shared'
 
+const auth = useAuthStore()
 const shell = useShellStore()
 const runtime = useRuntimeStore()
 const { t } = useI18n()
@@ -27,6 +31,7 @@ function resolveTheme(theme: 'light' | 'dark' | 'system'): 'light' | 'dark' {
 
 async function bootstrapShell() {
   await shell.bootstrap(shell.defaultWorkspaceId, shell.defaultProjectId)
+  await auth.bootstrapAuth()
   runtime.syncWorkspaceScopeFromShell()
 }
 
@@ -46,8 +51,18 @@ const hostUnavailableDescription = computed(() =>
   shell.error || t('app.hostUnavailable.description'),
 )
 
+const handleWorkspaceAuthFailure = (event: Event) => {
+  const detail = (event as CustomEvent<WorkspaceAuthFailureDetail>).detail
+  auth.handleAuthError(detail.workspaceConnectionId, 'session-expired')
+}
+
 onMounted(async () => {
+  window.addEventListener(WORKSPACE_AUTH_FAILURE_EVENT, handleWorkspaceAuthFailure as EventListener)
   await bootstrapShell()
+})
+
+onUnmounted(() => {
+  window.removeEventListener(WORKSPACE_AUTH_FAILURE_EVENT, handleWorkspaceAuthFailure as EventListener)
 })
 
 watch(
@@ -98,7 +113,10 @@ watch(
 
 watch(
   () => shell.activeWorkspaceConnectionId,
-  () => {
+  async (workspaceConnectionId) => {
+    if (workspaceConnectionId) {
+      await auth.bootstrapAuth(workspaceConnectionId)
+    }
     runtime.syncWorkspaceScopeFromShell()
   },
 )
@@ -141,5 +159,6 @@ watch(
   </div>
   <WorkbenchLayout v-else>
     <RouterView />
+    <AuthGateDialog />
   </WorkbenchLayout>
 </template>

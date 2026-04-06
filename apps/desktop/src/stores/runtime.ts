@@ -3,15 +3,21 @@ import { defineStore } from 'pinia'
 import { enumLabel, resolveRunDisplayValue } from '@/i18n/copy'
 import * as tauriClient from '@/tauri/client'
 import { useShellStore } from '@/stores/shell'
+import {
+  createRuntimeConfigDrafts,
+  createRuntimeConfigDraftsFromConfig,
+  createRuntimeConfigValidationState,
+  parseRuntimeConfigDraft,
+  type RuntimeConfigDrafts,
+  type RuntimeConfigValidationState,
+} from '@/stores/runtime-config'
 
 import type {
   CreateRuntimeSessionInput,
-  JsonValue,
   Message,
   ProviderConfig,
   ResolveRuntimeApprovalInput,
   RuntimeApprovalRequest,
-  RuntimeConfigPatch,
   RuntimeConfigScope,
   RuntimeConfigValidationResult,
   RuntimeDecisionAction,
@@ -39,8 +45,6 @@ export interface RuntimeQueueItem extends RuntimeSubmitTurnInput {
 }
 
 type RuntimeTransportMode = 'idle' | 'sse' | 'polling'
-type RuntimeConfigDrafts = Record<RuntimeConfigScope, string>
-type RuntimeConfigValidationState = Record<RuntimeConfigScope, RuntimeConfigValidationResult | null>
 
 interface RuntimeWorkspaceSnapshot {
   provider: ProviderConfig | null
@@ -56,58 +60,10 @@ interface RuntimeWorkspaceSnapshot {
   configDrafts: RuntimeConfigDrafts
   configValidation: RuntimeConfigValidationState
   configLoading: boolean
-  configSavingScope: RuntimeConfigScope | ''
-  configValidatingScope: RuntimeConfigScope | ''
+  configSaving: boolean
+  configValidating: boolean
   configError: string
   error: string
-}
-
-function createRuntimeConfigDrafts(): RuntimeConfigDrafts {
-  return {
-    user: '{}',
-    project: '{}',
-    local: '{}',
-  }
-}
-
-function createRuntimeConfigValidationState(): RuntimeConfigValidationState {
-  return {
-    user: null,
-    project: null,
-    local: null,
-  }
-}
-
-function stringifyConfigDocument(document?: Record<string, JsonValue>): string {
-  return JSON.stringify(document ?? {}, null, 2)
-}
-
-function createRuntimeConfigDraftsFromConfig(config: RuntimeEffectiveConfig | null): RuntimeConfigDrafts {
-  const drafts = createRuntimeConfigDrafts()
-  if (!config) {
-    return drafts
-  }
-
-  for (const source of config.sources) {
-    drafts[source.scope] = stringifyConfigDocument(source.document)
-  }
-
-  return drafts
-}
-
-function parseRuntimeConfigDraft(scope: RuntimeConfigScope, draft: string): RuntimeConfigPatch {
-  const trimmed = draft.trim()
-  const rawValue = trimmed.length ? trimmed : '{}'
-  const parsed = JSON.parse(rawValue) as JsonValue
-
-  if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-    throw new Error(`Runtime config for ${scope} must be a JSON object`)
-  }
-
-  return {
-    scope,
-    patch: parsed as Record<string, JsonValue>,
-  }
 }
 
 function createRuntimeWorkspaceSnapshot(): RuntimeWorkspaceSnapshot {
@@ -125,8 +81,8 @@ function createRuntimeWorkspaceSnapshot(): RuntimeWorkspaceSnapshot {
     configDrafts: createRuntimeConfigDrafts(),
     configValidation: createRuntimeConfigValidationState(),
     configLoading: false,
-    configSavingScope: '',
-    configValidatingScope: '',
+    configSaving: false,
+    configValidating: false,
     configError: '',
     error: '',
   }
@@ -219,8 +175,8 @@ export const useRuntimeStore = defineStore('runtime', {
     configDrafts: createRuntimeConfigDrafts(),
     configValidation: createRuntimeConfigValidationState(),
     configLoading: false,
-    configSavingScope: '' as RuntimeConfigScope | '',
-    configValidatingScope: '' as RuntimeConfigScope | '',
+    configSaving: false,
+    configValidating: false,
     configError: '',
     error: '',
   }),
@@ -290,8 +246,8 @@ export const useRuntimeStore = defineStore('runtime', {
           configDrafts: { ...this.configDrafts },
           configValidation: { ...this.configValidation },
           configLoading: this.configLoading,
-          configSavingScope: this.configSavingScope,
-          configValidatingScope: this.configValidatingScope,
+          configSaving: this.configSaving,
+          configValidating: this.configValidating,
           configError: this.configError,
           error: this.error,
         },
@@ -312,8 +268,8 @@ export const useRuntimeStore = defineStore('runtime', {
       this.configDrafts = { ...snapshot.configDrafts }
       this.configValidation = { ...snapshot.configValidation }
       this.configLoading = snapshot.configLoading
-      this.configSavingScope = snapshot.configSavingScope
-      this.configValidatingScope = snapshot.configValidatingScope
+      this.configSaving = snapshot.configSaving
+      this.configValidating = snapshot.configValidating
       this.configError = snapshot.configError
       this.error = snapshot.error
     },
@@ -409,6 +365,14 @@ export const useRuntimeStore = defineStore('runtime', {
       }
     },
     async validateConfig(scope: RuntimeConfigScope): Promise<RuntimeConfigValidationResult> {
+      if (scope !== 'workspace') {
+        return {
+          valid: false,
+          errors: ['Settings only supports workspace runtime configuration'],
+          warnings: [],
+        }
+      }
+
       const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
       if (!resolvedClient) {
         return {
@@ -419,10 +383,10 @@ export const useRuntimeStore = defineStore('runtime', {
       }
       const { connectionId, client } = resolvedClient
 
-      this.configValidatingScope = scope
+      this.configValidating = true
       this.configError = ''
 
-      let patch: RuntimeConfigPatch
+      let patch
       try {
         patch = parseRuntimeConfigDraft(scope, this.configDrafts[scope])
       } catch (error) {
@@ -436,7 +400,7 @@ export const useRuntimeStore = defineStore('runtime', {
           [scope]: result,
         }
         this.configError = result.errors[0] ?? ''
-        this.configValidatingScope = ''
+        this.configValidating = false
         this.saveActiveWorkspaceSnapshot()
         return result
       }
@@ -470,11 +434,16 @@ export const useRuntimeStore = defineStore('runtime', {
         return result
       } finally {
         if (this.activeWorkspaceConnectionId === connectionId) {
-          this.configValidatingScope = ''
+          this.configValidating = false
         }
       }
     },
     async saveConfig(scope: RuntimeConfigScope): Promise<RuntimeEffectiveConfig | null> {
+      if (scope !== 'workspace') {
+        this.configError = 'Settings only supports workspace runtime configuration'
+        return null
+      }
+
       const validation = await this.validateConfig(scope)
       if (!validation.valid) {
         return null
@@ -487,12 +456,12 @@ export const useRuntimeStore = defineStore('runtime', {
       }
       const { connectionId, client } = resolvedClient
 
-      this.configSavingScope = scope
+      this.configSaving = true
       this.configError = ''
 
       try {
         const patch = parseRuntimeConfigDraft(scope, this.configDrafts[scope])
-        const config = await client.runtime.saveConfig(scope, patch)
+        const config = await client.runtime.saveConfig(patch)
         if (this.activeWorkspaceConnectionId !== connectionId) {
           return null
         }
@@ -512,7 +481,7 @@ export const useRuntimeStore = defineStore('runtime', {
         return null
       } finally {
         if (this.activeWorkspaceConnectionId === connectionId) {
-          this.configSavingScope = ''
+          this.configSaving = false
         }
       }
     },

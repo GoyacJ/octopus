@@ -25,7 +25,7 @@ pub struct BackendSupervisor {
     connection: Arc<RwLock<DesktopBackendConnection>>,
     child: Arc<Mutex<Option<ManagedBackendChild>>>,
     generation: Arc<AtomicU64>,
-    runtime_root: PathBuf,
+    workspace_root: PathBuf,
 }
 
 enum ManagedBackendChild {
@@ -49,12 +49,12 @@ impl ManagedBackendChild {
 }
 
 impl BackendSupervisor {
-    pub fn new(connection: Arc<RwLock<DesktopBackendConnection>>, runtime_root: PathBuf) -> Self {
+    pub fn new(connection: Arc<RwLock<DesktopBackendConnection>>, workspace_root: PathBuf) -> Self {
         Self {
             connection,
             child: Arc::new(Mutex::new(None)),
             generation: Arc::new(AtomicU64::new(0)),
-            runtime_root,
+            workspace_root,
         }
     }
 
@@ -115,7 +115,8 @@ impl BackendSupervisor {
             &auth_token,
             host_state,
             preferences_path,
-            &self.runtime_root,
+            &self.workspace_root,
+            &workspace_root(),
         ) {
             Ok(child) => child,
             Err(error) => {
@@ -153,7 +154,7 @@ impl BackendSupervisor {
             &auth_token,
             host_state,
             preferences_path,
-            &self.runtime_root,
+            &self.workspace_root,
         ) {
             Ok(child) => child,
             Err(error) => {
@@ -229,10 +230,18 @@ fn spawn_backend_process(
     auth_token: &str,
     host_state: &HostState,
     preferences_path: &Path,
-    runtime_root: &Path,
+    backend_workspace_root: &Path,
 ) -> ShellResult<ManagedBackendChild> {
-    if cfg!(debug_assertions) {
-        spawn_dev_backend(port, auth_token, host_state, preferences_path, runtime_root)
+    let repo_root = workspace_root();
+    if should_spawn_dev_backend(host_state, &repo_root) {
+        spawn_dev_backend(
+            port,
+            auth_token,
+            host_state,
+            preferences_path,
+            backend_workspace_root,
+            &repo_root,
+        )
     } else {
         spawn_sidecar_backend(
             app,
@@ -240,7 +249,7 @@ fn spawn_backend_process(
             auth_token,
             host_state,
             preferences_path,
-            runtime_root,
+            backend_workspace_root,
         )
     }
 }
@@ -250,13 +259,10 @@ fn spawn_dev_backend(
     auth_token: &str,
     host_state: &HostState,
     preferences_path: &Path,
-    runtime_root: &Path,
+    backend_workspace_root: &Path,
+    repo_root: &Path,
 ) -> ShellResult<ManagedBackendChild> {
-    let repo_root = workspace_root();
-    let backend_bin = repo_root
-        .join("target")
-        .join("debug")
-        .join(executable_name("octopus-desktop-backend"));
+    let backend_bin = debug_backend_binary_path(repo_root);
     if !backend_bin.exists() {
         return Err(AppError::Runtime(format!(
             "desktop backend binary is missing at {}",
@@ -282,8 +288,8 @@ fn spawn_dev_backend(
         .arg(&host_state.shell)
         .arg("--preferences-path")
         .arg(preferences_path)
-        .arg("--runtime-root")
-        .arg(runtime_root)
+        .arg("--workspace-root")
+        .arg(backend_workspace_root)
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
@@ -298,7 +304,7 @@ fn spawn_sidecar_backend(
     auth_token: &str,
     host_state: &HostState,
     preferences_path: &Path,
-    runtime_root: &Path,
+    workspace_root: &Path,
 ) -> ShellResult<ManagedBackendChild> {
     let (_rx, child) = app
         .shell()
@@ -325,8 +331,8 @@ fn spawn_sidecar_backend(
             &host_state.shell,
             "--preferences-path",
             &preferences_path.display().to_string(),
-            "--runtime-root",
-            &runtime_root.display().to_string(),
+            "--workspace-root",
+            &workspace_root.display().to_string(),
         ])
         .spawn()
         .map_err(|error| AppError::Runtime(error.to_string()))?;
@@ -380,10 +386,93 @@ fn workspace_root() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
+fn debug_backend_binary_path(repo_root: &Path) -> PathBuf {
+    repo_root
+        .join("target")
+        .join("debug")
+        .join(executable_name("octopus-desktop-backend"))
+}
+
+fn should_spawn_dev_backend(host_state: &HostState, repo_root: &Path) -> bool {
+    host_state.cargo_workspace && debug_backend_binary_path(repo_root).exists()
+}
+
 fn executable_name(name: &str) -> String {
     if cfg!(target_os = "windows") {
         format!("{name}.exe")
     } else {
         name.into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{fs, path::PathBuf};
+
+    use octopus_core::HostState;
+    use tempfile::tempdir;
+
+    use super::{debug_backend_binary_path, executable_name, should_spawn_dev_backend};
+
+    fn host_state(cargo_workspace: bool) -> HostState {
+        HostState {
+            platform: "tauri".into(),
+            mode: "local".into(),
+            app_version: "0.1.0-test".into(),
+            cargo_workspace,
+            shell: "tauri2".into(),
+        }
+    }
+
+    #[test]
+    fn prefers_debug_backend_inside_cargo_workspace_when_binary_exists() {
+        let temp = tempdir().expect("tempdir");
+        let repo_root = temp.path();
+        let backend_path = debug_backend_binary_path(repo_root);
+        fs::create_dir_all(
+            backend_path
+                .parent()
+                .expect("debug backend path should have parent"),
+        )
+        .expect("create debug backend directory");
+        fs::write(&backend_path, []).expect("write debug backend placeholder");
+
+        assert!(should_spawn_dev_backend(&host_state(true), repo_root));
+    }
+
+    #[test]
+    fn does_not_use_debug_backend_outside_cargo_workspace() {
+        let temp = tempdir().expect("tempdir");
+        let repo_root = temp.path();
+        let backend_path = debug_backend_binary_path(repo_root);
+        fs::create_dir_all(
+            backend_path
+                .parent()
+                .expect("debug backend path should have parent"),
+        )
+        .expect("create debug backend directory");
+        fs::write(&backend_path, []).expect("write debug backend placeholder");
+
+        assert!(!should_spawn_dev_backend(&host_state(false), repo_root));
+    }
+
+    #[test]
+    fn does_not_use_debug_backend_when_binary_is_missing() {
+        let temp = tempdir().expect("tempdir");
+
+        assert!(!should_spawn_dev_backend(&host_state(true), temp.path()));
+    }
+
+    #[test]
+    fn debug_backend_binary_path_points_to_target_debug_binary() {
+        let repo_root = PathBuf::from("/tmp/octopus");
+
+        assert_eq!(
+            debug_backend_binary_path(&repo_root),
+            repo_root
+                .join("target")
+                .join("debug")
+                .join(executable_name("octopus-desktop-backend")),
+        );
     }
 }

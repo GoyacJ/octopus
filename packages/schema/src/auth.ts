@@ -5,6 +5,23 @@ export interface LoginRequest {
   workspaceId?: string
 }
 
+export interface AvatarUploadPayload {
+  fileName: string
+  contentType: string
+  dataBase64: string
+  byteSize: number
+}
+
+export interface RegisterWorkspaceOwnerRequest {
+  clientAppId: string
+  username: string
+  displayName: string
+  password: string
+  confirmPassword: string
+  avatar: AvatarUploadPayload
+  workspaceId?: string
+}
+
 export interface SessionRecord {
   id: string
   workspaceId: string
@@ -19,6 +36,11 @@ export interface SessionRecord {
 }
 
 export interface LoginResponse {
+  session: SessionRecord
+  workspace: import('./workspace').WorkspaceSummary
+}
+
+export interface RegisterWorkspaceOwnerResponse {
   session: SessionRecord
   workspace: import('./workspace').WorkspaceSummary
 }

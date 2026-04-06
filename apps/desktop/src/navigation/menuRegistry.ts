@@ -7,6 +7,7 @@ export type MenuIconKey =
   | 'resources'
   | 'knowledge'
   | 'trace'
+  | 'runtime'
   | 'models'
   | 'tools'
   | 'automations'
@@ -170,6 +171,17 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     order: 70,
   },
   {
+    id: 'menu-project-runtime',
+    source: 'main-sidebar',
+    section: 'project',
+    routeName: 'project-runtime',
+    routeNames: ['project-runtime'],
+    defaultLabel: 'Runtime',
+    labelKey: 'sidebar.navigation.runtime',
+    icon: 'runtime',
+    order: 75,
+  },
+  {
     id: 'menu-workspace-teams',
     source: 'main-sidebar',
     section: 'workspace',
@@ -178,7 +190,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     defaultLabel: '团队',
     labelKey: 'sidebar.navigation.teams',
     icon: 'teams',
-    order: 75,
+    order: 80,
   },
   {
     id: 'menu-workspace-models',
@@ -189,7 +201,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     defaultLabel: '模型',
     labelKey: 'sidebar.navigation.models',
     icon: 'models',
-    order: 80,
+    order: 90,
   },
   {
     id: 'menu-workspace-tools',
@@ -200,7 +212,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     defaultLabel: '工具',
     labelKey: 'sidebar.navigation.tools',
     icon: 'tools',
-    order: 90,
+    order: 100,
   },
   {
     id: 'menu-workspace-automations',
@@ -211,7 +223,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     defaultLabel: '自动化',
     labelKey: 'sidebar.navigation.automations',
     icon: 'automations',
-    order: 100,
+    order: 110,
   },
   {
     id: 'menu-workspace-user-center',
@@ -229,7 +241,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     defaultLabel: '用户中心',
     labelKey: 'sidebar.navigation.userCenter',
     icon: 'user-center',
-    order: 110,
+    order: 120,
   },
   {
     id: 'menu-workspace-user-center-profile',
@@ -241,7 +253,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     defaultLabel: '基本信息',
     labelKey: 'userCenter.nav.profile',
     icon: 'profile',
-    order: 120,
+    order: 130,
   },
   {
     id: 'menu-workspace-user-center-users',
@@ -253,7 +265,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     defaultLabel: '用户列表',
     labelKey: 'userCenter.nav.users',
     icon: 'users',
-    order: 130,
+    order: 140,
   },
   {
     id: 'menu-workspace-user-center-roles',
@@ -265,7 +277,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     defaultLabel: '角色列表',
     labelKey: 'userCenter.nav.roles',
     icon: 'roles',
-    order: 140,
+    order: 150,
   },
   {
     id: 'menu-workspace-user-center-permissions',
@@ -277,7 +289,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     defaultLabel: '权限列表',
     labelKey: 'userCenter.nav.permissions',
     icon: 'permissions',
-    order: 150,
+    order: 160,
   },
   {
     id: 'menu-workspace-user-center-menus',
@@ -289,7 +301,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     defaultLabel: '菜单列表',
     labelKey: 'userCenter.nav.menus',
     icon: 'menus',
-    order: 160,
+    order: 170,
   },
 ]
 

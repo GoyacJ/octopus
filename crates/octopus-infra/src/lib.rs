@@ -1,18 +1,21 @@
 use std::{
     fs,
+    hash::{Hash, Hasher},
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 
 use async_trait::async_trait;
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use octopus_core::{
     timestamp_now, AgentRecord, AppError, ArtifactRecord, AuditRecord, AuthorizationDecision,
-    AutomationRecord, ClientAppRecord, CostLedgerEntry, InboxItemRecord,
+    AutomationRecord, AvatarUploadPayload, ClientAppRecord, CostLedgerEntry, InboxItemRecord,
     KnowledgeEntryRecord, KnowledgeRecord, LoginRequest, LoginResponse, MenuRecord,
     ModelCatalogRecord, PermissionRecord, ProjectRecord, ProviderCredentialRecord,
-    RoleRecord, SessionRecord, SystemBootstrapStatus, TeamRecord, ToolRecord,
-    TraceEventRecord, UserRecord, UserRecordSummary, WorkspaceMembershipRecord,
-    WorkspaceResourceRecord, WorkspaceSummary, DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
+    RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse, RoleRecord, SessionRecord,
+    SystemBootstrapStatus, TeamRecord, ToolRecord, TraceEventRecord, UserRecord,
+    UserRecordSummary, WorkspaceMembershipRecord, WorkspaceResourceRecord, WorkspaceSummary,
+    DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
 };
 use octopus_platform::{
     AppRegistryService, ArtifactService, AuthService, InboxService, KnowledgeService,
@@ -32,8 +35,12 @@ pub struct WorkspacePaths {
     pub tmp_dir: PathBuf,
     pub workspace_config: PathBuf,
     pub app_registry_config: PathBuf,
+    pub runtime_config_dir: PathBuf,
+    pub runtime_project_config_dir: PathBuf,
+    pub runtime_user_config_dir: PathBuf,
     pub db_path: PathBuf,
     pub blobs_dir: PathBuf,
+    pub user_avatars_dir: PathBuf,
     pub artifacts_dir: PathBuf,
     pub knowledge_dir: PathBuf,
     pub inbox_dir: PathBuf,
@@ -54,7 +61,11 @@ impl WorkspacePaths {
         let runtime_dir = root.join("runtime");
         let logs_dir = root.join("logs");
         let tmp_dir = root.join("tmp");
+        let runtime_config_dir = config_dir.join("runtime");
+        let runtime_project_config_dir = runtime_config_dir.join("projects");
+        let runtime_user_config_dir = runtime_config_dir.join("users");
         let blobs_dir = data_dir.join("blobs");
+        let user_avatars_dir = blobs_dir.join("avatars");
         let artifacts_dir = data_dir.join("artifacts");
         let knowledge_dir = data_dir.join("knowledge");
         let inbox_dir = data_dir.join("inbox");
@@ -69,6 +80,9 @@ impl WorkspacePaths {
         Self {
             workspace_config: config_dir.join("workspace.toml"),
             app_registry_config: config_dir.join("app-registry.toml"),
+            runtime_config_dir,
+            runtime_project_config_dir,
+            runtime_user_config_dir,
             db_path: data_dir.join("main.db"),
             root,
             config_dir,
@@ -77,6 +91,7 @@ impl WorkspacePaths {
             logs_dir,
             tmp_dir,
             blobs_dir,
+            user_avatars_dir,
             artifacts_dir,
             knowledge_dir,
             inbox_dir,
@@ -94,11 +109,15 @@ impl WorkspacePaths {
         for path in [
             &self.root,
             &self.config_dir,
+            &self.runtime_config_dir,
+            &self.runtime_project_config_dir,
+            &self.runtime_user_config_dir,
             &self.data_dir,
             &self.runtime_dir,
             &self.logs_dir,
             &self.tmp_dir,
             &self.blobs_dir,
+            &self.user_avatars_dir,
             &self.artifacts_dir,
             &self.knowledge_dir,
             &self.inbox_dir,
@@ -145,7 +164,7 @@ struct StoredUser {
 #[derive(Debug)]
 struct InfraState {
     paths: WorkspacePaths,
-    workspace: WorkspaceSummary,
+    workspace: Mutex<WorkspaceSummary>,
     users: Mutex<Vec<StoredUser>>,
     apps: Mutex<Vec<ClientAppRecord>>,
     sessions: Mutex<Vec<SessionRecord>>,
@@ -171,6 +190,22 @@ struct InfraState {
 impl InfraState {
     fn open_db(&self) -> Result<Connection, AppError> {
         Connection::open(&self.paths.db_path).map_err(|error| AppError::database(error.to_string()))
+    }
+
+    fn workspace_snapshot(&self) -> Result<WorkspaceSummary, AppError> {
+        self.workspace
+            .lock()
+            .map_err(|_| AppError::runtime("workspace mutex poisoned"))
+            .map(|workspace| workspace.clone())
+    }
+
+    fn workspace_id(&self) -> Result<String, AppError> {
+        Ok(self.workspace_snapshot()?.id)
+    }
+
+    fn save_workspace_config(&self) -> Result<(), AppError> {
+        let workspace = self.workspace_snapshot()?;
+        save_workspace_config_file(&self.paths.workspace_config, &workspace)
     }
 }
 
@@ -279,12 +314,31 @@ fn initialize_workspace_config(paths: &WorkspacePaths) -> Result<(), AppError> {
         slug: "local-workspace".into(),
         deployment: "local".into(),
         bootstrap_status: "setup_required".into(),
-        owner_user_id: Some("user-owner".into()),
+        owner_user_id: None,
         host: "127.0.0.1".into(),
         listen_address: "127.0.0.1".into(),
         default_project_id: DEFAULT_PROJECT_ID.into(),
     };
     fs::write(&paths.workspace_config, toml::to_string_pretty(&config)?)?;
+    Ok(())
+}
+
+fn save_workspace_config_file(
+    path: &Path,
+    workspace: &WorkspaceSummary,
+) -> Result<(), AppError> {
+    let config = WorkspaceConfigFile {
+        id: workspace.id.clone(),
+        name: workspace.name.clone(),
+        slug: workspace.slug.clone(),
+        deployment: workspace.deployment.clone(),
+        bootstrap_status: workspace.bootstrap_status.clone(),
+        owner_user_id: workspace.owner_user_id.clone(),
+        host: workspace.host.clone(),
+        listen_address: workspace.listen_address.clone(),
+        default_project_id: workspace.default_project_id.clone(),
+    };
+    fs::write(path, toml::to_string_pretty(&config)?)?;
     Ok(())
 }
 
@@ -311,6 +365,10 @@ fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError> {
               id TEXT PRIMARY KEY,
               username TEXT NOT NULL UNIQUE,
               display_name TEXT NOT NULL,
+              avatar_path TEXT,
+              avatar_content_type TEXT,
+              avatar_byte_size INTEGER,
+              avatar_content_hash TEXT,
               status TEXT NOT NULL,
               password_hash TEXT NOT NULL,
               password_state TEXT NOT NULL,
@@ -512,7 +570,7 @@ fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError> {
               id TEXT PRIMARY KEY,
               effective_config_hash TEXT NOT NULL,
               started_from_scope_set TEXT NOT NULL,
-              source_paths TEXT NOT NULL,
+              source_refs TEXT NOT NULL,
               created_at INTEGER NOT NULL
             );
             CREATE TABLE IF NOT EXISTS runtime_session_projections (
@@ -560,53 +618,14 @@ fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError> {
         )
         .map_err(|error| AppError::database(error.to_string()))?;
 
+    ensure_user_avatar_columns(&connection)?;
+
     Ok(())
 }
 
 fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
     let connection =
         Connection::open(&paths.db_path).map_err(|error| AppError::database(error.to_string()))?;
-
-    let owner_exists: Option<String> = connection
-        .query_row(
-            "SELECT id FROM users WHERE id = ?1",
-            params!["user-owner"],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|error| AppError::database(error.to_string()))?;
-    if owner_exists.is_none() {
-        let now = timestamp_now();
-        connection
-            .execute(
-                "INSERT INTO users (id, username, display_name, status, password_hash, password_state, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![
-                    "user-owner",
-                    "owner",
-                    "Workspace Owner",
-                    "active",
-                    hash_password("owner"),
-                    "reset-required",
-                    now as i64,
-                    now as i64,
-                ],
-            )
-            .map_err(|error| AppError::database(error.to_string()))?;
-        connection
-            .execute(
-                "INSERT INTO memberships (workspace_id, user_id, role_ids, scope_mode, scope_project_ids)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![
-                    DEFAULT_WORKSPACE_ID,
-                    "user-owner",
-                    serde_json::to_string(&vec!["owner"])?,
-                    "all-projects",
-                    serde_json::to_string(&Vec::<String>::new())?,
-                ],
-            )
-            .map_err(|error| AppError::database(error.to_string()))?;
-    }
 
     let project_exists: Option<String> = connection
         .query_row(
@@ -942,11 +961,42 @@ fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
     Ok(())
 }
 
+fn ensure_user_avatar_columns(connection: &Connection) -> Result<(), AppError> {
+    let mut stmt = connection
+        .prepare("PRAGMA table_info(users)")
+        .map_err(|error| AppError::database(error.to_string()))?;
+    let columns = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| AppError::database(error.to_string()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| AppError::database(error.to_string()))?;
+
+    for (name, definition) in [
+        ("avatar_path", "TEXT"),
+        ("avatar_content_type", "TEXT"),
+        ("avatar_byte_size", "INTEGER"),
+        ("avatar_content_hash", "TEXT"),
+    ] {
+        if columns.iter().any(|column| column == name) {
+            continue;
+        }
+
+        connection
+            .execute(
+                &format!("ALTER TABLE users ADD COLUMN {name} {definition}"),
+                [],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+    }
+
+    Ok(())
+}
+
 fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> {
     let workspace_file: WorkspaceConfigFile = toml::from_str(&fs::read_to_string(
         &paths.workspace_config,
     )?)?;
-    let workspace = WorkspaceSummary {
+    let mut workspace = WorkspaceSummary {
         id: workspace_file.id,
         name: workspace_file.name,
         slug: workspace_file.slug,
@@ -963,6 +1013,22 @@ fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> {
     let connection =
         Connection::open(&paths.db_path).map_err(|error| AppError::database(error.to_string()))?;
     let users = load_users(&connection)?;
+    let owner_user_id = users
+        .iter()
+        .find(|user| user.membership.role_ids.iter().any(|role_id| role_id == "owner"))
+        .map(|user| user.record.id.clone());
+    let expected_bootstrap_status = if owner_user_id.is_some() {
+        "ready"
+    } else {
+        "setup_required"
+    };
+    let workspace_needs_normalize =
+        workspace.bootstrap_status != expected_bootstrap_status || workspace.owner_user_id != owner_user_id;
+    if workspace_needs_normalize {
+        workspace.bootstrap_status = expected_bootstrap_status.into();
+        workspace.owner_user_id = owner_user_id;
+        save_workspace_config_file(&paths.workspace_config, &workspace)?;
+    }
     let projects = load_projects(&connection)?;
     let sessions = load_sessions(&connection)?;
     let resources = load_resources(&connection)?;
@@ -982,7 +1048,7 @@ fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> {
 
     Ok(InfraState {
         paths,
-        workspace,
+        workspace: Mutex::new(workspace),
         users: Mutex::new(users),
         apps: Mutex::new(app_registry.apps),
         sessions: Mutex::new(sessions),
@@ -1009,7 +1075,8 @@ fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> {
 fn load_users(connection: &Connection) -> Result<Vec<StoredUser>, AppError> {
     let mut stmt = connection
         .prepare(
-            "SELECT u.id, u.username, u.display_name, u.status, u.password_hash, u.password_state, u.created_at, u.updated_at,
+            "SELECT u.id, u.username, u.display_name, u.avatar_path, u.avatar_content_type, u.avatar_byte_size, u.avatar_content_hash,
+                    u.status, u.password_hash, u.password_state, u.created_at, u.updated_at,
                     m.workspace_id, m.role_ids, m.scope_mode, m.scope_project_ids
              FROM users u
              LEFT JOIN memberships m ON m.user_id = u.id",
@@ -1017,24 +1084,28 @@ fn load_users(connection: &Connection) -> Result<Vec<StoredUser>, AppError> {
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
-            let role_ids_raw: String = row.get(9)?;
-            let scope_project_ids_raw: String = row.get(11)?;
+            let role_ids_raw: String = row.get(13)?;
+            let scope_project_ids_raw: String = row.get(15)?;
             Ok(StoredUser {
                 record: UserRecord {
                     id: row.get(0)?,
                     username: row.get(1)?,
                     display_name: row.get(2)?,
-                    status: row.get(3)?,
-                    password_state: row.get(5)?,
-                    created_at: row.get::<_, i64>(6)? as u64,
-                    updated_at: row.get::<_, i64>(7)? as u64,
+                    avatar_path: row.get(3)?,
+                    avatar_content_type: row.get(4)?,
+                    avatar_byte_size: row.get::<_, Option<i64>>(5)?.map(|value| value as u64),
+                    avatar_content_hash: row.get(6)?,
+                    status: row.get(7)?,
+                    password_state: row.get(9)?,
+                    created_at: row.get::<_, i64>(10)? as u64,
+                    updated_at: row.get::<_, i64>(11)? as u64,
                 },
-                password_hash: row.get(4)?,
+                password_hash: row.get(8)?,
                 membership: WorkspaceMembershipRecord {
-                    workspace_id: row.get(8)?,
+                    workspace_id: row.get(12)?,
                     user_id: row.get(0)?,
                     role_ids: serde_json::from_str(&role_ids_raw).unwrap_or_default(),
-                    scope_mode: row.get(10)?,
+                    scope_mode: row.get(14)?,
                     scope_project_ids: serde_json::from_str(&scope_project_ids_raw)
                         .unwrap_or_default(),
                 },
@@ -1841,12 +1912,30 @@ fn default_role_records() -> Vec<RoleRecord> {
     }]
 }
 
-fn to_user_summary(user: &StoredUser) -> UserRecordSummary {
+fn avatar_data_url(paths: &WorkspacePaths, user: &StoredUser) -> Option<String> {
+    let avatar_path = user.record.avatar_path.as_ref()?;
+    let content_type = user.record.avatar_content_type.as_deref()?;
+    let bytes = fs::read(paths.root.join(avatar_path)).ok()?;
+    Some(format!(
+        "data:{content_type};base64,{}",
+        BASE64_STANDARD.encode(bytes)
+    ))
+}
+
+fn content_hash(bytes: &[u8]) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut hasher);
+    format!("hash-{:x}", hasher.finish())
+}
+
+fn to_user_summary(paths: &WorkspacePaths, user: &StoredUser) -> UserRecordSummary {
     UserRecordSummary {
         id: user.record.id.clone(),
         username: user.record.username.clone(),
         display_name: user.record.display_name.clone(),
+        avatar: avatar_data_url(paths, user),
         status: user.record.status.clone(),
+        password_state: user.record.password_state.clone(),
         role_ids: user.membership.role_ids.clone(),
         scope_project_ids: user.membership.scope_project_ids.clone(),
     }
@@ -1927,19 +2016,147 @@ impl InfraWorkspaceService {
     }
 }
 
+impl InfraAuthService {
+    fn now() -> u64 {
+        timestamp_now()
+    }
+
+    fn workspace_snapshot(&self) -> Result<WorkspaceSummary, AppError> {
+        self.state.workspace_snapshot()
+    }
+
+    fn ensure_active_client_app(&self, client_app_id: &str) -> Result<ClientAppRecord, AppError> {
+        let app = self
+            .state
+            .apps
+            .lock()
+            .map_err(|_| AppError::runtime("app registry mutex poisoned"))?
+            .iter()
+            .find(|app| app.id == client_app_id)
+            .cloned()
+            .ok_or_else(|| AppError::auth("client app is not registered"))?;
+        if app.status != "active" {
+            return Err(AppError::auth("client app is disabled"));
+        }
+        Ok(app)
+    }
+
+    fn owner_exists(&self) -> Result<bool, AppError> {
+        Ok(self
+            .state
+            .users
+            .lock()
+            .map_err(|_| AppError::runtime("users mutex poisoned"))?
+            .iter()
+            .any(|user| user.membership.role_ids.iter().any(|role_id| role_id == "owner")))
+    }
+
+    fn persist_session(
+        &self,
+        user: &StoredUser,
+        client_app_id: String,
+    ) -> Result<SessionRecord, AppError> {
+        let workspace = self.workspace_snapshot()?;
+        let session = SessionRecord {
+            id: format!("sess-{}", Uuid::new_v4()),
+            workspace_id: workspace.id,
+            user_id: user.record.id.clone(),
+            client_app_id,
+            token: Uuid::new_v4().to_string(),
+            status: "active".into(),
+            created_at: Self::now(),
+            expires_at: None,
+            role_ids: user.membership.role_ids.clone(),
+            scope_project_ids: user.membership.scope_project_ids.clone(),
+        };
+
+        self.state
+            .open_db()?
+            .execute(
+                "INSERT INTO sessions (id, workspace_id, user_id, client_app_id, token, status, created_at, expires_at, role_ids, scope_project_ids)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                params![
+                    session.id,
+                    session.workspace_id,
+                    session.user_id,
+                    session.client_app_id,
+                    session.token,
+                    session.status,
+                    session.created_at as i64,
+                    session.expires_at.map(|value| value as i64),
+                    serde_json::to_string(&session.role_ids)?,
+                    serde_json::to_string(&session.scope_project_ids)?,
+                ],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+
+        self.state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("sessions mutex poisoned"))?
+            .push(session.clone());
+
+        Ok(session)
+    }
+
+    fn persist_avatar(
+        &self,
+        user_id: &str,
+        avatar: &AvatarUploadPayload,
+    ) -> Result<(String, String, u64, String), AppError> {
+        let content_type = avatar.content_type.trim().to_ascii_lowercase();
+        if !matches!(
+            content_type.as_str(),
+            "image/png" | "image/jpeg" | "image/jpg" | "image/webp"
+        ) {
+            return Err(AppError::invalid_input(
+                "avatar must be png, jpeg, or webp",
+            ));
+        }
+        if avatar.byte_size == 0 || avatar.byte_size > 2 * 1024 * 1024 {
+            return Err(AppError::invalid_input("avatar must be 2 MiB or smaller"));
+        }
+
+        let bytes = BASE64_STANDARD
+            .decode(&avatar.data_base64)
+            .map_err(|_| AppError::invalid_input("avatar payload is invalid"))?;
+        if bytes.len() as u64 != avatar.byte_size {
+            return Err(AppError::invalid_input("avatar byte size mismatch"));
+        }
+
+        let extension = match content_type.as_str() {
+            "image/png" => "png",
+            "image/webp" => "webp",
+            _ => "jpg",
+        };
+        let relative_path = format!("data/blobs/avatars/{user_id}.{extension}");
+        let absolute_path = self.state.paths.root.join(&relative_path);
+        fs::write(&absolute_path, &bytes)?;
+
+        Ok((
+            relative_path,
+            content_type,
+            avatar.byte_size,
+            content_hash(&bytes),
+        ))
+    }
+}
+
 #[async_trait]
 impl WorkspaceService for InfraWorkspaceService {
     async fn system_bootstrap(&self) -> Result<SystemBootstrapStatus, AppError> {
+        let workspace = self.state.workspace_snapshot()?;
+        let owner_ready = self
+            .state
+            .users
+            .lock()
+            .map_err(|_| AppError::runtime("workspace users mutex poisoned"))?
+            .iter()
+            .any(|user| user.membership.role_ids.iter().any(|role_id| role_id == "owner"));
         Ok(SystemBootstrapStatus {
-            workspace: self.state.workspace.clone(),
-            setup_required: self.state.workspace.bootstrap_status == "setup_required",
-            owner_ready: self
-                .state
-                .users
-                .lock()
-                .map_err(|_| AppError::runtime("workspace users mutex poisoned"))?
-                .iter()
-                .any(|user| user.record.id == "user-owner"),
+            workspace: workspace.clone(),
+            setup_required: !owner_ready && workspace.bootstrap_status == "setup_required",
+            owner_ready,
             registered_apps: self
                 .state
                 .apps
@@ -1961,7 +2178,7 @@ impl WorkspaceService for InfraWorkspaceService {
     }
 
     async fn workspace_summary(&self) -> Result<WorkspaceSummary, AppError> {
-        Ok(self.state.workspace.clone())
+        self.state.workspace_snapshot()
     }
 
     async fn list_projects(&self) -> Result<Vec<ProjectRecord>, AppError> {
@@ -2029,7 +2246,7 @@ impl WorkspaceService for InfraWorkspaceService {
             record.id = format!("agent-{}", Uuid::new_v4());
         }
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
         record.updated_at = Self::now();
 
@@ -2057,7 +2274,7 @@ impl WorkspaceService for InfraWorkspaceService {
     async fn update_agent(&self, agent_id: &str, mut record: AgentRecord) -> Result<AgentRecord, AppError> {
         record.id = agent_id.into();
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
         record.updated_at = Self::now();
 
@@ -2104,7 +2321,7 @@ impl WorkspaceService for InfraWorkspaceService {
             record.id = format!("team-{}", Uuid::new_v4());
         }
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
         record.updated_at = Self::now();
 
@@ -2132,7 +2349,7 @@ impl WorkspaceService for InfraWorkspaceService {
     async fn update_team(&self, team_id: &str, mut record: TeamRecord) -> Result<TeamRecord, AppError> {
         record.id = team_id.into();
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
         record.updated_at = Self::now();
 
@@ -2197,7 +2414,7 @@ impl WorkspaceService for InfraWorkspaceService {
             record.id = format!("tool-{}", Uuid::new_v4());
         }
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
         record.updated_at = Self::now();
 
@@ -2224,7 +2441,7 @@ impl WorkspaceService for InfraWorkspaceService {
     async fn update_tool(&self, tool_id: &str, mut record: ToolRecord) -> Result<ToolRecord, AppError> {
         record.id = tool_id.into();
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
         record.updated_at = Self::now();
 
@@ -2270,7 +2487,7 @@ impl WorkspaceService for InfraWorkspaceService {
             record.id = format!("automation-{}", Uuid::new_v4());
         }
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
 
         self.state.open_db()?.execute(
@@ -2300,7 +2517,7 @@ impl WorkspaceService for InfraWorkspaceService {
     async fn update_automation(&self, automation_id: &str, mut record: AutomationRecord) -> Result<AutomationRecord, AppError> {
         record.id = automation_id.into();
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
 
         self.state.open_db()?.execute(
@@ -2342,7 +2559,7 @@ impl WorkspaceService for InfraWorkspaceService {
             .lock()
             .map_err(|_| AppError::runtime("users mutex poisoned"))?
             .iter()
-            .map(to_user_summary)
+            .map(|user| to_user_summary(&self.state.paths, user))
             .collect())
     }
 
@@ -2355,13 +2572,17 @@ impl WorkspaceService for InfraWorkspaceService {
             id: record.id.clone(),
             username: record.username.clone(),
             display_name: record.display_name.clone(),
+            avatar_path: None,
+            avatar_content_type: None,
+            avatar_byte_size: None,
+            avatar_content_hash: None,
             status: record.status.clone(),
-            password_state: "reset-required".into(),
+            password_state: record.password_state.clone(),
             created_at: now,
             updated_at: now,
         };
         let membership = WorkspaceMembershipRecord {
-            workspace_id: self.state.workspace.id.clone(),
+            workspace_id: self.state.workspace_id()?,
             user_id: record.id.clone(),
             role_ids: record.role_ids.clone(),
             scope_mode: if record.scope_project_ids.is_empty() {
@@ -2373,12 +2594,16 @@ impl WorkspaceService for InfraWorkspaceService {
         };
 
         self.state.open_db()?.execute(
-            "INSERT INTO users (id, username, display_name, status, password_hash, password_state, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO users (id, username, display_name, avatar_path, avatar_content_type, avatar_byte_size, avatar_content_hash, status, password_hash, password_state, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             params![
                 user_record.id,
                 user_record.username,
                 user_record.display_name,
+                user_record.avatar_path,
+                user_record.avatar_content_type,
+                user_record.avatar_byte_size.map(|value| value as i64),
+                user_record.avatar_content_hash,
                 user_record.status,
                 hash_password("changeme"),
                 user_record.password_state,
@@ -2412,12 +2637,13 @@ impl WorkspaceService for InfraWorkspaceService {
         let now = Self::now();
 
         self.state.open_db()?.execute(
-            "UPDATE users SET username = ?2, display_name = ?3, status = ?4, updated_at = ?5 WHERE id = ?1",
+            "UPDATE users SET username = ?2, display_name = ?3, status = ?4, password_state = ?5, updated_at = ?6 WHERE id = ?1",
             params![
                 user_id,
                 record.username,
                 record.display_name,
                 record.status,
+                record.password_state,
                 now as i64,
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
@@ -2425,7 +2651,7 @@ impl WorkspaceService for InfraWorkspaceService {
             "INSERT OR REPLACE INTO memberships (workspace_id, user_id, role_ids, scope_mode, scope_project_ids)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
-                self.state.workspace.id,
+                self.state.workspace_id()?,
                 user_id,
                 serde_json::to_string(&record.role_ids)?,
                 if record.scope_project_ids.is_empty() { "all-projects" } else { "selected-projects" },
@@ -2438,6 +2664,7 @@ impl WorkspaceService for InfraWorkspaceService {
             existing.record.username = record.username.clone();
             existing.record.display_name = record.display_name.clone();
             existing.record.status = record.status.clone();
+            existing.record.password_state = record.password_state.clone();
             existing.record.updated_at = now;
             existing.membership.role_ids = record.role_ids.clone();
             existing.membership.scope_project_ids = record.scope_project_ids.clone();
@@ -2464,7 +2691,7 @@ impl WorkspaceService for InfraWorkspaceService {
             record.id = format!("role-{}", Uuid::new_v4());
         }
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
 
         self.state.open_db()?.execute(
@@ -2489,7 +2716,7 @@ impl WorkspaceService for InfraWorkspaceService {
     async fn update_role(&self, role_id: &str, mut record: RoleRecord) -> Result<RoleRecord, AppError> {
         record.id = role_id.into();
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
 
         self.state.open_db()?.execute(
@@ -2525,7 +2752,7 @@ impl WorkspaceService for InfraWorkspaceService {
             record.id = format!("permission-{}", Uuid::new_v4());
         }
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
 
         self.state.open_db()?.execute(
@@ -2553,7 +2780,7 @@ impl WorkspaceService for InfraWorkspaceService {
     async fn update_permission(&self, permission_id: &str, mut record: PermissionRecord) -> Result<PermissionRecord, AppError> {
         record.id = permission_id.into();
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
 
         self.state.open_db()?.execute(
@@ -2592,7 +2819,7 @@ impl WorkspaceService for InfraWorkspaceService {
             record.id = format!("menu-{}", Uuid::new_v4());
         }
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
 
         self.state.open_db()?.execute(
@@ -2617,7 +2844,7 @@ impl WorkspaceService for InfraWorkspaceService {
     async fn update_menu(&self, menu_id: &str, mut record: MenuRecord) -> Result<MenuRecord, AppError> {
         record.id = menu_id.into();
         if record.workspace_id.is_empty() {
-            record.workspace_id = self.state.workspace.id.clone();
+            record.workspace_id = self.state.workspace_id()?;
         }
 
         self.state.open_db()?.execute(
@@ -2643,18 +2870,7 @@ impl WorkspaceService for InfraWorkspaceService {
 #[async_trait]
 impl AuthService for InfraAuthService {
     async fn login(&self, request: LoginRequest) -> Result<LoginResponse, AppError> {
-        let app = self
-            .state
-            .apps
-            .lock()
-            .map_err(|_| AppError::runtime("app registry mutex poisoned"))?
-            .iter()
-            .find(|app| app.id == request.client_app_id)
-            .cloned()
-            .ok_or_else(|| AppError::auth("client app is not registered"))?;
-        if app.status != "active" {
-            return Err(AppError::auth("client app is disabled"));
-        }
+        self.ensure_active_client_app(&request.client_app_id)?;
 
         let user = self
             .state
@@ -2669,48 +2885,141 @@ impl AuthService for InfraAuthService {
             return Err(AppError::auth("invalid credentials"));
         }
 
-        let session = SessionRecord {
-            id: format!("sess-{}", Uuid::new_v4()),
-            workspace_id: self.state.workspace.id.clone(),
-            user_id: user.record.id.clone(),
-            client_app_id: request.client_app_id,
-            token: Uuid::new_v4().to_string(),
-            status: "active".into(),
-            created_at: timestamp_now(),
-            expires_at: None,
-            role_ids: user.membership.role_ids.clone(),
-            scope_project_ids: user.membership.scope_project_ids.clone(),
-        };
-
-        self.state
-            .open_db()?
-            .execute(
-                "INSERT INTO sessions (id, workspace_id, user_id, client_app_id, token, status, created_at, expires_at, role_ids, scope_project_ids)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-                params![
-                    session.id,
-                    session.workspace_id,
-                    session.user_id,
-                    session.client_app_id,
-                    session.token,
-                    session.status,
-                    session.created_at as i64,
-                    session.expires_at.map(|value| value as i64),
-                    serde_json::to_string(&session.role_ids)?,
-                    serde_json::to_string(&session.scope_project_ids)?,
-                ],
-            )
-            .map_err(|error| AppError::database(error.to_string()))?;
-
-        self.state
-            .sessions
-            .lock()
-            .map_err(|_| AppError::runtime("sessions mutex poisoned"))?
-            .push(session.clone());
+        let session = self.persist_session(&user, request.client_app_id)?;
 
         Ok(LoginResponse {
             session,
-            workspace: self.state.workspace.clone(),
+            workspace: self.workspace_snapshot()?,
+        })
+    }
+
+    async fn register_owner(
+        &self,
+        request: RegisterWorkspaceOwnerRequest,
+    ) -> Result<RegisterWorkspaceOwnerResponse, AppError> {
+        self.ensure_active_client_app(&request.client_app_id)?;
+
+        if request.username.trim().is_empty() || request.display_name.trim().is_empty() {
+            return Err(AppError::invalid_input(
+                "username and display name are required",
+            ));
+        }
+        if request.password.len() < 8 {
+            return Err(AppError::invalid_input(
+                "password must be at least 8 characters",
+            ));
+        }
+        if request.password != request.confirm_password {
+            return Err(AppError::invalid_input("password confirmation does not match"));
+        }
+        if self.owner_exists()? {
+            return Err(AppError::conflict("workspace owner already exists"));
+        }
+
+        let workspace = self.workspace_snapshot()?;
+        if workspace.bootstrap_status != "setup_required" && workspace.owner_user_id.is_some() {
+            return Err(AppError::conflict("workspace owner already exists"));
+        }
+
+        {
+            let users = self
+                .state
+                .users
+                .lock()
+                .map_err(|_| AppError::runtime("users mutex poisoned"))?;
+            if users
+                .iter()
+                .any(|user| user.record.username == request.username.trim())
+            {
+                return Err(AppError::conflict("username already exists"));
+            }
+        }
+
+        let now = Self::now();
+        let user_id = format!("user-{}", Uuid::new_v4());
+        let (avatar_path, avatar_content_type, avatar_byte_size, avatar_content_hash) =
+            self.persist_avatar(&user_id, &request.avatar)?;
+        let user_record = UserRecord {
+            id: user_id.clone(),
+            username: request.username.trim().to_string(),
+            display_name: request.display_name.trim().to_string(),
+            avatar_path: Some(avatar_path.clone()),
+            avatar_content_type: Some(avatar_content_type.clone()),
+            avatar_byte_size: Some(avatar_byte_size),
+            avatar_content_hash: Some(avatar_content_hash.clone()),
+            status: "active".into(),
+            password_state: "set".into(),
+            created_at: now,
+            updated_at: now,
+        };
+        let membership = WorkspaceMembershipRecord {
+            workspace_id: workspace.id.clone(),
+            user_id: user_id.clone(),
+            role_ids: vec!["owner".into()],
+            scope_mode: "all-projects".into(),
+            scope_project_ids: Vec::new(),
+        };
+
+        let db = self.state.open_db()?;
+        db.execute(
+            "INSERT INTO users (id, username, display_name, avatar_path, avatar_content_type, avatar_byte_size, avatar_content_hash, status, password_hash, password_state, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                user_record.id,
+                user_record.username,
+                user_record.display_name,
+                user_record.avatar_path,
+                user_record.avatar_content_type,
+                user_record.avatar_byte_size.map(|value| value as i64),
+                user_record.avatar_content_hash,
+                user_record.status,
+                hash_password(&request.password),
+                user_record.password_state,
+                user_record.created_at as i64,
+                user_record.updated_at as i64,
+            ],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+        db.execute(
+            "INSERT INTO memberships (workspace_id, user_id, role_ids, scope_mode, scope_project_ids)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                membership.workspace_id,
+                membership.user_id,
+                serde_json::to_string(&membership.role_ids)?,
+                membership.scope_mode,
+                serde_json::to_string(&membership.scope_project_ids)?,
+            ],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+
+        {
+            let mut workspace_state = self
+                .state
+                .workspace
+                .lock()
+                .map_err(|_| AppError::runtime("workspace mutex poisoned"))?;
+            workspace_state.bootstrap_status = "ready".into();
+            workspace_state.owner_user_id = Some(user_id.clone());
+        }
+        self.state.save_workspace_config()?;
+
+        let stored_user = StoredUser {
+            record: user_record,
+            password_hash: hash_password(&request.password),
+            membership,
+        };
+        self.state
+            .users
+            .lock()
+            .map_err(|_| AppError::runtime("users mutex poisoned"))?
+            .push(stored_user.clone());
+
+        let session = self.persist_session(&stored_user, request.client_app_id)?;
+
+        Ok(RegisterWorkspaceOwnerResponse {
+            session,
+            workspace: self.workspace_snapshot()?,
         })
     }
 
@@ -3032,6 +3341,7 @@ impl ObservationService for InfraObservationService {
 mod tests {
     use super::{build_infra_bundle, initialize_workspace, WorkspacePaths};
     use octopus_platform::WorkspaceService;
+    use rusqlite::Connection;
 
     #[test]
     fn workspace_initialization_creates_expected_layout_and_defaults() {
@@ -3069,7 +3379,7 @@ mod tests {
     }
 
     #[test]
-    fn bundle_exposes_bootstrap_owner_and_registered_apps() {
+    fn bundle_exposes_bootstrap_setup_required_state_and_registered_apps() {
         let temp = tempfile::tempdir().expect("tempdir");
         let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
         let bootstrap = tokio::runtime::Runtime::new()
@@ -3078,7 +3388,7 @@ mod tests {
             .expect("bootstrap");
 
         assert!(bootstrap.setup_required);
-        assert!(bootstrap.owner_ready);
+        assert!(!bootstrap.owner_ready);
         assert!(bootstrap
             .registered_apps
             .iter()
@@ -3094,5 +3404,69 @@ mod tests {
         assert_eq!(paths.runtime_events_dir, temp.path().join("runtime/events"));
         assert_eq!(paths.audit_log_dir, temp.path().join("logs/audit"));
         assert_eq!(paths.db_path, temp.path().join("data/main.db"));
+    }
+
+    #[test]
+    fn bundle_normalizes_legacy_setup_required_state_when_owner_already_exists() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = initialize_workspace(temp.path()).expect("workspace initialized");
+
+        let connection = Connection::open(&paths.db_path).expect("open sqlite");
+        connection
+            .execute(
+                "INSERT INTO users (id, username, display_name, status, password_hash, password_state, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                rusqlite::params![
+                    "user-owner",
+                    "owner",
+                    "Workspace Owner",
+                    "active",
+                    "hash",
+                    "set",
+                    1_i64,
+                    1_i64,
+                ],
+            )
+            .expect("insert owner user");
+        connection
+            .execute(
+                "INSERT INTO memberships (workspace_id, user_id, role_ids, scope_mode, scope_project_ids)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![
+                    "ws-local",
+                    "user-owner",
+                    "[\"owner\"]",
+                    "all-projects",
+                    "[]",
+                ],
+            )
+            .expect("insert owner membership");
+        std::fs::write(
+            &paths.workspace_config,
+            r#"id = "ws-local"
+name = "Octopus Local Workspace"
+slug = "local-workspace"
+deployment = "local"
+bootstrap_status = "setup_required"
+owner_user_id = "user-owner"
+host = "127.0.0.1"
+listen_address = "127.0.0.1"
+default_project_id = "proj-redesign"
+"#,
+        )
+        .expect("write legacy workspace config");
+
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let bootstrap = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(bundle.workspace.system_bootstrap())
+            .expect("bootstrap");
+
+        assert!(!bootstrap.setup_required);
+        assert!(bootstrap.owner_ready);
+
+        let workspace_toml =
+            std::fs::read_to_string(&paths.workspace_config).expect("workspace toml after normalize");
+        assert!(workspace_toml.contains("bootstrap_status = \"ready\""));
     }
 }

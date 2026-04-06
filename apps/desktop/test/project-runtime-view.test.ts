@@ -1,0 +1,84 @@
+// @vitest-environment jsdom
+
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createApp, nextTick } from 'vue'
+import { createPinia, setActivePinia } from 'pinia'
+
+import App from '@/App.vue'
+import i18n from '@/plugins/i18n'
+import { router } from '@/router'
+import { installWorkspaceApiFixture } from './support/workspace-fixture'
+
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
+})
+
+function mountApp(pinia = createPinia()) {
+  setActivePinia(pinia)
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+
+  const app = createApp(App)
+  app.use(pinia)
+  app.use(i18n)
+  app.use(router)
+  app.mount(container)
+
+  return {
+    app,
+    container,
+    destroy() {
+      app.unmount()
+      container.remove()
+    },
+  }
+}
+
+async function mountRoutedApp(path: string) {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  await router.push(path)
+  await router.isReady()
+  return mountApp(pinia)
+}
+
+async function waitForSelector(container: HTMLElement, selector: string, timeoutMs = 2000) {
+  const startedAt = Date.now()
+  while (!container.querySelector(selector)) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`Timed out waiting for selector: ${selector}`)
+    }
+    await nextTick()
+    await new Promise(resolve => window.setTimeout(resolve, 20))
+  }
+}
+
+describe('Project runtime config view', () => {
+  beforeEach(async () => {
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+    installWorkspaceApiFixture()
+    document.body.innerHTML = ''
+  })
+
+  it('renders the project runtime editor and effective preview from the project route', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/runtime')
+
+    await waitForSelector(mounted.container, '[data-testid="project-runtime-editor"]')
+
+    expect(mounted.container.querySelector('[data-testid="project-runtime-editor"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-runtime-effective-preview"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
+})

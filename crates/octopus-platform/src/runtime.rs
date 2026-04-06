@@ -13,6 +13,7 @@ pub trait RuntimeSessionService: Send + Sync {
     async fn create_session(
         &self,
         input: CreateRuntimeSessionInput,
+        user_id: &str,
     ) -> Result<RuntimeSessionDetail, AppError>;
     async fn get_session(&self, session_id: &str) -> Result<RuntimeSessionDetail, AppError>;
     async fn list_events(
@@ -44,13 +45,35 @@ pub trait RuntimeExecutionService: Send + Sync {
 #[async_trait]
 pub trait RuntimeConfigService: Send + Sync {
     async fn get_config(&self) -> Result<RuntimeEffectiveConfig, AppError>;
+    async fn get_project_config(&self, project_id: &str) -> Result<RuntimeEffectiveConfig, AppError>;
+    async fn get_user_config(&self, user_id: &str) -> Result<RuntimeEffectiveConfig, AppError>;
     async fn validate_config(
         &self,
+        patch: RuntimeConfigPatch,
+    ) -> Result<RuntimeConfigValidationResult, AppError>;
+    async fn validate_project_config(
+        &self,
+        project_id: &str,
+        patch: RuntimeConfigPatch,
+    ) -> Result<RuntimeConfigValidationResult, AppError>;
+    async fn validate_user_config(
+        &self,
+        user_id: &str,
         patch: RuntimeConfigPatch,
     ) -> Result<RuntimeConfigValidationResult, AppError>;
     async fn save_config(
         &self,
         scope: &str,
+        patch: RuntimeConfigPatch,
+    ) -> Result<RuntimeEffectiveConfig, AppError>;
+    async fn save_project_config(
+        &self,
+        project_id: &str,
+        patch: RuntimeConfigPatch,
+    ) -> Result<RuntimeEffectiveConfig, AppError>;
+    async fn save_user_config(
+        &self,
+        user_id: &str,
         patch: RuntimeConfigPatch,
     ) -> Result<RuntimeEffectiveConfig, AppError>;
 }

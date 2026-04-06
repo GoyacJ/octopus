@@ -17,11 +17,13 @@ export interface ProviderConfig {
   defaultModel?: string
 }
 
-export type RuntimeConfigScope = 'user' | 'project' | 'local'
+export type RuntimeConfigScope = 'workspace' | 'project' | 'user'
 
 export interface RuntimeConfigSource {
   scope: RuntimeConfigScope
-  path: string
+  ownerId?: string
+  displayPath: string
+  sourceKey: string
   exists: boolean
   loaded: boolean
   contentHash?: string
@@ -58,7 +60,7 @@ export interface RuntimeConfigSnapshotSummary {
   id: string
   effectiveConfigHash: string
   startedFromScopeSet: RuntimeConfigScope[]
-  sourcePaths: string[]
+  sourceRefs: string[]
   createdAt: number
 }
 

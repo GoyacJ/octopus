@@ -122,6 +122,8 @@ describe('User center RBAC prototype', () => {
     await waitForText(mounted.container, 'Lobster Owner')
     expect(mounted.container.textContent).toContain('Lobster Owner')
     expect(mounted.container.textContent).toContain('owner')
+    expect(mounted.container.querySelector('[data-testid="user-runtime-editor"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="user-runtime-effective-preview"]')).not.toBeNull()
 
     mounted.destroy()
   })

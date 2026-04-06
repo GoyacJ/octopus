@@ -459,11 +459,11 @@ These rules apply to all future desktop frontend work.
 
 - new shared UI components land in `packages/ui`
 - new business-page features use existing tokens, Tailwind utilities, and `Ui*` abstractions
-- frontend-first feature delivery must default to mock data so the primary UI path works before live backend integration is ready
-- page, store, and view-model logic must not require live backend or Tauri responses as the default development path
+- frontend feature delivery must default to the real workspace and host APIs through the shared adapter boundary
+- page, store, and view-model logic must use the shared adapter layer rather than direct request assembly in views
 - all new shared schema definitions must be added to feature-based files under `packages/schema/src/*`
 - `packages/schema/src/index.ts` is the public export surface only; do not keep adding concrete schema definitions there
-- mock data and seed factories must reuse `@octopus/schema` contracts so frontend-first flows and later real integrations stay aligned
+- any local fixtures, tests, or seed data must reuse `@octopus/schema` contracts so non-production helpers stay aligned with real integrations
 - if a shared primitive is missing, add it to `packages/ui` before using it in a page
 - avoid direct third-party UI imports in business pages unless the dependency is explicitly approved and wrapped
 - prefer Tauri native APIs for desktop-specific capabilities before introducing browser-only workarounds

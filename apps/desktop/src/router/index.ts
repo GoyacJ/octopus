@@ -6,6 +6,7 @@ import ProjectAgentsView from '@/views/project/ProjectAgentsView.vue'
 import ProjectDashboardView from '@/views/project/ProjectDashboardView.vue'
 import ProjectKnowledgeView from '@/views/project/ProjectKnowledgeView.vue'
 import ProjectResourcesView from '@/views/project/ProjectResourcesView.vue'
+import ProjectRuntimeConfigView from '@/views/project/ProjectRuntimeConfigView.vue'
 import TraceView from '@/views/project/TraceView.vue'
 import AutomationsView from '@/views/workspace/AutomationsView.vue'
 import ModelsView from '@/views/workspace/ModelsView.vue'
@@ -126,6 +127,11 @@ export const router = createRouter({
       path: '/workspaces/:workspaceId/projects/:projectId/trace',
       name: 'project-trace',
       component: TraceView,
+    },
+    {
+      path: '/workspaces/:workspaceId/projects/:projectId/runtime',
+      name: 'project-runtime',
+      component: ProjectRuntimeConfigView,
     },
     {
       path: '/workspaces/:workspaceId/agents',

@@ -7,6 +7,7 @@ import type {
   KnowledgeStatus,
   MenuSource,
   MenuStatus,
+  PasswordState,
   ProjectResourceKind,
   ProjectResourceOrigin,
   RbacPermissionKind,
@@ -169,7 +170,9 @@ export interface UserRecordSummary {
   id: string
   username: string
   displayName: string
+  avatar?: string
   status: UserStatus
+  passwordState: PasswordState
   roleIds: string[]
   scopeProjectIds: string[]
 }

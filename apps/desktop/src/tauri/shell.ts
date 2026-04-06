@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 
 import type {
+  AvatarUploadPayload,
   ConnectionProfile,
   HealthcheckStatus,
   HostBackendConnection,
@@ -26,6 +27,22 @@ import {
 function assertTauriHostAvailable(): void {
   if (!isTauriRuntime()) {
     throw new Error('Tauri host runtime is unavailable')
+  }
+}
+
+async function readBrowserFile(file: File): Promise<AvatarUploadPayload> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read avatar file'))
+    reader.onload = () => resolve(String(reader.result ?? ''))
+    reader.readAsDataURL(file)
+  })
+
+  return {
+    fileName: file.name,
+    contentType: file.type || 'application/octet-stream',
+    byteSize: file.size,
+    dataBase64: dataUrl.split(',', 2)[1] ?? '',
   }
 }
 
@@ -183,6 +200,11 @@ async function restartDesktopBackendTauri(): Promise<void> {
   await invoke('restart_desktop_backend')
 }
 
+async function pickAvatarImageTauri(): Promise<AvatarUploadPayload | null> {
+  assertTauriHostAvailable()
+  return await invoke<AvatarUploadPayload | null>('pick_avatar_image')
+}
+
 function resolveBrowserHostConfig(): { baseUrl: string, authToken: string } {
   return {
     baseUrl: resolveBrowserHostApiBaseUrl(),
@@ -269,6 +291,25 @@ async function resolveDesktopBackendConnectionBrowser(
   return (await bootstrapShellHostBrowser(defaultWorkspaceId, defaultProjectId)).backend
 }
 
+async function pickAvatarImageBrowser(): Promise<AvatarUploadPayload | null> {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = 'image/png,image/jpeg,image/webp'
+
+  return await new Promise<AvatarUploadPayload | null>((resolve) => {
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0]
+      if (!file) {
+        resolve(null)
+        return
+      }
+
+      resolve(await readBrowserFile(file))
+    }, { once: true })
+    input.click()
+  })
+}
+
 export async function bootstrapShellHost(
   defaultWorkspaceId: string,
   defaultProjectId: string,
@@ -322,6 +363,12 @@ export async function resolveDesktopBackendConnectionForHost(): Promise<HostBack
     : await resolveDesktopBackendConnection()
 }
 
+export async function pickAvatarImage(): Promise<AvatarUploadPayload | null> {
+  return resolveHostRuntime() === 'browser'
+    ? await pickAvatarImageBrowser()
+    : await pickAvatarImageTauri()
+}
+
 export const hostClient = {
   bootstrapShellHost,
   loadPreferences,
@@ -330,4 +377,5 @@ export const hostClient = {
   healthcheck,
   restartDesktopBackend,
   resolveDesktopBackendConnection: resolveDesktopBackendConnectionForHost,
+  pickAvatarImage,
 }

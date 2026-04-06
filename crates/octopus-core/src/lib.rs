@@ -25,6 +25,8 @@ pub enum AppError {
     NotFound(String),
     #[error("invalid input: {0}")]
     InvalidInput(String),
+    #[error("conflict: {0}")]
+    Conflict(String),
     #[error("database error: {0}")]
     Database(String),
     #[error("runtime error: {0}")]
@@ -42,6 +44,10 @@ impl AppError {
 
     pub fn invalid_input(message: impl Into<String>) -> Self {
         Self::InvalidInput(message.into())
+    }
+
+    pub fn conflict(message: impl Into<String>) -> Self {
+        Self::Conflict(message.into())
     }
 
     pub fn database(message: impl Into<String>) -> Self {
@@ -151,7 +157,35 @@ pub struct LoginRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct AvatarUploadPayload {
+    pub file_name: String,
+    pub content_type: String,
+    pub data_base64: String,
+    pub byte_size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegisterWorkspaceOwnerRequest {
+    pub client_app_id: String,
+    pub username: String,
+    pub display_name: String,
+    pub password: String,
+    pub confirm_password: String,
+    pub avatar: AvatarUploadPayload,
+    pub workspace_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct LoginResponse {
+    pub session: SessionRecord,
+    pub workspace: WorkspaceSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegisterWorkspaceOwnerResponse {
     pub session: SessionRecord,
     pub workspace: WorkspaceSummary,
 }
@@ -176,6 +210,10 @@ pub struct UserRecord {
     pub id: String,
     pub username: String,
     pub display_name: String,
+    pub avatar_path: Option<String>,
+    pub avatar_content_type: Option<String>,
+    pub avatar_byte_size: Option<u64>,
+    pub avatar_content_hash: Option<String>,
     pub status: String,
     pub password_state: String,
     pub created_at: u64,
@@ -407,7 +445,9 @@ pub struct UserRecordSummary {
     pub id: String,
     pub username: String,
     pub display_name: String,
+    pub avatar: Option<String>,
     pub status: String,
+    pub password_state: String,
     pub role_ids: Vec<String>,
     pub scope_project_ids: Vec<String>,
 }
@@ -493,7 +533,9 @@ pub struct RunRecord {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeConfigSource {
     pub scope: String,
-    pub path: String,
+    pub owner_id: Option<String>,
+    pub display_path: String,
+    pub source_key: String,
     pub exists: bool,
     pub loaded: bool,
     pub content_hash: Option<String>,
@@ -540,7 +582,7 @@ pub struct RuntimeConfigSnapshotSummary {
     pub id: String,
     pub effective_config_hash: String,
     pub started_from_scope_set: Vec<String>,
-    pub source_paths: Vec<String>,
+    pub source_refs: Vec<String>,
     pub created_at: u64,
 }
 

@@ -19,19 +19,13 @@ struct BackendArgs {
     host_mode: String,
     host_shell: String,
     preferences_path: PathBuf,
-    runtime_root: PathBuf,
+    workspace_root: PathBuf,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), AppError> {
     let args = BackendArgs::parse(env::args().skip(1).collect())?;
-    let workspace_root = args
-        .runtime_root
-        .parent()
-        .map(PathBuf::from)
-        .unwrap_or_else(|| args.runtime_root.clone());
-
-    let infra = build_infra_bundle(&workspace_root)?;
+    let infra = build_infra_bundle(&args.workspace_root)?;
     let runtime = std::sync::Arc::new(RuntimeAdapter::new(
         DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
@@ -78,7 +72,7 @@ async fn main() -> Result<(), AppError> {
         "starting octopus desktop backend version={} cargo_workspace={} workspace_root={} preferences_path={}",
         args.app_version,
         args.cargo_workspace,
-        workspace_root.display(),
+        args.workspace_root.display(),
         args.preferences_path.display(),
     );
     let listener = tokio::net::TcpListener::bind(address)
@@ -99,7 +93,7 @@ impl BackendArgs {
         let mut host_mode = None;
         let mut host_shell = None;
         let mut preferences_path = None;
-        let mut runtime_root = None;
+        let mut workspace_root = None;
 
         let mut iter = args.into_iter();
         while let Some(flag) = iter.next() {
@@ -121,7 +115,7 @@ impl BackendArgs {
                 "--host-mode" => host_mode = Some(value),
                 "--host-shell" => host_shell = Some(value),
                 "--preferences-path" => preferences_path = Some(PathBuf::from(value)),
-                "--runtime-root" => runtime_root = Some(PathBuf::from(value)),
+                "--workspace-root" => workspace_root = Some(PathBuf::from(value)),
                 _ => return Err(AppError::invalid_input(format!("unknown argument {flag}"))),
             }
         }
@@ -142,8 +136,8 @@ impl BackendArgs {
                 .ok_or_else(|| AppError::invalid_input("missing --host-shell"))?,
             preferences_path: preferences_path
                 .ok_or_else(|| AppError::invalid_input("missing --preferences-path"))?,
-            runtime_root: runtime_root
-                .ok_or_else(|| AppError::invalid_input("missing --runtime-root"))?,
+            workspace_root: workspace_root
+                .ok_or_else(|| AppError::invalid_input("missing --workspace-root"))?,
         })
     }
 }
@@ -173,8 +167,8 @@ mod tests {
             "browser".into(),
             "--preferences-path".into(),
             "/tmp/preferences.json".into(),
-            "--runtime-root".into(),
-            "/tmp/runtime".into(),
+            "--workspace-root".into(),
+            "/tmp/workspace".into(),
         ])
         .expect("args parse");
 
@@ -182,6 +176,6 @@ mod tests {
         assert!(args.cargo_workspace);
         assert_eq!(args.host_platform, "web");
         assert_eq!(args.host_shell, "browser");
-        assert_eq!(args.runtime_root, PathBuf::from("/tmp/runtime"));
+        assert_eq!(args.workspace_root, PathBuf::from("/tmp/workspace"));
     }
 }

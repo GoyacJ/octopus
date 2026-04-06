@@ -3,6 +3,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type {
+  ApiErrorEnvelope,
+  RegisterWorkspaceOwnerRequest,
   RuntimeConfigPatch,
   ShellBootstrap,
   WorkspaceConnectionRecord,
@@ -203,6 +205,109 @@ describe('host client transport', () => {
     expect(headers.get('X-Request-Id')).toMatch(/^req-/)
   })
 
+  it('submits first-owner registration through the public auth endpoint without an existing session', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        session: {
+          id: 'sess-owner',
+          workspaceId: 'ws-local',
+          userId: 'user-owner',
+          clientAppId: 'octopus-desktop',
+          token: 'token-owner',
+          status: 'active',
+          createdAt: 1,
+          roleIds: ['owner'],
+          scopeProjectIds: [],
+        },
+        workspace: {
+          id: 'ws-local',
+          name: 'Local Workspace',
+          slug: 'local-workspace',
+          deployment: 'local',
+          bootstrapStatus: 'ready',
+          ownerUserId: 'user-owner',
+          host: '127.0.0.1',
+          listenAddress: 'http://127.0.0.1:43127',
+          defaultProjectId: 'proj-redesign',
+        },
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+    })
+
+    const requestBody: RegisterWorkspaceOwnerRequest = {
+      clientAppId: 'octopus-desktop',
+      username: 'owner',
+      displayName: 'Workspace Owner',
+      password: 'owner-owner',
+      confirmPassword: 'owner-owner',
+      avatar: {
+        fileName: 'owner-avatar.png',
+        contentType: 'image/png',
+        dataBase64: 'iVBORw0KGgo=',
+        byteSize: 8,
+      },
+    }
+
+    const response = await workspaceClient.auth.registerOwner(requestBody)
+
+    expect(response.session.userId).toBe('user-owner')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/auth/register-owner',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBeNull()
+    expect(headers.get('X-Workspace-Id')).toBe('ws-local')
+  })
+
+  it('throws a typed API error for workspace auth failures', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async (): Promise<ApiErrorEnvelope> => ({
+        error: {
+          code: 'SESSION_EXPIRED',
+          message: 'session expired',
+          details: null,
+          requestId: 'req-auth-1',
+          retryable: false,
+        },
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const session = createWorkspaceSession(connection!)
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session,
+    })
+
+    await expect(workspaceClient.workspace.get()).rejects.toMatchObject({
+      code: 'SESSION_EXPIRED',
+      status: 401,
+      requestId: 'req-auth-1',
+      retryable: false,
+    })
+  })
+
   it('normalizes permission mode and forwards idempotency headers on runtime write requests', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
@@ -283,7 +388,7 @@ describe('host client transport', () => {
     })
   })
 
-  it('loads runtime config through the workspace API', async () => {
+  it('loads runtime config through the workspace API without requiring a workspace session', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -295,8 +400,9 @@ describe('host client transport', () => {
         effectiveConfigHash: 'cfg-hash-1',
         sources: [
           {
-            scope: 'project',
-            path: '/tmp/octopus/.claw/settings.json',
+            scope: 'workspace',
+            displayPath: 'config/runtime/workspace.json',
+            sourceKey: 'workspace',
             exists: true,
             loaded: true,
             contentHash: 'src-hash-1',
@@ -319,12 +425,16 @@ describe('host client transport', () => {
     const connection = payload.workspaceConnections?.[0]
     const workspaceClient = client.createWorkspaceClient({
       connection: connection!,
-      session: createWorkspaceSession(connection!),
     })
 
     const config = await workspaceClient.runtime.getConfig()
 
     expect(config.effectiveConfigHash).toBe('cfg-hash-1')
+    expect(config.sources[0]).toMatchObject({
+      scope: 'workspace',
+      displayPath: 'config/runtime/workspace.json',
+      sourceKey: 'workspace',
+    })
     expect(fetchSpy).toHaveBeenCalledWith(
       'http://127.0.0.1:43127/api/v1/runtime/config',
       expect.objectContaining({
@@ -332,9 +442,14 @@ describe('host client transport', () => {
         headers: expect.any(Headers),
       }),
     )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBeNull()
+    expect(headers.get('X-Workspace-Id')).toBe('ws-local')
   })
 
-  it('posts runtime config validation requests to the workspace API', async () => {
+  it('posts runtime config validation requests to the workspace API without requiring a workspace session', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -351,11 +466,10 @@ describe('host client transport', () => {
     const connection = payload.workspaceConnections?.[0]
     const workspaceClient = client.createWorkspaceClient({
       connection: connection!,
-      session: createWorkspaceSession(connection!),
     })
 
     const patch: RuntimeConfigPatch = {
-      scope: 'project',
+      scope: 'workspace',
       patch: {
         model: 'claude-sonnet-4-5',
       },
@@ -366,7 +480,7 @@ describe('host client transport', () => {
     expect(result.valid).toBe(true)
     const request = firstRequest()
     expect(JSON.parse(String(request.body))).toMatchObject({
-      scope: 'project',
+      scope: 'workspace',
       patch: {
         model: 'claude-sonnet-4-5',
       },
@@ -378,9 +492,12 @@ describe('host client transport', () => {
         headers: expect.any(Headers),
       }),
     )
+
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBeNull()
   })
 
-  it('patches runtime config scopes through the workspace API', async () => {
+  it('patches runtime config scopes through the workspace API without requiring a workspace session', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -395,8 +512,9 @@ describe('host client transport', () => {
         effectiveConfigHash: 'cfg-hash-2',
         sources: [
           {
-            scope: 'project',
-            path: '/tmp/octopus/.claw/settings.json',
+            scope: 'workspace',
+            displayPath: 'config/runtime/workspace.json',
+            sourceKey: 'workspace',
             exists: true,
             loaded: true,
             contentHash: 'src-hash-2',
@@ -419,11 +537,10 @@ describe('host client transport', () => {
     const connection = payload.workspaceConnections?.[0]
     const workspaceClient = client.createWorkspaceClient({
       connection: connection!,
-      session: createWorkspaceSession(connection!),
     })
 
-    await workspaceClient.runtime.saveConfig('project', {
-      scope: 'project',
+    await workspaceClient.runtime.saveConfig({
+      scope: 'workspace',
       patch: {
         permissions: {
           defaultMode: 'plan',
@@ -432,12 +549,122 @@ describe('host client transport', () => {
     })
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://127.0.0.1:43127/api/v1/runtime/config/scopes/project',
+      'http://127.0.0.1:43127/api/v1/runtime/config/scopes/workspace',
       expect.objectContaining({
         method: 'PATCH',
         headers: expect.any(Headers),
       }),
     )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBeNull()
+  })
+
+  it('uses authenticated project runtime config endpoints for project-scoped overrides', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        effectiveConfig: { model: 'claude-sonnet-4-5' },
+        effectiveConfigHash: 'cfg-project',
+        sources: [
+          {
+            scope: 'workspace',
+            displayPath: 'config/runtime/workspace.json',
+            sourceKey: 'workspace',
+            exists: true,
+            loaded: true,
+          },
+          {
+            scope: 'project',
+            ownerId: 'proj-redesign',
+            displayPath: 'config/runtime/projects/proj-redesign.json',
+            sourceKey: 'project:proj-redesign',
+            exists: true,
+            loaded: true,
+          },
+        ],
+        validation: { valid: true, errors: [], warnings: [] },
+        secretReferences: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.runtime.getProjectConfig('proj-redesign')
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/runtime-config',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
+  })
+
+  it('uses authenticated user runtime config endpoints for user-scoped overrides', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        effectiveConfig: { model: 'claude-sonnet-4-5' },
+        effectiveConfigHash: 'cfg-user',
+        sources: [
+          {
+            scope: 'workspace',
+            displayPath: 'config/runtime/workspace.json',
+            sourceKey: 'workspace',
+            exists: true,
+            loaded: true,
+          },
+          {
+            scope: 'user',
+            ownerId: 'user-owner',
+            displayPath: 'config/runtime/users/user-owner.json',
+            sourceKey: 'user:user-owner',
+            exists: true,
+            loaded: true,
+          },
+        ],
+        validation: { valid: true, errors: [], warnings: [] },
+        secretReferences: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.runtime.getUserConfig()
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/user-center/profile/runtime-config',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
   })
 
   it('uses browser host HTTP endpoints when VITE_HOST_RUNTIME=browser', async () => {

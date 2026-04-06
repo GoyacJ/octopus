@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RotateCcw } from 'lucide-vue-next'
 import { createDefaultShellPreferences } from '@octopus/schema'
-import type { RuntimeConfigScope, RuntimeConfigSource } from '@octopus/schema'
+import type { RuntimeConfigSource } from '@octopus/schema'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -37,16 +37,7 @@ function resolveSettingsTab(value: unknown): SettingsTab {
     : 'general'
 }
 
-function resolveConfigSource(scope: RuntimeConfigScope): RuntimeConfigSource | undefined {
-  return runtime.config?.sources.find(item => item.scope === scope)
-}
-
-function resolveConfigDraft(scope: RuntimeConfigScope): string {
-  return runtime.configDrafts[scope]
-}
-
-function resolveValidationTone(scope: RuntimeConfigScope): 'default' | 'success' | 'warning' | 'error' | 'info' {
-  const validation = runtime.configValidation[scope]
+function resolveValidationTone(validation = runtime.configValidation.workspace): 'default' | 'success' | 'warning' | 'error' | 'info' {
   if (!validation) {
     return 'default'
   }
@@ -54,8 +45,7 @@ function resolveValidationTone(scope: RuntimeConfigScope): 'default' | 'success'
   return validation.valid ? 'success' : 'error'
 }
 
-function resolveValidationLabel(scope: RuntimeConfigScope): string {
-  const validation = runtime.configValidation[scope]
+function resolveValidationLabel(validation = runtime.configValidation.workspace): string {
   if (!validation) {
     return t('settings.runtime.validation.idle')
   }
@@ -99,14 +89,10 @@ const tabs = computed(() => [
   { value: 'version', label: t('settings.tabs.version') },
 ])
 
-const runtimeScopes = computed(() => (['user', 'project', 'local'] as RuntimeConfigScope[]).map(scope => ({
-  scope,
-  label: t(`settings.runtime.scopes.${scope}.label`),
-  description: t(`settings.runtime.scopes.${scope}.description`),
-  source: resolveConfigSource(scope),
-  draft: resolveConfigDraft(scope),
-  validation: runtime.configValidation[scope],
-})))
+const workspaceRuntimeSource = computed<RuntimeConfigSource | undefined>(() =>
+  runtime.config?.sources.filter(item => item.scope === 'workspace').at(-1),
+)
+const workspaceRuntimeDraft = computed(() => runtime.configDrafts.workspace)
 
 const runtimeEffectivePreview = computed(() =>
   JSON.stringify(runtime.config?.effectiveConfig ?? {}, null, 2),
@@ -243,12 +229,12 @@ async function resetToDefault() {
   await shell.updatePreferences(defaults)
 }
 
-async function validateRuntimeScope(scope: RuntimeConfigScope) {
-  await runtime.validateConfig(scope)
+async function validateWorkspaceRuntime() {
+  await runtime.validateConfig('workspace')
 }
 
-async function saveRuntimeScope(scope: RuntimeConfigScope) {
-  await runtime.saveConfig(scope)
+async function saveWorkspaceRuntime() {
+  await runtime.saveConfig('workspace')
 }
 
 async function reloadRuntimeConfig() {
@@ -494,23 +480,21 @@ async function reloadRuntimeConfig() {
           <div v-else class="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)]">
             <div class="space-y-4">
               <UiRecordCard
-                v-for="item in runtimeScopes"
-                :key="item.scope"
-                :title="item.label"
-                :description="item.description"
-                :test-id="`settings-runtime-editor-${item.scope}`"
+                :title="t('settings.runtime.workspace.title')"
+                :description="t('settings.runtime.workspace.description')"
+                test-id="settings-runtime-editor-workspace"
               >
                 <template #eyebrow>
-                  {{ item.scope }}
+                  workspace
                 </template>
                 <template #badges>
                   <UiBadge
-                    :label="resolveSourceStatusLabel(item.source)"
-                    :tone="resolveSourceStatusTone(item.source)"
+                    :label="resolveSourceStatusLabel(workspaceRuntimeSource)"
+                    :tone="resolveSourceStatusTone(workspaceRuntimeSource)"
                   />
                   <UiBadge
-                    :label="resolveValidationLabel(item.scope)"
-                    :tone="resolveValidationTone(item.scope)"
+                    :label="resolveValidationLabel(runtime.configValidation.workspace)"
+                    :tone="resolveValidationTone(runtime.configValidation.workspace)"
                   />
                 </template>
 
@@ -518,22 +502,22 @@ async function reloadRuntimeConfig() {
                   <UiCodeEditor
                     language="json"
                     theme="octopus"
-                    :model-value="item.draft"
-                    @update:model-value="runtime.setConfigDraft(item.scope, $event)"
+                    :model-value="workspaceRuntimeDraft"
+                    @update:model-value="runtime.setConfigDraft('workspace', $event)"
                   />
 
                   <div
-                    v-if="item.validation?.errors.length"
+                    v-if="runtime.configValidation.workspace?.errors.length"
                     class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-[12px] text-status-error"
                   >
-                    {{ item.validation.errors.join(' ') }}
+                    {{ runtime.configValidation.workspace.errors.join(' ') }}
                   </div>
 
                   <div
-                    v-if="item.validation?.warnings.length"
+                    v-if="runtime.configValidation.workspace?.warnings.length"
                     class="rounded-md border border-status-warning/20 bg-status-warning/5 px-3 py-2 text-[12px] text-status-warning"
                   >
-                    {{ item.validation.warnings.join(' ') }}
+                    {{ runtime.configValidation.workspace.warnings.join(' ') }}
                   </div>
                 </div>
 
@@ -542,22 +526,22 @@ async function reloadRuntimeConfig() {
                     {{ t('settings.runtime.sourcePath') }}
                   </span>
                   <span class="min-w-0 truncate font-mono text-[12px] text-text-secondary">
-                    {{ item.source?.path ?? t('common.na') }}
+                    {{ workspaceRuntimeSource?.displayPath ?? t('common.na') }}
                   </span>
                 </template>
                 <template #actions>
                   <UiButton
                     variant="ghost"
                     size="sm"
-                    :disabled="runtime.configValidatingScope === item.scope || runtime.configSavingScope === item.scope"
-                    @click="validateRuntimeScope(item.scope)"
+                    :disabled="runtime.configValidating || runtime.configSaving"
+                    @click="validateWorkspaceRuntime"
                   >
                     {{ t('settings.runtime.actions.validate') }}
                   </UiButton>
                   <UiButton
                     size="sm"
-                    :disabled="runtime.configSavingScope === item.scope"
-                    @click="saveRuntimeScope(item.scope)"
+                    :disabled="runtime.configSaving"
+                    @click="saveWorkspaceRuntime"
                   >
                     {{ t('settings.runtime.actions.save') }}
                   </UiButton>

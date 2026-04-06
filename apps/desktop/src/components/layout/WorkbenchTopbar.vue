@@ -53,6 +53,8 @@ const currentPageName = computed(() => {
       return t('sidebar.navigation.tools')
     case 'workspace-automations':
       return t('sidebar.navigation.automations')
+    case 'project-runtime':
+      return t('sidebar.navigation.runtime')
     case 'workspace-user-center':
     case 'workspace-user-center-profile':
     case 'workspace-user-center-users':
@@ -227,8 +229,9 @@ async function openUserCenter() {
           class="dropdown-trigger flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
           @click="accountMenuOpen = !accountMenuOpen"
         >
-          <div class="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white uppercase">
-            {{ currentUser?.displayName?.slice(0, 1) || 'U' }}
+          <div class="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-primary text-[10px] font-bold text-white uppercase">
+            <img v-if="currentUser?.avatar" :src="currentUser.avatar" alt="" class="h-full w-full object-cover">
+            <span v-else>{{ currentUser?.displayName?.slice(0, 1) || 'U' }}</span>
           </div>
           <UserRound :size="14" class="text-text-tertiary" />
         </button>
@@ -236,8 +239,9 @@ async function openUserCenter() {
         <div v-if="accountMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-64 rounded-lg border border-border-subtle bg-background p-3 shadow-lg dark:border-white/[0.08]">
           <div class="space-y-3">
             <div class="flex items-center gap-3">
-              <div class="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-bold text-white uppercase">
-                {{ currentUser?.displayName?.slice(0, 1) || 'U' }}
+              <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-bold text-white uppercase">
+                <img v-if="currentUser?.avatar" :src="currentUser.avatar" alt="" class="h-full w-full object-cover">
+                <span v-else>{{ currentUser?.displayName?.slice(0, 1) || 'U' }}</span>
               </div>
               <div class="min-w-0 flex-1">
                 <div class="truncate text-sm font-semibold text-text-primary">{{ currentUser?.displayName ?? t('common.na') }}</div>

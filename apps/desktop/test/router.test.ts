@@ -28,6 +28,7 @@ describe('desktop router contract', () => {
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/resources')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/knowledge')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/trace')
+    expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/runtime')
     expect(routePaths).toContain('/workspaces/:workspaceId/agents')
     expect(routePaths).toContain('/workspaces/:workspaceId/models')
     expect(routePaths).toContain('/workspaces/:workspaceId/tools')
