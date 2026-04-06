@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::BTreeMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -144,6 +147,29 @@ pub struct ConnectionProfile {
     pub base_url: Option<String>,
     pub state: String,
     pub last_sync_at: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HostWorkspaceConnectionRecord {
+    pub workspace_connection_id: String,
+    pub workspace_id: String,
+    pub label: String,
+    pub base_url: String,
+    pub transport_security: String,
+    pub auth_mode: String,
+    pub last_used_at: Option<u64>,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateHostWorkspaceConnectionInput {
+    pub workspace_id: String,
+    pub label: String,
+    pub base_url: String,
+    pub transport_security: String,
+    pub auth_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -404,9 +430,126 @@ pub struct ProviderCredentialRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct CapabilityDescriptor {
+    pub capability_id: String,
+    pub label: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SurfaceDescriptor {
+    pub surface: String,
+    pub protocol_family: String,
+    pub transport: Vec<String>,
+    pub auth_strategy: String,
+    pub base_url: String,
+    pub base_url_policy: String,
+    pub enabled: bool,
+    pub capabilities: Vec<CapabilityDescriptor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderRegistryRecord {
+    pub provider_id: String,
+    pub label: String,
+    pub enabled: bool,
+    pub surfaces: Vec<SurfaceDescriptor>,
+    pub metadata: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelSurfaceBinding {
+    pub surface: String,
+    pub protocol_family: String,
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelRegistryRecord {
+    pub model_id: String,
+    pub provider_id: String,
+    pub label: String,
+    pub description: String,
+    pub family: String,
+    pub track: String,
+    pub enabled: bool,
+    pub recommended_for: String,
+    pub availability: String,
+    pub default_permission: String,
+    pub surface_bindings: Vec<ModelSurfaceBinding>,
+    pub capabilities: Vec<CapabilityDescriptor>,
+    pub context_window: Option<u32>,
+    pub max_output_tokens: Option<u32>,
+    pub metadata: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialBinding {
+    pub credential_ref: String,
+    pub provider_id: String,
+    pub label: String,
+    pub base_url: Option<String>,
+    pub status: String,
+    pub configured: bool,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DefaultSelection {
+    pub provider_id: String,
+    pub model_id: String,
+    pub surface: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelRegistryDiagnostics {
+    pub warnings: Vec<String>,
+    pub errors: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelCatalogSnapshot {
-    pub models: Vec<ModelCatalogRecord>,
-    pub provider_credentials: Vec<ProviderCredentialRecord>,
+    pub providers: Vec<ProviderRegistryRecord>,
+    pub models: Vec<ModelRegistryRecord>,
+    pub credential_bindings: Vec<CredentialBinding>,
+    pub default_selections: BTreeMap<String, DefaultSelection>,
+    pub diagnostics: ModelRegistryDiagnostics,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceToolCatalogSnapshot {
+    pub entries: Vec<WorkspaceToolCatalogEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceToolCatalogEntry {
+    pub id: String,
+    pub workspace_id: String,
+    pub name: String,
+    pub kind: String,
+    pub description: String,
+    pub required_permission: Option<String>,
+    pub availability: String,
+    pub source_key: String,
+    pub display_path: String,
+    pub builtin_key: Option<String>,
+    pub active: Option<bool>,
+    pub shadowed_by: Option<String>,
+    pub source_origin: Option<String>,
+    pub server_name: Option<String>,
+    pub endpoint: Option<String>,
+    pub tool_names: Option<Vec<String>>,
+    pub status_detail: Option<String>,
+    pub scope: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -584,6 +727,7 @@ pub struct RuntimeConfigSnapshotSummary {
     pub started_from_scope_set: Vec<String>,
     pub source_refs: Vec<String>,
     pub created_at: u64,
+    pub effective_config: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -616,6 +760,7 @@ pub struct RuntimeRunSnapshot {
     pub config_snapshot_id: String,
     pub effective_config_hash: String,
     pub started_from_scope_set: Vec<String>,
+    pub resolved_target: Option<ResolvedExecutionTarget>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -700,10 +845,24 @@ pub struct RuntimeSessionDetail {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderConfig {
-    pub provider: String,
-    pub api_key: Option<String>,
+    pub provider_id: String,
+    pub credential_ref: Option<String>,
     pub base_url: Option<String>,
     pub default_model: Option<String>,
+    pub default_surface: Option<String>,
+    pub protocol_family: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedExecutionTarget {
+    pub provider_id: String,
+    pub model_id: String,
+    pub surface: String,
+    pub protocol_family: String,
+    pub credential_ref: Option<String>,
+    pub base_url: Option<String>,
+    pub capabilities: Vec<CapabilityDescriptor>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -917,4 +1076,96 @@ pub fn default_connection_stubs() -> Vec<ConnectionProfile> {
         state: "local-ready".into(),
         last_sync_at: None,
     }]
+}
+
+pub fn normalize_connection_base_url(base_url: &str) -> String {
+    base_url.trim().trim_end_matches('/').to_string()
+}
+
+pub fn connection_mode_from_transport_security(transport_security: &str) -> String {
+    match transport_security {
+        "loopback" => "local".into(),
+        "public" => "remote".into(),
+        _ => "shared".into(),
+    }
+}
+
+pub fn transport_security_from_connection_mode(mode: &str) -> String {
+    match mode {
+        "local" => "loopback".into(),
+        "remote" => "public".into(),
+        _ => "trusted".into(),
+    }
+}
+
+pub fn workspace_connection_status_from_connection_profile(
+    connection: &ConnectionProfile,
+    backend: Option<&DesktopBackendConnection>,
+) -> String {
+    if connection.mode == "local" {
+        return match backend.map(|item| item.state.as_str()) {
+            Some("ready") => "connected".into(),
+            Some("unavailable") => "unreachable".into(),
+            _ => "disconnected".into(),
+        };
+    }
+
+    match connection.state.as_str() {
+        "connected" | "local-ready" => "connected".into(),
+        "expired" => "expired".into(),
+        "unreachable" => "unreachable".into(),
+        _ => "disconnected".into(),
+    }
+}
+
+pub fn workspace_connection_base_url_from_profile(
+    connection: &ConnectionProfile,
+    backend: Option<&DesktopBackendConnection>,
+) -> String {
+    if let Some(base_url) = connection.base_url.as_ref() {
+        return normalize_connection_base_url(base_url);
+    }
+
+    if connection.mode == "local" {
+        if let Some(base_url) = backend.and_then(|item| item.base_url.as_ref()) {
+            return normalize_connection_base_url(base_url);
+        }
+    }
+
+    "http://127.0.0.1".into()
+}
+
+pub fn host_workspace_connection_record_from_profile(
+    connection: &ConnectionProfile,
+    backend: Option<&DesktopBackendConnection>,
+) -> HostWorkspaceConnectionRecord {
+    HostWorkspaceConnectionRecord {
+        workspace_connection_id: connection.id.clone(),
+        workspace_id: connection.workspace_id.clone(),
+        label: connection.label.clone(),
+        base_url: workspace_connection_base_url_from_profile(connection, backend),
+        transport_security: transport_security_from_connection_mode(&connection.mode),
+        auth_mode: "session-token".into(),
+        last_used_at: connection.last_sync_at,
+        status: workspace_connection_status_from_connection_profile(connection, backend),
+    }
+}
+
+pub fn connection_profile_from_host_workspace_connection(
+    connection: &HostWorkspaceConnectionRecord,
+) -> ConnectionProfile {
+    ConnectionProfile {
+        id: connection.workspace_connection_id.clone(),
+        mode: connection_mode_from_transport_security(&connection.transport_security),
+        label: connection.label.clone(),
+        workspace_id: connection.workspace_id.clone(),
+        base_url: Some(normalize_connection_base_url(&connection.base_url)),
+        state: match connection.status.as_str() {
+            "connected" => "connected".into(),
+            "expired" => "expired".into(),
+            "unreachable" => "disconnected".into(),
+            other => other.into(),
+        },
+        last_sync_at: connection.last_used_at,
+    }
 }

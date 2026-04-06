@@ -28,6 +28,7 @@ import type {
   SystemBootstrapStatus,
   TeamRecord,
   ToolRecord,
+  WorkspaceToolCatalogSnapshot,
   UserCenterOverviewSnapshot,
   UserRecordSummary,
   WorkspaceConnectionRecord,
@@ -107,6 +108,7 @@ export interface WorkspaceClient {
   }
   catalog: {
     getSnapshot: () => Promise<ModelCatalogSnapshot>
+    getToolCatalog: () => Promise<WorkspaceToolCatalogSnapshot>
     listModels: () => Promise<ModelCatalogSnapshot['models']>
     listProviderCredentials: () => Promise<ProviderCredentialRecord[]>
     listTools: () => Promise<ToolRecord[]>
@@ -519,6 +521,11 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
     catalog: {
       async getSnapshot() {
         return await fetchWorkspace<ModelCatalogSnapshot>(context, `${API_BASE}/workspace/catalog/models`, {
+          method: 'GET',
+        })
+      },
+      async getToolCatalog() {
+        return await fetchWorkspace<WorkspaceToolCatalogSnapshot>(context, `${API_BASE}/workspace/catalog/tool-catalog`, {
           method: 'GET',
         })
       },

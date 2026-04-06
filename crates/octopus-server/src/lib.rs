@@ -14,21 +14,24 @@ use axum::{
         sse::{Event, KeepAlive, Sse},
         IntoResponse, Response,
     },
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use octopus_core::{
+    connection_profile_from_host_workspace_connection,
+    host_workspace_connection_record_from_profile, normalize_connection_base_url,
     normalize_runtime_permission_mode_label, timestamp_now, AgentRecord, ApiErrorDetail,
     ApiErrorEnvelope, AppError, AutomationRecord, ClientAppRecord, ConnectionProfile,
-    ConversationRecord, DesktopBackendConnection, HealthcheckBackendStatus, HealthcheckStatus,
-    HostState, KnowledgeRecord, LoginRequest, MenuRecord, ModelCatalogSnapshot,
-    PermissionRecord, ProjectDashboardSnapshot, ProjectRecord, ProviderCredentialRecord,
+    ConversationRecord, CreateHostWorkspaceConnectionInput, DesktopBackendConnection,
+    HealthcheckBackendStatus, HealthcheckStatus, HostState, HostWorkspaceConnectionRecord,
+    KnowledgeRecord, LoginRequest, MenuRecord, ModelCatalogSnapshot, PermissionRecord,
+    ProjectDashboardSnapshot, ProjectRecord, ProviderCredentialRecord,
     RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse, ResolveRuntimeApprovalInput,
     RoleRecord, RuntimeConfigPatch, RuntimeConfigValidationResult, RuntimeEffectiveConfig,
     SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput, TeamRecord,
     ToolRecord, UserCenterAlertRecord, UserCenterOverviewSnapshot, UserRecordSummary,
-    WorkspaceActivityRecord, WorkspaceMetricRecord, WorkspaceOverviewSnapshot,
-    WorkspaceResourceRecord,
+    WorkspaceActivityRecord, WorkspaceMetricRecord, WorkspaceOverviewSnapshot, WorkspaceResourceRecord,
+    WorkspaceToolCatalogSnapshot,
 };
 use octopus_platform::PlatformServices;
 use serde::Deserialize;
@@ -43,6 +46,7 @@ pub struct ServerState {
     pub host_state: HostState,
     pub host_connections: Vec<ConnectionProfile>,
     pub host_preferences_path: PathBuf,
+    pub host_workspace_connections_path: PathBuf,
     pub host_default_preferences: ShellPreferences,
     pub backend_connection: DesktopBackendConnection,
 }
@@ -263,6 +267,14 @@ pub fn build_router(state: ServerState) -> Router {
             "/api/v1/host/preferences",
             get(load_host_preferences_route).put(save_host_preferences_route),
         )
+        .route(
+            "/api/v1/host/workspace-connections",
+            get(list_host_workspace_connections_route).post(create_host_workspace_connection_route),
+        )
+        .route(
+            "/api/v1/host/workspace-connections/:connection_id",
+            delete(delete_host_workspace_connection_route),
+        )
         .route("/api/v1/system/health", get(healthcheck))
         .route("/api/v1/system/bootstrap", get(system_bootstrap))
         .route("/api/v1/auth/login", post(login))
@@ -291,6 +303,10 @@ pub fn build_router(state: ServerState) -> Router {
         .route(
             "/api/v1/workspace/catalog/provider-credentials",
             get(workspace_provider_credentials),
+        )
+        .route(
+            "/api/v1/workspace/catalog/tool-catalog",
+            get(workspace_tool_catalog),
         )
         .route("/api/v1/workspace/catalog/tools", get(list_tools).post(create_tool))
         .route(
@@ -444,6 +460,105 @@ fn save_host_preferences(
     Ok(preferences.clone())
 }
 
+fn load_remote_host_workspace_connections(
+    state: &ServerState,
+) -> Result<Vec<HostWorkspaceConnectionRecord>, ApiError> {
+    match fs::read_to_string(&state.host_workspace_connections_path) {
+        Ok(raw) => serde_json::from_str(&raw)
+            .map_err(|error| ApiError::from(AppError::from(error))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
+        Err(error) => Err(ApiError::from(AppError::from(error))),
+    }
+}
+
+fn save_remote_host_workspace_connections(
+    state: &ServerState,
+    connections: &[HostWorkspaceConnectionRecord],
+) -> Result<Vec<HostWorkspaceConnectionRecord>, ApiError> {
+    if let Some(parent) = state.host_workspace_connections_path.parent() {
+        fs::create_dir_all(parent).map_err(|error| ApiError::from(AppError::from(error)))?;
+    }
+    fs::write(
+        &state.host_workspace_connections_path,
+        serde_json::to_vec_pretty(connections)
+            .map_err(|error| ApiError::from(AppError::from(error)))?,
+    )
+    .map_err(|error| ApiError::from(AppError::from(error)))?;
+    Ok(connections.to_vec())
+}
+
+fn list_host_workspace_connections(
+    state: &ServerState,
+) -> Result<Vec<HostWorkspaceConnectionRecord>, ApiError> {
+    let mut connections = state
+        .host_connections
+        .iter()
+        .map(|connection| {
+            host_workspace_connection_record_from_profile(
+                connection,
+                Some(&state.backend_connection),
+            )
+        })
+        .collect::<Vec<_>>();
+    connections.extend(load_remote_host_workspace_connections(state)?);
+    Ok(connections)
+}
+
+fn create_host_workspace_connection(
+    state: &ServerState,
+    input: CreateHostWorkspaceConnectionInput,
+) -> Result<HostWorkspaceConnectionRecord, ApiError> {
+    let mut existing_connections = load_remote_host_workspace_connections(state)?;
+    let normalized_base_url = normalize_connection_base_url(&input.base_url);
+
+    if let Some(existing) = existing_connections.iter_mut().find(|connection| {
+        normalize_connection_base_url(&connection.base_url) == normalized_base_url
+            && connection.workspace_id == input.workspace_id
+    }) {
+        existing.label = input.label;
+        existing.base_url = normalized_base_url;
+        existing.transport_security = input.transport_security;
+        existing.auth_mode = input.auth_mode;
+        existing.last_used_at = Some(timestamp_now());
+        existing.status = "connected".into();
+        let persisted = existing.clone();
+        save_remote_host_workspace_connections(state, &existing_connections)?;
+        return Ok(persisted);
+    }
+
+    let created = HostWorkspaceConnectionRecord {
+        workspace_connection_id: format!("conn-remote-{}-{}", input.workspace_id, timestamp_now()),
+        workspace_id: input.workspace_id,
+        label: input.label,
+        base_url: normalized_base_url,
+        transport_security: input.transport_security,
+        auth_mode: input.auth_mode,
+        last_used_at: Some(timestamp_now()),
+        status: "connected".into(),
+    };
+    existing_connections.push(created.clone());
+    save_remote_host_workspace_connections(state, &existing_connections)?;
+    Ok(created)
+}
+
+fn delete_host_workspace_connection(
+    state: &ServerState,
+    connection_id: &str,
+) -> Result<(), ApiError> {
+    if state.host_connections.iter().any(|connection| connection.id == connection_id) {
+        return Err(ApiError::from(AppError::invalid_input(
+            "local workspace connection cannot be deleted",
+        )));
+    }
+
+    let next_connections = load_remote_host_workspace_connections(state)?
+        .into_iter()
+        .filter(|connection| connection.workspace_connection_id != connection_id)
+        .collect::<Vec<_>>();
+    save_remote_host_workspace_connections(state, &next_connections)?;
+    Ok(())
+}
+
 fn ensure_host_authorized(
     state: &ServerState,
     headers: &HeaderMap,
@@ -466,11 +581,15 @@ async fn host_bootstrap(
 ) -> Result<Json<ShellBootstrap>, ApiError> {
     let request_id = request_id(&headers);
     ensure_host_authorized(&state, &headers, &request_id)?;
+    let connections = list_host_workspace_connections(&state)?
+        .iter()
+        .map(connection_profile_from_host_workspace_connection)
+        .collect::<Vec<_>>();
 
     Ok(Json(ShellBootstrap {
         host_state: state.host_state.clone(),
         preferences: load_host_preferences(&state)?,
-        connections: state.host_connections.clone(),
+        connections,
         backend: Some(state.backend_connection.clone()),
     }))
 }
@@ -501,6 +620,36 @@ async fn save_host_preferences_route(
     let request_id = request_id(&headers);
     ensure_host_authorized(&state, &headers, &request_id)?;
     Ok(Json(save_host_preferences(&state, &preferences)?))
+}
+
+async fn list_host_workspace_connections_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<HostWorkspaceConnectionRecord>>, ApiError> {
+    let request_id = request_id(&headers);
+    ensure_host_authorized(&state, &headers, &request_id)?;
+    Ok(Json(list_host_workspace_connections(&state)?))
+}
+
+async fn create_host_workspace_connection_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(input): Json<CreateHostWorkspaceConnectionInput>,
+) -> Result<Json<HostWorkspaceConnectionRecord>, ApiError> {
+    let request_id = request_id(&headers);
+    ensure_host_authorized(&state, &headers, &request_id)?;
+    Ok(Json(create_host_workspace_connection(&state, input)?))
+}
+
+async fn delete_host_workspace_connection_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(connection_id): Path<String>,
+) -> Result<Json<()>, ApiError> {
+    let request_id = request_id(&headers);
+    ensure_host_authorized(&state, &headers, &request_id)?;
+    delete_host_workspace_connection(&state, &connection_id)?;
+    Ok(Json(()))
 }
 
 async fn login(
@@ -742,10 +891,7 @@ async fn workspace_catalog_models(
     headers: HeaderMap,
 ) -> Result<Json<ModelCatalogSnapshot>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(ModelCatalogSnapshot {
-        models: state.services.workspace.list_models().await?,
-        provider_credentials: state.services.workspace.list_provider_credentials().await?,
-    }))
+    Ok(Json(state.services.runtime_registry.catalog_snapshot().await?))
 }
 
 async fn workspace_provider_credentials(
@@ -754,6 +900,14 @@ async fn workspace_provider_credentials(
 ) -> Result<Json<Vec<ProviderCredentialRecord>>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
     Ok(Json(state.services.workspace.list_provider_credentials().await?))
+}
+
+async fn workspace_tool_catalog(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<WorkspaceToolCatalogSnapshot>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
+    Ok(Json(state.services.workspace.get_tool_catalog().await?))
 }
 
 async fn list_tools(
@@ -1601,6 +1755,7 @@ mod tests {
     use octopus_platform::{ObservationService, PlatformServices};
     use octopus_runtime_adapter::RuntimeAdapter;
     use rusqlite::Connection;
+    use serde_json::{json, Value};
     use tokio_stream::StreamExt;
     use tower::ServiceExt;
 
@@ -1616,6 +1771,7 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let root = temp.path().to_path_buf();
         let preferences_path = root.join("shell-preferences.json");
+        let workspace_connections_path = root.join("shell-workspace-connections.json");
         std::mem::forget(temp);
         let infra = build_infra_bundle(&root).expect("infra bundle");
         let runtime = Arc::new(RuntimeAdapter::new(
@@ -1630,7 +1786,8 @@ mod tests {
             rbac: infra.rbac.clone(),
             runtime_session: runtime.clone(),
             runtime_execution: runtime.clone(),
-            runtime_config: runtime,
+            runtime_config: runtime.clone(),
+            runtime_registry: runtime.clone(),
             artifact: infra.artifact.clone(),
             inbox: infra.inbox.clone(),
             knowledge: infra.knowledge.clone(),
@@ -1644,6 +1801,7 @@ mod tests {
             host_state: octopus_core::default_host_state("0.1.0-test".into(), true),
             host_connections: octopus_core::default_connection_stubs(),
             host_preferences_path: preferences_path,
+            host_workspace_connections_path: workspace_connections_path,
             host_default_preferences: octopus_core::default_preferences(
                 octopus_core::DEFAULT_WORKSPACE_ID,
                 octopus_core::DEFAULT_PROJECT_ID,
@@ -1798,6 +1956,40 @@ mod tests {
         decode_json::<RuntimeEffectiveConfig>(response).await
     }
 
+    async fn get_tool_catalog(router: &Router, token: &str) -> Value {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/v1/workspace/catalog/tool-catalog")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        decode_json::<Value>(response).await
+    }
+
+    async fn get_model_catalog(router: &Router, token: &str) -> Value {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/v1/workspace/catalog/models")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        decode_json::<Value>(response).await
+    }
+
     async fn validate_runtime_config_without_session(
         router: &Router,
         patch: RuntimeConfigPatch,
@@ -1869,6 +2061,27 @@ mod tests {
         permission_mode: &str,
         idempotency_key: Option<&str>,
     ) -> RuntimeRunSnapshot {
+        submit_turn_with_input(
+            router,
+            token,
+            session_id,
+            SubmitRuntimeTurnInput {
+                content: "hello".into(),
+                model_id: "claude-sonnet-4-5".into(),
+                permission_mode: permission_mode.into(),
+            },
+            idempotency_key,
+        )
+        .await
+    }
+
+    async fn submit_turn_with_input(
+        router: &Router,
+        token: &str,
+        session_id: &str,
+        input: SubmitRuntimeTurnInput,
+        idempotency_key: Option<&str>,
+    ) -> RuntimeRunSnapshot {
         let mut request = Request::builder();
         request = request
             .method(Method::POST)
@@ -1882,14 +2095,7 @@ mod tests {
             .clone()
             .oneshot(
                 request
-                    .body(Body::from(
-                        serde_json::to_vec(&SubmitRuntimeTurnInput {
-                            content: "hello".into(),
-                            model_id: "claude-sonnet-4-5".into(),
-                            permission_mode: permission_mode.into(),
-                        })
-                        .expect("json"),
-                    ))
+                    .body(Body::from(serde_json::to_vec(&input).expect("json")))
                     .expect("request"),
             )
             .await
@@ -2079,6 +2285,134 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(login_response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn workspace_tool_catalog_returns_runtime_backed_entries() {
+        let harness = test_harness();
+        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+
+        let skill_dir = harness
+            .infra
+            .paths
+            .root
+            .join(".codex/skills/help");
+        std::fs::create_dir_all(&skill_dir).expect("skill dir");
+        std::fs::write(
+            skill_dir.join("SKILL.md"),
+            "---\nname: help\ndescription: Helpful local skill.\n---\n\nUse this skill to help.\n",
+        )
+        .expect("skill file");
+
+        let _ = save_runtime_config_without_session(
+            &harness.router,
+            "workspace",
+            RuntimeConfigPatch {
+                scope: "workspace".into(),
+                patch: json!({
+                    "mcpServers": {
+                        "ops": {
+                            "type": "http",
+                            "url": "https://ops.example.test/mcp"
+                        }
+                    }
+                }),
+            },
+        )
+        .await;
+
+        let payload = get_tool_catalog(&harness.router, &token).await;
+        let entries = payload["entries"].as_array().expect("entries array");
+
+        assert!(entries.iter().any(|entry| entry["kind"] == "builtin" && entry["name"] == "bash"));
+        assert!(entries.iter().any(|entry| entry["kind"] == "skill" && entry["name"] == "help"));
+        assert!(entries.iter().any(|entry| entry["kind"] == "mcp" && entry["serverName"] == "ops"));
+    }
+
+    #[tokio::test]
+    async fn workspace_model_catalog_returns_registry_snapshot_shape() {
+        let harness = test_harness();
+        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+
+        let payload = get_model_catalog(&harness.router, &token).await;
+
+        assert!(payload.get("providers").is_some(), "missing providers snapshot");
+        assert!(payload.get("models").is_some(), "missing models snapshot");
+        assert!(
+            payload.get("defaultSelections").is_some(),
+            "missing default selections"
+        );
+        assert!(payload.get("diagnostics").is_some(), "missing diagnostics");
+    }
+
+    #[tokio::test]
+    async fn workspace_model_catalog_reflects_runtime_registry_overrides_without_restart() {
+        let harness = test_harness();
+        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+
+        let _saved = save_runtime_config_without_session(
+            &harness.router,
+            "workspace",
+            RuntimeConfigPatch {
+                scope: "workspace".into(),
+                patch: json!({
+                    "modelRegistry": {
+                        "providers": {
+                            "deepseek": {
+                                "providerId": "deepseek",
+                                "label": "DeepSeek",
+                                "enabled": true,
+                                "surfaces": [
+                                    {
+                                        "surface": "conversation",
+                                        "protocolFamily": "openai_chat",
+                                        "authStrategy": "bearer",
+                                        "baseUrl": "https://api.deepseek.com",
+                                        "baseUrlPolicy": "allow_override"
+                                    }
+                                ]
+                            }
+                        },
+                        "models": {
+                            "deepseek-chat": {
+                                "modelId": "deepseek-chat",
+                                "providerId": "deepseek",
+                                "label": "DeepSeek Chat",
+                                "family": "deepseek-chat",
+                                "track": "latest_alias",
+                                "enabled": true,
+                                "surfaceBindings": [
+                                    {
+                                        "surface": "conversation",
+                                        "protocolFamily": "openai_chat"
+                                    }
+                                ],
+                                "capabilities": ["streaming", "tool_calling"],
+                                "metadata": {
+                                    "source": "workspace-override"
+                                }
+                            }
+                        },
+                        "defaultSelections": {
+                            "conversation": {
+                                "providerId": "deepseek",
+                                "modelId": "deepseek-chat",
+                                "surface": "conversation"
+                            }
+                        }
+                    }
+                }),
+            },
+        )
+        .await;
+
+        let payload = get_model_catalog(&harness.router, &token).await;
+        let models = payload["models"].as_array().expect("models array");
+        let defaults = &payload["defaultSelections"];
+
+        assert!(models.iter().any(|model| model["modelId"] == "deepseek-chat"));
+        assert_eq!(defaults["conversation"]["modelId"], "deepseek-chat");
+        assert_eq!(defaults["conversation"]["providerId"], "deepseek");
     }
 
     #[tokio::test]
@@ -2297,6 +2631,78 @@ mod tests {
         assert!(audit_records
             .iter()
             .any(|record| record.action == "runtime.submit_turn"));
+    }
+
+    #[tokio::test]
+    async fn runtime_submit_turn_executes_model_and_records_resolved_target() {
+        let harness = test_harness();
+        let session = login_owner_session(&harness.router, "octopus-desktop").await;
+        let created =
+            create_runtime_session(&harness.router, &session.token, "Execution Session", None).await;
+
+        let run = submit_turn_with_input(
+            &harness.router,
+            &session.token,
+            &created.summary.id,
+            SubmitRuntimeTurnInput {
+                content: "Reply with a short acknowledgement.".into(),
+                model_id: "claude-sonnet-4-5".into(),
+                permission_mode: "readonly".into(),
+            },
+            None,
+        )
+        .await;
+
+        assert_eq!(run.status, "completed");
+
+        let detail = runtime_session_detail(&harness.router, &session.token, &created.summary.id).await;
+        let assistant_message = detail
+            .messages
+            .iter()
+            .find(|message| message.sender_type == "assistant")
+            .expect("assistant message");
+        assert!(!assistant_message.content.is_empty());
+
+        let run_value = serde_json::to_value(&run).expect("serialize run");
+        assert_eq!(run_value["resolvedTarget"]["providerId"], "anthropic");
+        assert_eq!(run_value["resolvedTarget"]["modelId"], "claude-sonnet-4-5");
+        assert_eq!(run_value["resolvedTarget"]["surface"], "conversation");
+    }
+
+    #[tokio::test]
+    async fn runtime_submit_turn_rejects_unknown_registry_model() {
+        let harness = test_harness();
+        let session = login_owner_session(&harness.router, "octopus-desktop").await;
+        let created =
+            create_runtime_session(&harness.router, &session.token, "Unknown Model Session", None)
+                .await;
+
+        let response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/runtime/sessions/{}/turns", created.summary.id))
+                    .header(header::AUTHORIZATION, format!("Bearer {}", session.token))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&SubmitRuntimeTurnInput {
+                            content: "hello".into(),
+                            model_id: "missing-model".into(),
+                            permission_mode: "readonly".into(),
+                        })
+                        .expect("json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let error = decode_json::<ApiErrorEnvelope>(response).await;
+        assert_eq!(error.error.code, "INVALID_INPUT");
+        assert!(error.error.message.contains("missing-model"));
     }
 
     #[tokio::test]

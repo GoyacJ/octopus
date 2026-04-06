@@ -5,6 +5,8 @@ import type {
   ModelCatalogSnapshot,
   ProviderCredentialRecord,
   ToolRecord,
+  WorkspaceToolCatalogEntry,
+  WorkspaceToolCatalogSnapshot,
 } from '@octopus/schema'
 
 import {
@@ -16,12 +18,15 @@ import {
 
 export const useCatalogStore = defineStore('catalog', () => {
   const snapshots = ref<Record<string, ModelCatalogSnapshot>>({})
+  const toolCatalogsByConnection = ref<Record<string, WorkspaceToolCatalogSnapshot>>({})
   const toolsByConnection = ref<Record<string, ToolRecord[]>>({})
   const requestTokens = ref<Record<string, number>>({})
   const errors = ref<Record<string, string>>({})
 
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
   const snapshot = computed(() => snapshots.value[activeConnectionId.value] ?? { models: [], providerCredentials: [] })
+  const toolCatalog = computed<WorkspaceToolCatalogSnapshot>(() => toolCatalogsByConnection.value[activeConnectionId.value] ?? { entries: [] })
+  const toolCatalogEntries = computed<WorkspaceToolCatalogEntry[]>(() => toolCatalog.value.entries)
   const models = computed(() => snapshot.value.models)
   const providerCredentials = computed<ProviderCredentialRecord[]>(() => snapshot.value.providerCredentials)
   const tools = computed(() => toolsByConnection.value[activeConnectionId.value] ?? [])
@@ -36,8 +41,9 @@ export const useCatalogStore = defineStore('catalog', () => {
     const token = createWorkspaceRequestToken(requestTokens.value[connectionId] ?? 0)
     requestTokens.value[connectionId] = token
     try {
-      const [nextSnapshot, nextTools] = await Promise.all([
+      const [nextSnapshot, nextToolCatalog, nextTools] = await Promise.all([
         client.catalog.getSnapshot(),
+        client.catalog.getToolCatalog(),
         client.catalog.listTools(),
       ])
       if (requestTokens.value[connectionId] !== token) {
@@ -47,15 +53,23 @@ export const useCatalogStore = defineStore('catalog', () => {
         ...snapshots.value,
         [connectionId]: nextSnapshot,
       }
+      toolCatalogsByConnection.value = {
+        ...toolCatalogsByConnection.value,
+        [connectionId]: nextToolCatalog,
+      }
       toolsByConnection.value = {
         ...toolsByConnection.value,
         [connectionId]: nextTools,
+      }
+      errors.value = {
+        ...errors.value,
+        [connectionId]: '',
       }
     } catch (cause) {
       if (requestTokens.value[connectionId] === token) {
         errors.value = {
           ...errors.value,
-          [connectionId]: cause instanceof Error ? cause.message : 'Failed to load model catalog',
+          [connectionId]: cause instanceof Error ? cause.message : 'Failed to load workspace catalog',
         }
       }
     }
@@ -92,6 +106,8 @@ export const useCatalogStore = defineStore('catalog', () => {
 
   return {
     snapshot,
+    toolCatalog,
+    toolCatalogEntries,
     models,
     providerCredentials,
     tools,

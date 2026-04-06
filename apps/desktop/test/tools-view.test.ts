@@ -72,6 +72,11 @@ function findButton(container: ParentNode, label: string) {
     .find(button => button.textContent?.includes(label))
 }
 
+function findTabButton(container: ParentNode, label: string) {
+  return Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+    .find(button => button.textContent?.includes(label))
+}
+
 describe('Workspace tools view', () => {
   beforeEach(async () => {
     vi.restoreAllMocks()
@@ -85,68 +90,60 @@ describe('Workspace tools view', () => {
   it('renders workspace tools from the real catalog store', async () => {
     const mounted = mountApp()
 
-    await waitForText(mounted.container, 'Terminal')
+    await waitForText(mounted.container, 'bash')
 
     expect(mounted.container.textContent).toContain(String(i18n.global.t('sidebar.navigation.tools')))
-    expect(mounted.container.textContent).toContain('Read')
-    expect(mounted.container.textContent).toContain('Terminal')
+    expect(mounted.container.textContent).toContain('bash')
+
+    const skillTab = findTabButton(mounted.container, String(i18n.global.t('tools.tabs.skill')))
+    expect(skillTab).toBeDefined()
+    skillTab!.click()
+    await waitForText(mounted.container, 'help')
+
+    const mcpTab = findTabButton(mounted.container, String(i18n.global.t('tools.tabs.mcp')))
+    expect(mcpTab).toBeDefined()
+    mcpTab!.click()
+    await waitForText(mounted.container, 'mcp__ops__tail_logs')
+
+    expect(mounted.container.textContent).toContain('ops')
+    expect(mounted.container.textContent).toContain('MCP handshake timed out')
 
     mounted.destroy()
   })
 
-  it('updates the selected tool through the workspace API store', async () => {
+  it('filters runtime-backed entries and shows detail state without edit actions', async () => {
     const mounted = mountApp()
 
-    await waitForText(mounted.container, 'Terminal')
+    const mcpTab = findTabButton(mounted.container, String(i18n.global.t('tools.tabs.mcp')))
+    expect(mcpTab).toBeDefined()
+    mcpTab!.click()
+    await waitForText(mounted.container, 'ops')
 
-    const toolCards = mounted.container.querySelectorAll<HTMLElement>('article[role="button"]')
-    expect(toolCards.length).toBeGreaterThan(1)
-    toolCards[1]?.click()
+    const searchInput = mounted.container.querySelector<HTMLInputElement>('input')
+    expect(searchInput).not.toBeNull()
+    searchInput!.value = 'ops'
+    searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    const nameInput = mounted.container.querySelector<HTMLInputElement>('input')
-    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('textarea')
-    expect(nameInput).not.toBeNull()
-    expect(descriptionInput).not.toBeNull()
-
-    nameInput!.value = 'Terminal Updated'
-    nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    descriptionInput!.value = 'Execute shell commands safely.'
-    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    findButton(mounted.container, String(i18n.global.t('common.save')))?.click()
-    await waitForText(mounted.container, 'Terminal Updated')
-
-    expect(mounted.container.textContent).toContain('Terminal Updated')
+    expect(mounted.container.textContent).toContain('ops')
+    expect(mounted.container.textContent).not.toContain('help')
+    expect(findButton(mounted.container, String(i18n.global.t('common.save')))).toBeUndefined()
+    expect(findButton(mounted.container, String(i18n.global.t('common.delete')))).toBeUndefined()
 
     mounted.destroy()
   })
 
-  it('creates and deletes a new tool record without any mock fallback', async () => {
+  it('shows a runtime settings link for MCP entries', async () => {
     const mounted = mountApp()
 
-    await waitForText(mounted.container, 'Terminal')
+    const mcpTab = findTabButton(mounted.container, String(i18n.global.t('tools.tabs.mcp')))
+    expect(mcpTab).toBeDefined()
+    mcpTab!.click()
+    await waitForText(mounted.container, 'mcp__ops__tail_logs')
 
-    findButton(mounted.container, String(i18n.global.t('common.reset')))?.click()
-    await nextTick()
-
-    const nameInput = mounted.container.querySelector<HTMLInputElement>('input')
-    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('textarea')
-    expect(nameInput).not.toBeNull()
-    expect(descriptionInput).not.toBeNull()
-
-    nameInput!.value = 'Ops MCP'
-    nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    descriptionInput!.value = 'Remote operations connector.'
-    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    findButton(mounted.container, String(i18n.global.t('common.save')))?.click()
-    await waitForText(mounted.container, 'Ops MCP')
-
-    findButton(mounted.container, String(i18n.global.t('common.delete')))?.click()
-    await waitForTextToDisappear(mounted.container, 'Ops MCP')
+    const settingsLink = Array.from(mounted.container.querySelectorAll<HTMLAnchorElement>('a'))
+      .find(link => link.getAttribute('href') === '/settings')
+    expect(settingsLink).toBeDefined()
 
     mounted.destroy()
   })

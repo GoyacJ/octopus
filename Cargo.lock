@@ -2928,12 +2928,14 @@ dependencies = [
  "base64 0.22.1",
  "octopus-core",
  "octopus-platform",
+ "runtime",
  "rusqlite",
  "serde",
  "serde_json",
  "tempfile",
  "tokio",
  "toml 0.8.2",
+ "tools",
  "uuid",
 ]
 
@@ -2956,6 +2958,7 @@ dependencies = [
  "octopus-infra",
  "octopus-platform",
  "plugins",
+ "reqwest 0.12.28",
  "runtime",
  "rusqlite",
  "serde",

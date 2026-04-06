@@ -1,4 +1,6 @@
 use std::{
+    collections::BTreeMap,
+    env,
     fs,
     hash::{Hash, Hasher},
     path::{Path, PathBuf},
@@ -15,7 +17,8 @@ use octopus_core::{
     RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse, RoleRecord, SessionRecord,
     SystemBootstrapStatus, TeamRecord, ToolRecord, TraceEventRecord, UserRecord,
     UserRecordSummary, WorkspaceMembershipRecord, WorkspaceResourceRecord, WorkspaceSummary,
-    DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
+    WorkspaceToolCatalogEntry, WorkspaceToolCatalogSnapshot, DEFAULT_PROJECT_ID,
+    DEFAULT_WORKSPACE_ID,
 };
 use octopus_platform::{
     AppRegistryService, ArtifactService, AuthService, InboxService, KnowledgeService,
@@ -247,6 +250,533 @@ pub struct InfraKnowledgeService {
 #[derive(Clone)]
 pub struct InfraObservationService {
     state: Arc<InfraState>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum SkillDefinitionSource {
+    ProjectClaw,
+    ProjectCodex,
+    ProjectClaude,
+    UserClawConfigHome,
+    UserCodexHome,
+    UserClaw,
+    UserCodex,
+    UserClaude,
+}
+
+impl SkillDefinitionSource {
+    fn key(self) -> &'static str {
+        match self {
+            Self::ProjectClaw => "project-claw",
+            Self::ProjectCodex => "project-codex",
+            Self::ProjectClaude => "project-claude",
+            Self::UserClawConfigHome => "user-claw-config-home",
+            Self::UserCodexHome => "user-codex-home",
+            Self::UserClaw => "user-claw-home",
+            Self::UserCodex => "user-codex-home-legacy",
+            Self::UserClaude => "user-claude-home",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SkillSourceOrigin {
+    SkillsDir,
+    LegacyCommandsDir,
+}
+
+impl SkillSourceOrigin {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::SkillsDir => "skills_dir",
+            Self::LegacyCommandsDir => "legacy_commands_dir",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SkillCatalogRoot {
+    source: SkillDefinitionSource,
+    path: PathBuf,
+    origin: SkillSourceOrigin,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SkillCatalogEntry {
+    name: String,
+    description: Option<String>,
+    source: SkillDefinitionSource,
+    origin: SkillSourceOrigin,
+    path: PathBuf,
+    shadowed_by: Option<String>,
+}
+
+fn normalize_required_permission(permission: runtime::PermissionMode) -> Option<String> {
+    match permission {
+        runtime::PermissionMode::ReadOnly => Some("readonly".into()),
+        runtime::PermissionMode::WorkspaceWrite => Some("workspace-write".into()),
+        runtime::PermissionMode::DangerFullAccess => Some("danger-full-access".into()),
+        runtime::PermissionMode::Prompt | runtime::PermissionMode::Allow => None,
+    }
+}
+
+fn display_path(path: &Path, workspace_root: &Path) -> String {
+    if let Ok(relative) = path.strip_prefix(workspace_root) {
+        return relative.to_string_lossy().replace('\\', "/");
+    }
+
+    if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
+        if let Ok(relative) = path.strip_prefix(&home) {
+            let suffix = relative.to_string_lossy().replace('\\', "/");
+            return if suffix.is_empty() {
+                "~".into()
+            } else {
+                format!("~/{}", suffix)
+            };
+        }
+    }
+
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn discover_skill_roots(cwd: &Path) -> Vec<SkillCatalogRoot> {
+    let mut roots = Vec::new();
+
+    for ancestor in cwd.ancestors() {
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::ProjectClaw,
+            ancestor.join(".claw").join("skills"),
+            SkillSourceOrigin::SkillsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::ProjectCodex,
+            ancestor.join(".codex").join("skills"),
+            SkillSourceOrigin::SkillsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::ProjectClaude,
+            ancestor.join(".claude").join("skills"),
+            SkillSourceOrigin::SkillsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::ProjectClaw,
+            ancestor.join(".claw").join("commands"),
+            SkillSourceOrigin::LegacyCommandsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::ProjectCodex,
+            ancestor.join(".codex").join("commands"),
+            SkillSourceOrigin::LegacyCommandsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::ProjectClaude,
+            ancestor.join(".claude").join("commands"),
+            SkillSourceOrigin::LegacyCommandsDir,
+        );
+    }
+
+    if let Ok(claw_config_home) = env::var("CLAW_CONFIG_HOME") {
+        let claw_config_home = PathBuf::from(claw_config_home);
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::UserClawConfigHome,
+            claw_config_home.join("skills"),
+            SkillSourceOrigin::SkillsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::UserClawConfigHome,
+            claw_config_home.join("commands"),
+            SkillSourceOrigin::LegacyCommandsDir,
+        );
+    }
+
+    if let Ok(codex_home) = env::var("CODEX_HOME") {
+        let codex_home = PathBuf::from(codex_home);
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::UserCodexHome,
+            codex_home.join("skills"),
+            SkillSourceOrigin::SkillsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::UserCodexHome,
+            codex_home.join("commands"),
+            SkillSourceOrigin::LegacyCommandsDir,
+        );
+    }
+
+    if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::UserClaw,
+            home.join(".claw").join("skills"),
+            SkillSourceOrigin::SkillsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::UserClaw,
+            home.join(".claw").join("commands"),
+            SkillSourceOrigin::LegacyCommandsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::UserCodex,
+            home.join(".codex").join("skills"),
+            SkillSourceOrigin::SkillsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::UserCodex,
+            home.join(".codex").join("commands"),
+            SkillSourceOrigin::LegacyCommandsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::UserClaude,
+            home.join(".claude").join("skills"),
+            SkillSourceOrigin::SkillsDir,
+        );
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::UserClaude,
+            home.join(".claude").join("commands"),
+            SkillSourceOrigin::LegacyCommandsDir,
+        );
+    }
+
+    roots
+}
+
+fn push_unique_skill_root(
+    roots: &mut Vec<SkillCatalogRoot>,
+    source: SkillDefinitionSource,
+    path: PathBuf,
+    origin: SkillSourceOrigin,
+) {
+    if path.is_dir() && !roots.iter().any(|existing| existing.path == path) {
+        roots.push(SkillCatalogRoot {
+            source,
+            path,
+            origin,
+        });
+    }
+}
+
+fn load_skills_from_roots(roots: &[SkillCatalogRoot]) -> Result<Vec<SkillCatalogEntry>, AppError> {
+    let mut skills = Vec::new();
+    let mut active_sources = BTreeMap::<String, String>::new();
+
+    for root in roots {
+        let mut root_skills = Vec::new();
+        for entry in fs::read_dir(&root.path)? {
+            let entry = entry?;
+            match root.origin {
+                SkillSourceOrigin::SkillsDir => {
+                    if !entry.path().is_dir() {
+                        continue;
+                    }
+                    let skill_path = entry.path().join("SKILL.md");
+                    if !skill_path.is_file() {
+                        continue;
+                    }
+                    let contents = fs::read_to_string(&skill_path)?;
+                    let (name, description) = parse_skill_frontmatter(&contents);
+                    root_skills.push(SkillCatalogEntry {
+                        name: name
+                            .unwrap_or_else(|| entry.file_name().to_string_lossy().to_string()),
+                        description,
+                        source: root.source,
+                        origin: root.origin,
+                        path: skill_path,
+                        shadowed_by: None,
+                    });
+                }
+                SkillSourceOrigin::LegacyCommandsDir => {
+                    let path = entry.path();
+                    let markdown_path = if path.is_dir() {
+                        let skill_path = path.join("SKILL.md");
+                        if !skill_path.is_file() {
+                            continue;
+                        }
+                        skill_path
+                    } else if path
+                        .extension()
+                        .is_some_and(|ext| ext.to_string_lossy().eq_ignore_ascii_case("md"))
+                    {
+                        path
+                    } else {
+                        continue;
+                    };
+
+                    let contents = fs::read_to_string(&markdown_path)?;
+                    let fallback_name = markdown_path.file_stem().map_or_else(
+                        || entry.file_name().to_string_lossy().to_string(),
+                        |stem| stem.to_string_lossy().to_string(),
+                    );
+                    let (name, description) = parse_skill_frontmatter(&contents);
+                    root_skills.push(SkillCatalogEntry {
+                        name: name.unwrap_or(fallback_name),
+                        description,
+                        source: root.source,
+                        origin: root.origin,
+                        path: markdown_path,
+                        shadowed_by: None,
+                    });
+                }
+            }
+        }
+
+        root_skills.sort_by(|left, right| left.name.cmp(&right.name));
+        for mut skill in root_skills {
+            let key = skill.name.to_ascii_lowercase();
+            if let Some(existing) = active_sources.get(&key) {
+                skill.shadowed_by = Some(existing.clone());
+            } else {
+                active_sources.insert(key, skill.source.key().into());
+            }
+            skills.push(skill);
+        }
+    }
+
+    Ok(skills)
+}
+
+fn parse_skill_frontmatter(contents: &str) -> (Option<String>, Option<String>) {
+    let mut lines = contents.lines();
+    if lines.next().map(str::trim) != Some("---") {
+        return (None, None);
+    }
+
+    let mut name = None;
+    let mut description = None;
+    for line in lines {
+        let trimmed = line.trim();
+        if trimmed == "---" {
+            break;
+        }
+        if let Some(value) = trimmed.strip_prefix("name:") {
+            let value = unquote_frontmatter_value(value.trim());
+            if !value.is_empty() {
+                name = Some(value);
+            }
+            continue;
+        }
+        if let Some(value) = trimmed.strip_prefix("description:") {
+            let value = unquote_frontmatter_value(value.trim());
+            if !value.is_empty() {
+                description = Some(value);
+            }
+        }
+    }
+
+    (name, description)
+}
+
+fn unquote_frontmatter_value(value: &str) -> String {
+    value
+        .strip_prefix('"')
+        .and_then(|trimmed| trimmed.strip_suffix('"'))
+        .or_else(|| {
+            value
+                .strip_prefix('\'')
+                .and_then(|trimmed| trimmed.strip_suffix('\''))
+        })
+        .unwrap_or(value)
+        .trim()
+        .to_string()
+}
+
+fn load_workspace_runtime_config(paths: &WorkspacePaths) -> Result<runtime::RuntimeConfig, AppError> {
+    let workspace_config_path = paths.runtime_config_dir.join("workspace.json");
+    let exists = workspace_config_path.exists();
+    let document = if exists {
+        let contents = fs::read_to_string(&workspace_config_path)?;
+        if contents.trim().is_empty() {
+            Some(BTreeMap::new())
+        } else {
+            let parsed = runtime::JsonValue::parse(&contents)
+                .map_err(|error| AppError::runtime(format!("invalid runtime config: {error}")))?;
+            let object = parsed.as_object().ok_or_else(|| {
+                AppError::invalid_input(format!(
+                    "{} must contain a top-level JSON object",
+                    workspace_config_path.display()
+                ))
+            })?;
+            Some(object.clone())
+        }
+    } else {
+        None
+    };
+
+    runtime::ConfigLoader::new(&paths.root, &paths.runtime_config_dir)
+        .load_from_documents(&[runtime::ConfigDocument {
+            source: runtime::ConfigSource::Project,
+            path: workspace_config_path,
+            exists,
+            loaded: document.is_some(),
+            document,
+        }])
+        .map_err(|error| AppError::runtime(error.to_string()))
+}
+
+fn mcp_scope_label(_scope: runtime::ConfigSource) -> &'static str {
+    "workspace"
+}
+
+fn mcp_endpoint(config: &runtime::McpServerConfig) -> String {
+    match config {
+        runtime::McpServerConfig::Stdio(config) => {
+            if config.args.is_empty() {
+                format!("stdio: {}", config.command)
+            } else {
+                format!("stdio: {} {}", config.command, config.args.join(" "))
+            }
+        }
+        runtime::McpServerConfig::Sse(config) | runtime::McpServerConfig::Http(config) => {
+            config.url.clone()
+        }
+        runtime::McpServerConfig::Ws(config) => config.url.clone(),
+        runtime::McpServerConfig::Sdk(config) => format!("sdk: {}", config.name),
+        runtime::McpServerConfig::ManagedProxy(config) => config.url.clone(),
+    }
+}
+
+impl InfraWorkspaceService {
+    async fn build_tool_catalog(&self) -> Result<WorkspaceToolCatalogSnapshot, AppError> {
+        let workspace_id = self.state.workspace_id()?;
+        let workspace_root = self.state.paths.root.clone();
+        let mut entries = Vec::new();
+
+        for spec in tools::mvp_tool_specs() {
+            entries.push(WorkspaceToolCatalogEntry {
+                id: format!("builtin-{}", spec.name),
+                workspace_id: workspace_id.clone(),
+                name: spec.name.into(),
+                kind: "builtin".into(),
+                description: spec.description.into(),
+                required_permission: normalize_required_permission(spec.required_permission),
+                availability: "healthy".into(),
+                source_key: format!("builtin:{}", spec.name),
+                display_path: "runtime builtin registry".into(),
+                builtin_key: Some(spec.name.into()),
+                active: None,
+                shadowed_by: None,
+                source_origin: None,
+                server_name: None,
+                endpoint: None,
+                tool_names: None,
+                status_detail: None,
+                scope: None,
+            });
+        }
+
+        for skill in load_skills_from_roots(&discover_skill_roots(&workspace_root))? {
+            let is_active = skill.shadowed_by.is_none();
+            entries.push(WorkspaceToolCatalogEntry {
+                id: format!("skill-{}-{}", skill.name.to_ascii_lowercase(), skill.source.key()),
+                workspace_id: workspace_id.clone(),
+                name: skill.name.clone(),
+                kind: "skill".into(),
+                description: skill.description.unwrap_or_default(),
+                required_permission: Some("readonly".into()),
+                availability: if is_active {
+                    "healthy".into()
+                } else {
+                    "configured".into()
+                },
+                source_key: format!("skill:{}:{}", skill.name.to_ascii_lowercase(), skill.source.key()),
+                display_path: display_path(&skill.path, &workspace_root),
+                builtin_key: None,
+                active: Some(is_active),
+                shadowed_by: skill.shadowed_by.clone(),
+                source_origin: Some(skill.origin.as_str().into()),
+                server_name: None,
+                endpoint: None,
+                tool_names: None,
+                status_detail: None,
+                scope: None,
+            });
+        }
+
+        let runtime_config = load_workspace_runtime_config(&self.state.paths)?;
+        let mut manager = runtime::McpServerManager::from_runtime_config(&runtime_config);
+        let discovery_report = manager.discover_tools_best_effort().await;
+        let discovered_tool_names = discovery_report
+            .tools
+            .iter()
+            .fold(BTreeMap::<String, Vec<String>>::new(), |mut grouped, tool| {
+                grouped
+                    .entry(tool.server_name.clone())
+                    .or_default()
+                    .push(tool.qualified_name.clone());
+                grouped
+            });
+        let failed_servers = discovery_report
+            .failed_servers
+            .iter()
+            .map(|failure| (failure.server_name.clone(), failure.error.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let unsupported_servers = discovery_report
+            .unsupported_servers
+            .iter()
+            .map(|server| (server.server_name.clone(), server.reason.clone()))
+            .collect::<BTreeMap<_, _>>();
+
+        for (server_name, scoped_config) in runtime_config.mcp().servers() {
+            let tool_names = discovered_tool_names
+                .get(server_name)
+                .cloned()
+                .unwrap_or_default();
+            let status_detail = failed_servers
+                .get(server_name)
+                .cloned()
+                .or_else(|| unsupported_servers.get(server_name).cloned());
+            let availability = if status_detail.is_some() {
+                "attention"
+            } else if tool_names.is_empty() {
+                "configured"
+            } else {
+                "healthy"
+            };
+
+            entries.push(WorkspaceToolCatalogEntry {
+                id: format!("mcp-{server_name}"),
+                workspace_id: workspace_id.clone(),
+                name: server_name.clone(),
+                kind: "mcp".into(),
+                description: "Configured MCP server.".into(),
+                required_permission: None,
+                availability: availability.into(),
+                source_key: format!("mcp:{server_name}"),
+                display_path: "config/runtime/workspace.json".into(),
+                builtin_key: None,
+                active: None,
+                shadowed_by: None,
+                source_origin: None,
+                server_name: Some(server_name.clone()),
+                endpoint: Some(mcp_endpoint(&scoped_config.config)),
+                tool_names: Some(tool_names),
+                status_detail,
+                scope: Some(mcp_scope_label(scoped_config.scope).into()),
+            });
+        }
+
+        entries.sort_by(|left, right| {
+            left.kind
+                .cmp(&right.kind)
+                .then_with(|| left.name.to_ascii_lowercase().cmp(&right.name.to_ascii_lowercase()))
+        });
+
+        Ok(WorkspaceToolCatalogSnapshot { entries })
+    }
 }
 
 #[derive(Clone)]
@@ -2400,6 +2930,10 @@ impl WorkspaceService for InfraWorkspaceService {
             .clone())
     }
 
+    async fn get_tool_catalog(&self) -> Result<WorkspaceToolCatalogSnapshot, AppError> {
+        self.build_tool_catalog().await
+    }
+
     async fn list_tools(&self) -> Result<Vec<ToolRecord>, AppError> {
         Ok(self
             .state
@@ -3468,5 +4002,77 @@ default_project_id = "proj-redesign"
         let workspace_toml =
             std::fs::read_to_string(&paths.workspace_config).expect("workspace toml after normalize");
         assert!(workspace_toml.contains("bootstrap_status = \"ready\""));
+    }
+
+    #[test]
+    fn tool_catalog_prefers_higher_priority_skill_roots_and_marks_shadowed_entries() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        let codex_skill_dir = bundle.paths.root.join(".codex/skills/help");
+        let claude_skill_dir = bundle.paths.root.join(".claude/skills/help");
+        std::fs::create_dir_all(&codex_skill_dir).expect("codex skill dir");
+        std::fs::create_dir_all(&claude_skill_dir).expect("claude skill dir");
+        std::fs::write(
+            codex_skill_dir.join("SKILL.md"),
+            "---\nname: help\ndescription: Preferred help skill.\n---\n",
+        )
+        .expect("codex skill");
+        std::fs::write(
+            claude_skill_dir.join("SKILL.md"),
+            "---\nname: help\ndescription: Shadowed help skill.\n---\n",
+        )
+        .expect("claude skill");
+
+        let snapshot = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(bundle.workspace.get_tool_catalog())
+            .expect("tool catalog");
+
+        let help_entries = snapshot
+            .entries
+            .iter()
+            .filter(|entry| entry.kind == "skill" && entry.name == "help")
+            .collect::<Vec<_>>();
+        assert_eq!(help_entries.len(), 2);
+        assert!(help_entries.iter().any(|entry| {
+            entry.display_path == ".codex/skills/help/SKILL.md"
+                && entry.active == Some(true)
+                && entry.shadowed_by.is_none()
+        }));
+        assert!(help_entries.iter().any(|entry| {
+            entry.display_path == ".claude/skills/help/SKILL.md"
+                && entry.active == Some(false)
+                && entry.shadowed_by.as_deref() == Some("project-codex")
+        }));
+    }
+
+    #[test]
+    fn tool_catalog_marks_unsupported_mcp_servers_as_attention() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        std::fs::write(
+            bundle.paths.runtime_config_dir.join("workspace.json"),
+            r#"{"mcpServers":{"ops":{"type":"http","url":"https://ops.example.test/mcp"}}}"#,
+        )
+        .expect("workspace runtime config");
+
+        let snapshot = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(bundle.workspace.get_tool_catalog())
+            .expect("tool catalog");
+
+        let ops = snapshot
+            .entries
+            .iter()
+            .find(|entry| entry.kind == "mcp" && entry.server_name.as_deref() == Some("ops"))
+            .expect("ops entry");
+        assert_eq!(ops.availability, "attention");
+        assert_eq!(ops.scope.as_deref(), Some("workspace"));
+        assert!(ops
+            .status_detail
+            .as_deref()
+            .is_some_and(|detail| detail.contains("not supported")));
     }
 }

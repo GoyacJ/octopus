@@ -3,7 +3,7 @@ use octopus_core::{
     AgentRecord, AppError, AutomationRecord, KnowledgeRecord, MenuRecord, ModelCatalogRecord,
     PermissionRecord, ProjectRecord, ProviderCredentialRecord, RoleRecord,
     SystemBootstrapStatus, TeamRecord, ToolRecord, UserRecordSummary,
-    WorkspaceResourceRecord, WorkspaceSummary,
+    WorkspaceResourceRecord, WorkspaceSummary, WorkspaceToolCatalogSnapshot,
 };
 
 #[async_trait]
@@ -25,6 +25,7 @@ pub trait WorkspaceService: Send + Sync {
     async fn delete_team(&self, team_id: &str) -> Result<(), AppError>;
     async fn list_models(&self) -> Result<Vec<ModelCatalogRecord>, AppError>;
     async fn list_provider_credentials(&self) -> Result<Vec<ProviderCredentialRecord>, AppError>;
+    async fn get_tool_catalog(&self) -> Result<WorkspaceToolCatalogSnapshot, AppError>;
     async fn list_tools(&self) -> Result<Vec<ToolRecord>, AppError>;
     async fn create_tool(&self, record: ToolRecord) -> Result<ToolRecord, AppError>;
     async fn update_tool(&self, tool_id: &str, record: ToolRecord) -> Result<ToolRecord, AppError>;

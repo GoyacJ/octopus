@@ -17,6 +17,7 @@
     "pause": "暂停",
     "resume": "恢复",
     "cancel": "取消",
+    "collapse": "收起",
     "confirm": "确定",
     "confirmDelete": "确认删除当前项？",
     "save": "保存",
@@ -120,6 +121,29 @@
       "passwordMismatch": "两次输入的密码不一致。"
     }
   },
+  "connectWorkspace": {
+    "eyebrow": "连接工作区",
+    "title": "新增并连接工作区",
+    "description": "输入工作区服务地址和登录凭证。系统会先探测工作区信息，再建立连接并切换过去。",
+    "fields": {
+      "baseUrl": "工作区地址",
+      "username": "用户名",
+      "password": "密码"
+    },
+    "placeholders": {
+      "baseUrl": "https://workspace.example.com"
+    },
+    "actions": {
+      "trigger": "新增/连接工作区",
+      "submit": "连接并进入"
+    },
+    "validation": {
+      "baseUrlRequired": "请输入工作区地址。",
+      "baseUrlInvalid": "请输入合法的工作区地址。",
+      "usernameRequired": "请输入用户名。",
+      "passwordRequired": "请输入密码。"
+    }
+  },
   "searchOverlay": {
     "placeholder": "输入关键词快速跳转…",
     "emptyTitle": "没有匹配结果",
@@ -146,6 +170,9 @@
   "sidebar": {
     "workspace": {
       "label": "工作区"
+    },
+    "businessNavigation": {
+      "title": "业务导航"
     },
     "workspaceMenu": {
       "trigger": "工作区",
@@ -485,6 +512,7 @@
       "readonlyPermission": "只读模式",
       "dangerPermission": "全权模式",
       "dangerPermissionHint": "允许 AI 自动执行敏感写操作",
+      "shortcutHint": "Cmd/Ctrl + Enter 发送",
       "dangerDialog": {
         "title": "启用全权模式",
         "description": "全权模式下，AI 将能够自动执行包括删除、修改在内的敏感写操作，而不再需要您的逐项审批。",
@@ -758,75 +786,63 @@
   },
   "tools": {
     "header": {
-      "eyebrow": "工具",
+      "eyebrow": "运行时工具",
       "title": "工具集成",
-      "subtitle": "管理工作区工具定义与权限策略。"
+      "subtitle": "直接从 runtime 真实来源读取内置工具、技能目录和 MCP 服务配置。"
     },
     "tabs": {
-      "builtin": "系统内置",
-      "skill": "Skill 工具",
-      "mcp": "MCP 连接器"
+      "builtin": "内置工具",
+      "skill": "技能目录",
+      "mcp": "MCP"
     },
     "empty": {
-      "title": "暂无集成项",
-      "description": "创建一个工具或连接器后，它会出现在这里。"
+      "title": "当前分组暂无条目",
+      "description": "这个分组下暂时没有 runtime 真实条目。",
+      "filteredTitle": "没有匹配的工具",
+      "filteredDescription": "试试修改搜索词或切换分组。",
+      "selectionTitle": "请选择一个工具",
+      "selectionDescription": "从左侧选择条目以查看来源和发现状态。"
     },
-    "emptyTitle": "暂无集成项",
     "search": {
-      "placeholder": "搜索工具名称、端点或状态…"
+      "placeholder": "搜索名称、路径、端点或状态…"
     },
-    "editor": {
-      "createTitle": "新建集成",
-      "editTitle": "编辑配置"
+    "summary": {
+      "results": "当前显示 {count} 条 / 本分组共 {total} 条"
     },
-    "fields": {
-      "name": "名称",
-      "kind": "类型",
-      "description": "功能描述",
-      "permissionMode": "权限模式",
-      "permission": "调用权限",
-      "status": "启用状态",
-      "availability": "连通性",
-      "skillContent": "代码逻辑",
-      "serverName": "服务标识",
-      "endpoint": "API 端点",
-      "toolNames": "暴露方法",
-      "notes": "开发备注"
+    "detail": {
+      "title": "详情",
+      "sourcePath": "来源路径",
+      "sourceKey": "来源键",
+      "requiredPermission": "所需权限",
+      "builtinKey": "内置键",
+      "activeState": "状态",
+      "shadowedBy": "被覆盖来源",
+      "sourceOrigin": "发现来源",
+      "serverName": "服务名",
+      "endpoint": "端点",
+      "toolNames": "已发现工具",
+      "scope": "配置范围",
+      "statusDetail": "状态说明",
+      "settingsHint": "MCP 配置编辑仍在 runtime settings 页面处理。",
+      "settingsLink": "打开运行时设置"
     },
-    "actions": {
-      "create": "创建工具",
-      "edit": "编辑工具",
-      "createSkill": "新建 Skill",
-      "createEmptySkill": "新建空白 Skill",
-      "importZip": "从 ZIP 导入",
-      "importFolder": "从文件夹导入",
-      "createMcp": "新建 MCP",
-      "enable": "启用",
-      "disable": "停用",
-      "delete": "删除",
-      "deleteConfirmTitle": "确认删除工具？",
-      "deleteConfirmDesc": "删除后将无法恢复，且所有引用此工具的智能体将无法继续使用其功能。"
+    "states": {
+      "active": "生效中",
+      "shadowed": "已被覆盖"
     },
-    "permissions": {
-      "allow": "始终允许",
-      "deny": "彻底禁止",
-      "ask": "每次询问",
-      "readonly": "仅限只读"
+    "sourceOrigins": {
+      "skills_dir": "技能目录",
+      "legacy_commands_dir": "旧版 /commands"
     },
-    "status": {
-      "active": "已启用",
-      "disabled": "已禁用"
+    "requiredPermissions": {
+      "readonly": "只读",
+      "workspace-write": "工作区写入",
+      "danger-full-access": "危险全权限"
     },
     "availability": {
       "healthy": "状态健康",
       "configured": "已配置",
       "attention": "需关注"
-    },
-    "pagination": {
-      "perPage": "每页 {count} 条",
-      "previous": "上一页",
-      "next": "下一页",
-      "summary": "第 {page} / {totalPages} 页，共 {count} 项"
     }
   },
   "settings": {

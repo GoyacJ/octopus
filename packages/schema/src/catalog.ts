@@ -9,8 +9,6 @@ import type {
   SettingsSectionId,
   ToolCatalogKind,
   ViewStatus,
-  WorkspaceToolPermissionMode,
-  WorkspaceToolStatus,
 } from './shared'
 
 export interface InboxItem {
@@ -101,57 +99,159 @@ export interface ProviderCredential {
   status: 'healthy' | 'error' | 'unconfigured'
 }
 
-interface WorkspaceToolBase {
+export type ModelCapabilityId =
+  | 'streaming'
+  | 'tool_calling'
+  | 'structured_output'
+  | 'reasoning'
+  | 'vision_input'
+  | 'image_generation'
+  | 'audio_io'
+  | 'realtime'
+  | 'files'
+  | 'batch'
+  | 'context_cache'
+  | 'mcp'
+  | 'web_search'
+  | 'computer_use'
+
+export type ModelSurfaceId =
+  | 'conversation'
+  | 'responses'
+  | 'files'
+  | 'batch'
+  | 'realtime'
+  | 'media'
+  | 'image'
+  | 'audio'
+  | 'video'
+  | 'cache'
+  | 'music'
+  | 'embeddings'
+
+export type ProtocolFamily =
+  | 'anthropic_messages'
+  | 'openai_chat'
+  | 'openai_responses'
+  | 'gemini_native'
+  | 'vendor_native'
+
+export type AuthStrategy = 'bearer' | 'x_api_key' | 'api_key' | 'none'
+export type BaseUrlPolicy = 'fixed' | 'allow_override' | 'credential_only'
+
+export interface CapabilityDescriptor {
+  capabilityId: ModelCapabilityId | string
+  label: string
+}
+
+export interface SurfaceDescriptor {
+  surface: ModelSurfaceId | string
+  protocolFamily: ProtocolFamily | string
+  transport: string[]
+  authStrategy: AuthStrategy | string
+  baseUrl: string
+  baseUrlPolicy: BaseUrlPolicy | string
+  enabled: boolean
+  capabilities: CapabilityDescriptor[]
+}
+
+export interface ProviderRegistryRecord {
+  providerId: string
+  label: string
+  enabled: boolean
+  surfaces: SurfaceDescriptor[]
+  metadata: Record<string, unknown>
+}
+
+export interface ModelSurfaceBinding {
+  surface: ModelSurfaceId | string
+  protocolFamily: ProtocolFamily | string
+  enabled: boolean
+}
+
+export interface ModelRegistryRecord {
+  modelId: string
+  providerId: string
+  label: string
+  description: string
+  family: string
+  track: string
+  enabled: boolean
+  recommendedFor: string
+  availability: ViewStatus | string
+  defaultPermission: PermissionMode
+  surfaceBindings: ModelSurfaceBinding[]
+  capabilities: CapabilityDescriptor[]
+  contextWindow?: number
+  maxOutputTokens?: number
+  metadata: Record<string, unknown>
+}
+
+export interface CredentialBinding {
+  credentialRef: string
+  providerId: string
+  label: string
+  baseUrl?: string
+  status: 'healthy' | 'error' | 'unconfigured' | 'configured'
+  configured: boolean
+  source: string
+}
+
+export interface DefaultSelection {
+  providerId: string
+  modelId: string
+  surface: ModelSurfaceId | string
+}
+
+export interface ModelRegistryDiagnostics {
+  warnings: string[]
+  errors: string[]
+}
+
+export type WorkspaceToolKind = ToolCatalogKind
+export type WorkspaceToolRequiredPermission = 'readonly' | 'workspace-write' | 'danger-full-access'
+export type WorkspaceToolAvailability = ViewStatus
+
+interface WorkspaceToolCatalogBase {
   id: string
   workspaceId: string
   name: string
-  kind: ToolCatalogKind
+  kind: WorkspaceToolKind
   description: string
-  availability: ViewStatus
-  status: WorkspaceToolStatus
-  permissionMode: WorkspaceToolPermissionMode
+  requiredPermission: WorkspaceToolRequiredPermission | null
+  availability: WorkspaceToolAvailability
+  sourceKey: string
+  displayPath: string
 }
 
-export interface BuiltinToolDefinition extends WorkspaceToolBase {
+export interface WorkspaceBuiltinToolCatalogEntry extends WorkspaceToolCatalogBase {
   kind: 'builtin'
   builtinKey: string
 }
 
-export interface SkillToolDefinition extends WorkspaceToolBase {
+export interface WorkspaceSkillToolCatalogEntry extends WorkspaceToolCatalogBase {
   kind: 'skill'
-  content: string
+  active: boolean
+  shadowedBy?: string
+  sourceOrigin: 'skills_dir' | 'legacy_commands_dir'
 }
 
-export interface McpToolDefinition extends WorkspaceToolBase {
+export interface WorkspaceMcpToolCatalogEntry extends WorkspaceToolCatalogBase {
   kind: 'mcp'
   serverName: string
   endpoint: string
   toolNames: string[]
-  notes: string
+  statusDetail?: string
+  scope: 'workspace' | 'project' | 'user'
 }
 
-export type WorkspaceToolDefinition = BuiltinToolDefinition | SkillToolDefinition | McpToolDefinition
+export type WorkspaceToolCatalogEntry =
+  | WorkspaceBuiltinToolCatalogEntry
+  | WorkspaceSkillToolCatalogEntry
+  | WorkspaceMcpToolCatalogEntry
 
-export interface ToolCatalogItem {
-  id: string
-  workspaceId: string
-  name: string
-  kind: ToolCatalogKind
-  description: string
-  availability: ViewStatus
-  status: WorkspaceToolStatus
-  permissionMode: WorkspaceToolPermissionMode
-  content?: string
-  serverName?: string
-  endpoint?: string
-  toolNames?: string[]
-  notes?: string
-}
-
-export interface ToolCatalogGroup {
-  id: ToolCatalogKind
-  title: string
-  items: ToolCatalogItem[]
+export interface WorkspaceToolCatalogSnapshot {
+  entries: WorkspaceToolCatalogEntry[]
 }
 
 export interface AutomationSummary {

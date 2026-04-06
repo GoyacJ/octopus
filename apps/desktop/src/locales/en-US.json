@@ -17,6 +17,7 @@
     "pause": "Pause",
     "resume": "Resume",
     "cancel": "Cancel",
+    "collapse": "Collapse",
     "confirm": "Confirm",
     "confirmDelete": "Delete this item?",
     "save": "Save",
@@ -120,6 +121,29 @@
       "passwordMismatch": "Passwords do not match."
     }
   },
+  "connectWorkspace": {
+    "eyebrow": "Connect Workspace",
+    "title": "Add and connect a workspace",
+    "description": "Enter the workspace service URL and your credentials. The desktop shell will probe the workspace first, then sign in and switch to it.",
+    "fields": {
+      "baseUrl": "Workspace URL",
+      "username": "Username",
+      "password": "Password"
+    },
+    "placeholders": {
+      "baseUrl": "https://workspace.example.com"
+    },
+    "actions": {
+      "trigger": "Add or connect workspace",
+      "submit": "Connect and continue"
+    },
+    "validation": {
+      "baseUrlRequired": "Enter a workspace URL.",
+      "baseUrlInvalid": "Enter a valid workspace URL.",
+      "usernameRequired": "Enter a username.",
+      "passwordRequired": "Enter a password."
+    }
+  },
   "searchOverlay": {
     "placeholder": "Type to jump anywhere…",
     "emptyTitle": "No matching results",
@@ -146,6 +170,9 @@
   "sidebar": {
     "workspace": {
       "label": "Workspace"
+    },
+    "businessNavigation": {
+      "title": "Business Navigation"
     },
     "workspaceMenu": {
       "trigger": "Workspace",
@@ -485,6 +512,7 @@
       "readonlyPermission": "Read-only",
       "dangerPermission": "Full Access",
       "dangerPermissionHint": "Allow AI to execute sensitive write operations",
+      "shortcutHint": "Cmd/Ctrl + Enter to Send",
       "dangerDialog": {
         "title": "Enable Full Access Mode",
         "description": "In Full Access mode, AI will be able to automatically execute sensitive write operations, including deletions and modifications, without requiring step-by-step approval from you.",
@@ -758,80 +786,63 @@
   },
   "tools": {
     "header": {
-      "eyebrow": "Tools",
-      "title": "TOOLS",
-      "subtitle": "Manage workspace tool definitions and permission policies."
+      "eyebrow": "Runtime Tools",
+      "title": "Tools",
+      "subtitle": "Read built-in tools, discovered skills, and MCP servers directly from runtime sources."
     },
     "tabs": {
-      "builtin": "System Built-in",
-      "skill": "Skill Tools",
-      "mcp": "MCP Connectors"
-    },
-    "tabs": {
-      "builtin": "System Built-in",
-      "skill": "Skill Tools",
-      "mcp": "MCP Connectors"
+      "builtin": "Built-in",
+      "skill": "Skills",
+      "mcp": "MCP"
     },
     "empty": {
-      "title": "No integrations yet",
-      "description": "Create a tool or connector to make it available to the workspace."
+      "title": "No runtime entries",
+      "description": "No runtime-backed entries are available for this group yet.",
+      "filteredTitle": "No matching tools",
+      "filteredDescription": "Try a different search term or switch tabs.",
+      "selectionTitle": "Select a tool",
+      "selectionDescription": "Choose an entry to inspect its runtime source and discovery state."
     },
-    "emptyTitle": "No integrations yet",
     "search": {
-      "placeholder": "Search tool name, endpoint, or status…"
+      "placeholder": "Search name, path, endpoint, or status…"
     },
-    "editor": {
-      "createTitle": "New Integration",
-      "editTitle": "Edit Config"
+    "summary": {
+      "results": "{count} shown / {total} in this group"
     },
-    "fields": {
-      "name": "Name",
-      "kind": "Kind",
-      "description": "Description",
-      "permissionMode": "Permission Mode",
-      "permission": "Permissions",
-      "status": "Status",
-      "availability": "Connectivity",
-      "skillContent": "Skill Logic",
-      "serverName": "Server Name",
-      "endpoint": "API Endpoint",
-      "toolNames": "Exposed Methods",
-      "notes": "Dev Notes"
+    "detail": {
+      "title": "Details",
+      "sourcePath": "Source path",
+      "sourceKey": "Source key",
+      "requiredPermission": "Required permission",
+      "builtinKey": "Builtin key",
+      "activeState": "State",
+      "shadowedBy": "Shadowed by",
+      "sourceOrigin": "Source origin",
+      "serverName": "Server",
+      "endpoint": "Endpoint",
+      "toolNames": "Discovered tools",
+      "scope": "Config scope",
+      "statusDetail": "Status detail",
+      "settingsHint": "MCP editing stays in runtime settings.",
+      "settingsLink": "Open runtime settings"
     },
-    "actions": {
-      "create": "Create tool",
-      "edit": "Edit tool",
-      "createSkill": "New Skill",
-      "createEmptySkill": "New Blank Skill",
-      "importZip": "Import from ZIP",
-      "importFolder": "Import from Folder",
-      "createMcp": "New MCP",
-      "enable": "Enable",
-      "disable": "Disable",
-      "delete": "Delete",
-      "deleteConfirmTitle": "Confirm deletion?",
-      "deleteConfirmDesc": "This action cannot be undone. Any agents relying on this tool will no longer be able to use it."
+    "states": {
+      "active": "Active",
+      "shadowed": "Shadowed"
     },
-    "permissions": {
-      "allow": "Always Allow",
-      "deny": "Prohibited",
-      "ask": "Ask every time",
-      "readonly": "Read-only only"
+    "sourceOrigins": {
+      "skills_dir": "Skills directory",
+      "legacy_commands_dir": "Legacy /commands"
     },
-    "status": {
-      "active": "Enabled",
-      "disabled": "Disabled"
+    "requiredPermissions": {
+      "readonly": "Read-only",
+      "workspace-write": "Workspace write",
+      "danger-full-access": "Danger full access"
     },
     "availability": {
       "healthy": "Healthy",
-      "configured": "Configuring",
+      "configured": "Configured",
       "attention": "Needs attention"
-    },
-    "pagination": {
-      "perPage": "{count} per page",
-      "previous": "Previous",
-      "next": "Next",
-      "summary": "Page {page} / {totalPages}, {count} items"
     }
   },
   "settings": {

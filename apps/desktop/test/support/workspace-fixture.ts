@@ -34,6 +34,7 @@ import type {
   WorkspaceConnectionRecord,
   WorkspaceOverviewSnapshot,
   WorkspaceResourceRecord,
+  WorkspaceToolCatalogSnapshot,
   WorkspaceSessionTokenEnvelope,
 } from '@octopus/schema'
 import { resolveRuntimePermissionMode } from '@octopus/schema'
@@ -70,6 +71,7 @@ interface WorkspaceFixtureState {
   agents: AgentRecord[]
   teams: TeamRecord[]
   catalog: ModelCatalogSnapshot
+  toolCatalog: WorkspaceToolCatalogSnapshot
   tools: ToolRecord[]
   automations: AutomationRecord[]
   userCenterOverview: UserCenterOverviewSnapshot
@@ -566,6 +568,52 @@ function createWorkspaceFixtureState(
     },
   ]
 
+  const toolCatalog = {
+    entries: [
+      {
+        id: 'builtin-bash',
+        workspaceId: workspace.id,
+        kind: 'builtin',
+        name: 'bash',
+        description: 'Execute a shell command in the current workspace.',
+        availability: 'healthy',
+        requiredPermission: 'danger-full-access',
+        sourceKey: 'builtin:bash',
+        displayPath: 'runtime builtin registry',
+        builtinKey: 'bash',
+      },
+      {
+        id: 'skill-help',
+        workspaceId: workspace.id,
+        kind: 'skill',
+        name: 'help',
+        description: 'Helpful local skill.',
+        availability: 'healthy',
+        requiredPermission: 'readonly',
+        sourceKey: 'skill:help',
+        displayPath: '~/.codex/skills/help/SKILL.md',
+        active: true,
+        sourceOrigin: 'skills_dir',
+      },
+      {
+        id: 'mcp-ops',
+        workspaceId: workspace.id,
+        kind: 'mcp',
+        name: 'ops',
+        description: 'Configured MCP server.',
+        availability: 'attention',
+        requiredPermission: null,
+        sourceKey: 'mcp:ops',
+        displayPath: 'config/runtime/workspace.json',
+        serverName: 'ops',
+        endpoint: 'https://ops.example.test/mcp',
+        toolNames: ['mcp__ops__tail_logs'],
+        statusDetail: 'MCP handshake timed out',
+        scope: 'workspace',
+      },
+    ],
+  }
+
   const automations: AutomationRecord[] = local
     ? [
         {
@@ -838,6 +886,7 @@ function createWorkspaceFixtureState(
     agents,
     teams,
     catalog,
+    toolCatalog,
     tools,
     automations,
     userCenterOverview,
@@ -1166,6 +1215,9 @@ function createWorkspaceClientFixture(
     catalog: {
       async getSnapshot() {
         return clone(workspaceState.catalog)
+      },
+      async getToolCatalog() {
+        return clone(workspaceState.toolCatalog)
       },
       async listModels() {
         return clone(workspaceState.catalog.models)
