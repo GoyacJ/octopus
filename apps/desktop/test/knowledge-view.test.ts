@@ -61,7 +61,7 @@ describe('Knowledge view', () => {
     expect(mounted.container.querySelector('[data-testid="knowledge-stat-total"]')?.textContent).toContain('1')
     expect(mounted.container.querySelector('[data-testid="knowledge-detail-title"]')?.textContent).toContain('Architect')
     expect(mounted.container.querySelector('[data-testid="knowledge-source-card"]')?.textContent).toContain('conv-redesign')
-    expect(mounted.container.querySelector('[data-testid="knowledge-related-conversation-link"]')?.textContent).toContain('Desktop shell GA 重构')
+    expect(mounted.container.querySelector('[data-testid="knowledge-related-conversation-link"]')?.textContent).toContain('Desktop shell GA refactor')
     expect(mounted.container.querySelector('[data-testid="knowledge-lineage-list"]')?.textContent).toContain('会话')
 
     mounted.destroy()

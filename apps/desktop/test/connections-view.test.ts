@@ -47,7 +47,7 @@ function mountApp() {
 describe('Connections view', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
-    await router.push('/workspaces/ws-local/connections')
+    await router.push('/connections')
     await router.isReady()
     document.body.innerHTML = ''
   })

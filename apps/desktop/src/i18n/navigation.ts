@@ -33,7 +33,7 @@ export function getProjectFirstConversationId(projects: Pick<Project, 'id' | 'co
 export function createProjectConversationTarget(workspaceId: string, projectId: string, conversationId?: string | null): RouteLocationNamedRaw {
   if (conversationId) {
     return {
-      name: 'conversation',
+      name: 'project-conversation',
       params: {
         workspaceId,
         projectId,
@@ -52,7 +52,7 @@ export function createProjectConversationTarget(workspaceId: string, projectId: 
 }
 
 export function createProjectSurfaceTarget(
-  routeName: 'project-agents' | 'resources' | 'knowledge' | 'trace',
+  routeName: 'project-agents' | 'project-resources' | 'project-knowledge' | 'project-trace',
   workspaceId: string,
   projectId: string,
 ): RouteLocationNamedRaw {

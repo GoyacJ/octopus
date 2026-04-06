@@ -1,4 +1,4 @@
-use octopus_core::{ConnectionProfile, HostState, PreferencesPort, ShellPreferences};
+use octopus_core::{ConnectionProfile, DesktopBackendConnection, HostState, PreferencesPort, ShellPreferences};
 use serde::Serialize;
 
 use crate::{error::ShellResult, state::ShellState};
@@ -61,6 +61,10 @@ pub fn save_shell_preferences(state: &ShellState, preferences: ShellPreferences)
 
 pub fn list_connections_payload(state: &ShellState) -> Vec<ConnectionProfile> {
   state.connections.clone()
+}
+
+pub fn get_backend_connection_payload(state: &ShellState) -> DesktopBackendConnection {
+  state.backend_supervisor.connection()
 }
 
 pub fn healthcheck_payload(state: &ShellState) -> HealthcheckStatusPayload {

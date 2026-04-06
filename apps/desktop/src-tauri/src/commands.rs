@@ -3,8 +3,9 @@ use tauri::{AppHandle, State};
 
 use crate::{
   bootstrap::{
-    bootstrap_shell_payload, get_host_state_payload, healthcheck_payload, list_connections_payload, load_shell_preferences,
-    save_shell_preferences, HealthcheckStatusPayload, ShellBootstrapPayload,
+    bootstrap_shell_payload, get_backend_connection_payload, get_host_state_payload, healthcheck_payload,
+    list_connections_payload, load_shell_preferences, save_shell_preferences, HealthcheckStatusPayload,
+    ShellBootstrapPayload,
   },
   error::into_command_error,
   state::ShellState,
@@ -33,6 +34,11 @@ pub fn save_preferences(state: State<'_, ShellState>, preferences: ShellPreferen
 #[tauri::command]
 pub fn list_connections_stub(state: State<'_, ShellState>) -> Vec<ConnectionProfile> {
   list_connections_payload(state.inner())
+}
+
+#[tauri::command]
+pub fn get_backend_connection(state: State<'_, ShellState>) -> DesktopBackendConnection {
+  get_backend_connection_payload(state.inner())
 }
 
 #[tauri::command]

@@ -15,18 +15,18 @@ describe('desktop i18n smoke coverage', () => {
 
     expect(translate('dashboard.header.eyebrow')).toBe('工作区 Dashboard')
     expect(translate('conversation.stream.title')).toBe('消息流')
-    expect(translate('settings.tabs.general')).toBe('通用')
-    expect(resolveCopy('mock.workspace.ws-local.name')).toBe('本地枢纽')
-    expect(resolveCopy('mock.project.proj-redesign.summary')).toContain('PRD 模块')
+    expect(translate('settings.tabs.general')).toBe('通用布局')
+    expect(resolveCopy('mock.workspace.ws-local.name')).toBe('本地工作区')
+    expect(resolveCopy('mock.project.proj-redesign.summary')).toContain('桌面端 shell 与会话架构')
     expect(enumLabel('conversationIntent', 'paused')).toBe('已暂停')
 
     i18n.global.locale.value = 'en-US'
 
     expect(translate('dashboard.header.eyebrow')).toBe('Workspace Dashboard')
     expect(translate('conversation.stream.title')).toBe('Message Stream')
-    expect(translate('settings.tabs.general')).toBe('General')
-    expect(resolveCopy('mock.workspace.ws-local.name')).toBe('Local Hub')
-    expect(resolveCopy('mock.project.proj-redesign.summary')).toContain('PRD modules')
+    expect(translate('settings.tabs.general')).toBe('General Layout')
+    expect(resolveCopy('mock.workspace.ws-local.name')).toBe('Local Workspace')
+    expect(resolveCopy('mock.project.proj-redesign.summary')).toContain('desktop shell and conversation architecture')
     expect(enumLabel('conversationIntent', 'paused')).toBe('Paused')
   })
 })

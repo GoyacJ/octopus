@@ -7,9 +7,11 @@ import {
   Menu,
   Monitor,
   MoonStar,
+  Plus,
   Search,
   Settings,
   SunMedium,
+  Trash2,
   UserRound,
 } from 'lucide-vue-next'
 
@@ -37,23 +39,30 @@ const workspaceLabel = computed(() =>
 
 const currentPageName = computed(() => {
   const name = String(route.name || '')
-  if (name.includes('conversations')) return t('sidebar.workspaceMenu.items.conversations')
-  if (name.includes('project-agents')) return t('sidebar.workspaceMenu.items.agents')
+  if (name.includes('project-conversation') || name.includes('project-conversations')) return t('sidebar.workspaceMenu.items.conversations')
+  if (name === 'project-dashboard' || name === 'workspace-overview') return t('sidebar.workspaceMenu.items.dashboard')
   if (name.includes('agents')) return t('sidebar.workspaceMenu.items.agents')
   if (name.includes('knowledge')) return t('sidebar.workspaceMenu.items.knowledge')
   if (name.includes('resources')) return t('sidebar.workspaceMenu.items.resources')
   if (name.includes('trace')) return t('sidebar.workspaceMenu.items.trace')
+  if (name.includes('teams')) return t('sidebar.navigation.teams')
   if (name.includes('models')) return t('sidebar.workspaceMenu.items.models')
   if (name.includes('tools')) return t('sidebar.workspaceMenu.items.tools')
   if (name.includes('automations')) return t('sidebar.workspaceMenu.items.automations')
-  if (name.includes('settings')) return t('topbar.settings')
+  if (name === 'app-settings') return t('topbar.settings')
+  if (name === 'app-connections') return t('connections.header.title')
   if (name.includes('user-center')) return t('sidebar.workspaceMenu.items.userCenter')
-  if (name.includes('workspace-overview')) return t('sidebar.workspaceMenu.items.dashboard')
   return ''
 })
 
 const currentRoleLabel = computed(() => workbench.currentUserRoles[0]?.name ?? t('topbar.profileRole'))
-const isSettingsRoute = computed(() => String(route.name || '') === 'settings')
+const isSettingsRoute = computed(() => String(route.name || '') === 'app-settings')
+const canManageWorkspace = computed(() =>
+  workbench.hasPermission('workspace:manage:update', 'update', 'workspace', workbench.currentWorkspaceId),
+)
+const canManageSettings = computed(() =>
+  workbench.hasPermission('settings:manage:update', 'update', 'workspace', workbench.currentWorkspaceId),
+)
 
 const themeIcons = {
   system: Monitor,
@@ -62,6 +71,12 @@ const themeIcons = {
 } as const
 
 const localeOptions = ['zh-CN', 'en-US'] as const
+const workspaceItems = computed(() => workbench.workspaces.map((workspace) => ({
+  id: workspace.id,
+  label: workbench.workspaceDisplayName(workspace.id),
+  helper: workspace.isLocal ? t('topbar.localWorkspace') : t('topbar.sharedWorkspace'),
+  active: workspace.id === workbench.currentWorkspaceId,
+})))
 
 function closeMenus() {
   themeMenuOpen.value = false
@@ -98,10 +113,13 @@ async function selectLocale(locale: 'zh-CN' | 'en-US') {
 }
 
 async function openSettings() {
+  if (!canManageSettings.value) {
+    return
+  }
+
   closeMenus()
   await router.push({
-    name: 'settings',
-    params: { workspaceId: workbench.currentWorkspaceId },
+    name: 'app-settings',
   })
 }
 
@@ -117,13 +135,17 @@ async function switchWorkspace(workspaceId: string) {
 }
 
 async function addWorkspace() {
+  if (!canManageWorkspace.value) {
+    return
+  }
+
   const workspace = workbench.createWorkspace()
   accountMenuOpen.value = false
   await router.push(createWorkspaceSwitchTarget(workbench.workspaces, workspace.id))
 }
 
 async function removeWorkspace(workspaceId: string) {
-  if (workbench.workspaces.length <= 1) {
+  if (!canManageWorkspace.value || workbench.workspaces.length <= 1) {
     return
   }
 
@@ -233,6 +255,7 @@ async function removeWorkspace(workspaceId: string) {
             </div>
 
             <button
+              v-if="canManageSettings"
               type="button"
               data-testid="topbar-settings-button"
               class="rounded-md px-2.5 py-1.5 text-xs text-text-secondary hover:bg-accent"
@@ -271,9 +294,64 @@ async function removeWorkspace(workspaceId: string) {
                   </div>
 
                   <div class="border-t border-border-subtle dark:border-white/[0.05] pt-2">
+                    <div class="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-text-tertiary">
+                      {{ t('topbar.workspaceSectionTitle') }}
+                    </div>
+                    <div class="px-2 pb-2 text-xs text-text-tertiary">
+                      {{ t('topbar.workspaceSectionSubtitle') }}
+                    </div>
+
+                    <div class="space-y-1">
+                      <div
+                        v-for="workspace in workspaceItems"
+                        :key="workspace.id"
+                        class="flex items-center gap-2"
+                      >
+                        <button
+                          type="button"
+                          :data-testid="`workspace-switch-${workspace.id}`"
+                          class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent"
+                          :class="workspace.active ? 'bg-accent text-text-primary font-medium' : 'text-text-secondary'"
+                          @click="switchWorkspace(workspace.id)"
+                        >
+                          <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-bold text-primary uppercase">
+                            {{ workspace.label.slice(0, 1) }}
+                          </div>
+                          <div class="min-w-0 flex-1">
+                            <div class="truncate">{{ workspace.label }}</div>
+                            <div class="truncate text-[11px] text-text-tertiary">{{ workspace.helper }}</div>
+                          </div>
+                          <Check v-if="workspace.active" :size="14" class="shrink-0 text-primary" />
+                        </button>
+                        <UiButton
+                          v-if="canManageWorkspace"
+                          variant="ghost"
+                          size="icon"
+                          class="h-8 w-8 shrink-0"
+                          :data-testid="`remove-workspace-${workspace.id}`"
+                          :disabled="workbench.workspaces.length <= 1"
+                          @click="removeWorkspace(workspace.id)"
+                        >
+                          <Trash2 :size="14" />
+                        </UiButton>
+                      </div>
+                    </div>
+
+                    <UiButton
+                      v-if="canManageWorkspace"
+                      variant="ghost"
+                      class="mt-2 w-full justify-start"
+                      data-testid="add-workspace-button"
+                      @click="addWorkspace"
+                    >
+                      <Plus :size="14" />
+                      {{ t('topbar.addWorkspace') }}
+                    </UiButton>
+
                     <button
+                      v-if="canManageSettings"
                       type="button"
-                      class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-text-secondary hover:bg-accent"
+                      class="mt-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-text-secondary hover:bg-accent"
                       @click="openSettings"
                     >
                       <Settings :size="14" />

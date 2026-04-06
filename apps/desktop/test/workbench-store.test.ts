@@ -593,14 +593,14 @@ describe('useWorkbenchStore', () => {
   it('syncs effective menus to the switched session user', () => {
     const store = useWorkbenchStore()
 
-    expect(store.effectiveMenuIdsByUser('user-admin')).toContain('menu-user-center-roles')
+    expect(store.effectiveMenuIdsByUser('user-admin')).toContain('menu-workspace-user-center-roles')
 
     store.switchCurrentUser('user-operator')
 
     expect(store.currentUser?.id).toBe('user-operator')
-    expect(store.effectiveMenuIdsByUser('user-operator')).toContain('menu-user-center')
-    expect(store.effectiveMenuIdsByUser('user-operator')).toContain('menu-user-center-users')
-    expect(store.effectiveMenuIdsByUser('user-operator')).not.toContain('menu-user-center-roles')
+    expect(store.effectiveMenuIdsByUser('user-operator')).toContain('menu-workspace-user-center')
+    expect(store.effectiveMenuIdsByUser('user-operator')).toContain('menu-workspace-user-center-users')
+    expect(store.effectiveMenuIdsByUser('user-operator')).not.toContain('menu-workspace-user-center-roles')
   })
 
   it('blocks deleting a role that is still bound to a workspace member', () => {
@@ -613,13 +613,13 @@ describe('useWorkbenchStore', () => {
   it('removes disabled menus from the effective navigation tree', () => {
     const store = useWorkbenchStore()
 
-    expect(store.effectiveMenuIdsByUser('user-admin')).toContain('menu-tools')
+    expect(store.effectiveMenuIdsByUser('user-admin')).toContain('menu-workspace-tools')
 
-    store.updateMenu('menu-tools', {
+    store.updateMenu('menu-workspace-tools', {
       status: 'disabled',
     })
 
-    expect(store.effectiveMenuIdsByUser('user-admin')).not.toContain('menu-tools')
+    expect(store.effectiveMenuIdsByUser('user-admin')).not.toContain('menu-workspace-tools')
   })
 
   it('manages workspace tool definitions for builtin, skill, and mcp entries', () => {
@@ -697,6 +697,6 @@ describe('useWorkbenchStore', () => {
     expect(store.workspaceUserListItems.some((user) => user.id === 'user-intern' && user.roleNames.length === 0)).toBe(true)
     expect(store.workspaceRoleListItems.some((role) => role.id === 'role-ws-local-observer' && role.riskFlags.length > 0)).toBe(true)
     expect(store.workspacePermissionListItems.some((permission) => permission.id === 'perm-ws-local-bundle-audit' && permission.riskFlags.length > 0)).toBe(true)
-    expect(store.workspaceMenuTreeItems.some((menu) => menu.id === 'menu-automations' && menu.roleUsageCount > 0)).toBe(true)
+    expect(store.workspaceMenuTreeItems.some((menu) => menu.id === 'menu-workspace-automations' && menu.roleUsageCount > 0)).toBe(true)
   })
 })

@@ -17,6 +17,7 @@
     "resume": "恢复",
     "cancel": "取消",
     "confirm": "确定",
+    "confirmDelete": "确认删除当前项？",
     "save": "保存",
     "edit": "编辑",
     "delete": "删除",
@@ -764,7 +765,8 @@
     "common": {
       "noRoles": "暂无角色",
       "active": "正常",
-      "disabled": "停用"
+      "disabled": "停用",
+      "status": "状态"
     },
     "nav": {
       "title": "管理菜单",
@@ -774,24 +776,156 @@
       "permissions": "权限管理",
       "menus": "导航管理"
     },
+    "filters": {
+      "status": "状态筛选",
+      "scope": "范围筛选",
+      "allStatuses": "全部状态",
+      "allScopes": "全部范围"
+    },
+    "gender": {
+      "unknown": "未知",
+      "male": "男",
+      "female": "女"
+    },
+    "scope": {
+      "allProjects": "全部项目",
+      "selectedProjects": "指定项目"
+    },
+    "risk": {
+      "broadMenuAccess": "广泛菜单访问"
+    },
     "profile": {
+      "usernameLabel": "用户名",
+      "nicknameLabel": "昵称",
+      "phoneLabel": "手机号",
+      "emailLabel": "邮箱",
+      "genderLabel": "性别",
+      "roleLabel": "角色",
+      "securityTitle": "账号安全",
+      "resetPassword": "重置密码",
+      "passwordLabel": "密码状态",
+      "passwordUpdatedAtLabel": "密码更新时间",
+      "passwordResetRequired": "需要重置密码",
+      "passwordTemporary": "临时密码",
+      "permissionTitle": "有效权限",
+      "permissionSubtitle": "按目标类型查看当前账号可执行的能力范围。",
+      "permissionCountLabel": "{count} 项权限",
+      "emptyPermissionTitle": "暂无权限",
+      "emptyPermissionDescription": "当前账号还没有绑定任何有效权限。",
+      "timelineTitle": "最近活动",
+      "timelineSubtitle": "展示当前账号在工作区内的关键操作轨迹。",
+      "emptyTimelineTitle": "暂无活动记录",
+      "emptyTimelineDescription": "当前账号还没有可展示的最近活动。",
       "metrics": {
         "permissionCount": "原子权限",
         "menuCount": "导航节点",
-        "roleCount": "承载角色"
+        "roleCount": "承载角色",
+        "permissionHelper": "当前账号继承到的权限总量。",
+        "menuHelper": "当前账号可见的导航节点数量。",
+        "roleHelper": "当前账号归属的角色数量。"
       }
     },
     "users": {
       "title": "成员管理",
+      "subtitle": "维护工作区成员账号、角色绑定与项目范围。",
       "create": "添加成员",
-      "searchPlaceholder": "搜索成员、账号或邮箱…"
+      "createTitle": "创建成员",
+      "editTitle": "编辑成员",
+      "formSubtitle": "编辑成员的基础资料、角色授权与访问范围。",
+      "searchPlaceholder": "搜索成员、账号或邮箱…",
+      "currentSessionUser": "当前会话用户",
+      "effectivePermissions": "有效权限 {count}",
+      "effectiveMenus": "可见菜单 {count}",
+      "switchCurrentUser": "切换为当前会话用户",
+      "disable": "停用成员",
+      "enable": "启用成员",
+      "roleBindingTitle": "角色绑定",
+      "scopeTitle": "项目范围",
+      "metrics": {
+        "total": "成员总数",
+        "activeHelper": "其中 {count} 个为启用状态",
+        "disabled": "已停用成员",
+        "scopeHelper": "其中 {count} 个为指定项目范围",
+        "unassigned": "未分配角色",
+        "unassignedHelper": "建议尽快补齐角色绑定，避免权限漂移。"
+      }
     },
     "roles": {
       "title": "角色定义",
       "create": "新增角色",
+      "createTitle": "创建角色",
+      "editTitle": "编辑角色",
+      "listTitle": "角色列表",
+      "listSubtitle": "集中维护工作区内的职责分工与授权模板。",
+      "formSubtitle": "编辑角色说明，并绑定权限与菜单访问范围。",
       "nameLabel": "角色名称",
       "codeLabel": "角色标识",
-      "descriptionLabel": "职能描述"
+      "descriptionLabel": "职能描述",
+      "permissionBindingTitle": "权限绑定",
+      "menuBindingTitle": "菜单绑定",
+      "menuHint": "只勾选该角色应该看到的导航入口。",
+      "metrics": {
+        "total": "角色总数",
+        "disabledHelper": "其中 {count} 个角色当前停用。",
+        "orphan": "空角色",
+        "orphanHelper": "当前没有成员绑定的角色数量。",
+        "broadAccess": "高覆盖访问",
+        "broadAccessHelper": "拥有广泛菜单访问的角色数量。"
+      }
+    },
+    "permissions": {
+      "title": "权限管理",
+      "subtitle": "管理原子权限与权限包，并绑定目标范围。",
+      "listTitle": "权限列表",
+      "listSubtitle": "查看工作区内所有权限定义、状态与风险提示。",
+      "create": "新增权限",
+      "createTitle": "创建权限",
+      "editTitle": "编辑权限",
+      "formSubtitle": "编辑权限元信息、目标对象与组合关系。",
+      "atomicTab": "原子权限",
+      "bundleTab": "权限包",
+      "nameLabel": "权限名称",
+      "codeLabel": "权限标识",
+      "descriptionLabel": "权限描述",
+      "kindLabel": "权限类型",
+      "targetTypeTitle": "目标类型",
+      "targetBindingTitle": "目标绑定",
+      "actionTitle": "动作标识",
+      "bundleComposeTitle": "权限包组合",
+      "bundleMembers": "包含 {count} 个成员权限",
+      "usedByRoles": "被 {count} 个角色使用",
+      "disable": "停用",
+      "enable": "启用",
+      "delete": "删除",
+      "metrics": {
+        "total": "权限总数",
+        "bundleHelper": "其中 {count} 个为权限包。",
+        "disabled": "已停用权限",
+        "disabledHelper": "当前不可用但仍保留定义的权限数量。",
+        "risky": "风险权限",
+        "riskyHelper": "需要额外审计关注的权限数量。"
+      }
+    },
+    "menus": {
+      "title": "导航管理",
+      "subtitle": "统一维护菜单标签、顺序、可见性与角色使用情况。",
+      "editTitle": "编辑菜单",
+      "formSubtitle": "调整当前菜单节点的展示文案与状态。",
+      "nonNavigable": "非导航节点",
+      "roleUsage": "被 {count} 个角色使用",
+      "rootNode": "根节点",
+      "labelLabel": "菜单名称",
+      "orderLabel": "排序权重",
+      "parentHint": "父级关系由注册中心控制，此处仅展示当前归属。",
+      "toggleStatus": "切换状态",
+      "metrics": {
+        "total": "菜单总数",
+        "userCenterHelper": "其中 {count} 个来自用户中心配置。",
+        "disabled": "已停用菜单",
+        "disabledHelper": "这些菜单当前不会出现在导航中。",
+        "unused": "未被角色使用",
+        "unusedHelper": "这些菜单暂未分配给任何角色。"
+      }
     }
   },
   "agents": {
@@ -845,10 +979,23 @@
   },
   "automations": {
     "placeholder": {
-      "title": "暂无自动化任务"
+      "eyebrow": "自动化",
+      "title": "暂无自动化任务",
+      "subtitle": "集中查看工作区内的自动化流程、执行节奏与产出状态。"
+    },
+    "list": {
+      "title": "自动化清单",
+      "subtitle": "浏览当前工作区中已配置的自动化任务与运行结果。",
+      "emptyTitle": "暂无自动化记录",
+      "emptyDescription": "当前工作区还没有可展示的自动化任务。"
     }
   },
   "teams": {
+    "header": {
+      "eyebrow": "团队",
+      "title": "团队协作编排",
+      "subtitle": "维护工作区内的协作小队、范围模式与默认输出策略。"
+    },
     "list": {
       "title": "团队列表",
       "subtitle": "管理工作区内预设的 AI 协作小队。",
@@ -856,6 +1003,16 @@
       "emptyDescription": "目前还没有建立任何团队智能体。",
       "projectCopy": "项目副本",
       "workspaceTeam": "工作区团队"
+    },
+    "form": {
+      "name": "团队名称",
+      "mode": "协作模式",
+      "useScope": "适用范围",
+      "defaultOutput": "默认输出",
+      "description": "团队说明",
+      "projectNotes": "项目备注",
+      "members": "成员列表",
+      "approvalPreferences": "审批偏好"
     }
   },
   "mock": {

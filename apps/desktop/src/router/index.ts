@@ -1,30 +1,30 @@
 import { createMemoryHistory, createRouter, createWebHashHistory } from 'vue-router'
 
-import WorkspaceAgentsView from '@/views/WorkspaceAgentsView.vue'
-import ProjectAgentsView from '@/views/ProjectAgentsView.vue'
-import WorkspaceResourcesView from '@/views/WorkspaceResourcesView.vue'
-import ProjectResourcesView from '@/views/ProjectResourcesView.vue'
-import AutomationsView from '@/views/AutomationsView.vue'
-import ConnectionsView from '@/views/ConnectionsView.vue'
-import ConversationView from '@/views/ConversationView.vue'
-import ProjectKnowledgeView from '@/views/ProjectKnowledgeView.vue'
-import WorkspaceKnowledgeView from '@/views/WorkspaceKnowledgeView.vue'
-import ModelsView from '@/views/ModelsView.vue'
-import ProjectDashboardView from '@/views/ProjectDashboardView.vue'
-import SettingsView from '@/views/SettingsView.vue'
-import TeamsView from '@/views/TeamsView.vue'
-import TraceView from '@/views/TraceView.vue'
-import ToolsView from '@/views/ToolsView.vue'
-import UserCenterView from '@/views/UserCenterView.vue'
-import WorkspaceOverviewView from '@/views/WorkspaceOverviewView.vue'
+import ConnectionsView from '@/views/app/ConnectionsView.vue'
+import SettingsView from '@/views/app/SettingsView.vue'
+import ConversationView from '@/views/project/ConversationView.vue'
+import ProjectAgentsView from '@/views/project/ProjectAgentsView.vue'
+import ProjectDashboardView from '@/views/project/ProjectDashboardView.vue'
+import ProjectKnowledgeView from '@/views/project/ProjectKnowledgeView.vue'
+import ProjectResourcesView from '@/views/project/ProjectResourcesView.vue'
+import TraceView from '@/views/project/TraceView.vue'
+import AutomationsView from '@/views/workspace/AutomationsView.vue'
+import ModelsView from '@/views/workspace/ModelsView.vue'
+import TeamsView from '@/views/workspace/TeamsView.vue'
+import ToolsView from '@/views/workspace/ToolsView.vue'
+import UserCenterView from '@/views/workspace/UserCenterView.vue'
+import WorkspaceAgentsView from '@/views/workspace/WorkspaceAgentsView.vue'
+import WorkspaceKnowledgeView from '@/views/workspace/WorkspaceKnowledgeView.vue'
+import WorkspaceOverviewView from '@/views/workspace/WorkspaceOverviewView.vue'
+import WorkspaceResourcesView from '@/views/workspace/WorkspaceResourcesView.vue'
+import UserCenterMenusView from '@/views/workspace/user/UserCenterMenusView.vue'
+import UserCenterPermissionsView from '@/views/workspace/user/UserCenterPermissionsView.vue'
+import UserCenterProfileView from '@/views/workspace/user/UserCenterProfileView.vue'
+import UserCenterRolesView from '@/views/workspace/user/UserCenterRolesView.vue'
+import UserCenterUsersView from '@/views/workspace/user/UserCenterUsersView.vue'
 import { createMockWorkbenchSeed } from '@/mock/data'
 import { USER_CENTER_MENU_IDS, getRouteMenuId } from '@/navigation/menuRegistry'
 import { useWorkbenchStore } from '@/stores/workbench'
-import UserCenterMenusView from '@/views/user-center/UserCenterMenusView.vue'
-import UserCenterPermissionsView from '@/views/user-center/UserCenterPermissionsView.vue'
-import UserCenterProfileView from '@/views/user-center/UserCenterProfileView.vue'
-import UserCenterRolesView from '@/views/user-center/UserCenterRolesView.vue'
-import UserCenterUsersView from '@/views/user-center/UserCenterUsersView.vue'
 
 function resolveUserCenterEntry(workspaceId: string) {
   const workbench = useWorkbenchStore()
@@ -94,7 +94,7 @@ export const router = createRouter({
     },
     {
       path: '/workspaces/:workspaceId/projects/:projectId/conversations/:conversationId',
-      name: 'conversation',
+      name: 'project-conversation',
       component: ConversationView,
     },
     {
@@ -104,22 +104,22 @@ export const router = createRouter({
     },
     {
       path: '/workspaces/:workspaceId/projects/:projectId/resources',
-      name: 'resources',
+      name: 'project-resources',
       component: ProjectResourcesView,
     },
     {
       path: '/workspaces/:workspaceId/projects/:projectId/knowledge',
-      name: 'knowledge',
+      name: 'project-knowledge',
       component: ProjectKnowledgeView,
     },
     {
       path: '/workspaces/:workspaceId/projects/:projectId/trace',
-      name: 'trace',
+      name: 'project-trace',
       component: TraceView,
     },
     {
       path: '/workspaces/:workspaceId/agents',
-      name: 'agents',
+      name: 'workspace-agents',
       component: WorkspaceAgentsView,
     },
     {
@@ -134,27 +134,27 @@ export const router = createRouter({
     },
     {
       path: '/workspaces/:workspaceId/teams',
-      name: 'teams',
+      name: 'workspace-teams',
       component: TeamsView,
     },
     {
       path: '/workspaces/:workspaceId/models',
-      name: 'models',
+      name: 'workspace-models',
       component: ModelsView,
     },
     {
       path: '/workspaces/:workspaceId/tools',
-      name: 'tools',
+      name: 'workspace-tools',
       component: ToolsView,
     },
     {
-      path: '/workspaces/:workspaceId/settings',
-      name: 'settings',
+      path: '/settings',
+      name: 'app-settings',
       component: SettingsView,
     },
     {
       path: '/workspaces/:workspaceId/user-center',
-      name: 'user-center',
+      name: 'workspace-user-center',
       component: UserCenterView,
       redirect: (to) => {
         const workbench = useWorkbenchStore()
@@ -163,49 +163,40 @@ export const router = createRouter({
       children: [
         {
           path: 'profile',
-          name: 'user-center-profile',
+          name: 'workspace-user-center-profile',
           component: UserCenterProfileView,
         },
         {
           path: 'users',
-          name: 'user-center-users',
+          name: 'workspace-user-center-users',
           component: UserCenterUsersView,
         },
         {
           path: 'roles',
-          name: 'user-center-roles',
+          name: 'workspace-user-center-roles',
           component: UserCenterRolesView,
         },
         {
           path: 'permissions',
-          name: 'user-center-permissions',
+          name: 'workspace-user-center-permissions',
           component: UserCenterPermissionsView,
         },
         {
           path: 'menus',
-          name: 'user-center-menus',
+          name: 'workspace-user-center-menus',
           component: UserCenterMenusView,
         },
       ],
     },
     {
       path: '/workspaces/:workspaceId/automations',
-      name: 'automations',
+      name: 'workspace-automations',
       component: AutomationsView,
     },
     {
-      path: '/workspaces/:workspaceId/connections',
-      name: 'workspace-connections',
-      component: ConnectionsView,
-    },
-    {
       path: '/connections',
-      name: 'connections',
-      redirect: (to) => {
-        const workbench = useWorkbenchStore()
-        const workspaceId = workbench.currentWorkspaceId || 'default'
-        return `/workspaces/${workspaceId}/connections`
-      },
+      name: 'app-connections',
+      component: ConnectionsView,
     },
     {
       path: '/:pathMatch(.*)*',
@@ -224,7 +215,11 @@ router.beforeEach((to) => {
   const workspaceId = typeof to.params.workspaceId === 'string' ? to.params.workspaceId : undefined
   const routeMenuId = getRouteMenuId(typeof to.name === 'string' ? to.name : undefined)
 
-  if (!workspaceId || !routeMenuId || !USER_CENTER_MENU_IDS.includes(routeMenuId)) {
+  if (!workspaceId || !routeMenuId) {
+    return true
+  }
+
+  if (!USER_CENTER_MENU_IDS.includes(routeMenuId)) {
     return true
   }
 

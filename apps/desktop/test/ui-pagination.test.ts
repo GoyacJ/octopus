@@ -19,11 +19,14 @@ describe('UiPagination', () => {
       },
     })
 
+    const buttons = wrapper.findAll('button')
+
     expect(wrapper.text()).toContain('2 per page')
     expect(wrapper.text()).toContain('Page 1 / 3, 6 items')
     expect(wrapper.text()).toContain('1 / 3')
-    expect(wrapper.get('[data-testid="ui-pagination-prev"]').attributes('disabled')).toBeDefined()
-    expect(wrapper.get('[data-testid="ui-pagination-next"]').attributes('disabled')).toBeUndefined()
+    expect(buttons).toHaveLength(2)
+    expect(buttons[0]?.attributes('disabled')).toBeDefined()
+    expect(buttons[1]?.attributes('disabled')).toBeUndefined()
   })
 
   it('emits update:page only for valid previous and next page transitions', async () => {
@@ -38,8 +41,10 @@ describe('UiPagination', () => {
       },
     })
 
-    await wrapper.get('[data-testid="ui-pagination-prev"]').trigger('click')
-    await wrapper.get('[data-testid="ui-pagination-next"]').trigger('click')
+    const [previousButton, nextButton] = wrapper.findAll('button')
+
+    await previousButton?.trigger('click')
+    await nextButton?.trigger('click')
 
     expect(wrapper.emitted('update:page')).toEqual([[1], [3]])
   })
@@ -55,8 +60,10 @@ describe('UiPagination', () => {
       },
     })
 
-    await wrapper.get('[data-testid="ui-pagination-prev"]').trigger('click')
-    await wrapper.get('[data-testid="ui-pagination-next"]').trigger('click')
+    const [previousButton, nextButton] = wrapper.findAll('button')
+
+    await previousButton?.trigger('click')
+    await nextButton?.trigger('click')
 
     expect(wrapper.emitted('update:page')).toBeUndefined()
   })

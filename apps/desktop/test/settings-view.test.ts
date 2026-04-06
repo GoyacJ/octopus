@@ -44,10 +44,10 @@ function mountApp() {
   }
 }
 
-describe('Workspace settings view', () => {
+describe('Settings view', () => {
   beforeEach(async () => {
     setActivePinia(createPinia())
-    await router.push('/workspaces/ws-local/settings')
+    await router.push('/settings')
     await router.isReady()
     document.body.innerHTML = ''
   })

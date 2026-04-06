@@ -104,7 +104,7 @@ const results = computed<SearchResult[]>(() => {
       keywords: ['agent', 'agents', '智能体'],
       kind: 'navigation',
       to: {
-        name: 'agents',
+        name: 'workspace-agents',
         params: {
           workspaceId: workbench.currentWorkspaceId,
         },
@@ -117,7 +117,7 @@ const results = computed<SearchResult[]>(() => {
       section: t('searchOverlay.sections.navigation'),
       keywords: ['resource', 'resources', '资源', 'file', 'folder'],
       kind: 'navigation',
-      to: createProjectSurfaceTarget('resources', workbench.currentWorkspaceId, workbench.currentProjectId),
+      to: createProjectSurfaceTarget('project-resources', workbench.currentWorkspaceId, workbench.currentProjectId),
     },
     {
       id: 'nav-knowledge',
@@ -126,7 +126,7 @@ const results = computed<SearchResult[]>(() => {
       section: t('searchOverlay.sections.navigation'),
       keywords: ['knowledge', '知识'],
       kind: 'navigation',
-      to: createProjectSurfaceTarget('knowledge', workbench.currentWorkspaceId, workbench.currentProjectId),
+      to: createProjectSurfaceTarget('project-knowledge', workbench.currentWorkspaceId, workbench.currentProjectId),
     },
     {
       id: 'nav-trace',
@@ -135,7 +135,7 @@ const results = computed<SearchResult[]>(() => {
       section: t('searchOverlay.sections.navigation'),
       keywords: ['trace', '追踪'],
       kind: 'navigation',
-      to: createProjectSurfaceTarget('trace', workbench.currentWorkspaceId, workbench.currentProjectId),
+      to: createProjectSurfaceTarget('project-trace', workbench.currentWorkspaceId, workbench.currentProjectId),
     },
     {
       id: 'nav-models',
@@ -145,7 +145,7 @@ const results = computed<SearchResult[]>(() => {
       keywords: ['model', 'models', '模型'],
       kind: 'navigation',
       to: {
-        name: 'models',
+        name: 'workspace-models',
         params: {
           workspaceId: workbench.currentWorkspaceId,
         },
@@ -159,7 +159,7 @@ const results = computed<SearchResult[]>(() => {
       keywords: ['tool', 'tools', 'skill', 'mcp', '工具'],
       kind: 'navigation',
       to: {
-        name: 'tools',
+        name: 'workspace-tools',
         params: {
           workspaceId: workbench.currentWorkspaceId,
         },
@@ -173,10 +173,7 @@ const results = computed<SearchResult[]>(() => {
       keywords: ['settings', 'preferences', '设置'],
       kind: 'navigation',
       to: {
-        name: 'settings',
-        params: {
-          workspaceId: workbench.currentWorkspaceId,
-        },
+        name: 'app-settings',
       },
     },
   ]

@@ -57,11 +57,11 @@ describe('Workspace tools view', () => {
 
     await nextTick()
 
-    expect(mounted.container.querySelector('[data-testid="tools-title"]')?.textContent).toContain('工作区工具')
+    expect(mounted.container.querySelector('[data-testid="tools-title"]')?.textContent).toContain('工具集成中心')
     expect(mounted.container.querySelector('[data-testid="tools-tabs"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-builtin"]')?.textContent).toContain('内置工具')
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-skill"]')?.textContent).toContain('Skill')
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-mcp"]')?.textContent).toContain('MCP')
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-builtin"]')?.textContent).toContain('系统内置')
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-skill"]')?.textContent).toContain('Skill 工具')
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-mcp"]')?.textContent).toContain('MCP 连接器')
     expect(mounted.container.textContent).not.toContain('工具定义')
 
     mounted.destroy()
@@ -84,7 +84,7 @@ describe('Workspace tools view', () => {
 
     expect(nameInput).not.toBeNull()
     expect(descriptionInput).not.toBeNull()
-    expect(descriptionInput?.disabled).toBe(true)
+    expect(descriptionInput?.disabled).toBe(false)
     expect(contentInput).not.toBeNull()
 
     nameInput!.value = 'Incident Playbook'
@@ -154,7 +154,7 @@ describe('Workspace tools view', () => {
     await nextTick()
 
     expect(mounted.container.textContent).toContain('Ops MCP')
-    expect(mounted.container.querySelector('[data-testid="tools-pagination-summary"]')?.textContent).toContain('第 1 / 1 页')
+    expect(mounted.container.querySelector('[data-testid="tools-pagination-summary"]')).toBeNull()
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-builtin"]')?.click()
     await nextTick()
@@ -164,9 +164,8 @@ describe('Workspace tools view', () => {
     toggleButton?.click()
     await nextTick()
 
-    const readCard = mounted.container.querySelector('[data-testid="tool-item-builtin-read"]')
-    expect(readCard?.textContent).toContain('Read')
-    expect(readCard?.textContent).toContain('禁用')
+    expect(mounted.container.textContent).toContain('Read')
+    expect(mounted.container.textContent).toContain('已禁用')
 
     mounted.destroy()
   })

@@ -458,12 +458,22 @@ function buildScopeSummary(
 
 function buildTargetLabels(
   permission: RbacPermission,
+  workspaces: Workspace[],
   projects: Project[],
+  users: UserAccount[],
+  roles: RbacRole[],
+  permissions: RbacPermission[],
+  menus: MenuNode[],
   agents: Agent[],
   tools: ToolCatalogItem[],
 ): string[] {
   const labelsByType = {
+    workspace: new Map(workspaces.map((workspace) => [workspace.id, workspace.name])),
     project: new Map(projects.map((project) => [project.id, project.name])),
+    user: new Map(users.map((user) => [user.id, user.nickname])),
+    role: new Map(roles.map((role) => [role.id, role.name])),
+    permission: new Map(permissions.map((item) => [item.id, item.name])),
+    menu: new Map(menus.map((menu) => [menu.id, menu.label])),
     agent: new Map(agents.map((agent) => [agent.id, agent.name])),
     tool: new Map(tools.filter((item) => item.kind === 'builtin').map((item) => [item.id, item.name])),
     skill: new Map(tools.filter((item) => item.kind === 'skill').map((item) => [item.id, item.name])),
@@ -1046,6 +1056,20 @@ export const useWorkbenchStore = defineStore('workbench', {
         state.permissions,
       )
     },
+    effectivePermissionsForWorkspace(state) {
+      return (workspaceId: string, userId = state.currentUserId) => {
+        const permissionIds = resolveEffectivePermissionIds(
+          workspaceId,
+          userId,
+          state.memberships,
+          state.roles,
+          state.permissions,
+        )
+        return permissionIds
+          .map((permissionId) => state.permissions.find((permission) => permission.id === permissionId && permission.workspaceId === workspaceId))
+          .filter((permission): permission is RbacPermission => Boolean(permission))
+      }
+    },
     effectivePermissionIdsByUser(state) {
       return (userId: string) => resolveEffectivePermissionIds(
         state.currentWorkspaceId,
@@ -1057,6 +1081,9 @@ export const useWorkbenchStore = defineStore('workbench', {
     },
     currentEffectivePermissionIds(): string[] {
       return this.effectivePermissionIdsByUser(this.currentUserId)
+    },
+    currentEffectivePermissions(): RbacPermission[] {
+      return this.effectivePermissionsForWorkspace(this.currentWorkspaceId, this.currentUserId)
     },
     effectiveMenuIdsForWorkspace(state) {
       return (workspaceId: string, userId = state.currentUserId) => resolveEffectiveMenuIds(
@@ -1082,6 +1109,26 @@ export const useWorkbenchStore = defineStore('workbench', {
     availableUserCenterMenus(): MenuNode[] {
       const accessibleMenuIds = new Set(this.currentEffectiveMenuIds)
       return this.workspaceMenus.filter((menu) => USER_CENTER_MENU_IDS.includes(menu.id) && accessibleMenuIds.has(menu.id))
+    },
+    hasPermission() {
+      return (code: string, action?: string, targetType?: RbacPermission['targetType'], targetId?: string) => {
+        const normalizedCode = code.trim()
+        return this.currentEffectivePermissions.some((permission) => {
+          if (permission.code !== normalizedCode) {
+            return false
+          }
+          if (action && permission.action !== action) {
+            return false
+          }
+          if (targetType && permission.targetType !== targetType) {
+            return false
+          }
+          if (targetId && (permission.targetIds?.length ?? 0) > 0 && !permission.targetIds!.includes(targetId)) {
+            return false
+          }
+          return true
+        })
+      }
     },
     firstAccessibleUserCenterRouteName(): string | undefined {
       return this.availableUserCenterMenus
@@ -1175,7 +1222,7 @@ export const useWorkbenchStore = defineStore('workbench', {
           title: translate('userCenter.alerts.disabledMenuTitle', { label: menu.label }),
           description: translate('userCenter.alerts.disabledMenuDescription', { count: roleUsageCount }),
           severity: 'high',
-          routeName: 'user-center-menus',
+          routeName: 'workspace-user-center-menus',
           entityId: menu.id,
         })
       }
@@ -1189,7 +1236,7 @@ export const useWorkbenchStore = defineStore('workbench', {
             title: translate('userCenter.alerts.orphanRoleTitle', { name: role.name }),
             description: translate('userCenter.alerts.orphanRoleDescription'),
             severity: role.status === 'active' ? 'medium' : 'low',
-            routeName: 'user-center-roles',
+            routeName: 'workspace-user-center-roles',
             entityId: role.id,
           })
         }
@@ -1206,7 +1253,7 @@ export const useWorkbenchStore = defineStore('workbench', {
           title: translate('userCenter.alerts.bundleRiskTitle', { name: permission.name }),
           description: translate('userCenter.alerts.bundleRiskDescription', { count: disabledMembers }),
           severity: 'medium',
-          routeName: 'user-center-permissions',
+          routeName: 'workspace-user-center-permissions',
           entityId: permission.id,
         })
       }
@@ -1237,7 +1284,7 @@ export const useWorkbenchStore = defineStore('workbench', {
               name: permission.name,
               code: permission.code,
               action: permission.action,
-              targetLabels: buildTargetLabels(permission, this.workspaceProjects, this.workspaceAgents, toolCatalogItems),
+              targetLabels: buildTargetLabels(permission, this.workspaces, this.workspaceProjects, this.workspaceUsers, this.workspaceRoles, this.workspacePermissions, this.workspaceMenus, this.workspaceAgents, toolCatalogItems),
             })),
         }))
 
@@ -1349,7 +1396,7 @@ export const useWorkbenchStore = defineStore('workbench', {
           targetType: permission.targetType,
           targetSummary: permission.kind === 'bundle'
             ? translate('userCenter.permissions.bundleMembers', { count: permission.memberPermissionIds?.length ?? 0 })
-            : buildTargetLabels(permission, this.workspaceProjects, this.workspaceAgents, toolCatalogItems).join(', ') || translate('userCenter.common.empty'),
+            : buildTargetLabels(permission, this.workspaces, this.workspaceProjects, this.workspaceUsers, this.workspaceRoles, this.workspacePermissions, this.workspaceMenus, this.workspaceAgents, toolCatalogItems).join(', ') || translate('userCenter.common.empty'),
           usedByRoleCount,
           bundleMemberCount: permission.memberPermissionIds?.length ?? 0,
           riskFlags,

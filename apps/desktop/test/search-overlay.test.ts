@@ -113,7 +113,7 @@ describe('Workbench search overlay', () => {
     agentsResult?.click()
     await flushNavigation()
 
-    expect(router.currentRoute.value.name).toBe('agents')
+    expect(router.currentRoute.value.name).toBe('workspace-agents')
     expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
 
     mounted.destroy()

@@ -17,6 +17,7 @@
     "resume": "Resume",
     "cancel": "Cancel",
     "confirm": "Confirm",
+    "confirmDelete": "Delete this item?",
     "save": "Save",
     "edit": "Edit",
     "delete": "Delete",
@@ -764,7 +765,8 @@
     "common": {
       "noRoles": "No roles yet",
       "active": "Healthy",
-      "disabled": "Disabled"
+      "disabled": "Disabled",
+      "status": "Status"
     },
     "nav": {
       "title": "Admin Menu",
@@ -774,24 +776,156 @@
       "permissions": "Permissions",
       "menus": "Navigation"
     },
+    "filters": {
+      "status": "Status",
+      "scope": "Scope",
+      "allStatuses": "All statuses",
+      "allScopes": "All scopes"
+    },
+    "gender": {
+      "unknown": "Unknown",
+      "male": "Male",
+      "female": "Female"
+    },
+    "scope": {
+      "allProjects": "All projects",
+      "selectedProjects": "Selected projects"
+    },
+    "risk": {
+      "broadMenuAccess": "Broad menu access"
+    },
     "profile": {
+      "usernameLabel": "Username",
+      "nicknameLabel": "Nickname",
+      "phoneLabel": "Phone",
+      "emailLabel": "Email",
+      "genderLabel": "Gender",
+      "roleLabel": "Roles",
+      "securityTitle": "Account security",
+      "resetPassword": "Reset password",
+      "passwordLabel": "Password state",
+      "passwordUpdatedAtLabel": "Password updated at",
+      "passwordResetRequired": "Password reset required",
+      "passwordTemporary": "Temporary password",
+      "permissionTitle": "Effective permissions",
+      "permissionSubtitle": "Review the capabilities currently inherited by this account, grouped by target type.",
+      "permissionCountLabel": "{count} permissions",
+      "emptyPermissionTitle": "No permissions",
+      "emptyPermissionDescription": "This account does not currently inherit any effective permissions.",
+      "timelineTitle": "Recent activity",
+      "timelineSubtitle": "Key actions recently performed by this account in the workspace.",
+      "emptyTimelineTitle": "No recent activity",
+      "emptyTimelineDescription": "There is no recent activity to show for this account yet.",
       "metrics": {
         "permissionCount": "Atomic perms",
         "menuCount": "Nav nodes",
-        "roleCount": "Assigned roles"
+        "roleCount": "Assigned roles",
+        "permissionHelper": "Total permissions inherited by the current account.",
+        "menuHelper": "Navigation entries currently visible to this account.",
+        "roleHelper": "Roles currently assigned to this account."
       }
     },
     "users": {
       "title": "Member Management",
+      "subtitle": "Manage workspace accounts, role bindings, and project scope coverage.",
       "create": "Add Member",
-      "searchPlaceholder": "Search member, ID, or email…"
+      "createTitle": "Create member",
+      "editTitle": "Edit member",
+      "formSubtitle": "Edit member profile data, role bindings, and access scope.",
+      "searchPlaceholder": "Search member, ID, or email…",
+      "currentSessionUser": "Current session user",
+      "effectivePermissions": "{count} effective permissions",
+      "effectiveMenus": "{count} visible menus",
+      "switchCurrentUser": "Switch as current session user",
+      "disable": "Disable member",
+      "enable": "Enable member",
+      "roleBindingTitle": "Role bindings",
+      "scopeTitle": "Project scope",
+      "metrics": {
+        "total": "Total members",
+        "activeHelper": "{count} members are currently active",
+        "disabled": "Disabled members",
+        "scopeHelper": "{count} members are limited to selected projects",
+        "unassigned": "Unassigned roles",
+        "unassignedHelper": "Bind roles to these accounts to avoid permission drift."
+      }
     },
     "roles": {
       "title": "Role Definitions",
       "create": "Add Role",
+      "createTitle": "Create role",
+      "editTitle": "Edit role",
+      "listTitle": "Role list",
+      "listSubtitle": "Maintain workspace responsibility templates and access bundles.",
+      "formSubtitle": "Edit role metadata and bind permissions and menu visibility.",
       "nameLabel": "Role Name",
       "codeLabel": "Role Code",
-      "descriptionLabel": "Functional Description"
+      "descriptionLabel": "Functional Description",
+      "permissionBindingTitle": "Permission bindings",
+      "menuBindingTitle": "Menu bindings",
+      "menuHint": "Only select navigation entries this role should be able to see.",
+      "metrics": {
+        "total": "Total roles",
+        "disabledHelper": "{count} roles are currently disabled.",
+        "orphan": "Orphan roles",
+        "orphanHelper": "Roles that are not currently assigned to any members.",
+        "broadAccess": "Broad access roles",
+        "broadAccessHelper": "Roles with broad navigation coverage."
+      }
+    },
+    "permissions": {
+      "title": "Permission Management",
+      "subtitle": "Manage atomic permissions and bundles with explicit target scope.",
+      "listTitle": "Permission list",
+      "listSubtitle": "Inspect all workspace permissions, current status, and risk markers.",
+      "create": "Add Permission",
+      "createTitle": "Create permission",
+      "editTitle": "Edit permission",
+      "formSubtitle": "Edit permission metadata, target bindings, and bundle composition.",
+      "atomicTab": "Atomic",
+      "bundleTab": "Bundle",
+      "nameLabel": "Permission Name",
+      "codeLabel": "Permission Code",
+      "descriptionLabel": "Description",
+      "kindLabel": "Permission Type",
+      "targetTypeTitle": "Target type",
+      "targetBindingTitle": "Target bindings",
+      "actionTitle": "Action",
+      "bundleComposeTitle": "Bundle composition",
+      "bundleMembers": "Contains {count} member permissions",
+      "usedByRoles": "Used by {count} roles",
+      "disable": "Disable",
+      "enable": "Enable",
+      "delete": "Delete",
+      "metrics": {
+        "total": "Total permissions",
+        "bundleHelper": "{count} of them are permission bundles.",
+        "disabled": "Disabled permissions",
+        "disabledHelper": "Permissions retained in the catalog but not currently usable.",
+        "risky": "Risky permissions",
+        "riskyHelper": "Permissions that require extra audit attention."
+      }
+    },
+    "menus": {
+      "title": "Navigation Management",
+      "subtitle": "Maintain menu labels, order, visibility, and role usage from one place.",
+      "editTitle": "Edit menu",
+      "formSubtitle": "Adjust the current menu node's display label and availability.",
+      "nonNavigable": "Non-navigable node",
+      "roleUsage": "Used by {count} roles",
+      "rootNode": "Root node",
+      "labelLabel": "Menu label",
+      "orderLabel": "Sort order",
+      "parentHint": "Parent relationships are controlled by the registry and shown here for reference only.",
+      "toggleStatus": "Toggle status",
+      "metrics": {
+        "total": "Total menus",
+        "userCenterHelper": "{count} menus come from user center configuration.",
+        "disabled": "Disabled menus",
+        "disabledHelper": "These menus are currently hidden from navigation.",
+        "unused": "Unused menus",
+        "unusedHelper": "These menus are not assigned to any roles yet."
+      }
     }
   },
   "agents": {
@@ -845,10 +979,23 @@
   },
   "automations": {
     "placeholder": {
-      "title": "No automations yet"
+      "eyebrow": "Automations",
+      "title": "No automations yet",
+      "subtitle": "Review workspace automation flows, cadences, and output states from one place."
+    },
+    "list": {
+      "title": "Automation roster",
+      "subtitle": "Browse configured workspace automations and their latest outputs.",
+      "emptyTitle": "No automation records",
+      "emptyDescription": "There are no workspace automations to display yet."
     }
   },
   "teams": {
+    "header": {
+      "eyebrow": "Teams",
+      "title": "Team orchestration",
+      "subtitle": "Maintain workspace squads, scope modes, and default output strategies."
+    },
     "list": {
       "title": "Team List",
       "subtitle": "Manage pre-configured AI collaborative squads.",
@@ -856,6 +1003,16 @@
       "emptyDescription": "No team agents have been created yet.",
       "projectCopy": "Project Copy",
       "workspaceTeam": "Workspace Team"
+    },
+    "form": {
+      "name": "Team name",
+      "mode": "Collaboration mode",
+      "useScope": "Scope",
+      "defaultOutput": "Default output",
+      "description": "Description",
+      "projectNotes": "Project notes",
+      "members": "Members",
+      "approvalPreferences": "Approval preferences"
     }
   },
   "mock": {

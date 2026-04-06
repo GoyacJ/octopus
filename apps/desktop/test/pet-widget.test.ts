@@ -69,8 +69,15 @@ describe('Desktop pet widget', () => {
     await wrapper.get('[data-testid="desktop-pet-trigger"]').trigger('click')
     expect(store.currentUserPetPresence?.chatOpen).toBe(true)
 
-    await wrapper.get('[data-testid="desktop-pet-input"]').setValue('你好，鸭鸭')
-    await wrapper.get('[data-testid="desktop-pet-send"]').trigger('click')
+    const chatInput = document.body.querySelector<HTMLInputElement>('[data-testid="desktop-pet-input"]')
+    const sendButton = document.body.querySelector<HTMLButtonElement>('[data-testid="desktop-pet-send"]')
+    expect(chatInput).not.toBeNull()
+    expect(sendButton).not.toBeNull()
+
+    chatInput!.value = '你好，鸭鸭'
+    chatInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    await wrapper.vm.$nextTick()
+    sendButton?.click()
 
     expect(store.currentUserPetMessages.at(-2)).toMatchObject({ sender: 'user', content: '你好，鸭鸭' })
     expect(store.currentUserPetMessages.at(-1)?.sender).toBe('pet')

@@ -26,8 +26,8 @@ describe('desktop router contract', () => {
     expect(routePaths).toContain('/workspaces/:workspaceId/models')
     expect(routePaths).toContain('/workspaces/:workspaceId/tools')
     expect(routePaths).toContain('/workspaces/:workspaceId/teams')
-    expect(routePaths).toContain('/workspaces/:workspaceId/settings')
-    expect(routePaths).toContain('/workspaces/:workspaceId/connections')
+    expect(routePaths).toContain('/settings')
+    expect(routePaths).toContain('/connections')
     expect(routePaths).toContain('/workspaces/:workspaceId/user-center')
     expect(routePaths).toContain('/workspaces/:workspaceId/user-center/profile')
     expect(routePaths).toContain('/workspaces/:workspaceId/user-center/users')
@@ -41,14 +41,14 @@ describe('desktop router contract', () => {
   it('keeps teams on the dedicated management panel route', async () => {
     await router.push('/workspaces/ws-local/teams')
 
-    expect(router.currentRoute.value.name).toBe('teams')
+    expect(router.currentRoute.value.name).toBe('workspace-teams')
     expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
   })
 
   it('redirects the user center root to the first authorized child route', async () => {
     await router.push('/workspaces/ws-local/user-center')
 
-    expect(router.currentRoute.value.name).toBe('user-center-profile')
+    expect(router.currentRoute.value.name).toBe('workspace-user-center-profile')
   })
 
   it('blocks unauthorized user center child routes and falls back to profile', async () => {
@@ -58,6 +58,6 @@ describe('desktop router contract', () => {
 
     await router.push('/workspaces/ws-local/user-center/roles')
 
-    expect(router.currentRoute.value.name).toBe('user-center-profile')
+    expect(router.currentRoute.value.name).toBe('workspace-user-center-profile')
   })
 })

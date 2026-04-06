@@ -57,7 +57,7 @@ describe('Workbench shell layout', () => {
     await flushUi()
 
     expect(mounted.container.querySelector('[data-testid="workbench-topbar"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="brand-title"]')?.textContent).toContain('Octopus')
+    expect(mounted.container.querySelector('[data-testid="brand-title"]')?.textContent).toContain('网易Lobster')
     expect(mounted.container.querySelector('.brand-logo-image')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="global-search-trigger"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="topbar-menu"]')).not.toBeNull()
@@ -71,7 +71,7 @@ describe('Workbench shell layout', () => {
     mounted.destroy()
   })
 
-  it('opens topbar menus, updates theme and locale preferences, and manages workspaces', async () => {
+  it('opens topbar menus, updates theme and locale preferences, and manages workspaces with RBAC', async () => {
     const mounted = mountLayout()
     const shell = useShellStore()
     const workbench = useWorkbenchStore()
@@ -175,6 +175,20 @@ describe('Workbench shell layout', () => {
     reopenAfterAdd?.click()
     await flushUi()
 
+    expect(mounted.container.querySelector('[data-testid="add-workspace-button"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="remove-workspace-ws-enterprise"]')).toBeNull()
+
+    const switchBackToLocal = mounted.container.querySelector<HTMLButtonElement>('[data-testid="workspace-switch-ws-local"]')
+    expect(switchBackToLocal).not.toBeNull()
+    switchBackToLocal?.click()
+    await flushUi()
+
+    expect(workbench.currentWorkspaceId).toBe('ws-local')
+
+    const reopenAfterSwitchBack = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-profile-trigger"]')
+    reopenAfterSwitchBack?.click()
+    await flushUi()
+
     const removeEnterprise = mounted.container.querySelector<HTMLButtonElement>('[data-testid="remove-workspace-ws-enterprise"]')
     expect(removeEnterprise).not.toBeNull()
     removeEnterprise?.click()
@@ -182,9 +196,9 @@ describe('Workbench shell layout', () => {
 
     expect(workbench.workspaces.some((workspace) => workspace.id === 'ws-enterprise')).toBe(false)
 
-    const removeActiveWorkspace = mounted.container.querySelector<HTMLButtonElement>('[data-testid="remove-workspace-ws-mock-3"]')
-    expect(removeActiveWorkspace).not.toBeNull()
-    removeActiveWorkspace?.click()
+    const removeMockWorkspace = mounted.container.querySelector<HTMLButtonElement>('[data-testid="remove-workspace-ws-mock-3"]')
+    expect(removeMockWorkspace).not.toBeNull()
+    removeMockWorkspace?.click()
     await flushUi()
 
     expect(workbench.currentWorkspaceId).toBe('ws-local')
@@ -219,7 +233,7 @@ describe('Workbench shell layout', () => {
     settingsButton?.click()
     await flushUi()
 
-    expect(router.currentRoute.value.name).toBe('settings')
+    expect(router.currentRoute.value.name).toBe('app-settings')
     expect(settingsButton?.classList.contains('active')).toBe(true)
 
     mounted.destroy()
@@ -253,8 +267,8 @@ describe('Workbench shell layout', () => {
     trigger?.click()
     await flushUi()
 
-    expect(mounted.container.querySelector('[data-testid="desktop-pet-chat"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="desktop-pet-input"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="desktop-pet-chat"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="desktop-pet-input"]')).not.toBeNull()
 
     mounted.destroy()
   })
@@ -279,7 +293,7 @@ describe('Workbench shell layout', () => {
     expect(router.currentRoute.value.name).toBe('project-dashboard')
     expect(router.currentRoute.value.params.projectId).toBe('proj-governance')
     expect(mounted.container.querySelector('[data-testid="project-module-proj-governance-dashboard"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="project-module-proj-governance-agents"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-module-proj-governance-agents"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="project-module-proj-governance-resources"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="project-module-proj-governance-knowledge"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="project-module-proj-governance-trace"]')).not.toBeNull()
@@ -296,20 +310,20 @@ describe('Workbench shell layout', () => {
     workspaceTrigger?.click()
     await flushUi()
 
-    expect(mounted.container.querySelector('[data-testid="sidebar-workspace-menu"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="sidebar-workspace-nav"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="sidebar-nav-workspace-overview"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="sidebar-nav-knowledge"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="sidebar-nav-agents"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="sidebar-nav-models"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="sidebar-nav-tools"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="sidebar-nav-user-center"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-workspace-menu"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-workspace-nav"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-nav-workspace-overview"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-nav-agents"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-nav-models"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-nav-tools"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-nav-user-center"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-nav-knowledge"]')).toBeNull()
 
-    const userCenterLink = mounted.container.querySelector<HTMLAnchorElement>('[data-testid="sidebar-nav-user-center"]')
+    const userCenterLink = document.body.querySelector<HTMLAnchorElement>('[data-testid="sidebar-nav-user-center"]')
     userCenterLink?.click()
     await flushUi()
 
-    expect(router.currentRoute.value.name).toBe('user-center-profile')
+    expect(router.currentRoute.value.name).toBe('workspace-user-center-profile')
     expect(mounted.container.querySelector('[data-testid="sidebar-workspace-menu"]')).toBeNull()
 
     mounted.destroy()

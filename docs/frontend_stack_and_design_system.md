@@ -231,36 +231,37 @@ First batch migrated toward this rule set:
 - `apps/desktop/src/components/layout/ConversationTabsBar.vue`
 - `apps/desktop/src/components/layout/WorkbenchSearchOverlay.vue`
 - `apps/desktop/src/components/layout/WorkbenchTopbar.vue`
-- `apps/desktop/src/views/ProjectDashboardView.vue`
-- `apps/desktop/src/views/WorkspaceOverviewView.vue`
-- `apps/desktop/src/views/KnowledgeView.vue`
-- `apps/desktop/src/views/UserCenterView.vue`
+- `apps/desktop/src/views/project/ProjectDashboardView.vue`
+- `apps/desktop/src/views/workspace/WorkspaceOverviewView.vue`
+- `apps/desktop/src/views/project/ProjectKnowledgeView.vue`
+- `apps/desktop/src/views/workspace/UserCenterView.vue`
 
 Second batch migrated the conversation workbench core path into the same shared skeleton:
 
 - `apps/desktop/src/components/layout/WorkbenchSidebar.vue`
 - `apps/desktop/src/components/layout/ConversationContextPane.vue`
-- `apps/desktop/src/views/ConversationView.vue`
-- `apps/desktop/src/views/ResourcesView.vue`
+- `apps/desktop/src/views/project/ConversationView.vue`
+- `apps/desktop/src/views/project/ProjectResourcesView.vue`
 
 Third batch migrated the management-panel family into the same shared skeleton:
 
-- `apps/desktop/src/views/user-center/UserCenterPermissionsView.vue`
-- `apps/desktop/src/views/user-center/UserCenterRolesView.vue`
-- `apps/desktop/src/views/user-center/UserCenterUsersView.vue`
-- `apps/desktop/src/views/user-center/UserCenterMenusView.vue`
-- `apps/desktop/src/views/user-center/UserCenterProfileView.vue`
-- `apps/desktop/src/views/ToolsView.vue`
-- `apps/desktop/src/views/SettingsView.vue`
-- `apps/desktop/src/views/ConnectionsView.vue`
-- `apps/desktop/src/views/AutomationsView.vue`
-- `apps/desktop/src/views/TeamsView.vue`
+- `apps/desktop/src/views/workspace/user/UserCenterPermissionsView.vue`
+- `apps/desktop/src/views/workspace/user/UserCenterRolesView.vue`
+- `apps/desktop/src/views/workspace/user/UserCenterUsersView.vue`
+- `apps/desktop/src/views/workspace/user/UserCenterMenusView.vue`
+- `apps/desktop/src/views/workspace/user/UserCenterProfileView.vue`
+- `apps/desktop/src/views/workspace/ToolsView.vue`
+- `apps/desktop/src/views/app/SettingsView.vue`
+- `apps/desktop/src/views/app/ConnectionsView.vue`
+- `apps/desktop/src/views/workspace/AutomationsView.vue`
+- `apps/desktop/src/views/workspace/TeamsView.vue`
 
 This batch standardized management screens on shared `UiMetricCard`, `UiToolbarRow`, `UiTabs`, `UiRecordCard`, `UiListRow`, `UiTimelineList`, and shared `UiField` form primitives. Local `metric-card`, `toolbar`, `card`, `editor-shell`, `binding-panel`, and `timeline` systems were removed instead of being preserved page-by-page.
 
 Fourth batch migrated the Agents family into the same shared skeleton:
 
-- `apps/desktop/src/views/AgentsView.vue`
+- `apps/desktop/src/views/workspace/WorkspaceAgentsView.vue`
+- `apps/desktop/src/views/project/ProjectAgentsView.vue`
 - `apps/desktop/src/views/agents/AgentsFilterBar.vue`
 - `apps/desktop/src/views/agents/AgentEmployeeCard.vue`
 - `apps/desktop/src/views/agents/TeamUnitCard.vue`
@@ -272,9 +273,9 @@ This batch standardized the agent center on shared `UiPageHero`, `UiToolbarRow`,
 
 Final tail-cleanup batch retired the last dashboard-family allowlist debt:
 
-- `apps/desktop/src/views/ProjectDashboardView.vue`
-- `apps/desktop/src/views/WorkspaceOverviewView.vue`
-- `apps/desktop/src/views/KnowledgeView.vue`
+- `apps/desktop/src/views/project/ProjectDashboardView.vue`
+- `apps/desktop/src/views/workspace/WorkspaceOverviewView.vue`
+- `apps/desktop/src/views/project/ProjectKnowledgeView.vue`
 
 This batch removed the remaining page-local progress, trend, toolbar-search, and panel-heading visual systems from the dashboard family. Those surfaces now compose shared `UiPageHero`, `UiPanelFrame`, `UiToolbarRow`, `UiFilterChipGroup`, `UiMetricCard`, `UiRankingList`, `UiTimelineList`, `UiNavCardList`, and `UiSurface` primitives with layout-only page orchestration.
 

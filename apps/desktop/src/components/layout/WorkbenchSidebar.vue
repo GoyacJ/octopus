@@ -3,25 +3,27 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import {
+  Bell,
   Bot,
+  Check,
   ChevronDown,
   Cpu,
-  FolderOpen,
   FolderKanban,
+  FolderOpen,
   LayoutDashboard,
   LibraryBig,
   MessageSquareText,
+  MoreHorizontal,
   PanelLeftClose,
   PlaySquare,
   Plus,
-  Trash2,
-  UserRound,
-  Workflow,
-  Wrench,
   Search,
   Settings,
-  Bell,
-  MoreHorizontal
+  Trash2,
+  UserRound,
+  Users,
+  Workflow,
+  Wrench,
 } from 'lucide-vue-next'
 
 import { createProjectConversationTarget, createProjectDashboardTarget, createProjectSurfaceTarget, createWorkspaceOverviewTarget, createWorkspaceSwitchTarget } from '@/i18n/navigation'
@@ -41,6 +43,13 @@ const projectDeleteDialogOpen = ref(false)
 const projectName = ref('')
 const pendingDeleteProjectId = ref<string | null>(null)
 const bottomWorkspaceMenuOpen = ref(false)
+
+const canManageWorkspace = computed(() =>
+  workbench.hasPermission('workspace:manage:update', 'update', 'workspace', workbench.currentWorkspaceId),
+)
+const canManageProjects = computed(() =>
+  workbench.hasPermission('project:manage:update', 'update', 'project', workbench.currentProjectId),
+)
 
 watch(() => route.fullPath, () => {
   bottomWorkspaceMenuOpen.value = false
@@ -80,26 +89,30 @@ const iconMap: Record<MenuIconKey, unknown> = {
   roles: UserRound,
   permissions: UserRound,
   menus: UserRound,
+  settings: Settings,
+  connections: Search,
+  teams: Users,
 }
 
 const workspaceNavigationMenuIds = [
   'menu-workspace-overview',
   'menu-workspace-knowledge',
   'menu-workspace-resources',
-  'menu-agents',
-  'menu-models',
-  'menu-tools',
-  'menu-automations',
-  'menu-user-center',
+  'menu-workspace-agents',
+  'menu-workspace-teams',
+  'menu-workspace-models',
+  'menu-workspace-tools',
+  'menu-workspace-automations',
+  'menu-workspace-user-center',
 ] as const
 
 const projectNavigationMenuIds = [
   'menu-project-dashboard',
-  'menu-conversations',
+  'menu-project-conversations',
   'menu-project-agents',
   'menu-project-resources',
-  'menu-knowledge',
-  'menu-trace',
+  'menu-project-knowledge',
+  'menu-project-trace',
 ] as const
 
 function menuLabel(menuId: string) {
@@ -131,16 +144,18 @@ const workspaceNavigation = computed<NavigationItem[]>(() =>
           return buildNavigationItem(menuId, { name: 'workspace-knowledge', params: { workspaceId: workbench.currentWorkspaceId } }, 'knowledge')
         case 'menu-workspace-resources':
           return buildNavigationItem(menuId, { name: 'workspace-resources', params: { workspaceId: workbench.currentWorkspaceId } }, 'resources')
-        case 'menu-agents':
-          return buildNavigationItem(menuId, { name: 'agents', params: { workspaceId: workbench.currentWorkspaceId } }, 'agents')
-        case 'menu-models':
-          return buildNavigationItem(menuId, { name: 'models', params: { workspaceId: workbench.currentWorkspaceId } }, 'models')
-        case 'menu-tools':
-          return buildNavigationItem(menuId, { name: 'tools', params: { workspaceId: workbench.currentWorkspaceId } }, 'tools')
-        case 'menu-automations':
-          return buildNavigationItem(menuId, { name: 'automations', params: { workspaceId: workbench.currentWorkspaceId } }, 'automations')
-        case 'menu-user-center':
-          return buildNavigationItem(menuId, { name: 'user-center', params: { workspaceId: workbench.currentWorkspaceId } }, 'user-center')
+        case 'menu-workspace-agents':
+          return buildNavigationItem(menuId, { name: 'workspace-agents', params: { workspaceId: workbench.currentWorkspaceId } }, 'agents')
+        case 'menu-workspace-teams':
+          return buildNavigationItem(menuId, { name: 'workspace-teams', params: { workspaceId: workbench.currentWorkspaceId } }, 'teams')
+        case 'menu-workspace-models':
+          return buildNavigationItem(menuId, { name: 'workspace-models', params: { workspaceId: workbench.currentWorkspaceId } }, 'models')
+        case 'menu-workspace-tools':
+          return buildNavigationItem(menuId, { name: 'workspace-tools', params: { workspaceId: workbench.currentWorkspaceId } }, 'tools')
+        case 'menu-workspace-automations':
+          return buildNavigationItem(menuId, { name: 'workspace-automations', params: { workspaceId: workbench.currentWorkspaceId } }, 'automations')
+        case 'menu-workspace-user-center':
+          return buildNavigationItem(menuId, { name: 'workspace-user-center', params: { workspaceId: workbench.currentWorkspaceId } }, 'user-center')
         default:
           return undefined
       }
@@ -157,16 +172,16 @@ function projectModules(projectId: string): NavigationItem[] {
       switch (menuId) {
         case 'menu-project-dashboard':
           return buildNavigationItem(menuId, createProjectDashboardTarget(workspaceId, projectId), 'dashboard')
-        case 'menu-conversations':
+        case 'menu-project-conversations':
           return buildNavigationItem(menuId, createProjectConversationTarget(workspaceId, projectId, firstConversationId), 'conversations')
         case 'menu-project-agents':
           return buildNavigationItem(menuId, createProjectSurfaceTarget('project-agents', workspaceId, projectId), 'agents')
         case 'menu-project-resources':
-          return buildNavigationItem(menuId, createProjectSurfaceTarget('resources', workspaceId, projectId), 'resources')
-        case 'menu-knowledge':
-          return buildNavigationItem(menuId, createProjectSurfaceTarget('knowledge', workspaceId, projectId), 'knowledge')
-        case 'menu-trace':
-          return buildNavigationItem(menuId, createProjectSurfaceTarget('trace', workspaceId, projectId), 'trace')
+          return buildNavigationItem(menuId, createProjectSurfaceTarget('project-resources', workspaceId, projectId), 'resources')
+        case 'menu-project-knowledge':
+          return buildNavigationItem(menuId, createProjectSurfaceTarget('project-knowledge', workspaceId, projectId), 'knowledge')
+        case 'menu-project-trace':
+          return buildNavigationItem(menuId, createProjectSurfaceTarget('project-trace', workspaceId, projectId), 'trace')
         default:
           return undefined
       }
@@ -268,7 +283,7 @@ async function confirmRemoveProject() {
       <section data-testid="sidebar-projects-nav">
         <div class="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-text-tertiary flex items-center justify-between group">
           <span>{{ t('sidebar.projectTree.title') }}</span>
-          <button data-testid="add-project-button" @click="openProjectDialog" class="opacity-0 group-hover:opacity-100 hover:bg-accent p-0.5 rounded transition-all">
+          <button v-if="canManageProjects" data-testid="add-project-button" @click="openProjectDialog" class="opacity-0 group-hover:opacity-100 hover:bg-accent p-0.5 rounded transition-all">
             <Plus :size="12" />
           </button>
         </div>
@@ -288,7 +303,7 @@ async function confirmRemoveProject() {
                 <span class="truncate flex-1" :class="workbench.currentProjectId === project.id ? 'font-medium' : ''">{{ project.name }}</span>
               </button>
               <button
-                v-if="workbench.currentProjectId !== project.id"
+                v-if="canManageProjects && workbench.currentProjectId !== project.id"
                 type="button"
                 :data-testid="`remove-project-${project.id}`"
                 @click.stop="openProjectDeleteDialog(project.id)"
@@ -321,7 +336,7 @@ async function confirmRemoveProject() {
     <footer data-testid="sidebar-bottom-navigation" class="p-2 border-t border-border-subtle dark:border-white/[0.05] relative">
       <UiPopover v-model:open="bottomWorkspaceMenuOpen" align="start" side="top" class="w-64 p-1">
         <template #trigger>
-          <button class="flex w-full items-center gap-2 rounded-md p-2 text-left hover:bg-accent transition-colors group">
+          <button data-testid="sidebar-workspace-trigger" class="flex w-full items-center gap-2 rounded-md p-2 text-left hover:bg-accent transition-colors group">
             <div class="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm bg-primary/10 text-[10px] font-bold text-primary">
               {{ workspaceLabel.slice(0, 1).toUpperCase() }}
             </div>

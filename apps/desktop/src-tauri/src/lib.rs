@@ -39,6 +39,7 @@ pub fn run() {
       commands::load_preferences,
       commands::save_preferences,
       commands::list_connections_stub,
+      commands::get_backend_connection,
       commands::healthcheck,
       commands::restart_desktop_backend,
     ])

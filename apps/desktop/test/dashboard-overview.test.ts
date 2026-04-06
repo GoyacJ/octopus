@@ -65,7 +65,7 @@ describe('Dashboard and overview surfaces', () => {
     mounted.destroy()
   })
 
-  it('renders the dashboard hero and keeps the project edit flow working with shared controls', async () => {
+  it('renders the dashboard hero and keeps the project edit flow working with RBAC controls', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/dashboard')
     await router.isReady()
 

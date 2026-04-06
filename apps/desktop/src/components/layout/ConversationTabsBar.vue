@@ -123,8 +123,7 @@ async function removeConversation(conversationId: string) {
           <UiButton
             variant="ghost"
             size="icon"
-            class="h-8 w-8 text-text-tertiary hover:bg-muted/80 hover:text-text-primary"
-            :class="{ 'text-primary': !shell.rightSidebarCollapsed }"
+            :class="shell.rightSidebarCollapsed ? 'h-8 w-8 text-text-tertiary hover:bg-muted/80 hover:text-text-primary' : 'h-8 w-8 text-text-tertiary hover:bg-muted/80 hover:text-text-primary text-primary'"
             data-testid="toggle-conversation-details"
             :title="t('conversation.tabs.toggleDetails')"
             @click="shell.toggleRightSidebar()"
