@@ -786,8 +786,9 @@
     },
     "tabs": {
       "general": "通用设置",
-      "theme": "外观皮肤",
-      "version": "关于版本"
+      "connection": "连接配置",
+      "theme": "外观设置",
+      "version": "版本信息"
     },
     "preferences": {
       "title": "偏好设定",

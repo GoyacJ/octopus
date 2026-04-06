@@ -1,18 +1,27 @@
 <script setup lang="ts">
 import { RotateCcw } from 'lucide-vue-next'
 import { createDefaultShellPreferences } from '@octopus/schema'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 
-import { UiBadge, UiButton, UiField, UiListRow, UiSectionHeading, UiSelect, UiSwitch, UiTabs } from '@octopus/ui'
+import { UiBadge, UiButton, UiEmptyState, UiField, UiListRow, UiRecordCard, UiSectionHeading, UiSelect, UiSwitch, UiTabs } from '@octopus/ui'
 
 import { enumLabel } from '@/i18n/copy'
 import { useShellStore } from '@/stores/shell'
 
 const { t } = useI18n()
 const shell = useShellStore()
+const route = useRoute()
 
-const activeTab = ref<'general' | 'theme' | 'version'>('general')
+const activeTab = ref<'general' | 'connection' | 'theme' | 'version'>('general')
+
+onMounted(() => {
+  const tab = route.query.tab as any
+  if (['general', 'connection', 'theme', 'version'].includes(tab)) {
+    activeTab.value = tab
+  }
+})
 const theme = ref(shell.preferences.theme)
 const locale = ref(shell.preferences.locale)
 const fontSize = ref(String(shell.preferences.fontSize))
@@ -22,9 +31,33 @@ const leftSidebarCollapsed = ref(shell.preferences.leftSidebarCollapsed)
 const rightSidebarCollapsed = ref(shell.preferences.rightSidebarCollapsed)
 const tabs = computed(() => [
   { value: 'general', label: t('settings.tabs.general') },
+  { value: 'connection', label: t('settings.tabs.connection') },
   { value: 'theme', label: t('settings.tabs.theme') },
   { value: 'version', label: t('settings.tabs.version') },
 ])
+
+const hostBackendBadges = computed((): Array<{ id: string, label: string, tone: 'info' | 'success' | 'warning' }> => {
+  if (!shell.backendConnection) {
+    return []
+  }
+
+  return [
+    {
+      id: 'state',
+      label: enumLabel('backendConnectionState', shell.backendConnection.state),
+      tone: shell.backendConnection.state === 'ready' ? 'success' : 'warning' as const,
+    },
+    {
+      id: 'transport',
+      label: enumLabel('backendTransport', shell.backendConnection.transport),
+      tone: 'info' as const,
+    },
+  ]
+})
+
+function workspaceLabel(workspaceId: string): string {
+  return shell.workspaceConnections.find((item) => item.workspaceId === workspaceId)?.label ?? workspaceId
+}
 
 const themeOptions = computed(() => [
   { value: 'system', label: t('settings.preferences.themeOptions.system') },
@@ -196,6 +229,94 @@ async function resetToDefault() {
                 </UiField>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section v-if="activeTab === 'connection'" class="space-y-10">
+          <div class="space-y-1">
+            <h3 class="text-xl font-bold text-text-primary">{{ t('connections.header.title') }}</h3>
+            <p class="text-[14px] text-text-secondary">{{ t('connections.header.subtitle') }}</p>
+          </div>
+
+          <div class="grid gap-10 xl:grid-cols-2">
+            <!-- Product Connections -->
+            <section class="space-y-6">
+              <div class="space-y-1 border-b border-border-subtle dark:border-white/[0.05] pb-4">
+                <h3 class="text-lg font-bold text-text-primary">{{ t('connections.product.title') }}</h3>
+                <p class="text-[13px] text-text-secondary">{{ t('connections.product.subtitle') }}</p>
+              </div>
+
+              <div data-testid="connections-product-list" class="space-y-4">
+                <UiRecordCard
+                  v-for="connection in shell.workspaceConnections"
+                  :key="connection.workspaceConnectionId"
+                  :test-id="`connection-record-${connection.workspaceConnectionId}`"
+                  :title="connection.label"
+                  :description="t('common.workspaceLabel', { workspace: workspaceLabel(connection.workspaceId) })"
+                >
+                  <template #badges>
+                    <UiBadge :label="enumLabel('transportSecurityLevel', connection.transportSecurity)" :tone="connection.transportSecurity === 'loopback' ? 'info' : 'success' as const" />
+                    <UiBadge :label="enumLabel('workspaceConnectionStatus', connection.status)" subtle />
+                  </template>
+                  <template #meta>
+                    <span class="truncate text-[12px] text-text-tertiary font-mono">{{ connection.baseUrl ?? t('common.noRemoteBaseUrl') }}</span>
+                  </template>
+                </UiRecordCard>
+
+                <UiEmptyState v-if="!shell.workspaceConnections.length" :title="t('connections.empty.title')" :description="t('connections.empty.description')" />
+              </div>
+            </section>
+
+            <!-- Host Connections -->
+            <section class="space-y-6">
+              <div class="space-y-1 border-b border-border-subtle dark:border-white/[0.05] pb-4">
+                <h3 class="text-lg font-bold text-text-primary">{{ t('connections.host.title') }}</h3>
+                <p class="text-[13px] text-text-secondary">{{ t('connections.host.subtitle') }}</p>
+              </div>
+
+              <div data-testid="connections-host-list" class="space-y-4">
+                <UiRecordCard
+                  v-if="shell.backendConnection"
+                  test-id="host-backend-connection"
+                  :title="t('connections.host.backendTitle')"
+                  :description="t('connections.host.backendSubtitle')"
+                >
+                  <template #badges>
+                    <UiBadge
+                      v-for="badge in hostBackendBadges"
+                      :key="badge.id"
+                      :label="badge.label"
+                      :tone="badge.tone"
+                    />
+                  </template>
+                  <template #meta>
+                    <span class="truncate text-[12px] text-text-tertiary font-mono">{{ shell.backendConnection.baseUrl ?? t('common.noBaseUrl') }}</span>
+                  </template>
+                </UiRecordCard>
+
+                <UiRecordCard
+                  v-for="connection in shell.bootstrapConnections"
+                  :key="connection.id"
+                  :test-id="`connection-record-${connection.id}`"
+                  :title="connection.label"
+                  :description="t('common.workspaceLabel', { workspace: workspaceLabel(connection.workspaceId) })"
+                >
+                  <template #badges>
+                    <UiBadge :label="enumLabel('connectionMode', connection.mode)" :tone="connection.mode === 'local' ? 'info' : 'success' as const" />
+                    <UiBadge :label="enumLabel('connectionState', connection.state)" subtle />
+                  </template>
+                  <template #meta>
+                    <span class="truncate text-[12px] text-text-tertiary font-mono">{{ connection.baseUrl ?? t('common.noBaseUrl') }}</span>
+                  </template>
+                </UiRecordCard>
+
+                <UiEmptyState
+                  v-if="!shell.backendConnection && !shell.bootstrapConnections.length"
+                  :title="t('connections.host.emptyTitle')"
+                  :description="t('connections.host.emptyDescription')"
+                />
+              </div>
+            </section>
           </div>
         </section>
 

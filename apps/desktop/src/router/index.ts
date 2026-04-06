@@ -1,6 +1,5 @@
 import { createMemoryHistory, createRouter, createWebHashHistory } from 'vue-router'
 
-import ConnectionsView from '@/views/app/ConnectionsView.vue'
 import SettingsView from '@/views/app/SettingsView.vue'
 import ConversationView from '@/views/project/ConversationView.vue'
 import ProjectAgentsView from '@/views/project/ProjectAgentsView.vue'
@@ -217,8 +216,7 @@ export const router = createRouter({
     },
     {
       path: '/connections',
-      name: 'app-connections',
-      component: ConnectionsView,
+      redirect: { name: 'app-settings', query: { tab: 'connection' } },
     },
     {
       path: '/:pathMatch(.*)*',

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute } from 'vue-router'
 import {
   Bell,
   Bot,
@@ -12,7 +12,6 @@ import {
   LibraryBig,
   MessageSquareText,
   PanelLeftClose,
-  Search,
   Settings,
   UserRound,
   Users,
@@ -30,7 +29,6 @@ import { useUserCenterStore } from '@/stores/user-center'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const route = useRoute()
-const router = useRouter()
 const { t } = useI18n()
 const shell = useShellStore()
 const workspaceStore = useWorkspaceStore()
@@ -62,22 +60,13 @@ const iconMap: Record<MenuIconKey, unknown> = {
   permissions: UserRound,
   menus: UserRound,
   settings: Settings,
-  connections: Search,
+  connections: Settings, // Fallback if still needed
   teams: Users,
   bell: Bell,
 }
 
 const currentWorkspaceId = computed(() => workspaceStore.currentWorkspaceId)
 const currentProjectId = computed(() => workspaceStore.currentProjectId)
-
-const workspaceConnections = computed(() =>
-  shell.workspaceConnections.map(connection => ({
-    id: connection.workspaceConnectionId,
-    workspaceId: connection.workspaceId,
-    label: connection.label,
-    active: connection.workspaceConnectionId === shell.activeWorkspaceConnectionId,
-  })),
-)
 
 const workspaceNavigation = computed<NavigationItem[]>(() => {
   const workspaceId = currentWorkspaceId.value
@@ -236,14 +225,6 @@ function isRouteActive(routeNames: string[]) {
 function isProjectModuleActive(projectId: string, routeNames: string[]) {
   return currentProjectId.value === projectId && isRouteActive(routeNames)
 }
-
-async function switchWorkspace(workspaceId: string) {
-  if (!workspaceId || workspaceId === currentWorkspaceId.value) {
-    return
-  }
-  await shell.activateWorkspaceByWorkspaceId(workspaceId)
-  await router.push(createWorkspaceOverviewTarget(workspaceId))
-}
 </script>
 
 <template>
@@ -259,21 +240,6 @@ async function switchWorkspace(workspaceId: string) {
       <UiButton variant="ghost" size="icon" data-testid="sidebar-collapse" class="h-8 w-8" @click="shell.toggleLeftSidebar()">
         <PanelLeftClose :size="16" />
       </UiButton>
-    </div>
-
-    <div class="mt-4 space-y-2">
-      <div class="px-2 text-[11px] font-bold uppercase tracking-widest text-text-tertiary">Workspaces</div>
-      <button
-        v-for="connection in workspaceConnections"
-        :key="connection.id"
-        type="button"
-        class="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm"
-        :class="connection.active ? 'bg-primary/[0.08] text-text-primary' : 'text-text-secondary hover:bg-accent'"
-        @click="switchWorkspace(connection.workspaceId)"
-      >
-        <span class="truncate">{{ connection.label }}</span>
-        <span v-if="connection.active" class="text-[11px] font-medium text-primary">active</span>
-      </button>
     </div>
 
     <nav class="mt-6 space-y-1">
@@ -323,14 +289,6 @@ async function switchWorkspace(workspaceId: string) {
     </div>
 
     <div class="mt-4 space-y-1 border-t border-border-subtle pt-4 dark:border-white/[0.05]">
-      <RouterLink
-        :to="{ name: 'app-connections' }"
-        class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm"
-        :class="isRouteActive(['app-connections']) ? 'bg-primary/[0.08] text-text-primary' : 'text-text-secondary hover:bg-accent'"
-      >
-        <Search :size="16" />
-        <span>{{ t('connections.header.title') }}</span>
-      </RouterLink>
       <RouterLink
         :to="{ name: 'app-settings' }"
         class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm"
