@@ -491,6 +491,61 @@ pub struct RunRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct RuntimeConfigSource {
+    pub scope: String,
+    pub path: String,
+    pub exists: bool,
+    pub loaded: bool,
+    pub content_hash: Option<String>,
+    pub document: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSecretReferenceStatus {
+    pub scope: String,
+    pub path: String,
+    pub reference: Option<String>,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeConfigValidationResult {
+    pub valid: bool,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeEffectiveConfig {
+    pub effective_config: serde_json::Value,
+    pub effective_config_hash: String,
+    pub sources: Vec<RuntimeConfigSource>,
+    pub validation: RuntimeConfigValidationResult,
+    pub secret_references: Vec<RuntimeSecretReferenceStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeConfigPatch {
+    pub scope: String,
+    pub patch: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeConfigSnapshotSummary {
+    pub id: String,
+    pub effective_config_hash: String,
+    pub started_from_scope_set: Vec<String>,
+    pub source_paths: Vec<String>,
+    pub created_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeSessionSummary {
     pub id: String,
     pub conversation_id: String,
@@ -499,6 +554,9 @@ pub struct RuntimeSessionSummary {
     pub status: String,
     pub updated_at: u64,
     pub last_message_preview: Option<String>,
+    pub config_snapshot_id: String,
+    pub effective_config_hash: String,
+    pub started_from_scope_set: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -513,6 +571,9 @@ pub struct RuntimeRunSnapshot {
     pub updated_at: u64,
     pub model_id: Option<String>,
     pub next_action: Option<String>,
+    pub config_snapshot_id: String,
+    pub effective_config_hash: String,
+    pub started_from_scope_set: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -642,6 +703,10 @@ pub struct ArtifactRecord {
     pub status: String,
     pub latest_version: u32,
     pub updated_at: u64,
+    pub storage_path: Option<String>,
+    pub content_hash: Option<String>,
+    pub byte_size: Option<u64>,
+    pub content_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -6,12 +6,17 @@ import { useShellStore } from '@/stores/shell'
 
 import type {
   CreateRuntimeSessionInput,
+  JsonValue,
   Message,
   ProviderConfig,
   ResolveRuntimeApprovalInput,
   RuntimeApprovalRequest,
+  RuntimeConfigPatch,
+  RuntimeConfigScope,
+  RuntimeConfigValidationResult,
   RuntimeDecisionAction,
   RuntimeEventEnvelope,
+  RuntimeEffectiveConfig,
   RuntimeMessage,
   RuntimeRunSnapshot,
   RuntimeSessionDetail,
@@ -34,6 +39,8 @@ export interface RuntimeQueueItem extends RuntimeSubmitTurnInput {
 }
 
 type RuntimeTransportMode = 'idle' | 'sse' | 'polling'
+type RuntimeConfigDrafts = Record<RuntimeConfigScope, string>
+type RuntimeConfigValidationState = Record<RuntimeConfigScope, RuntimeConfigValidationResult | null>
 
 interface RuntimeWorkspaceSnapshot {
   provider: ProviderConfig | null
@@ -45,7 +52,62 @@ interface RuntimeWorkspaceSnapshot {
   activeConversationId: string
   queuedTurns: Record<string, RuntimeQueueItem[]>
   lastEventIds: Record<string, string>
+  config: RuntimeEffectiveConfig | null
+  configDrafts: RuntimeConfigDrafts
+  configValidation: RuntimeConfigValidationState
+  configLoading: boolean
+  configSavingScope: RuntimeConfigScope | ''
+  configValidatingScope: RuntimeConfigScope | ''
+  configError: string
   error: string
+}
+
+function createRuntimeConfigDrafts(): RuntimeConfigDrafts {
+  return {
+    user: '{}',
+    project: '{}',
+    local: '{}',
+  }
+}
+
+function createRuntimeConfigValidationState(): RuntimeConfigValidationState {
+  return {
+    user: null,
+    project: null,
+    local: null,
+  }
+}
+
+function stringifyConfigDocument(document?: Record<string, JsonValue>): string {
+  return JSON.stringify(document ?? {}, null, 2)
+}
+
+function createRuntimeConfigDraftsFromConfig(config: RuntimeEffectiveConfig | null): RuntimeConfigDrafts {
+  const drafts = createRuntimeConfigDrafts()
+  if (!config) {
+    return drafts
+  }
+
+  for (const source of config.sources) {
+    drafts[source.scope] = stringifyConfigDocument(source.document)
+  }
+
+  return drafts
+}
+
+function parseRuntimeConfigDraft(scope: RuntimeConfigScope, draft: string): RuntimeConfigPatch {
+  const trimmed = draft.trim()
+  const rawValue = trimmed.length ? trimmed : '{}'
+  const parsed = JSON.parse(rawValue) as JsonValue
+
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+    throw new Error(`Runtime config for ${scope} must be a JSON object`)
+  }
+
+  return {
+    scope,
+    patch: parsed as Record<string, JsonValue>,
+  }
 }
 
 function createRuntimeWorkspaceSnapshot(): RuntimeWorkspaceSnapshot {
@@ -59,6 +121,13 @@ function createRuntimeWorkspaceSnapshot(): RuntimeWorkspaceSnapshot {
     activeConversationId: '',
     queuedTurns: {},
     lastEventIds: {},
+    config: null,
+    configDrafts: createRuntimeConfigDrafts(),
+    configValidation: createRuntimeConfigValidationState(),
+    configLoading: false,
+    configSavingScope: '',
+    configValidatingScope: '',
+    configError: '',
     error: '',
   }
 }
@@ -146,6 +215,13 @@ export const useRuntimeStore = defineStore('runtime', {
     streamSubscription: null as { close: () => void } | null,
     pollingSessionId: '',
     pollingTimer: null as ReturnType<typeof setInterval> | null,
+    config: null as RuntimeEffectiveConfig | null,
+    configDrafts: createRuntimeConfigDrafts(),
+    configValidation: createRuntimeConfigValidationState(),
+    configLoading: false,
+    configSavingScope: '' as RuntimeConfigScope | '',
+    configValidatingScope: '' as RuntimeConfigScope | '',
+    configError: '',
     error: '',
   }),
   getters: {
@@ -210,6 +286,13 @@ export const useRuntimeStore = defineStore('runtime', {
           activeConversationId: this.activeConversationId,
           queuedTurns: this.queuedTurns,
           lastEventIds: this.lastEventIds,
+          config: this.config,
+          configDrafts: { ...this.configDrafts },
+          configValidation: { ...this.configValidation },
+          configLoading: this.configLoading,
+          configSavingScope: this.configSavingScope,
+          configValidatingScope: this.configValidatingScope,
+          configError: this.configError,
           error: this.error,
         },
       }
@@ -225,6 +308,13 @@ export const useRuntimeStore = defineStore('runtime', {
       this.activeConversationId = snapshot.activeConversationId
       this.queuedTurns = snapshot.queuedTurns
       this.lastEventIds = snapshot.lastEventIds
+      this.config = snapshot.config
+      this.configDrafts = { ...snapshot.configDrafts }
+      this.configValidation = { ...snapshot.configValidation }
+      this.configLoading = snapshot.configLoading
+      this.configSavingScope = snapshot.configSavingScope
+      this.configValidatingScope = snapshot.configValidatingScope
+      this.configError = snapshot.configError
       this.error = snapshot.error
     },
     syncWorkspaceScopeFromShell() {
@@ -273,6 +363,158 @@ export const useRuntimeStore = defineStore('runtime', {
         [detail.summary.id]: detail,
       }
       this.sessions = upsertSessionSummary(this.sessions, detail.summary)
+    },
+    setConfigDraft(scope: RuntimeConfigScope, value: string) {
+      this.configDrafts = {
+        ...this.configDrafts,
+        [scope]: value,
+      }
+      this.saveActiveWorkspaceSnapshot()
+    },
+    async loadConfig(force = false): Promise<RuntimeEffectiveConfig | null> {
+      this.syncWorkspaceScopeFromShell()
+      if (this.config && !force) {
+        return this.config
+      }
+
+      const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+      if (!resolvedClient) {
+        return null
+      }
+      const { connectionId, client } = resolvedClient
+
+      this.configLoading = true
+      this.configError = ''
+
+      try {
+        const config = await client.runtime.getConfig()
+        if (this.activeWorkspaceConnectionId !== connectionId) {
+          return null
+        }
+
+        this.config = config
+        this.configDrafts = createRuntimeConfigDraftsFromConfig(config)
+        this.configValidation = createRuntimeConfigValidationState()
+        this.saveActiveWorkspaceSnapshot()
+        return config
+      } catch (error) {
+        if (this.activeWorkspaceConnectionId === connectionId) {
+          this.configError = error instanceof Error ? error.message : 'Failed to load runtime config'
+        }
+        return null
+      } finally {
+        if (this.activeWorkspaceConnectionId === connectionId) {
+          this.configLoading = false
+        }
+      }
+    },
+    async validateConfig(scope: RuntimeConfigScope): Promise<RuntimeConfigValidationResult> {
+      const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+      if (!resolvedClient) {
+        return {
+          valid: false,
+          errors: ['No active workspace connection selected'],
+          warnings: [],
+        }
+      }
+      const { connectionId, client } = resolvedClient
+
+      this.configValidatingScope = scope
+      this.configError = ''
+
+      let patch: RuntimeConfigPatch
+      try {
+        patch = parseRuntimeConfigDraft(scope, this.configDrafts[scope])
+      } catch (error) {
+        const result = {
+          valid: false,
+          errors: [error instanceof Error ? error.message : `Invalid ${scope} runtime config`],
+          warnings: [],
+        } satisfies RuntimeConfigValidationResult
+        this.configValidation = {
+          ...this.configValidation,
+          [scope]: result,
+        }
+        this.configError = result.errors[0] ?? ''
+        this.configValidatingScope = ''
+        this.saveActiveWorkspaceSnapshot()
+        return result
+      }
+
+      try {
+        const result = await client.runtime.validateConfig(patch)
+        if (this.activeWorkspaceConnectionId !== connectionId) {
+          return result
+        }
+
+        this.configValidation = {
+          ...this.configValidation,
+          [scope]: result,
+        }
+        this.saveActiveWorkspaceSnapshot()
+        return result
+      } catch (error) {
+        const result = {
+          valid: false,
+          errors: [error instanceof Error ? error.message : 'Failed to validate runtime config'],
+          warnings: [],
+        } satisfies RuntimeConfigValidationResult
+        if (this.activeWorkspaceConnectionId === connectionId) {
+          this.configValidation = {
+            ...this.configValidation,
+            [scope]: result,
+          }
+          this.configError = result.errors[0] ?? ''
+          this.saveActiveWorkspaceSnapshot()
+        }
+        return result
+      } finally {
+        if (this.activeWorkspaceConnectionId === connectionId) {
+          this.configValidatingScope = ''
+        }
+      }
+    },
+    async saveConfig(scope: RuntimeConfigScope): Promise<RuntimeEffectiveConfig | null> {
+      const validation = await this.validateConfig(scope)
+      if (!validation.valid) {
+        return null
+      }
+
+      const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+      if (!resolvedClient) {
+        this.configError = 'No active workspace connection selected'
+        return null
+      }
+      const { connectionId, client } = resolvedClient
+
+      this.configSavingScope = scope
+      this.configError = ''
+
+      try {
+        const patch = parseRuntimeConfigDraft(scope, this.configDrafts[scope])
+        const config = await client.runtime.saveConfig(scope, patch)
+        if (this.activeWorkspaceConnectionId !== connectionId) {
+          return null
+        }
+
+        this.config = config
+        this.configDrafts = createRuntimeConfigDraftsFromConfig(config)
+        this.configValidation = {
+          ...createRuntimeConfigValidationState(),
+          [scope]: config.validation,
+        }
+        this.saveActiveWorkspaceSnapshot()
+        return config
+      } catch (error) {
+        if (this.activeWorkspaceConnectionId === connectionId) {
+          this.configError = error instanceof Error ? error.message : 'Failed to save runtime config'
+        }
+        return null
+      } finally {
+        if (this.activeWorkspaceConnectionId === connectionId) {
+          this.configSavingScope = ''
+        }
+      }
     },
     setActiveSession(detail: RuntimeSessionDetail) {
       this.activeSessionId = detail.summary.id

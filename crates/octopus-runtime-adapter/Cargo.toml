@@ -15,8 +15,11 @@ octopus-core = { path = "../octopus-core" }
 octopus-infra = { path = "../octopus-infra" }
 octopus-platform = { path = "../octopus-platform" }
 plugins = { path = "../plugins" }
+rusqlite.workspace = true
 runtime = { path = "../runtime" }
+serde.workspace = true
 serde_json.workspace = true
+sha2 = "0.10"
 tokio.workspace = true
 tools = { path = "../tools" }
 uuid.workspace = true

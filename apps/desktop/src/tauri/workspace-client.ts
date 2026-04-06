@@ -15,7 +15,10 @@ import type {
   ResolveRuntimeApprovalInput,
   RoleRecord,
   RuntimeBootstrap,
+  RuntimeConfigPatch,
+  RuntimeConfigValidationResult,
   RuntimeEventEnvelope,
+  RuntimeEffectiveConfig,
   RuntimePermissionMode,
   RuntimeRunSnapshot,
   RuntimeSessionDetail,
@@ -131,6 +134,9 @@ export interface WorkspaceClient {
   }
   runtime: {
     bootstrap: () => Promise<RuntimeBootstrap>
+    getConfig: () => Promise<RuntimeEffectiveConfig>
+    validateConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeConfigValidationResult>
+    saveConfig: (scope: string, patch: RuntimeConfigPatch) => Promise<RuntimeEffectiveConfig>
     listSessions: () => Promise<RuntimeSessionSummary[]>
     createSession: (input: CreateRuntimeSessionInput, idempotencyKey?: string) => Promise<RuntimeSessionDetail>
     loadSession: (sessionId: string) => Promise<RuntimeSessionDetail>
@@ -639,6 +645,23 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
       async bootstrap() {
         return await fetchWorkspace<RuntimeBootstrap>(context, `${RUNTIME_API_BASE}/bootstrap`, {
           method: 'GET',
+        })
+      },
+      async getConfig() {
+        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${RUNTIME_API_BASE}/config`, {
+          method: 'GET',
+        })
+      },
+      async validateConfig(patch) {
+        return await fetchWorkspace<RuntimeConfigValidationResult>(context, `${RUNTIME_API_BASE}/config/validate`, {
+          method: 'POST',
+          body: JSON.stringify(patch),
+        })
+      },
+      async saveConfig(scope, patch) {
+        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${RUNTIME_API_BASE}/config/scopes/${scope}`, {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
         })
       },
       async listSessions() {

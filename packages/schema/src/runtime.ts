@@ -2,11 +2,64 @@ import type { DecisionAction, PermissionMode, RiskLevel, RunStatus, TraceKind, T
 import type { RuntimePermissionMode } from './permissions'
 import type { SseEventEnvelope } from './workspace-protocol'
 
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: JsonValue }
+  | JsonValue[]
+
 export interface ProviderConfig {
   provider: string
   apiKey?: string
   baseUrl?: string
   defaultModel?: string
+}
+
+export type RuntimeConfigScope = 'user' | 'project' | 'local'
+
+export interface RuntimeConfigSource {
+  scope: RuntimeConfigScope
+  path: string
+  exists: boolean
+  loaded: boolean
+  contentHash?: string
+  document?: Record<string, JsonValue>
+}
+
+export interface RuntimeSecretReferenceStatus {
+  scope: RuntimeConfigScope
+  path: string
+  reference?: string
+  status: 'reference-present' | 'reference-missing' | 'inline-redacted'
+}
+
+export interface RuntimeConfigPatch {
+  scope: RuntimeConfigScope
+  patch: Record<string, JsonValue>
+}
+
+export interface RuntimeConfigValidationResult {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+
+export interface RuntimeEffectiveConfig {
+  effectiveConfig: Record<string, JsonValue>
+  effectiveConfigHash: string
+  sources: RuntimeConfigSource[]
+  validation: RuntimeConfigValidationResult
+  secretReferences: RuntimeSecretReferenceStatus[]
+}
+
+export interface RuntimeConfigSnapshotSummary {
+  id: string
+  effectiveConfigHash: string
+  startedFromScopeSet: RuntimeConfigScope[]
+  sourcePaths: string[]
+  createdAt: number
 }
 
 export type RuntimeActorType = 'user' | 'assistant' | 'system'
@@ -27,6 +80,9 @@ export interface RuntimeSessionSummary {
   status: RunStatus
   updatedAt: number
   lastMessagePreview?: string
+  configSnapshotId: string
+  effectiveConfigHash: string
+  startedFromScopeSet: RuntimeConfigScope[]
 }
 
 export interface RuntimeRunSnapshot {
@@ -39,6 +95,9 @@ export interface RuntimeRunSnapshot {
   updatedAt: number
   modelId?: string
   nextAction?: string
+  configSnapshotId: string
+  effectiveConfigHash: string
+  startedFromScopeSet: RuntimeConfigScope[]
 }
 
 export interface RuntimeMessage {

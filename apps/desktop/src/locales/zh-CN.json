@@ -788,10 +788,11 @@
       "general": "通用设置",
       "connection": "连接配置",
       "theme": "外观设置",
+      "runtime": "运行设置",
       "version": "版本信息"
     },
     "preferences": {
-      "title": "偏好设定",
+      "title": "外观配置",
       "theme": "界面外观",
       "locale": "显示语言",
       "fontSize": "字体大小",
@@ -820,6 +821,49 @@
       "i18nTitle": "语言与区域",
       "leftSidebarHint": "下次启动时默认隐藏导航栏",
       "rightSidebarHint": "下次启动时默认隐藏详情栏"
+    },
+    "runtime": {
+      "title": "运行设置",
+      "subtitle": "以可视化方式编辑分层 runtime 设置，同时继续让配置文件保持真相源地位。",
+      "loading": "正在加载 runtime 配置…",
+      "emptyTitle": "当前无法读取 runtime 配置",
+      "emptyDescription": "当前工作区还没有可用的 runtime 配置来源。",
+      "sourcePath": "来源路径",
+      "secretReferencesTitle": "密钥引用状态",
+      "noSecretReferences": "当前 effective config 没有返回密钥引用状态。",
+      "actions": {
+        "reload": "重新加载",
+        "validate": "校验",
+        "save": "保存当前 scope"
+      },
+      "validation": {
+        "idle": "尚未校验",
+        "valid": "校验通过",
+        "invalid": "需要处理"
+      },
+      "sourceStatuses": {
+        "missing": "未发现",
+        "loaded": "已加载",
+        "detected": "已检测"
+      },
+      "scopes": {
+        "user": {
+          "label": "用户覆盖层",
+          "description": "只对当前用户生效的个人覆盖配置。"
+        },
+        "project": {
+          "label": "项目默认层",
+          "description": "当前工作区或项目共享的 runtime 默认配置。"
+        },
+        "local": {
+          "label": "本机覆盖层",
+          "description": "只保留在当前宿主机器上的本地设置。"
+        }
+      },
+      "effective": {
+        "title": "Effective Runtime 预览",
+        "description": "展示新 session 将使用的合并结果，敏感值在桌面端保持脱敏。"
+      }
     },
     "version": {
       "runtimeTitle": "运行时信息",

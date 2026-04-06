@@ -82,4 +82,18 @@ describe('Settings view', () => {
 
     mounted.destroy()
   })
+
+  it('renders runtime config editors and effective preview on the runtime tab', async () => {
+    const mounted = mountApp()
+
+    await waitForSelector(mounted.container, '[data-testid="settings-tabs"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-runtime"]')?.click()
+    await waitForSelector(mounted.container, '[data-testid="settings-runtime-editor-project"]')
+
+    expect(mounted.container.querySelector('[data-testid="settings-runtime-editor-project"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="settings-runtime-effective-preview"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
 })

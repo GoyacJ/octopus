@@ -1,27 +1,89 @@
 <script setup lang="ts">
 import { RotateCcw } from 'lucide-vue-next'
 import { createDefaultShellPreferences } from '@octopus/schema'
-import { computed, onMounted, ref, watch } from 'vue'
+import type { RuntimeConfigScope, RuntimeConfigSource } from '@octopus/schema'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 
-import { UiBadge, UiButton, UiEmptyState, UiField, UiListRow, UiRecordCard, UiSectionHeading, UiSelect, UiSwitch, UiTabs } from '@octopus/ui'
+import {
+  UiBadge,
+  UiButton,
+  UiCodeEditor,
+  UiEmptyState,
+  UiField,
+  UiListRow,
+  UiRecordCard,
+  UiSectionHeading,
+  UiSelect,
+  UiSwitch,
+  UiTabs,
+} from '@octopus/ui'
 
 import { enumLabel } from '@/i18n/copy'
+import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
+
+type SettingsTab = 'general' | 'connection' | 'theme' | 'runtime' | 'version'
 
 const { t } = useI18n()
 const shell = useShellStore()
+const runtime = useRuntimeStore()
 const route = useRoute()
 
-const activeTab = ref<'general' | 'connection' | 'theme' | 'version'>('general')
+function resolveSettingsTab(value: unknown): SettingsTab {
+  return ['general', 'connection', 'theme', 'runtime', 'version'].includes(String(value))
+    ? value as SettingsTab
+    : 'general'
+}
 
-onMounted(() => {
-  const tab = route.query.tab as any
-  if (['general', 'connection', 'theme', 'version'].includes(tab)) {
-    activeTab.value = tab
+function resolveConfigSource(scope: RuntimeConfigScope): RuntimeConfigSource | undefined {
+  return runtime.config?.sources.find(item => item.scope === scope)
+}
+
+function resolveConfigDraft(scope: RuntimeConfigScope): string {
+  return runtime.configDrafts[scope]
+}
+
+function resolveValidationTone(scope: RuntimeConfigScope): 'default' | 'success' | 'warning' | 'error' | 'info' {
+  const validation = runtime.configValidation[scope]
+  if (!validation) {
+    return 'default'
   }
-})
+
+  return validation.valid ? 'success' : 'error'
+}
+
+function resolveValidationLabel(scope: RuntimeConfigScope): string {
+  const validation = runtime.configValidation[scope]
+  if (!validation) {
+    return t('settings.runtime.validation.idle')
+  }
+
+  return validation.valid
+    ? t('settings.runtime.validation.valid')
+    : t('settings.runtime.validation.invalid')
+}
+
+function resolveSourceStatusLabel(source?: RuntimeConfigSource): string {
+  if (!source?.exists) {
+    return t('settings.runtime.sourceStatuses.missing')
+  }
+
+  return source.loaded
+    ? t('settings.runtime.sourceStatuses.loaded')
+    : t('settings.runtime.sourceStatuses.detected')
+}
+
+function resolveSourceStatusTone(source?: RuntimeConfigSource): 'default' | 'success' | 'warning' | 'error' | 'info' {
+  if (!source?.exists) {
+    return 'warning'
+  }
+
+  return source.loaded ? 'success' : 'info'
+}
+
+const activeTab = ref<SettingsTab>(resolveSettingsTab(route.query.tab))
 const theme = ref(shell.preferences.theme)
 const locale = ref(shell.preferences.locale)
 const fontSize = ref(String(shell.preferences.fontSize))
@@ -33,8 +95,24 @@ const tabs = computed(() => [
   { value: 'general', label: t('settings.tabs.general') },
   { value: 'connection', label: t('settings.tabs.connection') },
   { value: 'theme', label: t('settings.tabs.theme') },
+  { value: 'runtime', label: t('settings.tabs.runtime') },
   { value: 'version', label: t('settings.tabs.version') },
 ])
+
+const runtimeScopes = computed(() => (['user', 'project', 'local'] as RuntimeConfigScope[]).map(scope => ({
+  scope,
+  label: t(`settings.runtime.scopes.${scope}.label`),
+  description: t(`settings.runtime.scopes.${scope}.description`),
+  source: resolveConfigSource(scope),
+  draft: resolveConfigDraft(scope),
+  validation: runtime.configValidation[scope],
+})))
+
+const runtimeEffectivePreview = computed(() =>
+  JSON.stringify(runtime.config?.effectiveConfig ?? {}, null, 2),
+)
+
+const runtimeSecretStatuses = computed(() => runtime.config?.secretReferences ?? [])
 
 const hostBackendBadges = computed((): Array<{ id: string, label: string, tone: 'info' | 'success' | 'warning' }> => {
   if (!shell.backendConnection) {
@@ -82,9 +160,27 @@ const activeWorkspaceName = computed(() =>
     : t('common.na'),
 )
 
-const versionRows = computed(() => [])
+const versionRows = computed(() => [
+  { id: 'shell', label: t('settings.version.fields.shell'), value: shell.hostState.shell },
+  { id: 'appVersion', label: t('settings.version.fields.appVersion'), value: shell.hostState.appVersion },
+  { id: 'workspace', label: t('settings.version.fields.workspace'), value: activeWorkspaceName.value },
+  {
+    id: 'cargoWorkspace',
+    label: t('settings.version.fields.cargoWorkspace'),
+    value: shell.hostState.cargoWorkspace
+      ? t('settings.version.values.enabled')
+      : t('settings.version.values.disabled'),
+  },
+])
 
 const canManageSettings = computed(() => true)
+
+watch(
+  () => route.query.tab,
+  (tab) => {
+    activeTab.value = resolveSettingsTab(tab)
+  },
+)
 
 // Update local state when store changes
 watch(
@@ -122,12 +218,41 @@ watch(
     if (Object.keys(patch).length > 0) {
       await shell.updatePreferences(patch)
     }
-  }
+  },
+)
+
+watch(
+  () => ({
+    tab: activeTab.value,
+    workspaceConnectionId: shell.activeWorkspaceConnection?.workspaceConnectionId ?? '',
+  }),
+  ({ tab, workspaceConnectionId }, previous) => {
+    if (tab !== 'runtime' || !workspaceConnectionId) {
+      return
+    }
+
+    if (!runtime.config || previous?.workspaceConnectionId !== workspaceConnectionId) {
+      void runtime.loadConfig(previous?.workspaceConnectionId !== workspaceConnectionId)
+    }
+  },
+  { immediate: true },
 )
 
 async function resetToDefault() {
   const defaults = createDefaultShellPreferences(shell.defaultWorkspaceId, shell.defaultProjectId)
   await shell.updatePreferences(defaults)
+}
+
+async function validateRuntimeScope(scope: RuntimeConfigScope) {
+  await runtime.validateConfig(scope)
+}
+
+async function saveRuntimeScope(scope: RuntimeConfigScope) {
+  await runtime.saveConfig(scope)
+}
+
+async function reloadRuntimeConfig() {
+  await runtime.loadConfig(true)
 }
 </script>
 
@@ -201,7 +326,7 @@ async function resetToDefault() {
           </div>
         </section>
 
-        <section v-if="activeTab === 'connection'" class="space-y-10">
+        <section v-else-if="activeTab === 'connection'" class="space-y-10">
           <div class="space-y-1">
             <h3 class="text-xl font-bold text-text-primary">{{ t('connections.header.title') }}</h3>
             <p class="text-[14px] text-text-secondary">{{ t('connections.header.subtitle') }}</p>
@@ -331,6 +456,155 @@ async function resetToDefault() {
               <UiField :label="t('settings.preferences.fontStyle')">
                 <UiSelect v-model="fontStyle" :options="fontStyleOptions" />
               </UiField>
+            </div>
+          </div>
+        </section>
+
+        <section v-else-if="activeTab === 'runtime'" class="space-y-8">
+          <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div class="space-y-1">
+              <h3 class="text-xl font-bold text-text-primary">{{ t('settings.runtime.title') }}</h3>
+              <p class="max-w-3xl text-[14px] text-text-secondary">
+                {{ t('settings.runtime.subtitle') }}
+              </p>
+            </div>
+            <UiButton
+              variant="ghost"
+              size="sm"
+              class="text-text-secondary hover:text-text-primary transition-colors"
+              @click="reloadRuntimeConfig"
+            >
+              {{ t('settings.runtime.actions.reload') }}
+            </UiButton>
+          </div>
+
+          <div
+            v-if="runtime.configLoading && !runtime.config"
+            class="rounded-md border border-border/40 bg-subtle/10 px-4 py-6 text-[13px] text-text-secondary"
+          >
+            {{ t('settings.runtime.loading') }}
+          </div>
+
+          <UiEmptyState
+            v-else-if="!runtime.config"
+            :title="t('settings.runtime.emptyTitle')"
+            :description="runtime.configError || t('settings.runtime.emptyDescription')"
+          />
+
+          <div v-else class="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(22rem,0.9fr)]">
+            <div class="space-y-4">
+              <UiRecordCard
+                v-for="item in runtimeScopes"
+                :key="item.scope"
+                :title="item.label"
+                :description="item.description"
+                :test-id="`settings-runtime-editor-${item.scope}`"
+              >
+                <template #eyebrow>
+                  {{ item.scope }}
+                </template>
+                <template #badges>
+                  <UiBadge
+                    :label="resolveSourceStatusLabel(item.source)"
+                    :tone="resolveSourceStatusTone(item.source)"
+                  />
+                  <UiBadge
+                    :label="resolveValidationLabel(item.scope)"
+                    :tone="resolveValidationTone(item.scope)"
+                  />
+                </template>
+
+                <div class="space-y-3">
+                  <UiCodeEditor
+                    language="json"
+                    theme="octopus"
+                    :model-value="item.draft"
+                    @update:model-value="runtime.setConfigDraft(item.scope, $event)"
+                  />
+
+                  <div
+                    v-if="item.validation?.errors.length"
+                    class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-[12px] text-status-error"
+                  >
+                    {{ item.validation.errors.join(' ') }}
+                  </div>
+
+                  <div
+                    v-if="item.validation?.warnings.length"
+                    class="rounded-md border border-status-warning/20 bg-status-warning/5 px-3 py-2 text-[12px] text-status-warning"
+                  >
+                    {{ item.validation.warnings.join(' ') }}
+                  </div>
+                </div>
+
+                <template #meta>
+                  <span class="text-[11px] uppercase tracking-[0.24em] text-text-tertiary">
+                    {{ t('settings.runtime.sourcePath') }}
+                  </span>
+                  <span class="min-w-0 truncate font-mono text-[12px] text-text-secondary">
+                    {{ item.source?.path ?? t('common.na') }}
+                  </span>
+                </template>
+                <template #actions>
+                  <UiButton
+                    variant="ghost"
+                    size="sm"
+                    :disabled="runtime.configValidatingScope === item.scope || runtime.configSavingScope === item.scope"
+                    @click="validateRuntimeScope(item.scope)"
+                  >
+                    {{ t('settings.runtime.actions.validate') }}
+                  </UiButton>
+                  <UiButton
+                    size="sm"
+                    :disabled="runtime.configSavingScope === item.scope"
+                    @click="saveRuntimeScope(item.scope)"
+                  >
+                    {{ t('settings.runtime.actions.save') }}
+                  </UiButton>
+                </template>
+              </UiRecordCard>
+            </div>
+
+            <div class="space-y-4">
+              <UiRecordCard
+                :title="t('settings.runtime.effective.title')"
+                :description="t('settings.runtime.effective.description')"
+                test-id="settings-runtime-effective-preview"
+              >
+                <template #badges>
+                  <UiBadge :label="runtime.config.effectiveConfigHash" tone="info" />
+                  <UiBadge
+                    :label="runtime.config.validation.valid ? t('settings.runtime.validation.valid') : t('settings.runtime.validation.invalid')"
+                    :tone="runtime.config.validation.valid ? 'success' : 'error'"
+                  />
+                </template>
+
+                <div class="space-y-3">
+                  <UiCodeEditor
+                    language="json"
+                    theme="octopus"
+                    readonly
+                    :model-value="runtimeEffectivePreview"
+                  />
+
+                  <div class="rounded-md border border-border/40 bg-subtle/20 px-3 py-3 text-[12px] text-text-secondary">
+                    <p class="text-[11px] font-bold uppercase tracking-[0.24em] text-text-tertiary">
+                      {{ t('settings.runtime.secretReferencesTitle') }}
+                    </p>
+                    <div v-if="runtimeSecretStatuses.length" class="mt-3 flex flex-wrap gap-2">
+                      <UiBadge
+                        v-for="secret in runtimeSecretStatuses"
+                        :key="`${secret.scope}-${secret.path}`"
+                        :label="`${secret.scope}: ${secret.status}`"
+                        :tone="secret.status === 'reference-missing' ? 'warning' : 'info'"
+                      />
+                    </div>
+                    <p v-else class="mt-2">
+                      {{ t('settings.runtime.noSecretReferences') }}
+                    </p>
+                  </div>
+                </div>
+              </UiRecordCard>
             </div>
           </div>
         </section>

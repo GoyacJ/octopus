@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use octopus_core::{
     AppError, CreateRuntimeSessionInput, ResolveRuntimeApprovalInput, RuntimeBootstrap,
+    RuntimeConfigPatch, RuntimeConfigValidationResult, RuntimeEffectiveConfig,
     RuntimeEventEnvelope, RuntimeRunSnapshot, RuntimeSessionDetail, RuntimeSessionSummary,
     SubmitRuntimeTurnInput,
 };
@@ -38,6 +39,20 @@ pub trait RuntimeExecutionService: Send + Sync {
         &self,
         session_id: &str,
     ) -> Result<tokio::sync::broadcast::Receiver<RuntimeEventEnvelope>, AppError>;
+}
+
+#[async_trait]
+pub trait RuntimeConfigService: Send + Sync {
+    async fn get_config(&self) -> Result<RuntimeEffectiveConfig, AppError>;
+    async fn validate_config(
+        &self,
+        patch: RuntimeConfigPatch,
+    ) -> Result<RuntimeConfigValidationResult, AppError>;
+    async fn save_config(
+        &self,
+        scope: &str,
+        patch: RuntimeConfigPatch,
+    ) -> Result<RuntimeEffectiveConfig, AppError>;
 }
 
 #[async_trait]

@@ -38,6 +38,7 @@ pub struct WorkspacePaths {
     pub knowledge_dir: PathBuf,
     pub inbox_dir: PathBuf,
     pub runtime_sessions_dir: PathBuf,
+    pub runtime_events_dir: PathBuf,
     pub runtime_traces_dir: PathBuf,
     pub runtime_approvals_dir: PathBuf,
     pub runtime_cache_dir: PathBuf,
@@ -58,6 +59,7 @@ impl WorkspacePaths {
         let knowledge_dir = data_dir.join("knowledge");
         let inbox_dir = data_dir.join("inbox");
         let runtime_sessions_dir = runtime_dir.join("sessions");
+        let runtime_events_dir = runtime_dir.join("events");
         let runtime_traces_dir = runtime_dir.join("traces");
         let runtime_approvals_dir = runtime_dir.join("approvals");
         let runtime_cache_dir = runtime_dir.join("cache");
@@ -79,6 +81,7 @@ impl WorkspacePaths {
             knowledge_dir,
             inbox_dir,
             runtime_sessions_dir,
+            runtime_events_dir,
             runtime_traces_dir,
             runtime_approvals_dir,
             runtime_cache_dir,
@@ -100,6 +103,7 @@ impl WorkspacePaths {
             &self.knowledge_dir,
             &self.inbox_dir,
             &self.runtime_sessions_dir,
+            &self.runtime_events_dir,
             &self.runtime_traces_dir,
             &self.runtime_approvals_dir,
             &self.runtime_cache_dir,
@@ -503,6 +507,54 @@ fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError> {
               amount INTEGER NOT NULL,
               unit TEXT NOT NULL,
               created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runtime_config_snapshots (
+              id TEXT PRIMARY KEY,
+              effective_config_hash TEXT NOT NULL,
+              started_from_scope_set TEXT NOT NULL,
+              source_paths TEXT NOT NULL,
+              created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runtime_session_projections (
+              id TEXT PRIMARY KEY,
+              conversation_id TEXT NOT NULL,
+              project_id TEXT NOT NULL,
+              title TEXT NOT NULL,
+              status TEXT NOT NULL,
+              updated_at INTEGER NOT NULL,
+              last_message_preview TEXT,
+              config_snapshot_id TEXT NOT NULL,
+              effective_config_hash TEXT NOT NULL,
+              started_from_scope_set TEXT NOT NULL,
+              detail_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runtime_run_projections (
+              id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              conversation_id TEXT NOT NULL,
+              status TEXT NOT NULL,
+              current_step TEXT NOT NULL,
+              started_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              model_id TEXT,
+              next_action TEXT,
+              config_snapshot_id TEXT NOT NULL,
+              effective_config_hash TEXT NOT NULL,
+              started_from_scope_set TEXT NOT NULL,
+              run_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runtime_approval_projections (
+              id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              run_id TEXT NOT NULL,
+              conversation_id TEXT NOT NULL,
+              tool_name TEXT NOT NULL,
+              summary TEXT NOT NULL,
+              detail TEXT NOT NULL,
+              risk_level TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              status TEXT NOT NULL,
+              approval_json TEXT NOT NULL
             );
             ",
         )
@@ -2997,6 +3049,7 @@ mod tests {
             &paths.knowledge_dir,
             &paths.inbox_dir,
             &paths.runtime_sessions_dir,
+            &paths.runtime_events_dir,
             &paths.runtime_traces_dir,
             &paths.runtime_approvals_dir,
             &paths.runtime_cache_dir,
@@ -3038,6 +3091,7 @@ mod tests {
         let paths = WorkspacePaths::new(temp.path());
 
         assert_eq!(paths.runtime_sessions_dir, temp.path().join("runtime/sessions"));
+        assert_eq!(paths.runtime_events_dir, temp.path().join("runtime/events"));
         assert_eq!(paths.audit_log_dir, temp.path().join("logs/audit"));
         assert_eq!(paths.db_path, temp.path().join("data/main.db"));
     }

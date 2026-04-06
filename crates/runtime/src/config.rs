@@ -32,6 +32,16 @@ pub struct ConfigEntry {
     pub path: PathBuf,
 }
 
+/// A discovered config document together with its load status and parsed content.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigDocument {
+    pub source: ConfigSource,
+    pub path: PathBuf,
+    pub exists: bool,
+    pub loaded: bool,
+    pub document: Option<BTreeMap<String, JsonValue>>,
+}
+
 /// Fully merged runtime configuration plus parsed feature-specific views.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeConfig {
@@ -255,19 +265,51 @@ impl ConfigLoader {
         ]
     }
 
-    pub fn load(&self) -> Result<RuntimeConfig, ConfigError> {
+    #[must_use]
+    pub fn writable_path(&self, source: ConfigSource) -> PathBuf {
+        match source {
+            ConfigSource::User => self.config_home.join("settings.json"),
+            ConfigSource::Project => self.cwd.join(".claw").join("settings.json"),
+            ConfigSource::Local => self.cwd.join(".claw").join("settings.local.json"),
+        }
+    }
+
+    pub fn load_documents(&self) -> Result<Vec<ConfigDocument>, ConfigError> {
+        self.discover()
+            .into_iter()
+            .map(|entry| {
+                let exists = entry.path.exists();
+                let document = read_optional_json_object(&entry.path)?;
+                Ok(ConfigDocument {
+                    source: entry.source,
+                    path: entry.path,
+                    exists,
+                    loaded: document.is_some(),
+                    document,
+                })
+            })
+            .collect()
+    }
+
+    pub fn load_from_documents(
+        &self,
+        documents: &[ConfigDocument],
+    ) -> Result<RuntimeConfig, ConfigError> {
         let mut merged = BTreeMap::new();
         let mut loaded_entries = Vec::new();
         let mut mcp_servers = BTreeMap::new();
 
-        for entry in self.discover() {
-            let Some(value) = read_optional_json_object(&entry.path)? else {
+        for document in documents {
+            let Some(value) = document.document.as_ref() else {
                 continue;
             };
-            validate_optional_hooks_config(&value, &entry.path)?;
-            merge_mcp_servers(&mut mcp_servers, entry.source, &value, &entry.path)?;
-            deep_merge_objects(&mut merged, &value);
-            loaded_entries.push(entry);
+            validate_optional_hooks_config(value, &document.path)?;
+            merge_mcp_servers(&mut mcp_servers, document.source, value, &document.path)?;
+            deep_merge_objects(&mut merged, value);
+            loaded_entries.push(ConfigEntry {
+                source: document.source,
+                path: document.path.clone(),
+            });
         }
 
         let merged_value = JsonValue::Object(merged.clone());
@@ -290,6 +332,11 @@ impl ConfigLoader {
             loaded_entries,
             feature_config,
         })
+    }
+
+    pub fn load(&self) -> Result<RuntimeConfig, ConfigError> {
+        let documents = self.load_documents()?;
+        self.load_from_documents(&documents)
     }
 }
 
@@ -1070,6 +1117,32 @@ fn deep_merge_objects(
     }
 }
 
+pub fn apply_config_patch(
+    target: &mut BTreeMap<String, JsonValue>,
+    patch: &BTreeMap<String, JsonValue>,
+) {
+    for (key, value) in patch {
+        match value {
+            JsonValue::Null => {
+                target.remove(key);
+            }
+            JsonValue::Object(incoming) => match target.get_mut(key) {
+                Some(JsonValue::Object(existing)) => {
+                    apply_config_patch(existing, incoming);
+                }
+                _ => {
+                    let mut next = BTreeMap::new();
+                    apply_config_patch(&mut next, incoming);
+                    target.insert(key.clone(), JsonValue::Object(next));
+                }
+            },
+            _ => {
+                target.insert(key.clone(), value.clone());
+            }
+        }
+    }
+}
+
 fn extend_unique(target: &mut Vec<String>, values: &[String]) {
     for value in values {
         push_unique(target, value.clone());
@@ -1085,9 +1158,9 @@ fn push_unique(target: &mut Vec<String>, value: String) {
 #[cfg(test)]
 mod tests {
     use super::{
-        deep_merge_objects, parse_permission_mode_label, ConfigLoader, ConfigSource,
-        McpServerConfig, McpTransport, ResolvedPermissionMode, RuntimeHookConfig,
-        RuntimePluginConfig, CLAW_SETTINGS_SCHEMA_NAME,
+        apply_config_patch, deep_merge_objects, parse_permission_mode_label, ConfigLoader,
+        ConfigSource, McpServerConfig, McpTransport, ResolvedPermissionMode,
+        RuntimeHookConfig, RuntimePluginConfig, CLAW_SETTINGS_SCHEMA_NAME,
     };
     use crate::json::JsonValue;
     use crate::sandbox::FilesystemIsolationMode;
@@ -1517,6 +1590,75 @@ mod tests {
     }
 
     #[test]
+    fn load_documents_reports_exists_and_loaded_per_source() {
+        // given
+        let root = temp_dir();
+        let cwd = root.join("project");
+        let home = root.join("home").join(".claw");
+        fs::create_dir_all(cwd.join(".claw")).expect("project config dir");
+        fs::create_dir_all(&home).expect("home config dir");
+
+        fs::write(
+            home.join("settings.json"),
+            r#"{"model":"sonnet","custom":{"enabled":true}}"#,
+        )
+        .expect("write user settings");
+        fs::write(
+            cwd.join(".claw").join("settings.local.json"),
+            r#"{"permissionMode":"acceptEdits"}"#,
+        )
+        .expect("write local settings");
+
+        // when
+        let documents = ConfigLoader::new(&cwd, &home)
+            .load_documents()
+            .expect("documents should load");
+
+        // then
+        assert_eq!(documents.len(), 5);
+
+        let user_settings = documents
+            .iter()
+            .find(|document| {
+                document.source == ConfigSource::User
+                    && document.path == home.join("settings.json")
+            })
+            .expect("user settings document");
+        assert!(user_settings.exists);
+        assert!(user_settings.loaded);
+        assert_eq!(
+            user_settings
+                .document
+                .as_ref()
+                .and_then(|document| document.get("model")),
+            Some(&JsonValue::String("sonnet".into()))
+        );
+
+        let user_legacy = documents
+            .iter()
+            .find(|document| {
+                document.source == ConfigSource::User
+                    && document.path == home.parent().expect("home parent").join(".claw.json")
+            })
+            .expect("user legacy document");
+        assert!(!user_legacy.exists);
+        assert!(!user_legacy.loaded);
+        assert!(user_legacy.document.is_none());
+
+        let local_settings = documents
+            .iter()
+            .find(|document| {
+                document.source == ConfigSource::Local
+                    && document.path == cwd.join(".claw").join("settings.local.json")
+            })
+            .expect("local settings document");
+        assert!(local_settings.exists);
+        assert!(local_settings.loaded);
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[test]
     fn deep_merge_objects_merges_nested_maps() {
         // given
         let mut target = JsonValue::parse(r#"{"env":{"A":"1","B":"2"},"model":"haiku"}"#)
@@ -1546,6 +1688,63 @@ mod tests {
         );
         assert_eq!(env.get("C"), Some(&JsonValue::String("3".to_string())));
         assert!(target.contains_key("sandbox"));
+    }
+
+    #[test]
+    fn apply_config_patch_preserves_unknown_keys_and_removes_nulls() {
+        // given
+        let mut target = JsonValue::parse(
+            r#"{
+              "permissions":{"defaultMode":"plan"},
+              "custom":{"keep":"yes","remove":"soon"},
+              "model":"haiku"
+            }"#,
+        )
+        .expect("target JSON should parse")
+        .as_object()
+        .expect("target should be an object")
+        .clone();
+        let patch = JsonValue::parse(
+            r#"{
+              "permissions":{"defaultMode":"acceptEdits"},
+              "custom":{"remove":null},
+              "model":"sonnet"
+            }"#,
+        )
+        .expect("patch JSON should parse")
+        .as_object()
+        .expect("patch should be an object")
+        .clone();
+
+        // when
+        apply_config_patch(&mut target, &patch);
+
+        // then
+        assert_eq!(
+            target
+                .get("permissions")
+                .and_then(JsonValue::as_object)
+                .and_then(|object| object.get("defaultMode")),
+            Some(&JsonValue::String("acceptEdits".into()))
+        );
+        assert_eq!(
+            target
+                .get("custom")
+                .and_then(JsonValue::as_object)
+                .and_then(|object| object.get("keep")),
+            Some(&JsonValue::String("yes".into()))
+        );
+        assert_eq!(
+            target
+                .get("custom")
+                .and_then(JsonValue::as_object)
+                .and_then(|object| object.get("remove")),
+            None
+        );
+        assert_eq!(
+            target.get("model"),
+            Some(&JsonValue::String("sonnet".into()))
+        );
     }
 
     #[test]

@@ -263,6 +263,36 @@ describe('useRuntimeStore', () => {
     runtime.dispose()
   })
 
+  it('loads and saves runtime config through the shared workspace client', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    await runtime.loadConfig()
+
+    expect(runtime.config?.effectiveConfigHash).toContain('cfg-hash')
+    expect(runtime.configDrafts.project).toContain('claude-sonnet-4-5')
+
+    runtime.configDrafts.project = JSON.stringify({
+      model: 'gpt-4o',
+      permissions: {
+        defaultMode: 'plan',
+      },
+    }, null, 2)
+
+    await runtime.saveConfig('project')
+
+    expect(runtime.config?.effectiveConfig).toMatchObject({
+      model: 'gpt-4o',
+      permissions: {
+        defaultMode: 'plan',
+      },
+    })
+    expect(runtime.config?.sources.find(source => source.scope === 'project')?.document).toMatchObject({
+      model: 'gpt-4o',
+    })
+
+    runtime.dispose()
+  })
+
   it('ignores stale session responses from the previously active workspace connection', async () => {
     const { runtime, shell } = await prepareRuntimeStore()
 

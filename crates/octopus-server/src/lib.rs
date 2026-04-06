@@ -23,11 +23,11 @@ use octopus_core::{
     ConversationRecord, DesktopBackendConnection, HealthcheckBackendStatus, HealthcheckStatus,
     HostState, KnowledgeRecord, LoginRequest, MenuRecord, ModelCatalogSnapshot,
     PermissionRecord, ProjectDashboardSnapshot, ProjectRecord, ProviderCredentialRecord,
-    ResolveRuntimeApprovalInput, RoleRecord, SessionRecord, ShellBootstrap,
-    ShellPreferences, SubmitRuntimeTurnInput, TeamRecord, ToolRecord,
-    UserCenterAlertRecord, UserCenterOverviewSnapshot, UserRecordSummary,
-    WorkspaceActivityRecord, WorkspaceMetricRecord, WorkspaceOverviewSnapshot,
-    WorkspaceResourceRecord,
+    ResolveRuntimeApprovalInput, RoleRecord, RuntimeConfigPatch,
+    RuntimeConfigValidationResult, RuntimeEffectiveConfig, SessionRecord, ShellBootstrap,
+    ShellPreferences, SubmitRuntimeTurnInput, TeamRecord, ToolRecord, UserCenterAlertRecord,
+    UserCenterOverviewSnapshot, UserRecordSummary, WorkspaceActivityRecord,
+    WorkspaceMetricRecord, WorkspaceOverviewSnapshot, WorkspaceResourceRecord,
 };
 use octopus_platform::PlatformServices;
 use serde::Deserialize;
@@ -354,6 +354,9 @@ pub fn build_router(state: ServerState) -> Router {
 fn runtime_routes() -> Router<ServerState> {
     Router::new()
         .route("/bootstrap", get(runtime_bootstrap))
+        .route("/config", get(get_runtime_config))
+        .route("/config/validate", post(validate_runtime_config_route))
+        .route("/config/scopes/:scope", patch(save_runtime_config_route))
         .route("/sessions", get(list_runtime_sessions).post(create_runtime_session))
         .route("/sessions/:session_id", get(get_runtime_session))
         .route("/sessions/:session_id/turns", post(submit_runtime_turn))
@@ -997,6 +1000,37 @@ async fn runtime_bootstrap(
     Ok(Json(state.services.runtime_session.bootstrap().await?))
 }
 
+async fn get_runtime_config(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
+    ensure_authorized_session(&state, &headers, "runtime.read", None).await?;
+    Ok(Json(state.services.runtime_config.get_config().await?))
+}
+
+async fn validate_runtime_config_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(patch): Json<RuntimeConfigPatch>,
+) -> Result<Json<RuntimeConfigValidationResult>, ApiError> {
+    ensure_authorized_session(&state, &headers, "runtime.read", None).await?;
+    Ok(Json(state.services.runtime_config.validate_config(patch).await?))
+}
+
+async fn save_runtime_config_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(scope): Path<String>,
+    Json(patch): Json<RuntimeConfigPatch>,
+) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
+    ensure_authorized_session(&state, &headers, "runtime.read", None).await?;
+    Ok(Json(state
+        .services
+        .runtime_config
+        .save_config(&scope, patch)
+        .await?))
+}
+
 fn metric_record(id: &str, label: &str, value: usize) -> WorkspaceMetricRecord {
     WorkspaceMetricRecord {
         id: id.into(),
@@ -1438,12 +1472,14 @@ mod tests {
     use axum::{body::{to_bytes, Body}, http::{Method, Request}};
     use octopus_core::{
         ApiErrorEnvelope, CreateRuntimeSessionInput, LoginRequest, LoginResponse,
-        ResolveRuntimeApprovalInput, RuntimeEventEnvelope, RuntimeSessionDetail,
-        RuntimeRunSnapshot, SessionRecord, SubmitRuntimeTurnInput,
+        ResolveRuntimeApprovalInput, RuntimeConfigPatch, RuntimeConfigValidationResult,
+        RuntimeEffectiveConfig, RuntimeEventEnvelope, RuntimeSessionDetail, RuntimeRunSnapshot,
+        SessionRecord, SubmitRuntimeTurnInput,
     };
     use octopus_infra::{build_infra_bundle, InfraBundle};
     use octopus_platform::{ObservationService, PlatformServices};
     use octopus_runtime_adapter::RuntimeAdapter;
+    use rusqlite::Connection;
     use tokio_stream::StreamExt;
     use tower::ServiceExt;
 
@@ -1472,7 +1508,8 @@ mod tests {
             app_registry: infra.app_registry.clone(),
             rbac: infra.rbac.clone(),
             runtime_session: runtime.clone(),
-            runtime_execution: runtime,
+            runtime_execution: runtime.clone(),
+            runtime_config: runtime,
             artifact: infra.artifact.clone(),
             inbox: infra.inbox.clone(),
             knowledge: infra.knowledge.clone(),
@@ -1566,6 +1603,71 @@ mod tests {
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
         decode_json::<RuntimeSessionDetail>(response).await
+    }
+
+    async fn get_runtime_config(
+        router: &Router,
+        token: &str,
+    ) -> RuntimeEffectiveConfig {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::GET)
+                    .uri("/api/v1/runtime/config")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        decode_json::<RuntimeEffectiveConfig>(response).await
+    }
+
+    async fn validate_runtime_config(
+        router: &Router,
+        token: &str,
+        patch: RuntimeConfigPatch,
+    ) -> RuntimeConfigValidationResult {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/runtime/config/validate")
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&patch).expect("json")))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        decode_json::<RuntimeConfigValidationResult>(response).await
+    }
+
+    async fn save_runtime_config(
+        router: &Router,
+        token: &str,
+        scope: &str,
+        patch: RuntimeConfigPatch,
+    ) -> RuntimeEffectiveConfig {
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::PATCH)
+                    .uri(format!("/api/v1/runtime/config/scopes/{scope}"))
+                    .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::to_vec(&patch).expect("json")))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), StatusCode::OK);
+        decode_json::<RuntimeEffectiveConfig>(response).await
     }
 
     async fn submit_turn(
@@ -2242,5 +2344,174 @@ mod tests {
         assert!(audit_records
             .iter()
             .any(|record| record.action == "runtime.resolve_approval"));
+    }
+
+    #[tokio::test]
+    async fn runtime_config_routes_load_validate_and_save_scoped_documents() {
+        let harness = test_harness();
+        let session = login_owner_session(&harness.router, "octopus-desktop").await;
+
+        let initial = get_runtime_config(&harness.router, &session.token).await;
+        assert!(initial.validation.valid);
+        assert_eq!(initial.sources.len(), 5);
+        assert!(initial
+            .sources
+            .iter()
+            .any(|source| source.scope == "project" && !source.exists));
+
+        let validation = validate_runtime_config(
+            &harness.router,
+            &session.token,
+            RuntimeConfigPatch {
+                scope: "project".into(),
+                patch: serde_json::json!({
+                    "model": "claude-sonnet-4-5",
+                    "permissions": {
+                        "defaultMode": "plan"
+                    }
+                }),
+            },
+        )
+        .await;
+        assert!(validation.valid);
+
+        let saved = save_runtime_config(
+            &harness.router,
+            &session.token,
+            "project",
+            RuntimeConfigPatch {
+                scope: "project".into(),
+                patch: serde_json::json!({
+                    "model": "claude-sonnet-4-5",
+                    "permissions": {
+                        "defaultMode": "plan"
+                    }
+                }),
+            },
+        )
+        .await;
+
+        assert_eq!(
+            saved.effective_config.get("model"),
+            Some(&serde_json::json!("claude-sonnet-4-5"))
+        );
+        assert!(saved.sources.iter().any(|source| {
+            source.scope == "project"
+                && source.path.ends_with(".claw/settings.json")
+                && source.exists
+        }));
+
+        let project_settings = harness.infra.paths.root.join(".claw").join("settings.json");
+        let written = std::fs::read_to_string(project_settings).expect("project settings written");
+        assert!(written.contains("\"model\": \"claude-sonnet-4-5\""));
+        assert!(written.contains("\"defaultMode\": \"plan\""));
+    }
+
+    #[tokio::test]
+    async fn runtime_config_routes_redact_plaintext_secrets_from_api_payloads() {
+        let harness = test_harness();
+        let session = login_owner_session(&harness.router, "octopus-desktop").await;
+
+        let project_dir = harness.infra.paths.root.join(".claw");
+        std::fs::create_dir_all(&project_dir).expect("project settings dir");
+        std::fs::write(
+            project_dir.join("settings.json"),
+            r#"{
+              "provider": {
+                "apiKey": "super-secret-key"
+              },
+              "mcpServers": {
+                "remote": {
+                  "type": "http",
+                  "url": "https://example.test/mcp",
+                  "headers": {
+                    "Authorization": "Bearer secret-token"
+                  }
+                }
+              }
+            }"#,
+        )
+        .expect("write project settings");
+
+        let config = get_runtime_config(&harness.router, &session.token).await;
+        let project_source = config
+            .sources
+            .iter()
+            .find(|source| source.scope == "project" && source.path.ends_with(".claw/settings.json"))
+            .expect("project source");
+
+        assert_eq!(
+            project_source
+                .document
+                .as_ref()
+                .and_then(|document| document.get("provider"))
+                .and_then(|provider| provider.get("apiKey")),
+            Some(&serde_json::json!("***"))
+        );
+        assert!(config.secret_references.iter().any(|secret| {
+            secret.path.ends_with("provider.apiKey") && secret.status == "inline-redacted"
+        }));
+        assert!(config.secret_references.iter().any(|secret| {
+            secret.path.ends_with("mcpServers.remote.headers.Authorization")
+                && secret.status == "inline-redacted"
+        }));
+    }
+
+    #[tokio::test]
+    async fn runtime_session_creation_persists_config_snapshot_and_sqlite_projection() {
+        let harness = test_harness();
+        let session = login_owner_session(&harness.router, "octopus-desktop").await;
+
+        let _saved = save_runtime_config(
+            &harness.router,
+            &session.token,
+            "project",
+            RuntimeConfigPatch {
+                scope: "project".into(),
+                patch: serde_json::json!({
+                    "model": "claude-sonnet-4-5",
+                    "permissions": {
+                        "defaultMode": "plan"
+                    }
+                }),
+            },
+        )
+        .await;
+
+        let created =
+            create_runtime_session(&harness.router, &session.token, "Projection Session", None)
+                .await;
+        assert!(!created.summary.config_snapshot_id.is_empty());
+        assert!(!created.summary.effective_config_hash.is_empty());
+        assert!(created
+            .summary
+            .started_from_scope_set
+            .iter()
+            .any(|scope| scope == "project"));
+        assert_eq!(
+            created.run.config_snapshot_id,
+            created.summary.config_snapshot_id
+        );
+
+        let connection =
+            Connection::open(&harness.infra.paths.db_path).expect("open runtime projection db");
+
+        let stored_snapshot_id: String = connection
+            .query_row(
+                "SELECT config_snapshot_id FROM runtime_session_projections WHERE id = ?1",
+                [&created.summary.id],
+                |row| row.get(0),
+            )
+            .expect("runtime session projection");
+        assert_eq!(stored_snapshot_id, created.summary.config_snapshot_id);
+
+        let stored_hash: String = connection
+            .query_row(
+                "SELECT effective_config_hash FROM runtime_config_snapshots WHERE id = ?1",
+                [&created.summary.config_snapshot_id],
+                |row| row.get(0),
+            )
+            .expect("runtime config snapshot");
+        assert_eq!(stored_hash, created.summary.effective_config_hash);
     }
 }

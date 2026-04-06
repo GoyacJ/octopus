@@ -19,7 +19,7 @@ pub use knowledge::KnowledgeService;
 pub use observation::ObservationService;
 pub use rbac::RbacService;
 pub use runtime::{
-    AutomationService, RuntimeExecutionService, RuntimeProjectionService,
+    AutomationService, RuntimeConfigService, RuntimeExecutionService, RuntimeProjectionService,
     RuntimeSessionService, ToolExecutionService,
 };
 pub use workspace::WorkspaceService;
@@ -32,6 +32,7 @@ pub struct PlatformServices {
     pub rbac: Arc<dyn RbacService>,
     pub runtime_session: Arc<dyn RuntimeSessionService>,
     pub runtime_execution: Arc<dyn RuntimeExecutionService>,
+    pub runtime_config: Arc<dyn RuntimeConfigService>,
     pub artifact: Arc<dyn ArtifactService>,
     pub inbox: Arc<dyn InboxService>,
     pub knowledge: Arc<dyn KnowledgeService>,

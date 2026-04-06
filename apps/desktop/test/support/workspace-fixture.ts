@@ -13,7 +13,10 @@ import type {
   RoleRecord,
   RuntimeApprovalRequest,
   RuntimeBootstrap,
+  RuntimeConfigPatch,
+  RuntimeConfigValidationResult,
   RuntimeEventEnvelope,
+  RuntimeEffectiveConfig,
   RuntimeMessage,
   RuntimeRunSnapshot,
   RuntimeSessionDetail,
@@ -66,6 +69,7 @@ interface WorkspaceFixtureState {
   permissions: PermissionRecord[]
   menus: MenuRecord[]
   runtimeSessions: Map<string, RuntimeSessionState>
+  runtimeConfig: RuntimeEffectiveConfig
 }
 
 const WORKSPACE_CONNECTIONS: WorkspaceConnectionRecord[] = [
@@ -667,6 +671,49 @@ function createWorkspaceFixtureState(connection: WorkspaceConnectionRecord): Wor
     quickLinks: menus.slice(0, 2),
   }
 
+  const runtimeConfig: RuntimeEffectiveConfig = {
+    effectiveConfig: {
+      model: 'claude-sonnet-4-5',
+      permissions: {
+        defaultMode: 'plan',
+      },
+    },
+    effectiveConfigHash: `${workspace.id}-cfg-hash-1`,
+    sources: [
+      {
+        scope: 'user',
+        path: `${workspace.id}/config/.claw/settings.json`,
+        exists: false,
+        loaded: false,
+      },
+      {
+        scope: 'project',
+        path: `${workspace.id}/.claw/settings.json`,
+        exists: true,
+        loaded: true,
+        contentHash: `${workspace.id}-source-hash-1`,
+        document: {
+          model: 'claude-sonnet-4-5',
+          permissions: {
+            defaultMode: 'plan',
+          },
+        },
+      },
+      {
+        scope: 'local',
+        path: `${workspace.id}/.claw/settings.local.json`,
+        exists: false,
+        loaded: false,
+      },
+    ],
+    validation: {
+      valid: true,
+      errors: [],
+      warnings: [],
+    },
+    secretReferences: [],
+  }
+
   return {
     systemBootstrap: {
       workspace,
@@ -703,6 +750,7 @@ function createWorkspaceFixtureState(connection: WorkspaceConnectionRecord): Wor
     permissions,
     menus,
     runtimeSessions: new Map(),
+    runtimeConfig,
   }
 }
 
@@ -717,6 +765,9 @@ function createSessionDetail(conversationId: string, projectId: string, title: s
       status: 'draft',
       updatedAt: 1,
       lastMessagePreview: undefined,
+      configSnapshotId: 'cfgsnap-fixture',
+      effectiveConfigHash: 'cfg-hash-fixture',
+      startedFromScopeSet: ['project'],
     },
     run: {
       id: `run-${conversationId}`,
@@ -728,11 +779,40 @@ function createSessionDetail(conversationId: string, projectId: string, title: s
       updatedAt: 1,
       modelId: 'claude-sonnet-4-5',
       nextAction: 'runtime.run.awaitingInput',
+      configSnapshotId: 'cfgsnap-fixture',
+      effectiveConfigHash: 'cfg-hash-fixture',
+      startedFromScopeSet: ['project'],
     },
     messages: [],
     trace: [],
     pendingApproval: undefined,
   }
+}
+
+function applyJsonMergePatch(
+  target: Record<string, any>,
+  patch: Record<string, any>,
+): Record<string, any> {
+  const next = structuredClone(target)
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) {
+      delete next[key]
+      continue
+    }
+    if (Array.isArray(value)) {
+      next[key] = structuredClone(value)
+      continue
+    }
+    if (typeof value === 'object') {
+      const current = typeof next[key] === 'object' && next[key] && !Array.isArray(next[key])
+        ? next[key]
+        : {}
+      next[key] = applyJsonMergePatch(current, value as Record<string, any>)
+      continue
+    }
+    next[key] = value
+  }
+  return next
 }
 
 function createRuntimeMessage(
@@ -1020,6 +1100,41 @@ function createWorkspaceClientFixture(
           },
           sessions: [...workspaceState.runtimeSessions.values()].map(state => clone(state.detail.summary)),
         }
+      },
+      async getConfig(): Promise<RuntimeEffectiveConfig> {
+        return clone(workspaceState.runtimeConfig)
+      },
+      async validateConfig(_patch: RuntimeConfigPatch): Promise<RuntimeConfigValidationResult> {
+        return {
+          valid: true,
+          errors: [],
+          warnings: [],
+        }
+      },
+      async saveConfig(scope: string, patch: RuntimeConfigPatch): Promise<RuntimeEffectiveConfig> {
+        const source = workspaceState.runtimeConfig.sources.find(item => item.scope === scope)
+        if (source) {
+          const current = (source.document ?? {}) as Record<string, any>
+          source.document = applyJsonMergePatch(current, patch.patch as Record<string, any>)
+          source.exists = true
+          source.loaded = true
+        }
+
+        workspaceState.runtimeConfig = {
+          ...workspaceState.runtimeConfig,
+          effectiveConfig: applyJsonMergePatch(
+            workspaceState.runtimeConfig.effectiveConfig as Record<string, any>,
+            patch.patch as Record<string, any>,
+          ),
+          effectiveConfigHash: `${workspaceState.workspace.id}-cfg-hash-${Date.now()}`,
+          validation: {
+            valid: true,
+            errors: [],
+            warnings: [],
+          },
+        }
+
+        return clone(workspaceState.runtimeConfig)
       },
       async listSessions(): Promise<RuntimeSessionSummary[]> {
         return [...workspaceState.runtimeSessions.values()].map(state => clone(state.detail.summary))

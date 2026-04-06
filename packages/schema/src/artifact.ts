@@ -6,4 +6,8 @@ export interface ArtifactRecord {
   status: 'draft' | 'review' | 'approved' | 'published'
   latestVersion: number
   updatedAt: number
+  storagePath?: string
+  contentHash?: string
+  byteSize?: number
+  contentType?: string
 }

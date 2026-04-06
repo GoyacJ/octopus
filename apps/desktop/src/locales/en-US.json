@@ -793,10 +793,11 @@
       "general": "General Settings",
       "connection": "Connections",
       "theme": "Aesthetics",
+      "runtime": "Runtime Settings",
       "version": "About"
     },
     "preferences": {
-      "title": "Preferences",
+      "title": "Appearance",
       "theme": "Interface appearance",
       "locale": "Language",
       "fontSize": "Font Size",
@@ -825,6 +826,49 @@
       "i18nTitle": "Language & Region",
       "leftSidebarHint": "Hide the navigation rail on the next launch",
       "rightSidebarHint": "Hide the detail pane on the next launch"
+    },
+    "runtime": {
+      "title": "Runtime Configuration",
+      "subtitle": "Edit layered runtime settings without moving the source of truth out of the config files.",
+      "loading": "Loading runtime configuration…",
+      "emptyTitle": "Runtime configuration is unavailable",
+      "emptyDescription": "No runtime config sources are currently available for the active workspace.",
+      "sourcePath": "Source path",
+      "secretReferencesTitle": "Secret reference status",
+      "noSecretReferences": "No secret references were reported for the current effective config.",
+      "actions": {
+        "reload": "Reload",
+        "validate": "Validate",
+        "save": "Save scope"
+      },
+      "validation": {
+        "idle": "Not validated",
+        "valid": "Valid",
+        "invalid": "Needs attention"
+      },
+      "sourceStatuses": {
+        "missing": "Missing",
+        "loaded": "Loaded",
+        "detected": "Detected"
+      },
+      "scopes": {
+        "user": {
+          "label": "User Overrides",
+          "description": "Personal overrides stored in the user scope."
+        },
+        "project": {
+          "label": "Project Defaults",
+          "description": "Shared runtime defaults for the current workspace or project."
+        },
+        "local": {
+          "label": "Local Machine Overrides",
+          "description": "Host-local settings that should not be shared across machines."
+        }
+      },
+      "effective": {
+        "title": "Effective Runtime Preview",
+        "description": "Merged config used for new sessions, with secret values redacted from the desktop surface."
+      }
     },
     "version": {
       "runtimeTitle": "Runtime Info",

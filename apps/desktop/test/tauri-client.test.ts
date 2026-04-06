@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type {
+  RuntimeConfigPatch,
   ShellBootstrap,
   WorkspaceConnectionRecord,
   WorkspaceSessionTokenEnvelope,
@@ -280,6 +281,163 @@ describe('host client transport', () => {
     expect(JSON.parse(String(request.body))).toMatchObject({
       permissionMode: 'danger-full-access',
     })
+  })
+
+  it('loads runtime config through the workspace API', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        effectiveConfig: {
+          model: 'claude-sonnet-4-5',
+        },
+        effectiveConfigHash: 'cfg-hash-1',
+        sources: [
+          {
+            scope: 'project',
+            path: '/tmp/octopus/.claw/settings.json',
+            exists: true,
+            loaded: true,
+            contentHash: 'src-hash-1',
+            document: {
+              model: 'claude-sonnet-4-5',
+            },
+          },
+        ],
+        validation: {
+          valid: true,
+          errors: [],
+          warnings: [],
+        },
+        secretReferences: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const config = await workspaceClient.runtime.getConfig()
+
+    expect(config.effectiveConfigHash).toBe('cfg-hash-1')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/config',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+  })
+
+  it('posts runtime config validation requests to the workspace API', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        valid: true,
+        errors: [],
+        warnings: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const patch: RuntimeConfigPatch = {
+      scope: 'project',
+      patch: {
+        model: 'claude-sonnet-4-5',
+      },
+    }
+
+    const result = await workspaceClient.runtime.validateConfig(patch)
+
+    expect(result.valid).toBe(true)
+    const request = firstRequest()
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      scope: 'project',
+      patch: {
+        model: 'claude-sonnet-4-5',
+      },
+    })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/config/validate',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    )
+  })
+
+  it('patches runtime config scopes through the workspace API', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        effectiveConfig: {
+          model: 'claude-sonnet-4-5',
+          permissions: {
+            defaultMode: 'plan',
+          },
+        },
+        effectiveConfigHash: 'cfg-hash-2',
+        sources: [
+          {
+            scope: 'project',
+            path: '/tmp/octopus/.claw/settings.json',
+            exists: true,
+            loaded: true,
+            contentHash: 'src-hash-2',
+            document: {
+              model: 'claude-sonnet-4-5',
+            },
+          },
+        ],
+        validation: {
+          valid: true,
+          errors: [],
+          warnings: [],
+        },
+        secretReferences: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.runtime.saveConfig('project', {
+      scope: 'project',
+      patch: {
+        permissions: {
+          defaultMode: 'plan',
+        },
+      },
+    })
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/config/scopes/project',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.any(Headers),
+      }),
+    )
   })
 
   it('uses browser host HTTP endpoints when VITE_HOST_RUNTIME=browser', async () => {
