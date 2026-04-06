@@ -461,7 +461,6 @@ These rules apply to all future desktop frontend work.
 - new business-page features use existing tokens, Tailwind utilities, and `Ui*` abstractions
 - frontend-first feature delivery must default to mock data so the primary UI path works before live backend integration is ready
 - page, store, and view-model logic must not require live backend or Tauri responses as the default development path
-- if real Tauri or backend integration is needed, keep it behind adapter boundaries and preserve a mock-first default behavior
 - all new shared schema definitions must be added to feature-based files under `packages/schema/src/*`
 - `packages/schema/src/index.ts` is the public export surface only; do not keep adding concrete schema definitions there
 - mock data and seed factories must reuse `@octopus/schema` contracts so frontend-first flows and later real integrations stay aligned
