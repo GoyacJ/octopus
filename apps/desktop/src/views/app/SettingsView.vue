@@ -82,35 +82,9 @@ const activeWorkspaceName = computed(() =>
     : t('common.na'),
 )
 
-const versionRows = computed(() => [
-  { id: 'shell', label: t('settings.version.fields.shell'), value: shell.hostState.shell },
-  { id: 'appVersion', label: t('settings.version.fields.appVersion'), value: shell.hostState.appVersion },
-  { id: 'workspace', label: t('settings.version.fields.workspace'), value: activeWorkspaceName.value },
-  {
-    id: 'backendState',
-    label: t('settings.version.fields.backendState'),
-    value: shell.backendConnection
-      ? enumLabel('backendConnectionState', shell.backendConnection.state)
-      : t('common.na'),
-  },
-  {
-    id: 'backendTransport',
-    label: t('settings.version.fields.backendTransport'),
-    value: shell.backendConnection
-      ? enumLabel('backendTransport', shell.backendConnection.transport)
-      : t('common.na'),
-  },
-  {
-    id: 'cargoWorkspace',
-    label: t('settings.version.fields.cargoWorkspace'),
-    value: shell.hostState.cargoWorkspace
-      ? t('settings.version.values.enabled')
-      : t('settings.version.values.disabled'),
-  },
-])
+const versionRows = computed(() => [])
 
 const canManageSettings = computed(() => true)
-const canManageDesktopBackend = computed(() => canManageSettings.value && !!shell.backendConnection)
 
 // Update local state when store changes
 watch(
@@ -151,14 +125,6 @@ watch(
   }
 )
 
-async function refreshBackendStatus() {
-  await shell.refreshBackendStatus()
-}
-
-async function restartBackend() {
-  await shell.restartBackend()
-}
-
 async function resetToDefault() {
   const defaults = createDefaultShellPreferences(shell.defaultWorkspaceId, shell.defaultProjectId)
   await shell.updatePreferences(defaults)
@@ -179,8 +145,7 @@ async function resetToDefault() {
     </header>
 
     <main class="px-2">
-      <div class="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px] items-start">
-        <div class="flex flex-col gap-10">
+      <div class="flex flex-col gap-10">
         <section v-if="activeTab === 'general'" class="space-y-8">
           <div class="flex items-center justify-between">
             <div class="space-y-1">
@@ -203,7 +168,9 @@ async function resetToDefault() {
                     :subtitle="t('settings.general.leftSidebarHint')"
                   >
                     <template #actions>
-                      <UiSwitch v-model="leftSidebarCollapsed" />
+                      <div class="[&>label>button]:!bg-black/25 [&>label>button]:dark:!bg-white/25">
+                        <UiSwitch v-model="leftSidebarCollapsed" />
+                      </div>
                     </template>
                   </UiListRow>
                 </div>
@@ -214,7 +181,9 @@ async function resetToDefault() {
                     :subtitle="t('settings.general.rightSidebarHint')"
                   >
                     <template #actions>
-                      <UiSwitch v-model="rightSidebarCollapsed" />
+                      <div class="[&>label>button]:!bg-black/25 [&>label>button]:dark:!bg-white/25">
+                        <UiSwitch v-model="rightSidebarCollapsed" />
+                      </div>
                     </template>
                   </UiListRow>
                 </div>
@@ -369,12 +338,6 @@ async function resetToDefault() {
         <!-- Version Tab -->
         <section v-else class="space-y-8">
           <div class="space-y-6">
-            <h3 class="text-xl font-bold text-text-primary">{{ t('settings.version.runtimeTitle') }}</h3>
-            <div class="flex flex-wrap gap-2.5 mb-8">
-              <UiBadge :label="enumLabel('hostPlatform', shell.hostState.platform)" :tone="shell.hostState.platform === 'tauri' ? 'success' : 'info'" />
-              <UiBadge :label="enumLabel('hostMode', shell.hostState.mode)" subtle />
-            </div>
-
             <div class="bg-subtle/10 border border-border-subtle/30 dark:border-white/[0.08] rounded-md overflow-hidden">
               <div
                 v-for="(row, i) in versionRows"
@@ -387,45 +350,8 @@ async function resetToDefault() {
                 <span class="text-[14px] font-bold text-text-primary tracking-tight font-mono">{{ row.value }}</span>
               </div>
             </div>
-
-            <div
-              v-if="canManageDesktopBackend"
-              data-testid="settings-backend-actions"
-              class="flex flex-wrap gap-3 pt-2"
-            >
-              <UiButton
-                data-testid="settings-backend-refresh"
-                variant="ghost"
-                :disabled="shell.syncingBackend"
-                @click="refreshBackendStatus"
-              >
-                {{ t('settings.version.actions.refreshBackend') }}
-              </UiButton>
-              <UiButton
-                data-testid="settings-backend-restart"
-                variant="primary"
-                :disabled="shell.restartingBackend"
-                @click="restartBackend"
-              >
-                {{ t('settings.version.actions.restartBackend') }}
-              </UiButton>
-            </div>
           </div>
         </section>
-        </div>
-
-        <aside class="space-y-4">
-          <div class="rounded-lg border border-border-subtle/30 bg-subtle/20 p-5">
-            <h4 class="text-sm font-bold text-text-primary">{{ t('settings.version.fields.workspace') }}</h4>
-            <p class="mt-2 text-sm text-text-secondary">{{ activeWorkspaceName }}</p>
-          </div>
-          <div class="rounded-lg border border-border-subtle/30 bg-subtle/20 p-5">
-            <h4 class="text-sm font-bold text-text-primary">{{ t('settings.version.fields.backendState') }}</h4>
-            <p class="mt-2 text-sm text-text-secondary">
-              {{ shell.backendConnection ? enumLabel('backendConnectionState', shell.backendConnection.state) : t('common.na') }}
-            </p>
-          </div>
-        </aside>
       </div>
     </main>
   </div>
