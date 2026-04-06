@@ -21,6 +21,7 @@ pub trait RuntimeSessionService: Send + Sync {
         session_id: &str,
         after: Option<&str>,
     ) -> Result<Vec<RuntimeEventEnvelope>, AppError>;
+    async fn delete_session(&self, session_id: &str) -> Result<(), AppError>;
 }
 
 #[async_trait]

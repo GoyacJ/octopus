@@ -654,6 +654,29 @@ export const useRuntimeStore = defineStore('runtime', {
         return null
       }
     },
+    async deleteSession(sessionId: string): Promise<void> {
+      const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+      if (!resolvedClient) {
+        return
+      }
+      const { client } = resolvedClient
+
+      try {
+        await client.runtime.deleteSession(sessionId)
+        this.sessions = this.sessions.filter((session) => session.id !== sessionId)
+        const details = { ...this.sessionDetails }
+        delete details[sessionId]
+        this.sessionDetails = details
+
+        if (this.activeSessionId === sessionId) {
+          this.activeSessionId = ''
+          this.activeConversationId = ''
+        }
+        this.saveActiveWorkspaceSnapshot()
+      } catch (error) {
+        this.error = error instanceof Error ? error.message : 'Failed to delete runtime session'
+      }
+    },
     async loadSession(sessionId: string): Promise<RuntimeSessionDetail | null> {
       this.syncWorkspaceScopeFromShell()
       const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)

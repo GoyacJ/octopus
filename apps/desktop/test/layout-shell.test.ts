@@ -138,4 +138,22 @@ describe('Workbench shell layout', () => {
 
     mounted.destroy()
   })
+
+  it('removes the sidebar top workspace list and exposes workspace switching actions from the footer menu', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="sidebar-workspace-list-top"]')).toBeNull()
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-menu-trigger"]')?.click()
+    await nextTick()
+
+    expect(mounted.container.querySelector('[data-testid="sidebar-workspace-menu-list"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="sidebar-connect-workspace-trigger"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
 })

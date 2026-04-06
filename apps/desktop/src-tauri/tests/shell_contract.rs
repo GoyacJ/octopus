@@ -10,10 +10,11 @@ use octopus_core::{
 };
 use octopus_desktop_shell::backend::BackendSupervisor;
 use octopus_desktop_shell::bootstrap::{
-    bootstrap_shell_payload, get_backend_connection_payload, healthcheck_payload,
+    bootstrap_shell_payload, create_workspace_connection, delete_workspace_connection,
+    get_backend_connection_payload, healthcheck_payload, list_workspace_connections,
     load_shell_preferences, save_shell_preferences,
 };
-use octopus_desktop_shell::services::PreferencesService;
+use octopus_desktop_shell::services::{PreferencesService, WorkspaceConnectionRegistryService};
 use octopus_desktop_shell::state::ShellState;
 use parking_lot::RwLock;
 use tempfile::tempdir;
@@ -86,6 +87,70 @@ fn bootstrap_uses_defaults_when_preferences_file_is_missing() {
     assert_eq!(backend.transport, "http");
     assert_eq!(backend.base_url, None);
     assert_eq!(backend.auth_token, None);
+    assert_eq!(payload.connections.len(), 1);
+    assert_eq!(payload.connections[0].id, "conn-local");
+}
+
+#[test]
+fn workspace_connections_roundtrip_and_deduplicate_by_base_url_and_workspace_id() {
+    let temp = tempdir().expect("tempdir");
+    let state = test_state(temp.path().to_path_buf());
+
+    let created = create_workspace_connection(
+        &state,
+        octopus_core::CreateHostWorkspaceConnectionInput {
+            workspace_id: "ws-enterprise".into(),
+            label: "Enterprise Workspace".into(),
+            base_url: "https://enterprise.example.test/".into(),
+            transport_security: "trusted".into(),
+            auth_mode: "session-token".into(),
+        },
+    )
+    .expect("create workspace connection");
+
+    let deduped = create_workspace_connection(
+        &state,
+        octopus_core::CreateHostWorkspaceConnectionInput {
+            workspace_id: "ws-enterprise".into(),
+            label: "Enterprise Workspace".into(),
+            base_url: "https://enterprise.example.test".into(),
+            transport_security: "trusted".into(),
+            auth_mode: "session-token".into(),
+        },
+    )
+    .expect("dedupe workspace connection");
+
+    assert_eq!(created.workspace_connection_id, deduped.workspace_connection_id);
+
+    let listed = list_workspace_connections(&state).expect("list workspace connections");
+    assert_eq!(listed.len(), 2);
+    assert_eq!(listed[0].workspace_connection_id, "conn-local");
+    assert_eq!(listed[1].workspace_connection_id, created.workspace_connection_id);
+}
+
+#[test]
+fn deleting_remote_workspace_connection_keeps_local_default_connection() {
+    let temp = tempdir().expect("tempdir");
+    let state = test_state(temp.path().to_path_buf());
+
+    let created = create_workspace_connection(
+        &state,
+        octopus_core::CreateHostWorkspaceConnectionInput {
+            workspace_id: "ws-enterprise".into(),
+            label: "Enterprise Workspace".into(),
+            base_url: "https://enterprise.example.test".into(),
+            transport_security: "trusted".into(),
+            auth_mode: "session-token".into(),
+        },
+    )
+    .expect("create workspace connection");
+
+    delete_workspace_connection(&state, &created.workspace_connection_id)
+        .expect("delete workspace connection");
+
+    let listed = list_workspace_connections(&state).expect("list workspace connections");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].workspace_connection_id, "conn-local");
 }
 
 #[test]

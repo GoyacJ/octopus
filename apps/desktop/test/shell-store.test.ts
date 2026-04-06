@@ -10,12 +10,17 @@ vi.mock('@/tauri/client', async () => {
   return {
     ...actual,
     bootstrapShellHost: vi.fn(),
+    createWorkspaceConnection: vi.fn(),
+    deleteWorkspaceConnection: vi.fn(),
   }
 })
 
 import { bootstrapShellHost } from '@/tauri/client'
+import { createWorkspaceConnection, deleteWorkspaceConnection } from '@/tauri/client'
 
 const bootstrapShellHostMock = vi.mocked(bootstrapShellHost)
+const createWorkspaceConnectionMock = vi.mocked(createWorkspaceConnection)
+const deleteWorkspaceConnectionMock = vi.mocked(deleteWorkspaceConnection)
 
 const testConnections = [
   {
@@ -32,6 +37,8 @@ describe('useShellStore', () => {
     setActivePinia(createPinia())
     window.localStorage.clear()
     bootstrapShellHostMock.mockReset()
+    createWorkspaceConnectionMock.mockReset()
+    deleteWorkspaceConnectionMock.mockReset()
   })
 
   it('enters an explicit host failure state when shell bootstrap fails', async () => {
@@ -163,5 +170,94 @@ describe('useShellStore', () => {
 
     expect(store.workspaceSessionsState['conn-local']).toBeUndefined()
     expect(store.workspaceSessionsState['conn-enterprise']?.token).toBe('token-enterprise')
+  })
+
+  it('adds a persisted remote workspace connection and activates it', async () => {
+    const store = useShellStore()
+    store.workspaceConnectionsState = [{
+      workspaceConnectionId: 'conn-local',
+      workspaceId: 'ws-local',
+      label: 'Local Workspace',
+      baseUrl: 'http://127.0.0.1:43127',
+      transportSecurity: 'loopback',
+      authMode: 'session-token',
+      status: 'connected',
+    }]
+    store.activeWorkspaceConnectionId = 'conn-local'
+    createWorkspaceConnectionMock.mockResolvedValue({
+      workspaceConnectionId: 'conn-enterprise',
+      workspaceId: 'ws-enterprise',
+      label: 'Enterprise Workspace',
+      baseUrl: 'https://enterprise.example.test',
+      transportSecurity: 'trusted',
+      authMode: 'session-token',
+      status: 'connected',
+    })
+
+    const created = await store.createWorkspaceConnection({
+      workspaceId: 'ws-enterprise',
+      label: 'Enterprise Workspace',
+      baseUrl: 'https://enterprise.example.test',
+      transportSecurity: 'trusted',
+      authMode: 'session-token',
+    })
+
+    expect(created.workspaceConnectionId).toBe('conn-enterprise')
+    expect(store.workspaceConnections.map(item => item.workspaceConnectionId)).toEqual([
+      'conn-local',
+      'conn-enterprise',
+    ])
+    expect(store.activeWorkspaceConnectionId).toBe('conn-enterprise')
+  })
+
+  it('deletes a remote workspace connection, clears its session, and falls back to local when it was active', async () => {
+    const store = useShellStore()
+    store.workspaceConnectionsState = [
+      {
+        workspaceConnectionId: 'conn-local',
+        workspaceId: 'ws-local',
+        label: 'Local Workspace',
+        baseUrl: 'http://127.0.0.1:43127',
+        transportSecurity: 'loopback',
+        authMode: 'session-token',
+        status: 'connected',
+      },
+      {
+        workspaceConnectionId: 'conn-enterprise',
+        workspaceId: 'ws-enterprise',
+        label: 'Enterprise Workspace',
+        baseUrl: 'https://enterprise.example.test',
+        transportSecurity: 'trusted',
+        authMode: 'session-token',
+        status: 'connected',
+      },
+    ]
+    store.activeWorkspaceConnectionId = 'conn-enterprise'
+    store.workspaceSessionsState = {
+      'conn-enterprise': {
+        workspaceConnectionId: 'conn-enterprise',
+        token: 'token-enterprise',
+        issuedAt: 2,
+        session: {
+          id: 'sess-enterprise',
+          workspaceId: 'ws-enterprise',
+          userId: 'user-owner',
+          clientAppId: 'octopus-desktop',
+          token: 'token-enterprise',
+          status: 'active',
+          createdAt: 2,
+          expiresAt: undefined,
+          roleIds: ['owner'],
+          scopeProjectIds: [],
+        },
+      },
+    }
+    deleteWorkspaceConnectionMock.mockResolvedValue()
+
+    await store.deleteWorkspaceConnection('conn-enterprise')
+
+    expect(store.workspaceConnections.map(item => item.workspaceConnectionId)).toEqual(['conn-local'])
+    expect(store.workspaceSessionsState['conn-enterprise']).toBeUndefined()
+    expect(store.activeWorkspaceConnectionId).toBe('conn-local')
   })
 })

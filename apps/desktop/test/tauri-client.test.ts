@@ -757,4 +757,141 @@ describe('host client transport', () => {
     expect(headers.get('Authorization')).toBe('Bearer browser-host-token')
     expect(headers.get('Content-Type')).toBe('application/json')
   })
+
+  it('creates, lists, and deletes host workspace connections through Tauri commands', async () => {
+    invokeSpy.mockImplementation(async (command: string) => {
+      if (command === 'list_workspace_connections') {
+        return [{
+          workspaceConnectionId: 'conn-enterprise',
+          workspaceId: 'ws-enterprise',
+          label: 'Enterprise Workspace',
+          baseUrl: 'https://enterprise.example.test',
+          transportSecurity: 'trusted',
+          authMode: 'session-token',
+          status: 'connected',
+          lastUsedAt: 42,
+        }]
+      }
+
+      if (command === 'create_workspace_connection') {
+        return {
+          workspaceConnectionId: 'conn-enterprise',
+          workspaceId: 'ws-enterprise',
+          label: 'Enterprise Workspace',
+          baseUrl: 'https://enterprise.example.test',
+          transportSecurity: 'trusted',
+          authMode: 'session-token',
+          status: 'connected',
+          lastUsedAt: 42,
+        }
+      }
+
+      if (command === 'delete_workspace_connection') {
+        return null
+      }
+
+      return createHostBootstrap()
+    })
+
+    const client = await loadClientModule()
+
+    const listed = await client.listWorkspaceConnections()
+    expect(listed).toHaveLength(1)
+    expect(invokeSpy).toHaveBeenCalledWith('list_workspace_connections')
+
+    const created = await client.createWorkspaceConnection({
+      workspaceId: 'ws-enterprise',
+      label: 'Enterprise Workspace',
+      baseUrl: 'https://enterprise.example.test',
+      transportSecurity: 'trusted',
+      authMode: 'session-token',
+    })
+    expect(created.workspaceConnectionId).toBe('conn-enterprise')
+    expect(invokeSpy).toHaveBeenCalledWith('create_workspace_connection', {
+      input: {
+        workspaceId: 'ws-enterprise',
+        label: 'Enterprise Workspace',
+        baseUrl: 'https://enterprise.example.test',
+        transportSecurity: 'trusted',
+        authMode: 'session-token',
+      },
+    })
+
+    await client.deleteWorkspaceConnection('conn-enterprise')
+    expect(invokeSpy).toHaveBeenCalledWith('delete_workspace_connection', {
+      workspaceConnectionId: 'conn-enterprise',
+    })
+  })
+
+  it('creates, lists, and deletes host workspace connections through browser host HTTP endpoints', async () => {
+    vi.stubEnv('VITE_HOST_RUNTIME', 'browser')
+    vi.stubEnv('VITE_HOST_API_BASE_URL', 'http://127.0.0.1:43127')
+    vi.stubEnv('VITE_HOST_AUTH_TOKEN', 'browser-host-token')
+    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ([{
+          workspaceConnectionId: 'conn-enterprise',
+          workspaceId: 'ws-enterprise',
+          label: 'Enterprise Workspace',
+          baseUrl: 'https://enterprise.example.test',
+          transportSecurity: 'trusted',
+          authMode: 'session-token',
+          status: 'connected',
+          lastUsedAt: 42,
+        }]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          workspaceConnectionId: 'conn-enterprise',
+          workspaceId: 'ws-enterprise',
+          label: 'Enterprise Workspace',
+          baseUrl: 'https://enterprise.example.test',
+          transportSecurity: 'trusted',
+          authMode: 'session-token',
+          status: 'connected',
+          lastUsedAt: 42,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers(),
+        json: async () => null,
+      })
+
+    const client = await loadClientModule()
+
+    const listed = await client.listWorkspaceConnections()
+    expect(listed[0]?.workspaceConnectionId).toBe('conn-enterprise')
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:43127/api/v1/host/workspace-connections',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+
+    await client.createWorkspaceConnection({
+      workspaceId: 'ws-enterprise',
+      label: 'Enterprise Workspace',
+      baseUrl: 'https://enterprise.example.test',
+      transportSecurity: 'trusted',
+      authMode: 'session-token',
+    })
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:43127/api/v1/host/workspace-connections',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+
+    await client.deleteWorkspaceConnection('conn-enterprise')
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      3,
+      'http://127.0.0.1:43127/api/v1/host/workspace-connections/conn-enterprise',
+      expect.objectContaining({ method: 'DELETE', headers: expect.any(Headers) }),
+    )
+  })
 })

@@ -377,7 +377,10 @@ fn runtime_routes() -> Router<ServerState> {
         .route("/config/validate", post(validate_runtime_config_route))
         .route("/config/scopes/:scope", patch(save_runtime_config_route))
         .route("/sessions", get(list_runtime_sessions).post(create_runtime_session))
-        .route("/sessions/:session_id", get(get_runtime_session))
+        .route(
+            "/sessions/:session_id",
+            get(get_runtime_session).delete(delete_runtime_session),
+        )
         .route("/sessions/:session_id/turns", post(submit_runtime_turn))
         .route(
             "/sessions/:session_id/approvals/:approval_id",
@@ -1271,6 +1274,17 @@ async fn get_runtime_session(
     let project_id = runtime_project_scope(&state, &session_id).await?;
     ensure_authorized_session(&state, &headers, "runtime.read", project_id.as_deref()).await?;
     Ok(Json(state.services.runtime_session.get_session(&session_id).await?))
+}
+
+async fn delete_runtime_session(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(session_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    let project_id = runtime_project_scope(&state, &session_id).await?;
+    ensure_authorized_session(&state, &headers, "runtime.read", project_id.as_deref()).await?;
+    state.services.runtime_session.delete_session(&session_id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn submit_runtime_turn(

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { Brain, FileText, FolderTree, Sparkles, Waypoints, Wrench } from 'lucide-vue-next'
+import { Brain, FileText, FolderTree, PanelRight, Sparkles, Waypoints, Wrench } from 'lucide-vue-next'
 
 import { UiButton, UiEmptyState, UiTimelineList } from '@octopus/ui'
 
@@ -45,7 +45,19 @@ function setDetail(detail: string) {
     class="h-full border-l border-border-subtle bg-sidebar dark:border-white/[0.05]"
     :class="shell.rightSidebarCollapsed ? 'w-[48px]' : 'w-[360px]'"
   >
-    <div v-if="shell.rightSidebarCollapsed" class="flex h-full flex-col items-center gap-3 py-6">
+    <div v-if="shell.rightSidebarCollapsed" class="flex h-full flex-col items-center gap-3 py-4">
+      <UiButton
+        variant="ghost"
+        size="icon"
+        class="h-9 w-9 rounded-lg text-text-tertiary hover:bg-muted/80 hover:text-text-primary"
+        :title="t('common.expand')"
+        @click="shell.toggleRightSidebar()"
+      >
+        <PanelRight :size="18" />
+      </UiButton>
+
+      <div class="h-px w-6 bg-border-subtle dark:bg-white/[0.05]" />
+
       <UiButton
         v-for="item in sectionItems"
         :key="item.id"
@@ -60,8 +72,17 @@ function setDetail(detail: string) {
     </div>
 
     <div v-else class="flex h-full flex-col overflow-hidden">
-      <div class="border-b border-border-subtle px-4 py-3 dark:border-white/[0.05]">
+      <div class="flex items-center justify-between border-b border-border-subtle px-4 py-3 dark:border-white/[0.05]">
         <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">{{ t('conversation.detail.title') }}</div>
+        <UiButton
+          variant="ghost"
+          size="icon"
+          class="h-6 w-6 text-text-tertiary hover:bg-muted/80 hover:text-text-primary"
+          :title="t('common.collapse')"
+          @click="shell.toggleRightSidebar()"
+        >
+          <PanelRight :size="14" />
+        </UiButton>
       </div>
 
       <nav class="flex flex-wrap gap-1 border-b border-border-subtle p-2 dark:border-white/[0.05]">

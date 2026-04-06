@@ -149,6 +149,7 @@ export interface WorkspaceClient {
     listSessions: () => Promise<RuntimeSessionSummary[]>
     createSession: (input: CreateRuntimeSessionInput, idempotencyKey?: string) => Promise<RuntimeSessionDetail>
     loadSession: (sessionId: string) => Promise<RuntimeSessionDetail>
+    deleteSession: (sessionId: string) => Promise<void>
     pollEvents: (sessionId: string, options?: RuntimeEventsPollOptions) => Promise<RuntimeEventEnvelope[]>
     subscribeEvents: (sessionId: string, options: RuntimeEventSubscriptionOptions) => Promise<RuntimeEventSubscription>
     submitUserTurn: (
@@ -744,6 +745,11 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
       async loadSession(sessionId) {
         return await fetchWorkspace<RuntimeSessionDetail>(context, `${RUNTIME_API_BASE}/sessions/${sessionId}`, {
           method: 'GET',
+        })
+      },
+      async deleteSession(sessionId) {
+        await fetchWorkspaceVoid(context, `${RUNTIME_API_BASE}/sessions/${sessionId}`, {
+          method: 'DELETE',
         })
       },
       async pollEvents(sessionId, options = {}) {

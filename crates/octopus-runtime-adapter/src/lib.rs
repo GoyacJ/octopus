@@ -1038,6 +1038,35 @@ impl RuntimeSessionService for RuntimeAdapter {
 
         Ok(aggregate.events.clone())
     }
+
+    async fn delete_session(&self, session_id: &str) -> Result<(), AppError> {
+        let mut sessions = self
+            .state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+        let mut order = self
+            .state
+            .order
+            .lock()
+            .map_err(|_| AppError::runtime("runtime order mutex poisoned"))?;
+
+        sessions.remove(session_id);
+        order.retain(|id| id != session_id);
+
+        let _ = fs::remove_file(self.runtime_debug_session_path(session_id));
+        let _ = fs::remove_file(self.runtime_debug_events_path(session_id));
+
+        let connection = self.open_db()?;
+        connection
+            .execute(
+                "DELETE FROM runtime_session_projections WHERE id = ?1",
+                [session_id],
+            )
+            .map_err(|e| AppError::database(e.to_string()))?;
+
+        Ok(())
+    }
 }
 
 #[async_trait]
