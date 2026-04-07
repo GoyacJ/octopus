@@ -81,11 +81,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run desktop shell tests
-        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
-
       - name: Build desktop sidecar
         run: node scripts/prepare-desktop-sidecar.mjs
+
+      - name: Run desktop shell tests
+        run: cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
 
       - name: Build Tauri release bundle
         run: pnpm tauri build --config apps/desktop/src-tauri/tauri.conf.json
