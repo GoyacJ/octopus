@@ -1,6 +1,17 @@
-import type { DecisionAction, PermissionMode, RiskLevel, RunStatus, TraceKind, TraceTone } from './shared'
+import type {
+  ConversationActorKind,
+  DecisionAction,
+  PermissionMode,
+  RiskLevel,
+  RunStatus,
+  TraceKind,
+  TraceTone,
+  WorkspaceToolPermissionMode,
+} from './shared'
+import type { MessageProcessEntry, MessageToolCall, MessageUsage } from './workbench'
 import type { RuntimePermissionMode } from './permissions'
 import type { SseEventEnvelope } from './workspace-protocol'
+import type { CapabilityDescriptor } from './catalog'
 
 export type JsonValue =
   | string
@@ -11,10 +22,12 @@ export type JsonValue =
   | JsonValue[]
 
 export interface ProviderConfig {
-  provider: string
-  apiKey?: string
+  providerId: string
+  credentialRef?: string
   baseUrl?: string
   defaultModel?: string
+  defaultSurface?: string
+  protocolFamily?: string
 }
 
 export type RuntimeConfigScope = 'workspace' | 'project' | 'user'
@@ -42,8 +55,50 @@ export interface RuntimeConfigPatch {
   patch: Record<string, JsonValue>
 }
 
+export interface ProjectModelSettings {
+  allowedConfiguredModelIds: string[]
+  defaultConfiguredModelId: string
+}
+
+export interface ProjectToolPermissionOverride {
+  permissionMode: WorkspaceToolPermissionMode
+}
+
+export interface ProjectToolSettings {
+  enabledSourceKeys: string[]
+  overrides: Record<string, ProjectToolPermissionOverride>
+}
+
+export interface ProjectAgentSettings {
+  enabledAgentIds: string[]
+  enabledTeamIds: string[]
+}
+
+export interface ProjectSettingsConfig {
+  models?: ProjectModelSettings
+  tools?: ProjectToolSettings
+  agents?: ProjectAgentSettings
+}
+
 export interface RuntimeConfigValidationResult {
   valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+
+export interface RuntimeConfiguredModelProbeInput {
+  scope: RuntimeConfigScope
+  configuredModelId: string
+  patch: Record<string, JsonValue>
+}
+
+export interface RuntimeConfiguredModelProbeResult {
+  valid: boolean
+  reachable: boolean
+  configuredModelId: string
+  configuredModelName?: string
+  requestId?: string
+  consumedTokens?: number
   errors: string[]
   warnings: string[]
 }
@@ -62,6 +117,20 @@ export interface RuntimeConfigSnapshotSummary {
   startedFromScopeSet: RuntimeConfigScope[]
   sourceRefs: string[]
   createdAt: number
+  effectiveConfig?: Record<string, JsonValue>
+}
+
+export interface ResolvedExecutionTarget {
+  configuredModelId: string
+  configuredModelName: string
+  providerId: string
+  registryModelId: string
+  modelId: string
+  surface: string
+  protocolFamily: string
+  credentialRef?: string
+  baseUrl?: string
+  capabilities: CapabilityDescriptor[]
 }
 
 export type RuntimeActorType = 'user' | 'assistant' | 'system'
@@ -74,11 +143,14 @@ export type RuntimeEventKind =
   | 'runtime.session.updated'
   | 'runtime.error'
 
+export type RuntimeSessionKind = 'project' | 'pet'
+
 export interface RuntimeSessionSummary {
   id: string
   conversationId: string
   projectId: string
   title: string
+  sessionKind: RuntimeSessionKind
   status: RunStatus
   updatedAt: number
   lastMessagePreview?: string
@@ -95,11 +167,20 @@ export interface RuntimeRunSnapshot {
   currentStep: string
   startedAt: number
   updatedAt: number
+  configuredModelId?: string
+  configuredModelName?: string
   modelId?: string
+  consumedTokens?: number
   nextAction?: string
   configSnapshotId: string
   effectiveConfigHash: string
   startedFromScopeSet: RuntimeConfigScope[]
+  resolvedTarget?: ResolvedExecutionTarget
+  requestedActorKind?: ConversationActorKind
+  requestedActorId?: string
+  resolvedActorKind?: ConversationActorKind
+  resolvedActorId?: string
+  resolvedActorLabel?: string
 }
 
 export interface RuntimeMessage {
@@ -110,8 +191,22 @@ export interface RuntimeMessage {
   senderLabel: string
   content: string
   timestamp: number
+  configuredModelId?: string
+  configuredModelName?: string
   modelId?: string
   status: RunStatus
+  requestedActorKind?: ConversationActorKind
+  requestedActorId?: string
+  resolvedActorKind?: ConversationActorKind
+  resolvedActorId?: string
+  resolvedActorLabel?: string
+  usedDefaultActor?: boolean
+  resourceIds?: string[]
+  attachments?: string[]
+  artifacts?: string[]
+  usage?: MessageUsage
+  toolCalls?: MessageToolCall[]
+  processEntries?: MessageProcessEntry[]
 }
 
 export interface RuntimeTraceItem {
@@ -125,6 +220,8 @@ export interface RuntimeTraceItem {
   tone: TraceTone | 'default'
   timestamp: number
   actor: string
+  actorKind?: ConversationActorKind
+  actorId?: string
   relatedMessageId?: string
   relatedToolName?: string
 }
@@ -173,12 +270,16 @@ export interface CreateRuntimeSessionInput {
   conversationId: string
   projectId: string
   title: string
+  sessionKind?: RuntimeSessionKind
 }
 
 export interface SubmitRuntimeTurnInput {
   content: string
-  modelId: string
+  modelId?: string
+  configuredModelId?: string
   permissionMode: PermissionMode | RuntimePermissionMode
+  actorKind?: ConversationActorKind
+  actorId?: string
 }
 
 export interface ResolveRuntimeApprovalInput {

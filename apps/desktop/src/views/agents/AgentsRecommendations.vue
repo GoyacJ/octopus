@@ -1,18 +1,16 @@
 <script setup lang="ts">
 import { ArrowRight, Sparkles, UsersRound } from 'lucide-vue-next'
-import { UiBadge, UiRecordCard, UiSectionHeading, UiSurface } from '@octopus/ui'
+import { UiButton, UiRecordCard, UiSectionHeading, UiSurface } from '@octopus/ui'
 
 interface RecommendationEmployee {
   id: string
   name: string
-  title: string
   summary: string
 }
 
 interface RecommendationTeam {
   id: string
   name: string
-  title: string
   workflow: string[]
 }
 
@@ -47,15 +45,11 @@ const emit = defineEmits<{
             </div>
           </template>
 
-          <template #eyebrow>
-            {{ employee.title }}
-          </template>
-
           <template #actions>
-            <span class="inline-flex items-center gap-1 text-sm text-text-secondary">
+            <UiButton variant="ghost" size="sm" class="gap-1 px-2 text-xs text-text-secondary" @click.stop="emit('openAgent', employee.id)">
               打开
               <ArrowRight :size="14" />
-            </span>
+            </UiButton>
           </template>
         </UiRecordCard>
       </div>
@@ -70,7 +64,6 @@ const emit = defineEmits<{
           layout="compact"
           interactive
           :title="team.name"
-          :description="team.title"
           @click="emit('openTeam', team.id)"
         >
           <template #leading>
@@ -79,17 +72,11 @@ const emit = defineEmits<{
             </div>
           </template>
 
-          <template #secondary>
-            <div class="flex flex-wrap gap-2">
-              <UiBadge v-for="step in team.workflow" :key="step" :label="step" subtle />
-            </div>
-          </template>
-
           <template #actions>
-            <span class="inline-flex items-center gap-1 text-sm text-text-secondary">
+            <UiButton variant="ghost" size="sm" class="gap-1 px-2 text-xs text-text-secondary" @click.stop="emit('openTeam', team.id)">
               查看
               <ArrowRight :size="14" />
-            </span>
+            </UiButton>
           </template>
         </UiRecordCard>
       </div>

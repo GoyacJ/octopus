@@ -31,6 +31,17 @@ function toSessionEnvelope(
   }
 }
 
+function fallbackBootstrapStatus(
+  connection: Pick<WorkspaceConnectionRecord, 'transportSecurity' | 'authMode'>,
+  status: SystemBootstrapStatus,
+): SystemBootstrapStatus {
+  return {
+    ...status,
+    transportSecurity: status.transportSecurity ?? connection.transportSecurity,
+    authMode: status.authMode ?? connection.authMode,
+  }
+}
+
 export const useAuthStore = defineStore('auth', () => {
   const shell = useShellStore()
 
@@ -69,8 +80,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function resolveMode(status: SystemBootstrapStatus | null): AuthMode {
+    // null means we couldn't reach the server or haven't bootstrapped yet — treat as first launch
     if (!status) {
-      return 'login'
+      return 'register'
     }
 
     return status.setupRequired || !status.ownerReady ? 'register' : 'login'
@@ -183,7 +195,8 @@ export const useAuthStore = defineStore('auth', () => {
       }
 
       error.value = cause instanceof Error ? cause.message : 'Failed to bootstrap auth state'
-      applyUnauthenticatedState(connectionId, 'missing-session')
+      // Pass null status to ensure resolveMode returns 'register' for first launch
+      applyUnauthenticatedState(connectionId, 'first-launch', null)
     } finally {
       markBootstrapping(connectionId, false)
     }
@@ -216,28 +229,31 @@ export const useAuthStore = defineStore('auth', () => {
       shell.setWorkspaceSession(toSessionEnvelope(connection.workspaceConnectionId, response.session))
       setAuthenticated(connection.workspaceConnectionId, true)
       markReady(connection.workspaceConnectionId, true)
-      storeBootstrapStatus(connection.workspaceConnectionId, {
-        ...(getBootstrapStatus(connection.workspaceConnectionId) ?? {
+      storeBootstrapStatus(
+        connection.workspaceConnectionId,
+        fallbackBootstrapStatus(connection, {
+          ...(getBootstrapStatus(connection.workspaceConnectionId) ?? {
+            workspace: response.workspace,
+            setupRequired: false,
+            ownerReady: true,
+            registeredApps: [],
+            protocolVersion: 'unknown',
+            apiBasePath: '/api/v1',
+            transportSecurity: connection.transportSecurity,
+            authMode: connection.authMode,
+            capabilities: {
+              polling: true,
+              sse: true,
+              idempotency: true,
+              reconnect: true,
+              eventReplay: true,
+            },
+          }),
           workspace: response.workspace,
           setupRequired: false,
           ownerReady: true,
-          registeredApps: [],
-          protocolVersion: 'unknown',
-          apiBasePath: '/api/v1',
-          transportSecurity: connection.transportSecurity,
-          authMode: connection.authMode,
-          capabilities: {
-            polling: true,
-            sse: true,
-            idempotency: true,
-            reconnect: true,
-            eventReplay: true,
-          },
         }),
-        workspace: response.workspace,
-        setupRequired: false,
-        ownerReady: true,
-      })
+      )
       closeAuthDialog(connection.workspaceConnectionId)
       return response
     } catch (cause) {
@@ -269,28 +285,31 @@ export const useAuthStore = defineStore('auth', () => {
       shell.setWorkspaceSession(toSessionEnvelope(connection.workspaceConnectionId, response.session))
       setAuthenticated(connection.workspaceConnectionId, true)
       markReady(connection.workspaceConnectionId, true)
-      storeBootstrapStatus(connection.workspaceConnectionId, {
-        ...(getBootstrapStatus(connection.workspaceConnectionId) ?? {
+      storeBootstrapStatus(
+        connection.workspaceConnectionId,
+        fallbackBootstrapStatus(connection, {
+          ...(getBootstrapStatus(connection.workspaceConnectionId) ?? {
+            workspace: response.workspace,
+            setupRequired: false,
+            ownerReady: true,
+            registeredApps: [],
+            protocolVersion: 'unknown',
+            apiBasePath: '/api/v1',
+            transportSecurity: connection.transportSecurity,
+            authMode: connection.authMode,
+            capabilities: {
+              polling: true,
+              sse: true,
+              idempotency: true,
+              reconnect: true,
+              eventReplay: true,
+            },
+          }),
           workspace: response.workspace,
           setupRequired: false,
           ownerReady: true,
-          registeredApps: [],
-          protocolVersion: 'unknown',
-          apiBasePath: '/api/v1',
-          transportSecurity: connection.transportSecurity,
-          authMode: connection.authMode,
-          capabilities: {
-            polling: true,
-            sse: true,
-            idempotency: true,
-            reconnect: true,
-            eventReplay: true,
-          },
         }),
-        workspace: response.workspace,
-        setupRequired: false,
-        ownerReady: true,
-      })
+      )
       closeAuthDialog(connection.workspaceConnectionId)
       return response
     } catch (cause) {
@@ -341,6 +360,78 @@ export const useAuthStore = defineStore('auth', () => {
     return authenticatedByConnection.value[connection.workspaceConnectionId] ?? false
   }
 
+  async function connectWorkspace(input: {
+    baseUrl: string
+    username: string
+    password: string
+  }) {
+    submitting.value = true
+    error.value = ''
+
+    const normalizedBaseUrl = input.baseUrl.trim().replace(/\/+$/, '')
+    const provisionalConnection: WorkspaceConnectionRecord = {
+      workspaceConnectionId: `temp-${Date.now()}`,
+      workspaceId: '',
+      label: normalizedBaseUrl,
+      baseUrl: normalizedBaseUrl,
+      transportSecurity: normalizedBaseUrl.startsWith('http://127.0.0.1') || normalizedBaseUrl.startsWith('http://localhost')
+        ? 'loopback'
+        : normalizedBaseUrl.startsWith('https://')
+          ? 'trusted'
+          : 'public',
+      authMode: 'session-token',
+      status: 'connected',
+    }
+
+    try {
+      const bootstrapClient = tauriClient.createWorkspaceClient({ connection: provisionalConnection })
+      const status = await bootstrapClient.system.bootstrap()
+      const authenticatedConnection: WorkspaceConnectionRecord = {
+        ...provisionalConnection,
+        workspaceId: status.workspace.id,
+        label: status.workspace.name,
+        transportSecurity: status.transportSecurity,
+        authMode: status.authMode,
+      }
+      const loginClient = tauriClient.createWorkspaceClient({ connection: authenticatedConnection })
+      const response = await loginClient.auth.login({
+        clientAppId: 'octopus-desktop',
+        workspaceId: status.workspace.id,
+        username: input.username.trim(),
+        password: input.password,
+      })
+
+      const persistedConnection = await shell.createWorkspaceConnection({
+        workspaceId: status.workspace.id,
+        label: status.workspace.name,
+        baseUrl: normalizedBaseUrl,
+        transportSecurity: status.transportSecurity,
+        authMode: status.authMode,
+      })
+      shell.setWorkspaceSession(
+        toSessionEnvelope(persistedConnection.workspaceConnectionId, response.session),
+      )
+      setAuthenticated(persistedConnection.workspaceConnectionId, true)
+      markReady(persistedConnection.workspaceConnectionId, true)
+      storeBootstrapStatus(
+        persistedConnection.workspaceConnectionId,
+        fallbackBootstrapStatus(persistedConnection, {
+          ...status,
+          workspace: response.workspace,
+          setupRequired: false,
+          ownerReady: true,
+        }),
+      )
+      await shell.activateWorkspaceConnection(persistedConnection.workspaceConnectionId)
+      return persistedConnection
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : 'Failed to connect workspace'
+      throw cause
+    } finally {
+      submitting.value = false
+    }
+  }
+
   return {
     dialogOpen,
     mode,
@@ -355,6 +446,7 @@ export const useAuthStore = defineStore('auth', () => {
     requireLogin,
     login,
     registerOwner,
+    connectWorkspace,
     logout,
     handleAuthError,
     isConnectionAuthenticated,

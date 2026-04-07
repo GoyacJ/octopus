@@ -2,10 +2,14 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { Check, Menu, Monitor, MoonStar, Search, Settings, SunMedium, UserRound } from 'lucide-vue-next'
+import type { NotificationRecord } from '@octopus/schema'
+import { Bell, Check, Menu, Monitor, MoonStar, Search, Settings, SunMedium, UserRound } from 'lucide-vue-next'
 
-import { UiButton } from '@octopus/ui'
+import { UiButton, UiNotificationBadge, UiNotificationCenter, UiPopover } from '@octopus/ui'
 
+import { resolveWorkspaceLabel } from '@/composables/workspace-label'
+import { getAncestorMenuIds, getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
+import { useNotificationStore } from '@/stores/notifications'
 import { useShellStore } from '@/stores/shell'
 import { useUserCenterStore } from '@/stores/user-center'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -13,6 +17,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const notifications = useNotificationStore()
 const shell = useShellStore()
 const workspaceStore = useWorkspaceStore()
 const userCenterStore = useUserCenterStore()
@@ -22,53 +27,54 @@ const localeMenuOpen = ref(false)
 const accountMenuOpen = ref(false)
 
 const workspaceLabel = computed(() =>
-  shell.activeWorkspaceConnection?.label
-  ?? workspaceStore.activeWorkspace?.name
-  ?? 'Workspace',
+  resolveWorkspaceLabel(
+    shell.activeWorkspaceConnection,
+    workspaceStore.activeWorkspace?.name,
+    t,
+  ),
 )
 
-const currentPageName = computed(() => {
-  switch (String(route.name ?? '')) {
-    case 'workspace-overview':
-      return t('sidebar.navigation.overview')
-    case 'project-dashboard':
-      return t('sidebar.navigation.dashboard')
-    case 'project-conversations':
-    case 'project-conversation':
-      return t('sidebar.projectModules.conversations')
-    case 'workspace-resources':
-    case 'project-resources':
-      return t('sidebar.navigation.resources')
-    case 'workspace-knowledge':
-    case 'project-knowledge':
-      return t('sidebar.navigation.knowledge')
-    case 'workspace-agents':
-    case 'project-agents':
-      return t('sidebar.navigation.agents')
-    case 'workspace-teams':
-      return t('sidebar.navigation.teams')
-    case 'workspace-models':
-      return t('sidebar.navigation.models')
-    case 'workspace-tools':
-      return t('sidebar.navigation.tools')
-    case 'workspace-automations':
-      return t('sidebar.navigation.automations')
-    case 'project-runtime':
-      return t('sidebar.navigation.runtime')
-    case 'workspace-user-center':
-    case 'workspace-user-center-profile':
-    case 'workspace-user-center-users':
-    case 'workspace-user-center-roles':
-    case 'workspace-user-center-permissions':
-    case 'workspace-user-center-menus':
-      return t('sidebar.navigation.userCenter')
-    case 'app-settings':
-      return t('topbar.settings')
-    case 'app-connections':
-      return t('connections.header.title')
-    default:
-      return ''
+const projectLabel = computed(() => workspaceStore.activeProject?.name)
+
+const currentRouteName = computed(() => typeof route.name === 'string' ? route.name : '')
+const currentRouteMenuId = computed(() => getRouteMenuId(currentRouteName.value))
+const currentRouteMenuDefinition = computed(() => {
+  if (!currentRouteMenuId.value) {
+    return undefined
   }
+
+  return getMenuDefinition(currentRouteMenuId.value)
+})
+const currentTopLevelMenuDefinition = computed(() => {
+  if (!currentRouteMenuId.value) {
+    return undefined
+  }
+
+  const topLevelMenuId = getAncestorMenuIds(currentRouteMenuId.value)[0] ?? currentRouteMenuId.value
+  return getMenuDefinition(topLevelMenuId)
+})
+const currentPageName = computed(() =>
+  currentTopLevelMenuDefinition.value?.labelKey
+    ? t(currentTopLevelMenuDefinition.value.labelKey)
+    : '',
+)
+const breadcrumbItems = computed(() => {
+  const items: string[] = ['网易Lobster']
+  const section = currentRouteMenuDefinition.value?.section
+
+  if (section && section !== 'app') {
+    items.push(workspaceLabel.value)
+  }
+
+  if (section === 'project' && projectLabel.value) {
+    items.push(projectLabel.value)
+  }
+
+  if (currentPageName.value) {
+    items.push(currentPageName.value)
+  }
+
+  return items
 })
 
 const currentUser = computed(() => userCenterStore.currentUser)
@@ -87,6 +93,7 @@ function closeMenus() {
   themeMenuOpen.value = false
   localeMenuOpen.value = false
   accountMenuOpen.value = false
+  notifications.closeCenter()
 }
 
 function handleClickOutside(event: MouseEvent) {
@@ -129,6 +136,39 @@ async function openUserCenter() {
     params: { workspaceId: workspaceStore.currentWorkspaceId },
   })
 }
+
+const notificationFilterLabels = computed(() => ({
+  all: t('notifications.filters.all'),
+  app: t('notifications.filters.app'),
+  workspace: t('notifications.filters.workspace'),
+  user: t('notifications.filters.user'),
+}))
+
+const notificationScopeLabels = computed(() => ({
+  app: t('notifications.scopes.app'),
+  workspace: t('notifications.scopes.workspace'),
+  user: t('notifications.scopes.user'),
+}))
+
+function toggleNotifications() {
+  if (notifications.centerOpen) {
+    notifications.closeCenter()
+    return
+  }
+
+  themeMenuOpen.value = false
+  localeMenuOpen.value = false
+  accountMenuOpen.value = false
+  notifications.openCenter()
+}
+
+async function handleNotificationSelect(notification: NotificationRecord) {
+  await notifications.markRead(notification.id)
+  notifications.closeCenter()
+  if (notification.routeTo) {
+    await router.push(notification.routeTo)
+  }
+}
 </script>
 
 <template>
@@ -148,14 +188,17 @@ async function openUserCenter() {
         <Menu :size="16" />
       </UiButton>
 
-      <div class="flex items-center gap-2">
-        <span class="text-sm font-semibold text-text-primary">网易Lobster</span>
-      </div>
-
-      <div class="hidden min-w-0 items-center gap-2 text-sm text-text-secondary md:flex">
-        <span class="truncate">{{ workspaceLabel }}</span>
-        <span v-if="currentPageName" class="text-text-tertiary">/</span>
-        <span v-if="currentPageName" class="truncate text-text-primary">{{ currentPageName }}</span>
+      <div class="flex items-center gap-2 text-sm">
+        <div class="hidden items-center gap-2 md:flex" data-testid="topbar-breadcrumbs">
+          <template v-for="(item, index) in breadcrumbItems" :key="`${index}:${item}`">
+            <span
+              :class="index === breadcrumbItems.length - 1 ? 'truncate font-medium text-text-primary' : index === 0 ? 'font-semibold text-text-primary' : 'truncate text-text-secondary'"
+            >
+              {{ item }}
+            </span>
+            <span v-if="index < breadcrumbItems.length - 1" class="text-text-tertiary">></span>
+          </template>
+        </div>
       </div>
     </div>
 
@@ -221,6 +264,46 @@ async function openUserCenter() {
           {{ t('topbar.settings') }}
         </span>
       </button>
+
+      <UiPopover
+        :open="notifications.centerOpen"
+        align="end"
+        side="bottom"
+        root-class="!inline-flex"
+        class="border-none bg-transparent p-0 shadow-none"
+        @update:open="($event) => $event ? notifications.openCenter() : notifications.closeCenter()"
+      >
+        <template #trigger>
+          <button
+            type="button"
+            data-testid="topbar-notification-trigger"
+            class="dropdown-trigger relative flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent"
+            :aria-label="t('notifications.triggerAriaLabel')"
+            @click="toggleNotifications"
+          >
+            <Bell :size="15" class="text-text-secondary" />
+            <span class="absolute -right-1 -top-1">
+              <UiNotificationBadge :count="notifications.unreadSummary.total" />
+            </span>
+          </button>
+        </template>
+        <UiNotificationCenter
+          :open="notifications.centerOpen"
+          :notifications="notifications.filteredNotifications"
+          :unread-count="notifications.unreadSummary.total"
+          :active-filter="notifications.filterScope"
+          :filter-labels="notificationFilterLabels"
+          :scope-labels="notificationScopeLabels"
+          :title="t('notifications.title')"
+          :empty-title="t('notifications.empty.title')"
+          :empty-description="t('notifications.empty.description')"
+          :mark-all-label="t('notifications.markAllRead')"
+          @update:filter="notifications.setFilter"
+          @mark-read="notifications.markRead"
+          @mark-all-read="notifications.markAllRead({ scope: notifications.filterScope })"
+          @select="handleNotificationSelect"
+        />
+      </UiPopover>
 
       <div class="relative">
         <button

@@ -1,4 +1,7 @@
 import type {
+  AvatarUploadPayload,
+} from './auth'
+import type {
   AgentScope,
   AgentStatus,
   AutomationStatus,
@@ -22,6 +25,14 @@ import type {
   WorkspaceToolPermissionMode,
   WorkspaceToolStatus,
 } from './shared'
+import type {
+  ConfiguredModelRecord,
+  CredentialBinding,
+  DefaultSelection,
+  ModelRegistryDiagnostics,
+  ModelRegistryRecord,
+  ProviderRegistryRecord,
+} from './catalog'
 import type { ProjectRecord, WorkspaceSummary } from './workspace'
 
 export interface WorkspaceMetricRecord {
@@ -76,6 +87,39 @@ export interface WorkspaceResourceRecord {
   status: ViewStatus
   updatedAt: number
   tags: string[]
+  sourceArtifactId?: string
+}
+
+export interface CreateWorkspaceResourceInput {
+  projectId?: string
+  kind: ProjectResourceKind
+  name: string
+  location?: string
+  tags?: string[]
+  sourceArtifactId?: string
+}
+
+export interface UpdateWorkspaceResourceInput {
+  name?: string
+  location?: string
+  status?: ViewStatus
+  tags?: string[]
+}
+
+export interface WorkspaceResourceUploadPayload {
+  fileName: string
+  contentType: string
+  dataBase64: string
+  byteSize: number
+}
+
+export interface WorkspaceResourceFolderUploadEntry extends WorkspaceResourceUploadPayload {
+  relativePath: string
+}
+
+export interface CreateWorkspaceResourceFolderInput {
+  projectId?: string
+  files: WorkspaceResourceFolderUploadEntry[]
 }
 
 export interface KnowledgeRecord {
@@ -97,7 +141,15 @@ export interface AgentRecord {
   projectId?: string
   scope: AgentScope
   name: string
-  title: string
+  avatarPath?: string
+  avatar?: string
+  personality: string
+  tags: string[]
+  prompt: string
+  builtinToolKeys: string[]
+  skillIds: string[]
+  mcpServerNames: string[]
+  integrationSource?: AgentIntegrationSource
   description: string
   status: AgentStatus
   updatedAt: number
@@ -109,10 +161,88 @@ export interface TeamRecord {
   projectId?: string
   scope: TeamScope
   name: string
+  avatarPath?: string
+  avatar?: string
+  personality: string
+  tags: string[]
+  prompt: string
+  builtinToolKeys: string[]
+  skillIds: string[]
+  mcpServerNames: string[]
+  leaderAgentId?: string
+  memberAgentIds: string[]
+  integrationSource?: TeamIntegrationSource
   description: string
   status: TeamStatus
-  memberIds: string[]
   updatedAt: number
+}
+
+export interface WorkspaceLinkIntegrationSource {
+  kind: 'workspace-link'
+  sourceId: string
+}
+
+export type AgentIntegrationSource = WorkspaceLinkIntegrationSource
+export type TeamIntegrationSource = WorkspaceLinkIntegrationSource
+
+export interface UpsertAgentInput {
+  workspaceId: string
+  projectId?: string
+  scope: AgentScope
+  name: string
+  avatar?: AvatarUploadPayload
+  removeAvatar?: boolean
+  personality: string
+  tags: string[]
+  prompt: string
+  builtinToolKeys: string[]
+  skillIds: string[]
+  mcpServerNames: string[]
+  description: string
+  status: AgentStatus
+}
+
+export interface UpsertTeamInput {
+  workspaceId: string
+  projectId?: string
+  scope: TeamScope
+  name: string
+  avatar?: AvatarUploadPayload
+  removeAvatar?: boolean
+  personality: string
+  tags: string[]
+  prompt: string
+  builtinToolKeys: string[]
+  skillIds: string[]
+  mcpServerNames: string[]
+  leaderAgentId?: string
+  memberAgentIds: string[]
+  description: string
+  status: TeamStatus
+}
+
+export interface ProjectAgentLinkRecord {
+  workspaceId: string
+  projectId: string
+  agentId: string
+  linkedAt: number
+}
+
+export interface ProjectTeamLinkRecord {
+  workspaceId: string
+  projectId: string
+  teamId: string
+  linkedAt: number
+}
+
+export interface ProjectAgentLinkInput {
+  projectId: string
+  agentId: string
+}
+
+export interface ProjectTeamLinkInput {
+  projectId: string
+  teamId: string
 }
 
 export interface ModelCatalogRecord {
@@ -136,8 +266,12 @@ export interface ProviderCredentialRecord {
 }
 
 export interface ModelCatalogSnapshot {
-  models: ModelCatalogRecord[]
-  providerCredentials: ProviderCredentialRecord[]
+  providers: ProviderRegistryRecord[]
+  models: ModelRegistryRecord[]
+  configuredModels: ConfiguredModelRecord[]
+  credentialBindings: CredentialBinding[]
+  defaultSelections: Record<string, DefaultSelection>
+  diagnostics: ModelRegistryDiagnostics
 }
 
 export interface ToolRecord {
@@ -175,6 +309,49 @@ export interface UserRecordSummary {
   passwordState: PasswordState
   roleIds: string[]
   scopeProjectIds: string[]
+}
+
+export interface CreateWorkspaceUserRequest {
+  username: string
+  displayName: string
+  status: UserStatus
+  roleIds: string[]
+  scopeProjectIds: string[]
+  avatar?: AvatarUploadPayload
+  useDefaultAvatar?: boolean
+  password?: string
+  confirmPassword?: string
+  useDefaultPassword?: boolean
+}
+
+export interface UpdateWorkspaceUserRequest {
+  username: string
+  displayName: string
+  status: UserStatus
+  roleIds: string[]
+  scopeProjectIds: string[]
+  avatar?: AvatarUploadPayload
+  removeAvatar?: boolean
+  password?: string
+  confirmPassword?: string
+  resetPasswordToDefault?: boolean
+}
+
+export interface UpdateCurrentUserProfileRequest {
+  username: string
+  displayName: string
+  avatar?: AvatarUploadPayload
+  removeAvatar?: boolean
+}
+
+export interface ChangeCurrentUserPasswordRequest {
+  currentPassword: string
+  newPassword: string
+  confirmPassword: string
+}
+
+export interface ChangeCurrentUserPasswordResponse {
+  passwordState: PasswordState
 }
 
 export interface RoleRecord {

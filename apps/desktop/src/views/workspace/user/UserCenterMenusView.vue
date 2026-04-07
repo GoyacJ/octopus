@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { MenuRecord } from '@octopus/schema'
-import { UiBadge, UiButton, UiField, UiInput, UiRecordCard, UiSelect } from '@octopus/ui'
+import { UiButton, UiField, UiInput, UiSelect } from '@octopus/ui'
 
+import { enumLabel } from '@/i18n/copy'
+import { getMenuDefinition } from '@/navigation/menuRegistry'
 import { useUserCenterStore } from '@/stores/user-center'
 import { useWorkspaceStore } from '@/stores/workspace'
+import UserCenterMenuTree from './UserCenterMenuTree.vue'
+import { buildUserCenterMenuTreeSections } from './menu-tree'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const userCenterStore = useUserCenterStore()
 const workspaceStore = useWorkspaceStore()
 
@@ -22,15 +26,32 @@ const form = reactive({
   order: '0',
 })
 
-const sourceOptions = [
-  { value: 'main-sidebar', label: 'main-sidebar' },
-  { value: 'user-center', label: 'user-center' },
-]
+const sourceOptions = computed(() => {
+  locale.value
+  return [
+    { value: 'main-sidebar', label: enumLabel('menuSource', 'main-sidebar') },
+    { value: 'user-center', label: enumLabel('menuSource', 'user-center') },
+  ]
+})
 
-const statusOptions = [
-  { value: 'active', label: 'active' },
-  { value: 'disabled', label: 'disabled' },
-]
+const statusOptions = computed(() => {
+  locale.value
+  return [
+    { value: 'active', label: enumLabel('recordStatus', 'active') },
+    { value: 'disabled', label: enumLabel('recordStatus', 'disabled') },
+  ]
+})
+
+const menuTreeSections = computed(() => buildUserCenterMenuTreeSections(
+  userCenterStore.menus,
+  {
+    app: t('userCenter.roles.menuGroups.app'),
+    workspace: t('userCenter.roles.menuGroups.workspace'),
+    userCenter: t('userCenter.roles.menuGroups.userCenter'),
+    project: t('userCenter.roles.menuGroups.project'),
+  },
+  menu => menuLabel(menu.id, menu.label),
+))
 
 watch(
   () => userCenterStore.menus.map(menu => menu.id).join('|'),
@@ -78,31 +99,28 @@ async function saveMenu() {
     selectedMenuId.value = created.id
   }
 }
+
+function menuLabel(menuId: string, fallback: string) {
+  const definition = getMenuDefinition(menuId)
+  return definition ? t(definition.labelKey) : fallback
+}
 </script>
 
 <template>
   <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
     <section class="space-y-3">
-      <UiRecordCard
-        v-for="menu in userCenterStore.menus"
-        :key="menu.id"
-        :title="menu.label"
-        :description="menu.routeName || menu.id"
-        interactive
-        class="cursor-pointer"
-        :class="selectedMenuId === menu.id ? 'ring-1 ring-primary' : ''"
-        @click="applyMenu(menu.id)"
-      >
-        <template #badges>
-          <UiBadge :label="menu.source" subtle />
-          <UiBadge :label="menu.status" subtle />
-        </template>
-      </UiRecordCard>
+      <UserCenterMenuTree
+        selection-mode="single"
+        test-id-prefix="menus-tree"
+        :sections="menuTreeSections"
+        :active-id="selectedMenuId"
+        @select="applyMenu"
+      />
     </section>
 
     <section class="space-y-4 rounded-xl border border-border-subtle p-5 dark:border-white/[0.05]">
       <UiField :label="t('userCenter.menus.fields.label')">
-        <UiInput v-model="form.label" />
+        <UiInput v-model="form.label" data-testid="menus-label-input" />
       </UiField>
       <UiField :label="t('userCenter.menus.fields.source')">
         <UiSelect v-model="form.source" :options="sourceOptions" />

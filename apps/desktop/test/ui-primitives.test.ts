@@ -22,17 +22,41 @@ import {
   UiPopover,
   UiRecordCard,
   UiRankingList,
+  UiSearchableMultiSelect,
   UiSelectionMenu,
+  UiNotificationCenter,
+  UiNotificationRow,
+  UiToastItem,
+  UiToastViewport,
   UiTimelineList,
   UiToolbarRow,
   UiAccordion,
   UiTabs,
 } from '@octopus/ui'
+import type { NotificationRecord } from '@octopus/schema'
 
 Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
   configurable: true,
   value: () => {},
 })
+
+function createNotification(overrides: Partial<NotificationRecord> = {}): NotificationRecord {
+  return {
+    id: 'notif-1',
+    scopeKind: 'app',
+    level: 'info',
+    title: 'Saved',
+    body: 'Preferences updated.',
+    source: 'settings',
+    createdAt: 1,
+    readAt: undefined,
+    toastVisibleUntil: undefined,
+    scopeOwnerId: undefined,
+    routeTo: undefined,
+    actionLabel: undefined,
+    ...overrides,
+  }
+}
 
 describe('Shared UI primitives', () => {
   it('renders UiButton variants through a single component API', () => {
@@ -533,6 +557,52 @@ describe('Shared UI primitives', () => {
     wrapper.unmount()
   })
 
+  it('filters and toggles UiSearchableMultiSelect options', async () => {
+    const Demo = defineComponent({
+      components: { UiSearchableMultiSelect },
+      setup() {
+        const modelValue = ref<string[]>(['skill:analysis'])
+
+        return { modelValue }
+      },
+      template: `
+        <UiSearchableMultiSelect
+          v-model="modelValue"
+          trigger-label="Skills"
+          search-placeholder="Search skills"
+          empty-label="No matches"
+          :options="[
+            { value: 'skill:analysis', label: 'Analysis', keywords: ['research'] },
+            { value: 'skill:builder', label: 'Builder', keywords: ['implementation'] },
+            { value: 'skill:review', label: 'Review', keywords: ['qa'] }
+          ]"
+        />
+      `,
+    })
+
+    const wrapper = mount(Demo, {
+      attachTo: document.body,
+    })
+
+    await wrapper.get('[data-testid="ui-searchable-multi-select-trigger"]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const searchInput = document.body.querySelector<HTMLInputElement>('[data-testid="ui-searchable-multi-select-input"]')
+    expect(searchInput).not.toBeNull()
+    searchInput!.value = 'impl'
+    searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    await wrapper.vm.$nextTick()
+
+    expect(document.body.textContent).toContain('Builder')
+    expect(document.body.textContent).not.toContain('Review')
+
+    document.body.querySelector<HTMLElement>('[data-testid="ui-searchable-multi-select-option-skill:builder"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.vm.modelValue).toEqual(['skill:analysis', 'skill:builder'])
+    wrapper.unmount()
+  })
+
   it('renders UiFilterChipGroup and toggles the active option', async () => {
     const Demo = defineComponent({
       components: { UiFilterChipGroup },
@@ -596,5 +666,107 @@ describe('Shared UI primitives', () => {
     expect(wrapper.find('[data-testid="record-meta"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="record-action"]').exists()).toBe(true)
     expect(wrapper.emitted('click')).toHaveLength(1)
+  })
+
+  it('renders UiNotificationRow and emits read and select actions', async () => {
+    const wrapper = mount(UiNotificationRow, {
+      props: {
+        notification: createNotification({
+          id: 'notif-row',
+          scopeKind: 'workspace',
+          routeTo: '/workspaces/ws-local/overview',
+        }),
+        scopeLabel: 'Workspace',
+      },
+    })
+
+    expect(wrapper.text()).toContain('Saved')
+    expect(wrapper.text()).toContain('Workspace')
+
+    await wrapper.get('[data-testid="ui-notification-row-mark-read-notif-row"]').trigger('click')
+    expect(wrapper.emitted('mark-read')).toEqual([['notif-row']])
+
+    await wrapper.get('[data-testid="ui-notification-row-notif-row"]').trigger('click')
+    expect(wrapper.emitted('select')).toEqual([[expect.objectContaining({ id: 'notif-row' })]])
+  })
+
+  it('renders UiNotificationCenter filters and list actions', async () => {
+    const wrapper = mount(UiNotificationCenter, {
+      props: {
+        open: true,
+        notifications: [
+          createNotification({
+            id: 'notif-center',
+            scopeKind: 'user',
+          }),
+        ],
+        unreadCount: 1,
+        activeFilter: 'all',
+        filterLabels: {
+          all: 'All',
+          app: 'App',
+          workspace: 'Workspace',
+          user: 'User',
+        },
+        scopeLabels: {
+          app: 'App',
+          workspace: 'Workspace',
+          user: 'User',
+        },
+        title: 'Notifications',
+        emptyTitle: 'No notifications',
+        emptyDescription: 'You are all caught up.',
+        markAllLabel: 'Mark all read',
+      },
+      attachTo: document.body,
+    })
+
+    expect(wrapper.text()).toContain('Notifications')
+    expect(wrapper.text()).toContain('Mark all read')
+
+    await wrapper.get('[data-testid="ui-notification-filter-workspace"]').trigger('click')
+    expect(wrapper.emitted('update:filter')).toEqual([['workspace']])
+
+    await wrapper.get('[data-testid="ui-notification-center-mark-all"]').trigger('click')
+    expect(wrapper.emitted('mark-all-read')).toEqual([[]])
+  })
+
+  it('renders UiToastItem and UiToastViewport with close actions', async () => {
+    const toast = createNotification({
+      id: 'notif-toast',
+      level: 'success',
+      scopeKind: 'app',
+    })
+
+    const item = mount(UiToastItem, {
+      props: {
+        notification: toast,
+        scopeLabel: 'App',
+      },
+    })
+
+    expect(item.text()).toContain('Saved')
+    expect(item.text()).toContain('App')
+
+    await item.get('[data-testid="ui-toast-close-notif-toast"]').trigger('click')
+    expect(item.emitted('close')).toEqual([['notif-toast']])
+
+    const viewport = mount(UiToastViewport, {
+      props: {
+        notifications: [toast],
+        scopeLabels: {
+          app: 'App',
+          workspace: 'Workspace',
+          user: 'User',
+        },
+      },
+      attachTo: document.body,
+    })
+
+    expect(viewport.find('[data-testid="ui-toast-viewport"]').exists()).toBe(true)
+    expect(viewport.text()).toContain('Saved')
+
+    await viewport.get('[data-testid="ui-toast-close-notif-toast"]').trigger('click')
+    expect(viewport.emitted('close')).toEqual([['notif-toast']])
   })
 })

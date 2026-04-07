@@ -113,7 +113,7 @@
   - `workspace` scope stored at `config/runtime/workspace.json`
   - `project` scope stored at `config/runtime/projects/<project-id>.json`
   - `user` scope stored at `config/runtime/users/<user-id>.json`
-  - merge precedence is `workspace < project < user`
+  - merge precedence is `user < workspace < project`
   - deep-merge, validation, and patch behavior continue to reuse `crates/runtime`, but `.claw` path discovery is not the Octopus runtime source model
 - Desktop settings only edit workspace runtime config. User runtime config belongs to the user center, and project runtime config belongs to the project workspace surface.
 - Runtime config saves must use partial patch semantics:

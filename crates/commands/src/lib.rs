@@ -1958,6 +1958,7 @@ enum DefinitionSource {
     ProjectClaw,
     ProjectCodex,
     ProjectClaude,
+    ProjectManaged,
     UserClawConfigHome,
     UserCodexHome,
     UserClaw,
@@ -1985,7 +1986,7 @@ impl DefinitionScope {
 impl DefinitionSource {
     fn report_scope(self) -> DefinitionScope {
         match self {
-            Self::ProjectClaw | Self::ProjectCodex | Self::ProjectClaude => {
+            Self::ProjectClaw | Self::ProjectCodex | Self::ProjectClaude | Self::ProjectManaged => {
                 DefinitionScope::Project
             }
             Self::UserClawConfigHome | Self::UserCodexHome => DefinitionScope::UserConfigHome,
@@ -1994,7 +1995,10 @@ impl DefinitionSource {
     }
 
     fn label(self) -> &'static str {
-        self.report_scope().label()
+        match self {
+            Self::ProjectManaged => "Project (data/skills)",
+            _ => self.report_scope().label(),
+        }
     }
 }
 
@@ -2492,6 +2496,12 @@ fn discover_skill_roots(cwd: &Path) -> Vec<SkillRoot> {
     let mut roots = Vec::new();
 
     for ancestor in cwd.ancestors() {
+        push_unique_skill_root(
+            &mut roots,
+            DefinitionSource::ProjectManaged,
+            ancestor.join("data").join("skills"),
+            SkillOrigin::SkillsDir,
+        );
         push_unique_skill_root(
             &mut roots,
             DefinitionSource::ProjectClaw,
@@ -3515,6 +3525,7 @@ fn definition_source_id(source: DefinitionSource) -> &'static str {
         DefinitionSource::ProjectClaw
         | DefinitionSource::ProjectCodex
         | DefinitionSource::ProjectClaude => "project_claw",
+        DefinitionSource::ProjectManaged => "project_managed",
         DefinitionSource::UserClawConfigHome | DefinitionSource::UserCodexHome => {
             "user_claw_config_home"
         }

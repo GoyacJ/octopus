@@ -36,14 +36,16 @@ const results = computed<SearchResult[]>(() => {
   const workspaceId = workspaceStore.currentWorkspaceId
   const projectId = workspaceStore.currentProjectId
 
-  const conversations: SearchResult[] = runtime.sessions.map((session) => ({
-    id: `conversation:${session.id}`,
-    title: session.title,
-    subtitle: session.lastMessagePreview ?? session.status,
-    section: t('searchOverlay.sections.conversations'),
-    kind: 'conversation',
-    to: createProjectConversationTarget(workspaceId, session.projectId, session.conversationId),
-  }))
+  const conversations: SearchResult[] = runtime.sessions
+    .filter(session => session.sessionKind !== 'pet')
+    .map((session) => ({
+      id: `conversation:${session.id}`,
+      title: session.title,
+      subtitle: session.lastMessagePreview ?? session.status,
+      section: t('searchOverlay.sections.conversations'),
+      kind: 'conversation',
+      to: createProjectConversationTarget(workspaceId, session.projectId, session.conversationId),
+    }))
 
   const projects: SearchResult[] = workspaceStore.projects.map((project) => ({
     id: `project:${project.id}`,

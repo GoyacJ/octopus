@@ -2,11 +2,16 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import type {
+  ChangeCurrentUserPasswordRequest,
+  ChangeCurrentUserPasswordResponse,
+  CreateWorkspaceUserRequest,
   MenuRecord,
   PermissionRecord,
   RoleRecord,
   RuntimeConfigValidationResult,
   RuntimeEffectiveConfig,
+  UpdateCurrentUserProfileRequest,
+  UpdateWorkspaceUserRequest,
   UserCenterOverviewSnapshot,
   UserRecordSummary,
 } from '@octopus/schema'
@@ -61,6 +66,10 @@ export const useUserCenterStore = defineStore('user-center', () => {
   const runtimeSavingByConnection = ref<Record<string, boolean>>({})
   const runtimeValidatingByConnection = ref<Record<string, boolean>>({})
   const runtimeErrorsByConnection = ref<Record<string, string>>({})
+  const profileSavingByConnection = ref<Record<string, boolean>>({})
+  const profileErrorsByConnection = ref<Record<string, string>>({})
+  const passwordSavingByConnection = ref<Record<string, boolean>>({})
+  const passwordErrorsByConnection = ref<Record<string, string>>({})
 
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
   const overview = computed(() => overviews.value[activeConnectionId.value] ?? null)
@@ -69,14 +78,22 @@ export const useUserCenterStore = defineStore('user-center', () => {
   const permissions = computed(() => permissionsByConnection.value[activeConnectionId.value] ?? [])
   const menus = computed(() => menusByConnection.value[activeConnectionId.value] ?? [])
   const currentUser = computed(() => overview.value?.currentUser ?? users.value[0] ?? null)
+  const currentRoleRecords = computed(() =>
+    roles.value.filter(role => currentUser.value?.roleIds.includes(role.id)),
+  )
   const currentRoleNames = computed(() => overview.value?.roleNames ?? roles.value.filter(role => currentUser.value?.roleIds.includes(role.id)).map(role => role.name))
+  const currentPermissionRecords = computed(() => {
+    const permissionIds = new Set<string>()
+    currentRoleRecords.value.forEach((role) => {
+      role.permissionIds.forEach(permissionId => permissionIds.add(permissionId))
+    })
+    return permissions.value.filter(permission => permissionIds.has(permission.id))
+  })
   const currentEffectiveMenuIds = computed(() => {
     const menuIds = new Set<string>()
-    for (const role of roles.value) {
-      if (currentUser.value?.roleIds.includes(role.id)) {
-        role.menuIds.forEach(menuId => menuIds.add(menuId))
-      }
-    }
+    currentRoleRecords.value.forEach((role) => {
+      role.menuIds.forEach(menuId => menuIds.add(menuId))
+    })
     if (!menuIds.size) {
       menus.value.forEach((menu) => {
         if (menu.status === 'active') {
@@ -86,10 +103,13 @@ export const useUserCenterStore = defineStore('user-center', () => {
     }
     return [...menuIds]
   })
-  const availableUserCenterMenus = computed(() =>
+  const currentEffectiveMenus = computed(() =>
     menus.value
-      .filter(menu => menu.source === 'user-center' && currentEffectiveMenuIds.value.includes(menu.id))
+      .filter(menu => currentEffectiveMenuIds.value.includes(menu.id))
       .sort((left, right) => left.order - right.order),
+  )
+  const availableUserCenterMenus = computed(() =>
+    currentEffectiveMenus.value.filter(menu => menu.source === 'user-center'),
   )
   const firstAccessibleUserCenterRouteName = computed(() => {
     const firstMenu = availableUserCenterMenus.value.find(menu => menu.routeName && getMenuDefinition(menu.id)?.routeName)
@@ -103,6 +123,66 @@ export const useUserCenterStore = defineStore('user-center', () => {
   const runtimeSaving = computed(() => runtimeSavingByConnection.value[activeConnectionId.value] ?? false)
   const runtimeValidating = computed(() => runtimeValidatingByConnection.value[activeConnectionId.value] ?? false)
   const runtimeError = computed(() => runtimeErrorsByConnection.value[activeConnectionId.value] ?? '')
+  const profileSaving = computed(() => profileSavingByConnection.value[activeConnectionId.value] ?? false)
+  const profileError = computed(() => profileErrorsByConnection.value[activeConnectionId.value] ?? '')
+  const passwordSaving = computed(() => passwordSavingByConnection.value[activeConnectionId.value] ?? false)
+  const passwordError = computed(() => passwordErrorsByConnection.value[activeConnectionId.value] ?? '')
+
+  function updateCurrentUserState(connectionId: string, updatedUser: UserRecordSummary) {
+    usersByConnection.value = {
+      ...usersByConnection.value,
+      [connectionId]: (usersByConnection.value[connectionId] ?? []).map(item => item.id === updatedUser.id ? updatedUser : item),
+    }
+
+    const currentOverview = overviews.value[connectionId]
+    if (currentOverview?.currentUser.id === updatedUser.id) {
+      overviews.value = {
+        ...overviews.value,
+        [connectionId]: {
+          ...currentOverview,
+          currentUser: updatedUser,
+        },
+      }
+    }
+  }
+
+  function removeUserState(connectionId: string, userId: string) {
+    usersByConnection.value = {
+      ...usersByConnection.value,
+      [connectionId]: (usersByConnection.value[connectionId] ?? []).filter(item => item.id !== userId),
+    }
+  }
+
+  function removeRoleState(connectionId: string, roleId: string) {
+    rolesByConnection.value = {
+      ...rolesByConnection.value,
+      [connectionId]: (rolesByConnection.value[connectionId] ?? []).filter(item => item.id !== roleId),
+    }
+    usersByConnection.value = {
+      ...usersByConnection.value,
+      [connectionId]: (usersByConnection.value[connectionId] ?? []).map(user => ({
+        ...user,
+        roleIds: user.roleIds.filter(id => id !== roleId),
+      })),
+    }
+
+    const currentOverview = overviews.value[connectionId]
+    if (currentOverview) {
+      overviews.value = {
+        ...overviews.value,
+        [connectionId]: {
+          ...currentOverview,
+          currentUser: {
+            ...currentOverview.currentUser,
+            roleIds: currentOverview.currentUser.roleIds.filter(id => id !== roleId),
+          },
+          roleNames: currentOverview.roleNames.filter(name =>
+            (rolesByConnection.value[connectionId] ?? []).some(role => role.name === name),
+          ),
+        },
+      }
+    }
+  }
 
   async function load(workspaceConnectionId?: string) {
     const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
@@ -153,7 +233,7 @@ export const useUserCenterStore = defineStore('user-center', () => {
     }
   }
 
-  async function createUser(record: UserRecordSummary) {
+  async function createUser(record: CreateWorkspaceUserRequest) {
     const { client, connectionId } = ensureWorkspaceClientForConnection()
     const created = await client.rbac.createUser(record)
     usersByConnection.value = {
@@ -163,14 +243,108 @@ export const useUserCenterStore = defineStore('user-center', () => {
     return created
   }
 
-  async function updateUser(userId: string, record: UserRecordSummary) {
+  async function updateUser(userId: string, record: UpdateWorkspaceUserRequest) {
     const { client, connectionId } = ensureWorkspaceClientForConnection()
     const updated = await client.rbac.updateUser(userId, record)
-    usersByConnection.value = {
-      ...usersByConnection.value,
-      [connectionId]: (usersByConnection.value[connectionId] ?? []).map(item => item.id === userId ? updated : item),
-    }
+    updateCurrentUserState(connectionId, updated)
     return updated
+  }
+
+  async function setProjectMembers(projectId: string, memberUserIds: string[]) {
+    const selectedUserIds = new Set(memberUserIds)
+    const currentUsers = [...users.value]
+    const pendingUpdates = currentUsers.filter((user) => {
+      const currentlyAssigned = user.scopeProjectIds.includes(projectId)
+      const nextAssigned = selectedUserIds.has(user.id)
+      return currentlyAssigned !== nextAssigned
+    })
+
+    for (const user of pendingUpdates) {
+      const nextScopeProjectIds = selectedUserIds.has(user.id)
+        ? Array.from(new Set([...user.scopeProjectIds, projectId]))
+        : user.scopeProjectIds.filter(id => id !== projectId)
+      await updateUser(user.id, {
+        username: user.username,
+        displayName: user.displayName,
+        status: user.status,
+        roleIds: [...user.roleIds],
+        scopeProjectIds: nextScopeProjectIds,
+      })
+    }
+
+    return users.value.filter(user => selectedUserIds.has(user.id))
+  }
+
+  async function deleteUser(userId: string) {
+    const { client, connectionId } = ensureWorkspaceClientForConnection()
+    await client.rbac.deleteUser(userId)
+    removeUserState(connectionId, userId)
+  }
+
+  async function updateCurrentUserProfile(input: UpdateCurrentUserProfileRequest) {
+    const { client, connectionId } = ensureWorkspaceClientForConnection()
+    profileSavingByConnection.value = {
+      ...profileSavingByConnection.value,
+      [connectionId]: true,
+    }
+    profileErrorsByConnection.value = {
+      ...profileErrorsByConnection.value,
+      [connectionId]: '',
+    }
+
+    try {
+      const updated = await client.rbac.updateCurrentUserProfile(input)
+      updateCurrentUserState(connectionId, updated)
+      return updated
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Failed to update profile'
+      profileErrorsByConnection.value = {
+        ...profileErrorsByConnection.value,
+        [connectionId]: message,
+      }
+      throw cause
+    } finally {
+      profileSavingByConnection.value = {
+        ...profileSavingByConnection.value,
+        [connectionId]: false,
+      }
+    }
+  }
+
+  async function changeCurrentUserPassword(input: ChangeCurrentUserPasswordRequest) {
+    const { client, connectionId } = ensureWorkspaceClientForConnection()
+    passwordSavingByConnection.value = {
+      ...passwordSavingByConnection.value,
+      [connectionId]: true,
+    }
+    passwordErrorsByConnection.value = {
+      ...passwordErrorsByConnection.value,
+      [connectionId]: '',
+    }
+
+    try {
+      const response = await client.rbac.changeCurrentUserPassword(input)
+      const activeUser = overviews.value[connectionId]?.currentUser
+      if (activeUser) {
+        updateCurrentUserState(connectionId, {
+          ...activeUser,
+          passwordState: response.passwordState as ChangeCurrentUserPasswordResponse['passwordState'],
+        })
+      }
+      return response
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Failed to update password'
+      passwordErrorsByConnection.value = {
+        ...passwordErrorsByConnection.value,
+        [connectionId]: message,
+      }
+      throw cause
+    } finally {
+      passwordSavingByConnection.value = {
+        ...passwordSavingByConnection.value,
+        [connectionId]: false,
+      }
+    }
   }
 
   async function createRole(record: RoleRecord) {
@@ -193,6 +367,12 @@ export const useUserCenterStore = defineStore('user-center', () => {
     return updated
   }
 
+  async function deleteRole(roleId: string) {
+    const { client, connectionId } = ensureWorkspaceClientForConnection()
+    await client.rbac.deleteRole(roleId)
+    removeRoleState(connectionId, roleId)
+  }
+
   async function createPermission(record: PermissionRecord) {
     const { client, connectionId } = ensureWorkspaceClientForConnection()
     const created = await client.rbac.createPermission(record)
@@ -211,6 +391,27 @@ export const useUserCenterStore = defineStore('user-center', () => {
       [connectionId]: (permissionsByConnection.value[connectionId] ?? []).map(item => item.id === permissionId ? updated : item),
     }
     return updated
+  }
+
+  async function deletePermission(permissionId: string) {
+    const { client, connectionId } = ensureWorkspaceClientForConnection()
+    await client.rbac.deletePermission(permissionId)
+    permissionsByConnection.value = {
+      ...permissionsByConnection.value,
+      [connectionId]: (permissionsByConnection.value[connectionId] ?? [])
+        .filter(item => item.id !== permissionId)
+        .map(permission => ({
+          ...permission,
+          memberPermissionIds: permission.memberPermissionIds.filter(id => id !== permissionId),
+        })),
+    }
+    rolesByConnection.value = {
+      ...rolesByConnection.value,
+      [connectionId]: (rolesByConnection.value[connectionId] ?? []).map(role => ({
+        ...role,
+        permissionIds: role.permissionIds.filter(id => id !== permissionId),
+      })),
+    }
   }
 
   async function createMenu(record: MenuRecord) {
@@ -410,8 +611,11 @@ export const useUserCenterStore = defineStore('user-center', () => {
     permissions,
     menus,
     currentUser,
+    currentRoleRecords,
     currentRoleNames,
+    currentPermissionRecords,
     currentEffectiveMenuIds,
+    currentEffectiveMenus,
     availableUserCenterMenus,
     firstAccessibleUserCenterRouteName,
     error,
@@ -422,13 +626,23 @@ export const useUserCenterStore = defineStore('user-center', () => {
     runtimeSaving,
     runtimeValidating,
     runtimeError,
+    profileSaving,
+    profileError,
+    passwordSaving,
+    passwordError,
     load,
     createUser,
     updateUser,
+    setProjectMembers,
+    deleteUser,
+    updateCurrentUserProfile,
+    changeCurrentUserPassword,
     createRole,
     updateRole,
+    deleteRole,
     createPermission,
     updatePermission,
+    deletePermission,
     createMenu,
     updateMenu,
     hasPermission,

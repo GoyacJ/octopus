@@ -5,16 +5,20 @@ use std::{
 };
 
 use octopus_core::{
-    default_preferences, DesktopBackendConnection, HostState, RuntimeEffectiveConfig,
-    ShellPreferences,
+    default_preferences, CreateNotificationInput, DesktopBackendConnection, HostState,
+    NotificationFilter, RuntimeEffectiveConfig, ShellPreferences,
 };
 use octopus_desktop_shell::backend::BackendSupervisor;
 use octopus_desktop_shell::bootstrap::{
-    bootstrap_shell_payload, create_workspace_connection, delete_workspace_connection,
-    get_backend_connection_payload, healthcheck_payload, list_workspace_connections,
-    load_shell_preferences, save_shell_preferences,
+    bootstrap_shell_payload, create_notification, delete_workspace_connection,
+    dismiss_notification_toast, get_backend_connection_payload, healthcheck_payload,
+    list_notifications, list_workspace_connections, load_shell_preferences,
+    mark_all_notifications_read, mark_notification_read, save_shell_preferences,
+    create_workspace_connection,
 };
-use octopus_desktop_shell::services::{PreferencesService, WorkspaceConnectionRegistryService};
+use octopus_desktop_shell::services::{
+    NotificationService, PreferencesService, WorkspaceConnectionRegistryService,
+};
 use octopus_desktop_shell::state::ShellState;
 use parking_lot::RwLock;
 use tempfile::tempdir;
@@ -36,6 +40,7 @@ fn test_state(root: PathBuf) -> ShellState {
             root.join("preferences.json"),
             default_preferences("ws-local", "proj-redesign"),
         ),
+        WorkspaceConnectionRegistryService::new(root.join("workspace-connections.json")),
     )
 }
 
@@ -46,6 +51,8 @@ fn test_state_with_supervisor(root: PathBuf, backend_supervisor: BackendSupervis
             root.join("preferences.json"),
             default_preferences("ws-local", "proj-redesign"),
         ),
+        WorkspaceConnectionRegistryService::new(root.join("workspace-connections.json")),
+        NotificationService::new(root.join("data").join("main.db")),
         vec![],
         backend_supervisor,
     )
@@ -189,6 +196,96 @@ fn healthcheck_reflects_tauri_local_workspace_status() {
     assert!(payload.cargo_workspace);
     assert_eq!(payload.backend.state, "unavailable");
     assert_eq!(payload.backend.transport, "http");
+}
+
+#[test]
+fn notifications_persist_across_state_reloads_and_compute_unread_counts() {
+    let temp = tempdir().expect("tempdir");
+    let root = temp.path().to_path_buf();
+    let state = test_state(root.clone());
+
+    let created = create_notification(
+        &state,
+        CreateNotificationInput {
+            scope_kind: "workspace".into(),
+            scope_owner_id: Some("ws-local".into()),
+            level: "success".into(),
+            title: "Workspace synced".into(),
+            body: "The workspace is ready.".into(),
+            source: "workspace-store".into(),
+            toast_duration_ms: Some(30_000),
+            route_to: Some("/workspaces/ws-local/overview".into()),
+            action_label: Some("Open workspace".into()),
+        },
+    )
+    .expect("create notification");
+
+    let reloaded = test_state(root);
+    let listed = list_notifications(
+        &reloaded,
+        NotificationFilter {
+            scope: Some("all".into()),
+        },
+    )
+    .expect("list notifications");
+
+    assert_eq!(listed.notifications.len(), 1);
+    assert_eq!(listed.notifications[0].id, created.id);
+    assert_eq!(listed.unread.total, 1);
+    assert_eq!(listed.unread.by_scope.workspace, 1);
+}
+
+#[test]
+fn notifications_support_mark_read_mark_all_read_and_toast_dismiss_without_deleting_history() {
+    let temp = tempdir().expect("tempdir");
+    let state = test_state(temp.path().to_path_buf());
+
+    let created = create_notification(
+        &state,
+        CreateNotificationInput {
+            scope_kind: "app".into(),
+            scope_owner_id: None,
+            level: "info".into(),
+            title: "Heads up".into(),
+            body: "A background task completed.".into(),
+            source: "runtime".into(),
+            toast_duration_ms: Some(30_000),
+            route_to: None,
+            action_label: None,
+        },
+    )
+    .expect("create notification");
+
+    let marked = mark_notification_read(&state, &created.id).expect("mark notification read");
+    assert!(marked.read_at.is_some());
+
+    let dismissed =
+        dismiss_notification_toast(&state, &created.id).expect("dismiss notification toast");
+    assert_eq!(dismissed.id, created.id);
+    assert_eq!(dismissed.toast_visible_until, None);
+
+    let summary = mark_all_notifications_read(
+        &state,
+        NotificationFilter {
+            scope: Some("app".into()),
+        },
+    )
+    .expect("mark all notifications read");
+
+    assert_eq!(summary.total, 0);
+
+    let listed = list_notifications(
+        &state,
+        NotificationFilter {
+            scope: Some("all".into()),
+        },
+    )
+    .expect("list notifications");
+
+    assert_eq!(listed.notifications.len(), 1);
+    assert_eq!(listed.notifications[0].id, created.id);
+    assert!(listed.notifications[0].read_at.is_some());
+    assert_eq!(listed.notifications[0].toast_visible_until, None);
 }
 
 #[test]

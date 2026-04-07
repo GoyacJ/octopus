@@ -14,9 +14,9 @@ The public ownership model is:
 
 The merge order is:
 
-1. `workspace`
-2. `project`
-3. `user`
+1. `user`
+2. `workspace`
+3. `project`
 
 The canonical file layout under a workspace root is:
 
@@ -44,6 +44,8 @@ Workspace runtime config routes:
 - `POST /api/v1/runtime/config/validate`
 - `PATCH /api/v1/runtime/config/scopes/workspace`
 
+These public workspace routes are `workspace`-only. They do not resolve current-user runtime config because they do not carry user identity.
+
 Current-user runtime config routes:
 
 - `GET /api/v1/workspace/user-center/profile/runtime-config`
@@ -55,6 +57,8 @@ Project runtime config routes:
 - `GET /api/v1/projects/:project_id/runtime-config`
 - `POST /api/v1/projects/:project_id/runtime-config/validate`
 - `PATCH /api/v1/projects/:project_id/runtime-config`
+
+Authenticated project routes resolve effective config with `user -> workspace -> project` precedence using the current session user.
 
 Runtime session routes remain under `/api/v1/runtime/*`, but session snapshots now reference runtime config sources by identity instead of filesystem path.
 
@@ -89,7 +93,7 @@ Runtime session startup still records a config snapshot, but snapshot metadata i
 
 - keep `effective_config_hash`
 - keep `started_from_scope_set`
-- store `sourceRefs` such as `["workspace", "project:proj-1", "user:user-1"]`
+- store `sourceRefs` in effective precedence order, such as `["user:user-1", "workspace", "project:proj-1"]`
 
 SQLite projections, debug exports, and session snapshots must not persist absolute runtime config file paths.
 

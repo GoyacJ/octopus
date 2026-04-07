@@ -242,6 +242,7 @@ export interface Message {
   senderType: MessageSenderType
   content: string
   modelId?: string
+  status?: RunStatus
   permissionMode?: PermissionMode
   actorKind?: ConversationActorKind
   actorId?: string
@@ -255,6 +256,14 @@ export interface Message {
   processEntries?: MessageProcessEntry[]
   attachments?: ConversationAttachment[]
   artifacts?: string[]
+  approval?: {
+    id: string
+    toolName: string
+    summary: string
+    detail: string
+    riskLevel: RiskLevel
+    status?: 'pending' | 'approved' | 'rejected'
+  }
   timestamp: number
 }
 
@@ -293,6 +302,41 @@ export interface PetPresenceState {
     x: number
     y: number
   }
+}
+
+export interface PetConversationBinding {
+  petId: string
+  workspaceId: string
+  projectId: string
+  conversationId: string
+  sessionId?: string
+  updatedAt: number
+}
+
+export interface SavePetPresenceInput {
+  petId: string
+  isVisible?: boolean
+  chatOpen?: boolean
+  motionState?: PetMotionState
+  unreadCount?: number
+  lastInteractionAt?: number
+  position?: {
+    x: number
+    y: number
+  }
+}
+
+export interface BindPetConversationInput {
+  petId: string
+  conversationId: string
+  sessionId?: string
+}
+
+export interface PetWorkspaceSnapshot {
+  profile: PetProfile
+  presence: PetPresenceState
+  binding?: PetConversationBinding
+  messages: PetMessage[]
 }
 
 export interface ConversationQueueItem {

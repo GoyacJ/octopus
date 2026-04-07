@@ -8,6 +8,8 @@ import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 import { useShellStore } from '@/stores/shell'
+import type { WorkspaceClient } from '@/tauri/workspace-client'
+import * as tauriClient from '@/tauri/client'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 Object.defineProperty(window, 'matchMedia', {
@@ -56,6 +58,18 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2000) {
   }
 }
 
+function configureWorkspaceClient(
+  transform: (client: WorkspaceClient) => WorkspaceClient,
+) {
+  const createWorkspaceClientMock = vi.mocked(tauriClient.createWorkspaceClient)
+  const baseImplementation = createWorkspaceClientMock.getMockImplementation()
+  expect(baseImplementation).toBeTypeOf('function')
+
+  createWorkspaceClientMock.mockImplementation((context) =>
+    transform(baseImplementation!(context) as WorkspaceClient) as ReturnType<typeof tauriClient.createWorkspaceClient>,
+  )
+}
+
 describe('Workbench shell layout', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -68,15 +82,88 @@ describe('Workbench shell layout', () => {
     await router.isReady()
 
     const mounted = mountApp()
+    const localWorkspaceLabel = String(i18n.global.t('topbar.localWorkspace'))
     await waitFor(() =>
-      (mounted.container.textContent?.includes('Local Workspace') ?? false)
+      (mounted.container.textContent?.includes(localWorkspaceLabel) ?? false)
       && (mounted.container.textContent?.includes('Desktop Redesign') ?? false),
     )
 
     expect(mounted.container.querySelector('[data-testid="workbench-topbar"]')).not.toBeNull()
-    expect(mounted.container.textContent).toContain('Local Workspace')
+    expect(mounted.container.textContent).toContain(localWorkspaceLabel)
     expect(mounted.container.textContent).toContain('Desktop Redesign')
     expect(mounted.container.querySelector('[data-testid="global-search-trigger"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('renders topbar breadcrumbs by route section instead of always showing workspace and project', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/dashboard')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const localWorkspaceLabel = String(i18n.global.t('topbar.localWorkspace'))
+    await waitFor(() =>
+      (mounted.container.querySelector('[data-testid="topbar-breadcrumbs"]')?.textContent?.includes(localWorkspaceLabel) ?? false)
+      && (mounted.container.querySelector('[data-testid="topbar-breadcrumbs"]')?.textContent?.includes('Desktop Redesign') ?? false),
+    )
+
+    const breadcrumbText = () =>
+      mounted.container
+        .querySelector('[data-testid="topbar-breadcrumbs"]')
+        ?.textContent
+        ?.replace(/\s+/g, ' ')
+        .trim() ?? ''
+
+    expect(breadcrumbText()).toContain('网易Lobster')
+    expect(breadcrumbText()).toContain(localWorkspaceLabel)
+    expect(breadcrumbText()).toContain('Desktop Redesign')
+    expect(breadcrumbText()).toContain(String(i18n.global.t('sidebar.navigation.dashboard')))
+
+    await router.push('/workspaces/ws-local/projects')
+    await waitFor(() => router.currentRoute.value.name === 'workspace-projects')
+
+    expect(breadcrumbText()).toContain('网易Lobster')
+    expect(breadcrumbText()).toContain(localWorkspaceLabel)
+    expect(breadcrumbText()).not.toContain('Desktop Redesign')
+    expect(breadcrumbText()).toContain(String(i18n.global.t('sidebar.navigation.projects')))
+
+    await router.push('/settings')
+    await waitFor(() => router.currentRoute.value.name === 'app-settings')
+
+    expect(breadcrumbText()).toContain('网易Lobster')
+    expect(breadcrumbText()).not.toContain('Local Workspace')
+    expect(breadcrumbText()).not.toContain('Desktop Redesign')
+    expect(breadcrumbText()).toContain(String(i18n.global.t('topbar.settings')))
+
+    mounted.destroy()
+  })
+
+  it('keeps the topbar workspace breadcrumb aligned with the sidebar label for loopback workspaces', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const shell = useShellStore()
+    const localWorkspaceLabel = String(i18n.global.t('topbar.localWorkspace'))
+
+    await waitFor(() =>
+      (mounted.container.querySelector('[data-testid="topbar-breadcrumbs"]')?.textContent?.includes(localWorkspaceLabel) ?? false),
+    )
+
+    shell.workspaceConnectionsState = shell.workspaceConnectionsState.map(connection =>
+      connection.workspaceConnectionId === 'conn-local'
+        ? { ...connection, label: 'Local Runtime' }
+        : connection,
+    )
+
+    await waitFor(() =>
+      (mounted.container.querySelector('[data-testid="topbar-breadcrumbs"]')?.textContent?.includes(localWorkspaceLabel) ?? false)
+      && (mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]')?.textContent?.includes(localWorkspaceLabel) ?? false),
+    )
+
+    expect(mounted.container.querySelector('[data-testid="topbar-breadcrumbs"]')?.textContent).toContain(localWorkspaceLabel)
+    expect(mounted.container.querySelector('[data-testid="topbar-breadcrumbs"]')?.textContent).not.toContain('Local Runtime')
+    expect(mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]')?.textContent).toContain(localWorkspaceLabel)
 
     mounted.destroy()
   })
@@ -122,16 +209,155 @@ describe('Workbench shell layout', () => {
     mounted.destroy()
   })
 
-  it('switches workspace scope from the sidebar workspace list', async () => {
+  it('opens the pet panel from the sidebar and sends messages through runtime', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/dashboard')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="desktop-pet-trigger"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="desktop-pet-trigger"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="desktop-pet-chat"]') !== null)
+
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="desktop-pet-input"]')
+    expect(input).not.toBeNull()
+    input!.value = '宠物你好'
+    input!.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="desktop-pet-send"]')?.click()
+
+    await waitFor(() => (document.body.querySelector('[data-testid="desktop-pet-messages"]')?.textContent?.includes('宠物你好') ?? false))
+    await waitFor(() => (document.body.querySelector('[data-testid="desktop-pet-messages"]')?.textContent?.includes('Completed request') ?? false), 3000)
+
+    expect(document.body.querySelector('[data-testid="desktop-pet-messages"]')?.textContent).toContain('宠物你好')
+    expect(document.body.querySelector('[data-testid="desktop-pet-messages"]')?.textContent).toContain('Completed request')
+    expect(mounted.container.textContent).not.toContain('小章 proj-redesign')
+
+    mounted.destroy()
+  })
+
+  it('keeps the pet draft and shows the runtime error when submission fails', async () => {
+    configureWorkspaceClient((client) => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async submitUserTurn() {
+          throw new Error('missing configured credential env var `ANTHROPIC_API_KEY` for provider `anthropic`')
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/dashboard')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="desktop-pet-trigger"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="desktop-pet-trigger"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="desktop-pet-chat"]') !== null)
+
+    const input = document.body.querySelector<HTMLInputElement>('[data-testid="desktop-pet-input"]')
+    expect(input).not.toBeNull()
+    input!.value = '宠物你好'
+    input!.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="desktop-pet-send"]')?.click()
+
+    await waitFor(() => (document.body.querySelector('[data-testid="desktop-pet-error"]')?.textContent?.includes('missing configured credential env var') ?? false))
+
+    expect((document.body.querySelector('[data-testid="desktop-pet-input"]') as HTMLInputElement | null)?.value).toBe('宠物你好')
+    expect(document.body.querySelector('[data-testid="desktop-pet-error"]')?.textContent).toContain('missing configured credential env var `ANTHROPIC_API_KEY` for provider `anthropic`')
+    expect(document.body.querySelector('[data-testid="desktop-pet-error"]')?.getAttribute('role')).toBe('alert')
+
+    mounted.destroy()
+  })
+
+  it('clamps the pet panel inside the viewport when the trigger is near the left edge', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/dashboard')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="desktop-pet-trigger"]') !== null)
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      writable: true,
+      value: 320,
+    })
+    Object.defineProperty(window, 'innerHeight', {
+      configurable: true,
+      writable: true,
+      value: 900,
+    })
+
+    const trigger = mounted.container.querySelector<HTMLElement>('[data-testid="desktop-pet-trigger"]')
+    expect(trigger).not.toBeNull()
+    trigger!.getBoundingClientRect = () => ({
+      x: 24,
+      y: 720,
+      width: 44,
+      height: 44,
+      top: 720,
+      right: 68,
+      bottom: 764,
+      left: 24,
+      toJSON: () => ({}),
+    })
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="desktop-pet-trigger"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="desktop-pet-panel"]') !== null)
+
+    const panel = document.body.querySelector<HTMLElement>('[data-testid="desktop-pet-panel"]')
+    expect(panel).not.toBeNull()
+    panel!.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      width: 352,
+      height: 320,
+      top: 0,
+      right: 352,
+      bottom: 320,
+      left: 0,
+      toJSON: () => ({}),
+    })
+
+    window.dispatchEvent(new Event('resize'))
+    await nextTick()
+
+    expect(panel?.style.left).toBe('16px')
+    expect(panel?.style.visibility).toBe('visible')
+
+    mounted.destroy()
+  })
+
+  it('renders the notification trigger in the top-right action cluster', async () => {
     await router.push('/workspaces/ws-local/overview?project=proj-redesign')
     await router.isReady()
 
     const mounted = mountApp()
-    await waitFor(() => mounted.container.textContent?.includes('Enterprise Workspace') ?? false)
+    await waitFor(() => mounted.container.querySelector('[data-testid="topbar-notification-trigger"]') !== null)
 
-    const enterpriseButton = Array.from(mounted.container.querySelectorAll('button')).find(button =>
-      button.textContent?.includes('Enterprise Workspace'))
-    enterpriseButton?.click()
+    expect(mounted.container.querySelector('[data-testid="topbar-notification-trigger"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="topbar-profile-trigger"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('switches workspace scope from the footer workspace menu', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-menu-trigger"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="sidebar-workspace-menu-item-conn-enterprise"]') !== null)
+
+    document.body
+      .querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-menu-item-conn-enterprise"]')
+      ?.click()
 
     await waitFor(() => String(router.currentRoute.value.params.workspaceId) === 'ws-enterprise')
     expect(String(router.currentRoute.value.params.workspaceId)).toBe('ws-enterprise')
@@ -147,12 +373,131 @@ describe('Workbench shell layout', () => {
     await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]') !== null)
 
     expect(mounted.container.querySelector('[data-testid="sidebar-workspace-list-top"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="sidebar-workspace-navigation-menu"]')).toBeNull()
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-menu-trigger"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="sidebar-workspace-menu-list"]') !== null)
+
+    expect(document.body.querySelector('[data-testid="sidebar-workspace-menu-list"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-workspace-navigation-menu"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-workspace-nav-workspace-projects"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-connect-workspace-trigger"]')).not.toBeNull()
+    expect(document.body.textContent).toContain(String(i18n.global.t('sidebar.workspaceMenu.title')))
+
+    mounted.destroy()
+  })
+
+  it('navigates to the project management workspace page from the footer workspace menu', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-menu-trigger"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="sidebar-workspace-nav-workspace-projects"]') !== null)
+
+    document.body
+      .querySelector<HTMLAnchorElement>('[data-testid="sidebar-workspace-nav-workspace-projects"]')
+      ?.click()
+
+    await waitFor(() => router.currentRoute.value.name === 'workspace-projects')
+    expect(router.currentRoute.value.name).toBe('workspace-projects')
+
+    mounted.destroy()
+  })
+
+  it('creates a project from the sidebar quick-create popover and lands on project settings', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-project-create-trigger"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-create-trigger"]')?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="sidebar-project-create-popover"]') !== null)
+
+    const nameInput = document.body.querySelector<HTMLInputElement>('[data-testid="sidebar-project-create-name-input"]')
+    const descriptionInput = document.body.querySelector<HTMLTextAreaElement>('[data-testid="sidebar-project-create-description-input"]')
+    expect(nameInput).not.toBeNull()
+    expect(descriptionInput).not.toBeNull()
+
+    nameInput!.value = 'Strategy Launch'
+    nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    descriptionInput!.value = 'Launch checklist and delivery alignment.'
+    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    expect(mounted.container.querySelector('[data-testid="sidebar-workspace-menu-list"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="sidebar-connect-workspace-trigger"]')).not.toBeNull()
+    document.body.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-create-submit"]')?.click()
+
+    await waitFor(() =>
+      router.currentRoute.value.name === 'project-settings'
+      && String(router.currentRoute.value.params.projectId).includes('strategy-launch'),
+    )
+
+    expect(mounted.container.querySelector('[data-testid="sidebar-project-proj-strategy-launch"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('Strategy Launch')
+
+    mounted.destroy()
+  })
+
+  it('shows the project settings menu item in each project module list', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-project-proj-redesign"]') !== null)
+
+    const settingsLink = mounted.container.querySelector<HTMLAnchorElement>('[data-testid="sidebar-project-module-proj-redesign-settings"]')
+    expect(settingsLink).not.toBeNull()
+
+    settingsLink?.click()
+
+    await waitFor(() => router.currentRoute.value.name === 'project-settings')
+    expect(router.currentRoute.value.name).toBe('project-settings')
+
+    mounted.destroy()
+  })
+
+  it('only expands the selected project and opens another project when its collapsed card is clicked', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-project-proj-redesign"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="sidebar-project-module-proj-redesign-settings"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="sidebar-project-module-proj-governance-settings"]')).toBeNull()
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-summary-proj-governance"]')?.click()
+
+    await waitFor(() =>
+      router.currentRoute.value.name === 'project-dashboard'
+      && String(router.currentRoute.value.params.projectId) === 'proj-governance',
+    )
+
+    expect(mounted.container.querySelector('[data-testid="sidebar-project-module-proj-redesign-settings"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="sidebar-project-module-proj-governance-settings"]')).not.toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('opens a delete confirmation for collapsed projects and removes the project after confirm', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-project-delete-trigger-proj-governance"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-delete-trigger-proj-governance"]')?.click()
+
+    await waitFor(() => document.body.querySelector('[data-testid="sidebar-project-delete-dialog"]') !== null)
+    expect(document.body.textContent).toContain('Workspace Governance')
+
+    document.body.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-delete-confirm"]')?.click()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-project-proj-governance"]') === null)
+    expect(mounted.container.querySelector('[data-testid="sidebar-project-proj-redesign"]')).not.toBeNull()
 
     mounted.destroy()
   })

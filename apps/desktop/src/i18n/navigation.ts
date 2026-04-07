@@ -9,6 +9,13 @@ export function createWorkspaceOverviewTarget(workspaceId: string, projectId?: s
   } as const
 }
 
+export function createWorkspaceProjectsTarget(workspaceId: string) {
+  return {
+    name: 'workspace-projects',
+    params: { workspaceId },
+  } as const
+}
+
 export function createProjectDashboardTarget(workspaceId: string, projectId: string): RouteLocationNamedRaw {
   return {
     name: 'project-dashboard',
@@ -58,7 +65,7 @@ export function createProjectConversationTarget(workspaceId: string, projectId: 
 }
 
 export function createProjectSurfaceTarget(
-  routeName: 'project-agents' | 'project-resources' | 'project-knowledge' | 'project-trace' | 'project-runtime',
+  routeName: 'project-agents' | 'project-resources' | 'project-knowledge' | 'project-trace' | 'project-settings' | 'project-runtime',
   workspaceId: string,
   projectId: string,
 ): RouteLocationNamedRaw {

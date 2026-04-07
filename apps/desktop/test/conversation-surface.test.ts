@@ -7,6 +7,8 @@ import { createApp, nextTick } from 'vue'
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import type { WorkspaceClient } from '@/tauri/workspace-client'
+import * as tauriClient from '@/tauri/client'
 import { useRuntimeStore } from '@/stores/runtime'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
@@ -57,6 +59,18 @@ async function waitFor(predicate: () => boolean, timeoutMs = 2000) {
   }
 }
 
+function configureWorkspaceClient(
+  transform: (client: WorkspaceClient) => WorkspaceClient,
+) {
+  const createWorkspaceClientMock = vi.mocked(tauriClient.createWorkspaceClient)
+  const baseImplementation = createWorkspaceClientMock.getMockImplementation()
+  expect(baseImplementation).toBeTypeOf('function')
+
+  createWorkspaceClientMock.mockImplementation((context) =>
+    transform(baseImplementation!(context) as WorkspaceClient) as ReturnType<typeof tauriClient.createWorkspaceClient>,
+  )
+}
+
 describe('Conversation surfaces', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -75,6 +89,10 @@ describe('Conversation surfaces', () => {
 
     await waitFor(() => runtime.activeMessages.length >= 3)
     expect(mounted.container.querySelector('[data-testid="conversation-tabs"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="conversation-composer"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="conversation-model-select"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="conversation-permission-select"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="conversation-actor-select"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('请先查看当前桌面端实现状态')
     expect(mounted.container.textContent).toContain('建议先把 schema、共享 UI 和工作台布局拆开')
 
@@ -83,12 +101,444 @@ describe('Conversation surfaces', () => {
     textarea.dispatchEvent(new Event('input', { bubbles: true }))
     await nextTick()
 
-    const sendButton = Array.from(mounted.container.querySelectorAll('button')).find(button =>
-      button.textContent?.includes(String(i18n.global.t('conversation.composer.send'))))
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+    expect(sendButton?.disabled).toBe(false)
     sendButton?.click()
+
+    await waitFor(() => runtime.activeMessages.some(message => message.content === '继续推进真实 workspace API 收尾。'))
+    expect(mounted.container.textContent).toContain('继续推进真实 workspace API 收尾。')
 
     await waitFor(() => runtime.activeMessages.some(message => message.content.includes('Completed request')))
     expect(mounted.container.textContent).toContain('Completed request')
+
+    mounted.destroy()
+  })
+
+  it('renders runtime actor and artifact labels from real entity records', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    expect(mounted.container.textContent).toContain('Studio Direction Team')
+    expect(mounted.container.textContent).toContain('Team')
+    expect(mounted.container.textContent).toContain('Runtime Delivery Summary')
+    expect(mounted.container.textContent).toContain('v3')
+    expect(mounted.container.querySelectorAll('[data-testid="conversation-avatar-image"]').length).toBeGreaterThan(0)
+
+    mounted.destroy()
+  })
+
+  it('shows the user message immediately while the assistant response is still pending', async () => {
+    configureWorkspaceClient((client) => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async submitUserTurn(sessionId, input, idempotencyKey) {
+          await new Promise(resolve => window.setTimeout(resolve, 120))
+          return client.runtime.submitUserTurn(sessionId, input, idempotencyKey)
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    textarea.value = '先立即显示这条用户消息。'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+    sendButton?.click()
+
+    await nextTick()
+    expect(textarea.value).toBe('')
+    await waitFor(() => runtime.activeMessages.some(message => message.content === '先立即显示这条用户消息。'))
+    expect(mounted.container.textContent).toContain('先立即显示这条用户消息。')
+    await waitFor(() => runtime.activeMessages.some(message => message.content === 'Thinking…'))
+    expect(mounted.container.textContent).toContain('Thinking…')
+    expect(runtime.activeMessages.some(message => message.content.includes('Completed request'))).toBe(false)
+
+    await waitFor(() => runtime.activeMessages.some(message => message.content.includes('Completed request')))
+
+    mounted.destroy()
+  })
+
+  it('shows live process text on the assistant placeholder before the final result arrives', async () => {
+    configureWorkspaceClient((client) => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async submitUserTurn(sessionId, input, idempotencyKey) {
+          await new Promise(resolve => window.setTimeout(resolve, 120))
+          return client.runtime.submitUserTurn(sessionId, input, idempotencyKey)
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    textarea.value = '先显示实时处理过程。'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+    sendButton?.click()
+
+    await waitFor(() => runtime.activeMessages.some(message => message.content === 'Thinking…'))
+    const processToggle = Array.from(mounted.container.querySelectorAll('button'))
+      .filter(button => button.textContent?.includes('Thinking') || button.textContent?.includes('Processing'))
+      .at(-1)
+    processToggle?.click()
+    await nextTick()
+    expect(mounted.container.textContent).toContain('Preparing the assistant response.')
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-inline-tool-calls"]') !== null)
+    expect(mounted.container.textContent).toContain('Used Workspace API')
+    expect(mounted.container.textContent).toContain('Called 1 time')
+
+    await waitFor(() => runtime.activeMessages.some(message => message.content.includes('Completed request')))
+
+    mounted.destroy()
+  })
+
+  it('renders inline approval actions on the assistant placeholder and resolves them', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    textarea.value = 'Run pwd in the workspace terminal.'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+    sendButton?.click()
+
+    await waitFor(() => runtime.activeMessages.some(message => !!message.approval))
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-inline-approval"]') !== null)
+    expect(mounted.container.textContent).toContain('Approve workspace command execution')
+    expect(mounted.container.textContent).toContain('Run pwd in the workspace terminal.')
+    expect(mounted.container.querySelector('[data-testid="conversation-inline-approve"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="conversation-inline-reject"]')).not.toBeNull()
+
+    const approveButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-inline-approve"]')
+    approveButton?.click()
+
+    await waitFor(() => runtime.pendingApproval === null)
+    await waitFor(() => runtime.activeMessages.some(message => message.content === 'Command approved and execution completed.'))
+    expect(mounted.container.querySelector('[data-testid="conversation-inline-approval"]')).toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('queues follow-up turns above the composer while a run is pending and lets the user remove them', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+
+    textarea.value = 'Run pwd in the workspace terminal.'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    sendButton?.click()
+
+    await waitFor(() => runtime.pendingApproval !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-inline-approval"]') !== null)
+
+    textarea.value = '把这条加入队列。'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    sendButton?.click()
+
+    await waitFor(() => runtime.activeQueue.length === 1)
+    expect(runtime.activeQueue[0]?.content).toBe('把这条加入队列。')
+
+    const queueList = mounted.container.querySelector('[data-testid="conversation-queue-list"]')
+    const composer = mounted.container.querySelector('[data-testid="conversation-composer"]')
+    expect(queueList).not.toBeNull()
+    expect(composer).not.toBeNull()
+    expect(queueList?.compareDocumentPosition(composer as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(mounted.container.textContent).toContain('把这条加入队列。')
+
+    const removeButton = mounted.container.querySelector<HTMLButtonElement>(`[data-testid="conversation-queue-remove-${runtime.activeQueue[0]?.id}"]`)
+    expect(removeButton).not.toBeNull()
+    removeButton?.click()
+
+    await waitFor(() => runtime.activeQueue.length === 0)
+    expect(mounted.container.querySelector('[data-testid="conversation-queue-list"]')).toBeNull()
+
+    mounted.destroy()
+  })
+
+  it('keeps the draft and shows the runtime error when submission fails', async () => {
+    configureWorkspaceClient((client) => ({
+      ...client,
+      runtime: {
+        ...client.runtime,
+        async submitUserTurn() {
+          throw new Error('missing configured credential env var `ANTHROPIC_API_KEY` for provider `anthropic`')
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const textarea = mounted.container.querySelector('textarea') as HTMLTextAreaElement
+    textarea.value = '继续推进真实 workspace API 收尾。'
+    textarea.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+    sendButton?.click()
+
+    await waitFor(() => runtime.error.includes('missing configured credential env var'))
+    expect(textarea.value).toBe('继续推进真实 workspace API 收尾。')
+    expect(mounted.container.textContent).toContain('missing configured credential env var `ANTHROPIC_API_KEY` for provider `anthropic`')
+    expect(mounted.container.querySelector('[role="alert"]')?.textContent).toContain('missing configured credential env var')
+
+    mounted.destroy()
+  })
+
+  it('renders runtime-backed summary, memories, and tools in the conversation context pane', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?detail=summary')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.detail.summary.tokenUsage')))
+    expect(mounted.container.textContent).toContain('1000')
+
+    Array.from(mounted.container.querySelectorAll('button')).find(button => button.textContent?.includes('记忆'))?.click()
+    await waitFor(() => mounted.container.textContent?.includes('建议先把 schema、共享 UI 和工作台布局拆开') ?? false)
+    expect(mounted.container.textContent).toContain('Studio Direction Team')
+
+    Array.from(mounted.container.querySelectorAll('button')).find(button => button.textContent?.includes('工具'))?.click()
+    await waitFor(() => mounted.container.textContent?.includes('Workspace API') ?? false)
+    expect(mounted.container.textContent).toContain('workspace-api')
+
+    mounted.destroy()
+  })
+
+  it('renders artifact and resource details in the conversation context pane', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?detail=artifacts')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.detail.artifacts.listTitle')))
+    expect(mounted.container.textContent).toContain('Runtime Delivery Summary')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('conversation.detail.artifacts.linkedResourcesTitle')))
+    expect(mounted.container.textContent).toContain('Desktop Redesign API')
+
+    const artifactFilter = mounted.container.querySelector(`input[placeholder="${String(i18n.global.t('conversation.detail.artifacts.filterPlaceholder'))}"]`) as HTMLInputElement
+    artifactFilter.value = 'Delivery'
+    artifactFilter.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    expect(mounted.container.textContent).toContain('Runtime Delivery Summary')
+
+    mounted.destroy()
+  })
+
+  it('scopes the composer model and actor selectors to the project settings assignments', async () => {
+    configureWorkspaceClient((client) => ({
+      ...client,
+      catalog: {
+        ...client.catalog,
+        async getSnapshot() {
+          const snapshot = await client.catalog.getSnapshot()
+          return {
+            ...snapshot,
+            configuredModels: [
+              {
+                configuredModelId: 'anthropic-primary',
+                name: 'Claude Primary',
+                providerId: 'anthropic',
+                modelId: 'claude-sonnet-4-5',
+                credentialRef: 'env:ANTHROPIC_API_KEY',
+                tokenUsage: {
+                  usedTokens: 0,
+                  exhausted: false,
+                },
+                enabled: true,
+                source: 'workspace',
+              },
+              {
+                configuredModelId: 'anthropic-alt',
+                name: 'Claude Alt',
+                providerId: 'anthropic',
+                modelId: 'claude-sonnet-4-5',
+                credentialRef: 'env:ANTHROPIC_ALT_API_KEY',
+                tokenUsage: {
+                  usedTokens: 0,
+                  exhausted: false,
+                },
+                enabled: true,
+                source: 'workspace',
+              },
+            ],
+            defaultSelections: {
+              conversation: {
+                configuredModelId: 'anthropic-primary',
+                providerId: 'anthropic',
+                modelId: 'claude-sonnet-4-5',
+                surface: 'conversation',
+              },
+            },
+          } as any
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    const modelSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-model-select"]')
+    expect(modelSelect).not.toBeNull()
+    const modelOptionLabels = Array.from(modelSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
+    expect(modelOptionLabels).toContain('Claude Primary')
+    expect(modelOptionLabels).not.toContain('Claude Alt')
+
+    const actorSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-actor-select"]')
+    expect(actorSelect).not.toBeNull()
+    const actorOptionLabels = Array.from(actorSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
+    expect(actorOptionLabels).toContain('Architect Agent')
+    expect(actorOptionLabels).toContain('Studio Direction Team')
+    expect(actorOptionLabels).not.toContain('Coder Agent')
+    expect(actorOptionLabels).not.toContain('Redesign Copilot')
+    expect(actorOptionLabels).not.toContain('Redesign Tiger Team')
+
+    mounted.destroy()
+  })
+
+  it('keeps configured workspace agents and teams visible in the composer even without project link records', async () => {
+    configureWorkspaceClient((client) => ({
+      ...client,
+      agents: {
+        ...client.agents,
+        async listProjectLinks() {
+          return []
+        },
+      },
+      teams: {
+        ...client.teams,
+        async listProjectLinks() {
+          return []
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+
+    await waitFor(() => {
+      const actorSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-actor-select"]')
+      const actorOptionLabels = Array.from(actorSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
+      return actorOptionLabels.includes('Architect Agent') && actorOptionLabels.includes('Studio Direction Team')
+    })
+
+    const actorSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-actor-select"]')
+    expect(actorSelect).not.toBeNull()
+    const actorOptionLabels = Array.from(actorSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
+    expect(actorOptionLabels).toContain('Architect Agent')
+    expect(actorOptionLabels).toContain('Studio Direction Team')
+
+    mounted.destroy()
+  })
+
+  it('keeps composer model and actor selects empty and disabled when the project has no assignments', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-governance/conversations/conv-governance')
+    await router.isReady()
+
+    const mounted = mountApp()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="conversation-composer"]') !== null)
+
+    const modelSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-model-select"]')
+    expect(modelSelect).not.toBeNull()
+    expect(modelSelect?.disabled).toBe(true)
+    expect(modelSelect?.querySelectorAll('option')).toHaveLength(0)
+
+    const actorSelect = mounted.container.querySelector<HTMLSelectElement>('[data-testid="conversation-actor-select"]')
+    expect(actorSelect).not.toBeNull()
+    expect(actorSelect?.disabled).toBe(true)
+    expect(actorSelect?.querySelectorAll('option')).toHaveLength(0)
+
+    const sendButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="conversation-send-button"]')
+    expect(sendButton).not.toBeNull()
+    expect(sendButton?.disabled).toBe(true)
+
+    mounted.destroy()
+  })
+
+  it('renders conversation-linked resources in the resource detail pane', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign?detail=resources')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    expect(mounted.container.textContent).toContain('Desktop Redesign API')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('enum.projectResourceOrigin.generated')))
+    expect(mounted.container.textContent).toContain('artifact-run-conv-redesign')
+
+    const resourceFilter = mounted.container.querySelector(`input[placeholder="${String(i18n.global.t('conversation.detail.resources.filterPlaceholder'))}"]`) as HTMLInputElement
+    resourceFilter.value = 'API'
+    resourceFilter.dispatchEvent(new Event('input', { bubbles: true }))
+    await nextTick()
+    expect(mounted.container.textContent).toContain('Desktop Redesign API')
 
     mounted.destroy()
   })

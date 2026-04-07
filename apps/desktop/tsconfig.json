@@ -15,7 +15,9 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@octopus/schema": ["../../packages/schema/src/index.ts"],
+      "@octopus/schema/*": ["../../packages/schema/src/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue"],

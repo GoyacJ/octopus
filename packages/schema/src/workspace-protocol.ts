@@ -36,6 +36,16 @@ export interface WorkspaceConnectionRecord {
   status: WorkspaceConnectionStatus
 }
 
+export interface HostWorkspaceConnectionRecord extends WorkspaceConnectionRecord {}
+
+export interface CreateHostWorkspaceConnectionInput {
+  workspaceId: string
+  label: string
+  baseUrl: string
+  transportSecurity: TransportSecurityLevel
+  authMode: WorkspaceAuthMode
+}
+
 export interface WorkspaceSessionTokenEnvelope {
   workspaceConnectionId: string
   token: string

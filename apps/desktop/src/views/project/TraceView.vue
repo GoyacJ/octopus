@@ -15,6 +15,7 @@ const userCenterStore = useUserCenterStore()
 const workspaceStore = useWorkspaceStore()
 
 const traceStatusLabel = computed(() => runtime.activeRunStatusLabel || t('common.na'))
+const resolvedActorLabel = computed(() => runtime.activeRun?.resolvedActorLabel || t('common.na'))
 const canApproveTrace = computed(() =>
   userCenterStore.hasPermission('trace:approval:approve', 'approve', 'project', workspaceStore.currentProjectId)
   || !!userCenterStore.currentUser,
@@ -52,7 +53,7 @@ async function rejectRuntime() {
         <div data-testid="trace-runtime-status">
           <UiStatTile :label="t('trace.stats.status')" :value="traceStatusLabel" tone="warning" />
         </div>
-        <UiStatTile :label="t('trace.stats.owner')" :value="runtime.activeSession?.summary.id ?? t('common.na')" />
+        <UiStatTile :label="t('trace.stats.owner')" :value="resolvedActorLabel" />
         <UiStatTile :label="t('trace.stats.nextAction')" :value="runtime.activeRunNextActionLabel || t('common.na')" />
       </template>
     </div>
@@ -66,7 +67,7 @@ async function rejectRuntime() {
 
         <div v-if="runtime.activeRun" class="space-y-4 rounded-lg border border-border-subtle p-6 dark:border-white/[0.05]">
           <div class="flex flex-wrap gap-2.5">
-            <UiBadge :label="runtime.activeRun.modelId ?? t('common.na')" subtle />
+            <UiBadge :label="runtime.activeRun.configuredModelName ?? runtime.activeRun.modelId ?? t('common.na')" subtle />
             <UiBadge :label="formatDateTime(runtime.activeRun.startedAt)" subtle />
             <UiBadge :label="formatDateTime(runtime.activeRun.updatedAt)" subtle />
           </div>

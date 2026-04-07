@@ -79,6 +79,31 @@
     "addWorkspace": "Add workspace",
     "removeWorkspace": "Remove workspace"
   },
+  "notifications": {
+    "title": "Notifications",
+    "triggerAriaLabel": "Open notification center",
+    "markRead": "Mark read",
+    "markAllRead": "Mark all read",
+    "empty": {
+      "title": "No notifications yet",
+      "description": "New desktop updates and feedback will appear here."
+    },
+    "filters": {
+      "all": "All",
+      "app": "App",
+      "workspace": "Workspace",
+      "user": "User"
+    },
+    "scopes": {
+      "app": "App",
+      "workspace": "Workspace",
+      "user": "User"
+    },
+    "fallback": {
+      "title": "Notification",
+      "body": "A new update is available."
+    }
+  },
   "app": {
     "hostUnavailable": {
       "eyebrow": "Host Unavailable",
@@ -196,13 +221,18 @@
     "projectTree": {
       "title": "Projects",
       "caption": "Current workspace scope",
-      "create": "Add project",
-      "remove": "Remove project",
-      "removeConfirm": "Delete this project and all of its conversations?",
-      "dialogTitle": "Create project",
-      "dialogDescription": "Enter a project name to create a new project inside the current workspace.",
-      "inputPlaceholder": "Project name"
-    },
+    "create": "Add project",
+    "remove": "Remove project",
+    "removeConfirm": "Delete this project and all of its conversations?",
+    "dialogTitle": "Create project",
+    "dialogDescription": "Enter a project name to create a new project inside the current workspace.",
+    "inputPlaceholder": "Project name",
+    "deleteDialog": {
+      "title": "Delete project",
+      "description": "Delete \"{name}\"? In the current version this removes the project from the sidebar.",
+      "confirm": "Confirm delete"
+    }
+  },
     "projectModules": {
       "console": "Console",
       "conversations": "Conversations"
@@ -214,8 +244,10 @@
       "resources": "Resources",
       "knowledge": "Knowledge",
       "trace": "Trace",
+      "projectSettings": "Project Settings",
       "runtime": "Runtime",
       "agents": "Agents",
+      "projects": "Projects",
       "teams": "Teams",
       "models": "Models",
       "tools": "Tools",
@@ -474,6 +506,93 @@
     "emptyTitle": "Project runtime config is unavailable",
     "emptyDescription": "No project runtime config could be loaded for the active project."
   },
+  "projectSettings": {
+    "header": {
+      "eyebrow": "Project Settings",
+      "title": "Project Settings",
+      "subtitle": "Manage project basics, model selection, tool permissions, and project members in one place."
+    },
+    "tabs": {
+      "basics": "Basics",
+      "models": "Models",
+      "tools": "Tools",
+      "agents": "Agents",
+      "users": "Users"
+    },
+    "loading": "Loading project settings dependencies…",
+    "basics": {
+      "title": "Project Basics",
+      "description": "Edit the active project's name and description and keep shell surfaces in sync.",
+      "saveError": "Failed to save project basics."
+    },
+    "models": {
+      "title": "Model Settings",
+      "description": "Choose which workspace-configured models this project can use and set the default model.",
+      "allowedLabel": "Allowed models",
+      "allowedHint": "Only the selected workspace models are available to this project.",
+      "defaultLabel": "Default model",
+      "defaultHint": "New turns without an explicit model use this default selection.",
+      "saveError": "Failed to save project model settings.",
+      "emptyTitle": "No configured workspace models are available",
+      "emptyDescription": "Configure workspace models first, then return here to scope them per project.",
+      "validation": {
+        "required": "Select at least one allowed model.",
+        "defaultMustBeAllowed": "The default model must be one of the allowed models."
+      }
+    },
+    "tools": {
+      "title": "Tool Permissions",
+      "description": "Refine the assigned builtin, skill, and mcp tool set for this project and override permissions when needed.",
+      "saveError": "Failed to save project tool permissions.",
+      "emptyTitle": "No assigned tools are available",
+      "emptyDescription": "Assign workspace tools to this project first, then return here to refine the enabled set.",
+      "groups": {
+        "builtin": "builtin",
+        "skill": "skill",
+        "mcp": "mcp"
+      },
+      "modes": {
+        "inherit": "Inherit workspace",
+        "allow": "Allow",
+        "ask": "Ask",
+        "readonly": "Read-only",
+        "deny": "Disable for project"
+      }
+    },
+    "agents": {
+      "title": "Agent Availability",
+      "description": "Refine which assigned workspace agents and agent teams stay available inside this project.",
+      "saveError": "Failed to save project agent settings.",
+      "emptyTitle": "No assigned agents or teams are available",
+      "emptyDescription": "Assign workspace agents or teams to this project first, then return here to refine availability.",
+      "agentsLabel": "Available agents",
+      "agentsHint": "Only assigned workspace agents can be enabled here.",
+      "teamsLabel": "Available agent teams",
+      "teamsHint": "Only assigned workspace teams can be enabled here.",
+      "sections": {
+        "agents": "Agents",
+        "teams": "Agent Teams"
+      }
+    },
+    "users": {
+      "title": "Project Members",
+      "description": "Manage project membership by updating each user's scoped project assignments.",
+      "saveError": "Failed to save project members.",
+      "emptyTitle": "No workspace users are available",
+      "emptyDescription": "Create users in User Center first, then assign them to this project."
+    },
+    "summary": {
+      "title": "Project Summary",
+      "description": "Review the active project's current workspace state.",
+      "status": "Project status",
+      "models": "Allowed models",
+      "toolOverrides": "Tool overrides",
+      "actors": "Enabled actors",
+      "members": "Project members"
+    },
+    "emptyTitle": "Project settings are unavailable",
+    "emptyDescription": "The active project could not be found or has not finished loading yet."
+  },
   "conversation": {
     "header": {
       "eyebrow": "Session",
@@ -512,7 +631,6 @@
       "readonlyPermission": "Read-only",
       "dangerPermission": "Full Access",
       "dangerPermissionHint": "Allow AI to execute sensitive write operations",
-      "shortcutHint": "Cmd/Ctrl + Enter to Send",
       "dangerDialog": {
         "title": "Enable Full Access Mode",
         "description": "In Full Access mode, AI will be able to automatically execute sensitive write operations, including deletions and modifications, without requiring step-by-step approval from you.",
@@ -546,7 +664,13 @@
       "summary": {
         "title": "Session Snapshot",
         "subtitle": "Goals, status, and runtime summary.",
-        "statusNote": "Current status"
+        "statusNote": "Current status",
+        "tokenUsage": "Token usage",
+        "cards": {
+          "messages": "Messages",
+          "artifacts": "Artifacts",
+          "resources": "Resources"
+        }
       },
       "memories": {
         "title": "Captured Memories",
@@ -557,8 +681,15 @@
       },
       "artifacts": {
         "title": "Session Artifacts",
+        "filterPlaceholder": "Filter artifacts",
+        "updatedAt": "Updated",
+        "contentType": "Content type",
+        "listTitle": "Conversation artifacts",
+        "linkedResourcesTitle": "Linked resources",
+        "noLinkedResourcesTitle": "No linked resources",
+        "noLinkedResourcesDescription": "This artifact has not been materialized into project resources yet.",
         "emptyTitle": "No artifacts yet",
-        "emptyDescription": "Documents or code generated during the session will appear here."
+        "emptyDescription": "Artifacts created by the current conversation will appear here."
       },
       "knowledge": {
         "title": "Linked Knowledge",
@@ -567,8 +698,10 @@
       },
       "resources": {
         "title": "Linked Resources",
-        "emptyTitle": "No linked resources",
-        "emptyDescription": "Files and folders attached to this session will appear here."
+        "filterPlaceholder": "Filter resources",
+        "openFullPage": "Open full resource page",
+        "emptyTitle": "No resources yet",
+        "emptyDescription": "Resources referenced by the current conversation will appear here."
       },
       "tools": {
         "title": "Tool Usage",
@@ -747,7 +880,10 @@
       "uploadFile": "Upload File",
       "uploadFolder": "Upload Folder",
       "addUrl": "External Link",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "deactivate": "Deactivate",
+      "confirmDelete": "Are you sure you want to delete this resource?"
     },
     "kinds": {
       "file": "File",
@@ -775,25 +911,130 @@
   "models": {
     "header": {
       "eyebrow": "Models",
-      "title": "Model Catalog",
-      "subtitle": "Manage schedulable LLM resources in the workspace."
+      "title": "Workspace Model Center",
+      "subtitle": "Manage explicitly created workspace model instances and configure a name, credential ref, and base URL for each one."
     },
-    "list": {
-      "title": "Model Roster",
-      "subtitle": "View model providers, performance tiers, and default permissions.",
-      "emptyTitle": "No models yet"
+    "filters": {
+      "searchPlaceholder": "Search name, provider, model, family, track, or capability…",
+      "allProviders": "All providers",
+      "allSurfaces": "All surfaces",
+      "allCapabilities": "All capabilities"
+    },
+    "table": {
+      "columns": {
+        "name": "Name",
+        "provider": "Provider",
+        "upstreamModel": "Upstream model",
+        "surfaces": "Surfaces",
+        "usedTokens": "Used tokens",
+        "totalTokens": "Token quota",
+        "quotaStatus": "Quota status",
+        "credentialRef": "Credential ref",
+        "baseUrl": "Base URL"
+      }
+    },
+    "detail": {
+      "name": "Name",
+      "provider": "Provider",
+      "upstreamModel": "Upstream model",
+      "customProviderName": "Custom provider name",
+      "credentialRef": "Credential ref",
+      "credentialRefPlaceholder": "env:PROVIDER_API_KEY",
+      "baseUrl": "Base URL",
+      "baseUrlPlaceholder": "https://provider.example.test/v1",
+      "totalTokens": "Token quota",
+      "totalTokensPlaceholder": "Leave empty for unlimited",
+      "usedTokens": "Used tokens",
+      "remainingTokens": "Remaining tokens",
+      "quotaStatus": "Quota status",
+      "capabilities": "Capabilities",
+      "noCapabilities": "This model does not declare capabilities.",
+      "surfaces": "Surfaces",
+      "noSurfaces": "This model has no enabled surfaces.",
+      "enabled": "Enable this model instance",
+      "noDescription": "This model does not include a description."
+    },
+    "providerModes": {
+      "custom": "Custom"
+    },
+    "create": {
+      "title": "Create model configuration",
+      "description": "Create a workspace model instance and bind a name, provider, upstream model, and credential reference.",
+      "fields": {
+        "name": "Name",
+        "provider": "Provider",
+        "customProviderName": "Custom provider name",
+        "model": "Model",
+        "credentialRef": "Credential ref",
+        "baseUrl": "Base URL",
+        "totalTokens": "Token quota",
+        "enabled": "Enable this model instance"
+      },
+      "placeholders": {
+        "customProviderName": "For example: Internal Gateway",
+        "modelId": "Enter a model identifier, e.g. llama3.1:8b",
+        "totalTokens": "For example: 1000000"
+      },
+      "errors": {
+        "required": "Name, provider, and model are required.",
+        "duplicateName": "Model names must be unique inside the workspace.",
+        "customProviderNameRequired": "A custom provider name is required in custom mode.",
+        "saveFailed": "Failed to save the model configuration."
+      }
+    },
+    "actions": {
+      "create": "Create model",
+      "validate": "Validate",
+      "save": "Save",
+      "delete": "Delete model configuration",
+      "cancel": "Cancel",
+      "confirmCreate": "Create"
+    },
+    "pagination": {
+      "summary": "{count} items, page {page} / {total}"
+    },
+    "states": {
+      "enabled": "Enabled",
+      "disabled": "Disabled"
+    },
+    "validation": {
+      "success": "Real request completed. Model \"{name}\" is available and this check consumed {tokens} tokens.",
+      "requestId": "Request ID: {requestId}"
+    },
+    "quota": {
+      "unlimited": "Unlimited",
+      "available": "Available",
+      "exhausted": "Exhausted"
+    },
+    "empty": {
+      "title": "No models created yet",
+      "description": "Create the first workspace model instance from the upper-right corner.",
+      "selectionTitle": "Select a model",
+      "selectionDescription": "Choose a model instance from the left to inspect and edit its details."
     }
   },
   "tools": {
-    "header": {
-      "eyebrow": "Runtime Tools",
-      "title": "Tools",
-      "subtitle": "Read built-in tools, discovered skills, and MCP servers directly from runtime sources."
-    },
-    "tabs": {
-      "builtin": "Built-in",
-      "skill": "Skills",
-      "mcp": "MCP"
+  "header": {
+    "eyebrow": "Runtime Tools",
+    "title": "Tools",
+    "subtitle": "Manage built-in tools, workspace skills, and MCP servers from runtime-backed sources."
+  },
+  "actions": {
+    "disable": "Disable",
+    "enable": "Enable",
+    "newSkill": "New Skill",
+    "newMcp": "New MCP",
+    "importSkill": "Import Skill",
+    "importArchive": "Upload ZIP",
+    "importFolder": "Upload Folder",
+    "copyToManaged": "Copy To Managed Skill",
+    "selectForCopy": "Add to batch copy",
+    "skillSlugPrompt": "Enter a skill slug"
+  },
+  "tabs": {
+    "builtin": "Built-in",
+    "skill": "Skills",
+    "mcp": "MCP"
     },
     "empty": {
       "title": "No runtime entries",
@@ -806,30 +1047,74 @@
     "search": {
       "placeholder": "Search name, path, endpoint, or status…"
     },
-    "summary": {
-      "results": "{count} shown / {total} in this group"
-    },
-    "detail": {
+  "summary": {
+    "results": "{count} shown / {total} in this group"
+  },
+  "fields": {
+    "permissionMode": "Permission mode"
+  },
+  "detail": {
       "title": "Details",
       "sourcePath": "Source path",
       "sourceKey": "Source key",
-      "requiredPermission": "Required permission",
-      "builtinKey": "Builtin key",
-      "activeState": "State",
-      "shadowedBy": "Shadowed by",
-      "sourceOrigin": "Source origin",
-      "serverName": "Server",
-      "endpoint": "Endpoint",
-      "toolNames": "Discovered tools",
-      "scope": "Config scope",
-      "statusDetail": "Status detail",
-      "settingsHint": "MCP editing stays in runtime settings.",
-      "settingsLink": "Open runtime settings"
-    },
-    "states": {
-      "active": "Active",
-      "shadowed": "Shadowed"
-    },
+    "requiredPermission": "Required permission",
+    "disabled": "Disabled",
+    "builtinKey": "Builtin key",
+    "activeState": "State",
+    "shadowedBy": "Shadowed by",
+    "sourceOrigin": "Source origin",
+    "relativePath": "Relative path",
+    "workspaceOwned": "Ownership",
+    "workspaceOwnedYes": "Workspace managed",
+    "workspaceOwnedNo": "External source",
+    "serverName": "Server",
+    "endpoint": "Endpoint",
+    "toolNames": "Discovered tools",
+    "scope": "Config scope",
+    "statusDetail": "Status detail"
+  },
+  "editor": {
+    "loading": "Loading runtime document…",
+    "loadingFile": "Loading skill file…",
+    "unknownError": "Unable to load tool details.",
+    "jsonObjectRequired": "MCP config must be a JSON object.",
+    "skillSlugRequired": "Unable to derive a valid skill name.",
+    "skillNameRequired": "Enter a skill name.",
+    "skillImportRequired": "Choose at least one skill source.",
+    "skillCopyDuplicate": "The copy targets contain duplicate names. Adjust them and retry.",
+    "skillImportDuplicate": "The selected sources contain duplicate skill names. Adjust the selection and retry.",
+    "skillCreateDescription": "Create a managed skill under data/skills/<slug>/.",
+    "mcpCreateDescription": "Create a workspace MCP server entry in runtime workspace config.",
+    "copySkillDescription": "The managed copy will use the current skill name by default.",
+    "importSkillDescription": "Choose ZIP files or folders. The import uses each file or folder name by default.",
+    "importArchiveDescription": "The import uses each ZIP filename by default.",
+    "importFolderDescription": "The import uses each folder name by default.",
+    "skillSlug": "Skill slug",
+    "skillName": "Skill name",
+    "skillContent": "SKILL.md",
+    "mcpServerName": "Server name",
+    "mcpConfig": "Server config",
+    "skillTree": "Directory tree",
+    "selectedImportSource": "Selected source",
+    "selectedFile": "Selected file",
+    "fileKind": "File type",
+    "fileLanguage": "Language",
+    "fileSize": "Size",
+    "noSkillFiles": "No files are available in this skill yet.",
+    "noSkillFileSelectedTitle": "Select a file",
+    "noSkillFileSelectedDescription": "Choose a file from the skill tree to inspect or edit it.",
+    "textFile": "Text file",
+    "binaryFile": "Binary file",
+    "binaryReadonly": "Binary files are metadata-only in this view and cannot be edited inline."
+  },
+  "states": {
+    "active": "Active",
+    "shadowed": "Shadowed",
+    "managed": "Managed",
+    "disabled": "Disabled",
+    "readonly": "Read-only",
+    "external": "External"
+  },
     "sourceOrigins": {
       "skills_dir": "Skills directory",
       "legacy_commands_dir": "Legacy /commands"
@@ -991,6 +1276,7 @@
     "nav": {
       "title": "Admin Menu",
       "profile": "Basic Info",
+      "pet": "Pet",
       "users": "Members",
       "roles": "Roles",
       "permissions": "Permissions",
@@ -1044,11 +1330,118 @@
         "menuHelper": "Navigation entries currently visible to this account.",
         "roleHelper": "Roles currently assigned to this account."
       },
+      "emptyTitle": "No current user",
+      "emptyDescription": "The active workspace connection has not returned a current user yet.",
+      "access": {
+        "title": "Access Overview",
+        "description": "Review the roles, permissions, and visible menus currently inherited by this account.",
+        "roles": "Current roles",
+        "rolesDescription": "Roles directly assigned to the signed-in account.",
+        "permissions": "Current permissions",
+        "permissionsDescription": "Effective permissions aggregated from the current roles.",
+        "menus": "Current menus",
+        "menusDescription": "User center menus currently visible to this account.",
+        "openRoles": "View roles",
+        "openPermissions": "View permissions",
+        "openMenus": "View menus",
+        "emptyRoles": "No roles",
+        "emptyPermissions": "No permissions",
+        "emptyMenus": "No menus"
+      },
+      "edit": {
+        "title": "Edit Profile",
+        "description": "Update the current signed-in user's basic profile. This release supports display name, username, and avatar upload.",
+        "fields": {
+          "displayName": "Display name",
+          "username": "Username",
+          "avatar": "Avatar"
+        },
+        "hints": {
+          "avatar": "Choose a local PNG, JPEG, or WEBP image. Clearing it falls back to initials.",
+          "avatarCurrent": "Current avatar",
+          "avatarPendingEmpty": "No new avatar selected"
+        },
+        "actions": {
+          "pickAvatar": "Choose avatar",
+          "clearAvatar": "Clear avatar",
+          "save": "Save",
+          "reset": "Reset"
+        }
+      },
+      "password": {
+        "title": "Change Password",
+        "description": "Enter your current password and set a new sign-in password. The password state updates immediately after success.",
+        "fields": {
+          "currentPassword": "Current password",
+          "newPassword": "New password",
+          "confirmPassword": "Confirm new password"
+        },
+        "hints": {
+          "newPassword": "The new password must be at least 8 characters and different from the current password."
+        },
+        "actions": {
+          "submit": "Update password"
+        }
+      },
+      "feedback": {
+        "profileSaved": "Profile saved.",
+        "passwordUpdated": "Password updated."
+      },
+      "validation": {
+        "displayNameRequired": "Enter a display name.",
+        "usernameRequired": "Enter a username.",
+        "currentPasswordRequired": "Enter the current password.",
+        "newPasswordRequired": "Enter a new password.",
+        "newPasswordMinLength": "The new password must be at least 8 characters.",
+        "confirmPasswordRequired": "Confirm the new password.",
+        "passwordMismatch": "The new passwords do not match.",
+        "passwordUnchanged": "The new password must be different from the current password."
+      },
       "runtime": {
         "title": "Runtime Config",
         "description": "Edit your personal runtime override for the current workspace.",
         "effectiveTitle": "Effective Preview",
         "effectiveDescription": "Preview the runtime config that will apply to new sessions for your user."
+      }
+    },
+    "pet": {
+      "title": "Pet",
+      "description": "Configure Xiao Zhang's personal preferences for the current workspace, including the default model and permission mode.",
+      "emptyTitle": "No pet settings yet",
+      "emptyDescription": "The current workspace has not returned an editable user session context yet.",
+      "fields": {
+        "name": "Pet name",
+        "model": "Default model",
+        "greeting": "Greeting",
+        "summary": "Summary",
+        "permissionMode": "Permission mode",
+        "source": "Config source"
+      },
+      "hints": {
+        "model": "Controls which configured model the pet chat uses by default.",
+        "permissionMode": "Controls the default execution permission requested by pet sessions."
+      },
+      "actions": {
+        "save": "Save pet settings",
+        "reset": "Reset"
+      },
+      "permissionModes": {
+        "readOnly": "Read-only",
+        "workspaceWrite": "Workspace write",
+        "dangerFullAccess": "Danger full access"
+      },
+      "visibility": {
+        "visible": "Visible",
+        "hidden": "Hidden"
+      },
+      "preview": {
+        "selectedModel": "Selected model",
+        "greeting": "Greeting",
+        "summary": "Summary"
+      },
+      "runtime": {
+        "title": "Pet runtime preview",
+        "description": "Saving writes the pet section into the current user's runtime override."
       }
     },
     "users": {
@@ -1057,6 +1450,8 @@
       "create": "Add Member",
       "createTitle": "Create member",
       "editTitle": "Edit member",
+      "deleteTitle": "Delete member",
+      "deleteDescription": "Deleting a member removes their workspace access and cannot be undone.",
       "formSubtitle": "Edit member profile data, role bindings, and access scope.",
       "searchPlaceholder": "Search member, ID, or email…",
       "currentSessionUser": "Current session user",
@@ -1067,11 +1462,42 @@
       "enable": "Enable member",
       "roleBindingTitle": "Role bindings",
       "scopeTitle": "Project scope",
+      "actions": {
+        "create": "New member",
+        "delete": "Delete member",
+        "pickAvatar": "Choose avatar",
+        "clearAvatar": "Clear avatar",
+        "save": "Save member",
+        "reset": "Reset"
+      },
       "fields": {
         "username": "Username",
         "nickname": "Display name",
+        "role": "Role",
+        "scopeProjects": "Project scope",
+        "avatar": "Avatar",
+        "password": "Password",
         "roleIds": "Role IDs",
         "scopeProjectIds": "Project scope IDs"
+      },
+      "avatar": {
+        "description": "Upload an avatar image or keep the default initials avatar.",
+        "actions": {
+          "useDefault": "Use default avatar"
+        },
+        "pendingEmpty": "No new avatar selected",
+        "current": "Current avatar"
+      },
+      "password": {
+        "description": "Keep the current password, restore the default password, or set a new one for the member.",
+        "actions": {
+          "useDefault": "Use default password",
+          "custom": "Custom password"
+        },
+        "fields": {
+          "password": "New password",
+          "confirmPassword": "Confirm password"
+        }
       },
       "metrics": {
         "total": "Total members",
@@ -1080,6 +1506,10 @@
         "scopeHelper": "{count} members are limited to selected projects",
         "unassigned": "Unassigned roles",
         "unassignedHelper": "Bind roles to these accounts to avoid permission drift."
+      },
+      "feedback": {
+        "saved": "Member saved.",
+        "deleted": "Member deleted."
       }
     },
     "roles": {
@@ -1087,6 +1517,8 @@
       "create": "Add Role",
       "createTitle": "Create role",
       "editTitle": "Edit role",
+      "deleteTitle": "Delete role",
+      "deleteDescription": "Deleting a role also removes that role binding from members. This cannot be undone.",
       "listTitle": "Role list",
       "listSubtitle": "Maintain workspace responsibility templates and access bundles.",
       "formSubtitle": "Edit role metadata and bind permissions and menu visibility.",
@@ -1096,12 +1528,30 @@
       "permissionBindingTitle": "Permission bindings",
       "menuBindingTitle": "Menu bindings",
       "menuHint": "Only select navigation entries this role should be able to see.",
+      "actions": {
+        "create": "New role",
+        "delete": "Delete role",
+        "save": "Save role",
+        "reset": "Reset"
+      },
       "fields": {
         "name": "Role name",
         "code": "Role code",
+        "permissions": "Permissions",
+        "menus": "Menus",
         "permissionIds": "Permission IDs",
         "menuIds": "Menu IDs",
         "description": "Description"
+      },
+      "menuGroups": {
+        "app": "App",
+        "workspace": "Workspace",
+        "userCenter": "User Center",
+        "project": "Project"
+      },
+      "feedback": {
+        "saved": "Role saved.",
+        "deleted": "Role deleted."
       },
       "metrics": {
         "total": "Total roles",
@@ -1137,6 +1587,15 @@
       "disable": "Disable",
       "enable": "Enable",
       "delete": "Delete",
+      "deleteTitle": "Delete permission",
+      "deleteDescription": "Deleting a permission also removes that binding from roles. This cannot be undone.",
+      "emptyTargets": "No selectable targets are currently available for this target type.",
+      "actions": {
+        "create": "New permission",
+        "delete": "Delete permission",
+        "save": "Save permission",
+        "reset": "Reset"
+      },
       "fields": {
         "name": "Permission name",
         "code": "Permission code",
@@ -1146,6 +1605,10 @@
         "targetIds": "Target IDs",
         "memberPermissionIds": "Member permission IDs",
         "description": "Description"
+      },
+      "feedback": {
+        "saved": "Permission saved.",
+        "deleted": "Permission deleted."
       },
       "metrics": {
         "total": "Total permissions",
@@ -1183,6 +1646,14 @@
         "unused": "Unused menus",
         "unusedHelper": "These menus are not assigned to any roles yet."
       }
+    },
+    "recentConversations": {
+      "title": "Recent Sessions",
+      "emptyState": "Global recent sessions are still in development"
+    },
+    "todos": {
+      "title": "Todos",
+      "emptyState": "Global todos are still in development"
     }
   },
   "agents": {
@@ -1282,6 +1753,56 @@
       "output": "Output contract"
     }
   },
+  "projects": {
+    "header": {
+      "eyebrow": "Projects",
+      "subtitle": "Manage project basics, workspace assignments, and archive status from one surface."
+    },
+    "metrics": {
+      "total": "Total projects",
+      "active": "Active projects",
+      "archived": "Archived projects"
+    },
+    "empty": {
+      "title": "No projects yet",
+      "description": "Create a project to manage workspace delivery scope here."
+    },
+    "actions": {
+      "create": "Create project",
+      "edit": "Edit project",
+      "archive": "Archive project",
+      "restore": "Restore project"
+    },
+    "fields": {
+      "name": "Project name",
+      "description": "Description",
+      "models": "Assigned models",
+      "defaultModel": "Default model",
+      "tools": "Assigned tools",
+      "agents": "Assigned agents",
+      "teams": "Assigned teams"
+    },
+    "hints": {
+      "models": "Projects can only refine models selected here.",
+      "defaultModel": "This default seeds the project-level default model selection.",
+      "tools": "Choose builtin, skill, and mcp tools from the workspace catalog.",
+      "agents": "Choose workspace agents that this project can use.",
+      "teams": "Choose workspace agent teams that this project can use."
+    },
+    "emptyAssignments": {
+      "models": "No workspace models are available yet.",
+      "tools": "No workspace tools are available yet.",
+      "agents": "No workspace agents are available yet.",
+      "teams": "No workspace teams are available yet."
+    },
+    "status": {
+      "active": "active",
+      "archived": "archived"
+    },
+    "errors": {
+      "lastActiveProject": "Keep at least one active project. The last active project cannot be archived."
+    }
+  },
   "teams": {
     "header": {
       "eyebrow": "Teams",
@@ -1330,6 +1851,22 @@
       "blocked": "Blocked",
       "paused": "Paused"
     },
+    "artifactStatus": {
+      "draft": "Draft",
+      "review": "In Review",
+      "approved": "Approved",
+      "published": "Published"
+    },
+    "projectResourceKind": {
+      "file": "File",
+      "folder": "Folder",
+      "artifact": "Artifact",
+      "url": "URL"
+    },
+    "projectResourceOrigin": {
+      "source": "Original",
+      "generated": "Generated"
+    },
     "riskLevel": {
       "low": "Low Risk",
       "medium": "Medium Risk",
@@ -1340,6 +1877,37 @@
       "clarify": "Clarify",
       "review": "Review",
       "paused": "Paused"
+    },
+    "recordStatus": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "passwordState": {
+      "set": "Set",
+      "reset-required": "Reset Required",
+      "temporary": "Temporary"
+    },
+    "rbacPermissionKind": {
+      "atomic": "Atomic",
+      "bundle": "Bundle"
+    },
+    "rbacPermissionTargetType": {
+      "workspace": "Workspace",
+      "project": "Project",
+      "user": "User",
+      "role": "Role",
+      "permission": "Permission",
+      "menu": "Menu",
+      "resource": "Resource",
+      "agent": "Agent",
+      "knowledge": "Knowledge",
+      "tool": "Tool",
+      "skill": "Skill",
+      "mcp": "MCP"
+    },
+    "menuSource": {
+      "main-sidebar": "Main Sidebar",
+      "user-center": "User Center"
     },
     "teamMode": {
       "leadered": "Leadered",

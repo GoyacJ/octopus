@@ -71,6 +71,51 @@ pub fn normalize_runtime_permission_mode_label(value: &str) -> Option<&'static s
     }
 }
 
+pub fn create_default_notification_unread_summary() -> NotificationUnreadSummary {
+    NotificationUnreadSummary {
+        total: 0,
+        by_scope: NotificationUnreadScopeSummary {
+            app: 0,
+            workspace: 0,
+            user: 0,
+        },
+    }
+}
+
+pub fn normalize_notification_filter_scope(scope: Option<&str>) -> Option<&str> {
+    match scope.map(str::trim) {
+        Some("") | Some("all") | None => None,
+        Some("app") => Some("app"),
+        Some("workspace") => Some("workspace"),
+        Some("user") => Some("user"),
+        Some(_) => None,
+    }
+}
+
+pub fn notification_list_response_from_records(
+    notifications: Vec<NotificationRecord>,
+) -> NotificationListResponse {
+    let mut unread = create_default_notification_unread_summary();
+
+    for notification in &notifications {
+        if notification.read_at.is_some() {
+            continue;
+        }
+
+        unread.total += 1;
+        match notification.scope_kind.as_str() {
+            "workspace" => unread.by_scope.workspace += 1,
+            "user" => unread.by_scope.user += 1,
+            _ => unread.by_scope.app += 1,
+        }
+    }
+
+    NotificationListResponse {
+        notifications,
+        unread,
+    }
+}
+
 pub trait PreferencesPort: Send + Sync {
     fn load_preferences(&self) -> Result<ShellPreferences, AppError>;
     fn save_preferences(&self, preferences: &ShellPreferences)
@@ -126,6 +171,65 @@ pub struct ShellPreferences {
     pub right_sidebar_collapsed: bool,
     pub default_workspace_id: String,
     pub last_visited_route: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationRecord {
+    pub id: String,
+    pub scope_kind: String,
+    pub scope_owner_id: Option<String>,
+    pub level: String,
+    pub title: String,
+    pub body: String,
+    pub source: String,
+    pub created_at: u64,
+    pub read_at: Option<u64>,
+    pub toast_visible_until: Option<u64>,
+    pub route_to: Option<String>,
+    pub action_label: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateNotificationInput {
+    pub scope_kind: String,
+    pub scope_owner_id: Option<String>,
+    pub level: String,
+    pub title: String,
+    pub body: String,
+    pub source: String,
+    pub toast_duration_ms: Option<u64>,
+    pub route_to: Option<String>,
+    pub action_label: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationFilter {
+    pub scope: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationUnreadScopeSummary {
+    pub app: u64,
+    pub workspace: u64,
+    pub user: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationUnreadSummary {
+    pub total: u64,
+    pub by_scope: NotificationUnreadScopeSummary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationListResponse {
+    pub notifications: Vec<NotificationRecord>,
+    pub unread: NotificationUnreadSummary,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -287,12 +391,58 @@ pub struct WorkspaceSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectModelAssignments {
+    pub configured_model_ids: Vec<String>,
+    pub default_configured_model_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectToolAssignments {
+    pub source_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAgentAssignments {
+    pub agent_ids: Vec<String>,
+    pub team_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectWorkspaceAssignments {
+    pub models: Option<ProjectModelAssignments>,
+    pub tools: Option<ProjectToolAssignments>,
+    pub agents: Option<ProjectAgentAssignments>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectRecord {
     pub id: String,
     pub workspace_id: String,
     pub name: String,
     pub status: String,
     pub description: String,
+    pub assignments: Option<ProjectWorkspaceAssignments>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProjectRequest {
+    pub name: String,
+    pub description: String,
+    pub assignments: Option<ProjectWorkspaceAssignments>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateProjectRequest {
+    pub name: String,
+    pub description: String,
+    pub status: String,
+    pub assignments: Option<ProjectWorkspaceAssignments>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -348,6 +498,93 @@ pub struct ProjectDashboardSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct PetProfile {
+    pub id: String,
+    pub species: String,
+    pub display_name: String,
+    pub owner_user_id: String,
+    pub avatar_label: String,
+    pub summary: String,
+    pub greeting: String,
+    pub mood: String,
+    pub favorite_snack: String,
+    pub prompt_hints: Vec<String>,
+    pub fallback_asset: String,
+    pub rive_asset: Option<String>,
+    pub state_machine: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PetMessage {
+    pub id: String,
+    pub pet_id: String,
+    pub sender: String,
+    pub content: String,
+    pub timestamp: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PetPosition {
+    pub x: i64,
+    pub y: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PetPresenceState {
+    pub pet_id: String,
+    pub is_visible: bool,
+    pub chat_open: bool,
+    pub motion_state: String,
+    pub unread_count: u64,
+    pub last_interaction_at: u64,
+    pub position: PetPosition,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SavePetPresenceInput {
+    pub pet_id: String,
+    pub is_visible: Option<bool>,
+    pub chat_open: Option<bool>,
+    pub motion_state: Option<String>,
+    pub unread_count: Option<u64>,
+    pub last_interaction_at: Option<u64>,
+    pub position: Option<PetPosition>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PetConversationBinding {
+    pub pet_id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub conversation_id: String,
+    pub session_id: Option<String>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BindPetConversationInput {
+    pub pet_id: String,
+    pub conversation_id: String,
+    pub session_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PetWorkspaceSnapshot {
+    pub profile: PetProfile,
+    pub presence: PetPresenceState,
+    pub binding: Option<PetConversationBinding>,
+    pub messages: Vec<PetMessage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkspaceResourceRecord {
     pub id: String,
     pub workspace_id: String,
@@ -359,6 +596,50 @@ pub struct WorkspaceResourceRecord {
     pub status: String,
     pub updated_at: u64,
     pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_artifact_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateWorkspaceResourceInput {
+    pub project_id: Option<String>,
+    pub kind: String,
+    pub name: String,
+    pub location: Option<String>,
+    pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_artifact_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateWorkspaceResourceInput {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceResourceFileUploadEntry {
+    pub file_name: String,
+    pub content_type: String,
+    pub data_base64: String,
+    pub byte_size: u64,
+    pub relative_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateWorkspaceResourceFolderInput {
+    pub project_id: Option<String>,
+    pub files: Vec<WorkspaceResourceFileUploadEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -384,7 +665,15 @@ pub struct AgentRecord {
     pub project_id: Option<String>,
     pub scope: String,
     pub name: String,
-    pub title: String,
+    pub avatar_path: Option<String>,
+    pub avatar: Option<String>,
+    pub personality: String,
+    pub tags: Vec<String>,
+    pub prompt: String,
+    pub builtin_tool_keys: Vec<String>,
+    pub skill_ids: Vec<String>,
+    pub mcp_server_names: Vec<String>,
+    pub integration_source: Option<WorkspaceLinkIntegrationSource>,
     pub description: String,
     pub status: String,
     pub updated_at: u64,
@@ -398,10 +687,99 @@ pub struct TeamRecord {
     pub project_id: Option<String>,
     pub scope: String,
     pub name: String,
+    pub avatar_path: Option<String>,
+    pub avatar: Option<String>,
+    pub personality: String,
+    pub tags: Vec<String>,
+    pub prompt: String,
+    pub builtin_tool_keys: Vec<String>,
+    pub skill_ids: Vec<String>,
+    pub mcp_server_names: Vec<String>,
+    pub leader_agent_id: Option<String>,
+    pub member_agent_ids: Vec<String>,
+    pub integration_source: Option<WorkspaceLinkIntegrationSource>,
     pub description: String,
     pub status: String,
-    pub member_ids: Vec<String>,
     pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceLinkIntegrationSource {
+    pub kind: String,
+    pub source_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertAgentInput {
+    pub workspace_id: String,
+    pub project_id: Option<String>,
+    pub scope: String,
+    pub name: String,
+    pub avatar: Option<AvatarUploadPayload>,
+    pub remove_avatar: Option<bool>,
+    pub personality: String,
+    pub tags: Vec<String>,
+    pub prompt: String,
+    pub builtin_tool_keys: Vec<String>,
+    pub skill_ids: Vec<String>,
+    pub mcp_server_names: Vec<String>,
+    pub description: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertTeamInput {
+    pub workspace_id: String,
+    pub project_id: Option<String>,
+    pub scope: String,
+    pub name: String,
+    pub avatar: Option<AvatarUploadPayload>,
+    pub remove_avatar: Option<bool>,
+    pub personality: String,
+    pub tags: Vec<String>,
+    pub prompt: String,
+    pub builtin_tool_keys: Vec<String>,
+    pub skill_ids: Vec<String>,
+    pub mcp_server_names: Vec<String>,
+    pub leader_agent_id: Option<String>,
+    pub member_agent_ids: Vec<String>,
+    pub description: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAgentLinkRecord {
+    pub workspace_id: String,
+    pub project_id: String,
+    pub agent_id: String,
+    pub linked_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectTeamLinkRecord {
+    pub workspace_id: String,
+    pub project_id: String,
+    pub team_id: String,
+    pub linked_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectAgentLinkInput {
+    pub project_id: String,
+    pub agent_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectTeamLinkInput {
+    pub project_id: String,
+    pub team_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -501,9 +879,41 @@ pub struct CredentialBinding {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DefaultSelection {
+    pub configured_model_id: Option<String>,
     pub provider_id: String,
     pub model_id: String,
     pub surface: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfiguredModelTokenQuota {
+    pub total_tokens: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfiguredModelTokenUsage {
+    pub used_tokens: u64,
+    pub remaining_tokens: Option<u64>,
+    pub exhausted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfiguredModelRecord {
+    pub configured_model_id: String,
+    pub name: String,
+    pub provider_id: String,
+    pub model_id: String,
+    pub credential_ref: Option<String>,
+    pub base_url: Option<String>,
+    pub token_quota: Option<ConfiguredModelTokenQuota>,
+    pub token_usage: ConfiguredModelTokenUsage,
+    pub enabled: bool,
+    pub source: String,
+    pub status: String,
+    pub configured: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -518,6 +928,7 @@ pub struct ModelRegistryDiagnostics {
 pub struct ModelCatalogSnapshot {
     pub providers: Vec<ProviderRegistryRecord>,
     pub models: Vec<ModelRegistryRecord>,
+    pub configured_models: Vec<ConfiguredModelRecord>,
     pub credential_bindings: Vec<CredentialBinding>,
     pub default_selections: BTreeMap<String, DefaultSelection>,
     pub diagnostics: ModelRegistryDiagnostics,
@@ -527,6 +938,14 @@ pub struct ModelCatalogSnapshot {
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceToolCatalogSnapshot {
     pub entries: Vec<WorkspaceToolCatalogEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceToolManagementCapabilities {
+    pub can_disable: bool,
+    pub can_edit: bool,
+    pub can_delete: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -541,15 +960,153 @@ pub struct WorkspaceToolCatalogEntry {
     pub availability: String,
     pub source_key: String,
     pub display_path: String,
+    pub disabled: bool,
+    pub management: WorkspaceToolManagementCapabilities,
     pub builtin_key: Option<String>,
     pub active: Option<bool>,
     pub shadowed_by: Option<String>,
     pub source_origin: Option<String>,
+    pub workspace_owned: Option<bool>,
+    pub relative_path: Option<String>,
     pub server_name: Option<String>,
     pub endpoint: Option<String>,
     pub tool_names: Option<Vec<String>>,
     pub status_detail: Option<String>,
     pub scope: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceToolDisablePatch {
+    pub source_key: String,
+    pub disabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateWorkspaceSkillInput {
+    pub slug: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateWorkspaceSkillInput {
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSkillTreeNode {
+    pub path: String,
+    pub name: String,
+    pub kind: String,
+    pub children: Option<Vec<WorkspaceSkillTreeNode>>,
+    pub byte_size: Option<u64>,
+    pub is_text: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSkillDocument {
+    pub id: String,
+    pub source_key: String,
+    pub name: String,
+    pub description: String,
+    pub content: String,
+    pub display_path: String,
+    pub root_path: String,
+    pub tree: Vec<WorkspaceSkillTreeNode>,
+    pub source_origin: String,
+    pub workspace_owned: bool,
+    pub relative_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSkillTreeDocument {
+    pub skill_id: String,
+    pub source_key: String,
+    pub display_path: String,
+    pub root_path: String,
+    pub tree: Vec<WorkspaceSkillTreeNode>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSkillFileDocument {
+    pub skill_id: String,
+    pub source_key: String,
+    pub path: String,
+    pub display_path: String,
+    pub byte_size: u64,
+    pub is_text: bool,
+    pub content: Option<String>,
+    pub content_type: Option<String>,
+    pub language: Option<String>,
+    pub readonly: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateWorkspaceSkillFileInput {
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceFileUploadPayload {
+    pub file_name: String,
+    pub content_type: String,
+    pub data_base64: String,
+    pub byte_size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceDirectoryUploadEntry {
+    pub relative_path: String,
+    pub file_name: String,
+    pub content_type: String,
+    pub data_base64: String,
+    pub byte_size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportWorkspaceSkillArchiveInput {
+    pub slug: String,
+    pub archive: WorkspaceFileUploadPayload,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportWorkspaceSkillFolderInput {
+    pub slug: String,
+    pub files: Vec<WorkspaceDirectoryUploadEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CopyWorkspaceSkillToManagedInput {
+    pub slug: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpsertWorkspaceMcpServerInput {
+    pub server_name: String,
+    pub config: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceMcpServerDocument {
+    pub server_name: String,
+    pub source_key: String,
+    pub display_path: String,
+    pub scope: String,
+    pub config: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -593,6 +1150,59 @@ pub struct UserRecordSummary {
     pub password_state: String,
     pub role_ids: Vec<String>,
     pub scope_project_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateWorkspaceUserRequest {
+    pub username: String,
+    pub display_name: String,
+    pub status: String,
+    pub role_ids: Vec<String>,
+    pub scope_project_ids: Vec<String>,
+    pub avatar: Option<AvatarUploadPayload>,
+    pub use_default_avatar: Option<bool>,
+    pub password: Option<String>,
+    pub confirm_password: Option<String>,
+    pub use_default_password: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateWorkspaceUserRequest {
+    pub username: String,
+    pub display_name: String,
+    pub status: String,
+    pub role_ids: Vec<String>,
+    pub scope_project_ids: Vec<String>,
+    pub avatar: Option<AvatarUploadPayload>,
+    pub remove_avatar: Option<bool>,
+    pub password: Option<String>,
+    pub confirm_password: Option<String>,
+    pub reset_password_to_default: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCurrentUserProfileRequest {
+    pub username: String,
+    pub display_name: String,
+    pub avatar: Option<AvatarUploadPayload>,
+    pub remove_avatar: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeCurrentUserPasswordRequest {
+    pub current_password: String,
+    pub new_password: String,
+    pub confirm_password: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeCurrentUserPasswordResponse {
+    pub password_state: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -704,6 +1314,27 @@ pub struct RuntimeConfigValidationResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct RuntimeConfiguredModelProbeInput {
+    pub scope: String,
+    pub configured_model_id: String,
+    pub patch: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeConfiguredModelProbeResult {
+    pub valid: bool,
+    pub reachable: bool,
+    pub configured_model_id: String,
+    pub configured_model_name: Option<String>,
+    pub request_id: Option<String>,
+    pub consumed_tokens: Option<u32>,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeEffectiveConfig {
     pub effective_config: serde_json::Value,
     pub effective_config_hash: String,
@@ -730,6 +1361,10 @@ pub struct RuntimeConfigSnapshotSummary {
     pub effective_config: Option<serde_json::Value>,
 }
 
+fn default_runtime_session_kind() -> String {
+    "project".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeSessionSummary {
@@ -737,6 +1372,8 @@ pub struct RuntimeSessionSummary {
     pub conversation_id: String,
     pub project_id: String,
     pub title: String,
+    #[serde(default = "default_runtime_session_kind")]
+    pub session_kind: String,
     pub status: String,
     pub updated_at: u64,
     pub last_message_preview: Option<String>,
@@ -755,12 +1392,20 @@ pub struct RuntimeRunSnapshot {
     pub current_step: String,
     pub started_at: u64,
     pub updated_at: u64,
+    pub configured_model_id: Option<String>,
+    pub configured_model_name: Option<String>,
     pub model_id: Option<String>,
+    pub consumed_tokens: Option<u32>,
     pub next_action: Option<String>,
     pub config_snapshot_id: String,
     pub effective_config_hash: String,
     pub started_from_scope_set: Vec<String>,
     pub resolved_target: Option<ResolvedExecutionTarget>,
+    pub requested_actor_kind: Option<String>,
+    pub requested_actor_id: Option<String>,
+    pub resolved_actor_kind: Option<String>,
+    pub resolved_actor_id: Option<String>,
+    pub resolved_actor_label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -773,8 +1418,22 @@ pub struct RuntimeMessage {
     pub sender_label: String,
     pub content: String,
     pub timestamp: u64,
+    pub configured_model_id: Option<String>,
+    pub configured_model_name: Option<String>,
     pub model_id: Option<String>,
     pub status: String,
+    pub requested_actor_kind: Option<String>,
+    pub requested_actor_id: Option<String>,
+    pub resolved_actor_kind: Option<String>,
+    pub resolved_actor_id: Option<String>,
+    pub resolved_actor_label: Option<String>,
+    pub used_default_actor: Option<bool>,
+    pub resource_ids: Option<Vec<String>>,
+    pub attachments: Option<Vec<String>>,
+    pub artifacts: Option<Vec<String>>,
+    pub usage: Option<serde_json::Value>,
+    pub tool_calls: Option<Vec<serde_json::Value>>,
+    pub process_entries: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -790,6 +1449,8 @@ pub struct RuntimeTraceItem {
     pub tone: String,
     pub timestamp: u64,
     pub actor: String,
+    pub actor_kind: Option<String>,
+    pub actor_id: Option<String>,
     pub related_message_id: Option<String>,
     pub related_tool_name: Option<String>,
 }
@@ -856,7 +1517,10 @@ pub struct ProviderConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolvedExecutionTarget {
+    pub configured_model_id: String,
+    pub configured_model_name: String,
     pub provider_id: String,
+    pub registry_model_id: String,
     pub model_id: String,
     pub surface: String,
     pub protocol_family: String,
@@ -878,14 +1542,18 @@ pub struct CreateRuntimeSessionInput {
     pub conversation_id: String,
     pub project_id: String,
     pub title: String,
+    pub session_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmitRuntimeTurnInput {
     pub content: String,
-    pub model_id: String,
+    pub model_id: Option<String>,
+    pub configured_model_id: Option<String>,
     pub permission_mode: String,
+    pub actor_kind: Option<String>,
+    pub actor_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -973,6 +1641,7 @@ pub struct CostLedgerEntry {
     pub workspace_id: String,
     pub project_id: Option<String>,
     pub run_id: Option<String>,
+    pub configured_model_id: Option<String>,
     pub metric: String,
     pub amount: i64,
     pub unit: String,

@@ -6,11 +6,12 @@ import ProjectAgentsView from '@/views/project/ProjectAgentsView.vue'
 import ProjectDashboardView from '@/views/project/ProjectDashboardView.vue'
 import ProjectKnowledgeView from '@/views/project/ProjectKnowledgeView.vue'
 import ProjectResourcesView from '@/views/project/ProjectResourcesView.vue'
+import ProjectSettingsView from '@/views/project/ProjectSettingsView.vue'
 import ProjectRuntimeConfigView from '@/views/project/ProjectRuntimeConfigView.vue'
 import TraceView from '@/views/project/TraceView.vue'
 import AutomationsView from '@/views/workspace/AutomationsView.vue'
 import ModelsView from '@/views/workspace/ModelsView.vue'
-import TeamsView from '@/views/workspace/TeamsView.vue'
+import ProjectsView from '@/views/workspace/ProjectsView.vue'
 import ToolsView from '@/views/workspace/ToolsView.vue'
 import UserCenterView from '@/views/workspace/UserCenterView.vue'
 import WorkspaceAgentsView from '@/views/workspace/WorkspaceAgentsView.vue'
@@ -19,6 +20,7 @@ import WorkspaceOverviewView from '@/views/workspace/WorkspaceOverviewView.vue'
 import WorkspaceResourcesView from '@/views/workspace/WorkspaceResourcesView.vue'
 import UserCenterMenusView from '@/views/workspace/user/UserCenterMenusView.vue'
 import UserCenterPermissionsView from '@/views/workspace/user/UserCenterPermissionsView.vue'
+import UserCenterPetView from '@/views/workspace/user/UserCenterPetView.vue'
 import UserCenterProfileView from '@/views/workspace/user/UserCenterProfileView.vue'
 import UserCenterRolesView from '@/views/workspace/user/UserCenterRolesView.vue'
 import UserCenterUsersView from '@/views/workspace/user/UserCenterUsersView.vue'
@@ -94,6 +96,11 @@ export const router = createRouter({
       component: WorkspaceOverviewView,
     },
     {
+      path: '/workspaces/:workspaceId/projects',
+      name: 'workspace-projects',
+      component: ProjectsView,
+    },
+    {
       path: '/workspaces/:workspaceId/projects/:projectId/dashboard',
       name: 'project-dashboard',
       component: ProjectDashboardView,
@@ -129,6 +136,11 @@ export const router = createRouter({
       component: TraceView,
     },
     {
+      path: '/workspaces/:workspaceId/projects/:projectId/settings',
+      name: 'project-settings',
+      component: ProjectSettingsView,
+    },
+    {
       path: '/workspaces/:workspaceId/projects/:projectId/runtime',
       name: 'project-runtime',
       component: ProjectRuntimeConfigView,
@@ -151,7 +163,16 @@ export const router = createRouter({
     {
       path: '/workspaces/:workspaceId/teams',
       name: 'workspace-teams',
-      component: TeamsView,
+      redirect: (to) => ({
+        name: 'workspace-agents',
+        params: {
+          workspaceId: to.params.workspaceId,
+        },
+        query: {
+          ...to.query,
+          tab: 'team',
+        },
+      }),
     },
     {
       path: '/workspaces/:workspaceId/models',
@@ -182,6 +203,11 @@ export const router = createRouter({
           path: 'profile',
           name: 'workspace-user-center-profile',
           component: UserCenterProfileView,
+        },
+        {
+          path: 'pet',
+          name: 'workspace-user-center-pet',
+          component: UserCenterPetView,
         },
         {
           path: 'users',

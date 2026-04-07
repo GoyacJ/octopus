@@ -9,26 +9,32 @@ import { UiBadge, UiButton, UiInput, UiSurface } from '@octopus/ui'
 const props = defineProps<{
   pet: PetProfile
   messages: PetMessage[]
-}>()
-
-const emit = defineEmits<{
-  send: [content: string]
+  onSend: (content: string) => Promise<boolean> | boolean
 }>()
 
 const draft = ref('')
 const trimmedDraft = computed(() => draft.value.trim())
+const sending = ref(false)
 
 watch(() => props.pet.id, () => {
   draft.value = ''
 })
 
-function submit() {
-  if (!trimmedDraft.value) {
+async function submit() {
+  if (!trimmedDraft.value || sending.value) {
     return
   }
 
-  emit('send', trimmedDraft.value)
-  draft.value = ''
+  const content = trimmedDraft.value
+  sending.value = true
+  try {
+    const submitted = await props.onSend(content)
+    if (submitted) {
+      draft.value = ''
+    }
+  } finally {
+    sending.value = false
+  }
 }
 </script>
 

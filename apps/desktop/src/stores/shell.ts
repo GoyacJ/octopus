@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 import type {
   ConnectionProfile,
   ConversationDetailFocus,
+  CreateHostWorkspaceConnectionInput,
   HostBackendConnection,
   HostState,
   ShellBootstrap,
@@ -140,6 +141,15 @@ function mergeSavedPreferences(
 
 function toShellErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
+}
+
+function touchWorkspaceConnection(
+  connection: WorkspaceConnectionRecord,
+): WorkspaceConnectionRecord {
+  return {
+    ...connection,
+    lastUsedAt: Date.now(),
+  }
 }
 
 export const useShellStore = defineStore('shell', {
@@ -304,6 +314,9 @@ export const useShellStore = defineStore('shell', {
       }
 
       this.activeWorkspaceConnectionId = connection.workspaceConnectionId
+      this.workspaceConnectionsState = this.workspaceConnectionsState.map((item) =>
+        item.workspaceConnectionId === workspaceConnectionId ? touchWorkspaceConnection(item) : item,
+      )
       if (this.preferences.defaultWorkspaceId !== connection.workspaceId) {
         await this.updatePreferences({
           defaultWorkspaceId: connection.workspaceId,
@@ -330,6 +343,44 @@ export const useShellStore = defineStore('shell', {
       const nextSessions = { ...this.workspaceSessionsState }
       delete nextSessions[workspaceConnectionId]
       this.workspaceSessionsState = nextSessions
+    },
+    async createWorkspaceConnection(input: CreateHostWorkspaceConnectionInput) {
+      const created = await tauriClient.createWorkspaceConnection(input)
+      const existingIndex = this.workspaceConnectionsState.findIndex(
+        connection => connection.workspaceConnectionId === created.workspaceConnectionId,
+      )
+      const nextConnection = touchWorkspaceConnection(created)
+      if (existingIndex >= 0) {
+        const nextConnections = [...this.workspaceConnectionsState]
+        nextConnections.splice(existingIndex, 1, nextConnection)
+        this.workspaceConnectionsState = nextConnections
+      } else {
+        this.workspaceConnectionsState = [...this.workspaceConnectionsState, nextConnection]
+      }
+      return nextConnection
+    },
+    async deleteWorkspaceConnection(workspaceConnectionId: string) {
+      await tauriClient.deleteWorkspaceConnection(workspaceConnectionId)
+      const wasActive = this.activeWorkspaceConnectionId === workspaceConnectionId
+      this.clearWorkspaceSession(workspaceConnectionId)
+      this.workspaceConnectionsState = this.workspaceConnectionsState.filter(
+        connection => connection.workspaceConnectionId !== workspaceConnectionId,
+      )
+
+      if (wasActive) {
+        const fallbackConnection = this.workspaceConnectionsState.find(
+          connection => connection.transportSecurity === 'loopback',
+        ) ?? this.workspaceConnectionsState[0]
+        this.activeWorkspaceConnectionId = fallbackConnection?.workspaceConnectionId ?? ''
+        if (fallbackConnection && this.preferences.defaultWorkspaceId !== fallbackConnection.workspaceId) {
+          await this.updatePreferences({
+            defaultWorkspaceId: fallbackConnection.workspaceId,
+          })
+        }
+        return fallbackConnection ?? null
+      }
+
+      return this.activeWorkspaceConnection
     },
     syncBackendConnection(nextConnection: HostBackendConnection | undefined) {
       this.backendConnectionState = nextConnection

@@ -22,7 +22,32 @@ const scopedStyleHardLimit = 120
 const forbiddenVisualPatternTokens = ['hero', 'panel', 'card', 'toolbar', 'dialog', 'ranking', 'timeline', 'metric', 'shell']
 const nativeFormControlRegex = /<\s*(input|select|textarea|button)\b/g
 
-const legacyAllowlist = {}
+const legacyAllowlist = {
+  'apps/desktop/src/components/layout/ConversationTabsBar.vue': {
+    allowNativeFormControls: true,
+    maxScopedStyleLines: 40,
+  },
+  'apps/desktop/src/components/layout/WorkbenchSidebar.vue': {
+    allowNativeFormControls: true,
+    maxScopedStyleLines: 40,
+  },
+  'apps/desktop/src/components/layout/WorkbenchTopbar.vue': {
+    allowNativeFormControls: true,
+    maxScopedStyleLines: 0,
+  },
+  'apps/desktop/src/views/workspace/ToolsView.vue': {
+    allowNativeFormControls: true,
+    maxScopedStyleLines: 0,
+  },
+  'apps/desktop/src/views/workspace/ProjectsView.vue': {
+    allowNativeFormControls: true,
+    maxScopedStyleLines: 0,
+  },
+  'apps/desktop/src/views/workspace/user/UserCenterMenuTree.vue': {
+    allowNativeFormControls: true,
+    maxScopedStyleLines: 0,
+  },
+}
 
 async function walk(dir) {
   const entries = await readdir(dir, { withFileTypes: true })

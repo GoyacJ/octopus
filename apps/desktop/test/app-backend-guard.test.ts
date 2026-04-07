@@ -4,9 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createApp, nextTick } from 'vue'
 
-const { bootstrapShellHostMock, savePreferencesMock } = vi.hoisted(() => ({
+const { bootstrapShellHostMock, savePreferencesMock, listNotificationsMock, subscribeToNotificationsMock } = vi.hoisted(() => ({
   bootstrapShellHostMock: vi.fn(),
   savePreferencesMock: vi.fn(),
+  listNotificationsMock: vi.fn(),
+  subscribeToNotificationsMock: vi.fn(),
 }))
 
 vi.mock('@/tauri/client', async (importOriginal) => {
@@ -15,6 +17,8 @@ vi.mock('@/tauri/client', async (importOriginal) => {
     ...actual,
     bootstrapShellHost: bootstrapShellHostMock,
     savePreferences: savePreferencesMock,
+    listNotifications: listNotificationsMock,
+    subscribeToNotifications: subscribeToNotificationsMock,
   }
 })
 
@@ -97,7 +101,21 @@ describe('App host bootstrap guard', () => {
   beforeEach(async () => {
     bootstrapShellHostMock.mockReset()
     savePreferencesMock.mockReset()
+    listNotificationsMock.mockReset()
+    subscribeToNotificationsMock.mockReset()
     savePreferencesMock.mockImplementation(async (preferences) => preferences)
+    listNotificationsMock.mockResolvedValue({
+      notifications: [],
+      unread: {
+        total: 0,
+        byScope: {
+          app: 0,
+          workspace: 0,
+          user: 0,
+        },
+      },
+    })
+    subscribeToNotificationsMock.mockReturnValue(() => {})
     window.localStorage.clear()
     document.body.innerHTML = ''
     await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')

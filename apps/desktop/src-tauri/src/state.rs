@@ -8,25 +8,39 @@ use octopus_core::{
 use parking_lot::RwLock;
 use tauri::{AppHandle, Manager};
 
-use crate::{backend::BackendSupervisor, error::ShellResult, services::PreferencesService};
+use crate::{
+    backend::BackendSupervisor,
+    error::ShellResult,
+    services::{NotificationService, PreferencesService, WorkspaceConnectionRegistryService},
+};
 
 #[derive(Clone)]
 pub struct ShellState {
     pub host_state: HostState,
     pub preferences_service: PreferencesService,
-    pub connections: Vec<ConnectionProfile>,
+    pub local_connections: Vec<ConnectionProfile>,
+    pub workspace_connection_registry_service: WorkspaceConnectionRegistryService,
+    pub notification_service: NotificationService,
     pub backend_supervisor: BackendSupervisor,
 }
 
 impl ShellState {
-    pub fn new(host_state: HostState, preferences_service: PreferencesService) -> Self {
+    pub fn new(
+        host_state: HostState,
+        preferences_service: PreferencesService,
+        workspace_connection_registry_service: WorkspaceConnectionRegistryService,
+    ) -> Self {
         let preferences_path = preferences_service.path().to_path_buf();
         let workspace_root =
             resolve_workspace_root_for_backend(&preferences_path, host_state.cargo_workspace);
+        let notification_service =
+            NotificationService::new(resolve_notification_db_path(&preferences_path));
 
         Self::with_connections(
             host_state,
             preferences_service,
+            workspace_connection_registry_service,
+            notification_service,
             default_connection_stubs(),
             BackendSupervisor::new(
                 Arc::new(RwLock::new(DesktopBackendConnection {
@@ -43,13 +57,17 @@ impl ShellState {
     pub fn with_connections(
         host_state: HostState,
         preferences_service: PreferencesService,
-        connections: Vec<ConnectionProfile>,
+        workspace_connection_registry_service: WorkspaceConnectionRegistryService,
+        notification_service: NotificationService,
+        local_connections: Vec<ConnectionProfile>,
         backend_supervisor: BackendSupervisor,
     ) -> Self {
         Self {
             host_state,
             preferences_service,
-            connections,
+            local_connections,
+            workspace_connection_registry_service,
+            notification_service,
             backend_supervisor,
         }
     }
@@ -65,6 +83,10 @@ pub fn build_shell_state(app: &AppHandle) -> ShellResult<ShellState> {
         .app_config_dir()
         .map_err(|error| octopus_core::AppError::Runtime(error.to_string()))?
         .join("shell-preferences.json");
+    let workspace_connections_path = preferences_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("shell-workspace-connections.json");
     let host_state = default_host_state(
         app.package_info().version.to_string(),
         detect_cargo_workspace(),
@@ -73,8 +95,14 @@ pub fn build_shell_state(app: &AppHandle) -> ShellResult<ShellState> {
         preferences_path,
         default_preferences(DEFAULT_WORKSPACE_ID, DEFAULT_PROJECT_ID),
     );
+    let workspace_connection_registry_service =
+        WorkspaceConnectionRegistryService::new(workspace_connections_path);
 
-    Ok(ShellState::new(host_state, preferences_service))
+    Ok(ShellState::new(
+        host_state,
+        preferences_service,
+        workspace_connection_registry_service,
+    ))
 }
 
 pub fn detect_cargo_workspace() -> bool {
@@ -107,11 +135,18 @@ fn resolve_workspace_root_for_backend(
         .unwrap_or_else(|| Path::new(".").to_path_buf())
 }
 
+fn resolve_notification_db_path(preferences_path: &Path) -> std::path::PathBuf {
+    preferences_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("data/main.db")
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use super::resolve_workspace_root_for_backend;
+    use super::{resolve_notification_db_path, resolve_workspace_root_for_backend};
 
     fn repo_root() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -138,6 +173,16 @@ mod tests {
         assert_eq!(
             resolve_workspace_root_for_backend(&preferences_path, false),
             PathBuf::from("/tmp/octopus-shell"),
+        );
+    }
+
+    #[test]
+    fn resolves_notification_db_next_to_preferences_root() {
+        let preferences_path = PathBuf::from("/tmp/octopus-shell/shell-preferences.json");
+
+        assert_eq!(
+            resolve_notification_db_path(&preferences_path),
+            PathBuf::from("/tmp/octopus-shell/data/main.db"),
         );
     }
 }

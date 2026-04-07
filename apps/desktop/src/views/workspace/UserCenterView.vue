@@ -51,7 +51,7 @@ const tabs = computed(() =>
 
       return [{
         value: menu.id,
-        label: menu.label,
+        label: t(definition.labelKey),
       }]
     }),
 )

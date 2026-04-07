@@ -56,7 +56,7 @@ async function waitForText(container: HTMLElement, value: string, timeoutMs = 20
   }
 }
 
-describe('Teams view', () => {
+describe('Teams route compatibility', () => {
   beforeEach(async () => {
     vi.restoreAllMocks()
     window.localStorage.clear()
@@ -66,24 +66,14 @@ describe('Teams view', () => {
     document.body.innerHTML = ''
   })
 
-  it('renders workspace teams and saves edited team details', async () => {
+  it('lands on the team tab inside the workspace agent center', async () => {
     const mounted = mountApp()
 
     await waitForText(mounted.container, 'Studio Direction Team')
 
+    expect(router.currentRoute.value.name).toBe('workspace-agents')
+    expect(router.currentRoute.value.query.tab).toBe('team')
     expect(mounted.container.textContent).toContain('Studio Direction Team')
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('teams.metrics.total')))
-
-    const nameInput = mounted.container.querySelector<HTMLInputElement>('input')
-    expect(nameInput).not.toBeNull()
-    nameInput!.value = 'Unified Team Name'
-    nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
-
-    Array.from(mounted.container.querySelectorAll<HTMLButtonElement>('button'))
-      .find(button => button.textContent?.includes(String(i18n.global.t('common.save'))))
-      ?.click()
-    await waitForText(mounted.container, 'Unified Team Name')
 
     mounted.destroy()
   })

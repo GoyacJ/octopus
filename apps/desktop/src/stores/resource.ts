@@ -1,7 +1,12 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import type { WorkspaceResourceRecord } from '@octopus/schema'
+import type {
+  CreateWorkspaceResourceFolderInput,
+  CreateWorkspaceResourceInput,
+  UpdateWorkspaceResourceInput,
+  WorkspaceResourceRecord,
+} from '@octopus/schema'
 
 import {
   activeWorkspaceConnectionId,
@@ -85,6 +90,110 @@ export const useResourceStore = defineStore('resource', () => {
     }
   }
 
+  async function createWorkspaceResource(input: CreateWorkspaceResourceInput) {
+    const resolvedClient = resolveWorkspaceClientForConnection()
+    if (!resolvedClient) {
+      throw new Error('No active workspace connection')
+    }
+    const { client, connectionId } = resolvedClient
+    const record = await client.resources.createWorkspace(input)
+    workspaceResourcesByConnection.value = {
+      ...workspaceResourcesByConnection.value,
+      [connectionId]: [...(workspaceResourcesByConnection.value[connectionId] ?? []), record],
+    }
+    return record
+  }
+
+  async function createProjectResource(projectId: string, input: CreateWorkspaceResourceInput) {
+    const resolvedClient = resolveWorkspaceClientForConnection()
+    if (!resolvedClient) {
+      throw new Error('No active workspace connection')
+    }
+    const { client, connectionId } = resolvedClient
+    const record = await client.resources.createProject(projectId, input)
+    const key = `${connectionId}:${projectId}`
+    projectResources.value = {
+      ...projectResources.value,
+      [key]: [...(projectResources.value[key] ?? []), record],
+    }
+    return record
+  }
+
+  async function createProjectResourceFolder(projectId: string, input: CreateWorkspaceResourceFolderInput) {
+    const resolvedClient = resolveWorkspaceClientForConnection()
+    if (!resolvedClient) {
+      throw new Error('No active workspace connection')
+    }
+    const { client, connectionId } = resolvedClient
+    const records = await client.resources.createProjectFolder(projectId, input)
+    const key = `${connectionId}:${projectId}`
+    projectResources.value = {
+      ...projectResources.value,
+      [key]: [...(projectResources.value[key] ?? []), ...records],
+    }
+    return records
+  }
+
+  async function updateWorkspaceResource(resourceId: string, input: UpdateWorkspaceResourceInput) {
+    const resolvedClient = resolveWorkspaceClientForConnection()
+    if (!resolvedClient) {
+      throw new Error('No active workspace connection')
+    }
+    const { client, connectionId } = resolvedClient
+    const record = await client.resources.updateWorkspace(resourceId, input)
+    const resources = workspaceResourcesByConnection.value[connectionId] ?? []
+    workspaceResourcesByConnection.value = {
+      ...workspaceResourcesByConnection.value,
+      [connectionId]: resources.map(r => r.id === resourceId ? record : r),
+    }
+    return record
+  }
+
+  async function updateProjectResource(projectId: string, resourceId: string, input: UpdateWorkspaceResourceInput) {
+    const resolvedClient = resolveWorkspaceClientForConnection()
+    if (!resolvedClient) {
+      throw new Error('No active workspace connection')
+    }
+    const { client, connectionId } = resolvedClient
+    const record = await client.resources.updateProject(projectId, resourceId, input)
+    const key = `${connectionId}:${projectId}`
+    const resources = projectResources.value[key] ?? []
+    projectResources.value = {
+      ...projectResources.value,
+      [key]: resources.map(r => r.id === resourceId ? record : r),
+    }
+    return record
+  }
+
+  async function deleteWorkspaceResource(resourceId: string) {
+    const resolvedClient = resolveWorkspaceClientForConnection()
+    if (!resolvedClient) {
+      throw new Error('No active workspace connection')
+    }
+    const { client, connectionId } = resolvedClient
+    await client.resources.deleteWorkspace(resourceId)
+    const resources = workspaceResourcesByConnection.value[connectionId] ?? []
+    workspaceResourcesByConnection.value = {
+      ...workspaceResourcesByConnection.value,
+      [connectionId]: resources.filter(r => r.id !== resourceId),
+    }
+  }
+
+  async function deleteProjectResource(projectId: string, resourceId: string) {
+    const resolvedClient = resolveWorkspaceClientForConnection()
+    if (!resolvedClient) {
+      throw new Error('No active workspace connection')
+    }
+    const { client, connectionId } = resolvedClient
+    await client.resources.deleteProject(projectId, resourceId)
+    const key = `${connectionId}:${projectId}`
+    const resources = projectResources.value[key] ?? []
+    projectResources.value = {
+      ...projectResources.value,
+      [key]: resources.filter(r => r.id !== resourceId),
+    }
+  }
+
   function clearWorkspaceScope(workspaceConnectionId: string) {
     const nextWorkspaceResources = { ...workspaceResourcesByConnection.value }
     const nextErrors = { ...errors.value }
@@ -108,6 +217,13 @@ export const useResourceStore = defineStore('resource', () => {
     error,
     loadWorkspaceResources,
     loadProjectResources,
+    createWorkspaceResource,
+    createProjectResource,
+    createProjectResourceFolder,
+    updateWorkspaceResource,
+    updateProjectResource,
+    deleteWorkspaceResource,
+    deleteProjectResource,
     clearWorkspaceScope,
   }
 })

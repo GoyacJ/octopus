@@ -1,16 +1,11 @@
 <script setup lang="ts">
-import { UiBadge, UiButton, UiPageHero } from '@octopus/ui'
+import { UiBadge, UiPageHero } from '@octopus/ui'
 
 const props = defineProps<{
   title: string
   subtitle: string
   scopeLabel: string
   activeModeLabel: string
-}>()
-
-const emit = defineEmits<{
-  createAgent: []
-  createTeam: []
 }>()
 </script>
 
@@ -30,14 +25,5 @@ const emit = defineEmits<{
         Digital Workforce
       </span>
     </div>
-
-    <template #actions>
-      <UiButton data-testid="agent-center-create-agent" @click="emit('createAgent')">
-        新建员工
-      </UiButton>
-      <UiButton variant="outline" data-testid="agent-center-create-team" @click="emit('createTeam')">
-        新建团队
-      </UiButton>
-    </template>
   </UiPageHero>
 </template>

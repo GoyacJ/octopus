@@ -38,7 +38,8 @@ async fn main() -> Result<(), AppError> {
         rbac: infra.rbac.clone(),
         runtime_session: runtime.clone(),
         runtime_execution: runtime.clone(),
-        runtime_config: runtime,
+        runtime_config: runtime.clone(),
+        runtime_registry: runtime.clone(),
         artifact: infra.artifact.clone(),
         inbox: infra.inbox.clone(),
         knowledge: infra.knowledge.clone(),
@@ -58,6 +59,11 @@ async fn main() -> Result<(), AppError> {
         },
         host_connections: default_connection_stubs(),
         host_preferences_path: args.preferences_path.clone(),
+        host_workspace_connections_path: args
+            .preferences_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("shell-workspace-connections.json"),
         host_default_preferences: default_preferences(DEFAULT_WORKSPACE_ID, DEFAULT_PROJECT_ID),
         backend_connection: octopus_core::DesktopBackendConnection {
             base_url: Some(format!("http://127.0.0.1:{}", args.port)),

@@ -96,6 +96,7 @@ describe('Workbench search overlay', () => {
 
     const conversationResult = document.body.querySelector<HTMLButtonElement>('[data-result-id="conversation:rt-conv-redesign"]')
     expect(conversationResult).not.toBeNull()
+    expect(document.body.textContent).not.toContain('小章 proj-redesign')
 
     conversationResult?.click()
     await flushNavigation()

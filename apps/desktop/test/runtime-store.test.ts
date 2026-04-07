@@ -52,7 +52,8 @@ describe('useRuntimeStore', () => {
       content: 'Summarize the desktop runtime integration progress.',
       modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorLabel: '默认智能体',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
     })
 
     await waitFor(() =>
@@ -67,7 +68,255 @@ describe('useRuntimeStore', () => {
       ]),
     )
     expect(runtime.activeMessages.some((message) => message.senderType === 'agent')).toBe(true)
+    expect(runtime.activeMessages.some((message) => message.actorId === 'agent-architect')).toBe(true)
+    expect(runtime.activeMessages.some((message) => (message.artifacts ?? []).length > 0)).toBe(true)
     expect(runtime.activeTrace[0]?.title.length).toBeGreaterThan(0)
+
+    runtime.dispose()
+  })
+
+  it('shows the user message immediately before the submit request finishes', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-immediate-message',
+      projectId: 'proj-redesign',
+      title: 'Immediate Message Session',
+    })
+
+    const baseImplementation = vi.mocked(tauriClient.createWorkspaceClient).getMockImplementation()
+    expect(baseImplementation).toBeTypeOf('function')
+    vi.mocked(tauriClient.createWorkspaceClient).mockImplementation((context) => {
+      const client = baseImplementation!(context)
+      return {
+        ...client,
+        runtime: {
+          ...client.runtime,
+          async submitUserTurn(sessionId, input, idempotencyKey) {
+            await new Promise(resolve => window.setTimeout(resolve, 120))
+            return client.runtime.submitUserTurn(sessionId, input, idempotencyKey)
+          },
+        },
+      }
+    })
+
+    const submitPromise = runtime.submitTurn({
+      content: 'Show this message immediately.',
+      modelId: 'claude-sonnet-4-5',
+      permissionMode: 'readonly',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
+    })
+
+    await waitFor(() => runtime.activeMessages.some(message => message.content === 'Show this message immediately.'))
+    await waitFor(() => runtime.activeMessages.some(message => message.content === 'Thinking…'))
+    expect(runtime.activeMessages.some(message => message.content.includes('Completed request'))).toBe(false)
+
+    await submitPromise
+    await waitFor(() => runtime.activeMessages.some(message => message.content.includes('Completed request')))
+
+    runtime.dispose()
+  })
+
+  it('merges trace and approval updates into the optimistic assistant placeholder', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-placeholder-process',
+      projectId: 'proj-redesign',
+      title: 'Placeholder Process Session',
+    })
+
+    runtime.addOptimisticUserMessage({
+      content: 'Run pwd in the workspace terminal.',
+      modelId: 'claude-sonnet-4-5',
+      permissionMode: 'auto',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
+    })
+
+    runtime.applyRuntimeEvent({
+      id: 'evt-trace-placeholder',
+      eventType: 'runtime.trace.emitted',
+      kind: 'runtime.trace.emitted',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      sessionId: runtime.activeSessionId,
+      conversationId: 'conv-placeholder-process',
+      runId: runtime.activeRun?.id,
+      emittedAt: 100,
+      sequence: 1,
+      trace: {
+        id: 'trace-placeholder-step',
+        sessionId: runtime.activeSessionId,
+        runId: runtime.activeRun?.id ?? 'runtime-run-placeholder',
+        conversationId: 'conv-placeholder-process',
+        kind: 'step',
+        title: 'Turn submitted',
+        detail: 'Permission mode workspace-write requires explicit approval before execution.',
+        tone: 'warning',
+        timestamp: 100,
+        actor: 'user',
+        actorKind: 'agent',
+        actorId: 'agent-architect',
+      },
+    })
+
+    runtime.applyRuntimeEvent({
+      id: 'evt-tool-placeholder',
+      eventType: 'runtime.trace.emitted',
+      kind: 'runtime.trace.emitted',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      sessionId: runtime.activeSessionId,
+      conversationId: 'conv-placeholder-process',
+      runId: runtime.activeRun?.id,
+      emittedAt: 105,
+      sequence: 2,
+      trace: {
+        id: 'trace-placeholder-tool',
+        sessionId: runtime.activeSessionId,
+        runId: runtime.activeRun?.id ?? 'runtime-run-placeholder',
+        conversationId: 'conv-placeholder-process',
+        kind: 'tool',
+        title: 'Workspace API',
+        detail: 'Calling workspace API before approval.',
+        tone: 'info',
+        timestamp: 105,
+        actor: 'assistant',
+        actorKind: 'agent',
+        actorId: 'agent-architect',
+        relatedToolName: 'workspace-api',
+      },
+    })
+
+    runtime.applyRuntimeEvent({
+      id: 'evt-approval-placeholder',
+      eventType: 'runtime.approval.requested',
+      kind: 'runtime.approval.requested',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      sessionId: runtime.activeSessionId,
+      conversationId: 'conv-placeholder-process',
+      runId: runtime.activeRun?.id,
+      emittedAt: 110,
+      sequence: 3,
+      approval: {
+        id: 'approval-placeholder',
+        sessionId: runtime.activeSessionId,
+        conversationId: 'conv-placeholder-process',
+        runId: runtime.activeRun?.id ?? 'runtime-run-placeholder',
+        toolName: 'runtime.turn',
+        summary: 'Turn requires approval',
+        detail: 'Permission mode workspace-write requires explicit approval.',
+        riskLevel: 'medium',
+        createdAt: 110,
+        status: 'pending',
+      },
+    })
+
+    const placeholder = runtime.activeSession?.messages.find(message => message.id.startsWith('optimistic-assistant-'))
+    expect(placeholder?.content).toBe('Awaiting approval…')
+    expect(placeholder?.status).toBe('waiting_approval')
+    expect(placeholder?.processEntries?.some(entry => entry.title === 'Turn submitted')).toBe(true)
+    expect(placeholder?.processEntries?.some(entry => entry.title === 'Turn requires approval')).toBe(true)
+    expect(placeholder?.processEntries?.some(entry => entry.toolId === 'workspace-api')).toBe(true)
+    expect(placeholder?.toolCalls).toEqual([
+      {
+        toolId: 'workspace-api',
+        label: 'workspace-api',
+        kind: 'builtin',
+        count: 1,
+      },
+    ])
+    expect(runtime.activeMessages.find(message => message.id === placeholder?.id)?.status).toBe('waiting_approval')
+
+    runtime.dispose()
+  })
+
+  it('carries placeholder process entries into the final assistant message', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-placeholder-finalize',
+      projectId: 'proj-redesign',
+      title: 'Placeholder Finalize Session',
+    })
+
+    runtime.addOptimisticUserMessage({
+      content: 'Explain the rollout plan.',
+      modelId: 'claude-sonnet-4-5',
+      permissionMode: 'readonly',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
+    })
+
+    runtime.applyRuntimeEvent({
+      id: 'evt-trace-finalize',
+      eventType: 'runtime.trace.emitted',
+      kind: 'runtime.trace.emitted',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      sessionId: runtime.activeSessionId,
+      conversationId: 'conv-placeholder-finalize',
+      runId: runtime.activeRun?.id,
+      emittedAt: 100,
+      sequence: 1,
+      trace: {
+        id: 'trace-finalize-step',
+        sessionId: runtime.activeSessionId,
+        runId: runtime.activeRun?.id ?? 'runtime-run-placeholder',
+        conversationId: 'conv-placeholder-finalize',
+        kind: 'step',
+        title: 'Drafting response',
+        detail: 'Collecting rollout details before replying.',
+        tone: 'info',
+        timestamp: 100,
+        actor: 'assistant',
+        actorKind: 'agent',
+        actorId: 'agent-architect',
+      },
+    })
+
+    runtime.applyRuntimeEvent({
+      id: 'evt-message-finalize',
+      eventType: 'runtime.message.created',
+      kind: 'runtime.message.created',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      sessionId: runtime.activeSessionId,
+      conversationId: 'conv-placeholder-finalize',
+      runId: runtime.activeRun?.id,
+      emittedAt: 120,
+      sequence: 2,
+      message: {
+        id: 'msg-final-assistant',
+        sessionId: runtime.activeSessionId,
+        conversationId: 'conv-placeholder-finalize',
+        senderType: 'assistant',
+        senderLabel: 'Architect Agent · Agent',
+        content: 'Here is the rollout plan.',
+        timestamp: 120,
+        configuredModelId: 'anthropic-primary',
+        configuredModelName: 'Claude Sonnet 4.5',
+        modelId: 'claude-sonnet-4-5',
+        status: 'completed',
+        requestedActorKind: 'agent',
+        requestedActorId: 'agent-architect',
+        resolvedActorKind: 'agent',
+        resolvedActorId: 'agent-architect',
+        resolvedActorLabel: 'Architect Agent · Agent',
+        usedDefaultActor: false,
+        resourceIds: [],
+        attachments: [],
+        artifacts: [],
+      },
+    })
+
+    const finalAssistant = runtime.activeSession?.messages.find(message => message.id === 'msg-final-assistant')
+    expect(finalAssistant?.content).toBe('Here is the rollout plan.')
+    expect(finalAssistant?.processEntries?.some(entry => entry.title === 'Drafting response')).toBe(true)
+    expect(runtime.activeSession?.messages.some(message => message.id.startsWith('optimistic-assistant-'))).toBe(false)
 
     runtime.dispose()
   })
@@ -85,7 +334,8 @@ describe('useRuntimeStore', () => {
       content: 'Run pwd in the workspace terminal.',
       modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorLabel: '默认智能体',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
     })
 
     await waitFor(() => runtime.pendingApproval !== null)
@@ -96,11 +346,13 @@ describe('useRuntimeStore', () => {
       content: 'Then summarize the output.',
       modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorLabel: '默认智能体',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
     })
 
     expect(runtime.activeQueue).toHaveLength(1)
     expect(runtime.activeQueue[0]?.content).toBe('Then summarize the output.')
+    expect(runtime.activeQueue[0]?.actorId).toBe('agent-architect')
 
     await runtime.resolveApproval('approve')
 
@@ -127,7 +379,8 @@ describe('useRuntimeStore', () => {
       content: 'Run pwd in the workspace terminal.',
       modelId: 'claude-sonnet-4-5',
       permissionMode: 'readonly',
-      actorLabel: '默认智能体',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
     })
 
     await waitFor(() =>
@@ -154,7 +407,8 @@ describe('useRuntimeStore', () => {
       content: 'Run pwd in the workspace terminal.',
       modelId: 'claude-sonnet-4-5',
       permissionMode: 'danger-full-access',
-      actorLabel: '默认智能体',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
     })
 
     await waitFor(() =>
@@ -181,6 +435,33 @@ describe('useRuntimeStore', () => {
 
     expect(runtime.activeSession?.summary.conversationId).toBe('conv-recovery')
     expect(runtime.error).toBe('')
+
+    runtime.dispose()
+  })
+
+  it('resolves team actor labels from runtime-backed turns', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-team-runtime',
+      projectId: 'proj-redesign',
+      title: 'Team Runtime Session',
+    })
+
+    await runtime.submitTurn({
+      content: 'Coordinate the redesign rollout.',
+      modelId: 'claude-sonnet-4-5',
+      permissionMode: 'auto',
+      actorKind: 'team',
+      actorId: 'team-studio',
+    })
+
+    await waitFor(() =>
+      runtime.activeRun?.status === 'completed'
+      && runtime.activeMessages.some(message => message.actorId === 'team-studio'),
+    )
+
+    expect(runtime.activeRun?.resolvedActorLabel).toBe('Studio Direction Team · Team')
 
     runtime.dispose()
   })
@@ -215,6 +496,11 @@ describe('useRuntimeStore', () => {
         updatedAt: 200,
         modelId: 'claude-sonnet-4-5',
         nextAction: 'runtime.run.idle',
+        requestedActorKind: 'agent',
+        requestedActorId: 'agent-architect',
+        resolvedActorKind: 'agent',
+        resolvedActorId: 'agent-architect',
+        resolvedActorLabel: '默认智能体',
       },
     })
 

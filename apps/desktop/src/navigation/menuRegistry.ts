@@ -8,11 +8,13 @@ export type MenuIconKey =
   | 'knowledge'
   | 'trace'
   | 'runtime'
+  | 'projects'
   | 'models'
   | 'tools'
   | 'automations'
   | 'user-center'
   | 'profile'
+  | 'pet'
   | 'users'
   | 'roles'
   | 'permissions'
@@ -70,6 +72,17 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     labelKey: 'sidebar.navigation.overview',
     icon: 'dashboard',
     order: 10,
+  },
+  {
+    id: 'menu-workspace-projects',
+    source: 'main-sidebar',
+    section: 'workspace',
+    routeName: 'workspace-projects',
+    routeNames: ['workspace-projects'],
+    defaultLabel: '项目管理',
+    labelKey: 'sidebar.navigation.projects',
+    icon: 'projects',
+    order: 12,
   },
   {
     id: 'menu-workspace-knowledge',
@@ -171,6 +184,17 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     order: 70,
   },
   {
+    id: 'menu-project-settings',
+    source: 'main-sidebar',
+    section: 'project',
+    routeName: 'project-settings',
+    routeNames: ['project-settings'],
+    defaultLabel: '项目配置',
+    labelKey: 'sidebar.navigation.projectSettings',
+    icon: 'settings',
+    order: 74,
+  },
+  {
     id: 'menu-project-runtime',
     source: 'main-sidebar',
     section: 'project',
@@ -180,17 +204,6 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     labelKey: 'sidebar.navigation.runtime',
     icon: 'runtime',
     order: 75,
-  },
-  {
-    id: 'menu-workspace-teams',
-    source: 'main-sidebar',
-    section: 'workspace',
-    routeName: 'workspace-teams',
-    routeNames: ['workspace-teams'],
-    defaultLabel: '团队',
-    labelKey: 'sidebar.navigation.teams',
-    icon: 'teams',
-    order: 80,
   },
   {
     id: 'menu-workspace-models',
@@ -233,6 +246,7 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     routeNames: [
       'workspace-user-center',
       'workspace-user-center-profile',
+      'workspace-user-center-pet',
       'workspace-user-center-users',
       'workspace-user-center-roles',
       'workspace-user-center-permissions',
@@ -254,6 +268,18 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     labelKey: 'userCenter.nav.profile',
     icon: 'profile',
     order: 130,
+  },
+  {
+    id: 'menu-workspace-user-center-pet',
+    parentId: 'menu-workspace-user-center',
+    source: 'user-center',
+    section: 'user-center',
+    routeName: 'workspace-user-center-pet',
+    routeNames: ['workspace-user-center-pet'],
+    defaultLabel: '宠物',
+    labelKey: 'userCenter.nav.pet',
+    icon: 'pet',
+    order: 135,
   },
   {
     id: 'menu-workspace-user-center-users',

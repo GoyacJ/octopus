@@ -85,14 +85,42 @@ describe('TraceView runtime integration', () => {
       content: 'Summarize the runtime trace state.',
       modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorLabel: '默认智能体',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
     })
 
     await waitFor(() => runtime.activeRun?.status === 'completed' && runtime.activeTrace.length > 0)
     await flushUi()
 
     expect(mounted.container.querySelector('[data-testid="trace-runtime-status"]')?.textContent).toMatch(/completed|已完成/)
+    expect(mounted.container.textContent).toContain('Architect Agent · Agent')
     expect(mounted.container.querySelectorAll('[data-testid="trace-runtime-item"]').length).toBeGreaterThan(0)
+
+    runtime.dispose()
+    mounted.destroy()
+  })
+
+  it('renders team resolved labels in the trace view', async () => {
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-team-trace',
+      projectId: 'proj-redesign',
+      title: 'Team Trace Runtime Session',
+    })
+    await runtime.submitTurn({
+      content: 'Summarize the runtime trace state.',
+      modelId: 'claude-sonnet-4-5',
+      permissionMode: 'auto',
+      actorKind: 'team',
+      actorId: 'team-studio',
+    })
+
+    await waitFor(() => runtime.activeRun?.status === 'completed' && runtime.activeTrace.length > 0)
+    await flushUi()
+
+    expect(mounted.container.textContent).toContain('Studio Direction Team · Team')
 
     runtime.dispose()
     mounted.destroy()
@@ -111,13 +139,15 @@ describe('TraceView runtime integration', () => {
       content: 'Run bash pwd in the workspace terminal.',
       modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorLabel: '默认智能体',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
     })
 
     await waitFor(() => runtime.pendingApproval !== null)
     await flushUi()
 
     expect(mounted.container.querySelector('[data-testid="trace-runtime-approval"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('Architect Agent · Agent')
     expect(mounted.container.querySelector('[data-testid="trace-runtime-approve"]')?.textContent).toMatch(/批准|Approve/)
     expect(mounted.container.querySelector('[data-testid="trace-runtime-reject"]')?.textContent).toMatch(/驳回|Reject/)
 

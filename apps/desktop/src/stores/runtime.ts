@@ -12,31 +12,35 @@ import {
   type RuntimeConfigValidationState,
 } from '@/stores/runtime-config'
 
-import type {
-  CreateRuntimeSessionInput,
-  Message,
-  ProviderConfig,
-  ResolveRuntimeApprovalInput,
-  RuntimeApprovalRequest,
-  RuntimeConfigScope,
-  RuntimeConfigValidationResult,
-  RuntimeDecisionAction,
-  RuntimeEventEnvelope,
-  RuntimeEffectiveConfig,
-  RuntimeMessage,
-  RuntimeRunSnapshot,
-  RuntimeSessionDetail,
-  RuntimeSessionSummary,
-  RuntimeTraceItem,
-  SubmitRuntimeTurnInput,
-  ToolCatalogKind,
+import {
+  resolveRuntimePermissionMode,
+  type ConversationAttachment,
+  type ConversationActorKind,
+  type CreateRuntimeSessionInput,
+  type Message,
+  type ProviderConfig,
+  type ResolveRuntimeApprovalInput,
+  type RuntimeApprovalRequest,
+  type RuntimeConfigScope,
+  type RuntimeConfigValidationResult,
+  type RuntimeConfiguredModelProbeResult,
+  type RuntimeDecisionAction,
+  type RuntimeEventEnvelope,
+  type RuntimeEffectiveConfig,
+  type RuntimeMessage,
+  type RuntimeRunSnapshot,
+  type RuntimeSessionDetail,
+  type RuntimeSessionSummary,
+  type RuntimeTraceItem,
+  type RunStatus,
+  type SubmitRuntimeTurnInput,
+  type ToolCatalogKind,
 } from '@octopus/schema'
+
 
 type EnsureRuntimeSessionInput = CreateRuntimeSessionInput
 
-type RuntimeSubmitTurnInput = SubmitRuntimeTurnInput & {
-  actorLabel: string
-}
+type RuntimeSubmitTurnInput = SubmitRuntimeTurnInput
 
 export interface RuntimeQueueItem extends RuntimeSubmitTurnInput {
   id: string
@@ -59,6 +63,8 @@ interface RuntimeWorkspaceSnapshot {
   config: RuntimeEffectiveConfig | null
   configDrafts: RuntimeConfigDrafts
   configValidation: RuntimeConfigValidationState
+  configuredModelProbeResult: RuntimeConfiguredModelProbeResult | null
+  configuredModelProbing: boolean
   configLoading: boolean
   configSaving: boolean
   configValidating: boolean
@@ -80,6 +86,8 @@ function createRuntimeWorkspaceSnapshot(): RuntimeWorkspaceSnapshot {
     config: null,
     configDrafts: createRuntimeConfigDrafts(),
     configValidation: createRuntimeConfigValidationState(),
+    configuredModelProbeResult: null,
+    configuredModelProbing: false,
     configLoading: false,
     configSaving: false,
     configValidating: false,
@@ -96,15 +104,270 @@ function isBusyStatus(status?: string): boolean {
   return status === 'running' || status === 'waiting_input' || status === 'waiting_approval'
 }
 
-function toConversationMessage(message: RuntimeMessage): Message {
+function toConversationAttachments(attachments?: string[]): ConversationAttachment[] {
+  return (attachments ?? []).map((attachmentId) => ({
+    id: attachmentId,
+    name: attachmentId,
+    kind: 'file',
+  }))
+}
+
+function createOptimisticRuntimeMessage(
+  sessionId: string,
+  conversationId: string,
+  input: RuntimeSubmitTurnInput,
+  timestamp = Date.now(),
+): RuntimeMessage {
+  const requestedActorKind = input.actorKind
+  const requestedActorId = input.actorId
+  const status: RunStatus = resolveRuntimePermissionMode(input.permissionMode) === 'workspace-write'
+    ? 'waiting_approval'
+    : 'running'
+
+  return {
+    id: `optimistic-msg-${timestamp}`,
+    sessionId,
+    conversationId,
+    senderType: 'user',
+    senderLabel: 'You',
+    content: input.content.trim(),
+    timestamp,
+    configuredModelId: input.configuredModelId,
+    modelId: input.modelId,
+    status,
+    requestedActorKind,
+    requestedActorId,
+    resolvedActorKind: requestedActorKind,
+    resolvedActorId: requestedActorId,
+    resolvedActorLabel: 'You',
+    usedDefaultActor: false,
+    resourceIds: [],
+    attachments: [],
+    artifacts: [],
+  }
+}
+
+function createOptimisticAssistantMessage(
+  sessionId: string,
+  conversationId: string,
+  input: RuntimeSubmitTurnInput,
+  timestamp = Date.now() + 1,
+): RuntimeMessage {
+  const requestedActorKind = input.actorKind
+  const requestedActorId = input.actorId
+
+  return {
+    id: `optimistic-assistant-${timestamp}`,
+    sessionId,
+    conversationId,
+    senderType: 'assistant',
+    senderLabel: 'Assistant',
+    content: 'Thinking…',
+    timestamp,
+    configuredModelId: input.configuredModelId,
+    modelId: input.modelId,
+    status: 'running',
+    requestedActorKind,
+    requestedActorId,
+    resolvedActorKind: requestedActorKind,
+    resolvedActorId: requestedActorId,
+    resolvedActorLabel: 'Assistant',
+    usedDefaultActor: false,
+    resourceIds: [],
+    attachments: [],
+    artifacts: [],
+    processEntries: [
+      {
+        id: `optimistic-process-${timestamp}`,
+        type: 'thinking',
+        title: 'Thinking',
+        detail: 'Preparing the assistant response.',
+        timestamp,
+      },
+    ],
+  }
+}
+
+function createPendingApprovalAssistantMessage(
+  sessionId: string,
+  conversationId: string,
+  approval: RuntimeApprovalRequest,
+  run?: RuntimeRunSnapshot,
+): RuntimeMessage {
+  return {
+    id: `approval-assistant-${approval.id}`,
+    sessionId,
+    conversationId,
+    senderType: 'assistant',
+    senderLabel: run?.resolvedActorLabel ?? 'Assistant',
+    content: 'Awaiting approval…',
+    timestamp: approval.createdAt,
+    configuredModelId: run?.configuredModelId,
+    modelId: run?.modelId,
+    status: 'waiting_approval',
+    requestedActorKind: run?.requestedActorKind,
+    requestedActorId: run?.requestedActorId,
+    resolvedActorKind: run?.resolvedActorKind,
+    resolvedActorId: run?.resolvedActorId,
+    resolvedActorLabel: run?.resolvedActorLabel ?? 'Assistant',
+    usedDefaultActor: false,
+    resourceIds: [],
+    attachments: [],
+    artifacts: [],
+    processEntries: [
+      {
+        id: approval.id,
+        type: 'result',
+        title: approval.summary,
+        detail: approval.detail,
+        timestamp: approval.createdAt,
+      },
+    ],
+  }
+}
+
+function appendProcessEntry(message: RuntimeMessage, entry: NonNullable<RuntimeMessage['processEntries']>[number]): RuntimeMessage {
+  const entries = message.processEntries ?? []
+  if (entries.some(item => item.id === entry.id)) {
+    return message
+  }
+
+  return {
+    ...message,
+    processEntries: [...entries, entry],
+  }
+}
+
+function appendToolCall(
+  message: RuntimeMessage,
+  toolCall: NonNullable<RuntimeMessage['toolCalls']>[number],
+): RuntimeMessage {
+  const toolCalls = message.toolCalls ?? []
+  const existing = toolCalls.find(item => item.toolId === toolCall.toolId)
+  if (!existing) {
+    return {
+      ...message,
+      toolCalls: [...toolCalls, toolCall],
+    }
+  }
+
+  return {
+    ...message,
+    toolCalls: toolCalls.map(item => item.toolId === toolCall.toolId
+      ? {
+          ...item,
+          count: Math.max(item.count, toolCall.count),
+          label: toolCall.label,
+          kind: toolCall.kind,
+        }
+      : item),
+  }
+}
+
+function updateOptimisticAssistantMessage(
+  messages: RuntimeMessage[],
+  updater: (message: RuntimeMessage) => RuntimeMessage,
+): RuntimeMessage[] {
+  const index = messages.findIndex(message => message.id.startsWith('optimistic-assistant-') && message.senderType === 'assistant')
+  if (index === -1) {
+    return messages
+  }
+
+  const nextMessages = [...messages]
+  nextMessages[index] = updater(nextMessages[index]!)
+  return nextMessages
+}
+
+function mergeAssistantMessageWithPlaceholder(
+  incoming: RuntimeMessage,
+  messages: RuntimeMessage[],
+): RuntimeMessage {
+  const placeholder = messages.find(message => message.id.startsWith('optimistic-assistant-') && message.senderType === 'assistant')
+  if (!placeholder) {
+    return incoming
+  }
+
+  const mergedProcessEntries = [
+    ...(placeholder.processEntries ?? []),
+    ...((incoming.processEntries ?? []).filter(entry => !(placeholder.processEntries ?? []).some(item => item.id === entry.id))),
+  ]
+  const mergedToolCalls = [
+    ...(placeholder.toolCalls ?? []),
+    ...((incoming.toolCalls ?? []).filter(entry => !(placeholder.toolCalls ?? []).some(item => item.toolId === entry.toolId && item.label === entry.label && item.count === entry.count))),
+  ]
+
+  return {
+    ...incoming,
+    processEntries: mergedProcessEntries.length ? mergedProcessEntries : incoming.processEntries,
+    toolCalls: mergedToolCalls.length ? mergedToolCalls : incoming.toolCalls,
+  }
+}
+
+function normalizeRuntimeSessionDetail(detail: RuntimeSessionDetail): RuntimeSessionDetail {
+  if (!detail.pendingApproval) {
+    return detail
+  }
+
+  const hasApprovalMessage = detail.messages.some(message => message.senderType === 'assistant' && (
+    message.id === `approval-assistant-${detail.pendingApproval!.id}`
+    || message.status === 'waiting_approval'
+  ))
+
+  if (hasApprovalMessage) {
+    return detail
+  }
+
+  return {
+    ...detail,
+    messages: [
+      ...detail.messages,
+      createPendingApprovalAssistantMessage(
+        detail.summary.id,
+        detail.summary.conversationId,
+        detail.pendingApproval,
+        detail.run,
+      ),
+    ],
+  }
+}
+
+function toConversationMessage(message: RuntimeMessage, pendingApproval?: RuntimeApprovalRequest): Message {
+  const isPendingApprovalMessage = message.senderType === 'assistant'
+    && message.status === 'waiting_approval'
+    && pendingApproval
+    && message.conversationId === pendingApproval.conversationId
+
   return {
     id: message.id,
     conversationId: message.conversationId,
-    senderId: message.senderType === 'assistant' ? message.senderLabel : 'runtime-user',
+    senderId: message.resolvedActorId
+      ?? (message.senderType === 'assistant' ? message.senderLabel : 'runtime-user'),
     senderType: message.senderType === 'assistant' ? 'agent' : 'user',
     content: message.content,
-    modelId: message.modelId,
+    modelId: message.configuredModelName ?? message.modelId,
+    status: message.status,
     timestamp: message.timestamp,
+    actorKind: message.resolvedActorKind,
+    actorId: message.resolvedActorId,
+    requestedActorKind: message.requestedActorKind,
+    requestedActorId: message.requestedActorId,
+    usedDefaultActor: message.usedDefaultActor,
+    resourceIds: message.resourceIds ?? [],
+    attachments: toConversationAttachments(message.attachments),
+    artifacts: message.artifacts ?? [],
+    usage: message.usage,
+    toolCalls: message.toolCalls,
+    processEntries: message.processEntries,
+    approval: isPendingApprovalMessage
+      ? {
+          id: pendingApproval.id,
+          toolName: pendingApproval.toolName,
+          summary: pendingApproval.summary,
+          detail: pendingApproval.detail,
+          riskLevel: pendingApproval.riskLevel,
+          status: pendingApproval.status,
+        }
+      : undefined,
   }
 }
 
@@ -174,6 +437,8 @@ export const useRuntimeStore = defineStore('runtime', {
     config: null as RuntimeEffectiveConfig | null,
     configDrafts: createRuntimeConfigDrafts(),
     configValidation: createRuntimeConfigValidationState(),
+    configuredModelProbeResult: null as RuntimeConfiguredModelProbeResult | null,
+    configuredModelProbing: false,
     configLoading: false,
     configSaving: false,
     configValidating: false,
@@ -191,7 +456,7 @@ export const useRuntimeStore = defineStore('runtime', {
       return this.activeSession?.trace ?? []
     },
     activeMessages(): Message[] {
-      return (this.activeSession?.messages ?? []).map((message) => toConversationMessage(message))
+      return (this.activeSession?.messages ?? []).map((message) => toConversationMessage(message, this.activeSession?.pendingApproval))
     },
     pendingApproval(): RuntimeApprovalRequest | null {
       return this.activeSession?.pendingApproval ?? null
@@ -222,9 +487,18 @@ export const useRuntimeStore = defineStore('runtime', {
     },
     isBusy(): boolean {
       return isBusyStatus(this.activeRun?.status)
+        || (this.activeSession?.messages ?? []).some(message => (
+          message.senderType === 'assistant' && message.id.startsWith('optimistic-assistant-')
+        ))
+    },
+    activeWorkspaceConfig(): RuntimeEffectiveConfig | null {
+      return this.config
     },
   },
   actions: {
+    async loadWorkspaceConfig(force = false): Promise<RuntimeEffectiveConfig | null> {
+      return this.loadConfig(force)
+    },
     saveActiveWorkspaceSnapshot() {
       if (!this.activeWorkspaceConnectionId) {
         return
@@ -245,6 +519,8 @@ export const useRuntimeStore = defineStore('runtime', {
           config: this.config,
           configDrafts: { ...this.configDrafts },
           configValidation: { ...this.configValidation },
+          configuredModelProbeResult: this.configuredModelProbeResult,
+          configuredModelProbing: this.configuredModelProbing,
           configLoading: this.configLoading,
           configSaving: this.configSaving,
           configValidating: this.configValidating,
@@ -267,6 +543,8 @@ export const useRuntimeStore = defineStore('runtime', {
       this.config = snapshot.config
       this.configDrafts = { ...snapshot.configDrafts }
       this.configValidation = { ...snapshot.configValidation }
+      this.configuredModelProbeResult = snapshot.configuredModelProbeResult
+      this.configuredModelProbing = snapshot.configuredModelProbing
       this.configLoading = snapshot.configLoading
       this.configSaving = snapshot.configSaving
       this.configValidating = snapshot.configValidating
@@ -325,6 +603,10 @@ export const useRuntimeStore = defineStore('runtime', {
         ...this.configDrafts,
         [scope]: value,
       }
+      this.saveActiveWorkspaceSnapshot()
+    },
+    clearConfiguredModelProbeResult() {
+      this.configuredModelProbeResult = null
       this.saveActiveWorkspaceSnapshot()
     },
     async loadConfig(force = false): Promise<RuntimeEffectiveConfig | null> {
@@ -438,6 +720,111 @@ export const useRuntimeStore = defineStore('runtime', {
         }
       }
     },
+    async probeConfiguredModel(
+      scope: RuntimeConfigScope,
+      configuredModelId: string,
+    ): Promise<RuntimeConfiguredModelProbeResult> {
+      if (scope !== 'workspace') {
+        return {
+          valid: false,
+          reachable: false,
+          configuredModelId,
+          errors: ['Settings only supports workspace runtime configuration'],
+          warnings: [],
+        }
+      }
+
+      const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+      if (!resolvedClient) {
+        return {
+          valid: false,
+          reachable: false,
+          configuredModelId,
+          errors: ['No active workspace connection selected'],
+          warnings: [],
+        }
+      }
+      const { connectionId, client } = resolvedClient
+
+      let patch
+      try {
+        patch = parseRuntimeConfigDraft(scope, this.configDrafts[scope])
+      } catch (error) {
+        const result = {
+          valid: false,
+          reachable: false,
+          configuredModelId,
+          errors: [error instanceof Error ? error.message : `Invalid ${scope} runtime config`],
+          warnings: [],
+        } satisfies RuntimeConfiguredModelProbeResult
+        this.configuredModelProbeResult = result
+        this.configValidation = {
+          ...this.configValidation,
+          [scope]: {
+            valid: false,
+            errors: result.errors,
+            warnings: result.warnings,
+          },
+        }
+        this.configError = result.errors[0] ?? ''
+        this.saveActiveWorkspaceSnapshot()
+        return result
+      }
+
+      this.configuredModelProbing = true
+      this.configError = ''
+      try {
+        const result = await client.runtime.validateConfiguredModel({
+          scope,
+          configuredModelId,
+          patch: patch.patch,
+        })
+        if (this.activeWorkspaceConnectionId !== connectionId) {
+          return result
+        }
+
+        this.configuredModelProbeResult = result
+        this.configValidation = {
+          ...this.configValidation,
+          [scope]: {
+            valid: result.valid && result.reachable,
+            errors: result.errors,
+            warnings: result.warnings,
+          },
+        }
+        if (result.errors.length > 0) {
+          this.configError = result.errors[0] ?? ''
+        }
+        this.saveActiveWorkspaceSnapshot()
+        return result
+      } catch (error) {
+        const result = {
+          valid: false,
+          reachable: false,
+          configuredModelId,
+          errors: [error instanceof Error ? error.message : 'Failed to validate configured model'],
+          warnings: [],
+        } satisfies RuntimeConfiguredModelProbeResult
+        if (this.activeWorkspaceConnectionId === connectionId) {
+          this.configuredModelProbeResult = result
+          this.configValidation = {
+            ...this.configValidation,
+            [scope]: {
+              valid: false,
+              errors: result.errors,
+              warnings: result.warnings,
+            },
+          }
+          this.configError = result.errors[0] ?? ''
+          this.saveActiveWorkspaceSnapshot()
+        }
+        return result
+      } finally {
+        if (this.activeWorkspaceConnectionId === connectionId) {
+          this.configuredModelProbing = false
+        }
+      }
+    },
     async saveConfig(scope: RuntimeConfigScope): Promise<RuntimeEffectiveConfig | null> {
       if (scope !== 'workspace') {
         this.configError = 'Settings only supports workspace runtime configuration'
@@ -486,10 +873,71 @@ export const useRuntimeStore = defineStore('runtime', {
       }
     },
     setActiveSession(detail: RuntimeSessionDetail) {
-      this.activeSessionId = detail.summary.id
-      this.activeConversationId = detail.summary.conversationId
+      const normalizedDetail = normalizeRuntimeSessionDetail(detail)
+      this.activeSessionId = normalizedDetail.summary.id
+      this.activeConversationId = normalizedDetail.summary.conversationId
       this.error = ''
+      this.cacheSessionDetail(normalizedDetail)
+    },
+    addOptimisticUserMessage(input: RuntimeSubmitTurnInput) {
+      if (!this.activeSession) {
+        return
+      }
+
+      const optimisticUserMessage = createOptimisticRuntimeMessage(
+        this.activeSessionId,
+        this.activeConversationId,
+        input,
+      )
+      const optimisticAssistantMessage = createOptimisticAssistantMessage(
+        this.activeSessionId,
+        this.activeConversationId,
+        input,
+        optimisticUserMessage.timestamp + 1,
+      )
+      const detail: RuntimeSessionDetail = {
+        ...this.activeSession,
+        summary: {
+          ...this.activeSession.summary,
+          updatedAt: optimisticAssistantMessage.timestamp,
+          lastMessagePreview: optimisticUserMessage.content,
+        },
+        messages: [
+          ...this.activeSession.messages,
+          optimisticUserMessage,
+          optimisticAssistantMessage,
+        ],
+      }
       this.cacheSessionDetail(detail)
+      this.saveActiveWorkspaceSnapshot()
+    },
+    replaceOptimisticMessages(content: string, sessionId?: string) {
+      const targetSessionId = sessionId ?? this.activeSessionId
+      if (!targetSessionId) {
+        return
+      }
+      const detail = this.sessionDetails[targetSessionId]
+      if (!detail) {
+        return
+      }
+
+      const nextMessages = detail.messages.filter(message => !(
+        (message.id.startsWith('optimistic-msg-')
+          && message.senderType === 'user'
+          && message.content === content)
+        || (message.id.startsWith('optimistic-assistant-')
+          && message.senderType === 'assistant')
+      ))
+
+      if (nextMessages.length === detail.messages.length) {
+        return
+      }
+
+      this.cacheSessionDetail({
+        ...detail,
+        messages: nextMessages,
+      })
+      this.saveActiveWorkspaceSnapshot()
     },
     async bootstrap() {
       this.syncWorkspaceScopeFromShell()
@@ -630,7 +1078,10 @@ export const useRuntimeStore = defineStore('runtime', {
         return null
       }
 
-      const existingSession = this.sessions.find((session) => session.conversationId === input.conversationId)
+      const existingSession = this.sessions.find((session) => (
+        session.conversationId === input.conversationId
+        && session.sessionKind === (input.sessionKind ?? 'project')
+      ))
       const { connectionId, client } = resolvedClient
 
       if (existingSession) {
@@ -733,14 +1184,14 @@ export const useRuntimeStore = defineStore('runtime', {
       }
       this.saveActiveWorkspaceSnapshot()
     },
-    async submitTurn(input: RuntimeSubmitTurnInput) {
+    async submitTurn(input: RuntimeSubmitTurnInput): Promise<boolean> {
       if (!this.activeSessionId) {
         throw new Error('No active runtime session selected')
       }
 
       const trimmed = input.content.trim()
       if (!trimmed) {
-        return
+        return false
       }
 
       if (this.isBusy) {
@@ -748,12 +1199,19 @@ export const useRuntimeStore = defineStore('runtime', {
           ...input,
           content: trimmed,
         })
-        return
+        return true
+      }
+
+      const normalizedInput = {
+        ...input,
+        content: trimmed,
       }
 
       this.error = ''
+      this.addOptimisticUserMessage(normalizedInput)
       const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
       if (!resolvedClient) {
+        this.replaceOptimisticMessages(trimmed)
         throw new Error('No active workspace connection selected')
       }
       const { connectionId, client } = resolvedClient
@@ -762,28 +1220,32 @@ export const useRuntimeStore = defineStore('runtime', {
         const run = await client.runtime.submitUserTurn(this.activeSessionId, {
           content: trimmed,
           modelId: input.modelId,
+          configuredModelId: input.configuredModelId,
           permissionMode: input.permissionMode,
+          actorKind: input.actorKind,
+          actorId: input.actorId,
         }, tauriClient.createIdempotencyKey(`runtime-turn-${connectionId}-${this.activeSessionId}`))
         if (this.activeWorkspaceConnectionId !== connectionId) {
-          return
+          return false
         }
 
-        const activeSession = this.activeSession
-        if (activeSession) {
-          this.cacheSessionDetail({
-            ...activeSession,
-            run,
-            summary: {
-              ...activeSession.summary,
-              status: run.status,
-              updatedAt: run.updatedAt,
-            },
-          })
+        const detail = await client.runtime.loadSession(this.activeSessionId)
+        if (this.activeWorkspaceConnectionId !== connectionId) {
+          return false
         }
-        await this.startEventTransport(this.activeSessionId)
+
+        this.setActiveSession(detail)
+        if (isBusyStatus(run.status)) {
+          await this.startEventTransport(this.activeSessionId)
+        } else {
+          await this.finishTransportCycle(this.activeSessionId, connectionId)
+        }
         this.saveActiveWorkspaceSnapshot()
+        return true
       } catch (error) {
+        this.replaceOptimisticMessages(trimmed)
         this.error = error instanceof Error ? error.message : 'Failed to submit runtime turn'
+        return false
       }
     },
     applyRuntimeEvent(event: RuntimeEventEnvelope) {
@@ -819,17 +1281,87 @@ export const useRuntimeStore = defineStore('runtime', {
         pendingApproval: existing.pendingApproval,
       }
 
-      if (event.message && !nextDetail.messages.some((message) => message.id === event.message?.id)) {
-        nextDetail.messages.push(event.message)
+      if (event.message) {
+        const runtimeMessage = event.message
+
+        if (runtimeMessage.senderType === 'user') {
+          nextDetail.messages = nextDetail.messages.filter(message => !(
+            message.id.startsWith('optimistic-msg-')
+            && message.senderType === 'user'
+            && message.content === runtimeMessage.content
+          ))
+        }
+
+        let nextRuntimeMessage = runtimeMessage
+        if (runtimeMessage.senderType === 'assistant') {
+          nextRuntimeMessage = mergeAssistantMessageWithPlaceholder(runtimeMessage, nextDetail.messages)
+          nextDetail.messages = nextDetail.messages.filter(message => !(
+            message.id.startsWith('optimistic-assistant-')
+            && message.senderType === 'assistant'
+          ))
+        }
+
+        if (!nextDetail.messages.some((message) => message.id === nextRuntimeMessage.id)) {
+          nextDetail.messages.push(nextRuntimeMessage)
+        }
       }
 
       if (event.trace && !nextDetail.trace.some((trace) => trace.id === event.trace?.id)) {
         nextDetail.trace.push(event.trace)
+        nextDetail.messages = updateOptimisticAssistantMessage(nextDetail.messages, (message) => {
+          const updatedMessage = {
+            ...appendProcessEntry(message, {
+              id: event.trace!.id,
+              type: event.trace!.kind === 'tool' ? 'tool' : 'execution',
+              title: event.trace!.title,
+              detail: event.trace!.detail,
+              timestamp: event.trace!.timestamp,
+              toolId: event.trace!.relatedToolName,
+            }),
+            content: event.trace!.title,
+          }
+
+          if (event.trace!.kind !== 'tool') {
+            return updatedMessage
+          }
+
+          const toolId = event.trace!.relatedToolName ?? event.trace!.title
+          const currentCount = (updatedMessage.toolCalls ?? []).find(item => item.toolId === toolId)?.count ?? 0
+          return appendToolCall(updatedMessage, {
+            toolId,
+            label: event.trace!.relatedToolName ?? event.trace!.title,
+            kind: 'builtin',
+            count: currentCount + 1,
+          })
+        })
       }
 
       const eventType = resolveRuntimeEventType(event)
       if (eventType === 'runtime.approval.requested') {
         nextDetail.pendingApproval = event.approval
+        if (event.approval) {
+          const updatedMessages = updateOptimisticAssistantMessage(nextDetail.messages, message => ({
+            ...appendProcessEntry(message, {
+              id: event.approval!.id,
+              type: 'result',
+              title: event.approval!.summary,
+              detail: event.approval!.detail,
+              timestamp: event.approval!.createdAt,
+            }),
+            content: 'Awaiting approval…',
+            status: 'waiting_approval',
+          }))
+          nextDetail.messages = updatedMessages
+
+          if (!updatedMessages.some(message => message.id.startsWith('optimistic-assistant-') && message.senderType === 'assistant')) {
+            nextDetail.messages.push(createPendingApprovalAssistantMessage(
+              nextDetail.summary.id,
+              nextDetail.summary.conversationId,
+              event.approval,
+              event.run ?? nextDetail.run,
+            ))
+          }
+        }
       }
 
       if (eventType === 'runtime.approval.resolved') {
@@ -840,7 +1372,7 @@ export const useRuntimeStore = defineStore('runtime', {
         this.error = event.error
       }
 
-      this.cacheSessionDetail(nextDetail)
+      this.cacheSessionDetail(normalizeRuntimeSessionDetail(nextDetail))
       this.saveActiveWorkspaceSnapshot()
     },
     async pollSessionEvents(sessionId?: string, workspaceConnectionId?: string) {
@@ -929,14 +1461,17 @@ export const useRuntimeStore = defineStore('runtime', {
           return
         }
 
-        const activeSession = this.activeSession
-        if (activeSession) {
-          this.cacheSessionDetail({
-            ...activeSession,
-            pendingApproval: undefined,
-          })
+        const detail = await client.runtime.loadSession(this.activeSessionId)
+        if (this.activeWorkspaceConnectionId !== connectionId) {
+          return
         }
-        await this.startEventTransport(this.activeSessionId)
+
+        this.setActiveSession(detail)
+        if (isBusyStatus(detail.run.status)) {
+          await this.startEventTransport(this.activeSessionId)
+        } else {
+          await this.finishTransportCycle(this.activeSessionId, connectionId)
+        }
         this.saveActiveWorkspaceSnapshot()
       } catch (error) {
         this.error = error instanceof Error ? error.message : 'Failed to resolve runtime approval'

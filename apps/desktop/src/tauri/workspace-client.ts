@@ -1,23 +1,43 @@
 import type {
   AgentRecord,
   AutomationRecord,
+  ChangeCurrentUserPasswordRequest,
+  ChangeCurrentUserPasswordResponse,
+  CopyWorkspaceSkillToManagedInput,
+  CreateWorkspaceResourceFolderInput,
+  CreateWorkspaceResourceInput,
+  CredentialBinding,
+  BindPetConversationInput,
+  CreateProjectRequest,
+  CreateWorkspaceUserRequest,
+  CreateWorkspaceSkillInput,
   CreateRuntimeSessionInput,
+  ImportWorkspaceSkillArchiveInput,
+  ImportWorkspaceSkillFolderInput,
   KnowledgeRecord,
   LoginRequest,
   LoginResponse,
   MenuRecord,
   ModelCatalogSnapshot,
   PermissionRecord,
+  ProjectAgentLinkInput,
+  ProjectAgentLinkRecord,
   ProjectDashboardSnapshot,
   ProjectRecord,
-  ProviderCredentialRecord,
+  ProjectTeamLinkInput,
+  ProjectTeamLinkRecord,
   RegisterWorkspaceOwnerRequest,
   RegisterWorkspaceOwnerResponse,
   ResolveRuntimeApprovalInput,
   RoleRecord,
+  PetConversationBinding,
+  PetPresenceState,
+  PetWorkspaceSnapshot,
   RuntimeBootstrap,
   RuntimeConfigPatch,
   RuntimeConfigValidationResult,
+  RuntimeConfiguredModelProbeInput,
+  RuntimeConfiguredModelProbeResult,
   RuntimeEventEnvelope,
   RuntimeEffectiveConfig,
   RuntimePermissionMode,
@@ -26,15 +46,31 @@ import type {
   RuntimeSessionSummary,
   SubmitRuntimeTurnInput,
   SystemBootstrapStatus,
+  SavePetPresenceInput,
   TeamRecord,
   ToolRecord,
+  UpdateCurrentUserProfileRequest,
+  UpdateProjectRequest,
+  UpdateWorkspaceResourceInput,
+  UpsertAgentInput,
+  UpsertTeamInput,
+  UpdateWorkspaceUserRequest,
+  UpdateWorkspaceSkillFileInput,
+  UpdateWorkspaceSkillInput,
+  UpsertWorkspaceMcpServerInput,
+  WorkspaceMcpServerDocument,
+  WorkspaceSkillDocument,
+  WorkspaceSkillFileDocument,
+  WorkspaceSkillTreeDocument,
   WorkspaceToolCatalogSnapshot,
+  WorkspaceToolDisablePatch,
   UserCenterOverviewSnapshot,
   UserRecordSummary,
   WorkspaceConnectionRecord,
   WorkspaceOverviewSnapshot,
   WorkspaceResourceRecord,
   WorkspaceSessionTokenEnvelope,
+  ArtifactRecord,
 } from '@octopus/schema'
 import { resolveRuntimePermissionMode } from '@octopus/schema'
 
@@ -47,6 +83,14 @@ import {
 
 const API_BASE = '/api/v1'
 const RUNTIME_API_BASE = `${API_BASE}/runtime`
+
+function encodePathSegments(path: string): string {
+  return path
+    .split('/')
+    .filter(segment => segment.length > 0)
+    .map(segment => encodeURIComponent(segment))
+    .join('/')
+}
 
 export interface WorkspaceClientContext {
   connection: WorkspaceConnectionRecord
@@ -84,33 +128,81 @@ export interface WorkspaceClient {
   }
   projects: {
     list: () => Promise<ProjectRecord[]>
+    create: (input: CreateProjectRequest) => Promise<ProjectRecord>
+    update: (projectId: string, input: UpdateProjectRequest) => Promise<ProjectRecord>
     getDashboard: (projectId: string) => Promise<ProjectDashboardSnapshot>
   }
   resources: {
     listWorkspace: () => Promise<WorkspaceResourceRecord[]>
     listProject: (projectId: string) => Promise<WorkspaceResourceRecord[]>
+    createWorkspace: (input: CreateWorkspaceResourceInput) => Promise<WorkspaceResourceRecord>
+    createProject: (projectId: string, input: CreateWorkspaceResourceInput) => Promise<WorkspaceResourceRecord>
+    createProjectFolder: (projectId: string, input: CreateWorkspaceResourceFolderInput) => Promise<WorkspaceResourceRecord[]>
+    updateWorkspace: (resourceId: string, input: UpdateWorkspaceResourceInput) => Promise<WorkspaceResourceRecord>
+    updateProject: (projectId: string, resourceId: string, input: UpdateWorkspaceResourceInput) => Promise<WorkspaceResourceRecord>
+    deleteWorkspace: (resourceId: string) => Promise<void>
+    deleteProject: (projectId: string, resourceId: string) => Promise<void>
+  }
+  artifacts: {
+    listWorkspace: () => Promise<ArtifactRecord[]>
   }
   knowledge: {
     listWorkspace: () => Promise<KnowledgeRecord[]>
     listProject: (projectId: string) => Promise<KnowledgeRecord[]>
   }
+  pet: {
+    getSnapshot: (projectId?: string) => Promise<PetWorkspaceSnapshot>
+    savePresence: (input: SavePetPresenceInput, projectId?: string) => Promise<PetPresenceState>
+    bindConversation: (input: BindPetConversationInput, projectId?: string) => Promise<PetConversationBinding>
+  }
   agents: {
     list: () => Promise<AgentRecord[]>
-    create: (record: AgentRecord) => Promise<AgentRecord>
-    update: (agentId: string, record: AgentRecord) => Promise<AgentRecord>
+    create: (input: UpsertAgentInput) => Promise<AgentRecord>
+    update: (agentId: string, input: UpsertAgentInput) => Promise<AgentRecord>
     delete: (agentId: string) => Promise<void>
+    listProjectLinks: (projectId: string) => Promise<ProjectAgentLinkRecord[]>
+    linkProject: (input: ProjectAgentLinkInput) => Promise<ProjectAgentLinkRecord>
+    unlinkProject: (projectId: string, agentId: string) => Promise<void>
   }
   teams: {
     list: () => Promise<TeamRecord[]>
-    create: (record: TeamRecord) => Promise<TeamRecord>
-    update: (teamId: string, record: TeamRecord) => Promise<TeamRecord>
+    create: (input: UpsertTeamInput) => Promise<TeamRecord>
+    update: (teamId: string, input: UpsertTeamInput) => Promise<TeamRecord>
     delete: (teamId: string) => Promise<void>
+    listProjectLinks: (projectId: string) => Promise<ProjectTeamLinkRecord[]>
+    linkProject: (input: ProjectTeamLinkInput) => Promise<ProjectTeamLinkRecord>
+    unlinkProject: (projectId: string, teamId: string) => Promise<void>
   }
   catalog: {
     getSnapshot: () => Promise<ModelCatalogSnapshot>
     getToolCatalog: () => Promise<WorkspaceToolCatalogSnapshot>
+    setToolDisabled: (patch: WorkspaceToolDisablePatch) => Promise<WorkspaceToolCatalogSnapshot>
+    getSkill: (skillId: string) => Promise<WorkspaceSkillDocument>
+    getSkillTree: (skillId: string) => Promise<WorkspaceSkillTreeDocument>
+    getSkillFile: (skillId: string, relativePath: string) => Promise<WorkspaceSkillFileDocument>
+    createSkill: (input: CreateWorkspaceSkillInput) => Promise<WorkspaceSkillDocument>
+    updateSkill: (skillId: string, input: UpdateWorkspaceSkillInput) => Promise<WorkspaceSkillDocument>
+    updateSkillFile: (
+      skillId: string,
+      relativePath: string,
+      input: UpdateWorkspaceSkillFileInput,
+    ) => Promise<WorkspaceSkillFileDocument>
+    importSkillArchive: (input: ImportWorkspaceSkillArchiveInput) => Promise<WorkspaceSkillDocument>
+    importSkillFolder: (input: ImportWorkspaceSkillFolderInput) => Promise<WorkspaceSkillDocument>
+    copySkillToManaged: (
+      skillId: string,
+      input: CopyWorkspaceSkillToManagedInput,
+    ) => Promise<WorkspaceSkillDocument>
+    deleteSkill: (skillId: string) => Promise<void>
+    getMcpServer: (serverName: string) => Promise<WorkspaceMcpServerDocument>
+    createMcpServer: (input: UpsertWorkspaceMcpServerInput) => Promise<WorkspaceMcpServerDocument>
+    updateMcpServer: (
+      serverName: string,
+      input: UpsertWorkspaceMcpServerInput,
+    ) => Promise<WorkspaceMcpServerDocument>
+    deleteMcpServer: (serverName: string) => Promise<void>
     listModels: () => Promise<ModelCatalogSnapshot['models']>
-    listProviderCredentials: () => Promise<ProviderCredentialRecord[]>
+    listProviderCredentials: () => Promise<CredentialBinding[]>
     listTools: () => Promise<ToolRecord[]>
     createTool: (record: ToolRecord) => Promise<ToolRecord>
     updateTool: (toolId: string, record: ToolRecord) => Promise<ToolRecord>
@@ -125,14 +217,19 @@ export interface WorkspaceClient {
   rbac: {
     getUserCenterOverview: () => Promise<UserCenterOverviewSnapshot>
     listUsers: () => Promise<UserRecordSummary[]>
-    createUser: (record: UserRecordSummary) => Promise<UserRecordSummary>
-    updateUser: (userId: string, record: UserRecordSummary) => Promise<UserRecordSummary>
+    createUser: (input: CreateWorkspaceUserRequest) => Promise<UserRecordSummary>
+    updateUser: (userId: string, input: UpdateWorkspaceUserRequest) => Promise<UserRecordSummary>
+    deleteUser: (userId: string) => Promise<void>
+    updateCurrentUserProfile: (input: UpdateCurrentUserProfileRequest) => Promise<UserRecordSummary>
+    changeCurrentUserPassword: (input: ChangeCurrentUserPasswordRequest) => Promise<ChangeCurrentUserPasswordResponse>
     listRoles: () => Promise<RoleRecord[]>
     createRole: (record: RoleRecord) => Promise<RoleRecord>
     updateRole: (roleId: string, record: RoleRecord) => Promise<RoleRecord>
+    deleteRole: (roleId: string) => Promise<void>
     listPermissions: () => Promise<PermissionRecord[]>
     createPermission: (record: PermissionRecord) => Promise<PermissionRecord>
     updatePermission: (permissionId: string, record: PermissionRecord) => Promise<PermissionRecord>
+    deletePermission: (permissionId: string) => Promise<void>
     listMenus: () => Promise<MenuRecord[]>
     createMenu: (record: MenuRecord) => Promise<MenuRecord>
     updateMenu: (menuId: string, record: MenuRecord) => Promise<MenuRecord>
@@ -141,6 +238,7 @@ export interface WorkspaceClient {
     bootstrap: () => Promise<RuntimeBootstrap>
     getConfig: () => Promise<RuntimeEffectiveConfig>
     validateConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeConfigValidationResult>
+    validateConfiguredModel: (input: RuntimeConfiguredModelProbeInput) => Promise<RuntimeConfiguredModelProbeResult>
     saveConfig: (patch: RuntimeConfigPatch) => Promise<RuntimeEffectiveConfig>
     getProjectConfig: (projectId: string) => Promise<RuntimeEffectiveConfig>
     validateProjectConfig: (projectId: string, patch: RuntimeConfigPatch) => Promise<RuntimeConfigValidationResult>
@@ -428,6 +526,18 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
           method: 'GET',
         })
       },
+      async create(input) {
+        return await fetchWorkspace<ProjectRecord>(context, `${API_BASE}/projects`, {
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      },
+      async update(projectId, input) {
+        return await fetchWorkspace<ProjectRecord>(context, `${API_BASE}/projects/${projectId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(input),
+        })
+      },
       async getDashboard(projectId) {
         return await fetchWorkspace<ProjectDashboardSnapshot>(
           context,
@@ -453,6 +563,69 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
           },
         )
       },
+      async createWorkspace(input) {
+        return await fetchWorkspace<WorkspaceResourceRecord>(context, `${API_BASE}/workspace/resources`, {
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      },
+      async createProject(projectId, input) {
+        return await fetchWorkspace<WorkspaceResourceRecord>(
+          context,
+          `${API_BASE}/projects/${projectId}/resources`,
+          {
+            method: 'POST',
+            body: JSON.stringify(input),
+          },
+        )
+      },
+      async createProjectFolder(projectId, input) {
+        return await fetchWorkspace<WorkspaceResourceRecord[]>(
+          context,
+          `${API_BASE}/projects/${projectId}/resources/folder`,
+          {
+            method: 'POST',
+            body: JSON.stringify(input),
+          },
+        )
+      },
+      async updateWorkspace(resourceId, input) {
+        return await fetchWorkspace<WorkspaceResourceRecord>(
+          context,
+          `${API_BASE}/workspace/resources/${resourceId}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(input),
+          },
+        )
+      },
+      async updateProject(projectId, resourceId, input) {
+        return await fetchWorkspace<WorkspaceResourceRecord>(
+          context,
+          `${API_BASE}/projects/${projectId}/resources/${resourceId}`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(input),
+          },
+        )
+      },
+      async deleteWorkspace(resourceId) {
+        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/resources/${resourceId}`, {
+          method: 'DELETE',
+        })
+      },
+      async deleteProject(projectId, resourceId) {
+        await fetchWorkspaceVoid(context, `${API_BASE}/projects/${projectId}/resources/${resourceId}`, {
+          method: 'DELETE',
+        })
+      },
+    },
+    artifacts: {
+      async listWorkspace() {
+        return await fetchWorkspace<ArtifactRecord[]>(context, `${API_BASE}/artifacts`, {
+          method: 'GET',
+        })
+      },
     },
     knowledge: {
       async listWorkspace() {
@@ -470,26 +643,81 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
         )
       },
     },
+    pet: {
+      async getSnapshot(projectId) {
+        return await fetchWorkspace<PetWorkspaceSnapshot>(
+          context,
+          projectId ? `${API_BASE}/projects/${projectId}/pet` : `${API_BASE}/workspace/pet`,
+          {
+            method: 'GET',
+          },
+        )
+      },
+      async savePresence(input, projectId) {
+        return await fetchWorkspace<PetPresenceState>(
+          context,
+          projectId ? `${API_BASE}/projects/${projectId}/pet/presence` : `${API_BASE}/workspace/pet/presence`,
+          {
+            method: 'PATCH',
+            body: JSON.stringify(input),
+          },
+        )
+      },
+      async bindConversation(input, projectId) {
+        return await fetchWorkspace<PetConversationBinding>(
+          context,
+          projectId ? `${API_BASE}/projects/${projectId}/pet/conversation` : `${API_BASE}/workspace/pet/conversation`,
+          {
+            method: 'PUT',
+            body: JSON.stringify(input),
+          },
+        )
+      },
+    },
     agents: {
       async list() {
         return await fetchWorkspace<AgentRecord[]>(context, `${API_BASE}/workspace/agents`, {
           method: 'GET',
         })
       },
-      async create(record) {
+      async create(input) {
         return await fetchWorkspace<AgentRecord>(context, `${API_BASE}/workspace/agents`, {
           method: 'POST',
-          body: JSON.stringify(record),
+          body: JSON.stringify(input),
         })
       },
-      async update(agentId, record) {
+      async update(agentId, input) {
         return await fetchWorkspace<AgentRecord>(context, `${API_BASE}/workspace/agents/${agentId}`, {
           method: 'PATCH',
-          body: JSON.stringify(record),
+          body: JSON.stringify(input),
         })
       },
       async delete(agentId) {
         await fetchWorkspaceVoid(context, `${API_BASE}/workspace/agents/${agentId}`, {
+          method: 'DELETE',
+        })
+      },
+      async listProjectLinks(projectId) {
+        return await fetchWorkspace<ProjectAgentLinkRecord[]>(
+          context,
+          `${API_BASE}/projects/${projectId}/agent-links`,
+          {
+            method: 'GET',
+          },
+        )
+      },
+      async linkProject(input) {
+        return await fetchWorkspace<ProjectAgentLinkRecord>(
+          context,
+          `${API_BASE}/projects/${input.projectId}/agent-links`,
+          {
+            method: 'POST',
+            body: JSON.stringify(input),
+          },
+        )
+      },
+      async unlinkProject(projectId, agentId) {
+        await fetchWorkspaceVoid(context, `${API_BASE}/projects/${projectId}/agent-links/${agentId}`, {
           method: 'DELETE',
         })
       },
@@ -500,20 +728,44 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
           method: 'GET',
         })
       },
-      async create(record) {
+      async create(input) {
         return await fetchWorkspace<TeamRecord>(context, `${API_BASE}/workspace/teams`, {
           method: 'POST',
-          body: JSON.stringify(record),
+          body: JSON.stringify(input),
         })
       },
-      async update(teamId, record) {
+      async update(teamId, input) {
         return await fetchWorkspace<TeamRecord>(context, `${API_BASE}/workspace/teams/${teamId}`, {
           method: 'PATCH',
-          body: JSON.stringify(record),
+          body: JSON.stringify(input),
         })
       },
       async delete(teamId) {
         await fetchWorkspaceVoid(context, `${API_BASE}/workspace/teams/${teamId}`, {
+          method: 'DELETE',
+        })
+      },
+      async listProjectLinks(projectId) {
+        return await fetchWorkspace<ProjectTeamLinkRecord[]>(
+          context,
+          `${API_BASE}/projects/${projectId}/team-links`,
+          {
+            method: 'GET',
+          },
+        )
+      },
+      async linkProject(input) {
+        return await fetchWorkspace<ProjectTeamLinkRecord>(
+          context,
+          `${API_BASE}/projects/${input.projectId}/team-links`,
+          {
+            method: 'POST',
+            body: JSON.stringify(input),
+          },
+        )
+      },
+      async unlinkProject(projectId, teamId) {
+        await fetchWorkspaceVoid(context, `${API_BASE}/projects/${projectId}/team-links/${teamId}`, {
           method: 'DELETE',
         })
       },
@@ -529,12 +781,96 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
           method: 'GET',
         })
       },
+      async setToolDisabled(patch) {
+        return await fetchWorkspace<WorkspaceToolCatalogSnapshot>(context, `${API_BASE}/workspace/catalog/tool-catalog/disable`, {
+          method: 'PATCH',
+          body: JSON.stringify(patch),
+        })
+      },
+      async getSkill(skillId) {
+        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}`, {
+          method: 'GET',
+        })
+      },
+      async getSkillTree(skillId) {
+        return await fetchWorkspace<WorkspaceSkillTreeDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}/tree`, {
+          method: 'GET',
+        })
+      },
+      async getSkillFile(skillId, relativePath) {
+        return await fetchWorkspace<WorkspaceSkillFileDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}/files/${encodePathSegments(relativePath)}`, {
+          method: 'GET',
+        })
+      },
+      async createSkill(input) {
+        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills`, {
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      },
+      async updateSkill(skillId, input) {
+        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(input),
+        })
+      },
+      async updateSkillFile(skillId, relativePath, input) {
+        return await fetchWorkspace<WorkspaceSkillFileDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}/files/${encodePathSegments(relativePath)}`, {
+          method: 'PATCH',
+          body: JSON.stringify(input),
+        })
+      },
+      async importSkillArchive(input) {
+        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills/import-archive`, {
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      },
+      async importSkillFolder(input) {
+        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills/import-folder`, {
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      },
+      async copySkillToManaged(skillId, input) {
+        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}/copy-to-managed`, {
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      },
+      async deleteSkill(skillId) {
+        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/catalog/skills/${skillId}`, {
+          method: 'DELETE',
+        })
+      },
+      async getMcpServer(serverName) {
+        return await fetchWorkspace<WorkspaceMcpServerDocument>(context, `${API_BASE}/workspace/catalog/mcp-servers/${serverName}`, {
+          method: 'GET',
+        })
+      },
+      async createMcpServer(input) {
+        return await fetchWorkspace<WorkspaceMcpServerDocument>(context, `${API_BASE}/workspace/catalog/mcp-servers`, {
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      },
+      async updateMcpServer(serverName, input) {
+        return await fetchWorkspace<WorkspaceMcpServerDocument>(context, `${API_BASE}/workspace/catalog/mcp-servers/${serverName}`, {
+          method: 'PATCH',
+          body: JSON.stringify(input),
+        })
+      },
+      async deleteMcpServer(serverName) {
+        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/catalog/mcp-servers/${serverName}`, {
+          method: 'DELETE',
+        })
+      },
       async listModels() {
         const snapshot = await this.getSnapshot()
         return snapshot.models
       },
       async listProviderCredentials() {
-        return await fetchWorkspace<ProviderCredentialRecord[]>(
+        return await fetchWorkspace<CredentialBinding[]>(
           context,
           `${API_BASE}/workspace/catalog/provider-credentials`,
           {
@@ -616,6 +952,23 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
           body: JSON.stringify(record),
         })
       },
+      async deleteUser(userId) {
+        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/rbac/users/${userId}`, {
+          method: 'DELETE',
+        })
+      },
+      async updateCurrentUserProfile(input) {
+        return await fetchWorkspace<UserRecordSummary>(context, `${API_BASE}/workspace/user-center/profile`, {
+          method: 'PATCH',
+          body: JSON.stringify(input),
+        })
+      },
+      async changeCurrentUserPassword(input) {
+        return await fetchWorkspace<ChangeCurrentUserPasswordResponse>(context, `${API_BASE}/workspace/user-center/profile/password`, {
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      },
       async listRoles() {
         return await fetchWorkspace<RoleRecord[]>(context, `${API_BASE}/workspace/rbac/roles`, {
           method: 'GET',
@@ -631,6 +984,11 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
         return await fetchWorkspace<RoleRecord>(context, `${API_BASE}/workspace/rbac/roles/${roleId}`, {
           method: 'PATCH',
           body: JSON.stringify(record),
+        })
+      },
+      async deleteRole(roleId) {
+        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/rbac/roles/${roleId}`, {
+          method: 'DELETE',
         })
       },
       async listPermissions() {
@@ -661,6 +1019,11 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
             body: JSON.stringify(record),
           },
         )
+      },
+      async deletePermission(permissionId) {
+        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/rbac/permissions/${permissionId}`, {
+          method: 'DELETE',
+        })
       },
       async listMenus() {
         return await fetchWorkspace<MenuRecord[]>(context, `${API_BASE}/workspace/rbac/menus`, {
@@ -695,6 +1058,12 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
         return await fetchWorkspaceWithoutSession<RuntimeConfigValidationResult>(context, `${RUNTIME_API_BASE}/config/validate`, {
           method: 'POST',
           body: JSON.stringify(patch),
+        })
+      },
+      async validateConfiguredModel(input) {
+        return await fetchWorkspaceWithoutSession<RuntimeConfiguredModelProbeResult>(context, `${RUNTIME_API_BASE}/config/configured-models/probe`, {
+          method: 'POST',
+          body: JSON.stringify(input),
         })
       },
       async saveConfig(patch) {

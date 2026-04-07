@@ -10,6 +10,7 @@ import type {
   ToolCatalogKind,
   ViewStatus,
 } from './shared'
+import type { JsonValue } from './runtime'
 
 export interface InboxItem {
   id: string
@@ -198,9 +199,35 @@ export interface CredentialBinding {
 }
 
 export interface DefaultSelection {
+  configuredModelId?: string
   providerId: string
   modelId: string
   surface: ModelSurfaceId | string
+}
+
+export interface ConfiguredModelTokenQuota {
+  totalTokens?: number
+}
+
+export interface ConfiguredModelTokenUsage {
+  usedTokens: number
+  remainingTokens?: number
+  exhausted: boolean
+}
+
+export interface ConfiguredModelRecord {
+  configuredModelId: string
+  name: string
+  providerId: string
+  modelId: string
+  credentialRef?: string
+  baseUrl?: string
+  tokenQuota?: ConfiguredModelTokenQuota
+  tokenUsage: ConfiguredModelTokenUsage
+  enabled: boolean
+  source: string
+  status: CredentialBinding['status'] | 'missing'
+  configured: boolean
 }
 
 export interface ModelRegistryDiagnostics {
@@ -212,6 +239,12 @@ export type WorkspaceToolKind = ToolCatalogKind
 export type WorkspaceToolRequiredPermission = 'readonly' | 'workspace-write' | 'danger-full-access'
 export type WorkspaceToolAvailability = ViewStatus
 
+export interface WorkspaceToolManagementCapabilities {
+  canDisable: boolean
+  canEdit: boolean
+  canDelete: boolean
+}
+
 interface WorkspaceToolCatalogBase {
   id: string
   workspaceId: string
@@ -222,6 +255,8 @@ interface WorkspaceToolCatalogBase {
   availability: WorkspaceToolAvailability
   sourceKey: string
   displayPath: string
+  disabled: boolean
+  management: WorkspaceToolManagementCapabilities
 }
 
 export interface WorkspaceBuiltinToolCatalogEntry extends WorkspaceToolCatalogBase {
@@ -234,6 +269,8 @@ export interface WorkspaceSkillToolCatalogEntry extends WorkspaceToolCatalogBase
   active: boolean
   shadowedBy?: string
   sourceOrigin: 'skills_dir' | 'legacy_commands_dir'
+  workspaceOwned: boolean
+  relativePath?: string
 }
 
 export interface WorkspaceMcpToolCatalogEntry extends WorkspaceToolCatalogBase {
@@ -252,6 +289,106 @@ export type WorkspaceToolCatalogEntry =
 
 export interface WorkspaceToolCatalogSnapshot {
   entries: WorkspaceToolCatalogEntry[]
+}
+
+export interface WorkspaceToolDisablePatch {
+  sourceKey: string
+  disabled: boolean
+}
+
+export interface CreateWorkspaceSkillInput {
+  slug: string
+  content: string
+}
+
+export interface UpdateWorkspaceSkillInput {
+  content: string
+}
+
+export interface WorkspaceSkillTreeNode {
+  path: string
+  name: string
+  kind: 'directory' | 'file'
+  children?: WorkspaceSkillTreeNode[]
+  byteSize?: number
+  isText?: boolean
+}
+
+export interface WorkspaceSkillDocument {
+  id: string
+  sourceKey: string
+  name: string
+  description: string
+  content: string
+  displayPath: string
+  rootPath: string
+  tree: WorkspaceSkillTreeNode[]
+  sourceOrigin: 'skills_dir' | 'legacy_commands_dir'
+  workspaceOwned: boolean
+  relativePath?: string
+}
+
+export interface WorkspaceSkillTreeDocument {
+  skillId: string
+  sourceKey: string
+  displayPath: string
+  rootPath: string
+  tree: WorkspaceSkillTreeNode[]
+}
+
+export interface WorkspaceSkillFileDocument {
+  skillId: string
+  sourceKey: string
+  path: string
+  displayPath: string
+  byteSize: number
+  isText: boolean
+  content: string | null
+  contentType?: string
+  language?: string
+  readonly: boolean
+}
+
+export interface UpdateWorkspaceSkillFileInput {
+  content: string
+}
+
+export interface WorkspaceFileUploadPayload {
+  fileName: string
+  contentType: string
+  dataBase64: string
+  byteSize: number
+}
+
+export interface WorkspaceDirectoryUploadEntry extends WorkspaceFileUploadPayload {
+  relativePath: string
+}
+
+export interface ImportWorkspaceSkillArchiveInput {
+  slug: string
+  archive: WorkspaceFileUploadPayload
+}
+
+export interface ImportWorkspaceSkillFolderInput {
+  slug: string
+  files: WorkspaceDirectoryUploadEntry[]
+}
+
+export interface CopyWorkspaceSkillToManagedInput {
+  slug: string
+}
+
+export interface UpsertWorkspaceMcpServerInput {
+  serverName: string
+  config: Record<string, JsonValue>
+}
+
+export interface WorkspaceMcpServerDocument {
+  serverName: string
+  sourceKey: string
+  displayPath: string
+  scope: 'workspace' | 'project' | 'user'
+  config: Record<string, JsonValue>
 }
 
 export interface AutomationSummary {

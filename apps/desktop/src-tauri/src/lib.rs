@@ -39,10 +39,21 @@ pub fn run() {
             commands::load_preferences,
             commands::save_preferences,
             commands::list_connections_stub,
+            commands::list_workspace_connections,
+            commands::create_workspace_connection,
+            commands::delete_workspace_connection,
+            commands::list_notifications,
+            commands::create_notification,
+            commands::mark_notification_read,
+            commands::mark_all_notifications_read,
+            commands::dismiss_notification_toast,
+            commands::get_notification_unread_summary,
             commands::get_backend_connection,
             commands::healthcheck,
             commands::restart_desktop_backend,
             commands::pick_avatar_image,
+            commands::pick_skill_archive,
+            commands::pick_skill_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

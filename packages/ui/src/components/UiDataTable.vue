@@ -16,6 +16,7 @@ const props = defineProps<{
   rowTestId?: string
   emptyTitle?: string
   emptyDescription?: string
+  onRowClick?: (row: TData) => void
   class?: string
 }>()
 
@@ -77,8 +78,12 @@ function resolveCellRender(cell: {
         <tr
           v-for="row in table.getRowModel().rows"
           :key="row.id"
-          class="group border-b border-border/40 dark:border-white/[0.04] last:border-0 hover:bg-accent/40 transition-colors"
+          :class="cn(
+            'group border-b border-border/40 dark:border-white/[0.04] last:border-0 hover:bg-accent/40 transition-colors',
+            props.onRowClick && 'cursor-pointer',
+          )"
           :data-testid="props.rowTestId ? `${props.rowTestId}-${row.id}` : undefined"
+          @click="props.onRowClick?.(row.original)"
         >
           <td
             v-for="cell in row.getVisibleCells()"

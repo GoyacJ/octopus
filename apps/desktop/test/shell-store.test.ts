@@ -172,7 +172,7 @@ describe('useShellStore', () => {
     expect(store.workspaceSessionsState['conn-enterprise']?.token).toBe('token-enterprise')
   })
 
-  it('adds a persisted remote workspace connection and activates it', async () => {
+  it('adds a persisted remote workspace connection without switching the active connection before login state is stored', async () => {
     const store = useShellStore()
     store.workspaceConnectionsState = [{
       workspaceConnectionId: 'conn-local',
@@ -207,7 +207,7 @@ describe('useShellStore', () => {
       'conn-local',
       'conn-enterprise',
     ])
-    expect(store.activeWorkspaceConnectionId).toBe('conn-enterprise')
+    expect(store.activeWorkspaceConnectionId).toBe('conn-local')
   })
 
   it('deletes a remote workspace connection, clears its session, and falls back to local when it was active', async () => {

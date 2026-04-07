@@ -55,6 +55,17 @@ async function waitForText(container: HTMLElement, value: string, timeoutMs = 20
   }
 }
 
+async function waitForCondition(check: () => boolean, timeoutMs = 2000) {
+  const startedAt = Date.now()
+  while (!check()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error('Timed out waiting for condition')
+    }
+    await nextTick()
+    await new Promise(resolve => window.setTimeout(resolve, 20))
+  }
+}
+
 describe('workspace and project agents pages', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -62,7 +73,7 @@ describe('workspace and project agents pages', () => {
     document.body.innerHTML = ''
   })
 
-  it('renders workspace agents and supports updating the selected agent', async () => {
+  it('renders workspace agent center tabs and workspace teams in the team tab', async () => {
     await router.push('/workspaces/ws-local/agents')
     await router.isReady()
 
@@ -71,24 +82,20 @@ describe('workspace and project agents pages', () => {
 
     expect(mounted.container.textContent).toContain('Architect Agent')
     expect(mounted.container.textContent).toContain('Coder Agent')
+    expect(mounted.container.textContent).toContain('Studio Direction Team')
 
-    const nameInput = mounted.container.querySelectorAll('input')[0] as HTMLInputElement
-    expect(nameInput).not.toBeNull()
-    nameInput.value = 'Architect Agent Updated'
-    nameInput.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
+    const teamTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-team"]') as HTMLButtonElement | null
+    expect(teamTab).not.toBeNull()
+    teamTab?.click()
+    await waitForCondition(() => router.currentRoute.value.query.tab === 'team')
 
-    const saveButton = Array.from(mounted.container.querySelectorAll('button')).find(button =>
-      button.textContent?.includes(String(i18n.global.t('common.save'))))
-    saveButton?.click()
-    await waitForText(mounted.container, 'Architect Agent Updated')
-
-    expect(mounted.container.textContent).toContain('Architect Agent Updated')
+    expect(router.currentRoute.value.query.tab).toBe('team')
+    expect(mounted.container.textContent).toContain('Studio Direction Team')
 
     mounted.destroy()
   })
 
-  it('renders project-scoped agents for the current project', async () => {
+  it('renders project-scoped agents and teams without workspace integration entries', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/agents')
     await router.isReady()
 
@@ -97,7 +104,43 @@ describe('workspace and project agents pages', () => {
 
     expect(mounted.container.textContent).toContain('Desktop Redesign')
     expect(mounted.container.textContent).toContain('Redesign Copilot')
-    expect(mounted.container.textContent).not.toContain('Governance Agent')
+    expect(mounted.container.textContent).not.toContain('接入工作区 Agent')
+    expect(mounted.container.textContent).not.toContain('Architect Agent')
+
+    const teamTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-team"]') as HTMLButtonElement | null
+    expect(teamTab).not.toBeNull()
+    teamTab?.click()
+    await waitForCondition(() => router.currentRoute.value.query.tab === 'team')
+
+    expect(mounted.container.textContent).not.toContain('接入工作区 Team')
+    expect(mounted.container.textContent).not.toContain('Studio Direction Team')
+
+    mounted.destroy()
+  })
+
+  it('shows delete actions for workspace agent and team cards and keeps team relationships inside dialog', async () => {
+    await router.push('/workspaces/ws-local/agents')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitForText(mounted.container, 'Architect Agent')
+
+    expect(mounted.container.textContent).not.toContain('编辑关系')
+    expect(mounted.container.textContent).toContain('删除')
+
+    const teamTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-team"]') as HTMLButtonElement | null
+    expect(teamTab).not.toBeNull()
+    teamTab?.click()
+    await waitForCondition(() => router.currentRoute.value.query.tab === 'team')
+
+    const teamOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-team-team-studio"]') as HTMLButtonElement | null
+    expect(teamOpenButton).not.toBeNull()
+    teamOpenButton?.click()
+    await nextTick()
+
+    expect(document.body.textContent).toContain('团队配置')
+    expect(document.body.textContent).toContain('Studio Direction Team')
+    expect(document.body.textContent).toContain('组织结构预览')
 
     mounted.destroy()
   })

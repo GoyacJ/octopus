@@ -1,22 +1,28 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
-import { RouterView } from 'vue-router'
+import { RouterView, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
-import { UiButton } from '@octopus/ui'
+import type { NotificationRecord } from '@octopus/schema'
+import { UiButton, UiToastViewport } from '@octopus/ui'
 
 import AuthGateDialog from '@/components/auth/AuthGateDialog.vue'
 import i18n from '@/plugins/i18n'
 import { useWorkbenchRouteSync } from '@/composables/useWorkbenchRouteSync'
 import WorkbenchLayout from '@/layouts/WorkbenchLayout.vue'
 import { useAuthStore } from '@/stores/auth'
+import { useNotificationStore } from '@/stores/notifications'
+import { usePetStore } from '@/stores/pet'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 import { WORKSPACE_AUTH_FAILURE_EVENT, type WorkspaceAuthFailureDetail } from '@/tauri/shared'
 
 const auth = useAuthStore()
+const notifications = useNotificationStore()
+const router = useRouter()
 const shell = useShellStore()
 const runtime = useRuntimeStore()
+const pet = usePetStore()
 const { t } = useI18n()
 
 useWorkbenchRouteSync()
@@ -31,9 +37,16 @@ function resolveTheme(theme: 'light' | 'dark' | 'system'): 'light' | 'dark' {
 
 async function bootstrapShell() {
   await shell.bootstrap(shell.defaultWorkspaceId, shell.defaultProjectId)
+  await notifications.bootstrap()
   await auth.bootstrapAuth()
   runtime.syncWorkspaceScopeFromShell()
 }
+
+const notificationScopeLabels = computed(() => ({
+  app: t('notifications.scopes.app'),
+  workspace: t('notifications.scopes.workspace'),
+  user: t('notifications.scopes.user'),
+}))
 
 const showHostUnavailable = computed(() => {
   if (shell.loading) {
@@ -54,6 +67,13 @@ const hostUnavailableDescription = computed(() =>
 const handleWorkspaceAuthFailure = (event: Event) => {
   const detail = (event as CustomEvent<WorkspaceAuthFailureDetail>).detail
   auth.handleAuthError(detail.workspaceConnectionId, 'session-expired')
+}
+
+async function handleNotificationSelect(notification: NotificationRecord) {
+  await notifications.markRead(notification.id)
+  if (notification.routeTo) {
+    await router.push(notification.routeTo)
+  }
 }
 
 onMounted(async () => {
@@ -113,7 +133,10 @@ watch(
 
 watch(
   () => shell.activeWorkspaceConnectionId,
-  async (workspaceConnectionId) => {
+  async (workspaceConnectionId, previousConnectionId) => {
+    if (previousConnectionId) {
+      pet.clearWorkspaceScope(previousConnectionId)
+    }
     if (workspaceConnectionId) {
       await auth.bootstrapAuth(workspaceConnectionId)
     }
@@ -160,5 +183,11 @@ watch(
   <WorkbenchLayout v-else>
     <RouterView />
     <AuthGateDialog />
+    <UiToastViewport
+      :notifications="notifications.activeToasts"
+      :scope-labels="notificationScopeLabels"
+      @close="notifications.dismissToast"
+      @select="handleNotificationSelect"
+    />
   </WorkbenchLayout>
 </template>

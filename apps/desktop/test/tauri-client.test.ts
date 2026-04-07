@@ -4,8 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type {
   ApiErrorEnvelope,
+  AvatarUploadPayload,
+  BindPetConversationInput,
+  NotificationRecord,
   RegisterWorkspaceOwnerRequest,
   RuntimeConfigPatch,
+  SavePetPresenceInput,
   ShellBootstrap,
   WorkspaceConnectionRecord,
   WorkspaceSessionTokenEnvelope,
@@ -83,6 +87,24 @@ function firstRequest(): RequestInit {
   return calls[0]?.[1] as RequestInit
 }
 
+function createNotificationRecord(overrides: Partial<NotificationRecord> = {}): NotificationRecord {
+  return {
+    id: 'notif-1',
+    scopeKind: 'app',
+    level: 'info',
+    title: 'Saved',
+    body: 'Preferences updated.',
+    source: 'settings',
+    createdAt: 1,
+    readAt: undefined,
+    toastVisibleUntil: undefined,
+    scopeOwnerId: undefined,
+    routeTo: undefined,
+    actionLabel: undefined,
+    ...overrides,
+  }
+}
+
 async function loadClientModule() {
   vi.resetModules()
   vi.doMock('@tauri-apps/api/core', () => ({
@@ -144,6 +166,74 @@ describe('host client transport', () => {
     expect('submitRuntimeUserTurn' in client).toBe(false)
   })
 
+  it('creates notifications through the Tauri shell bridge', async () => {
+    const notification = createNotificationRecord({
+      id: 'notif-created',
+      scopeKind: 'workspace',
+    })
+    invokeSpy.mockResolvedValue(notification)
+
+    const client = await loadClientModule()
+    const result = await client.createNotification({
+      scopeKind: 'workspace',
+      scopeOwnerId: 'ws-local',
+      level: 'success',
+      title: 'Workspace synced',
+      body: 'The workspace status is up to date.',
+      source: 'workspace-store',
+      toastDurationMs: 30_000,
+    })
+
+    expect(invokeSpy).toHaveBeenCalledWith('create_notification', {
+      input: {
+        scopeKind: 'workspace',
+        scopeOwnerId: 'ws-local',
+        level: 'success',
+        title: 'Workspace synced',
+        body: 'The workspace status is up to date.',
+        source: 'workspace-store',
+        toastDurationMs: 30_000,
+      },
+    })
+    expect(result.id).toBe('notif-created')
+  })
+
+  it('fans out notification events to local subscribers after successful creation', async () => {
+    const notification = createNotificationRecord({
+      id: 'notif-fanout',
+      toastVisibleUntil: 30_000,
+    })
+    invokeSpy.mockResolvedValue(notification)
+
+    const client = await loadClientModule()
+    const received: NotificationRecord[] = []
+    const unsubscribe = client.subscribeToNotifications((event) => {
+      received.push(event)
+    })
+
+    await client.createNotification({
+      scopeKind: 'app',
+      level: 'info',
+      title: 'Heads up',
+      body: 'New notification.',
+      source: 'test-suite',
+    })
+
+    expect(received).toEqual([notification])
+
+    unsubscribe()
+
+    await client.createNotification({
+      scopeKind: 'app',
+      level: 'info',
+      title: 'Second',
+      body: 'Should not be received.',
+      source: 'test-suite',
+    })
+
+    expect(received).toEqual([notification])
+  })
+
   it('requires a workspace session token before workspace-plane calls can be made', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
 
@@ -203,6 +293,99 @@ describe('host client transport', () => {
     expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
     expect(headers.get('X-Workspace-Id')).toBe('ws-local')
     expect(headers.get('X-Request-Id')).toMatch(/^req-/)
+  })
+
+  it('calls workspace pet endpoints through the workspace client adapter', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          profile: {
+            id: 'pet-octopus',
+            displayName: '小章',
+            species: 'octopus',
+            ownerUserId: 'user-owner',
+            avatarLabel: 'Octopus mascot',
+            summary: 'Octopus 首席吉祥物，负责卖萌和加油。',
+            greeting: '嗨！我是小章，今天也要加油哦！',
+            mood: 'happy',
+            favoriteSnack: '新鲜小虾',
+            promptHints: ['最近有什么好消息？'],
+            fallbackAsset: 'octopus',
+          },
+          presence: {
+            petId: 'pet-octopus',
+            isVisible: true,
+            chatOpen: false,
+            motionState: 'idle',
+            unreadCount: 0,
+            lastInteractionAt: 0,
+            position: { x: 0, y: 0 },
+          },
+          messages: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          petId: 'pet-octopus',
+          isVisible: true,
+          chatOpen: true,
+          motionState: 'chat',
+          unreadCount: 0,
+          lastInteractionAt: 12,
+          position: { x: 0, y: 0 },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          petId: 'pet-octopus',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          conversationId: 'conversation-1',
+          sessionId: 'rt-conversation-1',
+          updatedAt: 12,
+        }),
+      })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const session = createWorkspaceSession(connection!)
+    const workspaceClient = client.createWorkspaceClient({ connection: connection!, session })
+
+    await workspaceClient.pet.getSnapshot('proj-redesign')
+    await workspaceClient.pet.savePresence({
+      petId: 'pet-octopus',
+      chatOpen: true,
+      motionState: 'chat',
+    } satisfies SavePetPresenceInput, 'proj-redesign')
+    await workspaceClient.pet.bindConversation({
+      petId: 'pet-octopus',
+      conversationId: 'conversation-1',
+      sessionId: 'rt-conversation-1',
+    } satisfies BindPetConversationInput, 'proj-redesign')
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/pet',
+      expect.objectContaining({ method: 'GET' }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/pet/presence',
+      expect.objectContaining({ method: 'PATCH' }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      3,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/pet/conversation',
+      expect.objectContaining({ method: 'PUT' }),
+    )
   })
 
   it('submits first-owner registration through the public auth endpoint without an existing session', async () => {
@@ -338,6 +521,8 @@ describe('host client transport', () => {
       content: 'hello',
       modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
     }, 'idem-turn-1')
 
     const request = firstRequest()
@@ -346,8 +531,50 @@ describe('host client transport', () => {
       content: 'hello',
       modelId: 'claude-sonnet-4-5',
       permissionMode: 'workspace-write',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
     })
     expect(headers.get('Idempotency-Key')).toBe('idem-turn-1')
+  })
+
+  it('lists workspace artifacts through the workspace API with the session token', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ([
+        {
+          id: 'artifact-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          title: 'Runtime Delivery Summary',
+          status: 'review',
+          latestVersion: 2,
+          updatedAt: 10,
+        },
+      ]),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const artifacts = await workspaceClient.artifacts.listWorkspace()
+
+    expect(artifacts[0]?.title).toBe('Runtime Delivery Summary')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/artifacts',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+    const request = firstRequest()
+    expect((request.headers as Headers).get('Authorization')).toBe('Bearer workspace-session-token')
   })
 
   it('preserves danger-full-access for authenticated runtime requests', async () => {
@@ -380,11 +607,15 @@ describe('host client transport', () => {
       content: 'hello',
       modelId: 'claude-sonnet-4-5',
       permissionMode: 'danger-full-access',
+      actorKind: 'team',
+      actorId: 'team-studio',
     })
 
     const request = firstRequest()
     expect(JSON.parse(String(request.body))).toMatchObject({
       permissionMode: 'danger-full-access',
+      actorKind: 'team',
+      actorId: 'team-studio',
     })
   })
 
@@ -497,6 +728,67 @@ describe('host client transport', () => {
     expect(headers.get('Authorization')).toBeNull()
   })
 
+  it('posts configured model probe requests to the workspace API without requiring a workspace session', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        valid: true,
+        reachable: true,
+        configuredModelId: 'anthropic-primary',
+        configuredModelName: 'Claude Primary',
+        requestId: 'probe-request-1',
+        consumedTokens: 12,
+        errors: [],
+        warnings: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+    })
+
+    const result = await workspaceClient.runtime.validateConfiguredModel({
+      scope: 'workspace',
+      configuredModelId: 'anthropic-primary',
+      patch: {
+        configuredModels: {
+          'anthropic-primary': {
+            baseUrl: 'https://anthropic.example.test',
+          },
+        },
+      },
+    })
+
+    expect(result.reachable).toBe(true)
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/config/configured-models/probe',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBeNull()
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      scope: 'workspace',
+      configuredModelId: 'anthropic-primary',
+      patch: {
+        configuredModels: {
+          'anthropic-primary': {
+            baseUrl: 'https://anthropic.example.test',
+          },
+        },
+      },
+    })
+  })
+
   it('patches runtime config scopes through the workspace API without requiring a workspace session', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
@@ -571,6 +863,14 @@ describe('host client transport', () => {
         effectiveConfigHash: 'cfg-project',
         sources: [
           {
+            scope: 'user',
+            ownerId: 'user-owner',
+            displayPath: 'config/runtime/users/user-owner.json',
+            sourceKey: 'user:user-owner',
+            exists: true,
+            loaded: true,
+          },
+          {
             scope: 'workspace',
             displayPath: 'config/runtime/workspace.json',
             sourceKey: 'workspace',
@@ -614,6 +914,89 @@ describe('host client transport', () => {
     expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
   })
 
+  it('uses authenticated project create endpoint for workspace project management', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'proj-studio',
+        workspaceId: 'ws-local',
+        name: 'Agent Studio',
+        status: 'active',
+        description: 'Project management workspace surface.',
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const project = await (workspaceClient.projects as any).create({
+      name: 'Agent Studio',
+      description: 'Project management workspace surface.',
+    })
+
+    expect(project.name).toBe('Agent Studio')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/projects',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
+  })
+
+  it('uses authenticated project update endpoint for archive/restore actions', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'proj-redesign',
+        workspaceId: 'ws-local',
+        name: 'Desktop Redesign',
+        status: 'archived',
+        description: 'Real workspace API migration for the desktop surface.',
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const project = await (workspaceClient.projects as any).update('proj-redesign', {
+      name: 'Desktop Redesign',
+      description: 'Real workspace API migration for the desktop surface.',
+      status: 'archived',
+    })
+
+    expect(project.status).toBe('archived')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
+  })
+
   it('uses authenticated user runtime config endpoints for user-scoped overrides', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
@@ -624,17 +1007,17 @@ describe('host client transport', () => {
         effectiveConfigHash: 'cfg-user',
         sources: [
           {
-            scope: 'workspace',
-            displayPath: 'config/runtime/workspace.json',
-            sourceKey: 'workspace',
-            exists: true,
-            loaded: true,
-          },
-          {
             scope: 'user',
             ownerId: 'user-owner',
             displayPath: 'config/runtime/users/user-owner.json',
             sourceKey: 'user:user-owner',
+            exists: true,
+            loaded: true,
+          },
+          {
+            scope: 'workspace',
+            displayPath: 'config/runtime/workspace.json',
+            sourceKey: 'workspace',
             exists: true,
             loaded: true,
           },
@@ -665,6 +1048,306 @@ describe('host client transport', () => {
     const request = firstRequest()
     const headers = request.headers as Headers
     expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
+  })
+
+  it('updates the current user profile through the workspace user center profile endpoint', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'user-owner',
+        username: 'owner-updated',
+        displayName: 'Owner Updated',
+        status: 'active',
+        passwordState: 'set',
+        roleIds: ['role-owner'],
+        scopeProjectIds: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const avatar: AvatarUploadPayload = {
+      fileName: 'owner-avatar.png',
+      contentType: 'image/png',
+      dataBase64: 'iVBORw0KGgo=',
+      byteSize: 8,
+    }
+
+    await workspaceClient.rbac.updateCurrentUserProfile({
+      username: 'owner-updated',
+      displayName: 'Owner Updated',
+      avatar,
+    })
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/user-center/profile',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    expect(request.body).toBe(JSON.stringify({
+      username: 'owner-updated',
+      displayName: 'Owner Updated',
+      avatar,
+    }))
+  })
+
+  it('changes the current user password through the workspace user center profile password endpoint', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        passwordState: 'set',
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.rbac.changeCurrentUserPassword({
+      currentPassword: 'owner-owner',
+      newPassword: 'owner-owner-2',
+      confirmPassword: 'owner-owner-2',
+    })
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/user-center/profile/password',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    expect(request.body).toBe(JSON.stringify({
+      currentPassword: 'owner-owner',
+      newPassword: 'owner-owner-2',
+      confirmPassword: 'owner-owner-2',
+    }))
+  })
+
+  it('creates workspace members through the RBAC users endpoint with avatar and password options', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'user-member-alpha',
+        username: 'member-alpha',
+        displayName: 'Member Alpha',
+        avatar: undefined,
+        status: 'active',
+        passwordState: 'reset-required',
+        roleIds: ['role-operator'],
+        scopeProjectIds: ['proj-governance'],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const avatar: AvatarUploadPayload = {
+      fileName: 'member-alpha.png',
+      contentType: 'image/png',
+      dataBase64: 'YWxwaGE=',
+      byteSize: 5,
+    }
+
+    await workspaceClient.rbac.createUser({
+      username: 'member-alpha',
+      displayName: 'Member Alpha',
+      status: 'active',
+      roleIds: ['role-operator'],
+      scopeProjectIds: ['proj-governance'],
+      avatar,
+      useDefaultPassword: true,
+    })
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/rbac/users',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    expect(request.body).toBe(JSON.stringify({
+      username: 'member-alpha',
+      displayName: 'Member Alpha',
+      status: 'active',
+      roleIds: ['role-operator'],
+      scopeProjectIds: ['proj-governance'],
+      avatar,
+      useDefaultPassword: true,
+    }))
+  })
+
+  it('updates workspace members through the RBAC user detail endpoint with password reset options', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'user-member-beta',
+        username: 'member-beta',
+        displayName: 'Member Beta',
+        avatar: 'data:image/png;base64,YmV0YQ==',
+        status: 'active',
+        passwordState: 'set',
+        roleIds: ['role-owner'],
+        scopeProjectIds: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const avatar: AvatarUploadPayload = {
+      fileName: 'member-beta.png',
+      contentType: 'image/png',
+      dataBase64: 'YmV0YQ==',
+      byteSize: 4,
+    }
+
+    await workspaceClient.rbac.updateUser('user-member-beta', {
+      username: 'member-beta',
+      displayName: 'Member Beta',
+      status: 'active',
+      roleIds: ['role-owner'],
+      scopeProjectIds: [],
+      avatar,
+      password: 'member-beta-1',
+      confirmPassword: 'member-beta-1',
+    })
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/rbac/users/user-member-beta',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    expect(request.body).toBe(JSON.stringify({
+      username: 'member-beta',
+      displayName: 'Member Beta',
+      status: 'active',
+      roleIds: ['role-owner'],
+      scopeProjectIds: [],
+      avatar,
+      password: 'member-beta-1',
+      confirmPassword: 'member-beta-1',
+    }))
+  })
+
+  it('deletes workspace members through the RBAC user detail endpoint', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      text: async () => '',
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.rbac.deleteUser('user-member-beta')
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/rbac/users/user-member-beta',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.any(Headers),
+      }),
+    )
+  })
+
+  it('deletes workspace roles through the RBAC role detail endpoint', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      text: async () => '',
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.rbac.deleteRole('role-operator')
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/rbac/roles/role-operator',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.any(Headers),
+      }),
+    )
+  })
+
+  it('deletes workspace permissions through the RBAC permission detail endpoint', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers(),
+      text: async () => '',
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.rbac.deletePermission('perm-manage-tools')
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/rbac/permissions/perm-manage-tools',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.any(Headers),
+      }),
+    )
   })
 
   it('uses browser host HTTP endpoints when VITE_HOST_RUNTIME=browser', async () => {
@@ -892,6 +1575,252 @@ describe('host client transport', () => {
       3,
       'http://127.0.0.1:43127/api/v1/host/workspace-connections/conn-enterprise',
       expect.objectContaining({ method: 'DELETE', headers: expect.any(Headers) }),
+    )
+  })
+
+  it('calls the workspace tool management routes through the catalog adapter', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({ entries: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({ entries: [] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'skill-workspace-ops-helper',
+          sourceKey: 'skill:data/skills/ops-helper/SKILL.md',
+          name: 'ops-helper',
+          description: 'Helpful local skill.',
+          content: '---\\nname: ops-helper\\n---\\n',
+          displayPath: 'data/skills/ops-helper/SKILL.md',
+          rootPath: 'data/skills/ops-helper',
+          tree: [],
+          relativePath: 'data/skills/ops-helper/SKILL.md',
+          workspaceOwned: true,
+          sourceOrigin: 'skills_dir',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          serverName: 'ops',
+          sourceKey: 'mcp:ops',
+          displayPath: 'config/runtime/workspace.json',
+          scope: 'workspace',
+          config: {
+            type: 'http',
+            url: 'https://ops.example.test/mcp',
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          skillId: 'skill-workspace-ops-helper',
+          sourceKey: 'skill:data/skills/ops-helper/SKILL.md',
+          displayPath: 'data/skills/ops-helper',
+          rootPath: 'data/skills/ops-helper',
+          tree: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          skillId: 'skill-workspace-ops-helper',
+          sourceKey: 'skill:data/skills/ops-helper/SKILL.md',
+          path: 'notes/overview.md',
+          displayPath: 'data/skills/ops-helper/notes/overview.md',
+          byteSize: 12,
+          isText: true,
+          content: '# Overview',
+          contentType: 'text/markdown',
+          language: 'markdown',
+          readonly: false,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          skillId: 'skill-workspace-ops-helper',
+          sourceKey: 'skill:data/skills/ops-helper/SKILL.md',
+          path: 'notes/overview.md',
+          displayPath: 'data/skills/ops-helper/notes/overview.md',
+          byteSize: 14,
+          isText: true,
+          content: '# Updated',
+          contentType: 'text/markdown',
+          language: 'markdown',
+          readonly: false,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'skill-workspace-imported',
+          sourceKey: 'skill:data/skills/imported/SKILL.md',
+          name: 'imported',
+          description: 'Imported skill.',
+          content: '---\\nname: imported\\n---\\n',
+          displayPath: 'data/skills/imported/SKILL.md',
+          rootPath: 'data/skills/imported',
+          tree: [],
+          relativePath: 'data/skills/imported/SKILL.md',
+          workspaceOwned: true,
+          sourceOrigin: 'skills_dir',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'skill-workspace-foldered',
+          sourceKey: 'skill:data/skills/foldered/SKILL.md',
+          name: 'foldered',
+          description: 'Folder import.',
+          content: '---\\nname: foldered\\n---\\n',
+          displayPath: 'data/skills/foldered/SKILL.md',
+          rootPath: 'data/skills/foldered',
+          tree: [],
+          relativePath: 'data/skills/foldered/SKILL.md',
+          workspaceOwned: true,
+          sourceOrigin: 'skills_dir',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'skill-workspace-copied',
+          sourceKey: 'skill:data/skills/copied/SKILL.md',
+          name: 'copied',
+          description: 'Copied skill.',
+          content: '---\\nname: copied\\n---\\n',
+          displayPath: 'data/skills/copied/SKILL.md',
+          rootPath: 'data/skills/copied',
+          tree: [],
+          relativePath: 'data/skills/copied/SKILL.md',
+          workspaceOwned: true,
+          sourceOrigin: 'skills_dir',
+        }),
+      })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const session = createWorkspaceSession(connection!)
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session,
+    })
+
+    await workspaceClient.catalog.setToolDisabled({
+      sourceKey: 'builtin:bash',
+      disabled: true,
+    })
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/tool-catalog/disable',
+      expect.objectContaining({ method: 'PATCH', headers: expect.any(Headers) }),
+    )
+
+    await workspaceClient.catalog.createSkill({
+      slug: 'ops-helper',
+      content: '---\nname: ops-helper\n---\n',
+    })
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+
+    await workspaceClient.catalog.getSkill('skill-workspace-ops-helper')
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      3,
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills/skill-workspace-ops-helper',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+
+    await workspaceClient.catalog.getMcpServer('ops')
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      4,
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/mcp-servers/ops',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+
+    await workspaceClient.catalog.getSkillTree('skill-workspace-ops-helper')
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      5,
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills/skill-workspace-ops-helper/tree',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+
+    await workspaceClient.catalog.getSkillFile('skill-workspace-ops-helper', 'notes/overview.md')
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      6,
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills/skill-workspace-ops-helper/files/notes/overview.md',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+
+    await workspaceClient.catalog.updateSkillFile('skill-workspace-ops-helper', 'notes/overview.md', {
+      content: '# Updated',
+    })
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      7,
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills/skill-workspace-ops-helper/files/notes/overview.md',
+      expect.objectContaining({ method: 'PATCH', headers: expect.any(Headers) }),
+    )
+
+    await workspaceClient.catalog.importSkillArchive({
+      slug: 'imported',
+      archive: {
+        fileName: 'imported.zip',
+        contentType: 'application/zip',
+        dataBase64: 'UEsDBA==',
+        byteSize: 8,
+      },
+    })
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      8,
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills/import-archive',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+
+    await workspaceClient.catalog.importSkillFolder({
+      slug: 'foldered',
+      files: [{
+        relativePath: 'foldered/SKILL.md',
+        fileName: 'SKILL.md',
+        contentType: 'text/markdown',
+        dataBase64: 'IyBza2lsbA==',
+        byteSize: 8,
+      }],
+    })
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      9,
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills/import-folder',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+
+    await workspaceClient.catalog.copySkillToManaged('skill-external-help', {
+      slug: 'copied',
+    })
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      10,
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills/skill-external-help/copy-to-managed',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
     )
   })
 })

@@ -6,9 +6,9 @@ const { t } = useI18n()
 
 <template>
   <div class="p-6">
-    <h1 class="text-2xl font-bold mb-4">{{ t('sidebar.workspaceMenu.items.conversations') }}</h1>
+    <h1 class="mb-4 text-2xl font-bold">{{ t('userCenter.recentConversations.title') }}</h1>
     <div class="bg-card rounded-lg border p-12 text-center text-text-tertiary">
-      全局最近会话功能开发中...
+      {{ t('userCenter.recentConversations.emptyState') }}
     </div>
   </div>
 </template>

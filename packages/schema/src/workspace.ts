@@ -10,12 +10,46 @@ export interface WorkspaceSummary {
   defaultProjectId: string
 }
 
+export interface ProjectModelAssignments {
+  configuredModelIds: string[]
+  defaultConfiguredModelId: string
+}
+
+export interface ProjectToolAssignments {
+  sourceKeys: string[]
+}
+
+export interface ProjectAgentAssignments {
+  agentIds: string[]
+  teamIds: string[]
+}
+
+export interface ProjectWorkspaceAssignments {
+  models?: ProjectModelAssignments
+  tools?: ProjectToolAssignments
+  agents?: ProjectAgentAssignments
+}
+
 export interface ProjectRecord {
   id: string
   workspaceId: string
   name: string
   status: 'active' | 'archived'
   description: string
+  assignments?: ProjectWorkspaceAssignments
+}
+
+export interface CreateProjectRequest {
+  name: string
+  description: string
+  assignments?: ProjectWorkspaceAssignments
+}
+
+export interface UpdateProjectRequest {
+  name: string
+  description: string
+  status: 'active' | 'archived'
+  assignments?: ProjectWorkspaceAssignments
 }
 
 export interface SystemBootstrapStatus {

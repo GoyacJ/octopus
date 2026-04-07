@@ -26,7 +26,7 @@ const activeConversationId = computed(() =>
   typeof route.params.conversationId === 'string' ? route.params.conversationId : runtime.activeConversationId,
 )
 const conversations = computed(() =>
-  runtime.sessions.filter(session => session.projectId === projectId.value),
+  runtime.sessions.filter(session => session.projectId === projectId.value && session.sessionKind !== 'pet'),
 )
 
 function createConversationId() {
