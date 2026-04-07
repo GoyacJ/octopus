@@ -259,3 +259,12 @@ pub fn pick_skill_folder() -> Result<Option<Vec<Vec<WorkspaceDirectoryUploadEntr
             .collect::<Result<Vec<_>, _>>()?,
     ))
 }
+
+#[tauri::command]
+pub fn pick_agent_bundle_folder() -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, String> {
+    let Some(path) = FileDialog::new().pick_folder() else {
+        return Ok(None);
+    };
+
+    Ok(Some(read_folder_entries(&path, &path)?))
+}

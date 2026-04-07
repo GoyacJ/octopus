@@ -1,4 +1,5 @@
 export * from './app'
+export * from './agent-import'
 export * from './artifact'
 export * from './auth'
 export * from './governance'

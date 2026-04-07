@@ -28,6 +28,8 @@ use octopus_core::{
     CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput, CreateWorkspaceSkillInput,
     CreateWorkspaceUserRequest, DesktopBackendConnection, HealthcheckBackendStatus,
     HealthcheckStatus, HostState, HostWorkspaceConnectionRecord,
+    ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
+    ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
     ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, KnowledgeRecord,
     LoginRequest, MenuRecord, ModelCatalogSnapshot, PermissionRecord, PetConversationBinding,
     PetPresenceState, PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord,
@@ -330,6 +332,14 @@ pub fn build_router(state: ServerState) -> Router {
         .route("/api/v1/workspace/pet/presence", patch(save_workspace_pet_presence))
         .route("/api/v1/workspace/pet/conversation", put(bind_workspace_pet_conversation))
         .route("/api/v1/workspace/agents", get(list_agents).post(create_agent))
+        .route(
+            "/api/v1/workspace/agents/import-preview",
+            post(preview_import_agent_bundle_route),
+        )
+        .route(
+            "/api/v1/workspace/agents/import",
+            post(import_agent_bundle_route),
+        )
         .route(
             "/api/v1/workspace/agents/:agent_id",
             patch(update_agent).delete(delete_agent),
@@ -1500,6 +1510,36 @@ async fn create_agent(
 ) -> Result<Json<AgentRecord>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", input.project_id.as_deref()).await?;
     Ok(Json(state.services.workspace.create_agent(input).await?))
+}
+
+async fn preview_import_agent_bundle_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(input): Json<ImportWorkspaceAgentBundlePreviewInput>,
+) -> Result<Json<ImportWorkspaceAgentBundlePreview>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .preview_import_agent_bundle(input)
+            .await?,
+    ))
+}
+
+async fn import_agent_bundle_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(input): Json<ImportWorkspaceAgentBundleInput>,
+) -> Result<Json<ImportWorkspaceAgentBundleResult>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.write", None).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .import_agent_bundle(input)
+            .await?,
+    ))
 }
 
 async fn update_agent(

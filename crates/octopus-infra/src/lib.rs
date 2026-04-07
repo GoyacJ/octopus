@@ -1,3 +1,5 @@
+mod agent_import;
+
 use std::{
     collections::BTreeMap,
     ffi::OsStr,
@@ -17,12 +19,14 @@ use octopus_core::{
     ChangeCurrentUserPasswordResponse, ClientAppRecord, CopyWorkspaceSkillToManagedInput,
     CostLedgerEntry, CreateProjectRequest, CreateWorkspaceResourceFolderInput,
     CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, CreateWorkspaceUserRequest,
-    BindPetConversationInput, ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput,
-    InboxItemRecord, KnowledgeEntryRecord, KnowledgeRecord, LoginRequest, LoginResponse,
-    MenuRecord, ModelCatalogRecord, PermissionRecord, PetConversationBinding, PetMessage,
-    PetPosition, PetPresenceState, PetProfile, PetWorkspaceSnapshot, ProjectAgentLinkInput,
-    ProjectAgentLinkRecord, ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord,
-    ProjectWorkspaceAssignments,
+    BindPetConversationInput, ImportWorkspaceAgentBundleInput,
+    ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
+    ImportWorkspaceAgentBundleResult, ImportWorkspaceSkillArchiveInput,
+    ImportWorkspaceSkillFolderInput, InboxItemRecord, KnowledgeEntryRecord, KnowledgeRecord,
+    LoginRequest, LoginResponse, MenuRecord, ModelCatalogRecord, PermissionRecord,
+    PetConversationBinding, PetMessage, PetPosition, PetPresenceState, PetProfile,
+    PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectRecord,
+    ProjectTeamLinkInput, ProjectTeamLinkRecord, ProjectWorkspaceAssignments,
     ProviderCredentialRecord, RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse,
     RoleRecord, SavePetPresenceInput, SessionRecord, SystemBootstrapStatus, TeamRecord,
     ToolRecord, TraceEventRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
@@ -1987,6 +1991,7 @@ fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError> {
     ensure_runtime_session_projection_columns(&connection)?;
     ensure_cost_entry_columns(&connection)?;
     ensure_resource_columns(&connection)?;
+    agent_import::ensure_import_source_tables(&connection)?;
 
     Ok(())
 }
@@ -2081,30 +2086,39 @@ fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
         .optional()
         .map_err(|error| AppError::database(error.to_string()))?;
     if agents_exist.is_none() {
-        for record in default_agent_records() {
-            connection
-                .execute(
-                    "INSERT INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-                    params![
-                        record.id,
-                        record.workspace_id,
-                        record.project_id,
-                        record.scope,
-                        record.name,
-                        record.avatar_path,
-                        record.personality,
-                        serde_json::to_string(&record.tags)?,
-                        record.prompt,
-                        serde_json::to_string(&record.builtin_tool_keys)?,
-                        serde_json::to_string(&record.skill_ids)?,
-                        serde_json::to_string(&record.mcp_server_names)?,
-                        record.description,
-                        record.status,
-                        record.updated_at as i64,
-                    ],
-                )
-                .map_err(|error| AppError::database(error.to_string()))?;
+        let workspace_has_managed_skills = agent_import::workspace_has_managed_skills(paths)?;
+        let seeded_agent_ids = if workspace_has_managed_skills {
+            Vec::new()
+        } else {
+            agent_import::seed_bundled_agent_bundle(&connection, paths, DEFAULT_WORKSPACE_ID)?
+        };
+
+        if seeded_agent_ids.is_empty() && !workspace_has_managed_skills {
+            for record in default_agent_records() {
+                connection
+                    .execute(
+                        "INSERT INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                        params![
+                            record.id,
+                            record.workspace_id,
+                            record.project_id,
+                            record.scope,
+                            record.name,
+                            record.avatar_path,
+                            record.personality,
+                            serde_json::to_string(&record.tags)?,
+                            record.prompt,
+                            serde_json::to_string(&record.builtin_tool_keys)?,
+                            serde_json::to_string(&record.skill_ids)?,
+                            serde_json::to_string(&record.mcp_server_names)?,
+                            record.description,
+                            record.status,
+                            record.updated_at as i64,
+                        ],
+                    )
+                    .map_err(|error| AppError::database(error.to_string()))?;
+            }
         }
     }
 
@@ -5131,6 +5145,36 @@ impl WorkspaceService for InfraWorkspaceService {
             self.remove_avatar_file(record.avatar_path.as_deref())?;
         }
         Ok(())
+    }
+
+    async fn preview_import_agent_bundle(
+        &self,
+        input: ImportWorkspaceAgentBundlePreviewInput,
+    ) -> Result<ImportWorkspaceAgentBundlePreview, AppError> {
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        agent_import::preview_agent_bundle_import(&connection, &self.state.paths, &workspace_id, input)
+    }
+
+    async fn import_agent_bundle(
+        &self,
+        input: ImportWorkspaceAgentBundleInput,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        let result = agent_import::execute_agent_bundle_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            input,
+        )?;
+        let next_agents = load_agents(&connection)?;
+        *self
+            .state
+            .agents
+            .lock()
+            .map_err(|_| AppError::runtime("agents mutex poisoned"))? = next_agents;
+        Ok(result)
     }
 
     async fn list_project_agent_links(&self, project_id: &str) -> Result<Vec<ProjectAgentLinkRecord>, AppError> {

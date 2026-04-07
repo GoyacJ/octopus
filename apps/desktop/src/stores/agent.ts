@@ -3,6 +3,8 @@ import { defineStore } from 'pinia'
 
 import type {
   AgentRecord,
+  ImportWorkspaceAgentBundleInput,
+  ImportWorkspaceAgentBundlePreviewInput,
   ProjectAgentLinkInput,
   ProjectAgentLinkRecord,
   UpsertAgentInput,
@@ -162,6 +164,18 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  async function previewImportBundle(input: ImportWorkspaceAgentBundlePreviewInput) {
+    const { client } = ensureWorkspaceClientForConnection()
+    return await client.agents.previewImportBundle(input)
+  }
+
+  async function importBundle(input: ImportWorkspaceAgentBundleInput) {
+    const { client, connectionId } = ensureWorkspaceClientForConnection()
+    const result = await client.agents.importBundle(input)
+    await load(connectionId)
+    return result
+  }
+
   async function linkProject(input: ProjectAgentLinkInput) {
     const { client, connectionId } = ensureWorkspaceClientForConnection()
     const created = await client.agents.linkProject(input)
@@ -203,6 +217,8 @@ export const useAgentStore = defineStore('agent', () => {
     create,
     update,
     remove,
+    previewImportBundle,
+    importBundle,
     linkProject,
     unlinkProject,
   }

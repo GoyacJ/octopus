@@ -1088,6 +1088,88 @@ pub struct ImportWorkspaceSkillFolderInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct ImportWorkspaceAgentBundlePreviewInput {
+    pub files: Vec<WorkspaceDirectoryUploadEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportWorkspaceAgentBundleInput {
+    pub files: Vec<WorkspaceDirectoryUploadEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportIssue {
+    pub severity: String,
+    pub scope: String,
+    pub source_id: Option<String>,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedAgentPreviewItem {
+    pub source_id: String,
+    pub agent_id: Option<String>,
+    pub name: String,
+    pub department: String,
+    pub action: String,
+    pub skill_slugs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedSkillPreviewItem {
+    pub slug: String,
+    pub skill_id: String,
+    pub name: String,
+    pub action: String,
+    pub content_hash: String,
+    pub file_count: u64,
+    pub source_ids: Vec<String>,
+    pub departments: Vec<String>,
+    pub agent_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportWorkspaceAgentBundlePreview {
+    pub departments: Vec<String>,
+    pub department_count: u64,
+    pub detected_agent_count: u64,
+    pub importable_agent_count: u64,
+    pub create_count: u64,
+    pub update_count: u64,
+    pub skip_count: u64,
+    pub failure_count: u64,
+    pub unique_skill_count: u64,
+    pub filtered_file_count: u64,
+    pub agents: Vec<ImportedAgentPreviewItem>,
+    pub skills: Vec<ImportedSkillPreviewItem>,
+    pub issues: Vec<ImportIssue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportWorkspaceAgentBundleResult {
+    pub departments: Vec<String>,
+    pub department_count: u64,
+    pub detected_agent_count: u64,
+    pub importable_agent_count: u64,
+    pub create_count: u64,
+    pub update_count: u64,
+    pub skip_count: u64,
+    pub failure_count: u64,
+    pub unique_skill_count: u64,
+    pub filtered_file_count: u64,
+    pub agents: Vec<ImportedAgentPreviewItem>,
+    pub skills: Vec<ImportedSkillPreviewItem>,
+    pub issues: Vec<ImportIssue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct CopyWorkspaceSkillToManagedInput {
     pub slug: String,
 }

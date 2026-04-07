@@ -235,6 +235,11 @@ async function pickSkillFolderTauri(): Promise<WorkspaceDirectoryUploadEntry[][]
   return await invoke<WorkspaceDirectoryUploadEntry[][] | null>('pick_skill_folder')
 }
 
+async function pickAgentBundleFolderTauri(): Promise<WorkspaceDirectoryUploadEntry[] | null> {
+  assertTauriHostAvailable()
+  return await invoke<WorkspaceDirectoryUploadEntry[] | null>('pick_agent_bundle_folder')
+}
+
 async function listWorkspaceConnectionsTauri(): Promise<HostWorkspaceConnectionRecord[]> {
   assertTauriHostAvailable()
   return await invoke<HostWorkspaceConnectionRecord[]>('list_workspace_connections')
@@ -448,6 +453,44 @@ async function pickSkillFolderBrowser(): Promise<WorkspaceDirectoryUploadEntry[]
   })
 }
 
+async function pickAgentBundleFolderBrowser(): Promise<WorkspaceDirectoryUploadEntry[] | null> {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.setAttribute('webkitdirectory', 'true')
+  input.multiple = true
+
+  return await new Promise<WorkspaceDirectoryUploadEntry[] | null>((resolve) => {
+    input.addEventListener('change', async () => {
+      const files = Array.from(input.files ?? [])
+      if (!files.length) {
+        resolve(null)
+        return
+      }
+
+      const payloads = await Promise.all(files.map(async (file) => ({
+        ...(await readBrowserFile(file)),
+        relativePath: (file.webkitRelativePath || file.name).replace(/\\/g, '/'),
+      })))
+      const topLevelNames = new Set(
+        payloads
+          .map(file => file.relativePath.split('/')[0])
+          .filter((value): value is string => Boolean(value)),
+      )
+      const rootPrefix = topLevelNames.size === 1
+        ? `${[...topLevelNames][0]}/`
+        : ''
+
+      resolve(payloads.map(file => ({
+        ...file,
+        relativePath: rootPrefix && file.relativePath.startsWith(rootPrefix)
+          ? file.relativePath.slice(rootPrefix.length)
+          : file.relativePath,
+      })))
+    }, { once: true })
+    input.click()
+  })
+}
+
 async function listWorkspaceConnectionsBrowser(): Promise<HostWorkspaceConnectionRecord[]> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
   return await fetchHostApi<HostWorkspaceConnectionRecord[]>(
@@ -637,6 +680,12 @@ export async function pickSkillFolder(): Promise<WorkspaceDirectoryUploadEntry[]
     : await pickSkillFolderTauri()
 }
 
+export async function pickAgentBundleFolder(): Promise<WorkspaceDirectoryUploadEntry[] | null> {
+  return resolveHostRuntime() === 'browser'
+    ? await pickAgentBundleFolderBrowser()
+    : await pickAgentBundleFolderTauri()
+}
+
 export async function listWorkspaceConnections(): Promise<HostWorkspaceConnectionRecord[]> {
   return resolveHostRuntime() === 'browser'
     ? await listWorkspaceConnectionsBrowser()
@@ -719,6 +768,7 @@ export const hostClient = {
   restartDesktopBackend,
   resolveDesktopBackendConnection: resolveDesktopBackendConnectionForHost,
   pickAvatarImage,
+  pickAgentBundleFolder,
   pickSkillArchive,
   pickSkillFolder,
   listWorkspaceConnections,

@@ -4,6 +4,8 @@ use octopus_core::{
     ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse,
     CopyWorkspaceSkillToManagedInput, CreateProjectRequest, CreateWorkspaceResourceInput,
     CreateWorkspaceResourceFolderInput, CreateWorkspaceSkillInput, CreateWorkspaceUserRequest,
+    ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
+    ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
     ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, KnowledgeRecord,
     MenuRecord, ModelCatalogRecord, PermissionRecord, PetConversationBinding,
     PetPresenceState, PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord,
@@ -89,6 +91,14 @@ pub trait WorkspaceService: Send + Sync {
     async fn create_agent(&self, input: UpsertAgentInput) -> Result<AgentRecord, AppError>;
     async fn update_agent(&self, agent_id: &str, input: UpsertAgentInput) -> Result<AgentRecord, AppError>;
     async fn delete_agent(&self, agent_id: &str) -> Result<(), AppError>;
+    async fn preview_import_agent_bundle(
+        &self,
+        input: ImportWorkspaceAgentBundlePreviewInput,
+    ) -> Result<ImportWorkspaceAgentBundlePreview, AppError>;
+    async fn import_agent_bundle(
+        &self,
+        input: ImportWorkspaceAgentBundleInput,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError>;
     async fn list_project_agent_links(
         &self,
         project_id: &str,

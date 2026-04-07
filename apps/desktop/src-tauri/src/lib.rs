@@ -52,6 +52,7 @@ pub fn run() {
             commands::healthcheck,
             commands::restart_desktop_backend,
             commands::pick_avatar_image,
+            commands::pick_agent_bundle_folder,
             commands::pick_skill_archive,
             commands::pick_skill_folder,
         ])

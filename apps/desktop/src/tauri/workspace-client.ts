@@ -14,6 +14,10 @@ import type {
   CreateRuntimeSessionInput,
   ImportWorkspaceSkillArchiveInput,
   ImportWorkspaceSkillFolderInput,
+  ImportWorkspaceAgentBundleInput,
+  ImportWorkspaceAgentBundlePreview,
+  ImportWorkspaceAgentBundlePreviewInput,
+  ImportWorkspaceAgentBundleResult,
   KnowledgeRecord,
   LoginRequest,
   LoginResponse,
@@ -160,6 +164,12 @@ export interface WorkspaceClient {
     create: (input: UpsertAgentInput) => Promise<AgentRecord>
     update: (agentId: string, input: UpsertAgentInput) => Promise<AgentRecord>
     delete: (agentId: string) => Promise<void>
+    previewImportBundle: (
+      input: ImportWorkspaceAgentBundlePreviewInput,
+    ) => Promise<ImportWorkspaceAgentBundlePreview>
+    importBundle: (
+      input: ImportWorkspaceAgentBundleInput,
+    ) => Promise<ImportWorkspaceAgentBundleResult>
     listProjectLinks: (projectId: string) => Promise<ProjectAgentLinkRecord[]>
     linkProject: (input: ProjectAgentLinkInput) => Promise<ProjectAgentLinkRecord>
     unlinkProject: (projectId: string, agentId: string) => Promise<void>
@@ -696,6 +706,26 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
         await fetchWorkspaceVoid(context, `${API_BASE}/workspace/agents/${agentId}`, {
           method: 'DELETE',
         })
+      },
+      async previewImportBundle(input) {
+        return await fetchWorkspace<ImportWorkspaceAgentBundlePreview>(
+          context,
+          `${API_BASE}/workspace/agents/import-preview`,
+          {
+            method: 'POST',
+            body: JSON.stringify(input),
+          },
+        )
+      },
+      async importBundle(input) {
+        return await fetchWorkspace<ImportWorkspaceAgentBundleResult>(
+          context,
+          `${API_BASE}/workspace/agents/import`,
+          {
+            method: 'POST',
+            body: JSON.stringify(input),
+          },
+        )
       },
       async listProjectLinks(projectId) {
         return await fetchWorkspace<ProjectAgentLinkRecord[]>(

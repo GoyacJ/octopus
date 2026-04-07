@@ -5,6 +5,7 @@ export {
   hostClient,
   loadPreferences,
   pickAvatarImage,
+  pickAgentBundleFolder,
   pickSkillArchive,
   pickSkillFolder,
   restartDesktopBackend,

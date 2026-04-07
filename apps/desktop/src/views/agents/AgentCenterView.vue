@@ -3,12 +3,9 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  Boxes,
   LayoutGrid,
   List,
   Network,
-  PencilLine,
-  Plus,
   Search,
   Trash2,
   UserCheck,
@@ -20,7 +17,10 @@ import {
 import type {
   AgentRecord,
   AvatarUploadPayload,
+  ImportWorkspaceAgentBundlePreview,
+  ImportWorkspaceAgentBundleResult,
   TeamRecord,
+  WorkspaceDirectoryUploadEntry,
   UpsertAgentInput,
   UpsertTeamInput,
 } from '@octopus/schema'
@@ -52,6 +52,7 @@ import { useTeamStore } from '@/stores/team'
 import { useWorkspaceStore } from '@/stores/workspace'
 import * as tauriClient from '@/tauri/client'
 import AgentEmployeeCard from './AgentEmployeeCard.vue'
+import AgentBundleImportDialog from './AgentBundleImportDialog.vue'
 import AgentsHeroSection from './AgentsHeroSection.vue'
 import AgentsStatsStrip from './AgentsStatsStrip.vue'
 import TeamUnitCard from './TeamUnitCard.vue'
@@ -98,6 +99,12 @@ const removeTeamAvatar = ref(false)
 
 const deleteConfirmOpen = ref(false)
 const itemToDelete = ref<{ id: string; name: string; type: 'agent' | 'team' } | null>(null)
+const agentImportDialogOpen = ref(false)
+const agentImportFiles = ref<WorkspaceDirectoryUploadEntry[]>([])
+const agentImportPreview = ref<ImportWorkspaceAgentBundlePreview | null>(null)
+const agentImportResult = ref<ImportWorkspaceAgentBundleResult | null>(null)
+const agentImportError = ref('')
+const agentImportLoading = ref(false)
 
 const agentForm = reactive({
   name: '',
@@ -368,6 +375,60 @@ function openCreateAgent() {
   agentDialogOpen.value = true
 }
 
+async function openAgentImportDialog() {
+  agentImportError.value = ''
+  agentImportResult.value = null
+  const files = await tauriClient.pickAgentBundleFolder()
+  if (!files?.length) {
+    return
+  }
+
+  agentImportLoading.value = true
+  try {
+    const preview = await agentStore.previewImportBundle({ files })
+    agentImportFiles.value = files
+    agentImportPreview.value = preview
+    agentImportDialogOpen.value = true
+  } catch (error) {
+    agentImportPreview.value = null
+    agentImportFiles.value = []
+    agentImportError.value = error instanceof Error ? error.message : 'Failed to preview agent bundle import'
+    agentImportDialogOpen.value = true
+  } finally {
+    agentImportLoading.value = false
+  }
+}
+
+async function confirmAgentImport() {
+  if (!agentImportFiles.value.length) {
+    return
+  }
+
+  agentImportLoading.value = true
+  agentImportError.value = ''
+  try {
+    const result = await agentStore.importBundle({ files: agentImportFiles.value })
+    agentImportResult.value = result
+    await catalogStore.load()
+  } catch (error) {
+    agentImportError.value = error instanceof Error ? error.message : 'Failed to import agent bundle'
+  } finally {
+    agentImportLoading.value = false
+  }
+}
+
+function handleAgentImportDialogOpen(nextOpen: boolean) {
+  agentImportDialogOpen.value = nextOpen
+  if (nextOpen) {
+    return
+  }
+
+  agentImportFiles.value = []
+  agentImportPreview.value = null
+  agentImportResult.value = null
+  agentImportError.value = ''
+}
+
 function openEditAgent(record: AgentRecord) {
   if (record.integrationSource && isProjectScope.value) {
     void router.push({
@@ -588,6 +649,18 @@ async function confirmDelete() {
           >
             <LayoutGrid :size="14" />
             卡片
+          </UiButton>
+        </template>
+        <template #actions>
+          <UiButton
+            v-if="!isProjectScope"
+            variant="outline"
+            size="sm"
+            :loading="agentImportLoading && !agentImportDialogOpen"
+            loading-label="Previewing"
+            @click="openAgentImportDialog"
+          >
+            Import Agent
           </UiButton>
         </template>
       </UiToolbarRow>
@@ -1114,5 +1187,14 @@ async function confirmDelete() {
       </template>
     </UiDialog>
 
+    <AgentBundleImportDialog
+      :open="agentImportDialogOpen"
+      :preview="agentImportPreview"
+      :result="agentImportResult"
+      :loading="agentImportLoading"
+      :error-message="agentImportError"
+      @update:open="handleAgentImportDialogOpen"
+      @confirm="confirmAgentImport"
+    />
   </div>
 </template>
