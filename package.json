@@ -7,7 +7,7 @@
     "dev": "pnpm dev:desktop",
     "dev:desktop": "pnpm prepare:desktop-backend:dev && pnpm tauri dev --config apps/desktop/src-tauri/tauri.conf.json",
     "dev:desktop:fresh": "pnpm clean:desktop-shell && pnpm dev:desktop",
-    "prepare:desktop-backend:dev": "cargo build -p octopus-desktop-backend",
+    "prepare:desktop-backend:dev": "node scripts/prepare-desktop-backend.mjs",
     "clean:desktop-shell": "cargo clean -p octopus-desktop-shell",
     "prepare:agent-bundle-seed": "node scripts/prepare-agent-bundle-seed.mjs",
     "dev:web": "node scripts/dev-web.mjs",

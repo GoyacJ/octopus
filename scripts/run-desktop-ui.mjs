@@ -38,6 +38,7 @@ async function runCommand(args) {
     cwd: repoRoot,
     stdio: 'inherit',
     env,
+    shell: process.platform === 'win32',
   })
   const result = await waitForExit(child)
   if (result.signal) {
@@ -54,6 +55,7 @@ if (mode === 'dev') {
     cwd: repoRoot,
     stdio: 'inherit',
     env,
+    shell: process.platform === 'win32',
   })
   const typecheckResult = await waitForExit(typecheck)
   if (typecheckResult.signal) {
