@@ -33,12 +33,17 @@ function waitForExit(child) {
   })
 }
 
-async function runCommand(args) {
-  const child = spawn(pnpmCommand, args, {
+function spawnPnpm(args) {
+  return spawn(pnpmCommand, args, {
     cwd: repoRoot,
     stdio: 'inherit',
     env,
+    shell: process.platform === 'win32',
   })
+}
+
+async function runCommand(args) {
+  const child = spawnPnpm(args)
   const result = await waitForExit(child)
   if (result.signal) {
     process.kill(process.pid, result.signal)
@@ -50,11 +55,7 @@ async function runCommand(args) {
 if (mode === 'dev') {
   await runCommand(['-C', desktopDir, 'exec', 'vite'])
 } else {
-  const typecheck = spawn(pnpmCommand, ['-C', desktopDir, 'exec', 'vue-tsc', '--noEmit'], {
-    cwd: repoRoot,
-    stdio: 'inherit',
-    env,
-  })
+  const typecheck = spawnPnpm(['-C', desktopDir, 'exec', 'vue-tsc', '--noEmit'])
   const typecheckResult = await waitForExit(typecheck)
   if (typecheckResult.signal) {
     process.kill(process.pid, typecheckResult.signal)
