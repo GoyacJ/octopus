@@ -394,7 +394,8 @@ fn debug_backend_binary_path(repo_root: &Path) -> PathBuf {
 }
 
 fn should_spawn_dev_backend(host_state: &HostState, repo_root: &Path) -> bool {
-    host_state.cargo_workspace && debug_backend_binary_path(repo_root).exists()
+    // Only use dev backend when actually running a debug build inside cargo workspace
+    cfg!(debug_assertions) && host_state.cargo_workspace && debug_backend_binary_path(repo_root).exists()
 }
 
 fn executable_name(name: &str) -> String {

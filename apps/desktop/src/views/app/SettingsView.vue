@@ -148,6 +148,7 @@ const activeWorkspaceName = computed(() =>
 
 const versionRows = computed(() => [
   { id: 'appVersion', label: t('settings.version.fields.appVersion'), value: shell.hostState.appVersion },
+  { id: 'shell', label: t('settings.version.fields.shell'), value: shell.hostState.shell },
   { id: 'workspace', label: t('settings.version.fields.workspace'), value: activeWorkspaceName.value },
   {
     id: 'cargoWorkspace',
