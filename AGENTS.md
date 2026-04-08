@@ -2,17 +2,19 @@
 
 ## Frontend Governance
 
+- This root file defines repo-wide defaults. If a more specific `AGENTS.md` exists deeper in the tree, the nearest file wins for that subtree.
 - Desktop frontend baseline: `Vue 3 + Vite + Pinia + Vue Router + Vue I18n + Tauri 2`.
-- **Design System Aesthetic**: `Minimalist Refined Foundation` (Notion-inspired). Focus on:
-  - **Whisper-quiet borders**: `border-border/40` or `dark:border-white/[0.08]`.
-  - **Apple-style easing**: `cubic-bezier(0.32, 0.72, 0, 1)`.
-  - **Hierarchical Typography**: Bold titles, tight tracking, small uppercase eyebrows with wide tracking.
-  - **Refined Surfaces**: `UiSurface` with subtle shadows and background gradients.
+- UI/UX source of truth for product surfaces is `docs/design/DESIGN.md`. Any AI agent generating or modifying UI must read and follow it before changing layouts, components, motion, copy hierarchy, or visual styling.
+- `docs/design/DESIGN.md` is the canonical visual and interaction standard for desktop UI and design-system evolution. Treat preview files in `docs/design/*` as references only.
 - Desktop frontend delivery uses real workspace and host APIs through the shared adapter layer by default.
 - Real Tauri and browser-host integration must stay behind the existing adapter layer so pages, stores, and view models consume one contract surface.
 - Shared schemas in `packages/schema` must be defined in feature-based files under `packages/schema/src/*`. `packages/schema/src/index.ts` is the public export surface only and must not keep accumulating schema definitions.
 - Any local fixtures, tests, or seeded development data must reuse `@octopus/schema` contracts so non-production helpers stay aligned with real API payloads.
 - Shared UI must go through `@octopus/ui`. Business pages must not introduce ad-hoc third-party UI styles or bypass the shared design system.
+- Frontend implementation order:
+  1. Follow `docs/design/DESIGN.md`.
+  2. Reuse existing shared components and tokens first.
+  3. If missing, extract or extend reusable shared components in `@octopus/ui` or shared tokens instead of hardcoding business-page-specific UI.
 - Component selection order:
   1. Reuse `@octopus/ui`.
   2. If missing, reference `shadcn-vue` interaction and structure patterns, but implement the component inside `@octopus/ui`.
@@ -39,6 +41,8 @@
   - success, failure, loading, and empty-state assets: `dotLottie`
   - illustration: `unDraw`
 - Forbidden patterns:
+  - do not bypass `docs/design/DESIGN.md` with ad-hoc UI decisions
+  - do not hardcode business-page-specific colors, radii, spacing, shadows, or animation values when a shared token or reusable component should exist
   - do not introduce large all-in-one UI frameworks
   - do not import unapproved UI libraries directly in business pages
   - do not deep import from `packages/ui/src/components/*`; consume the public `@octopus/ui` export surface only
