@@ -25,6 +25,7 @@
     "version:check": "node scripts/check-version-governance.mjs",
     "release:notes": "node scripts/generate-release-notes.mjs",
     "release:collect-artifacts": "node scripts/collect-release-artifacts.mjs",
+    "release:collect-metadata": "node scripts/collect-release-metadata.mjs",
     "release:verify-artifacts": "node scripts/verify-release-artifacts.mjs",
     "test": "pnpm -C apps/desktop test",
     "tauri": "tauri"

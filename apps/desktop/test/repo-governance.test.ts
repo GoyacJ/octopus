@@ -35,6 +35,7 @@ describe('repository governance', () => {
     expect(workflow).toContain("- 'v*'")
     expect(workflow).toContain('softprops/action-gh-release')
     expect(workflow).toContain('pnpm release:notes')
+    expect(workflow).toContain('pnpm release:collect-metadata')
     expect(workflow).toContain('pnpm release:collect-artifacts --platform macos')
     expect(workflow).toContain('pnpm release:collect-artifacts --platform windows')
     expect(workflow).toContain('pnpm release:verify-artifacts')

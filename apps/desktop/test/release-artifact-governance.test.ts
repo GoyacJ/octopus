@@ -9,6 +9,7 @@ const repoRoot = path.resolve(__dirname, '../../..')
 const nodeExecutable = process.execPath
 const verifyScriptPath = path.join(repoRoot, 'scripts', 'verify-release-artifacts.mjs')
 const collectScriptPath = path.join(repoRoot, 'scripts', 'collect-release-artifacts.mjs')
+const collectMetadataScriptPath = path.join(repoRoot, 'scripts', 'collect-release-metadata.mjs')
 const releaseNotesScriptPath = path.join(repoRoot, 'scripts', 'generate-release-notes.mjs')
 const tempDirectories: string[] = []
 
@@ -46,6 +47,39 @@ describe('release artifact governance scripts', () => {
     const notes = readFileSync(outputPath, 'utf8')
     expect(notes).toContain('2026-04-08-initial-release-governance')
     expect(notes).not.toContain('## README')
+  })
+
+  it('collects canonical release metadata into a flat directory for publish verification', () => {
+    const sourceDir = createTempDir('octopus-release-metadata-source-')
+    const outputDir = createTempDir('octopus-release-metadata-output-')
+    const notesPath = path.join(sourceDir, 'notes', 'v0.1.0.md')
+
+    writeFile(path.join(sourceDir, 'VERSION'), '0.1.0\n')
+    writeFile(path.join(sourceDir, 'contracts', 'openapi', 'octopus.openapi.yaml'), 'openapi: 3.1.0\n')
+    writeFile(path.join(sourceDir, 'packages', 'schema', 'src', 'generated.ts'), 'export {}\n')
+    writeFile(notesPath, '# Octopus v0.1.0\n')
+
+    execFileSync(nodeExecutable, [
+      collectMetadataScriptPath,
+      '--output-dir',
+      outputDir,
+      '--version-file',
+      path.join(sourceDir, 'VERSION'),
+      '--openapi-file',
+      path.join(sourceDir, 'contracts', 'openapi', 'octopus.openapi.yaml'),
+      '--schema-file',
+      path.join(sourceDir, 'packages', 'schema', 'src', 'generated.ts'),
+      '--notes',
+      notesPath,
+    ], {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    })
+
+    expect(readFileSync(path.join(outputDir, 'VERSION'), 'utf8')).toBe('0.1.0\n')
+    expect(readFileSync(path.join(outputDir, 'octopus.openapi.yaml'), 'utf8')).toBe('openapi: 3.1.0\n')
+    expect(readFileSync(path.join(outputDir, 'generated.ts'), 'utf8')).toBe('export {}\n')
+    expect(readFileSync(path.join(outputDir, 'v0.1.0.md'), 'utf8')).toBe('# Octopus v0.1.0\n')
   })
 
   it('fails verification when formal desktop installers are missing', () => {
