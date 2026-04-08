@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <g class="pet-body">
+
+    <path d="M64 20 Q 74 20 74 40 L 74 60 Q 94 60 94 80 Q 94 104 64 104 Q 34 104 34 80 Q 34 60 54 60 L 54 40 Q 54 20 64 20 Z" fill="#FFFFFF"/>
+    <circle cx="58" cy="30" r="3" fill="#1F2937"/>
+    <path d="M40 34 Q 50 38 40 42 Z" fill="#F57C00"/>
+  
+  </g>
+</svg>

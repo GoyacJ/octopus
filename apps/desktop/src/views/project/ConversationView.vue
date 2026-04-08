@@ -1,0 +1,466 @@
+<script setup lang="ts">
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useRoute, useRouter } from 'vue-router'
+import { ArrowUp, Bot, Plus, Shield, Sparkles } from 'lucide-vue-next'
+
+import type { ConversationActorKind, Message, PermissionMode, WorkspaceResourceRecord } from '@octopus/schema'
+import { UiButton, UiEmptyState, UiSelect, UiTextarea } from '@octopus/ui'
+
+import ConversationMessageBubble from '@/components/conversation/ConversationMessageBubble.vue'
+import ConversationQueueList from '@/components/conversation/ConversationQueueList.vue'
+import ConversationContextPane from '@/components/layout/ConversationContextPane.vue'
+import ConversationTabsBar from '@/components/layout/ConversationTabsBar.vue'
+import { createProjectConversationTarget } from '@/i18n/navigation'
+import { useAgentStore } from '@/stores/agent'
+import { useCatalogStore } from '@/stores/catalog'
+import { useRuntimeStore } from '@/stores/runtime'
+import { useShellStore } from '@/stores/shell'
+import { useTeamStore } from '@/stores/team'
+import { useResourceStore } from '@/stores/resource'
+import { useArtifactStore } from '@/stores/artifact'
+import { useWorkspaceStore } from '@/stores/workspace'
+import { useUserCenterStore } from '@/stores/user-center'
+
+const route = useRoute()
+const router = useRouter()
+const { t } = useI18n()
+const runtime = useRuntimeStore()
+const shell = useShellStore()
+const catalogStore = useCatalogStore()
+const agentStore = useAgentStore()
+const teamStore = useTeamStore()
+const resourceStore = useResourceStore()
+const artifactStore = useArtifactStore()
+const workspaceStore = useWorkspaceStore()
+const userCenterStore = useUserCenterStore()
+
+interface ActorOption {
+  value: string
+  label: string
+  kind: ConversationActorKind
+}
+
+interface MessageArtifactOption {
+  id: string
+  label: string
+  kindLabel?: string
+}
+
+const messageDraft = ref('')
+const selectedModelId = ref('')
+const selectedPermissionMode = ref<PermissionMode>('auto')
+const selectedActorValue = ref('')
+const expandedMessageIds = ref<string[]>([])
+const focusedToolByMessageId = ref<Record<string, string>>({})
+const scrollContainer = ref<HTMLElement | null>(null)
+
+const conversationId = computed(() =>
+  typeof route.params.conversationId === 'string' ? route.params.conversationId : '',
+)
+const projectId = computed(() =>
+  typeof route.params.projectId === 'string' ? route.params.projectId : workspaceStore.currentProjectId,
+)
+const workspaceId = computed(() =>
+  typeof route.params.workspaceId === 'string' ? route.params.workspaceId : workspaceStore.currentWorkspaceId,
+)
+const projectSettings = computed(() =>
+  projectId.value ? workspaceStore.getProjectSettings(projectId.value) : {},
+)
+
+const modelOptions = computed(() => {
+  const allowedConfiguredModelIds = projectSettings.value.models?.allowedConfiguredModelIds ?? []
+  return catalogStore.workspaceConfiguredModelOptions
+    .filter(model => allowedConfiguredModelIds.includes(model.value))
+    .map(model => ({
+      value: model.value,
+      label: model.label,
+    }))
+})
+const actorOptions = computed<ActorOption[]>(() => {
+  const enabledAgentIds = projectSettings.value.agents?.enabledAgentIds ?? []
+  const enabledTeamIds = projectSettings.value.agents?.enabledTeamIds ?? []
+
+  return [
+    ...agentStore.workspaceAgents
+      .filter(agent => enabledAgentIds.includes(agent.id))
+      .map(agent => ({
+        value: `agent:${agent.id}`,
+        label: agent.name,
+        kind: 'agent' as const,
+      })),
+    ...teamStore.workspaceTeams
+      .filter(team => enabledTeamIds.includes(team.id))
+      .map(team => ({
+        value: `team:${team.id}`,
+        label: team.name,
+        kind: 'team' as const,
+      })),
+  ]
+})
+const selectedActor = computed(() => actorOptions.value.find(option => option.value === selectedActorValue.value) ?? null)
+const actorLabelMap = computed<Map<string, string>>(() => new Map(actorOptions.value.map(option => [`${option.kind}:${option.value.split(':')[1]}`, option.label])))
+const actorAvatarMap = computed<Map<string, string>>(() => new Map([
+  ...agentStore.workspaceAgents.map(agent => [`agent:${agent.id}`, agent.avatar ?? ''] as const),
+  ...agentStore.projectAgents.map(agent => [`agent:${agent.id}`, agent.avatar ?? ''] as const),
+  ...teamStore.workspaceTeams.map(team => [`team:${team.id}`, team.avatar ?? ''] as const),
+  ...teamStore.projectTeams.map(team => [`team:${team.id}`, team.avatar ?? ''] as const),
+]))
+const currentUserAvatar = computed(() => userCenterStore.currentUser?.avatar ?? '')
+const currentUserLabel = computed(() => userCenterStore.currentUser?.displayName || 'You')
+const resourceMap = computed(() => new Map(resourceStore.activeProjectResources.map(resource => [resource.id, resource])))
+const artifactMap = computed(() => new Map(artifactStore.activeProjectArtifacts.map(artifact => [artifact.id, artifact])))
+const permissionOptions = computed(() => [
+  { value: 'auto', label: t('conversation.composer.autoPermission') },
+  { value: 'readonly', label: t('conversation.composer.readonlyPermission') },
+  { value: 'danger-full-access', label: t('conversation.composer.dangerPermission') },
+])
+
+const renderedMessages = computed<Message[]>(() => (
+  conversationId.value && runtime.activeConversationId === conversationId.value
+    ? runtime.activeMessages
+    : []
+))
+
+const queueItems = computed(() =>
+  runtime.activeQueue.map(item => ({
+    id: item.id,
+    content: item.content,
+    actorLabel: actorLabelMap.value.get(`${item.actorKind}:${item.actorId}`) ?? 'Assistant',
+    createdAt: item.createdAt,
+  })),
+)
+const hasModelOptions = computed(() => modelOptions.value.length > 0)
+const hasActorOptions = computed(() => actorOptions.value.length > 0)
+const canSubmit = computed(() => messageDraft.value.trim().length > 0 && hasModelOptions.value && !!selectedActor.value)
+
+function createConversationId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `conversation-${crypto.randomUUID()}`
+  }
+  return `conversation-${Date.now()}`
+}
+
+async function ensureRuntimeSession() {
+  if (!conversationId.value || !projectId.value) {
+    return
+  }
+
+  await Promise.all([
+    workspaceStore.loadProjectRuntimeConfig(projectId.value),
+    catalogStore.load(),
+    agentStore.load(),
+    teamStore.load(),
+    userCenterStore.load(),
+    resourceStore.loadProjectResources(projectId.value),
+    artifactStore.loadWorkspaceArtifacts(),
+    agentStore.loadProjectLinks(projectId.value),
+    teamStore.loadProjectLinks(projectId.value),
+  ])
+
+  if (!modelOptions.value.some(option => option.value === selectedModelId.value)) {
+    selectedModelId.value = modelOptions.value[0]?.value ?? ''
+  }
+  if (!actorOptions.value.some(option => option.value === selectedActorValue.value)) {
+    selectedActorValue.value = actorOptions.value[0]?.value ?? ''
+  }
+
+  await runtime.ensureSession({
+    conversationId: conversationId.value,
+    projectId: projectId.value,
+    title: `Conversation ${conversationId.value.slice(-6)}`,
+  })
+}
+
+watch(renderedMessages, (messages) => {
+  const artifactIds = messages.flatMap(message => message.artifacts ?? [])
+  shell.hydrateArtifactSelection(artifactIds)
+  nextTick(() => {
+    if (scrollContainer.value) {
+      scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
+    }
+  })
+}, { deep: true })
+
+watch(
+  () => [conversationId.value, projectId.value, shell.activeWorkspaceConnectionId, shell.activeWorkspaceSession?.token],
+  () => {
+    if (shell.activeWorkspaceConnectionId && shell.activeWorkspaceSession?.token) {
+      void ensureRuntimeSession()
+    }
+  },
+  { immediate: true },
+)
+
+onMounted(() => {
+  void ensureRuntimeSession()
+})
+
+async function createConversationFromEmpty() {
+  await router.push(createProjectConversationTarget(workspaceId.value, projectId.value, createConversationId()))
+}
+
+async function submitRuntimeTurn() {
+  if (!canSubmit.value) {
+    return
+  }
+
+  const draft = messageDraft.value
+  messageDraft.value = ''
+
+  await ensureRuntimeSession()
+  const submitted = await runtime.submitTurn({
+    content: draft,
+    configuredModelId: selectedModelId.value || modelOptions.value[0]?.value || '',
+    permissionMode: selectedPermissionMode.value,
+    actorKind: selectedActor.value?.kind,
+    actorId: selectedActor.value?.value.split(':')[1],
+  })
+
+  if (!submitted) {
+    messageDraft.value = draft
+  }
+}
+
+function handleComposerKeydown(event: KeyboardEvent) {
+  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+    event.preventDefault()
+    void submitRuntimeTurn()
+  }
+}
+
+function toggleDetail(messageId: string) {
+  expandedMessageIds.value = expandedMessageIds.value.includes(messageId)
+    ? expandedMessageIds.value.filter(id => id !== messageId)
+    : [...expandedMessageIds.value, messageId]
+
+  if (!expandedMessageIds.value.includes(messageId)) {
+    focusedToolByMessageId.value = {
+      ...focusedToolByMessageId.value,
+      [messageId]: '',
+    }
+  }
+}
+
+function focusMessageTool(payload: { messageId: string, toolId: string }) {
+  if (!expandedMessageIds.value.includes(payload.messageId)) {
+    expandedMessageIds.value = [...expandedMessageIds.value, payload.messageId]
+  }
+
+  focusedToolByMessageId.value = {
+    ...focusedToolByMessageId.value,
+    [payload.messageId]: payload.toolId,
+  }
+}
+
+function resolveActorKey(kind?: ConversationActorKind, id?: string): string {
+  if (!kind || !id) {
+    return ''
+  }
+
+  return `${kind}:${id}`
+}
+
+function resolveMessageActorLabel(message: Message): string {
+  const resolvedActorKey = resolveActorKey(message.actorKind, message.actorId)
+  const requestedActorKey = resolveActorKey(message.requestedActorKind, message.requestedActorId)
+
+  return (resolvedActorKey ? actorLabelMap.value.get(resolvedActorKey) : undefined)
+    ?? (requestedActorKey ? actorLabelMap.value.get(requestedActorKey) : undefined)
+    ?? message.senderId
+}
+
+function resolveMessageAvatarSrc(message: Message): string {
+  if (message.senderType === 'user') {
+    return currentUserAvatar.value
+  }
+
+  const resolvedActorKey = resolveActorKey(message.actorKind, message.actorId)
+  const requestedActorKey = resolveActorKey(message.requestedActorKind, message.requestedActorId)
+
+  return (resolvedActorKey ? actorAvatarMap.value.get(resolvedActorKey) : undefined)
+    ?? (requestedActorKey ? actorAvatarMap.value.get(requestedActorKey) : undefined)
+    ?? ''
+}
+
+function resolveMessageAvatarLabel(message: Message): string {
+  if (message.senderType === 'user') {
+    return currentUserLabel.value.slice(0, 1).toUpperCase() || 'U'
+  }
+
+  const label = resolveMessageActorLabel(message)
+  return label.slice(0, 1).toUpperCase() || 'A'
+}
+
+function resolveMessageResources(message: Message): WorkspaceResourceRecord[] {
+  return (message.resourceIds ?? [])
+    .map(id => resourceMap.value.get(id))
+    .filter((resource): resource is WorkspaceResourceRecord => Boolean(resource))
+}
+
+function resolveMessageArtifacts(message: Message): MessageArtifactOption[] {
+  return (message.artifacts ?? []).map((id) => {
+    const artifact = artifactMap.value.get(id)
+    return {
+      id,
+      label: artifact?.title ?? id,
+      kindLabel: artifact ? `v${artifact.latestVersion}` : undefined,
+    }
+  })
+}
+
+function openArtifact(artifactId: string) {
+  shell.selectArtifact(artifactId)
+  shell.setDetailFocus('artifacts')
+  shell.setRightSidebarCollapsed(false)
+}
+
+async function approveMessageApproval() {
+  await runtime.resolveApproval('approve')
+}
+
+async function rejectMessageApproval() {
+  await runtime.resolveApproval('reject')
+}
+</script>
+
+<template>
+  <div class="flex h-full min-h-0 w-full">
+    <div class="flex min-w-0 flex-1 flex-col px-2 pb-6">
+      <ConversationTabsBar />
+
+      <div v-if="!conversationId" class="flex flex-1 items-center justify-center">
+        <UiEmptyState :title="t('conversation.empty.title')" :description="t('conversation.empty.description')">
+          <template #actions>
+            <UiButton @click="createConversationFromEmpty">
+              <Plus :size="14" />
+              {{ t('conversation.empty.create') }}
+            </UiButton>
+          </template>
+        </UiEmptyState>
+      </div>
+
+      <template v-else>
+        <div ref="scrollContainer" class="flex-1 overflow-y-auto py-4">
+          <div class="mx-auto flex w-full max-w-[800px] flex-col">
+            <ConversationMessageBubble
+              v-for="message in renderedMessages"
+              :key="message.id"
+              :message="message"
+              :sender-label="message.senderType === 'user' ? currentUserLabel : resolveMessageActorLabel(message)"
+              :avatar-label="resolveMessageAvatarLabel(message)"
+              :avatar-src="resolveMessageAvatarSrc(message)"
+              :actor-label="message.senderType === 'user' ? '' : resolveMessageActorLabel(message)"
+              :permission-label="selectedPermissionMode"
+              :resources="resolveMessageResources(message)"
+              :attachments="message.attachments ?? []"
+              :artifacts="resolveMessageArtifacts(message)"
+              :is-expanded="expandedMessageIds.includes(message.id)"
+              :focused-tool-id="focusedToolByMessageId[message.id]"
+              @toggle-detail="toggleDetail"
+              @open-artifact="openArtifact"
+              @approve="approveMessageApproval"
+              @reject="rejectMessageApproval"
+              @focus-tool="focusMessageTool"
+            />
+
+            <UiEmptyState
+              v-if="!renderedMessages.length"
+              :title="t('conversation.messages.emptyTitle')"
+              :description="t('conversation.messages.emptyDescription')"
+            />
+          </div>
+        </div>
+
+        <div v-if="queueItems.length" class="mx-auto mt-4 w-full max-w-[840px]">
+          <ConversationQueueList :items="queueItems" @remove="runtime.removeQueuedTurn" />
+        </div>
+
+        <div
+          data-testid="conversation-composer"
+          class="mx-auto mt-4 w-full max-w-[840px] rounded-[26px] border border-border/40 bg-card/95 shadow-md transition-all duration-normal ease-apple dark:border-white/[0.08]"
+        >
+          <div
+            v-if="runtime.error"
+            class="mx-3 mb-1 rounded-[18px] border border-status-error/20 bg-status-error/5 px-4 py-3 text-sm text-status-error"
+            role="alert"
+          >
+            {{ runtime.error }}
+          </div>
+
+          <div class="px-5 pb-3 pt-3">
+            <UiTextarea
+              v-model="messageDraft"
+              class="min-h-[96px] max-h-[220px] resize-none border-0 bg-transparent px-0 py-0 text-[15px] leading-6 shadow-none placeholder:text-text-tertiary focus-visible:border-transparent focus-visible:ring-0"
+              :rows="3"
+              :placeholder="t('conversation.composer.placeholder')"
+              @keydown="handleComposerKeydown"
+            />
+
+            <div class="mt-3 flex items-end gap-3 pt-2">
+              <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <div
+                  aria-hidden="true"
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/20 bg-background/60 text-text-secondary shadow-xs dark:border-white/5"
+                >
+                  <Plus :size="14" />
+                </div>
+
+                <div class="w-full sm:w-[10.5rem]">
+                  <div class="flex min-w-0 items-center gap-1 rounded-full border border-border/20 bg-background/70 px-1.5 shadow-xs dark:border-white/5">
+                    <Sparkles :size="14" class="ml-2 shrink-0 text-text-secondary" />
+                    <UiSelect
+                      v-model="selectedModelId"
+                      data-testid="conversation-model-select"
+                      :options="modelOptions"
+                      :disabled="!hasModelOptions"
+                      class="min-w-0 h-8 border-0 bg-transparent px-1 pr-7 text-sm font-medium text-text-secondary shadow-none focus-visible:border-transparent focus-visible:ring-0"
+                    />
+                  </div>
+                </div>
+
+                <div class="w-full sm:w-[10rem]">
+                  <div class="flex min-w-[100px] items-center gap-1 rounded-full border border-border/20 bg-background/70 px-1.5 shadow-xs dark:border-white/5">
+                    <Shield :size="14" class="ml-2 shrink-0 text-text-secondary" />
+                    <UiSelect
+                      v-model="selectedPermissionMode"
+                      data-testid="conversation-permission-select"
+                      :options="permissionOptions"
+                      class="h-8 border-0 bg-transparent px-1 pr-7 text-sm font-medium text-text-secondary shadow-none focus-visible:border-transparent focus-visible:ring-0"
+                    />
+                  </div>
+                </div>
+
+                <div class="w-full sm:w-[9.5rem]">
+                  <div class="flex min-w-0 items-center gap-1 rounded-full border border-border/20 bg-background/70 px-1.5 shadow-xs dark:border-white/5">
+                    <Bot :size="14" class="ml-2 shrink-0 text-text-secondary" />
+                    <UiSelect
+                      v-model="selectedActorValue"
+                      data-testid="conversation-actor-select"
+                      :options="actorOptions"
+                      :disabled="!hasActorOptions"
+                      class="min-w-0 h-8 border-0 bg-transparent px-1 pr-7 text-sm font-medium text-text-secondary shadow-none focus-visible:border-transparent focus-visible:ring-0"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <UiButton
+                data-testid="conversation-send-button"
+                size="icon"
+                :aria-label="t('conversation.composer.send')"
+                :disabled="!canSubmit"
+                class="h-10 w-10 shrink-0 self-end rounded-full bg-primary text-primary-foreground shadow-sm transition-all duration-normal ease-apple hover:bg-primary/90 disabled:bg-muted disabled:text-text-tertiary"
+                @click="submitRuntimeTurn"
+              >
+                <ArrowUp :size="18" />
+              </UiButton>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <ConversationContextPane />
+  </div>
+</template>

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <g class="pet-body">
+
+    <ellipse cx="44" cy="34" rx="10" ry="24" fill="#FAFAFA"/>
+    <ellipse cx="84" cy="34" rx="10" ry="24" fill="#FAFAFA"/>
+    <ellipse cx="44" cy="34" rx="4" ry="14" fill="#F48FB1"/>
+    <ellipse cx="84" cy="34" rx="4" ry="14" fill="#F48FB1"/>
+    <circle cx="64" cy="74" r="36" fill="#FAFAFA"/>
+    <circle cx="50" cy="64" r="4" fill="#1F2937"/>
+    <circle cx="78" cy="64" r="4" fill="#1F2937"/>
+    <path d="M60 74 L 64 78 L 68 74" stroke="#F48FB1" stroke-width="3" fill="none"/>
+  
+  </g>
+</svg>

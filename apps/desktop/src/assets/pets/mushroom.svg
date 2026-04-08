@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <g class="pet-body">
+
+    <path d="M64 24 C 94 24 104 64 104 64 L 24 64 C 24 64 34 24 64 24 Z" fill="#EF5350"/>
+    <circle cx="50" cy="40" r="6" fill="#FFFFFF"/>
+    <circle cx="78" cy="48" r="8" fill="#FFFFFF"/>
+    <circle cx="64" cy="30" r="4" fill="#FFFFFF"/>
+    <rect x="44" y="64" width="40" height="40" rx="10" fill="#FFE0B2"/>
+    <circle cx="54" cy="74" r="3" fill="#1F2937"/>
+    <circle cx="74" cy="74" r="3" fill="#1F2937"/>
+    <path d="M60 84 Q 64 88 68 84" stroke="#1F2937" stroke-width="2" fill="none"/>
+  
+  </g>
+</svg>

@@ -1,0 +1,1918 @@
+{
+  "common": {
+    "theme": "主题",
+    "language": "语言",
+    "search": "搜索…",
+    "newConversation": "新建会话",
+    "na": "暂无",
+    "open": "打开",
+    "selected": "已选中",
+    "send": "发送",
+    "approve": "批准",
+    "reject": "驳回",
+    "saveDraft": "保存草稿",
+    "requestReview": "发起审阅",
+    "savePreferences": "保存偏好",
+    "resetToDefault": "恢复默认",
+    "pause": "暂停",
+    "resume": "恢复",
+    "cancel": "取消",
+    "collapse": "收起",
+    "confirm": "确定",
+    "confirmDelete": "确认删除当前项？",
+    "save": "保存",
+    "reset": "重置",
+    "edit": "编辑",
+    "delete": "删除",
+    "createProjectCopy": "创建项目副本",
+    "goal": "目标",
+    "constraints": "约束",
+    "resumePoints": "恢复点",
+    "branchLinks": "分支链接",
+    "status": "状态",
+    "owner": "负责人",
+    "nextAction": "下一步",
+    "impact": "影响",
+    "risk": "风险",
+    "lineage": "来源链",
+    "workspace": "工作区",
+    "project": "项目",
+    "members": "{count} 名成员",
+    "artifacts": "{count} 个产物",
+    "teams": "{count} 个团队",
+    "conversations": "{count} 个会话",
+    "items": "{count} 个项",
+    "progress": "{value}% 进度",
+    "updatedAt": "更新于 {time}",
+    "currentShell": "当前 Shell: {shell}",
+    "lastRoute": "最近路由: {route}",
+    "activeWorkspace": "当前工作区: {workspace}",
+    "workspaceLabel": "工作区: {workspace}",
+    "noRemoteBaseUrl": "暂无远端地址",
+    "noBaseUrl": "暂无地址"
+  },
+  "topbar": {
+    "searchPlaceholder": "搜索对话、项目或页面…",
+    "leftSidebar": "切换左侧栏",
+    "theme": "主题模式",
+    "themeMenuLabel": "选择界面主题",
+    "themeModes": {
+      "system": "跟随系统",
+      "light": "浅色模式",
+      "dark": "深色模式"
+    },
+    "locale": "界面语言",
+    "localeMenuLabel": "选择显示语言",
+    "localeModes": {
+      "zh-CN": "简体中文",
+      "en-US": "English"
+    },
+    "inbox": "收件箱",
+    "settings": "设置",
+    "workspaceMenu": "当前工作区",
+    "localWorkspace": "本地工作区",
+    "sharedWorkspace": "共享工作区",
+    "profileRole": "主工作台负责人",
+    "accountSectionTitle": "账号列表",
+    "workspaceSectionTitle": "工作区列表",
+    "workspaceSectionSubtitle": "切换当前工作范围，或新增一个工作区连接。",
+    "addWorkspace": "添加工作区",
+    "removeWorkspace": "移除工作区"
+  },
+  "notifications": {
+    "title": "通知中心",
+    "triggerAriaLabel": "打开通知中心",
+    "markRead": "标记已读",
+    "markAllRead": "全部标记已读",
+    "empty": {
+      "title": "暂时没有通知",
+      "description": "新的桌面消息与操作反馈会显示在这里。"
+    },
+    "filters": {
+      "all": "全部",
+      "app": "应用",
+      "workspace": "工作区",
+      "user": "用户"
+    },
+    "scopes": {
+      "app": "应用",
+      "workspace": "工作区",
+      "user": "用户"
+    },
+    "fallback": {
+      "title": "通知",
+      "body": "有一条新的更新。"
+    }
+  },
+  "app": {
+    "hostUnavailable": {
+      "eyebrow": "宿主不可用",
+      "title": "无法连接当前桌面工作区节点",
+      "description": "宿主控制面或本地 workspace backend 当前不可用，业务页面已停止加载。",
+      "retry": "重新连接",
+      "restart": "重启后端"
+    }
+  },
+  "authGate": {
+    "eyebrow": "工作区认证",
+    "closeLabel": "关闭认证弹窗",
+    "login": {
+      "title": "登录本地工作区",
+      "description": "当前工作区存在账号，但本地 session 不可用或已失效，请重新登录后继续当前上下文。"
+    },
+    "register": {
+      "title": "注册首个管理员账号",
+      "description": "这是该本地工作区的首次启动。请完成首个 owner 账号注册，注册成功后会直接进入当前工作区。"
+    },
+    "fields": {
+      "username": "用户名",
+      "displayName": "昵称",
+      "avatar": "头像",
+      "avatarHint": "支持 PNG、JPEG、WEBP，头像为必填。",
+      "password": "密码",
+      "confirmPassword": "确认密码"
+    },
+    "actions": {
+      "login": "登录",
+      "register": "注册并进入工作区",
+      "pickAvatar": "选择头像"
+    },
+    "validation": {
+      "usernameRequired": "请输入用户名。",
+      "displayNameRequired": "请输入昵称。",
+      "avatarRequired": "请选择头像。",
+      "passwordRequired": "请输入密码。",
+      "passwordMinLength": "密码长度至少 8 位。",
+      "passwordMismatch": "两次输入的密码不一致。"
+    }
+  },
+  "connectWorkspace": {
+    "eyebrow": "连接工作区",
+    "title": "新增并连接工作区",
+    "description": "输入工作区服务地址和登录凭证。系统会先探测工作区信息，再建立连接并切换过去。",
+    "fields": {
+      "baseUrl": "工作区地址",
+      "username": "用户名",
+      "password": "密码"
+    },
+    "placeholders": {
+      "baseUrl": "https://workspace.example.com"
+    },
+    "actions": {
+      "trigger": "新增/连接工作区",
+      "submit": "连接并进入"
+    },
+    "validation": {
+      "baseUrlRequired": "请输入工作区地址。",
+      "baseUrlInvalid": "请输入合法的工作区地址。",
+      "usernameRequired": "请输入用户名。",
+      "passwordRequired": "请输入密码。"
+    }
+  },
+  "searchOverlay": {
+    "placeholder": "输入关键词快速跳转…",
+    "emptyTitle": "没有匹配结果",
+    "emptyDescription": "试试搜索 workspace、project、conversation 或页面名。",
+    "sections": {
+      "conversations": "会话",
+      "projects": "项目",
+      "workspaces": "工作区",
+      "navigation": "导航"
+    },
+    "navigation": {
+      "dashboard": "回到当前仪表盘",
+      "console": "打开当前控制台",
+      "conversation": "打开当前会话",
+      "agents": "打开数字员工中心",
+      "resources": "打开资源页",
+      "knowledge": "打开知识页",
+      "trace": "打开追踪页",
+      "models": "打开模型页",
+      "tools": "打开工具页",
+      "settings": "打开设置"
+    }
+  },
+  "sidebar": {
+    "workspace": {
+      "label": "工作区"
+    },
+    "businessNavigation": {
+      "title": "业务导航"
+    },
+    "workspaceMenu": {
+      "trigger": "工作区",
+      "title": "工作区导航",
+      "items": {
+        "dashboard": "概览",
+        "knowledge": "知识库",
+        "resources": "资源库",
+        "agents": "数字员工中心",
+        "models": "模型配置",
+        "tools": "工具集成",
+        "automations": "自动化",
+        "userCenter": "用户中心",
+        "conversations": "最近会话",
+        "trace": "最近追踪"
+      }
+    },
+    "projectRail": {
+      "title": "项目导航"
+    },
+    "projectTree": {
+      "title": "项目",
+      "caption": "当前工作区范围",
+    "create": "新增项目",
+    "remove": "删除项目",
+    "removeConfirm": "确认删除该项目及其所有会话吗？",
+    "dialogTitle": "创建项目",
+    "dialogDescription": "输入项目名称后，在当前工作区内创建一个新的项目。",
+    "inputPlaceholder": "请输入项目名称",
+    "deleteDialog": {
+      "title": "删除项目",
+      "description": "确认删除“{name}”？当前版本会将该项目从侧边栏移除。",
+      "confirm": "确认删除"
+    }
+  },
+    "projectModules": {
+      "console": "控制台",
+      "conversations": "会话"
+    },
+    "navigation": {
+      "overview": "概览",
+      "dashboard": "仪表盘",
+      "conversation": "会话",
+      "resources": "资源",
+      "knowledge": "知识",
+      "trace": "追踪",
+      "projectSettings": "项目配置",
+      "runtime": "运行配置",
+      "agents": "数字员工",
+      "projects": "项目管理",
+      "teams": "团队",
+      "models": "模型",
+      "tools": "工具",
+      "settings": "设置",
+      "automations": "自动化",
+      "userCenter": "用户中心",
+      "connections": "连接"
+    },
+    "scope": {
+      "title": "当前范围",
+      "eyebrow": "Project Focus"
+    }
+  },
+  "dashboard": {
+    "header": {
+      "eyebrow": "工作区 Dashboard",
+      "titleFallback": "工作区总览",
+      "subtitleFallback": "查看工作区、项目与会话的运行态势。"
+    },
+    "metrics": {
+      "activeProjects": "活跃项目",
+      "activeConversations": "活跃会话",
+      "pendingInbox": "待处理 Inbox",
+      "projectPhase": "项目阶段",
+      "artifacts": "产物",
+      "teams": "团队",
+      "intent": "意图",
+      "progress": "进度",
+      "resumePoints": "恢复点"
+    },
+    "summary": {
+      "title": "Workspace 摘要",
+      "subtitleFallback": "当前还没有选中的 workspace。",
+      "openAgentCenter": "打开数字员工中心",
+      "openTeamCenter": "打开团队中心"
+    },
+    "project": {
+      "title": "当前项目",
+      "subtitleFallback": "请从左侧导航选择一个项目。",
+      "openConversation": "打开会话",
+      "knowledge": "项目知识",
+      "trace": "执行追踪"
+    },
+    "highlights": {
+      "title": "近期亮点",
+      "subtitle": "快速访问会话、产物、审批与追踪。",
+      "conversationTitle": "打开当前会话",
+      "conversationDescription": "继续推进最近一次工作流。",
+      "artifactTitle": "查看最新产物",
+      "artifactDescription": "检查最新的交付物详情。",
+      "traceTitle": "查看追踪记录",
+      "traceDescription": "检查当前执行链路。"
+    },
+    "inbox": {
+      "title": "待处理审批",
+      "subtitle": "需要确认或处理的任务积压。",
+      "emptyTitle": "暂无待处理项",
+      "emptyDescription": "当前没有需要您审批或确认的任务。"
+    },
+    "artifacts": {
+      "title": "最近产物",
+      "subtitle": "项目与会话中产生的结构化输出。",
+      "emptyTitle": "暂无产物",
+      "emptyDescription": "当前尚未产生任何项目产物。"
+    }
+  },
+  "overview": {
+    "greeting": {
+      "night": "深夜好",
+      "morning": "早安",
+      "afternoon": "下午好",
+      "evening": "晚上好"
+    },
+    "status": {
+      "online": "系统正常运行"
+    },
+    "header": {
+      "eyebrow": "工作区概览",
+      "titleFallback": "未选择工作区",
+      "subtitleFallback": "查看用户、项目与工作区的核心指标统计。"
+    },
+    "insights": {
+      "topAgent": "本周智能体 {name} 最为活跃，已累计运行 {value} 次。",
+      "default": "工作区目前运行平稳，暂无异常。"
+    },
+    "sections": {
+      "user": {
+        "title": "用户活跃动态",
+        "subtitle": "工作区成员、活跃度与 Token 消耗统计。",
+        "activity": "最新用户操作"
+      },
+      "project": {
+        "title": "最近项目",
+        "enter": "进入",
+        "subtitle": "当前选定项目的核心运行指标。",
+        "openDashboard": "进入项目控制台",
+        "openConversation": "进入项目会话",
+        "activity": "项目最新动态",
+        "conversationTop": "热门会话排行"
+      },
+      "workspace": {
+        "title": "工作区全局数据",
+        "subtitle": "工作区内资源、模型与工具的整体分布。",
+        "projectRanking": "项目消耗排行",
+        "agentRanking": "智能体调用排行",
+        "teamRanking": "团队排行",
+        "toolRanking": "工具使用排行",
+        "modelRanking": "模型排行"
+      }
+    },
+    "charts": {
+      "activity": {
+        "title": "全站活跃趋势",
+        "subtitle": "工作区整体资源消耗趋势 (Tokens/Tasks)",
+        "label": "消耗量"
+      },
+      "mix": {
+        "title": "模型分布",
+        "total": "总计"
+      }
+    },
+    "user": {
+      "users": "用户总数",
+      "logins": "登录次数",
+      "tokens": "Token 消耗"
+    },
+    "workspace": {
+      "projects": "项目总数",
+      "agents": "智能体总数",
+      "teams": "团队总数",
+      "tools": "集成工具",
+      "models": "可用模型",
+      "knowledge": "沉淀知识",
+      "automations": "自动化任务",
+      "tokens": "总消耗 Token"
+    },
+    "empty": {
+      "projectsTitle": "暂无项目",
+      "projectsDescription": "创建或接入项目后，这里会展示工作区项目概览。",
+      "projectTitle": "暂无活跃项目",
+      "projectDescription": "请先选择一个项目以查看详情。",
+      "activityTitle": "暂无操作记录",
+      "activityDescription": "当前范围内没有发现任何操作记录。",
+      "conversationsTitle": "暂无会话",
+      "conversationsDescription": "运行态会话启动后，这里会展示最近的会话记录。",
+      "rankingTitle": "暂无排行",
+      "rankingDescription": "目前还没有数据支撑排行榜显示。"
+    },
+    "projects": {
+      "title": "项目",
+      "openDashboard": "打开控制台"
+    },
+    "activity": {
+      "title": "最近动态"
+    },
+    "conversations": {
+      "title": "最近会话"
+    }
+  },
+  "projectDashboard": {
+    "header": {
+      "eyebrow": "项目控制台",
+      "titleFallback": "项目仪表盘",
+      "subtitleFallback": "查看项目指标、动态与最近会话。"
+    },
+    "conversations": {
+      "title": "最近会话"
+    },
+    "activity": {
+      "title": "项目动态"
+    },
+    "empty": {
+      "conversationsTitle": "暂无项目会话",
+      "conversationsDescription": "项目运行态会话启动后，这里会展示最近会话。",
+      "activityTitle": "暂无项目动态",
+      "activityDescription": "项目产生运行或变更后，这里会展示对应动态。"
+    },
+    "info": {
+      "title": "项目详情",
+      "subtitle": "维护项目的核心描述与阶段目标。"
+    },
+    "fields": {
+      "name": "项目名称",
+      "goal": "项目目标",
+      "phase": "当前阶段",
+      "summary": "项目简介",
+      "status": "项目状态"
+    },
+    "actions": {
+      "openConversation": "进入会话",
+      "openConversationHint": "继续项目的主线程协作。",
+      "openKnowledge": "查看知识库",
+      "openKnowledgeHint": "查阅沉淀的项目资产。",
+      "openTrace": "查看追踪",
+      "openTraceHint": "检查执行路径与阻塞点。"
+    },
+    "resources": {
+      "title": "资源概览",
+      "subtitle": "当前项目下的会话、资源与智能体规模。",
+      "conversations": "会话数",
+      "resources": "资源数",
+      "agents": "智能体数",
+      "teams": "团队数",
+      "knowledge": "知识条目"
+    },
+    "progress": {
+      "title": "健康度与进度",
+      "subtitle": "基于实时运行态势生成的项目报告。",
+      "phase": "阶段",
+      "progress": "主进度",
+      "runStatus": "Run 状态",
+      "currentStep": "当前步骤",
+      "blockers": "阻塞数",
+      "pendingInbox": "待处理审批"
+    },
+    "data": {
+      "title": "数据统计",
+      "subtitle": "聚合项目级调用与 Token 消耗。",
+      "conversationTop": "高消耗会话",
+      "conversations": "会话数",
+      "participants": "参与者",
+      "boundAgents": "绑定智能体",
+      "knowledge": "知识条目",
+      "agentCalls": "智能体调用",
+      "toolCalls": "工具调用",
+      "modelCalls": "模型调用",
+      "tokens": "Token 消耗",
+      "activity": "活动数"
+    },
+    "activity": {
+      "title": "最新项目动态"
+    },
+    "empty": {
+      "conversationsTitle": "暂无项目会话",
+      "conversationsDescription": "项目运行态会话启动后，这里会展示最近会话。",
+      "activityTitle": "暂无项目动态",
+      "activityDescription": "当前项目还没有任何操作日志。",
+      "rankingTitle": "暂无会话排行",
+      "rankingDescription": "没有足够的数据进行排行。"
+    }
+  },
+  "projectRuntime": {
+    "header": {
+      "eyebrow": "项目运行配置",
+      "title": "项目运行配置",
+      "subtitle": "管理当前项目的 runtime override，同时避免暴露宿主机真实路径。"
+    },
+    "editor": {
+      "title": "项目覆盖配置",
+      "description": "编辑当前项目的 runtime override 文档。"
+    },
+    "effective": {
+      "title": "项目 Effective 预览",
+      "description": "预览从当前项目启动新 session 时会使用的合并配置。"
+    },
+    "emptyTitle": "当前无法读取项目运行配置",
+    "emptyDescription": "当前项目还没有可用的运行配置。"
+  },
+  "projectSettings": {
+    "header": {
+      "eyebrow": "项目配置",
+      "title": "项目配置",
+      "subtitle": "统一维护当前项目的基础信息、模型、工具权限与项目成员。"
+    },
+    "tabs": {
+      "basics": "基础信息",
+      "models": "模型",
+      "tools": "工具",
+      "agents": "智能体",
+      "users": "用户"
+    },
+    "loading": "正在加载项目配置依赖…",
+    "basics": {
+      "title": "基础信息",
+      "description": "编辑当前项目的名称与描述，并同步到侧边栏与顶部导航。",
+      "saveError": "保存项目基础信息失败。"
+    },
+    "models": {
+      "title": "模型配置",
+      "description": "从工作区已有模型中选择当前项目可用模型，并指定默认模型。",
+      "allowedLabel": "可用模型",
+      "allowedHint": "项目只允许在这里勾选的工作区模型参与运行。",
+      "defaultLabel": "默认模型",
+      "defaultHint": "未显式指定模型时，将使用这里的默认模型。",
+      "saveError": "保存项目模型配置失败。",
+      "emptyTitle": "当前工作区还没有可用模型",
+      "emptyDescription": "请先在工作区模型页完成模型配置，再回到项目配置页选择。",
+      "validation": {
+        "required": "请至少选择一个可用模型。",
+        "defaultMustBeAllowed": "默认模型必须属于已选模型。"
+      }
+    },
+    "tools": {
+      "title": "工具权限",
+      "description": "在工作区已分配的 builtin、skill、mcp 工具范围内，进一步细化当前项目的启用项和权限覆盖。",
+      "saveError": "保存项目工具权限失败。",
+      "emptyTitle": "当前没有已分配工具",
+      "emptyDescription": "请先在工作区项目管理里为当前项目分配工具，再回到这里做细化配置。",
+      "groups": {
+        "builtin": "builtin",
+        "skill": "skill",
+        "mcp": "mcp"
+      },
+      "modes": {
+        "inherit": "继承工作区",
+        "allow": "允许",
+        "ask": "询问",
+        "readonly": "只读",
+        "deny": "项目禁用"
+      }
+    },
+    "agents": {
+      "title": "数字员工可用性",
+      "description": "在工作区已分配的个人数字员工和数字员工团队范围内，细化当前项目可用对象。",
+      "saveError": "保存项目数字员工配置失败。",
+      "emptyTitle": "当前没有已分配数字员工或团队",
+      "emptyDescription": "请先在工作区项目管理里为当前项目分配数字员工或团队，再回到这里做细化配置。",
+      "agentsLabel": "可用个人数字员工",
+      "agentsHint": "这里只能启用已分配到当前项目的工作区数字员工。",
+      "teamsLabel": "可用数字员工团队",
+      "teamsHint": "这里只能启用已分配到当前项目的工作区团队。",
+      "sections": {
+        "agents": "个人数字员工",
+        "teams": "数字员工团队"
+      }
+    },
+    "users": {
+      "title": "项目成员",
+      "description": "通过用户的项目作用域关系，维护当前项目的成员名单。",
+      "saveError": "保存项目成员失败。",
+      "emptyTitle": "当前工作区还没有可分配成员",
+      "emptyDescription": "请先在用户中心创建用户，再把用户加入当前项目。"
+    },
+    "summary": {
+      "title": "项目概览",
+      "description": "查看当前项目在工作区中的基础状态。",
+      "status": "项目状态",
+      "models": "已选模型",
+      "toolOverrides": "工具覆盖数",
+      "actors": "已启用数字员工数",
+      "members": "项目成员数"
+    },
+    "emptyTitle": "当前无法读取项目配置",
+    "emptyDescription": "未找到当前项目，或项目数据尚未加载完成。"
+  },
+  "conversation": {
+    "header": {
+      "eyebrow": "会话",
+      "titleFallback": "暂无会话",
+      "subtitleFallback": "请选择或创建一个会话开始协作。"
+    },
+    "tabs": {
+      "title": "会话列表",
+      "caption": "项目会话线程",
+      "create": "新建会话",
+      "delete": "删除会话",
+      "toggleDetails": "切换会话详情"
+    },
+    "empty": {
+      "title": "会话工作区",
+      "description": "选择当前工作区下的项目并创建新会话，运行消息、审批和轨迹都会落在该工作区内。",
+      "guideTitle": "开启第一个会话",
+      "guideDescription": "点击上方“+”按钮，开启与 AI 的结构化协作。",
+      "create": "新建会话"
+    },
+    "stream": {
+      "title": "消息流",
+      "emptyTitle": "暂无消息",
+      "emptyDescription": "对话即将从这里开始。"
+    },
+    "messages": {
+      "emptyTitle": "暂无运行消息",
+      "emptyDescription": "发起一次 turn 后，这里会显示运行态消息流。"
+    },
+    "composer": {
+      "placeholder": "输入你的消息、指令或下一步计划…",
+      "modelLabel": "选择模型",
+      "agentSection": "智能体",
+      "permissionLabel": "权限模式",
+      "autoPermission": "自动模式",
+      "readonlyPermission": "只读模式",
+      "dangerPermission": "全权模式",
+      "dangerPermissionHint": "允许 AI 自动执行敏感写操作",
+      "dangerDialog": {
+        "title": "启用全权模式",
+        "description": "全权模式下，AI 将能够自动执行包括删除、修改在内的敏感写操作，而不再需要您的逐项审批。",
+        "warningTitle": "安全警示",
+        "warningBody": "开启全权模式意味着您已充分信任该智能体。在处理文件、数据库或敏感配置时，AI 的误操作可能会导致数据丢失或环境受损。请谨慎操作并确保已做好必要备份。",
+        "confirm": "确认开启"
+      },
+      "actorLabel": "智能体",
+      "defaultActorOption": "默认智能体 · {name}",
+      "agentGroup": "个人智能体",
+      "teamGroup": "团队智能体",
+      "uploadFile": "上传文件",
+      "uploadFolder": "上传文件夹",
+      "attachExisting": "引用项目资源",
+      "send": "发送"
+    },
+    "controls": {
+      "title": "会话控制"
+    },
+    "detail": {
+      "title": "会话详情",
+      "sections": {
+        "summary": "总结",
+        "memories": "记忆",
+        "artifacts": "产物",
+        "knowledge": "知识",
+        "resources": "资源",
+        "tools": "工具",
+        "timeline": "时间线"
+      },
+      "summary": {
+        "title": "会话摘要",
+        "subtitle": "目标、状态与运行概况。",
+        "statusNote": "当前状态",
+        "tokenUsage": "Token 使用量",
+        "cards": {
+          "messages": "消息数",
+          "artifacts": "产物数",
+          "resources": "资源数"
+        }
+      },
+      "memories": {
+        "title": "沉淀记忆",
+        "agentSource": "智能体私有",
+        "conversationSource": "会话沉淀",
+        "emptyTitle": "暂无记忆",
+        "emptyDescription": "该会话尚未产生值得记录的长期记忆。"
+      },
+      "artifacts": {
+        "title": "会话产物",
+        "filterPlaceholder": "筛选产物",
+        "updatedAt": "更新时间",
+        "contentType": "内容类型",
+        "listTitle": "会话产物列表",
+        "linkedResourcesTitle": "关联资源",
+        "noLinkedResourcesTitle": "暂无关联资源",
+        "noLinkedResourcesDescription": "该产物尚未沉淀为项目资源。",
+        "emptyTitle": "暂无产物",
+        "emptyDescription": "当前会话生成的产物会显示在这里。"
+      },
+      "knowledge": {
+        "title": "引用知识",
+        "emptyTitle": "暂无知识条目",
+        "emptyDescription": "引用的文档、决策和笔记会显示在这里。"
+      },
+      "resources": {
+        "title": "关联资源",
+        "filterPlaceholder": "筛选资源",
+        "openFullPage": "打开完整资源页",
+        "emptyTitle": "暂无资源",
+        "emptyDescription": "当前会话引用的资源会显示在这里。"
+      },
+      "tools": {
+        "title": "工具调用",
+        "emptyTitle": "暂无工具记录",
+        "emptyDescription": "本会话执行过的工具调用会显示在这里。"
+      },
+      "timeline": {
+        "title": "执行轨迹",
+        "emptyTitle": "暂无时间线",
+        "emptyDescription": "随着会话推进，运行事件和关键里程碑会显示在这里。"
+      }
+    }
+  },
+  "knowledge": {
+    "header": {
+      "eyebrow": "项目知识",
+      "workspaceEyebrow": "全域知识库",
+      "projectEyebrow": "项目知识",
+      "titleFallback": "知识中心",
+      "subtitle": "管理当前项目的知识资产与来源链路。",
+      "projectSubtitle": "管理当前项目范围内的知识记录与来源链路。",
+      "workspaceSubtitle": "管理工作区内跨项目的全局知识资产。"
+    },
+    "hero": {
+      "summary": "帮助你追溯知识的来源、可信度及其关联的运行上下文。",
+      "workspaceSummary": "汇总工作区内所有项目的核心知识点与通用经验库。",
+      "badges": {
+        "reading": "深度阅读",
+        "lineage": "全链路追溯",
+        "context": "上下文关联"
+      },
+      "cards": {
+        "total": "知识总数",
+        "shared": "已共享",
+        "candidate": "候选中",
+        "highTrust": "高可信"
+      }
+    },
+    "filters": {
+      "searchPlaceholder": "搜索标题、内容、来源或负责人…",
+      "sourceAll": "全部来源",
+      "sortRecent": "最近使用",
+      "sortTrust": "可信度优先",
+      "sortTitle": "按标题"
+    },
+    "kinds": {
+      "all": "全部类型",
+      "private": "仅限私有",
+      "shared": "已共享",
+      "candidate": "待晋升"
+    },
+    "detail": {
+      "sourceTitle": "来源详情",
+      "lineageTitle": "推导轨迹",
+      "contextTitle": "关联上下文",
+      "fields": {
+        "owner": "负责人",
+        "source": "来源对象",
+        "lastUsedAt": "最近活跃",
+        "trustLevel": "可信度"
+      },
+      "actions": {
+        "openConversation": "进入会话",
+        "openTrace": "查看追踪",
+        "openResources": "查看资源",
+        "traceLabel": "运行追踪",
+        "resourcesLabel": "关联资源"
+      }
+    },
+    "empty": {
+      "projectTitle": "暂无项目知识",
+      "projectDescription": "项目运行过程中的关键发现将在此沉淀。",
+      "workspaceTitle": "暂无全域知识",
+      "workspaceDescription": "工作区尚未建立起跨项目的全局知识库。",
+      "filteredTitle": "没有匹配的知识",
+      "filteredDescription": "试试切换筛选条件或修改搜索关键词。",
+      "selectionTitle": "请选择知识项",
+      "selectionDescription": "从左侧列表中选择一项知识以查看详细的来源与链路。",
+      "lineageDescription": "该知识项暂无详细的推导路径。"
+    },
+    "sourceDescriptions": {
+      "conversation": "源自会话中的上下文对话沉淀。",
+      "artifact": "源自结构化产物或文档的提炼。",
+      "run": "源自运行过程中的 Trace 自动晋升。"
+    },
+    "lineageTypes": {
+      "conversation": "会话",
+      "artifact": "产物",
+      "run": "运行",
+      "resource": "资源",
+      "trace": "追踪",
+      "unknown": "未知"
+    }
+  },
+  "runtime": {
+    "run": {
+      "idle": "空闲",
+      "awaitingInput": "等待输入",
+      "waitingApproval": "等待审批",
+      "awaitingApproval": "等待审批结果",
+      "completed": "已完成",
+      "resuming": "审批通过后恢复中",
+      "blocked": "已阻塞",
+      "manualRecovery": "需要手动恢复",
+      "ingestingConstraints": "正在吸收会话约束",
+      "awaitingFollowUp": "等待后续输入",
+      "rolledBackToCheckpoint": "已回滚到所选检查点",
+      "pausedByUser": "已由用户暂停",
+      "resumedFromCheckpoint": "已从检查点恢复",
+      "approvalReceived": "已收到批准并恢复执行",
+      "reroutedAfterRejection": "驳回后已重新路由"
+    }
+  },
+  "trace": {
+    "header": {
+      "eyebrow": "Trace",
+      "titleFallback": "执行追踪",
+      "subtitleFallback": "当前没有活跃的运行实例。"
+    },
+    "stats": {
+      "status": "当前状态",
+      "owner": "执行主体",
+      "nextAction": "下一步动作"
+    },
+    "runState": {
+      "title": "Run 状态",
+      "subtitle": "详细记录了当前执行的进度、时间点与状态变迁。",
+      "emptyTitle": "暂无活跃 Run",
+      "emptyDescription": "当前会话还没有进入执行阶段。"
+    },
+    "recovery": {
+      "title": "故障恢复",
+      "subtitle": "基于会话快照的断点恢复支持。",
+      "emptyTitle": "暂无可用的恢复点",
+      "emptyDescription": "当前没有待处理审批或可恢复的执行节点。"
+    },
+    "timeline": {
+      "title": "执行时间线",
+      "subtitle": "全量记录工具调用、思考过程与系统反馈。",
+      "emptyTitle": "时间线为空",
+      "emptyDescription": "开始一次新的运行后，这里会持续追加事件。"
+    }
+  },
+  "resources": {
+    "header": {
+      "eyebrow": "资源中心",
+      "title": "项目资产库",
+      "projectTitleFallback": "项目资产库",
+      "subtitle": "管理文件、链接与生成产物。"
+    },
+    "filters": {
+      "searchPlaceholder": "按名称、路径、类型或标签搜索…"
+    },
+    "search": {
+      "placeholder": "搜索名称、标签或路径…"
+    },
+    "tabs": {
+      "all": "全部资源",
+      "source": "原始资料",
+      "generated": "AI 生成"
+    },
+    "stats": {
+      "total": "总资产数",
+      "source": "原始资料",
+      "generated": "AI 生成",
+      "artifact": "Artifacts"
+    },
+    "empty": {
+      "title": "暂无资源",
+      "description": "创建或接入资源后，这里会展示当前列表。",
+      "emptyTitle": "暂无项目资源",
+      "emptyDescription": "点击右上角添加您的第一份项目资料。"
+    },
+    "actions": {
+      "add": "添加资源",
+      "uploadFile": "上传文件",
+      "uploadFolder": "上传文件夹",
+      "addUrl": "外部链接",
+      "cancel": "取消",
+      "delete": "删除",
+      "deactivate": "停用",
+      "confirmDelete": "确定要删除此资源吗？"
+    },
+    "kinds": {
+      "file": "文件",
+      "folder": "文件夹",
+      "url": "外部链接",
+      "artifact": "会话产物"
+    },
+    "editForm": {
+      "nameLabel": "资源名称",
+      "locationLabel": "资源地址",
+      "confirmCreate": "立即创建",
+      "confirmSave": "保存修改"
+    },
+    "deleteDialog": {
+      "title": "彻底删除资源",
+      "description": "此操作不可逆，将移除所有关联引用。",
+      "confirm": "确定删除"
+    },
+    "pagination": {
+      "previous": "上一页",
+      "next": "下一页",
+      "summary": "第 {page} / {total} 页"
+    }
+  },
+  "models": {
+    "header": {
+      "eyebrow": "模型",
+      "title": "工作区模型中心",
+      "subtitle": "管理工作区显式创建的模型实例，并为每个实例配置名称、凭据与 Base URL。"
+    },
+    "filters": {
+      "searchPlaceholder": "搜索名称、厂商、模型、族系、轨道或能力…",
+      "allProviders": "全部厂商",
+      "allSurfaces": "全部接口",
+      "allCapabilities": "全部能力"
+    },
+    "table": {
+      "columns": {
+        "name": "名称",
+        "provider": "厂商",
+        "upstreamModel": "上游模型",
+        "surfaces": "接口",
+        "usedTokens": "已消耗 Token",
+        "totalTokens": "Token 总量",
+        "quotaStatus": "配额状态",
+        "credentialRef": "凭据引用",
+        "baseUrl": "Base URL"
+      }
+    },
+    "detail": {
+      "name": "名称",
+      "provider": "厂商",
+      "upstreamModel": "上游模型",
+      "customProviderName": "自定义厂商名称",
+      "credentialRef": "凭据引用",
+      "credentialRefPlaceholder": "env:PROVIDER_API_KEY",
+      "baseUrl": "Base URL",
+      "baseUrlPlaceholder": "https://provider.example.test/v1",
+      "totalTokens": "Token 总量",
+      "totalTokensPlaceholder": "留空表示不限量",
+      "usedTokens": "已消耗 Token",
+      "remainingTokens": "剩余 Token",
+      "quotaStatus": "配额状态",
+      "capabilities": "能力",
+      "noCapabilities": "当前模型没有声明能力。",
+      "surfaces": "接口",
+      "noSurfaces": "当前模型没有启用的接口。",
+      "enabled": "启用该模型实例",
+      "noDescription": "当前模型没有额外说明。"
+    },
+    "providerModes": {
+      "custom": "自定义"
+    },
+    "create": {
+      "title": "创建模型配置",
+      "description": "创建一个工作区级模型实例，并绑定名称、厂商、上游模型与凭据引用。",
+      "fields": {
+        "name": "名称",
+        "provider": "厂商",
+        "customProviderName": "自定义厂商名称",
+        "model": "模型",
+        "credentialRef": "凭据引用",
+        "baseUrl": "Base URL",
+        "totalTokens": "Token 总量",
+        "enabled": "启用该模型实例"
+      },
+      "placeholders": {
+        "customProviderName": "例如：内部网关",
+        "modelId": "输入模型标识，例如 llama3.1:8b",
+        "totalTokens": "例如：1000000"
+      },
+      "errors": {
+        "required": "请先填写名称、厂商和模型。",
+        "duplicateName": "模型名称必须在当前工作区内唯一。",
+        "customProviderNameRequired": "自定义模式下必须填写厂商名称。",
+        "saveFailed": "保存模型配置失败。"
+      }
+    },
+    "actions": {
+      "create": "创建模型",
+      "validate": "校验",
+      "save": "保存",
+      "delete": "删除模型配置",
+      "cancel": "取消",
+      "confirmCreate": "创建"
+    },
+    "pagination": {
+      "summary": "共 {count} 条，第 {page} / {total} 页"
+    },
+    "states": {
+      "enabled": "已启用",
+      "disabled": "已停用"
+    },
+    "validation": {
+      "success": "已完成真实请求校验，模型“{name}”可用，本次消耗 {tokens} Token。",
+      "requestId": "请求 ID：{requestId}"
+    },
+    "quota": {
+      "unlimited": "不限量",
+      "available": "可用",
+      "exhausted": "已耗尽"
+    },
+    "empty": {
+      "title": "还没有创建模型",
+      "description": "从右上角创建第一个工作区模型实例。",
+      "selectionTitle": "请选择一个模型",
+      "selectionDescription": "从左侧选择一个模型实例，查看并编辑详情。"
+    }
+  },
+  "tools": {
+  "header": {
+    "eyebrow": "运行时工具",
+    "title": "工具集成",
+    "subtitle": "基于 runtime 真源管理内置工具、工作区技能和 MCP 服务。"
+  },
+  "actions": {
+    "disable": "停用",
+    "enable": "启用",
+    "newSkill": "新建 Skill",
+    "newMcp": "新建 MCP",
+    "importSkill": "导入 Skill",
+    "importArchive": "上传 ZIP",
+    "importFolder": "上传文件夹",
+    "copyToManaged": "复制为本应用 Skill",
+    "selectForCopy": "加入批量复制",
+    "skillSlugPrompt": "请输入 Skill 标识"
+  },
+  "tabs": {
+    "builtin": "内置工具",
+    "skill": "技能目录",
+    "mcp": "MCP"
+    },
+    "empty": {
+      "title": "当前分组暂无条目",
+      "description": "这个分组下暂时没有 runtime 真实条目。",
+      "filteredTitle": "没有匹配的工具",
+      "filteredDescription": "试试修改搜索词或切换分组。",
+      "selectionTitle": "请选择一个工具",
+      "selectionDescription": "从左侧选择条目以查看来源和发现状态。"
+    },
+    "search": {
+      "placeholder": "搜索名称、路径、端点或状态…"
+    },
+  "summary": {
+    "results": "当前显示 {count} 条 / 本分组共 {total} 条"
+  },
+  "fields": {
+    "permissionMode": "权限模式"
+  },
+  "detail": {
+      "title": "详情",
+      "sourcePath": "来源路径",
+      "sourceKey": "来源键",
+    "requiredPermission": "所需权限",
+    "disabled": "已停用",
+    "builtinKey": "内置键",
+    "activeState": "状态",
+    "shadowedBy": "被覆盖来源",
+    "sourceOrigin": "发现来源",
+    "relativePath": "相对路径",
+    "workspaceOwned": "归属",
+    "workspaceOwnedYes": "工作区管理",
+    "workspaceOwnedNo": "外部来源",
+    "serverName": "服务名",
+    "endpoint": "端点",
+    "toolNames": "已发现工具",
+    "scope": "配置范围",
+    "statusDetail": "状态说明"
+  },
+  "editor": {
+    "loading": "正在加载 runtime 文档…",
+    "loadingFile": "正在加载 Skill 文件…",
+    "unknownError": "加载工具详情失败。",
+    "jsonObjectRequired": "MCP 配置必须是 JSON 对象。",
+    "skillSlugRequired": "无法生成有效的 Skill 名称。",
+    "skillNameRequired": "请输入 Skill 名称。",
+    "skillImportRequired": "请至少选择一个 Skill 来源。",
+    "skillCopyDuplicate": "复制目标名称存在重复，请调整后重试。",
+    "skillImportDuplicate": "所选来源中存在重复的 Skill 名称，请调整后重试。",
+    "skillCreateDescription": "在 data/skills/<slug>/ 下创建一个本应用自有 skill。",
+    "mcpCreateDescription": "在工作区 runtime 配置里创建一个 MCP server 条目。",
+    "copySkillDescription": "将使用当前 Skill 名称创建本应用副本。",
+    "importSkillDescription": "选择 ZIP 或文件夹后，将默认使用文件名或文件夹名导入。",
+    "importArchiveDescription": "将默认使用 ZIP 文件名导入。",
+    "importFolderDescription": "将默认使用文件夹名导入。",
+    "skillSlug": "Skill 标识",
+    "skillName": "Skill 名称",
+    "skillContent": "SKILL.md",
+    "mcpServerName": "服务名",
+    "mcpConfig": "服务配置",
+    "skillTree": "目录结构",
+    "selectedImportSource": "已选择来源",
+    "selectedFile": "当前文件",
+    "fileKind": "文件类型",
+    "fileLanguage": "语言",
+    "fileSize": "大小",
+    "noSkillFiles": "当前 skill 目录下没有可展示的文件。",
+    "noSkillFileSelectedTitle": "选择一个文件",
+    "noSkillFileSelectedDescription": "从左侧目录树中选择一个 skill 文件。",
+    "textFile": "文本文件",
+    "binaryFile": "二进制文件",
+    "binaryReadonly": "二进制文件仅展示元数据，暂不支持页面内编辑。"
+  },
+  "states": {
+    "active": "生效中",
+    "shadowed": "已被覆盖",
+    "managed": "本应用",
+    "disabled": "已停用",
+    "readonly": "只读",
+    "external": "外部来源"
+  },
+    "sourceOrigins": {
+      "skills_dir": "技能目录",
+      "legacy_commands_dir": "旧版 /commands"
+    },
+    "requiredPermissions": {
+      "readonly": "只读",
+      "workspace-write": "工作区写入",
+      "danger-full-access": "危险全权限"
+    },
+    "availability": {
+      "healthy": "状态健康",
+      "configured": "已配置",
+      "attention": "需关注"
+    }
+  },
+  "settings": {
+    "header": {
+      "eyebrow": "系统设置",
+      "title": "桌面环境配置",
+      "subtitle": "自定义您的专属 AI 工作空间。"
+    },
+    "tabs": {
+      "general": "通用设置",
+      "connection": "连接配置",
+      "theme": "外观设置",
+      "runtime": "运行配置",
+      "version": "版本信息"
+    },
+    "preferences": {
+      "title": "外观配置",
+      "theme": "界面外观",
+      "locale": "显示语言",
+      "fontSize": "字体大小",
+      "fontFamily": "系统字体",
+      "fontStyle": "字体风格",
+      "leftSidebarCollapsed": "默认收起侧边栏",
+      "rightSidebarCollapsed": "默认收起详情面板",
+      "themeOptions": {
+        "system": "跟随操作系统",
+        "light": "优雅浅色",
+        "dark": "极客深色"
+      },
+      "localeOptions": {
+        "zh-CN": "简体中文 (中国)",
+        "en-US": "English (US)"
+      },
+      "fontStyleOptions": {
+        "sans": "无衬线体 (Sans)",
+        "serif": "衬线体 (Serif)",
+        "mono": "等宽字体 (Mono)"
+      }
+    },
+    "general": {
+      "title": "通用设置",
+      "layoutTitle": "页面布局",
+      "i18nTitle": "语言与区域",
+      "leftSidebarHint": "下次启动时默认隐藏导航栏",
+      "rightSidebarHint": "下次启动时默认隐藏详情栏"
+    },
+    "runtime": {
+      "title": "运行配置",
+      "subtitle": "以可视化方式编辑分层运行配置，同时继续让配置文件保持真相源地位。",
+      "loading": "正在加载运行配置…",
+      "emptyTitle": "当前无法读取运行配置",
+      "emptyDescription": "当前工作区还没有可用的运行配置来源。",
+      "sourcePath": "来源路径",
+      "secretReferencesTitle": "密钥引用状态",
+      "noSecretReferences": "当前 effective config 没有返回密钥引用状态。",
+      "actions": {
+        "reload": "重新加载",
+        "validate": "校验",
+        "save": "保存"
+      },
+      "validation": {
+        "idle": "尚未校验",
+        "valid": "校验通过",
+        "invalid": "需要处理"
+      },
+      "sourceStatuses": {
+        "missing": "未发现",
+        "loaded": "已加载",
+        "detected": "已检测"
+      },
+      "workspace": {
+        "title": "工作区运行配置",
+        "description": "编辑保存在 config/runtime/workspace.json 中的工作区级 runtime 配置。"
+      },
+      "effective": {
+        "title": "Effective Runtime 预览",
+        "description": "展示新 session 将使用的合并结果，敏感值在桌面端保持脱敏。"
+      }
+    },
+    "version": {
+      "runtimeTitle": "运行时信息",
+      "fields": {
+        "shell": "内核核心",
+        "appVersion": "当前版本",
+        "workspace": "活跃工作区",
+        "backendState": "后端状态",
+        "backendTransport": "后端传输",
+        "cargoWorkspace": "编译环境"
+      },
+      "values": {
+        "enabled": "已开启",
+        "disabled": "未开启"
+      },
+      "actions": {
+        "refreshBackend": "刷新后端状态",
+        "restartBackend": "重启桌面后端"
+      }
+    }
+  },
+  "contextPane": {
+    "host": {
+      "title": "宿主上下文"
+    }
+  },
+  "connections": {
+    "header": {
+      "eyebrow": "连接拓扑",
+      "title": "工作区连接",
+      "subtitle": "在统一视图中查看产品侧与宿主侧连接 contract。"
+    },
+    "product": {
+      "title": "产品连接",
+      "subtitle": "供项目与会话使用的工作区连接。",
+      "empty": {
+        "title": "暂无产品连接",
+        "description": "当前没有可展示的产品级连接状态。"
+      }
+    },
+    "host": {
+      "title": "宿主连接",
+      "subtitle": "由桌面宿主管理的 shell 与 bootstrap 连接。",
+      "backendTitle": "桌面后端连接",
+      "backendSubtitle": "通过统一 contract 暴露的 shell 层宿主连接。",
+      "emptyTitle": "暂无宿主连接",
+      "emptyDescription": "当前宿主尚未暴露任何 bootstrap 或后端连接。"
+    },
+    "empty": {
+      "title": "暂无连接",
+      "description": "当前还没有可用的工作区连接。"
+    }
+  },
+  "userCenter": {
+    "header": {
+      "eyebrow": "用户中心",
+      "title": "权限管理",
+      "subtitle": "管理工作区级的角色、权限分配与导航控制。",
+      "heroTitle": "统一的身份与能力治理看板",
+      "heroSubtitle": "清晰展现成员与权限的边界，保障工作区安全合规。"
+    },
+    "common": {
+      "noRoles": "暂无角色",
+      "active": "正常",
+      "disabled": "停用",
+      "status": "状态"
+    },
+    "nav": {
+      "title": "管理菜单",
+      "profile": "基本资料",
+      "pet": "宠物",
+      "users": "成员管理",
+      "roles": "角色管理",
+      "permissions": "权限管理",
+      "menus": "导航管理"
+    },
+    "filters": {
+      "status": "状态筛选",
+      "scope": "范围筛选",
+      "allStatuses": "全部状态",
+      "allScopes": "全部范围"
+    },
+    "gender": {
+      "unknown": "未知",
+      "male": "男",
+      "female": "女"
+    },
+    "scope": {
+      "allProjects": "全部项目",
+      "selectedProjects": "指定项目"
+    },
+    "risk": {
+      "broadMenuAccess": "广泛菜单访问"
+    },
+    "profile": {
+      "usernameLabel": "用户名",
+      "nicknameLabel": "昵称",
+      "phoneLabel": "手机号",
+      "emailLabel": "邮箱",
+      "genderLabel": "性别",
+      "roleLabel": "角色",
+      "securityTitle": "账号安全",
+      "resetPassword": "重置密码",
+      "passwordLabel": "密码状态",
+      "passwordUpdatedAtLabel": "密码更新时间",
+      "passwordResetRequired": "需要重置密码",
+      "passwordTemporary": "临时密码",
+      "permissionTitle": "有效权限",
+      "permissionSubtitle": "按目标类型查看当前账号可执行的能力范围。",
+      "permissionCountLabel": "{count} 项权限",
+      "emptyPermissionTitle": "暂无权限",
+      "emptyPermissionDescription": "当前账号还没有绑定任何有效权限。",
+      "timelineTitle": "最近活动",
+      "timelineSubtitle": "展示当前账号在工作区内的关键操作轨迹。",
+      "emptyTimelineTitle": "暂无活动记录",
+      "emptyTimelineDescription": "当前账号还没有可展示的最近活动。",
+      "metrics": {
+        "permissionCount": "原子权限",
+        "menuCount": "导航节点",
+        "roleCount": "承载角色",
+        "permissionHelper": "当前账号继承到的权限总量。",
+        "menuHelper": "当前账号可见的导航节点数量。",
+        "roleHelper": "当前账号归属的角色数量。"
+      },
+      "emptyTitle": "暂无当前用户",
+      "emptyDescription": "当前工作区连接尚未返回用户资料。",
+      "access": {
+        "title": "访问概览",
+        "description": "查看当前账号继承到的角色、权限与可见菜单。",
+        "roles": "当前角色",
+        "rolesDescription": "当前登录账号直接绑定的角色。",
+        "permissions": "当前权限",
+        "permissionsDescription": "基于当前角色聚合得到的有效权限。",
+        "menus": "当前菜单",
+        "menusDescription": "当前账号可见的用户中心菜单。",
+        "openRoles": "查看角色",
+        "openPermissions": "查看权限",
+        "openMenus": "查看菜单",
+        "emptyRoles": "暂无角色",
+        "emptyPermissions": "暂无权限",
+        "emptyMenus": "暂无菜单"
+      },
+      "edit": {
+        "title": "编辑个人资料",
+        "description": "维护当前登录用户的基础资料。本期支持昵称、用户名和头像上传。",
+        "fields": {
+          "displayName": "昵称",
+          "username": "用户名",
+          "avatar": "头像"
+        },
+        "hints": {
+          "avatar": "支持从本地选择 PNG、JPEG、WEBP 图片；清空后会回退到首字母头像。",
+          "avatarCurrent": "当前头像",
+          "avatarPendingEmpty": "未选择新的头像文件"
+        },
+        "actions": {
+          "pickAvatar": "选择头像",
+          "clearAvatar": "清空头像",
+          "save": "保存",
+          "reset": "重置"
+        }
+      },
+      "password": {
+        "title": "修改密码",
+        "description": "输入当前密码并设置新的登录密码。修改成功后会立即更新密码状态。",
+        "fields": {
+          "currentPassword": "当前密码",
+          "newPassword": "新密码",
+          "confirmPassword": "确认新密码"
+        },
+        "hints": {
+          "newPassword": "新密码长度至少 8 位，且不能与当前密码相同。"
+        },
+        "actions": {
+          "submit": "更新密码"
+        }
+      },
+      "feedback": {
+        "profileSaved": "个人资料已保存。",
+        "passwordUpdated": "密码已更新。"
+      },
+      "validation": {
+        "displayNameRequired": "请输入昵称。",
+        "usernameRequired": "请输入用户名。",
+        "currentPasswordRequired": "请输入当前密码。",
+        "newPasswordRequired": "请输入新密码。",
+        "newPasswordMinLength": "新密码长度至少 8 位。",
+        "confirmPasswordRequired": "请再次输入新密码。",
+        "passwordMismatch": "两次输入的新密码不一致。",
+        "passwordUnchanged": "新密码不能与当前密码相同。"
+      },
+      "runtime": {
+        "title": "运行配置",
+        "description": "编辑当前工作区下只对你自己生效的 runtime override。",
+        "effectiveTitle": "Effective 预览",
+        "effectiveDescription": "预览对当前用户新建 session 生效的 runtime 配置。"
+      }
+    },
+    "pet": {
+      "title": "宠物",
+      "description": "配置小章在当前工作区下的个人偏好，例如默认模型与权限模式。",
+      "emptyTitle": "暂无宠物配置",
+      "emptyDescription": "当前工作区还没有可编辑的用户会话上下文。",
+      "fields": {
+        "name": "宠物名称",
+        "model": "默认模型",
+        "greeting": "问候语",
+        "summary": "角色摘要",
+        "permissionMode": "权限模式",
+        "source": "配置来源"
+      },
+      "hints": {
+        "model": "控制宠物聊天默认使用的 configured model。",
+        "permissionMode": "控制宠物会话默认请求的执行权限。"
+      },
+      "actions": {
+        "save": "保存宠物配置",
+        "reset": "重置"
+      },
+      "permissionModes": {
+        "readOnly": "只读",
+        "workspaceWrite": "工作区可写",
+        "dangerFullAccess": "危险全权限"
+      },
+      "visibility": {
+        "visible": "已显示",
+        "hidden": "已隐藏"
+      },
+      "preview": {
+        "selectedModel": "当前模型",
+        "greeting": "问候语",
+        "summary": "角色摘要"
+      },
+      "runtime": {
+        "title": "宠物运行预览",
+        "description": "保存后会写入当前用户 runtime override 中的 pet 配置段。"
+      }
+    },
+    "users": {
+      "title": "成员管理",
+      "subtitle": "维护工作区成员账号、角色绑定与项目范围。",
+      "create": "添加成员",
+      "createTitle": "创建成员",
+      "editTitle": "编辑成员",
+      "deleteTitle": "删除成员",
+      "deleteDescription": "删除后将移除该成员的工作区访问权限，此操作不可撤销。",
+      "formSubtitle": "编辑成员的基础资料、角色授权与访问范围。",
+      "searchPlaceholder": "搜索成员、账号或邮箱…",
+      "currentSessionUser": "当前会话用户",
+      "effectivePermissions": "有效权限 {count}",
+      "effectiveMenus": "可见菜单 {count}",
+      "switchCurrentUser": "切换为当前会话用户",
+      "disable": "停用成员",
+      "enable": "启用成员",
+      "roleBindingTitle": "角色绑定",
+      "scopeTitle": "项目范围",
+      "actions": {
+        "create": "新建成员",
+        "delete": "删除成员",
+        "pickAvatar": "选择头像",
+        "clearAvatar": "清空头像",
+        "save": "保存成员",
+        "reset": "重置"
+      },
+      "fields": {
+        "username": "用户名",
+        "nickname": "昵称",
+        "role": "角色",
+        "scopeProjects": "项目范围",
+        "avatar": "头像",
+        "password": "密码",
+        "roleIds": "角色 ID",
+        "scopeProjectIds": "项目范围 ID"
+      },
+      "avatar": {
+        "description": "可上传头像，或使用默认首字母头像。",
+        "actions": {
+          "useDefault": "使用默认头像"
+        },
+        "pendingEmpty": "未选择新的头像文件",
+        "current": "当前头像"
+      },
+      "password": {
+        "description": "可保留现有密码、恢复默认密码，或设置一个新的成员密码。",
+        "actions": {
+          "useDefault": "使用默认密码",
+          "custom": "自定义密码"
+        },
+        "fields": {
+          "password": "新密码",
+          "confirmPassword": "确认新密码"
+        }
+      },
+      "metrics": {
+        "total": "成员总数",
+        "activeHelper": "其中 {count} 个为启用状态",
+        "disabled": "已停用成员",
+        "scopeHelper": "其中 {count} 个为指定项目范围",
+        "unassigned": "未分配角色",
+        "unassignedHelper": "建议尽快补齐角色绑定，避免权限漂移。"
+      },
+      "feedback": {
+        "saved": "成员信息已保存。",
+        "deleted": "成员已删除。"
+      }
+    },
+    "roles": {
+      "title": "角色定义",
+      "create": "新增角色",
+      "createTitle": "创建角色",
+      "editTitle": "编辑角色",
+      "deleteTitle": "删除角色",
+      "deleteDescription": "删除后会同步移除成员绑定的该角色，此操作不可撤销。",
+      "listTitle": "角色列表",
+      "listSubtitle": "集中维护工作区内的职责分工与授权模板。",
+      "formSubtitle": "编辑角色说明，并绑定权限与菜单访问范围。",
+      "nameLabel": "角色名称",
+      "codeLabel": "角色标识",
+      "descriptionLabel": "职能描述",
+      "permissionBindingTitle": "权限绑定",
+      "menuBindingTitle": "菜单绑定",
+      "menuHint": "只勾选该角色应该看到的导航入口。",
+      "actions": {
+        "create": "新建角色",
+        "delete": "删除角色",
+        "save": "保存角色",
+        "reset": "重置"
+      },
+      "fields": {
+        "name": "角色名称",
+        "code": "角色标识",
+        "permissions": "权限",
+        "menus": "菜单",
+        "permissionIds": "权限 ID",
+        "menuIds": "菜单 ID",
+        "description": "角色说明"
+      },
+      "menuGroups": {
+        "app": "应用",
+        "workspace": "工作区",
+        "userCenter": "用户中心",
+        "project": "项目"
+      },
+      "feedback": {
+        "saved": "角色信息已保存。",
+        "deleted": "角色已删除。"
+      },
+      "metrics": {
+        "total": "角色总数",
+        "disabled": "已停用角色",
+        "disabledHelper": "其中 {count} 个角色当前停用。",
+        "orphan": "空角色",
+        "orphanHelper": "当前没有成员绑定的角色数量。",
+        "broadAccess": "高覆盖访问",
+        "broadAccessHelper": "拥有广泛菜单访问的角色数量。"
+      }
+    },
+    "permissions": {
+      "title": "权限管理",
+      "subtitle": "管理原子权限与权限包，并绑定目标范围。",
+      "listTitle": "权限列表",
+      "listSubtitle": "查看工作区内所有权限定义、状态与风险提示。",
+      "create": "新增权限",
+      "createTitle": "创建权限",
+      "editTitle": "编辑权限",
+      "formSubtitle": "编辑权限元信息、目标对象与组合关系。",
+      "atomicTab": "原子权限",
+      "bundleTab": "权限包",
+      "nameLabel": "权限名称",
+      "codeLabel": "权限标识",
+      "descriptionLabel": "权限描述",
+      "kindLabel": "权限类型",
+      "targetTypeTitle": "目标类型",
+      "targetBindingTitle": "目标绑定",
+      "actionTitle": "动作标识",
+      "bundleComposeTitle": "权限包组合",
+      "bundleMembers": "包含 {count} 个成员权限",
+      "usedByRoles": "被 {count} 个角色使用",
+      "disable": "停用",
+      "enable": "启用",
+      "delete": "删除",
+      "deleteTitle": "删除权限",
+      "deleteDescription": "删除后会同步移除角色中绑定的该权限，此操作不可撤销。",
+      "emptyTargets": "当前目标类型暂无可选对象。",
+      "actions": {
+        "create": "新建权限",
+        "delete": "删除权限",
+        "save": "保存权限",
+        "reset": "重置"
+      },
+      "fields": {
+        "name": "权限名称",
+        "code": "权限标识",
+        "kind": "权限类型",
+        "targetType": "目标类型",
+        "action": "动作标识",
+        "targetIds": "目标 ID",
+        "memberPermissionIds": "成员权限 ID",
+        "description": "权限描述"
+      },
+      "feedback": {
+        "saved": "权限信息已保存。",
+        "deleted": "权限已删除。"
+      },
+      "metrics": {
+        "total": "权限总数",
+        "bundleHelper": "其中 {count} 个为权限包。",
+        "disabled": "已停用权限",
+        "disabledHelper": "当前不可用但仍保留定义的权限数量。",
+        "risky": "风险权限",
+        "riskyHelper": "需要额外审计关注的权限数量。"
+      }
+    },
+    "menus": {
+      "title": "导航管理",
+      "subtitle": "统一维护菜单标签、顺序、可见性与角色使用情况。",
+      "editTitle": "编辑菜单",
+      "formSubtitle": "调整当前菜单节点的展示文案与状态。",
+      "nonNavigable": "非导航节点",
+      "roleUsage": "被 {count} 个角色使用",
+      "rootNode": "根节点",
+      "labelLabel": "菜单名称",
+      "orderLabel": "排序权重",
+      "parentHint": "父级关系由注册中心控制，此处仅展示当前归属。",
+      "toggleStatus": "切换状态",
+      "fields": {
+        "label": "菜单名称",
+        "source": "来源",
+        "routeName": "路由名称",
+        "parentId": "父级菜单 ID",
+        "order": "排序权重"
+      },
+      "metrics": {
+        "total": "菜单总数",
+        "userCenterHelper": "其中 {count} 个来自用户中心配置。",
+        "disabled": "已停用菜单",
+        "disabledHelper": "这些菜单当前不会出现在导航中。",
+        "unused": "未被角色使用",
+        "unusedHelper": "这些菜单暂未分配给任何角色。"
+      }
+    },
+    "recentConversations": {
+      "title": "最近会话",
+      "emptyState": "全局最近会话功能开发中"
+    },
+    "todos": {
+      "title": "待办事项",
+      "emptyState": "全局待办事项功能开发中"
+    }
+  },
+  "agents": {
+    "header": {
+      "eyebrow": "数字员工中心",
+      "title": "数字员工与团队",
+      "subtitleProject": "管理当前项目的数字员工与团队协作。",
+      "subtitleWorkspace": "管理您的工作区级数字员工与团队配置。"
+    },
+    "workspace": {
+      "descriptionAgent": "管理可被多个项目复用的工作区级数字员工。"
+    },
+    "project": {
+      "titleFallback": "项目数字员工",
+      "descriptionAgent": "管理分配给当前项目的数字员工。"
+    },
+    "stats": {
+      "total": "数字员工总数",
+      "active": "启用中的数字员工"
+    },
+    "empty": {
+      "workspaceTitle": "暂无工作区数字员工",
+      "workspaceDescription": "创建第一个可复用的工作区数字员工。",
+      "projectTitle": "暂无项目数字员工",
+      "projectDescription": "为当前项目创建第一个项目级数字员工。"
+    },
+    "tabs": {
+      "agents": "数字员工",
+      "teams": "团队"
+    },
+    "actions": {
+      "create": "创建数字员工",
+      "edit": "编辑数字员工",
+      "new": "新建",
+      "addAgent": "新建数字员工",
+      "addTeam": "新建团队",
+      "filter": "筛选",
+      "sort": "排序",
+      "searchPlaceholder": "搜索名称、角色或描述…"
+    },
+    "view": {
+      "gallery": "图标视图",
+      "list": "列表视图"
+    },
+    "list": {
+      "title": "数字员工列表",
+      "subtitle": "管理个人与工作区级数字员工能力。",
+      "emptyTitle": "暂无数字员工",
+      "emptyDescription": "当前还没有可复用的数字员工配置。",
+      "columns": {
+        "name": "名称",
+        "role": "角色",
+        "status": "状态",
+        "tags": "标签",
+        "actions": "操作"
+      }
+    },
+    "dialog": {
+      "createTitle": "新建数字员工",
+      "editTitle": "数字员工详情",
+      "name": "名称",
+      "namePlaceholder": "数字员工名称",
+      "role": "角色",
+      "rolePlaceholder": "例如：前端专家",
+      "model": "模型",
+      "tags": "标签",
+      "tagsPlaceholder": "添加标签...",
+      "description": "描述",
+      "descriptionPlaceholder": "这个数字员工是做什么的？"
+    },
+    "fields": {
+      "name": "名称",
+      "title": "标题",
+      "description": "描述"
+    }
+  },
+  "automations": {
+    "header": {
+      "eyebrow": "自动化",
+      "subtitle": "集中管理工作区内的自动化任务、负责人、执行节奏与输出约定。"
+    },
+    "empty": {
+      "title": "暂无自动化任务",
+      "description": "创建自动化后，这里会展示当前工作区的执行编排与最新状态。"
+    },
+    "actions": {
+      "create": "新建自动化",
+      "edit": "编辑自动化"
+    },
+    "fields": {
+      "title": "标题",
+      "ownerType": "负责人类型",
+      "ownerId": "负责人",
+      "status": "状态",
+      "cadence": "执行节奏",
+      "description": "描述",
+      "output": "输出约定"
+    }
+  },
+  "projects": {
+    "header": {
+      "eyebrow": "项目管理",
+      "subtitle": "集中维护项目基础信息、工作区分配项与归档状态。"
+    },
+    "metrics": {
+      "total": "项目总数",
+      "active": "活跃项目",
+      "archived": "已归档项目"
+    },
+    "empty": {
+      "title": "暂无项目",
+      "description": "创建项目后，这里会展示当前工作区的项目清单。"
+    },
+    "actions": {
+      "create": "新建项目",
+      "edit": "编辑项目",
+      "archive": "归档项目",
+      "restore": "恢复项目"
+    },
+    "fields": {
+      "name": "项目名称",
+      "description": "项目说明",
+      "models": "已分配模型",
+      "defaultModel": "默认模型",
+      "tools": "已分配工具",
+      "agents": "已分配个人数字员工",
+      "teams": "已分配数字员工团队"
+    },
+    "hints": {
+      "models": "项目配置页只能在这里选中的模型范围内继续细化。",
+      "defaultModel": "这里的默认模型会作为项目级默认模型的初始范围。",
+      "tools": "从工作区工具目录中选择 builtin、skill、mcp 工具。",
+      "agents": "选择当前项目可使用的工作区个人数字员工。",
+      "teams": "选择当前项目可使用的工作区数字员工团队。"
+    },
+    "emptyAssignments": {
+      "models": "当前还没有可用的工作区模型。",
+      "tools": "当前还没有可用的工作区工具。",
+      "agents": "当前还没有可用的工作区个人数字员工。",
+      "teams": "当前还没有可用的工作区数字员工团队。"
+    },
+    "status": {
+      "active": "active",
+      "archived": "archived"
+    },
+    "errors": {
+      "lastActiveProject": "至少保留一个活跃项目，无法归档最后一个活跃项目。"
+    }
+  },
+  "teams": {
+    "header": {
+      "eyebrow": "团队",
+      "title": "团队协作编排",
+      "subtitle": "维护工作区内的协作小队、范围模式与默认输出策略。"
+    },
+    "metrics": {
+      "total": "团队总数",
+      "active": "启用中团队"
+    },
+    "empty": {
+      "title": "暂无团队",
+      "description": "创建团队后，这里会展示工作区内的协作编组与成员范围。"
+    },
+    "actions": {
+      "create": "新建团队",
+      "edit": "编辑团队"
+    },
+    "fields": {
+      "name": "团队名称",
+      "memberIds": "成员 ID",
+      "description": "团队说明"
+    }
+  },
+  "enum": {
+    "backendConnectionState": {
+      "ready": "可用",
+      "unavailable": "不可用"
+    },
+    "backendTransport": {
+      "http": "HTTP",
+      "sse": "SSE",
+      "ws": "WebSocket"
+    },
+    "hostPlatform": {
+      "tauri": "Tauri",
+      "web": "Web"
+    },
+    "hostMode": {
+      "local": "本地",
+      "remote": "远端"
+    },
+    "runStatus": {
+      "running": "执行中",
+      "completed": "已完成",
+      "blocked": "已阻塞",
+      "paused": "已暂停"
+    },
+    "artifactStatus": {
+      "draft": "草稿",
+      "review": "审阅中",
+      "approved": "已批准",
+      "published": "已发布"
+    },
+    "projectResourceKind": {
+      "file": "文件",
+      "folder": "文件夹",
+      "artifact": "产物",
+      "url": "链接"
+    },
+    "projectResourceOrigin": {
+      "source": "原始",
+      "generated": "生成"
+    },
+    "riskLevel": {
+      "low": "低风险",
+      "medium": "中风险",
+      "high": "高风险"
+    },
+    "conversationIntent": {
+      "plan": "规划中",
+      "clarify": "澄清中",
+      "review": "评审中",
+      "paused": "已暂停"
+    },
+    "recordStatus": {
+      "active": "正常",
+      "disabled": "停用"
+    },
+    "passwordState": {
+      "set": "已设置",
+      "reset-required": "需要重置",
+      "temporary": "临时密码"
+    },
+    "rbacPermissionKind": {
+      "atomic": "原子权限",
+      "bundle": "权限包"
+    },
+    "rbacPermissionTargetType": {
+      "workspace": "工作区",
+      "project": "项目",
+      "user": "用户",
+      "role": "角色",
+      "permission": "权限项",
+      "menu": "菜单",
+      "resource": "资源",
+      "agent": "智能体",
+      "knowledge": "知识",
+      "tool": "工具",
+      "skill": "技能",
+      "mcp": "MCP"
+    },
+    "menuSource": {
+      "main-sidebar": "主侧边栏",
+      "user-center": "用户中心"
+    },
+    "teamMode": {
+      "leadered": "主导式",
+      "hybrid": "混合式",
+      "mesh": "网格式"
+    }
+  }
+}

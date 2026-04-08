@@ -1,0 +1,26 @@
+[package]
+name = "octopus-runtime-adapter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+api = { path = "../api" }
+async-trait.workspace = true
+octopus-core = { path = "../octopus-core" }
+octopus-infra = { path = "../octopus-infra" }
+octopus-platform = { path = "../octopus-platform" }
+plugins = { path = "../plugins" }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+rusqlite.workspace = true
+runtime = { path = "../runtime" }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10"
+tokio.workspace = true
+tools = { path = "../tools" }
+uuid.workspace = true

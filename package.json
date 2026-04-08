@@ -1,0 +1,28 @@
+{
+  "name": "octopus",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm dev:desktop",
+    "dev:desktop": "pnpm prepare:desktop-backend:dev && pnpm tauri dev --config apps/desktop/src-tauri/tauri.conf.json",
+    "dev:desktop:fresh": "pnpm clean:desktop-shell && pnpm dev:desktop",
+    "build:desktop": "pnpm tauri build --config apps/desktop/src-tauri/tauri.conf.json",
+    "prepare:desktop-backend:dev": "node scripts/prepare-desktop-backend.mjs",
+    "prepare:desktop-backend:sidecar": "node scripts/prepare-desktop-sidecar.mjs",
+    "clean:desktop-shell": "cargo clean -p octopus-desktop-shell",
+    "prepare:agent-bundle-seed": "node scripts/prepare-agent-bundle-seed.mjs",
+    "dev:web": "node scripts/dev-web.mjs",
+    "dev:backend": "node scripts/run-desktop-backend.mjs",
+    "build": "pnpm -C apps/desktop build:ui",
+    "check:frontend": "pnpm check:frontend-governance && pnpm -C apps/desktop typecheck && pnpm -C apps/desktop test",
+    "check:frontend-governance": "node scripts/check-frontend-governance.mjs",
+    "test": "pnpm -C apps/desktop test",
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1",
+    "autoprefixer": "^10.4.20",
+    "tailwindcss": "^3.4.17"
+  }
+}

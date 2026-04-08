@@ -1,0 +1,47 @@
+[[apps]]
+id = "octopus-desktop"
+name = "Octopus Desktop"
+platform = "desktop"
+status = "active"
+firstParty = true
+allowedOrigins = []
+allowedHosts = [
+    "127.0.0.1",
+    "localhost",
+]
+sessionPolicy = "session_token"
+defaultScopes = [
+    "workspace",
+    "runtime",
+]
+
+[[apps]]
+id = "octopus-web"
+name = "Octopus Web"
+platform = "web"
+status = "active"
+firstParty = true
+allowedOrigins = [
+    "http://127.0.0.1",
+    "http://localhost",
+]
+allowedHosts = [
+    "127.0.0.1",
+    "localhost",
+]
+sessionPolicy = "session_token"
+defaultScopes = [
+    "workspace",
+    "runtime",
+]
+
+[[apps]]
+id = "octopus-mobile"
+name = "Octopus Mobile"
+platform = "mobile"
+status = "disabled"
+firstParty = true
+allowedOrigins = []
+allowedHosts = []
+sessionPolicy = "session_token"
+defaultScopes = ["workspace"]
