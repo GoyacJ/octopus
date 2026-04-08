@@ -31,6 +31,8 @@ Every release must pass:
 
 Because the Rust workspace includes the Tauri desktop shell, Ubuntu-based CI and release verification jobs must install the official Tauri Linux system dependencies before running `cargo clippy` and `cargo test`. The governance target is the full workspace gate, not a reduced Linux-only crate subset.
 
+Because `apps/desktop/src-tauri/tauri.conf.json` bundles `bin/octopus-desktop-backend` as an external sidecar, Rust verification must prepare the sidecar binary before workspace compilation-driven checks. `pnpm check:rust` and the Ubuntu workflows both enforce this precondition explicitly.
+
 ## Formal Release Flow
 
 - release publication is tag-driven only: pushing `vX.Y.Z` runs `.github/workflows/release.yml`

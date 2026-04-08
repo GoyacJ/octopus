@@ -60,6 +60,9 @@ jobs:
       - name: Check frontend surfaces
         run: pnpm check:frontend
 
+      - name: Prepare desktop sidecar for Rust workspace checks
+        run: pnpm prepare:desktop-backend:sidecar
+
       - name: Check Rust formatting
         run: cargo fmt --all --check
 

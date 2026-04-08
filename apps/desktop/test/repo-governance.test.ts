@@ -18,6 +18,7 @@ describe('repository governance', () => {
     expect(workflow).toContain('libwebkit2gtk-4.1-dev')
     expect(workflow).toContain('libayatana-appindicator3-dev')
     expect(workflow).toContain('librsvg2-dev')
+    expect(workflow).toContain('pnpm prepare:desktop-backend:sidecar')
     expect(workflow).toContain('pnpm check:all')
     expect(workflow).toContain('cargo fmt --all --check')
     expect(workflow).toContain('cargo clippy --workspace --all-targets -- -D warnings')
@@ -41,6 +42,7 @@ describe('repository governance', () => {
     expect(workflow).toContain('libwebkit2gtk-4.1-dev')
     expect(workflow).toContain('libayatana-appindicator3-dev')
     expect(workflow).toContain('librsvg2-dev')
+    expect(workflow).toContain('pnpm prepare:desktop-backend:sidecar')
     expect(workflow).toContain('release-artifacts/publish')
     expect(workflow).toContain('release-artifacts/metadata')
   })
@@ -60,6 +62,7 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['release:notes']).toBe('node scripts/generate-release-notes.mjs')
     expect(packageJson.scripts?.['release:collect-artifacts']).toBe('node scripts/collect-release-artifacts.mjs')
     expect(packageJson.scripts?.['release:verify-artifacts']).toBe('node scripts/verify-release-artifacts.mjs')
+    expect(packageJson.scripts?.['check:rust']).toContain('pnpm prepare:desktop-backend:sidecar')
   })
 
   it('treats OpenAPI as the canonical shared schema source and checks generated freshness', () => {

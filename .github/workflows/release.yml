@@ -59,6 +59,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Prepare desktop sidecar for Rust workspace checks
+        run: pnpm prepare:desktop-backend:sidecar
+
       - name: Check release tag and repo governance
         run: |
           export RELEASE_TAG="${GITHUB_REF_NAME}"
