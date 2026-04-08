@@ -1,0 +1,189 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CI: true
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify-release:
+    name: Verify release governance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check release tag and repo governance
+        run: |
+          export RELEASE_TAG="${GITHUB_REF_NAME}"
+          pnpm version:check "${RELEASE_TAG}"
+          pnpm schema:check
+          pnpm check:all
+
+      - name: Generate release notes
+        run: pnpm release:notes --output tmp/release-notes/${GITHUB_REF_NAME}.md
+
+      - name: Upload release metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: octopus-release-metadata
+          if-no-files-found: error
+          path: |
+            VERSION
+            contracts/openapi/octopus.openapi.yaml
+            packages/schema/src/generated.ts
+            tmp/release-notes/${{ github.ref_name }}.md
+
+  desktop-release-build:
+    name: Desktop release build (${{ matrix.label }})
+    runs-on: ${{ matrix.os }}
+    needs: verify-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            label: macos
+          - os: windows-latest
+            label: windows
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build desktop sidecar
+        run: node scripts/prepare-desktop-sidecar.mjs
+
+      - name: Build Tauri release bundle
+        run: pnpm build:desktop
+
+      - name: Collect macOS release artifacts
+        if: runner.os == 'macOS'
+        run: pnpm release:collect-artifacts --platform macos --source-dir target/release/bundle --output-dir release-artifacts/publish
+
+      - name: Collect Windows release artifacts
+        if: runner.os == 'Windows'
+        run: pnpm release:collect-artifacts --platform windows --source-dir target/release/bundle --output-dir release-artifacts/publish
+
+      - name: Upload macOS bundles
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: octopus-desktop-macos-bundles
+          if-no-files-found: error
+          path: release-artifacts/publish/macos/*
+
+      - name: Upload Windows bundles
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: octopus-desktop-windows-bundles
+          if-no-files-found: error
+          path: release-artifacts/publish/windows/*
+
+  publish-release:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - verify-release
+      - desktop-release-build
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Download metadata artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: octopus-release-metadata
+          path: release-artifacts/metadata
+
+      - name: Download macOS bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: octopus-desktop-macos-bundles
+          path: release-artifacts/publish/macos
+
+      - name: Download Windows bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: octopus-desktop-windows-bundles
+          path: release-artifacts/publish/windows
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify release artifacts
+        run: pnpm release:verify-artifacts --artifacts-dir release-artifacts --metadata-dir release-artifacts/metadata --notes release-artifacts/metadata/${GITHUB_REF_NAME}.md --checksums release-artifacts/SHA256SUMS.txt
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release-artifacts/metadata/${{ github.ref_name }}.md
+          files: |
+            release-artifacts/SHA256SUMS.txt
+            release-artifacts/metadata/VERSION
+            release-artifacts/metadata/octopus.openapi.yaml
+            release-artifacts/metadata/generated.ts
+            release-artifacts/publish/macos/*
+            release-artifacts/publish/windows/*

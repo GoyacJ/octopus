@@ -9,7 +9,6 @@ dist/
 
 .vscode/
 .idea/
-.github/workflows/
 .playwright-cli/
 output/
 target/
