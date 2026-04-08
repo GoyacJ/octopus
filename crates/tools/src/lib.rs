@@ -6999,6 +6999,9 @@ mod tests {
 
     #[test]
     fn repl_executes_python_code() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let result = execute_tool(
             "REPL",
             &json!({"language": "python", "code": "print(1 + 1)", "timeout_ms": 500}),
@@ -7028,6 +7031,9 @@ mod tests {
 
     #[test]
     fn given_timeout_ms_when_repl_blocks_then_returns_timeout_error() {
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let result = execute_tool(
             "REPL",
             &json!({
