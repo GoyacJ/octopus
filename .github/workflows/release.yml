@@ -70,7 +70,7 @@ jobs:
           pnpm check:all
 
       - name: Generate release notes
-        run: pnpm release:notes --output tmp/release-notes/${GITHUB_REF_NAME}.md
+        run: pnpm release:notes -- --tag "${GITHUB_REF_NAME}" --sha "${GITHUB_SHA}" --language zh-CN --require-manual-summary true --output tmp/release-notes/${GITHUB_REF_NAME}.md
 
       - name: Collect release metadata
         run: pnpm release:collect-metadata --output-dir release-artifacts/metadata --notes tmp/release-notes/${GITHUB_REF_NAME}.md

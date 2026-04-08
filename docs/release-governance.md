@@ -53,6 +53,29 @@ Because `apps/desktop/src-tauri/tauri.conf.json` bundles `bin/octopus-desktop-ba
   - `release-artifacts/metadata/*`
   - `release-artifacts/SHA256SUMS.txt`
 
+## Release Notes Governance
+
+- release notes are generated from structured fragments plus Git metadata, not handwritten free-form Markdown dumps
+- `docs/release-notes/README.md` defines the supported fragment categories and writing rules
+- release generation produces:
+  - the rendered Markdown notes file
+  - `release-artifacts/metadata/release-notes.json`
+  - `release-artifacts/metadata/change-log.json`
+- formal releases must include at least one `summary-*` fragment as a manually reviewed version overview
+- preview releases may be fully auto-generated, but must state that they are `main` branch preview builds
+- `internal-*` and `governance-*` fragments do not enter the formal user-facing正文；它们只会出现在 preview 内容或技术附录中
+- formal notes emphasize:
+  - 版本概览
+  - 用户可感知变化
+  - 升级提示
+  - 修复摘要
+  - 技术附录
+- preview notes emphasize:
+  - 预览摘要
+  - 本次变更
+  - 验证状态
+  - 构建元数据
+
 ## Shared Schema Governance
 
 - `contracts/openapi/octopus.openapi.yaml` is the canonical protocol spec.

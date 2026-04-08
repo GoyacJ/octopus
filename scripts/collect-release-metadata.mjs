@@ -13,12 +13,22 @@ const versionFile = path.resolve(repoRoot, readArgument('--version-file') ?? 'VE
 const openapiFile = path.resolve(repoRoot, readArgument('--openapi-file') ?? path.join('contracts', 'openapi', 'octopus.openapi.yaml'))
 const schemaFile = path.resolve(repoRoot, readArgument('--schema-file') ?? path.join('packages', 'schema', 'src', 'generated.ts'))
 const notesFile = path.resolve(repoRoot, readArgument('--notes') ?? path.join('tmp', 'release-notes', 'latest.md'))
+const releaseNotesJsonFile = path.resolve(
+  repoRoot,
+  readArgument('--release-notes-json') ?? path.join(path.dirname(notesFile), 'release-notes.json'),
+)
+const changeLogJsonFile = path.resolve(
+  repoRoot,
+  readArgument('--change-log-json') ?? path.join(path.dirname(notesFile), 'change-log.json'),
+)
 
 const metadataFiles = [
   [versionFile, 'VERSION'],
   [openapiFile, 'octopus.openapi.yaml'],
   [schemaFile, 'generated.ts'],
   [notesFile, path.basename(notesFile)],
+  [releaseNotesJsonFile, 'release-notes.json'],
+  [changeLogJsonFile, 'change-log.json'],
 ]
 
 await mkdir(outputDir, { recursive: true })

@@ -1,11 +1,10 @@
-Add one Markdown fragment per releasable change in this directory.
+This directory stores release note fragments.
 
-Suggested naming:
+Use the governed category-prefix format documented in [`docs/release-notes/README.md`](/Users/goya/Work/weilaizhihuigu/super-agent/octopus/docs/release-notes/README.md).
 
-- `YYYY-MM-DD-short-title.md`
+Quick rules:
 
-Rules:
-
-- keep fragments user-facing
-- summarize behavior and governance changes, not commit history
-- remove or archive fragments after they are included in a tagged release
+- one Markdown fragment per releasable change
+- use filenames like `summary-*`, `feature-*`, `fix-*`, `breaking-*`, `migration-*`, `internal-*`, or `governance-*`
+- formal releases require at least one `summary-*` fragment
+- remove or archive fragments after they are included in a tagged formal release

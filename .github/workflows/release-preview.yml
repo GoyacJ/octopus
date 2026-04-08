@@ -69,7 +69,7 @@ jobs:
           PREVIEW_TAG="$(pnpm release:tag:preview -- --run-number "${GITHUB_RUN_NUMBER}" | tail -n 1)"
           echo "tag=${PREVIEW_TAG}" >> "$GITHUB_OUTPUT"
           echo "notes_path=tmp/release-notes/${PREVIEW_TAG}.md" >> "$GITHUB_OUTPUT"
-          echo "release_name=Octopus ${PREVIEW_TAG}" >> "$GITHUB_OUTPUT"
+          echo "release_name=Octopus Preview ${PREVIEW_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Check preview branch and repo governance
         run: |
@@ -82,7 +82,7 @@ jobs:
           pnpm check:all
 
       - name: Generate preview release notes
-        run: pnpm release:notes:preview -- --tag "${{ steps.preview-release.outputs.tag }}" --run-number "${GITHUB_RUN_NUMBER}" --sha "${GITHUB_SHA}" --output "${{ steps.preview-release.outputs.notes_path }}"
+        run: pnpm release:notes:preview -- --tag "${{ steps.preview-release.outputs.tag }}" --run-number "${GITHUB_RUN_NUMBER}" --sha "${GITHUB_SHA}" --language zh-CN --output "${{ steps.preview-release.outputs.notes_path }}"
 
       - name: Collect release metadata
         run: pnpm release:collect-metadata --output-dir release-artifacts/metadata --notes "${{ steps.preview-release.outputs.notes_path }}"

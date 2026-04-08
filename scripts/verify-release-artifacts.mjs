@@ -35,6 +35,8 @@ const requiredMetadataFiles = [
   path.join(metadataDir, 'VERSION'),
   path.join(metadataDir, 'octopus.openapi.yaml'),
   path.join(metadataDir, 'generated.ts'),
+  path.join(metadataDir, 'release-notes.json'),
+  path.join(metadataDir, 'change-log.json'),
   notesPath,
 ]
 
