@@ -10,11 +10,10 @@ use octopus_core::{
 };
 use octopus_desktop_shell::backend::BackendSupervisor;
 use octopus_desktop_shell::bootstrap::{
-    bootstrap_shell_payload, create_notification, delete_workspace_connection,
-    dismiss_notification_toast, get_backend_connection_payload, healthcheck_payload,
-    list_notifications, list_workspace_connections, load_shell_preferences,
+    bootstrap_shell_payload, create_notification, create_workspace_connection,
+    delete_workspace_connection, dismiss_notification_toast, get_backend_connection_payload,
+    healthcheck_payload, list_notifications, list_workspace_connections, load_shell_preferences,
     mark_all_notifications_read, mark_notification_read, save_shell_preferences,
-    create_workspace_connection,
 };
 use octopus_desktop_shell::services::{
     NotificationService, PreferencesService, WorkspaceConnectionRegistryService,
@@ -127,12 +126,18 @@ fn workspace_connections_roundtrip_and_deduplicate_by_base_url_and_workspace_id(
     )
     .expect("dedupe workspace connection");
 
-    assert_eq!(created.workspace_connection_id, deduped.workspace_connection_id);
+    assert_eq!(
+        created.workspace_connection_id,
+        deduped.workspace_connection_id
+    );
 
     let listed = list_workspace_connections(&state).expect("list workspace connections");
     assert_eq!(listed.len(), 2);
     assert_eq!(listed[0].workspace_connection_id, "conn-local");
-    assert_eq!(listed[1].workspace_connection_id, created.workspace_connection_id);
+    assert_eq!(
+        listed[1].workspace_connection_id,
+        created.workspace_connection_id
+    );
 }
 
 #[test]

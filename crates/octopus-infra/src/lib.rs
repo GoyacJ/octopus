@@ -2,11 +2,11 @@ mod agent_import;
 
 use std::{
     collections::BTreeMap,
-    ffi::OsStr,
-    io::{Cursor, Read},
     env,
+    ffi::OsStr,
     fs,
     hash::{Hash, Hasher},
+    io::{Cursor, Read},
     path::{Component, Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -15,24 +15,24 @@ use async_trait::async_trait;
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use octopus_core::{
     timestamp_now, AgentRecord, AppError, ArtifactRecord, AuditRecord, AuthorizationDecision,
-    AutomationRecord, AvatarUploadPayload, ChangeCurrentUserPasswordRequest,
-    ChangeCurrentUserPasswordResponse, ClientAppRecord, CopyWorkspaceSkillToManagedInput,
-    CostLedgerEntry, CreateProjectRequest, CreateWorkspaceResourceFolderInput,
-    CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, CreateWorkspaceUserRequest,
-    BindPetConversationInput, ImportWorkspaceAgentBundleInput,
-    ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
-    ImportWorkspaceAgentBundleResult, ImportWorkspaceSkillArchiveInput,
-    ImportWorkspaceSkillFolderInput, InboxItemRecord, KnowledgeEntryRecord, KnowledgeRecord,
-    LoginRequest, LoginResponse, MenuRecord, ModelCatalogRecord, PermissionRecord,
-    PetConversationBinding, PetMessage, PetPosition, PetPresenceState, PetProfile,
-    PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectRecord,
-    ProjectTeamLinkInput, ProjectTeamLinkRecord, ProjectWorkspaceAssignments,
-    ProviderCredentialRecord, RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse,
-    RoleRecord, SavePetPresenceInput, SessionRecord, SystemBootstrapStatus, TeamRecord,
-    ToolRecord, TraceEventRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
-    UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput,
-    UpdateWorkspaceUserRequest, UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput,
-    UserRecord, UserRecordSummary, WorkspaceDirectoryUploadEntry, WorkspaceMcpServerDocument,
+    AutomationRecord, AvatarUploadPayload, BindPetConversationInput,
+    ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse, ClientAppRecord,
+    CopyWorkspaceSkillToManagedInput, CostLedgerEntry, CreateProjectRequest,
+    CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput, CreateWorkspaceSkillInput,
+    CreateWorkspaceUserRequest, ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
+    ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
+    ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, InboxItemRecord,
+    KnowledgeEntryRecord, KnowledgeRecord, LoginRequest, LoginResponse, MenuRecord,
+    ModelCatalogRecord, PermissionRecord, PetConversationBinding, PetMessage, PetPosition,
+    PetPresenceState, PetProfile, PetWorkspaceSnapshot, ProjectAgentLinkInput,
+    ProjectAgentLinkRecord, ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord,
+    ProjectWorkspaceAssignments, ProviderCredentialRecord, RegisterWorkspaceOwnerRequest,
+    RegisterWorkspaceOwnerResponse, RoleRecord, SavePetPresenceInput, SessionRecord,
+    SystemBootstrapStatus, TeamRecord, ToolRecord, TraceEventRecord,
+    UpdateCurrentUserProfileRequest, UpdateProjectRequest, UpdateWorkspaceResourceInput,
+    UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput, UpdateWorkspaceUserRequest,
+    UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput, UserRecord,
+    UserRecordSummary, WorkspaceDirectoryUploadEntry, WorkspaceMcpServerDocument,
     WorkspaceMembershipRecord, WorkspaceResourceRecord, WorkspaceSkillDocument,
     WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceSkillTreeNode,
     WorkspaceSummary, WorkspaceToolCatalogEntry, WorkspaceToolCatalogSnapshot,
@@ -633,7 +633,9 @@ fn unquote_frontmatter_value(value: &str) -> String {
         .to_string()
 }
 
-fn load_workspace_runtime_config(paths: &WorkspacePaths) -> Result<runtime::RuntimeConfig, AppError> {
+fn load_workspace_runtime_config(
+    paths: &WorkspacePaths,
+) -> Result<runtime::RuntimeConfig, AppError> {
     let workspace_config_path = paths.runtime_config_dir.join("workspace.json");
     let exists = workspace_config_path.exists();
     let document = if exists {
@@ -677,10 +679,9 @@ fn load_workspace_runtime_document(
                 return Ok(serde_json::Map::new());
             }
             let parsed: serde_json::Value = serde_json::from_str(trimmed)?;
-            parsed
-                .as_object()
-                .cloned()
-                .ok_or_else(|| AppError::invalid_input("workspace runtime config must be a JSON object"))
+            parsed.as_object().cloned().ok_or_else(|| {
+                AppError::invalid_input("workspace runtime config must be a JSON object")
+            })
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::Map::new()),
         Err(error) => Err(error.into()),
@@ -781,7 +782,9 @@ fn validate_skill_slug(slug: &str) -> Result<String, AppError> {
         return Err(AppError::invalid_input("skill slug is required"));
     }
     if slug.contains('/') || slug.contains('\\') || slug.contains("..") {
-        return Err(AppError::invalid_input("skill slug must be a safe relative directory name"));
+        return Err(AppError::invalid_input(
+            "skill slug must be a safe relative directory name",
+        ));
     }
     if !slug
         .chars()
@@ -813,10 +816,7 @@ fn skill_root_path(path: &Path, source_origin: SkillSourceOrigin) -> Result<Path
     }
 }
 
-fn build_skill_tree_node(
-    path: &Path,
-    root: &Path,
-) -> Result<WorkspaceSkillTreeNode, AppError> {
+fn build_skill_tree_node(path: &Path, root: &Path) -> Result<WorkspaceSkillTreeNode, AppError> {
     let metadata = fs::metadata(path)?;
     let name = path
         .file_name()
@@ -909,7 +909,11 @@ fn collect_tree_files(
 }
 
 fn content_type_for_skill_file(path: &Path, is_text: bool) -> Option<String> {
-    match path.extension().and_then(OsStr::to_str).map(|value| value.to_ascii_lowercase()) {
+    match path
+        .extension()
+        .and_then(OsStr::to_str)
+        .map(|value| value.to_ascii_lowercase())
+    {
         Some(extension) if extension == "md" => Some("text/markdown".into()),
         Some(extension) if matches!(extension.as_str(), "json") => Some("application/json".into()),
         Some(extension) if matches!(extension.as_str(), "yaml" | "yml") => {
@@ -929,7 +933,11 @@ fn content_type_for_skill_file(path: &Path, is_text: bool) -> Option<String> {
 }
 
 fn language_for_skill_file(path: &Path) -> Option<String> {
-    match path.extension().and_then(OsStr::to_str).map(|value| value.to_ascii_lowercase()) {
+    match path
+        .extension()
+        .and_then(OsStr::to_str)
+        .map(|value| value.to_ascii_lowercase())
+    {
         Some(extension) if extension == "md" => Some("markdown".into()),
         Some(extension) if extension == "json" => Some("json".into()),
         Some(extension) if matches!(extension.as_str(), "yaml" | "yml") => Some("yaml".into()),
@@ -971,10 +979,11 @@ fn resolve_skill_file_path(
     match source_origin {
         SkillSourceOrigin::SkillsDir => Ok(skill_root.join(relative_path)),
         SkillSourceOrigin::LegacyCommandsDir => {
-            if relative_path != skill_root
-                .file_name()
-                .map(|value| value.to_string_lossy().replace('\\', "/"))
-                .unwrap_or_default()
+            if relative_path
+                != skill_root
+                    .file_name()
+                    .map(|value| value.to_string_lossy().replace('\\', "/"))
+                    .unwrap_or_default()
             {
                 return Err(AppError::not_found("workspace skill file"));
             }
@@ -1005,7 +1014,12 @@ fn skill_file_document_from_path(
             .strip_prefix(skill_root)
             .ok()
             .map(|value| value.to_string_lossy().replace('\\', "/"))
-            .unwrap_or_else(|| path.file_name().unwrap_or_default().to_string_lossy().to_string()),
+            .unwrap_or_else(|| {
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string()
+            }),
         SkillSourceOrigin::LegacyCommandsDir => path
             .file_name()
             .unwrap_or_default()
@@ -1045,10 +1059,7 @@ fn skill_tree_document_from_path(
     })
 }
 
-fn write_skill_tree_files(
-    skill_dir: &Path,
-    files: &[(String, Vec<u8>)],
-) -> Result<(), AppError> {
+fn write_skill_tree_files(skill_dir: &Path, files: &[(String, Vec<u8>)]) -> Result<(), AppError> {
     for (relative_path, bytes) in files {
         let target_path = skill_dir.join(relative_path);
         if let Some(parent) = target_path.parent() {
@@ -1278,7 +1289,10 @@ impl InfraWorkspaceService {
             .ok_or_else(|| AppError::not_found("workspace skill"))
     }
 
-    fn get_workspace_skill_document(&self, skill_id: &str) -> Result<WorkspaceSkillDocument, AppError> {
+    fn get_workspace_skill_document(
+        &self,
+        skill_id: &str,
+    ) -> Result<WorkspaceSkillDocument, AppError> {
         let entry = self.find_skill_catalog_entry(skill_id)?;
         skill_document_from_path(&self.state.paths.root, &entry.path, entry.origin)
     }
@@ -1344,9 +1358,14 @@ impl InfraWorkspaceService {
         let slug = validate_skill_slug(slug)?;
         let skill_dir = workspace_owned_skill_root(&self.state.paths).join(&slug);
         if skill_dir.exists() {
-            return Err(AppError::conflict(format!("workspace skill '{slug}' already exists")));
+            return Err(AppError::conflict(format!(
+                "workspace skill '{slug}' already exists"
+            )));
         }
-        if !files.iter().any(|(relative_path, _)| relative_path == "SKILL.md") {
+        if !files
+            .iter()
+            .any(|(relative_path, _)| relative_path == "SKILL.md")
+        {
             return Err(AppError::invalid_input(
                 "imported skill must contain SKILL.md at the root",
             ));
@@ -1355,7 +1374,11 @@ impl InfraWorkspaceService {
         write_skill_tree_files(&skill_dir, &files)?;
         let skill_path = skill_dir.join("SKILL.md");
         rewrite_skill_frontmatter_name(&skill_path, &slug)?;
-        skill_document_from_path(&self.state.paths.root, &skill_path, SkillSourceOrigin::SkillsDir)
+        skill_document_from_path(
+            &self.state.paths.root,
+            &skill_path,
+            SkillSourceOrigin::SkillsDir,
+        )
     }
 
     fn load_mcp_server_document(
@@ -1434,8 +1457,7 @@ impl InfraWorkspaceService {
             let is_active = skill.shadowed_by.is_none();
             let source_key = skill_source_key(&skill.path, &workspace_root);
             let relative_path = workspace_relative_path(&skill.path, &workspace_root);
-            let workspace_owned =
-                is_workspace_owned_skill(relative_path.as_deref(), skill.origin);
+            let workspace_owned = is_workspace_owned_skill(relative_path.as_deref(), skill.origin);
             entries.push(WorkspaceToolCatalogEntry {
                 id: catalog_hash_id("skill", &display_path(&skill.path, &workspace_root)),
                 workspace_id: workspace_id.clone(),
@@ -1473,16 +1495,16 @@ impl InfraWorkspaceService {
         let runtime_config = load_workspace_runtime_config(&self.state.paths)?;
         let mut manager = runtime::McpServerManager::from_runtime_config(&runtime_config);
         let discovery_report = manager.discover_tools_best_effort().await;
-        let discovered_tool_names = discovery_report
-            .tools
-            .iter()
-            .fold(BTreeMap::<String, Vec<String>>::new(), |mut grouped, tool| {
+        let discovered_tool_names = discovery_report.tools.iter().fold(
+            BTreeMap::<String, Vec<String>>::new(),
+            |mut grouped, tool| {
                 grouped
                     .entry(tool.server_name.clone())
                     .or_default()
                     .push(tool.qualified_name.clone());
                 grouped
-            });
+            },
+        );
         let failed_servers = discovery_report
             .failed_servers
             .iter()
@@ -1543,14 +1565,15 @@ impl InfraWorkspaceService {
         }
 
         entries.sort_by(|left, right| {
-            left.kind
-                .cmp(&right.kind)
-                .then_with(|| left.name.to_ascii_lowercase().cmp(&right.name.to_ascii_lowercase()))
+            left.kind.cmp(&right.kind).then_with(|| {
+                left.name
+                    .to_ascii_lowercase()
+                    .cmp(&right.name.to_ascii_lowercase())
+            })
         });
 
         Ok(WorkspaceToolCatalogSnapshot { entries })
     }
-
 }
 
 #[derive(Clone)]
@@ -1627,10 +1650,7 @@ fn initialize_workspace_config(paths: &WorkspacePaths) -> Result<(), AppError> {
     Ok(())
 }
 
-fn save_workspace_config_file(
-    path: &Path,
-    workspace: &WorkspaceSummary,
-) -> Result<(), AppError> {
+fn save_workspace_config_file(path: &Path, workspace: &WorkspaceSummary) -> Result<(), AppError> {
     let config = WorkspaceConfigFile {
         id: workspace.id.clone(),
         name: workspace.name.clone(),
@@ -1654,7 +1674,10 @@ fn initialize_app_registry(paths: &WorkspacePaths) -> Result<(), AppError> {
     let registry = AppRegistryFile {
         apps: default_client_apps(),
     };
-    fs::write(&paths.app_registry_config, toml::to_string_pretty(&registry)?)?;
+    fs::write(
+        &paths.app_registry_config,
+        toml::to_string_pretty(&registry)?,
+    )?;
     Ok(())
 }
 
@@ -2055,7 +2078,9 @@ fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
     }
 
     let knowledge_exists: Option<String> = connection
-        .query_row("SELECT id FROM knowledge_records LIMIT 1", [], |row| row.get(0))
+        .query_row("SELECT id FROM knowledge_records LIMIT 1", [], |row| {
+            row.get(0)
+        })
         .optional()
         .map_err(|error| AppError::database(error.to_string()))?;
     if knowledge_exists.is_none() {
@@ -2158,7 +2183,9 @@ fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
     }
 
     let provider_credentials_exist: Option<String> = connection
-        .query_row("SELECT id FROM provider_credentials LIMIT 1", [], |row| row.get(0))
+        .query_row("SELECT id FROM provider_credentials LIMIT 1", [], |row| {
+            row.get(0)
+        })
         .optional()
         .map_err(|error| AppError::database(error.to_string()))?;
     if provider_credentials_exist.is_none() {
@@ -2307,7 +2334,11 @@ fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
     }
 
     let owner_menu_ids_raw: Option<String> = connection
-        .query_row("SELECT menu_ids FROM roles WHERE id = 'owner' LIMIT 1", [], |row| row.get(0))
+        .query_row(
+            "SELECT menu_ids FROM roles WHERE id = 'owner' LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
         .optional()
         .map_err(|error| AppError::database(error.to_string()))?;
     if let Some(owner_menu_ids_raw) = owner_menu_ids_raw {
@@ -2452,12 +2483,20 @@ fn ensure_team_record_columns(connection: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
-fn write_team_record(connection: &Connection, record: &TeamRecord, replace: bool) -> Result<(), AppError> {
+fn write_team_record(
+    connection: &Connection,
+    record: &TeamRecord,
+    replace: bool,
+) -> Result<(), AppError> {
     let member_agent_ids_json = serde_json::to_string(&record.member_agent_ids)?;
     let has_legacy_member_ids = table_columns(connection, "teams")?
         .iter()
         .any(|column| column == "member_ids");
-    let verb = if replace { "INSERT OR REPLACE" } else { "INSERT" };
+    let verb = if replace {
+        "INSERT OR REPLACE"
+    } else {
+        "INSERT"
+    };
 
     let sql = if has_legacy_member_ids {
         format!(
@@ -2523,11 +2562,7 @@ fn write_team_record(connection: &Connection, record: &TeamRecord, replace: bool
 }
 
 fn ensure_project_assignment_columns(connection: &Connection) -> Result<(), AppError> {
-    ensure_columns(
-        connection,
-        "projects",
-        &[("assignments_json", "TEXT")],
-    )
+    ensure_columns(connection, "projects", &[("assignments_json", "TEXT")])
 }
 
 fn ensure_project_agent_link_table(connection: &Connection) -> Result<(), AppError> {
@@ -2572,7 +2607,10 @@ fn ensure_runtime_config_snapshot_columns(connection: &Connection) -> Result<(),
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| AppError::database(error.to_string()))?;
 
-    if columns.iter().any(|column| column == "effective_config_json") {
+    if columns
+        .iter()
+        .any(|column| column == "effective_config_json")
+    {
         return Ok(());
     }
 
@@ -2642,9 +2680,8 @@ fn ensure_resource_columns(connection: &Connection) -> Result<(), AppError> {
 }
 
 fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> {
-    let workspace_file: WorkspaceConfigFile = toml::from_str(&fs::read_to_string(
-        &paths.workspace_config,
-    )?)?;
+    let workspace_file: WorkspaceConfigFile =
+        toml::from_str(&fs::read_to_string(&paths.workspace_config)?)?;
     let mut workspace = WorkspaceSummary {
         id: workspace_file.id,
         name: workspace_file.name,
@@ -2664,15 +2701,20 @@ fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> {
     let users = load_users(&connection)?;
     let owner_user_id = users
         .iter()
-        .find(|user| user.membership.role_ids.iter().any(|role_id| role_id == "owner"))
+        .find(|user| {
+            user.membership
+                .role_ids
+                .iter()
+                .any(|role_id| role_id == "owner")
+        })
         .map(|user| user.record.id.clone());
     let expected_bootstrap_status = if owner_user_id.is_some() {
         "ready"
     } else {
         "setup_required"
     };
-    let workspace_needs_normalize =
-        workspace.bootstrap_status != expected_bootstrap_status || workspace.owner_user_id != owner_user_id;
+    let workspace_needs_normalize = workspace.bootstrap_status != expected_bootstrap_status
+        || workspace.owner_user_id != owner_user_id;
     if workspace_needs_normalize {
         workspace.bootstrap_status = expected_bootstrap_status.into();
         workspace.owner_user_id = owner_user_id;
@@ -2696,8 +2738,8 @@ fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> {
     let trace_events = load_trace_events(&connection)?;
     let audit_records = load_audit_records(&connection)?;
     let cost_entries = load_cost_entries(&connection)?;
-    let workspace_pet_presence = load_pet_presence(&connection, "workspace")?
-        .unwrap_or_else(default_workspace_pet_presence);
+    let workspace_pet_presence =
+        load_pet_presence(&connection, "workspace")?.unwrap_or_else(default_workspace_pet_presence);
     let project_pet_presences = load_all_project_pet_presences(&connection)?;
     let workspace_pet_binding = load_pet_binding(&connection, "workspace")?;
     let project_pet_bindings = load_all_project_pet_bindings(&connection)?;
@@ -2781,7 +2823,9 @@ fn load_users(connection: &Connection) -> Result<Vec<StoredUser>, AppError> {
 
 fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord>, AppError> {
     let mut stmt = connection
-        .prepare("SELECT id, workspace_id, name, status, description, assignments_json FROM projects")
+        .prepare(
+            "SELECT id, workspace_id, name, status, description, assignments_json FROM projects",
+        )
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
@@ -2791,11 +2835,13 @@ fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord>, AppError
                 .filter(|value| !value.trim().is_empty())
                 .map(serde_json::from_str::<ProjectWorkspaceAssignments>)
                 .transpose()
-                .map_err(|error| rusqlite::Error::FromSqlConversionFailure(
-                    5,
-                    rusqlite::types::Type::Text,
-                    Box::new(error),
-                ))?;
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        5,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?;
             Ok(ProjectRecord {
                 id: row.get(0)?,
                 workspace_id: row.get(1)?,
@@ -2821,7 +2867,11 @@ fn default_pet_profile() -> PetProfile {
         greeting: "嗨！我是小章，今天也要加油哦！".into(),
         mood: "happy".into(),
         favorite_snack: "新鲜小虾".into(),
-        prompt_hints: vec!["最近有什么好消息？".into(), "给我讲个冷笑话".into(), "我们要加油呀！".into()],
+        prompt_hints: vec![
+            "最近有什么好消息？".into(),
+            "给我讲个冷笑话".into(),
+            "我们要加油呀！".into(),
+        ],
         fallback_asset: "octopus".into(),
         rive_asset: None,
         state_machine: None,
@@ -2844,7 +2894,11 @@ fn map_pet_message(pet_id: &str, message: &octopus_core::RuntimeMessage) -> PetM
     PetMessage {
         id: message.id.clone(),
         pet_id: pet_id.into(),
-        sender: if message.sender_type == "assistant" { "pet".into() } else { "user".into() },
+        sender: if message.sender_type == "assistant" {
+            "pet".into()
+        } else {
+            "user".into()
+        },
         content: message.content.clone(),
         timestamp: message.timestamp,
     }
@@ -2867,7 +2921,11 @@ fn load_runtime_messages_for_conversation(
         return Ok(vec![]);
     };
     let detail: octopus_core::RuntimeSessionDetail = serde_json::from_str(&detail_json)?;
-    Ok(detail.messages.iter().map(|message| map_pet_message(pet_id, message)).collect())
+    Ok(detail
+        .messages
+        .iter()
+        .map(|message| map_pet_message(pet_id, message))
+        .collect())
 }
 
 fn row_to_pet_presence(row: &rusqlite::Row<'_>) -> rusqlite::Result<PetPresenceState> {
@@ -2885,7 +2943,10 @@ fn row_to_pet_presence(row: &rusqlite::Row<'_>) -> rusqlite::Result<PetPresenceS
     })
 }
 
-fn load_pet_presence(connection: &Connection, scope_key: &str) -> Result<Option<PetPresenceState>, AppError> {
+fn load_pet_presence(
+    connection: &Connection,
+    scope_key: &str,
+) -> Result<Option<PetPresenceState>, AppError> {
     connection
         .query_row(
             "SELECT scope_key, project_id, pet_id, is_visible, chat_open, motion_state, unread_count, last_interaction_at, position_x, position_y FROM pet_presence WHERE scope_key = ?1",
@@ -2896,12 +2957,19 @@ fn load_pet_presence(connection: &Connection, scope_key: &str) -> Result<Option<
         .map_err(|error| AppError::database(error.to_string()))
 }
 
-fn load_all_project_pet_presences(connection: &Connection) -> Result<Vec<(String, PetPresenceState)>, AppError> {
+fn load_all_project_pet_presences(
+    connection: &Connection,
+) -> Result<Vec<(String, PetPresenceState)>, AppError> {
     let mut stmt = connection
         .prepare("SELECT scope_key, project_id, pet_id, is_visible, chat_open, motion_state, unread_count, last_interaction_at, position_x, position_y FROM pet_presence WHERE project_id IS NOT NULL")
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
-        .query_map([], |row| Ok((row.get::<_, Option<String>>(1)?.unwrap_or_default(), row_to_pet_presence(row)?)))
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                row_to_pet_presence(row)?,
+            ))
+        })
         .map_err(|error| AppError::database(error.to_string()))?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| AppError::database(error.to_string()))
@@ -2918,7 +2986,10 @@ fn row_to_pet_binding(row: &rusqlite::Row<'_>) -> rusqlite::Result<PetConversati
     })
 }
 
-fn load_pet_binding(connection: &Connection, scope_key: &str) -> Result<Option<PetConversationBinding>, AppError> {
+fn load_pet_binding(
+    connection: &Connection,
+    scope_key: &str,
+) -> Result<Option<PetConversationBinding>, AppError> {
     connection
         .query_row(
             "SELECT scope_key, project_id, pet_id, workspace_id, conversation_id, session_id, updated_at FROM pet_conversation_bindings WHERE scope_key = ?1",
@@ -2929,12 +3000,19 @@ fn load_pet_binding(connection: &Connection, scope_key: &str) -> Result<Option<P
         .map_err(|error| AppError::database(error.to_string()))
 }
 
-fn load_all_project_pet_bindings(connection: &Connection) -> Result<Vec<(String, PetConversationBinding)>, AppError> {
+fn load_all_project_pet_bindings(
+    connection: &Connection,
+) -> Result<Vec<(String, PetConversationBinding)>, AppError> {
     let mut stmt = connection
         .prepare("SELECT scope_key, project_id, pet_id, workspace_id, conversation_id, session_id, updated_at FROM pet_conversation_bindings WHERE project_id IS NOT NULL")
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
-        .query_map([], |row| Ok((row.get::<_, Option<String>>(1)?.unwrap_or_default(), row_to_pet_binding(row)?)))
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                row_to_pet_binding(row)?,
+            ))
+        })
         .map_err(|error| AppError::database(error.to_string()))?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| AppError::database(error.to_string()))
@@ -2998,13 +3076,19 @@ fn agent_avatar(paths: &WorkspacePaths, avatar_path: Option<&str>) -> Option<Str
     let avatar_path = avatar_path?;
     let absolute_path = paths.root.join(avatar_path);
     let bytes = fs::read(&absolute_path).ok()?;
-    let content_type = match absolute_path.extension().and_then(|extension| extension.to_str()) {
+    let content_type = match absolute_path
+        .extension()
+        .and_then(|extension| extension.to_str())
+    {
         Some("png") => "image/png",
         Some("webp") => "image/webp",
         Some("jpg") | Some("jpeg") => "image/jpeg",
         _ => return Some(avatar_path.to_string()),
     };
-    Some(format!("data:{content_type};base64,{}", BASE64_STANDARD.encode(bytes)))
+    Some(format!(
+        "data:{content_type};base64,{}",
+        BASE64_STANDARD.encode(bytes)
+    ))
 }
 
 fn load_agents(connection: &Connection) -> Result<Vec<AgentRecord>, AppError> {
@@ -3054,11 +3138,11 @@ fn load_agents(connection: &Connection) -> Result<Vec<AgentRecord>, AppError> {
         .map_err(|error| AppError::database(error.to_string()))
 }
 
-fn load_project_agent_links(connection: &Connection) -> Result<Vec<ProjectAgentLinkRecord>, AppError> {
+fn load_project_agent_links(
+    connection: &Connection,
+) -> Result<Vec<ProjectAgentLinkRecord>, AppError> {
     let mut stmt = connection
-        .prepare(
-            "SELECT workspace_id, project_id, agent_id, linked_at FROM project_agent_links",
-        )
+        .prepare("SELECT workspace_id, project_id, agent_id, linked_at FROM project_agent_links")
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
@@ -3124,11 +3208,11 @@ fn load_teams(connection: &Connection) -> Result<Vec<TeamRecord>, AppError> {
         .map_err(|error| AppError::database(error.to_string()))
 }
 
-fn load_project_team_links(connection: &Connection) -> Result<Vec<ProjectTeamLinkRecord>, AppError> {
+fn load_project_team_links(
+    connection: &Connection,
+) -> Result<Vec<ProjectTeamLinkRecord>, AppError> {
     let mut stmt = connection
-        .prepare(
-            "SELECT workspace_id, project_id, team_id, linked_at FROM project_team_links",
-        )
+        .prepare("SELECT workspace_id, project_id, team_id, linked_at FROM project_team_links")
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
@@ -3168,7 +3252,9 @@ fn load_model_catalog(connection: &Connection) -> Result<Vec<ModelCatalogRecord>
         .map_err(|error| AppError::database(error.to_string()))
 }
 
-fn load_provider_credentials(connection: &Connection) -> Result<Vec<ProviderCredentialRecord>, AppError> {
+fn load_provider_credentials(
+    connection: &Connection,
+) -> Result<Vec<ProviderCredentialRecord>, AppError> {
     let mut stmt = connection
         .prepare(
             "SELECT id, workspace_id, provider, name, base_url, status FROM provider_credentials",
@@ -3343,8 +3429,7 @@ fn load_sessions(connection: &Connection) -> Result<Vec<SessionRecord>, AppError
                 created_at: row.get::<_, i64>(6)? as u64,
                 expires_at: row.get::<_, Option<i64>>(7)?.map(|value| value as u64),
                 role_ids: serde_json::from_str(&role_ids_raw).unwrap_or_default(),
-                scope_project_ids: serde_json::from_str(&scope_project_ids_raw)
-                    .unwrap_or_default(),
+                scope_project_ids: serde_json::from_str(&scope_project_ids_raw).unwrap_or_default(),
             })
         })
         .map_err(|error| AppError::database(error.to_string()))?;
@@ -3538,29 +3623,27 @@ fn default_agent_records() -> Vec<AgentRecord> {
 
 fn default_team_records() -> Vec<TeamRecord> {
     let now = timestamp_now();
-    vec![
-        TeamRecord {
-            id: "team-workspace-core".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            project_id: None,
-            scope: "workspace".into(),
-            name: "Workspace Core".into(),
-            avatar_path: None,
-            avatar: None,
-            personality: "Governance team".into(),
-            tags: vec!["workspace".into(), "governance".into()],
-            prompt: "Maintain workspace-wide standards and governance.".into(),
-            builtin_tool_keys: vec![],
-            skill_ids: vec![],
-            mcp_server_names: vec![],
-            leader_agent_id: Some("agent-orchestrator".into()),
-            member_agent_ids: vec!["agent-orchestrator".into()],
-            integration_source: None,
-            description: "Maintains workspace-wide operating standards and governance.".into(),
-            status: "active".into(),
-            updated_at: now,
-        },
-    ]
+    vec![TeamRecord {
+        id: "team-workspace-core".into(),
+        workspace_id: DEFAULT_WORKSPACE_ID.into(),
+        project_id: None,
+        scope: "workspace".into(),
+        name: "Workspace Core".into(),
+        avatar_path: None,
+        avatar: None,
+        personality: "Governance team".into(),
+        tags: vec!["workspace".into(), "governance".into()],
+        prompt: "Maintain workspace-wide standards and governance.".into(),
+        builtin_tool_keys: vec![],
+        skill_ids: vec![],
+        mcp_server_names: vec![],
+        leader_agent_id: Some("agent-orchestrator".into()),
+        member_agent_ids: vec!["agent-orchestrator".into()],
+        integration_source: None,
+        description: "Maintains workspace-wide operating standards and governance.".into(),
+        status: "active".into(),
+        updated_at: now,
+    }]
 }
 
 fn default_model_catalog() -> Vec<ModelCatalogRecord> {
@@ -3861,7 +3944,10 @@ fn default_role_records() -> Vec<RoleRecord> {
             .into_iter()
             .map(|record| record.id)
             .collect(),
-        menu_ids: default_menu_records().into_iter().map(|record| record.id).collect(),
+        menu_ids: default_menu_records()
+            .into_iter()
+            .map(|record| record.id)
+            .collect(),
     }]
 }
 
@@ -3873,7 +3959,10 @@ fn avatar_data_url(paths: &WorkspacePaths, user: &StoredUser) -> Option<String> 
     let Ok(bytes) = fs::read(paths.root.join(avatar_path)) else {
         return Some(avatar_path.clone());
     };
-    Some(format!("data:{content_type};base64,{}", BASE64_STANDARD.encode(bytes)))
+    Some(format!(
+        "data:{content_type};base64,{}",
+        BASE64_STANDARD.encode(bytes)
+    ))
 }
 
 fn content_hash(bytes: &[u8]) -> String {
@@ -4108,11 +4197,16 @@ impl InfraWorkspaceService {
         match status.trim() {
             "active" => Ok("active".into()),
             "archived" => Ok("archived".into()),
-            _ => Err(AppError::invalid_input("project status must be active or archived")),
+            _ => Err(AppError::invalid_input(
+                "project status must be active or archived",
+            )),
         }
     }
 
-    fn next_active_project_id(projects: &[ProjectRecord], current_project_id: &str) -> Option<String> {
+    fn next_active_project_id(
+        projects: &[ProjectRecord],
+        current_project_id: &str,
+    ) -> Option<String> {
         projects
             .iter()
             .find(|project| project.id != current_project_id && project.status == "active")
@@ -4152,9 +4246,7 @@ impl InfraWorkspaceService {
             content_type.as_str(),
             "image/png" | "image/jpeg" | "image/jpg" | "image/webp"
         ) {
-            return Err(AppError::invalid_input(
-                "avatar must be png, jpeg, or webp",
-            ));
+            return Err(AppError::invalid_input("avatar must be png, jpeg, or webp"));
         }
         if avatar.byte_size == 0 || avatar.byte_size > 2 * 1024 * 1024 {
             return Err(AppError::invalid_input("avatar must be 2 MiB or smaller"));
@@ -4265,7 +4357,9 @@ impl InfraWorkspaceService {
             builtin_tool_keys: input.builtin_tool_keys,
             skill_ids: input.skill_ids,
             mcp_server_names: input.mcp_server_names,
-            leader_agent_id: input.leader_agent_id.filter(|value| !value.trim().is_empty()),
+            leader_agent_id: input
+                .leader_agent_id
+                .filter(|value| !value.trim().is_empty()),
             member_agent_ids: input.member_agent_ids,
             integration_source: None,
             description: input.description.trim().into(),
@@ -4364,7 +4458,12 @@ impl InfraAuthService {
             .lock()
             .map_err(|_| AppError::runtime("users mutex poisoned"))?
             .iter()
-            .any(|user| user.membership.role_ids.iter().any(|role_id| role_id == "owner")))
+            .any(|user| {
+                user.membership
+                    .role_ids
+                    .iter()
+                    .any(|role_id| role_id == "owner")
+            }))
     }
 
     fn persist_session(
@@ -4425,9 +4524,7 @@ impl InfraAuthService {
             content_type.as_str(),
             "image/png" | "image/jpeg" | "image/jpg" | "image/webp"
         ) {
-            return Err(AppError::invalid_input(
-                "avatar must be png, jpeg, or webp",
-            ));
+            return Err(AppError::invalid_input("avatar must be png, jpeg, or webp"));
         }
         if avatar.byte_size == 0 || avatar.byte_size > 2 * 1024 * 1024 {
             return Err(AppError::invalid_input("avatar must be 2 MiB or smaller"));
@@ -4468,7 +4565,12 @@ impl WorkspaceService for InfraWorkspaceService {
             .lock()
             .map_err(|_| AppError::runtime("workspace users mutex poisoned"))?
             .iter()
-            .any(|user| user.membership.role_ids.iter().any(|role_id| role_id == "owner"));
+            .any(|user| {
+                user.membership
+                    .role_ids
+                    .iter()
+                    .any(|role_id| role_id == "owner")
+            });
         Ok(SystemBootstrapStatus {
             workspace: workspace.clone(),
             setup_required: !owner_ready && workspace.bootstrap_status == "setup_required",
@@ -4506,7 +4608,10 @@ impl WorkspaceService for InfraWorkspaceService {
             .clone())
     }
 
-    async fn create_project(&self, request: CreateProjectRequest) -> Result<ProjectRecord, AppError> {
+    async fn create_project(
+        &self,
+        request: CreateProjectRequest,
+    ) -> Result<ProjectRecord, AppError> {
         let record = ProjectRecord {
             id: format!("proj-{}", Uuid::new_v4()),
             workspace_id: self.state.workspace_id()?,
@@ -4534,13 +4639,25 @@ impl WorkspaceService for InfraWorkspaceService {
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
 
-        let mut projects = self.state.projects.lock().map_err(|_| AppError::runtime("projects mutex poisoned"))?;
+        let mut projects = self
+            .state
+            .projects
+            .lock()
+            .map_err(|_| AppError::runtime("projects mutex poisoned"))?;
         projects.push(record.clone());
         Ok(record)
     }
 
-    async fn update_project(&self, project_id: &str, request: UpdateProjectRequest) -> Result<ProjectRecord, AppError> {
-        let mut projects = self.state.projects.lock().map_err(|_| AppError::runtime("projects mutex poisoned"))?;
+    async fn update_project(
+        &self,
+        project_id: &str,
+        request: UpdateProjectRequest,
+    ) -> Result<ProjectRecord, AppError> {
+        let mut projects = self
+            .state
+            .projects
+            .lock()
+            .map_err(|_| AppError::runtime("projects mutex poisoned"))?;
         let existing = projects
             .iter()
             .find(|project| project.id == project_id)
@@ -4557,9 +4674,14 @@ impl WorkspaceService for InfraWorkspaceService {
         };
 
         if existing.status != "archived" && updated.status == "archived" {
-            let active_count = projects.iter().filter(|project| project.status == "active").count();
+            let active_count = projects
+                .iter()
+                .filter(|project| project.status == "active")
+                .count();
             if active_count <= 1 {
-                return Err(AppError::invalid_input("cannot archive the last active project"));
+                return Err(AppError::invalid_input(
+                    "cannot archive the last active project",
+                ));
             }
         }
 
@@ -4585,10 +4707,16 @@ impl WorkspaceService for InfraWorkspaceService {
         Self::replace_or_push(&mut projects, updated.clone(), |item| item.id == project_id);
 
         if existing.status != updated.status && updated.status == "archived" {
-            let mut workspace = self.state.workspace.lock().map_err(|_| AppError::runtime("workspace mutex poisoned"))?;
+            let mut workspace = self
+                .state
+                .workspace
+                .lock()
+                .map_err(|_| AppError::runtime("workspace mutex poisoned"))?;
             if workspace.default_project_id == project_id {
                 workspace.default_project_id = Self::next_active_project_id(&projects, project_id)
-                    .ok_or_else(|| AppError::invalid_input("cannot archive the last active project"))?;
+                    .ok_or_else(|| {
+                        AppError::invalid_input("cannot archive the last active project")
+                    })?;
                 save_workspace_config_file(&self.state.paths.workspace_config, &workspace)?;
             }
         }
@@ -4605,7 +4733,10 @@ impl WorkspaceService for InfraWorkspaceService {
             .clone())
     }
 
-    async fn list_project_resources(&self, project_id: &str) -> Result<Vec<WorkspaceResourceRecord>, AppError> {
+    async fn list_project_resources(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<WorkspaceResourceRecord>, AppError> {
         Ok(self
             .state
             .resources
@@ -4893,7 +5024,10 @@ impl WorkspaceService for InfraWorkspaceService {
             .clone())
     }
 
-    async fn list_project_knowledge(&self, project_id: &str) -> Result<Vec<KnowledgeRecord>, AppError> {
+    async fn list_project_knowledge(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<KnowledgeRecord>, AppError> {
         Ok(self
             .state
             .knowledge_records
@@ -4909,7 +5043,10 @@ impl WorkspaceService for InfraWorkspaceService {
         self.workspace_pet_snapshot()
     }
 
-    async fn get_project_pet_snapshot(&self, project_id: &str) -> Result<PetWorkspaceSnapshot, AppError> {
+    async fn get_project_pet_snapshot(
+        &self,
+        project_id: &str,
+    ) -> Result<PetWorkspaceSnapshot, AppError> {
         self.project_pet_snapshot(project_id)
     }
 
@@ -4949,7 +5086,8 @@ impl WorkspaceService for InfraWorkspaceService {
             .state
             .workspace_pet_presence
             .lock()
-            .map_err(|_| AppError::runtime("workspace pet presence mutex poisoned"))? = presence.clone();
+            .map_err(|_| AppError::runtime("workspace pet presence mutex poisoned"))? =
+            presence.clone();
         Ok(presence)
     }
 
@@ -4991,7 +5129,11 @@ impl WorkspaceService for InfraWorkspaceService {
             presence.position = value;
         }
         self.persist_pet_presence(Some(project_id), &presence)?;
-        Self::replace_or_push(&mut presences, (project_id.to_string(), presence.clone()), |item| item.0 == project_id);
+        Self::replace_or_push(
+            &mut presences,
+            (project_id.to_string(), presence.clone()),
+            |item| item.0 == project_id,
+        );
         Ok(presence)
     }
 
@@ -5000,7 +5142,11 @@ impl WorkspaceService for InfraWorkspaceService {
         input: BindPetConversationInput,
     ) -> Result<PetConversationBinding, AppError> {
         let binding = PetConversationBinding {
-            pet_id: if input.pet_id.trim().is_empty() { "pet-octopus".into() } else { input.pet_id },
+            pet_id: if input.pet_id.trim().is_empty() {
+                "pet-octopus".into()
+            } else {
+                input.pet_id
+            },
             workspace_id: self.state.workspace_id()?,
             project_id: String::new(),
             conversation_id: input.conversation_id,
@@ -5012,7 +5158,8 @@ impl WorkspaceService for InfraWorkspaceService {
             .state
             .workspace_pet_binding
             .lock()
-            .map_err(|_| AppError::runtime("workspace pet binding mutex poisoned"))? = Some(binding.clone());
+            .map_err(|_| AppError::runtime("workspace pet binding mutex poisoned"))? =
+            Some(binding.clone());
         Ok(binding)
     }
 
@@ -5023,7 +5170,11 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<PetConversationBinding, AppError> {
         self.ensure_project_exists(project_id)?;
         let binding = PetConversationBinding {
-            pet_id: if input.pet_id.trim().is_empty() { "pet-octopus".into() } else { input.pet_id },
+            pet_id: if input.pet_id.trim().is_empty() {
+                "pet-octopus".into()
+            } else {
+                input.pet_id
+            },
             workspace_id: self.state.workspace_id()?,
             project_id: project_id.into(),
             conversation_id: input.conversation_id,
@@ -5036,7 +5187,11 @@ impl WorkspaceService for InfraWorkspaceService {
             .project_pet_bindings
             .lock()
             .map_err(|_| AppError::runtime("project pet bindings mutex poisoned"))?;
-        Self::replace_or_push(&mut bindings, (project_id.to_string(), binding.clone()), |item| item.0 == project_id);
+        Self::replace_or_push(
+            &mut bindings,
+            (project_id.to_string(), binding.clone()),
+            |item| item.0 == project_id,
+        );
         Ok(binding)
     }
 
@@ -5075,12 +5230,20 @@ impl WorkspaceService for InfraWorkspaceService {
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
 
-        let mut agents = self.state.agents.lock().map_err(|_| AppError::runtime("agents mutex poisoned"))?;
+        let mut agents = self
+            .state
+            .agents
+            .lock()
+            .map_err(|_| AppError::runtime("agents mutex poisoned"))?;
         agents.push(record.clone());
         Ok(record)
     }
 
-    async fn update_agent(&self, agent_id: &str, input: UpsertAgentInput) -> Result<AgentRecord, AppError> {
+    async fn update_agent(
+        &self,
+        agent_id: &str,
+        input: UpsertAgentInput,
+    ) -> Result<AgentRecord, AppError> {
         let current = {
             self.state
                 .agents
@@ -5120,25 +5283,41 @@ impl WorkspaceService for InfraWorkspaceService {
             }
         }
 
-        let mut agents = self.state.agents.lock().map_err(|_| AppError::runtime("agents mutex poisoned"))?;
+        let mut agents = self
+            .state
+            .agents
+            .lock()
+            .map_err(|_| AppError::runtime("agents mutex poisoned"))?;
         Self::replace_or_push(&mut agents, record.clone(), |item| item.id == agent_id);
         Ok(record)
     }
 
     async fn delete_agent(&self, agent_id: &str) -> Result<(), AppError> {
         let removed = {
-            let mut agents = self.state.agents.lock().map_err(|_| AppError::runtime("agents mutex poisoned"))?;
+            let mut agents = self
+                .state
+                .agents
+                .lock()
+                .map_err(|_| AppError::runtime("agents mutex poisoned"))?;
             let existing = agents.iter().find(|item| item.id == agent_id).cloned();
             agents.retain(|item| item.id != agent_id);
             existing
         };
 
         let connection = self.state.open_db()?;
-        connection.execute("DELETE FROM agents WHERE id = ?1", params![agent_id])
+        connection
+            .execute("DELETE FROM agents WHERE id = ?1", params![agent_id])
             .map_err(|error| AppError::database(error.to_string()))?;
-        connection.execute("DELETE FROM project_agent_links WHERE agent_id = ?1", params![agent_id])
+        connection
+            .execute(
+                "DELETE FROM project_agent_links WHERE agent_id = ?1",
+                params![agent_id],
+            )
             .map_err(|error| AppError::database(error.to_string()))?;
-        self.state.project_agent_links.lock().map_err(|_| AppError::runtime("project agent links mutex poisoned"))?
+        self.state
+            .project_agent_links
+            .lock()
+            .map_err(|_| AppError::runtime("project agent links mutex poisoned"))?
             .retain(|item| item.agent_id != agent_id);
 
         if let Some(record) = removed {
@@ -5153,7 +5332,12 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<ImportWorkspaceAgentBundlePreview, AppError> {
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        agent_import::preview_agent_bundle_import(&connection, &self.state.paths, &workspace_id, input)
+        agent_import::preview_agent_bundle_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            input,
+        )
     }
 
     async fn import_agent_bundle(
@@ -5177,7 +5361,10 @@ impl WorkspaceService for InfraWorkspaceService {
         Ok(result)
     }
 
-    async fn list_project_agent_links(&self, project_id: &str) -> Result<Vec<ProjectAgentLinkRecord>, AppError> {
+    async fn list_project_agent_links(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectAgentLinkRecord>, AppError> {
         Ok(self
             .state
             .project_agent_links
@@ -5189,7 +5376,10 @@ impl WorkspaceService for InfraWorkspaceService {
             .collect())
     }
 
-    async fn link_project_agent(&self, input: ProjectAgentLinkInput) -> Result<ProjectAgentLinkRecord, AppError> {
+    async fn link_project_agent(
+        &self,
+        input: ProjectAgentLinkInput,
+    ) -> Result<ProjectAgentLinkRecord, AppError> {
         let record = ProjectAgentLinkRecord {
             workspace_id: self.state.workspace_id()?,
             project_id: input.project_id,
@@ -5202,17 +5392,29 @@ impl WorkspaceService for InfraWorkspaceService {
             params![record.workspace_id, record.project_id, record.agent_id, record.linked_at as i64],
         ).map_err(|error| AppError::database(error.to_string()))?;
 
-        let mut links = self.state.project_agent_links.lock().map_err(|_| AppError::runtime("project agent links mutex poisoned"))?;
-        Self::replace_or_push(&mut links, record.clone(), |item| item.project_id == record.project_id && item.agent_id == record.agent_id);
+        let mut links = self
+            .state
+            .project_agent_links
+            .lock()
+            .map_err(|_| AppError::runtime("project agent links mutex poisoned"))?;
+        Self::replace_or_push(&mut links, record.clone(), |item| {
+            item.project_id == record.project_id && item.agent_id == record.agent_id
+        });
         Ok(record)
     }
 
     async fn unlink_project_agent(&self, project_id: &str, agent_id: &str) -> Result<(), AppError> {
-        self.state.open_db()?.execute(
-            "DELETE FROM project_agent_links WHERE project_id = ?1 AND agent_id = ?2",
-            params![project_id, agent_id],
-        ).map_err(|error| AppError::database(error.to_string()))?;
-        self.state.project_agent_links.lock().map_err(|_| AppError::runtime("project agent links mutex poisoned"))?
+        self.state
+            .open_db()?
+            .execute(
+                "DELETE FROM project_agent_links WHERE project_id = ?1 AND agent_id = ?2",
+                params![project_id, agent_id],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        self.state
+            .project_agent_links
+            .lock()
+            .map_err(|_| AppError::runtime("project agent links mutex poisoned"))?
             .retain(|item| !(item.project_id == project_id && item.agent_id == agent_id));
         Ok(())
     }
@@ -5232,12 +5434,20 @@ impl WorkspaceService for InfraWorkspaceService {
 
         write_team_record(&self.state.open_db()?, &record, false)?;
 
-        let mut teams = self.state.teams.lock().map_err(|_| AppError::runtime("teams mutex poisoned"))?;
+        let mut teams = self
+            .state
+            .teams
+            .lock()
+            .map_err(|_| AppError::runtime("teams mutex poisoned"))?;
         teams.push(record.clone());
         Ok(record)
     }
 
-    async fn update_team(&self, team_id: &str, input: UpsertTeamInput) -> Result<TeamRecord, AppError> {
+    async fn update_team(
+        &self,
+        team_id: &str,
+        input: UpsertTeamInput,
+    ) -> Result<TeamRecord, AppError> {
         let current = {
             self.state
                 .teams
@@ -5257,25 +5467,41 @@ impl WorkspaceService for InfraWorkspaceService {
             }
         }
 
-        let mut teams = self.state.teams.lock().map_err(|_| AppError::runtime("teams mutex poisoned"))?;
+        let mut teams = self
+            .state
+            .teams
+            .lock()
+            .map_err(|_| AppError::runtime("teams mutex poisoned"))?;
         Self::replace_or_push(&mut teams, record.clone(), |item| item.id == team_id);
         Ok(record)
     }
 
     async fn delete_team(&self, team_id: &str) -> Result<(), AppError> {
         let removed = {
-            let mut teams = self.state.teams.lock().map_err(|_| AppError::runtime("teams mutex poisoned"))?;
+            let mut teams = self
+                .state
+                .teams
+                .lock()
+                .map_err(|_| AppError::runtime("teams mutex poisoned"))?;
             let existing = teams.iter().find(|item| item.id == team_id).cloned();
             teams.retain(|item| item.id != team_id);
             existing
         };
 
         let connection = self.state.open_db()?;
-        connection.execute("DELETE FROM teams WHERE id = ?1", params![team_id])
+        connection
+            .execute("DELETE FROM teams WHERE id = ?1", params![team_id])
             .map_err(|error| AppError::database(error.to_string()))?;
-        connection.execute("DELETE FROM project_team_links WHERE team_id = ?1", params![team_id])
+        connection
+            .execute(
+                "DELETE FROM project_team_links WHERE team_id = ?1",
+                params![team_id],
+            )
             .map_err(|error| AppError::database(error.to_string()))?;
-        self.state.project_team_links.lock().map_err(|_| AppError::runtime("project team links mutex poisoned"))?
+        self.state
+            .project_team_links
+            .lock()
+            .map_err(|_| AppError::runtime("project team links mutex poisoned"))?
             .retain(|item| item.team_id != team_id);
 
         if let Some(record) = removed {
@@ -5284,7 +5510,10 @@ impl WorkspaceService for InfraWorkspaceService {
         Ok(())
     }
 
-    async fn list_project_team_links(&self, project_id: &str) -> Result<Vec<ProjectTeamLinkRecord>, AppError> {
+    async fn list_project_team_links(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectTeamLinkRecord>, AppError> {
         Ok(self
             .state
             .project_team_links
@@ -5296,7 +5525,10 @@ impl WorkspaceService for InfraWorkspaceService {
             .collect())
     }
 
-    async fn link_project_team(&self, input: ProjectTeamLinkInput) -> Result<ProjectTeamLinkRecord, AppError> {
+    async fn link_project_team(
+        &self,
+        input: ProjectTeamLinkInput,
+    ) -> Result<ProjectTeamLinkRecord, AppError> {
         let record = ProjectTeamLinkRecord {
             workspace_id: self.state.workspace_id()?,
             project_id: input.project_id,
@@ -5309,17 +5541,29 @@ impl WorkspaceService for InfraWorkspaceService {
             params![record.workspace_id, record.project_id, record.team_id, record.linked_at as i64],
         ).map_err(|error| AppError::database(error.to_string()))?;
 
-        let mut links = self.state.project_team_links.lock().map_err(|_| AppError::runtime("project team links mutex poisoned"))?;
-        Self::replace_or_push(&mut links, record.clone(), |item| item.project_id == record.project_id && item.team_id == record.team_id);
+        let mut links = self
+            .state
+            .project_team_links
+            .lock()
+            .map_err(|_| AppError::runtime("project team links mutex poisoned"))?;
+        Self::replace_or_push(&mut links, record.clone(), |item| {
+            item.project_id == record.project_id && item.team_id == record.team_id
+        });
         Ok(record)
     }
 
     async fn unlink_project_team(&self, project_id: &str, team_id: &str) -> Result<(), AppError> {
-        self.state.open_db()?.execute(
-            "DELETE FROM project_team_links WHERE project_id = ?1 AND team_id = ?2",
-            params![project_id, team_id],
-        ).map_err(|error| AppError::database(error.to_string()))?;
-        self.state.project_team_links.lock().map_err(|_| AppError::runtime("project team links mutex poisoned"))?
+        self.state
+            .open_db()?
+            .execute(
+                "DELETE FROM project_team_links WHERE project_id = ?1 AND team_id = ?2",
+                params![project_id, team_id],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        self.state
+            .project_team_links
+            .lock()
+            .map_err(|_| AppError::runtime("project team links mutex poisoned"))?
             .retain(|item| !(item.project_id == project_id && item.team_id == team_id));
         Ok(())
     }
@@ -5371,7 +5615,10 @@ impl WorkspaceService for InfraWorkspaceService {
         self.build_tool_catalog().await
     }
 
-    async fn get_workspace_skill(&self, skill_id: &str) -> Result<WorkspaceSkillDocument, AppError> {
+    async fn get_workspace_skill(
+        &self,
+        skill_id: &str,
+    ) -> Result<WorkspaceSkillDocument, AppError> {
         self.get_workspace_skill_document(skill_id)
     }
 
@@ -5382,12 +5629,18 @@ impl WorkspaceService for InfraWorkspaceService {
         let slug = validate_skill_slug(&input.slug)?;
         let skill_dir = workspace_owned_skill_root(&self.state.paths).join(&slug);
         if skill_dir.exists() {
-            return Err(AppError::conflict(format!("workspace skill '{slug}' already exists")));
+            return Err(AppError::conflict(format!(
+                "workspace skill '{slug}' already exists"
+            )));
         }
         fs::create_dir_all(&skill_dir)?;
         let skill_path = skill_dir.join("SKILL.md");
         fs::write(&skill_path, input.content)?;
-        skill_document_from_path(&self.state.paths.root, &skill_path, SkillSourceOrigin::SkillsDir)
+        skill_document_from_path(
+            &self.state.paths.root,
+            &skill_path,
+            SkillSourceOrigin::SkillsDir,
+        )
     }
 
     async fn update_workspace_skill(
@@ -5520,9 +5773,10 @@ impl WorkspaceService for InfraWorkspaceService {
                 input.server_name
             )));
         }
-        let config = input.config.as_object().cloned().ok_or_else(|| {
-            AppError::invalid_input("mcp server config must be a JSON object")
-        })?;
+        let config =
+            input.config.as_object().cloned().ok_or_else(|| {
+                AppError::invalid_input("mcp server config must be a JSON object")
+            })?;
         servers.insert(input.server_name.clone(), serde_json::Value::Object(config));
         self.save_workspace_runtime_document(document)?;
         self.load_mcp_server_document(&input.server_name)
@@ -5543,9 +5797,10 @@ impl WorkspaceService for InfraWorkspaceService {
         if !servers.contains_key(server_name) {
             return Err(AppError::not_found("workspace mcp server"));
         }
-        let config = input.config.as_object().cloned().ok_or_else(|| {
-            AppError::invalid_input("mcp server config must be a JSON object")
-        })?;
+        let config =
+            input.config.as_object().cloned().ok_or_else(|| {
+                AppError::invalid_input("mcp server config must be a JSON object")
+            })?;
         servers.insert(server_name.into(), serde_json::Value::Object(config));
         self.save_workspace_runtime_document(document)?;
         self.load_mcp_server_document(server_name)
@@ -5594,12 +5849,20 @@ impl WorkspaceService for InfraWorkspaceService {
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
 
-        let mut tools = self.state.tools.lock().map_err(|_| AppError::runtime("tools mutex poisoned"))?;
+        let mut tools = self
+            .state
+            .tools
+            .lock()
+            .map_err(|_| AppError::runtime("tools mutex poisoned"))?;
         tools.push(record.clone());
         Ok(record)
     }
 
-    async fn update_tool(&self, tool_id: &str, mut record: ToolRecord) -> Result<ToolRecord, AppError> {
+    async fn update_tool(
+        &self,
+        tool_id: &str,
+        mut record: ToolRecord,
+    ) -> Result<ToolRecord, AppError> {
         record.id = tool_id.into();
         if record.workspace_id.is_empty() {
             record.workspace_id = self.state.workspace_id()?;
@@ -5621,15 +5884,24 @@ impl WorkspaceService for InfraWorkspaceService {
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
 
-        let mut tools = self.state.tools.lock().map_err(|_| AppError::runtime("tools mutex poisoned"))?;
+        let mut tools = self
+            .state
+            .tools
+            .lock()
+            .map_err(|_| AppError::runtime("tools mutex poisoned"))?;
         Self::replace_or_push(&mut tools, record.clone(), |item| item.id == tool_id);
         Ok(record)
     }
 
     async fn delete_tool(&self, tool_id: &str) -> Result<(), AppError> {
-        self.state.open_db()?.execute("DELETE FROM tools WHERE id = ?1", params![tool_id])
+        self.state
+            .open_db()?
+            .execute("DELETE FROM tools WHERE id = ?1", params![tool_id])
             .map_err(|error| AppError::database(error.to_string()))?;
-        self.state.tools.lock().map_err(|_| AppError::runtime("tools mutex poisoned"))?
+        self.state
+            .tools
+            .lock()
+            .map_err(|_| AppError::runtime("tools mutex poisoned"))?
             .retain(|item| item.id != tool_id);
         Ok(())
     }
@@ -5643,7 +5915,10 @@ impl WorkspaceService for InfraWorkspaceService {
             .clone())
     }
 
-    async fn create_automation(&self, mut record: AutomationRecord) -> Result<AutomationRecord, AppError> {
+    async fn create_automation(
+        &self,
+        mut record: AutomationRecord,
+    ) -> Result<AutomationRecord, AppError> {
         if record.id.is_empty() {
             record.id = format!("automation-{}", Uuid::new_v4());
         }
@@ -5670,12 +5945,20 @@ impl WorkspaceService for InfraWorkspaceService {
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
 
-        let mut automations = self.state.automations.lock().map_err(|_| AppError::runtime("automations mutex poisoned"))?;
+        let mut automations = self
+            .state
+            .automations
+            .lock()
+            .map_err(|_| AppError::runtime("automations mutex poisoned"))?;
         automations.push(record.clone());
         Ok(record)
     }
 
-    async fn update_automation(&self, automation_id: &str, mut record: AutomationRecord) -> Result<AutomationRecord, AppError> {
+    async fn update_automation(
+        &self,
+        automation_id: &str,
+        mut record: AutomationRecord,
+    ) -> Result<AutomationRecord, AppError> {
         record.id = automation_id.into();
         if record.workspace_id.is_empty() {
             record.workspace_id = self.state.workspace_id()?;
@@ -5700,15 +5983,29 @@ impl WorkspaceService for InfraWorkspaceService {
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
 
-        let mut automations = self.state.automations.lock().map_err(|_| AppError::runtime("automations mutex poisoned"))?;
-        Self::replace_or_push(&mut automations, record.clone(), |item| item.id == automation_id);
+        let mut automations = self
+            .state
+            .automations
+            .lock()
+            .map_err(|_| AppError::runtime("automations mutex poisoned"))?;
+        Self::replace_or_push(&mut automations, record.clone(), |item| {
+            item.id == automation_id
+        });
         Ok(record)
     }
 
     async fn delete_automation(&self, automation_id: &str) -> Result<(), AppError> {
-        self.state.open_db()?.execute("DELETE FROM automations WHERE id = ?1", params![automation_id])
+        self.state
+            .open_db()?
+            .execute(
+                "DELETE FROM automations WHERE id = ?1",
+                params![automation_id],
+            )
             .map_err(|error| AppError::database(error.to_string()))?;
-        self.state.automations.lock().map_err(|_| AppError::runtime("automations mutex poisoned"))?
+        self.state
+            .automations
+            .lock()
+            .map_err(|_| AppError::runtime("automations mutex poisoned"))?
             .retain(|item| item.id != automation_id);
         Ok(())
     }
@@ -5813,7 +6110,11 @@ impl WorkspaceService for InfraWorkspaceService {
             membership,
         };
         let summary = to_user_summary(&self.state.paths, &stored_user);
-        let mut users = self.state.users.lock().map_err(|_| AppError::runtime("users mutex poisoned"))?;
+        let mut users = self
+            .state
+            .users
+            .lock()
+            .map_err(|_| AppError::runtime("users mutex poisoned"))?;
         users.push(stored_user);
         Ok(summary)
     }
@@ -5862,24 +6163,27 @@ impl WorkspaceService for InfraWorkspaceService {
             )
         };
 
-        let (next_password_hash, next_password_state) = if request.reset_password_to_default.unwrap_or(false) {
-            self.resolve_member_password(None, None, true)?
-        } else if request.password.is_some() || request.confirm_password.is_some() {
-            self.resolve_member_password(
-                request.password.as_deref(),
-                request.confirm_password.as_deref(),
-                false,
-            )?
-        } else {
-            (
-                current_user.password_hash.clone(),
-                current_user.record.password_state.clone(),
-            )
-        };
+        let (next_password_hash, next_password_state) =
+            if request.reset_password_to_default.unwrap_or(false) {
+                self.resolve_member_password(None, None, true)?
+            } else if request.password.is_some() || request.confirm_password.is_some() {
+                self.resolve_member_password(
+                    request.password.as_deref(),
+                    request.confirm_password.as_deref(),
+                    false,
+                )?
+            } else {
+                (
+                    current_user.password_hash.clone(),
+                    current_user.record.password_state.clone(),
+                )
+            };
 
         let now = Self::now();
-        self.state.open_db()?.execute(
-            "UPDATE users
+        self.state
+            .open_db()?
+            .execute(
+                "UPDATE users
              SET username = ?2,
                  display_name = ?3,
                  avatar_path = ?4,
@@ -5891,20 +6195,21 @@ impl WorkspaceService for InfraWorkspaceService {
                  password_state = ?10,
                  updated_at = ?11
              WHERE id = ?1",
-            params![
-                user_id,
-                request.username.trim(),
-                request.display_name.trim(),
-                next_avatar.0.clone(),
-                next_avatar.1.clone(),
-                next_avatar.2.map(|value| value as i64),
-                next_avatar.3.clone(),
-                request.status.clone(),
-                next_password_hash.clone(),
-                next_password_state.clone(),
-                now as i64,
-            ],
-        ).map_err(|error| AppError::database(error.to_string()))?;
+                params![
+                    user_id,
+                    request.username.trim(),
+                    request.display_name.trim(),
+                    next_avatar.0.clone(),
+                    next_avatar.1.clone(),
+                    next_avatar.2.map(|value| value as i64),
+                    next_avatar.3.clone(),
+                    request.status.clone(),
+                    next_password_hash.clone(),
+                    next_password_state.clone(),
+                    now as i64,
+                ],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
         self.state.open_db()?.execute(
             "INSERT OR REPLACE INTO memberships (workspace_id, user_id, role_ids, scope_mode, scope_project_ids)
              VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -5917,7 +6222,11 @@ impl WorkspaceService for InfraWorkspaceService {
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
 
-        let mut users = self.state.users.lock().map_err(|_| AppError::runtime("users mutex poisoned"))?;
+        let mut users = self
+            .state
+            .users
+            .lock()
+            .map_err(|_| AppError::runtime("users mutex poisoned"))?;
         let existing = users
             .iter_mut()
             .find(|item| item.record.id == user_id)
@@ -5964,7 +6273,10 @@ impl WorkspaceService for InfraWorkspaceService {
 
         self.state
             .open_db()?
-            .execute("DELETE FROM memberships WHERE user_id = ?1", params![user_id])
+            .execute(
+                "DELETE FROM memberships WHERE user_id = ?1",
+                params![user_id],
+            )
             .map_err(|error| AppError::database(error.to_string()))?;
         self.state
             .open_db()?
@@ -6175,12 +6487,20 @@ impl WorkspaceService for InfraWorkspaceService {
                 serde_json::to_string(&record.menu_ids)?,
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
-        let mut roles = self.state.roles.lock().map_err(|_| AppError::runtime("roles mutex poisoned"))?;
+        let mut roles = self
+            .state
+            .roles
+            .lock()
+            .map_err(|_| AppError::runtime("roles mutex poisoned"))?;
         roles.push(record.clone());
         Ok(record)
     }
 
-    async fn update_role(&self, role_id: &str, mut record: RoleRecord) -> Result<RoleRecord, AppError> {
+    async fn update_role(
+        &self,
+        role_id: &str,
+        mut record: RoleRecord,
+    ) -> Result<RoleRecord, AppError> {
         record.id = role_id.into();
         if record.workspace_id.is_empty() {
             record.workspace_id = self.state.workspace_id()?;
@@ -6200,7 +6520,11 @@ impl WorkspaceService for InfraWorkspaceService {
                 serde_json::to_string(&record.menu_ids)?,
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
-        let mut roles = self.state.roles.lock().map_err(|_| AppError::runtime("roles mutex poisoned"))?;
+        let mut roles = self
+            .state
+            .roles
+            .lock()
+            .map_err(|_| AppError::runtime("roles mutex poisoned"))?;
         Self::replace_or_push(&mut roles, record.clone(), |item| item.id == role_id);
         Ok(record)
     }
@@ -6248,7 +6572,10 @@ impl WorkspaceService for InfraWorkspaceService {
                         .open_db()?
                         .execute(
                             "UPDATE sessions SET role_ids = ?2 WHERE id = ?1",
-                            params![session.id.clone(), serde_json::to_string(&session.role_ids)?],
+                            params![
+                                session.id.clone(),
+                                serde_json::to_string(&session.role_ids)?
+                            ],
                         )
                         .map_err(|error| AppError::database(error.to_string()))?;
                 }
@@ -6272,7 +6599,10 @@ impl WorkspaceService for InfraWorkspaceService {
             .clone())
     }
 
-    async fn create_permission(&self, mut record: PermissionRecord) -> Result<PermissionRecord, AppError> {
+    async fn create_permission(
+        &self,
+        mut record: PermissionRecord,
+    ) -> Result<PermissionRecord, AppError> {
         if record.id.is_empty() {
             record.id = format!("permission-{}", Uuid::new_v4());
         }
@@ -6297,12 +6627,20 @@ impl WorkspaceService for InfraWorkspaceService {
                 serde_json::to_string(&record.member_permission_ids)?,
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
-        let mut permissions = self.state.permissions.lock().map_err(|_| AppError::runtime("permissions mutex poisoned"))?;
+        let mut permissions = self
+            .state
+            .permissions
+            .lock()
+            .map_err(|_| AppError::runtime("permissions mutex poisoned"))?;
         permissions.push(record.clone());
         Ok(record)
     }
 
-    async fn update_permission(&self, permission_id: &str, mut record: PermissionRecord) -> Result<PermissionRecord, AppError> {
+    async fn update_permission(
+        &self,
+        permission_id: &str,
+        mut record: PermissionRecord,
+    ) -> Result<PermissionRecord, AppError> {
         record.id = permission_id.into();
         if record.workspace_id.is_empty() {
             record.workspace_id = self.state.workspace_id()?;
@@ -6325,15 +6663,24 @@ impl WorkspaceService for InfraWorkspaceService {
                 serde_json::to_string(&record.member_permission_ids)?,
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
-        let mut permissions = self.state.permissions.lock().map_err(|_| AppError::runtime("permissions mutex poisoned"))?;
-        Self::replace_or_push(&mut permissions, record.clone(), |item| item.id == permission_id);
+        let mut permissions = self
+            .state
+            .permissions
+            .lock()
+            .map_err(|_| AppError::runtime("permissions mutex poisoned"))?;
+        Self::replace_or_push(&mut permissions, record.clone(), |item| {
+            item.id == permission_id
+        });
         Ok(record)
     }
 
     async fn delete_permission(&self, permission_id: &str) -> Result<(), AppError> {
         self.state
             .open_db()?
-            .execute("DELETE FROM permissions WHERE id = ?1", params![permission_id])
+            .execute(
+                "DELETE FROM permissions WHERE id = ?1",
+                params![permission_id],
+            )
             .map_err(|error| AppError::database(error.to_string()))?;
 
         {
@@ -6349,7 +6696,10 @@ impl WorkspaceService for InfraWorkspaceService {
                         .open_db()?
                         .execute(
                             "UPDATE roles SET permission_ids = ?2 WHERE id = ?1",
-                            params![role.id.clone(), serde_json::to_string(&role.permission_ids)?],
+                            params![
+                                role.id.clone(),
+                                serde_json::to_string(&role.permission_ids)?
+                            ],
                         )
                         .map_err(|error| AppError::database(error.to_string()))?;
                 }
@@ -6363,13 +6713,22 @@ impl WorkspaceService for InfraWorkspaceService {
                 .lock()
                 .map_err(|_| AppError::runtime("permissions mutex poisoned"))?;
             for permission in permissions.iter_mut() {
-                if permission.member_permission_ids.iter().any(|id| id == permission_id) {
-                    permission.member_permission_ids.retain(|id| id != permission_id);
+                if permission
+                    .member_permission_ids
+                    .iter()
+                    .any(|id| id == permission_id)
+                {
+                    permission
+                        .member_permission_ids
+                        .retain(|id| id != permission_id);
                     self.state
                         .open_db()?
                         .execute(
                             "UPDATE permissions SET member_permission_ids = ?2 WHERE id = ?1",
-                            params![permission.id.clone(), serde_json::to_string(&permission.member_permission_ids)?],
+                            params![
+                                permission.id.clone(),
+                                serde_json::to_string(&permission.member_permission_ids)?
+                            ],
                         )
                         .map_err(|error| AppError::database(error.to_string()))?;
                 }
@@ -6410,12 +6769,20 @@ impl WorkspaceService for InfraWorkspaceService {
                 record.order,
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
-        let mut menus = self.state.menus.lock().map_err(|_| AppError::runtime("menus mutex poisoned"))?;
+        let mut menus = self
+            .state
+            .menus
+            .lock()
+            .map_err(|_| AppError::runtime("menus mutex poisoned"))?;
         menus.push(record.clone());
         Ok(record)
     }
 
-    async fn update_menu(&self, menu_id: &str, mut record: MenuRecord) -> Result<MenuRecord, AppError> {
+    async fn update_menu(
+        &self,
+        menu_id: &str,
+        mut record: MenuRecord,
+    ) -> Result<MenuRecord, AppError> {
         record.id = menu_id.into();
         if record.workspace_id.is_empty() {
             record.workspace_id = self.state.workspace_id()?;
@@ -6435,7 +6802,11 @@ impl WorkspaceService for InfraWorkspaceService {
                 record.order,
             ],
         ).map_err(|error| AppError::database(error.to_string()))?;
-        let mut menus = self.state.menus.lock().map_err(|_| AppError::runtime("menus mutex poisoned"))?;
+        let mut menus = self
+            .state
+            .menus
+            .lock()
+            .map_err(|_| AppError::runtime("menus mutex poisoned"))?;
         Self::replace_or_push(&mut menus, record.clone(), |item| item.id == menu_id);
         Ok(record)
     }
@@ -6484,7 +6855,9 @@ impl AuthService for InfraAuthService {
             ));
         }
         if request.password != request.confirm_password {
-            return Err(AppError::invalid_input("password confirmation does not match"));
+            return Err(AppError::invalid_input(
+                "password confirmation does not match",
+            ));
         }
         if self.owner_exists()? {
             return Err(AppError::conflict("workspace owner already exists"));
@@ -6649,10 +7022,7 @@ impl AppRegistryService for InfraAppRegistryService {
             .clone())
     }
 
-    async fn register_app(
-        &self,
-        record: ClientAppRecord,
-    ) -> Result<ClientAppRecord, AppError> {
+    async fn register_app(&self, record: ClientAppRecord) -> Result<ClientAppRecord, AppError> {
         if !record.first_party {
             return Err(AppError::invalid_input(
                 "phase one only accepts first-party client apps",
@@ -6838,7 +7208,11 @@ impl ObservationService for InfraObservationService {
             )
             .map_err(|error| AppError::database(error.to_string()))?;
         append_json_line(
-            &self.state.paths.runtime_traces_dir.join("trace-events.jsonl"),
+            &self
+                .state
+                .paths
+                .runtime_traces_dir
+                .join("trace-events.jsonl"),
             &record,
         )?;
         self.state
@@ -6978,7 +7352,10 @@ mod tests {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
 
-        assert_eq!(paths.runtime_sessions_dir, temp.path().join("runtime/sessions"));
+        assert_eq!(
+            paths.runtime_sessions_dir,
+            temp.path().join("runtime/sessions")
+        );
         assert_eq!(paths.runtime_events_dir, temp.path().join("runtime/events"));
         assert_eq!(paths.audit_log_dir, temp.path().join("logs/audit"));
         assert_eq!(paths.db_path, temp.path().join("data/main.db"));
@@ -7043,8 +7420,8 @@ default_project_id = "proj-redesign"
         assert!(!bootstrap.setup_required);
         assert!(bootstrap.owner_ready);
 
-        let workspace_toml =
-            std::fs::read_to_string(&paths.workspace_config).expect("workspace toml after normalize");
+        let workspace_toml = std::fs::read_to_string(&paths.workspace_config)
+            .expect("workspace toml after normalize");
         assert!(workspace_toml.contains("bootstrap_status = \"ready\""));
     }
 
@@ -7225,7 +7602,10 @@ default_project_id = "proj-redesign"
         let source = snapshot
             .entries
             .iter()
-            .find(|entry| entry.kind == "skill" && entry.display_path == ".codex/skills/external-help/SKILL.md")
+            .find(|entry| {
+                entry.kind == "skill"
+                    && entry.display_path == ".codex/skills/external-help/SKILL.md"
+            })
             .expect("source skill");
 
         let copied = tokio::runtime::Runtime::new()

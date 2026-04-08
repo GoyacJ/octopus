@@ -1,0 +1,803 @@
+openapi: 3.1.0
+info:
+  title: Octopus API
+  version: 0.1.0
+  description: Canonical OpenAPI contract for Octopus host, workspace, and runtime APIs.
+servers:
+  - url: http://127.0.0.1:15421
+paths:
+  /api/v1/host/bootstrap:
+    get:
+      operationId: getHostBootstrap
+      responses:
+        '200':
+          description: Host bootstrap payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShellBootstrap'
+        default:
+          description: API error envelope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorEnvelope'
+  /api/v1/host/health:
+    get:
+      operationId: getHostHealthcheck
+      responses:
+        '200':
+          description: Host healthcheck payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthcheckStatus'
+        default:
+          description: API error envelope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorEnvelope'
+  /api/v1/system/bootstrap:
+    get:
+      operationId: getSystemBootstrap
+      responses:
+        '200':
+          description: Workspace bootstrap payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemBootstrapStatus'
+        default:
+          description: API error envelope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorEnvelope'
+  /api/v1/workspace/overview:
+    get:
+      operationId: getWorkspaceOverview
+      responses:
+        '200':
+          description: Workspace overview payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkspaceOverviewSnapshot'
+        default:
+          description: API error envelope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorEnvelope'
+  /api/v1/runtime/config:
+    get:
+      operationId: getRuntimeConfig
+      responses:
+        '200':
+          description: Effective runtime configuration payload.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeEffectiveConfig'
+        default:
+          description: API error envelope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorEnvelope'
+components:
+  schemas:
+    ThemeMode:
+      type: string
+      enum:
+        - light
+        - dark
+        - system
+    Locale:
+      type: string
+      enum:
+        - zh-CN
+        - en-US
+    HostPlatform:
+      type: string
+      enum:
+        - tauri
+        - web
+    HostExecutionMode:
+      type: string
+      enum:
+        - local
+        - remote
+    BackendTransport:
+      type: string
+      enum:
+        - http
+        - sse
+        - ws
+    BackendConnectionState:
+      type: string
+      enum:
+        - ready
+        - unavailable
+    ConnectionMode:
+      type: string
+      enum:
+        - local
+        - shared
+        - remote
+    ConnectionState:
+      type: string
+      enum:
+        - local-ready
+        - connected
+        - disconnected
+    TransportSecurityLevel:
+      type: string
+      enum:
+        - loopback
+        - trusted
+        - public
+    WorkspaceAuthMode:
+      type: string
+      enum:
+        - session-token
+    WorkspaceConnectionStatus:
+      type: string
+      enum:
+        - connected
+        - disconnected
+        - expired
+        - unreachable
+    ApiErrorCode:
+      type: string
+      enum:
+        - UNAUTHENTICATED
+        - SESSION_EXPIRED
+        - FORBIDDEN
+        - NOT_FOUND
+        - CONFLICT
+        - INVALID_INPUT
+        - RATE_LIMITED
+        - UNAVAILABLE
+        - CAPABILITY_UNSUPPORTED
+        - INTERNAL_ERROR
+    HostState:
+      type: object
+      additionalProperties: false
+      required:
+        - platform
+        - mode
+        - appVersion
+        - cargoWorkspace
+        - shell
+      properties:
+        platform:
+          $ref: '#/components/schemas/HostPlatform'
+        mode:
+          $ref: '#/components/schemas/HostExecutionMode'
+        appVersion:
+          type: string
+        cargoWorkspace:
+          type: boolean
+        shell:
+          type: string
+    HostBackendConnection:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - transport
+      properties:
+        baseUrl:
+          type: string
+        authToken:
+          type: string
+        state:
+          $ref: '#/components/schemas/BackendConnectionState'
+        transport:
+          $ref: '#/components/schemas/BackendTransport'
+    HealthcheckBackendStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - transport
+      properties:
+        state:
+          $ref: '#/components/schemas/BackendConnectionState'
+        transport:
+          $ref: '#/components/schemas/BackendTransport'
+    ConnectionProfile:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - mode
+        - label
+        - workspaceId
+        - state
+      properties:
+        id:
+          type: string
+        mode:
+          $ref: '#/components/schemas/ConnectionMode'
+        label:
+          type: string
+        workspaceId:
+          type: string
+        baseUrl:
+          type: string
+        state:
+          $ref: '#/components/schemas/ConnectionState'
+        lastSyncAt:
+          type: integer
+    ShellPreferences:
+      type: object
+      additionalProperties: false
+      required:
+        - theme
+        - locale
+        - fontSize
+        - fontFamily
+        - fontStyle
+        - compactSidebar
+        - leftSidebarCollapsed
+        - rightSidebarCollapsed
+        - defaultWorkspaceId
+        - lastVisitedRoute
+      properties:
+        theme:
+          $ref: '#/components/schemas/ThemeMode'
+        locale:
+          $ref: '#/components/schemas/Locale'
+        fontSize:
+          type: integer
+        fontFamily:
+          type: string
+        fontStyle:
+          type: string
+        compactSidebar:
+          type: boolean
+        leftSidebarCollapsed:
+          type: boolean
+        rightSidebarCollapsed:
+          type: boolean
+        defaultWorkspaceId:
+          type: string
+        lastVisitedRoute:
+          type: string
+    SessionRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - workspaceId
+        - userId
+        - clientAppId
+        - token
+        - status
+        - createdAt
+        - roleIds
+        - scopeProjectIds
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        userId:
+          type: string
+        clientAppId:
+          type: string
+        token:
+          type: string
+        status:
+          type: string
+        createdAt:
+          type: integer
+        expiresAt:
+          type: integer
+        roleIds:
+          type: array
+          items:
+            type: string
+        scopeProjectIds:
+          type: array
+          items:
+            type: string
+    WorkspaceConnectionRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - workspaceConnectionId
+        - workspaceId
+        - label
+        - baseUrl
+        - transportSecurity
+        - authMode
+        - status
+      properties:
+        workspaceConnectionId:
+          type: string
+        workspaceId:
+          type: string
+        label:
+          type: string
+        baseUrl:
+          type: string
+        transportSecurity:
+          $ref: '#/components/schemas/TransportSecurityLevel'
+        authMode:
+          $ref: '#/components/schemas/WorkspaceAuthMode'
+        lastUsedAt:
+          type: integer
+        status:
+          $ref: '#/components/schemas/WorkspaceConnectionStatus'
+    WorkspaceSessionTokenEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - workspaceConnectionId
+        - token
+        - session
+        - issuedAt
+      properties:
+        workspaceConnectionId:
+          type: string
+        token:
+          type: string
+        session:
+          $ref: '#/components/schemas/SessionRecord'
+        issuedAt:
+          type: integer
+        expiresAt:
+          type: integer
+    ShellBootstrap:
+      type: object
+      additionalProperties: false
+      required:
+        - hostState
+        - preferences
+        - connections
+      properties:
+        hostState:
+          $ref: '#/components/schemas/HostState'
+        preferences:
+          $ref: '#/components/schemas/ShellPreferences'
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionProfile'
+        backend:
+          $ref: '#/components/schemas/HostBackendConnection'
+        workspaceConnections:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceConnectionRecord'
+        workspaceSessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceSessionTokenEnvelope'
+    HealthcheckStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - host
+        - mode
+        - cargoWorkspace
+        - backend
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        host:
+          $ref: '#/components/schemas/HostPlatform'
+        mode:
+          $ref: '#/components/schemas/HostExecutionMode'
+        cargoWorkspace:
+          type: boolean
+        backend:
+          $ref: '#/components/schemas/HealthcheckBackendStatus'
+    ClientAppRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - platform
+        - status
+        - firstParty
+        - allowedOrigins
+        - allowedHosts
+        - sessionPolicy
+        - defaultScopes
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        platform:
+          type: string
+        status:
+          type: string
+        firstParty:
+          type: boolean
+        allowedOrigins:
+          type: array
+          items:
+            type: string
+        allowedHosts:
+          type: array
+          items:
+            type: string
+        sessionPolicy:
+          type: string
+        defaultScopes:
+          type: array
+          items:
+            type: string
+    WorkspaceSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - slug
+        - deployment
+        - bootstrapStatus
+        - host
+        - listenAddress
+        - defaultProjectId
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        slug:
+          type: string
+        deployment:
+          type: string
+          enum:
+            - local
+            - remote
+        bootstrapStatus:
+          type: string
+          enum:
+            - setup_required
+            - ready
+        ownerUserId:
+          type: string
+        host:
+          type: string
+        listenAddress:
+          type: string
+        defaultProjectId:
+          type: string
+    WorkspaceCapabilitySet:
+      type: object
+      additionalProperties: false
+      required:
+        - polling
+        - sse
+        - idempotency
+        - reconnect
+        - eventReplay
+      properties:
+        polling:
+          type: boolean
+        sse:
+          type: boolean
+        idempotency:
+          type: boolean
+        reconnect:
+          type: boolean
+        eventReplay:
+          type: boolean
+    SystemBootstrapStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - workspace
+        - setupRequired
+        - ownerReady
+        - registeredApps
+        - protocolVersion
+        - apiBasePath
+        - transportSecurity
+        - authMode
+        - capabilities
+      properties:
+        workspace:
+          $ref: '#/components/schemas/WorkspaceSummary'
+        setupRequired:
+          type: boolean
+        ownerReady:
+          type: boolean
+        registeredApps:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClientAppRecord'
+        protocolVersion:
+          type: string
+        apiBasePath:
+          type: string
+        transportSecurity:
+          $ref: '#/components/schemas/TransportSecurityLevel'
+        authMode:
+          $ref: '#/components/schemas/WorkspaceAuthMode'
+        capabilities:
+          $ref: '#/components/schemas/WorkspaceCapabilitySet'
+    ProjectModelAssignments:
+      type: object
+      additionalProperties: false
+      required:
+        - configuredModelIds
+        - defaultConfiguredModelId
+      properties:
+        configuredModelIds:
+          type: array
+          items:
+            type: string
+        defaultConfiguredModelId:
+          type: string
+    ProjectToolAssignments:
+      type: object
+      additionalProperties: false
+      required:
+        - sourceKeys
+      properties:
+        sourceKeys:
+          type: array
+          items:
+            type: string
+    ProjectAgentAssignments:
+      type: object
+      additionalProperties: false
+      required:
+        - agentIds
+        - teamIds
+      properties:
+        agentIds:
+          type: array
+          items:
+            type: string
+        teamIds:
+          type: array
+          items:
+            type: string
+    ProjectWorkspaceAssignments:
+      type: object
+      additionalProperties: false
+      properties:
+        models:
+          $ref: '#/components/schemas/ProjectModelAssignments'
+        tools:
+          $ref: '#/components/schemas/ProjectToolAssignments'
+        agents:
+          $ref: '#/components/schemas/ProjectAgentAssignments'
+    ProjectRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - workspaceId
+        - name
+        - status
+        - description
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum:
+            - active
+            - archived
+        description:
+          type: string
+        assignments:
+          $ref: '#/components/schemas/ProjectWorkspaceAssignments'
+    WorkspaceMetricRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - label
+        - value
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        value:
+          type: string
+        helper:
+          type: string
+        tone:
+          type: string
+    ConversationRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - workspaceId
+        - projectId
+        - sessionId
+        - title
+        - status
+        - updatedAt
+      properties:
+        id:
+          type: string
+        workspaceId:
+          type: string
+        projectId:
+          type: string
+        sessionId:
+          type: string
+        title:
+          type: string
+        status:
+          type: string
+        updatedAt:
+          type: integer
+        lastMessagePreview:
+          type: string
+    WorkspaceActivityRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - title
+        - description
+        - timestamp
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        timestamp:
+          type: integer
+    WorkspaceOverviewSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - workspace
+        - metrics
+        - projects
+        - recentConversations
+        - recentActivity
+      properties:
+        workspace:
+          $ref: '#/components/schemas/WorkspaceSummary'
+        metrics:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceMetricRecord'
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectRecord'
+        recentConversations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConversationRecord'
+        recentActivity:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspaceActivityRecord'
+    RuntimeConfigSource:
+      type: object
+      additionalProperties: false
+      required:
+        - scope
+        - displayPath
+        - sourceKey
+        - exists
+        - loaded
+      properties:
+        scope:
+          type: string
+        ownerId:
+          type: string
+        displayPath:
+          type: string
+        sourceKey:
+          type: string
+        exists:
+          type: boolean
+        loaded:
+          type: boolean
+        contentHash:
+          type: string
+        document: {}
+    RuntimeSecretReferenceStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - scope
+        - path
+        - status
+      properties:
+        scope:
+          type: string
+        path:
+          type: string
+        reference:
+          type: string
+        status:
+          type: string
+    RuntimeConfigValidationResult:
+      type: object
+      additionalProperties: false
+      required:
+        - valid
+        - errors
+        - warnings
+      properties:
+        valid:
+          type: boolean
+        errors:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+    RuntimeEffectiveConfig:
+      type: object
+      additionalProperties: false
+      required:
+        - effectiveConfig
+        - effectiveConfigHash
+        - sources
+        - validation
+        - secretReferences
+      properties:
+        effectiveConfig: {}
+        effectiveConfigHash:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuntimeConfigSource'
+        validation:
+          $ref: '#/components/schemas/RuntimeConfigValidationResult'
+        secretReferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuntimeSecretReferenceStatus'
+    ApiErrorDetailEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - requestId
+        - retryable
+      properties:
+        code:
+          $ref: '#/components/schemas/ApiErrorCode'
+        message:
+          type: string
+        details: {}
+        requestId:
+          type: string
+        retryable:
+          type: boolean
+    ApiErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/ApiErrorDetailEnvelope'

@@ -62,6 +62,7 @@ impl AppError {
     }
 }
 
+#[must_use]
 pub fn normalize_runtime_permission_mode_label(value: &str) -> Option<&'static str> {
     match value.trim() {
         "readonly" | "read-only" => Some(RUNTIME_PERMISSION_READ_ONLY),
@@ -71,6 +72,7 @@ pub fn normalize_runtime_permission_mode_label(value: &str) -> Option<&'static s
     }
 }
 
+#[must_use]
 pub fn create_default_notification_unread_summary() -> NotificationUnreadSummary {
     NotificationUnreadSummary {
         total: 0,
@@ -82,16 +84,17 @@ pub fn create_default_notification_unread_summary() -> NotificationUnreadSummary
     }
 }
 
+#[must_use]
 pub fn normalize_notification_filter_scope(scope: Option<&str>) -> Option<&str> {
     match scope.map(str::trim) {
-        Some("") | Some("all") | None => None,
         Some("app") => Some("app"),
         Some("workspace") => Some("workspace"),
         Some("user") => Some("user"),
-        Some(_) => None,
+        _ => None,
     }
 }
 
+#[must_use]
 pub fn notification_list_response_from_records(
     notifications: Vec<NotificationRecord>,
 ) -> NotificationListResponse {
@@ -118,8 +121,10 @@ pub fn notification_list_response_from_records(
 
 pub trait PreferencesPort: Send + Sync {
     fn load_preferences(&self) -> Result<ShellPreferences, AppError>;
-    fn save_preferences(&self, preferences: &ShellPreferences)
-        -> Result<ShellPreferences, AppError>;
+    fn save_preferences(
+        &self,
+        preferences: &ShellPreferences,
+    ) -> Result<ShellPreferences, AppError>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1751,6 +1756,7 @@ pub struct AuthorizationDecision {
     pub reason: Option<String>,
 }
 
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceCapabilitySet {
@@ -1777,13 +1783,18 @@ pub struct ApiErrorEnvelope {
     pub error: ApiErrorDetail,
 }
 
+#[must_use]
 pub fn timestamp_now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
+    u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis(),
+    )
+    .unwrap_or(u64::MAX)
 }
 
+#[must_use]
 pub fn default_host_state(app_version: String, cargo_workspace: bool) -> HostState {
     HostState {
         platform: "tauri".into(),
@@ -1794,6 +1805,7 @@ pub fn default_host_state(app_version: String, cargo_workspace: bool) -> HostSta
     }
 }
 
+#[must_use]
 pub fn default_preferences(
     default_workspace_id: impl Into<String>,
     default_project_id: impl Into<String>,
@@ -1811,12 +1823,11 @@ pub fn default_preferences(
         left_sidebar_collapsed: false,
         right_sidebar_collapsed: false,
         default_workspace_id: workspace_id.clone(),
-        last_visited_route: format!(
-            "/workspaces/{workspace_id}/overview?project={project_id}"
-        ),
+        last_visited_route: format!("/workspaces/{workspace_id}/overview?project={project_id}"),
     }
 }
 
+#[must_use]
 pub fn default_connection_stubs() -> Vec<ConnectionProfile> {
     vec![ConnectionProfile {
         id: "conn-local".into(),
@@ -1829,10 +1840,12 @@ pub fn default_connection_stubs() -> Vec<ConnectionProfile> {
     }]
 }
 
+#[must_use]
 pub fn normalize_connection_base_url(base_url: &str) -> String {
     base_url.trim().trim_end_matches('/').to_string()
 }
 
+#[must_use]
 pub fn connection_mode_from_transport_security(transport_security: &str) -> String {
     match transport_security {
         "loopback" => "local".into(),
@@ -1841,6 +1854,7 @@ pub fn connection_mode_from_transport_security(transport_security: &str) -> Stri
     }
 }
 
+#[must_use]
 pub fn transport_security_from_connection_mode(mode: &str) -> String {
     match mode {
         "local" => "loopback".into(),
@@ -1849,6 +1863,7 @@ pub fn transport_security_from_connection_mode(mode: &str) -> String {
     }
 }
 
+#[must_use]
 pub fn workspace_connection_status_from_connection_profile(
     connection: &ConnectionProfile,
     backend: Option<&DesktopBackendConnection>,
@@ -1869,6 +1884,7 @@ pub fn workspace_connection_status_from_connection_profile(
     }
 }
 
+#[must_use]
 pub fn workspace_connection_base_url_from_profile(
     connection: &ConnectionProfile,
     backend: Option<&DesktopBackendConnection>,
@@ -1886,6 +1902,7 @@ pub fn workspace_connection_base_url_from_profile(
     "http://127.0.0.1".into()
 }
 
+#[must_use]
 pub fn host_workspace_connection_record_from_profile(
     connection: &ConnectionProfile,
     backend: Option<&DesktopBackendConnection>,
@@ -1902,6 +1919,7 @@ pub fn host_workspace_connection_record_from_profile(
     }
 }
 
+#[must_use]
 pub fn connection_profile_from_host_workspace_connection(
     connection: &HostWorkspaceConnectionRecord,
 ) -> ConnectionProfile {

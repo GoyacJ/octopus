@@ -18,36 +18,34 @@ use axum::{
     Json, Router,
 };
 use octopus_core::{
-    connection_profile_from_host_workspace_connection,
-    create_default_notification_unread_summary, host_workspace_connection_record_from_profile,
-    normalize_connection_base_url, normalize_notification_filter_scope,
-    normalize_runtime_permission_mode_label, notification_list_response_from_records,
-    timestamp_now, AgentRecord, ApiErrorDetail, ApiErrorEnvelope, AppError, AutomationRecord,
-    ClientAppRecord, ConnectionProfile, ConversationRecord, CopyWorkspaceSkillToManagedInput,
-    CreateHostWorkspaceConnectionInput, CreateNotificationInput, CreateProjectRequest,
-    CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput, CreateWorkspaceSkillInput,
-    CreateWorkspaceUserRequest, DesktopBackendConnection, HealthcheckBackendStatus,
-    HealthcheckStatus, HostState, HostWorkspaceConnectionRecord,
+    connection_profile_from_host_workspace_connection, create_default_notification_unread_summary,
+    host_workspace_connection_record_from_profile, normalize_connection_base_url,
+    normalize_notification_filter_scope, normalize_runtime_permission_mode_label,
+    notification_list_response_from_records, timestamp_now, AgentRecord, ApiErrorDetail,
+    ApiErrorEnvelope, AppError, AutomationRecord, ChangeCurrentUserPasswordRequest,
+    ChangeCurrentUserPasswordResponse, ClientAppRecord, ConnectionProfile, ConversationRecord,
+    CopyWorkspaceSkillToManagedInput, CreateHostWorkspaceConnectionInput, CreateNotificationInput,
+    CreateProjectRequest, CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput,
+    CreateWorkspaceSkillInput, CreateWorkspaceUserRequest, DesktopBackendConnection,
+    HealthcheckBackendStatus, HealthcheckStatus, HostState, HostWorkspaceConnectionRecord,
     ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
     ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
     ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, KnowledgeRecord,
-    LoginRequest, MenuRecord, ModelCatalogSnapshot, PermissionRecord, PetConversationBinding,
+    LoginRequest, MenuRecord, ModelCatalogSnapshot, NotificationFilter, NotificationListResponse,
+    NotificationRecord, NotificationUnreadSummary, PermissionRecord, PetConversationBinding,
     PetPresenceState, PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord,
     ProjectDashboardSnapshot, ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord,
-    ProviderCredentialRecord, RegisterWorkspaceOwnerRequest,
-    RegisterWorkspaceOwnerResponse, ResolveRuntimeApprovalInput, RoleRecord,
-    RuntimeConfigPatch, RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
-    RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, SavePetPresenceInput,
-    SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput, TeamRecord,
-    ToolRecord, NotificationFilter, NotificationListResponse, NotificationRecord,
-    NotificationUnreadSummary, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
-    UpdateWorkspaceResourceInput, UpdateWorkspaceUserRequest, UpdateWorkspaceSkillFileInput,
-    UpdateWorkspaceSkillInput, UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput,
+    ProviderCredentialRecord, RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse,
+    ResolveRuntimeApprovalInput, RoleRecord, RuntimeConfigPatch, RuntimeConfigValidationResult,
+    RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
+    SavePetPresenceInput, SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput,
+    TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
+    UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput,
+    UpdateWorkspaceUserRequest, UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput,
     UserCenterAlertRecord, UserCenterOverviewSnapshot, UserRecordSummary, WorkspaceActivityRecord,
     WorkspaceMcpServerDocument, WorkspaceMetricRecord, WorkspaceOverviewSnapshot,
     WorkspaceResourceRecord, WorkspaceSkillDocument, WorkspaceSkillFileDocument,
     WorkspaceSkillTreeDocument, WorkspaceToolCatalogSnapshot, WorkspaceToolDisablePatch,
-    ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse,
 };
 use octopus_platform::PlatformServices;
 use rusqlite::{params, Connection, OptionalExtension};
@@ -240,10 +238,12 @@ fn load_idempotent_response(
     scope: &str,
     request_id: &str,
 ) -> Result<Option<Response>, ApiError> {
-    let cache = state
-        .idempotency_cache
-        .lock()
-        .map_err(|_| ApiError::new(AppError::runtime("idempotency cache mutex poisoned"), request_id))?;
+    let cache = state.idempotency_cache.lock().map_err(|_| {
+        ApiError::new(
+            AppError::runtime("idempotency cache mutex poisoned"),
+            request_id,
+        )
+    })?;
     let Some(body) = cache.get(scope).cloned() else {
         return Ok(None);
     };
@@ -262,10 +262,12 @@ fn store_idempotent_response<T: serde::Serialize>(
 ) -> Result<(), ApiError> {
     let payload = serde_json::to_value(value)
         .map_err(|error| ApiError::new(AppError::Json(error), request_id))?;
-    let mut cache = state
-        .idempotency_cache
-        .lock()
-        .map_err(|_| ApiError::new(AppError::runtime("idempotency cache mutex poisoned"), request_id))?;
+    let mut cache = state.idempotency_cache.lock().map_err(|_| {
+        ApiError::new(
+            AppError::runtime("idempotency cache mutex poisoned"),
+            request_id,
+        )
+    })?;
     cache.insert(scope.to_string(), payload);
     Ok(())
 }
@@ -276,7 +278,13 @@ fn idempotency_scope(
     resource: &str,
     key: &str,
 ) -> String {
-    format!("{}:{}:{}:{}", session.workspace_id, session.user_id, operation, format!("{resource}:{key}"))
+    format!(
+        "{}:{}:{}:{}",
+        session.workspace_id,
+        session.user_id,
+        operation,
+        format!("{resource}:{key}")
+    )
 }
 
 pub fn build_router(state: ServerState) -> Router {
@@ -327,16 +335,28 @@ pub fn build_router(state: ServerState) -> Router {
         .route("/api/v1/apps", get(list_apps).post(register_app))
         .route("/api/v1/workspace", get(workspace))
         .route("/api/v1/workspace/overview", get(workspace_overview))
-        .route("/api/v1/workspace/resources", get(workspace_resources).post(create_workspace_resource))
+        .route(
+            "/api/v1/workspace/resources",
+            get(workspace_resources).post(create_workspace_resource),
+        )
         .route(
             "/api/v1/workspace/resources/:resource_id",
             patch(update_workspace_resource).delete(delete_workspace_resource),
         )
         .route("/api/v1/workspace/knowledge", get(workspace_knowledge))
         .route("/api/v1/workspace/pet", get(workspace_pet_snapshot))
-        .route("/api/v1/workspace/pet/presence", patch(save_workspace_pet_presence))
-        .route("/api/v1/workspace/pet/conversation", put(bind_workspace_pet_conversation))
-        .route("/api/v1/workspace/agents", get(list_agents).post(create_agent))
+        .route(
+            "/api/v1/workspace/pet/presence",
+            patch(save_workspace_pet_presence),
+        )
+        .route(
+            "/api/v1/workspace/pet/conversation",
+            put(bind_workspace_pet_conversation),
+        )
+        .route(
+            "/api/v1/workspace/agents",
+            get(list_agents).post(create_agent),
+        )
         .route(
             "/api/v1/workspace/agents/import-preview",
             post(preview_import_agent_bundle_route),
@@ -410,7 +430,10 @@ pub fn build_router(state: ServerState) -> Router {
                 .patch(update_workspace_mcp_server_route)
                 .delete(delete_workspace_mcp_server_route),
         )
-        .route("/api/v1/workspace/catalog/tools", get(list_tools).post(create_tool))
+        .route(
+            "/api/v1/workspace/catalog/tools",
+            get(list_tools).post(create_tool),
+        )
         .route(
             "/api/v1/workspace/catalog/tools/:tool_id",
             patch(update_tool).delete(delete_tool),
@@ -443,12 +466,18 @@ pub fn build_router(state: ServerState) -> Router {
             "/api/v1/workspace/user-center/profile/password",
             post(change_current_user_password_route),
         )
-        .route("/api/v1/workspace/rbac/users", get(list_users).post(create_user))
+        .route(
+            "/api/v1/workspace/rbac/users",
+            get(list_users).post(create_user),
+        )
         .route(
             "/api/v1/workspace/rbac/users/:user_id",
             patch(update_user).delete(delete_user),
         )
-        .route("/api/v1/workspace/rbac/roles", get(list_roles).post(create_role))
+        .route(
+            "/api/v1/workspace/rbac/roles",
+            get(list_roles).post(create_role),
+        )
         .route(
             "/api/v1/workspace/rbac/roles/:role_id",
             patch(update_role).delete(delete_role),
@@ -461,11 +490,11 @@ pub fn build_router(state: ServerState) -> Router {
             "/api/v1/workspace/rbac/permissions/:permission_id",
             patch(update_permission).delete(delete_permission),
         )
-        .route("/api/v1/workspace/rbac/menus", get(list_menus).post(create_menu))
         .route(
-            "/api/v1/workspace/rbac/menus/:menu_id",
-            patch(update_menu),
+            "/api/v1/workspace/rbac/menus",
+            get(list_menus).post(create_menu),
         )
+        .route("/api/v1/workspace/rbac/menus/:menu_id", patch(update_menu))
         .route("/api/v1/projects", get(projects).post(create_project))
         .route("/api/v1/projects/:project_id", patch(update_project))
         .route(
@@ -543,7 +572,10 @@ fn runtime_routes() -> Router<ServerState> {
             post(probe_runtime_configured_model_route),
         )
         .route("/config/scopes/:scope", patch(save_runtime_config_route))
-        .route("/sessions", get(list_runtime_sessions).post(create_runtime_session))
+        .route(
+            "/sessions",
+            get(list_runtime_sessions).post(create_runtime_session),
+        )
         .route(
             "/sessions/:session_id",
             get(get_runtime_session).delete(delete_runtime_session),
@@ -586,8 +618,9 @@ fn build_healthcheck_status(state: &ServerState) -> HealthcheckStatus {
 
 fn load_host_preferences(state: &ServerState) -> Result<ShellPreferences, ApiError> {
     match fs::read_to_string(&state.host_preferences_path) {
-        Ok(raw) => serde_json::from_str(&raw)
-            .map_err(|error| ApiError::from(AppError::from(error))),
+        Ok(raw) => {
+            serde_json::from_str(&raw).map_err(|error| ApiError::from(AppError::from(error)))
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             Ok(state.host_default_preferences.clone())
         }
@@ -615,8 +648,9 @@ fn load_remote_host_workspace_connections(
     state: &ServerState,
 ) -> Result<Vec<HostWorkspaceConnectionRecord>, ApiError> {
     match fs::read_to_string(&state.host_workspace_connections_path) {
-        Ok(raw) => serde_json::from_str(&raw)
-            .map_err(|error| ApiError::from(AppError::from(error))),
+        Ok(raw) => {
+            serde_json::from_str(&raw).map_err(|error| ApiError::from(AppError::from(error)))
+        }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
         Err(error) => Err(ApiError::from(AppError::from(error))),
     }
@@ -696,7 +730,11 @@ fn delete_host_workspace_connection(
     state: &ServerState,
     connection_id: &str,
 ) -> Result<(), ApiError> {
-    if state.host_connections.iter().any(|connection| connection.id == connection_id) {
+    if state
+        .host_connections
+        .iter()
+        .any(|connection| connection.id == connection_id)
+    {
         return Err(ApiError::from(AppError::invalid_input(
             "local workspace connection cannot be deleted",
         )));
@@ -724,8 +762,8 @@ fn open_host_notifications_db(state: &ServerState) -> Result<Connection, ApiErro
         fs::create_dir_all(parent).map_err(|error| ApiError::from(AppError::from(error)))?;
     }
 
-    let connection =
-        Connection::open(path).map_err(|error| ApiError::from(AppError::database(error.to_string())))?;
+    let connection = Connection::open(path)
+        .map_err(|error| ApiError::from(AppError::database(error.to_string())))?;
     connection
         .execute_batch(
             "CREATE TABLE IF NOT EXISTS notifications (
@@ -892,7 +930,9 @@ fn get_host_notification_unread_summary(
         .prepare("SELECT scope_kind, COUNT(*) FROM notifications WHERE read_at IS NULL GROUP BY scope_kind")
         .map_err(|error| ApiError::from(AppError::database(error.to_string())))?;
     let counts = statement
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?)))
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+        })
         .map_err(|error| ApiError::from(AppError::database(error.to_string())))?;
 
     let mut summary = create_default_notification_unread_summary();
@@ -1111,7 +1151,10 @@ async fn dismiss_host_notification_toast_route(
 ) -> Result<Json<NotificationRecord>, ApiError> {
     let request_id = request_id(&headers);
     ensure_host_authorized(&state, &headers, &request_id)?;
-    Ok(Json(dismiss_host_notification_toast(&state, &notification_id)?))
+    Ok(Json(dismiss_host_notification_toast(
+        &state,
+        &notification_id,
+    )?))
 }
 
 async fn get_host_notification_unread_summary_route(
@@ -1258,7 +1301,9 @@ async fn create_project(
 ) -> Result<Json<ProjectRecord>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
     let request = validate_create_project_request(request)?;
-    Ok(Json(state.services.workspace.create_project(request).await?))
+    Ok(Json(
+        state.services.workspace.create_project(request).await?,
+    ))
 }
 
 async fn update_project(
@@ -1269,7 +1314,13 @@ async fn update_project(
 ) -> Result<Json<ProjectRecord>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
     let request = validate_update_project_request(request)?;
-    Ok(Json(state.services.workspace.update_project(&project_id, request).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .update_project(&project_id, request)
+            .await?,
+    ))
 }
 
 async fn project_dashboard(
@@ -1282,8 +1333,16 @@ async fn project_dashboard(
     let project = lookup_project(&state, &project_id).await?;
     let conversations = list_conversation_records(&state, Some(&project_id)).await?;
     let recent_activity = list_activity_records(&state, Some(&project_id)).await?;
-    let resources = state.services.workspace.list_project_resources(&project_id).await?;
-    let knowledge = state.services.workspace.list_project_knowledge(&project_id).await?;
+    let resources = state
+        .services
+        .workspace
+        .list_project_resources(&project_id)
+        .await?;
+    let knowledge = state
+        .services
+        .workspace
+        .list_project_knowledge(&project_id)
+        .await?;
     let agents = state
         .services
         .workspace
@@ -1311,7 +1370,9 @@ async fn workspace_resources(
     headers: HeaderMap,
 ) -> Result<Json<Vec<WorkspaceResourceRecord>>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.list_workspace_resources().await?))
+    Ok(Json(
+        state.services.workspace.list_workspace_resources().await?,
+    ))
 }
 
 async fn project_resources(
@@ -1320,7 +1381,13 @@ async fn project_resources(
     Path(project_id): Path<String>,
 ) -> Result<Json<Vec<WorkspaceResourceRecord>>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
-    Ok(Json(state.services.workspace.list_project_resources(&project_id).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .list_project_resources(&project_id)
+            .await?,
+    ))
 }
 
 async fn create_workspace_resource(
@@ -1433,7 +1500,9 @@ async fn workspace_knowledge(
     headers: HeaderMap,
 ) -> Result<Json<Vec<KnowledgeRecord>>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.list_workspace_knowledge().await?))
+    Ok(Json(
+        state.services.workspace.list_workspace_knowledge().await?,
+    ))
 }
 
 async fn project_knowledge(
@@ -1442,7 +1511,13 @@ async fn project_knowledge(
     Path(project_id): Path<String>,
 ) -> Result<Json<Vec<KnowledgeRecord>>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
-    Ok(Json(state.services.workspace.list_project_knowledge(&project_id).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .list_project_knowledge(&project_id)
+            .await?,
+    ))
 }
 
 async fn workspace_pet_snapshot(
@@ -1450,7 +1525,13 @@ async fn workspace_pet_snapshot(
     headers: HeaderMap,
 ) -> Result<Json<PetWorkspaceSnapshot>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.get_workspace_pet_snapshot().await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .get_workspace_pet_snapshot()
+            .await?,
+    ))
 }
 
 async fn project_pet_snapshot(
@@ -1459,7 +1540,13 @@ async fn project_pet_snapshot(
     Path(project_id): Path<String>,
 ) -> Result<Json<PetWorkspaceSnapshot>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
-    Ok(Json(state.services.workspace.get_project_pet_snapshot(&project_id).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .get_project_pet_snapshot(&project_id)
+            .await?,
+    ))
 }
 
 async fn save_workspace_pet_presence(
@@ -1468,7 +1555,13 @@ async fn save_workspace_pet_presence(
     Json(input): Json<SavePetPresenceInput>,
 ) -> Result<Json<PetPresenceState>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.save_workspace_pet_presence(input).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .save_workspace_pet_presence(input)
+            .await?,
+    ))
 }
 
 async fn save_project_pet_presence(
@@ -1478,7 +1571,13 @@ async fn save_project_pet_presence(
     Json(input): Json<SavePetPresenceInput>,
 ) -> Result<Json<PetPresenceState>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
-    Ok(Json(state.services.workspace.save_project_pet_presence(&project_id, input).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .save_project_pet_presence(&project_id, input)
+            .await?,
+    ))
 }
 
 async fn bind_workspace_pet_conversation(
@@ -1487,7 +1586,13 @@ async fn bind_workspace_pet_conversation(
     Json(input): Json<octopus_core::BindPetConversationInput>,
 ) -> Result<Json<PetConversationBinding>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.bind_workspace_pet_conversation(input).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .bind_workspace_pet_conversation(input)
+            .await?,
+    ))
 }
 
 async fn bind_project_pet_conversation(
@@ -1497,7 +1602,13 @@ async fn bind_project_pet_conversation(
     Json(input): Json<octopus_core::BindPetConversationInput>,
 ) -> Result<Json<PetConversationBinding>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
-    Ok(Json(state.services.workspace.bind_project_pet_conversation(&project_id, input).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .bind_project_pet_conversation(&project_id, input)
+            .await?,
+    ))
 }
 
 async fn list_agents(
@@ -1513,7 +1624,13 @@ async fn create_agent(
     headers: HeaderMap,
     Json(input): Json<UpsertAgentInput>,
 ) -> Result<Json<AgentRecord>, ApiError> {
-    ensure_authorized_session(&state, &headers, "workspace.read", input.project_id.as_deref()).await?;
+    ensure_authorized_session(
+        &state,
+        &headers,
+        "workspace.read",
+        input.project_id.as_deref(),
+    )
+    .await?;
     Ok(Json(state.services.workspace.create_agent(input).await?))
 }
 
@@ -1539,11 +1656,7 @@ async fn import_agent_bundle_route(
 ) -> Result<Json<ImportWorkspaceAgentBundleResult>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.write", None).await?;
     Ok(Json(
-        state
-            .services
-            .workspace
-            .import_agent_bundle(input)
-            .await?,
+        state.services.workspace.import_agent_bundle(input).await?,
     ))
 }
 
@@ -1553,8 +1666,20 @@ async fn update_agent(
     Path(agent_id): Path<String>,
     Json(input): Json<UpsertAgentInput>,
 ) -> Result<Json<AgentRecord>, ApiError> {
-    ensure_authorized_session(&state, &headers, "workspace.read", input.project_id.as_deref()).await?;
-    Ok(Json(state.services.workspace.update_agent(&agent_id, input).await?))
+    ensure_authorized_session(
+        &state,
+        &headers,
+        "workspace.read",
+        input.project_id.as_deref(),
+    )
+    .await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .update_agent(&agent_id, input)
+            .await?,
+    ))
 }
 
 async fn delete_agent(
@@ -1580,7 +1705,13 @@ async fn create_team(
     headers: HeaderMap,
     Json(input): Json<UpsertTeamInput>,
 ) -> Result<Json<TeamRecord>, ApiError> {
-    ensure_authorized_session(&state, &headers, "workspace.read", input.project_id.as_deref()).await?;
+    ensure_authorized_session(
+        &state,
+        &headers,
+        "workspace.read",
+        input.project_id.as_deref(),
+    )
+    .await?;
     Ok(Json(state.services.workspace.create_team(input).await?))
 }
 
@@ -1590,8 +1721,20 @@ async fn update_team(
     Path(team_id): Path<String>,
     Json(input): Json<UpsertTeamInput>,
 ) -> Result<Json<TeamRecord>, ApiError> {
-    ensure_authorized_session(&state, &headers, "workspace.read", input.project_id.as_deref()).await?;
-    Ok(Json(state.services.workspace.update_team(&team_id, input).await?))
+    ensure_authorized_session(
+        &state,
+        &headers,
+        "workspace.read",
+        input.project_id.as_deref(),
+    )
+    .await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .update_team(&team_id, input)
+            .await?,
+    ))
 }
 
 async fn delete_team(
@@ -1631,7 +1774,9 @@ async fn link_project_agent(
             "project_id in path and body must match",
         )));
     }
-    Ok(Json(state.services.workspace.link_project_agent(input).await?))
+    Ok(Json(
+        state.services.workspace.link_project_agent(input).await?,
+    ))
 }
 
 async fn unlink_project_agent(
@@ -1675,7 +1820,9 @@ async fn link_project_team(
             "project_id in path and body must match",
         )));
     }
-    Ok(Json(state.services.workspace.link_project_team(input).await?))
+    Ok(Json(
+        state.services.workspace.link_project_team(input).await?,
+    ))
 }
 
 async fn unlink_project_team(
@@ -1697,7 +1844,9 @@ async fn workspace_catalog_models(
     headers: HeaderMap,
 ) -> Result<Json<ModelCatalogSnapshot>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.runtime_registry.catalog_snapshot().await?))
+    Ok(Json(
+        state.services.runtime_registry.catalog_snapshot().await?,
+    ))
 }
 
 async fn workspace_provider_credentials(
@@ -1705,7 +1854,9 @@ async fn workspace_provider_credentials(
     headers: HeaderMap,
 ) -> Result<Json<Vec<ProviderCredentialRecord>>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.list_provider_credentials().await?))
+    Ok(Json(
+        state.services.workspace.list_provider_credentials().await?,
+    ))
 }
 
 async fn workspace_tool_catalog(
@@ -1737,7 +1888,13 @@ async fn get_workspace_skill_route(
     Path(skill_id): Path<String>,
 ) -> Result<Json<WorkspaceSkillDocument>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.get_workspace_skill(&skill_id).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .get_workspace_skill(&skill_id)
+            .await?,
+    ))
 }
 
 async fn get_workspace_skill_tree_route(
@@ -1961,7 +2118,13 @@ async fn update_tool(
     Json(record): Json<ToolRecord>,
 ) -> Result<Json<ToolRecord>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.update_tool(&tool_id, record).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .update_tool(&tool_id, record)
+            .await?,
+    ))
 }
 
 async fn delete_tool(
@@ -1987,8 +2150,16 @@ async fn create_automation(
     headers: HeaderMap,
     Json(record): Json<AutomationRecord>,
 ) -> Result<Json<AutomationRecord>, ApiError> {
-    ensure_authorized_session(&state, &headers, "workspace.read", record.project_id.as_deref()).await?;
-    Ok(Json(state.services.workspace.create_automation(record).await?))
+    ensure_authorized_session(
+        &state,
+        &headers,
+        "workspace.read",
+        record.project_id.as_deref(),
+    )
+    .await?;
+    Ok(Json(
+        state.services.workspace.create_automation(record).await?,
+    ))
 }
 
 async fn update_automation(
@@ -1997,8 +2168,20 @@ async fn update_automation(
     Path(automation_id): Path<String>,
     Json(record): Json<AutomationRecord>,
 ) -> Result<Json<AutomationRecord>, ApiError> {
-    ensure_authorized_session(&state, &headers, "workspace.read", record.project_id.as_deref()).await?;
-    Ok(Json(state.services.workspace.update_automation(&automation_id, record).await?))
+    ensure_authorized_session(
+        &state,
+        &headers,
+        "workspace.read",
+        record.project_id.as_deref(),
+    )
+    .await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .update_automation(&automation_id, record)
+            .await?,
+    ))
 }
 
 async fn delete_automation(
@@ -2032,7 +2215,12 @@ async fn user_center_overview(
 
     let role_names = roles
         .iter()
-        .filter(|record| current_user.role_ids.iter().any(|role_id| role_id == &record.id))
+        .filter(|record| {
+            current_user
+                .role_ids
+                .iter()
+                .any(|role_id| role_id == &record.id)
+        })
         .map(|record| record.name.clone())
         .collect::<Vec<_>>();
     let quick_links = menus
@@ -2080,7 +2268,13 @@ async fn update_user(
     Json(request): Json<UpdateWorkspaceUserRequest>,
 ) -> Result<Json<UserRecordSummary>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.update_user(&user_id, request).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .update_user(&user_id, request)
+            .await?,
+    ))
 }
 
 async fn delete_user(
@@ -2104,11 +2298,13 @@ async fn update_current_user_profile_route(
     Json(request): Json<UpdateCurrentUserProfileRequest>,
 ) -> Result<Json<UserRecordSummary>, ApiError> {
     let session = ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state
-        .services
-        .workspace
-        .update_current_user_profile(&session.user_id, request)
-        .await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .update_current_user_profile(&session.user_id, request)
+            .await?,
+    ))
 }
 
 async fn change_current_user_password_route(
@@ -2117,11 +2313,13 @@ async fn change_current_user_password_route(
     Json(request): Json<ChangeCurrentUserPasswordRequest>,
 ) -> Result<Json<ChangeCurrentUserPasswordResponse>, ApiError> {
     let session = ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state
-        .services
-        .workspace
-        .change_current_user_password(&session.user_id, request)
-        .await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .change_current_user_password(&session.user_id, request)
+            .await?,
+    ))
 }
 
 async fn list_roles(
@@ -2148,7 +2346,13 @@ async fn update_role(
     Json(record): Json<RoleRecord>,
 ) -> Result<Json<RoleRecord>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.update_role(&role_id, record).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .update_role(&role_id, record)
+            .await?,
+    ))
 }
 
 async fn delete_role(
@@ -2175,7 +2379,9 @@ async fn create_permission(
     Json(record): Json<PermissionRecord>,
 ) -> Result<Json<PermissionRecord>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.create_permission(record).await?))
+    Ok(Json(
+        state.services.workspace.create_permission(record).await?,
+    ))
 }
 
 async fn update_permission(
@@ -2200,7 +2406,11 @@ async fn delete_permission(
     Path(permission_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    state.services.workspace.delete_permission(&permission_id).await?;
+    state
+        .services
+        .workspace
+        .delete_permission(&permission_id)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -2228,7 +2438,13 @@ async fn update_menu(
     Json(record): Json<MenuRecord>,
 ) -> Result<Json<MenuRecord>, ApiError> {
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state.services.workspace.update_menu(&menu_id, record).await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .update_menu(&menu_id, record)
+            .await?,
+    ))
 }
 
 async fn inbox(
@@ -2283,7 +2499,9 @@ async fn validate_runtime_config_route(
     _headers: HeaderMap,
     Json(patch): Json<RuntimeConfigPatch>,
 ) -> Result<Json<RuntimeConfigValidationResult>, ApiError> {
-    Ok(Json(state.services.runtime_config.validate_config(patch).await?))
+    Ok(Json(
+        state.services.runtime_config.validate_config(patch).await?,
+    ))
 }
 
 async fn probe_runtime_configured_model_route(
@@ -2306,11 +2524,13 @@ async fn save_runtime_config_route(
     Path(scope): Path<String>,
     Json(patch): Json<RuntimeConfigPatch>,
 ) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
-    Ok(Json(state
-        .services
-        .runtime_config
-        .save_config(&scope, patch)
-        .await?))
+    Ok(Json(
+        state
+            .services
+            .runtime_config
+            .save_config(&scope, patch)
+            .await?,
+    ))
 }
 
 async fn get_project_runtime_config_route(
@@ -2320,11 +2540,13 @@ async fn get_project_runtime_config_route(
 ) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
     let session =
         ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
-    Ok(Json(state
-        .services
-        .runtime_config
-        .get_project_config(&project_id, &session.user_id)
-        .await?))
+    Ok(Json(
+        state
+            .services
+            .runtime_config
+            .get_project_config(&project_id, &session.user_id)
+            .await?,
+    ))
 }
 
 async fn validate_project_runtime_config_route(
@@ -2335,11 +2557,13 @@ async fn validate_project_runtime_config_route(
 ) -> Result<Json<RuntimeConfigValidationResult>, ApiError> {
     let session =
         ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
-    Ok(Json(state
-        .services
-        .runtime_config
-        .validate_project_config(&project_id, &session.user_id, patch)
-        .await?))
+    Ok(Json(
+        state
+            .services
+            .runtime_config
+            .validate_project_config(&project_id, &session.user_id, patch)
+            .await?,
+    ))
 }
 
 async fn save_project_runtime_config_route(
@@ -2350,11 +2574,13 @@ async fn save_project_runtime_config_route(
 ) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
     let session =
         ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
-    Ok(Json(state
-        .services
-        .runtime_config
-        .save_project_config(&project_id, &session.user_id, patch)
-        .await?))
+    Ok(Json(
+        state
+            .services
+            .runtime_config
+            .save_project_config(&project_id, &session.user_id, patch)
+            .await?,
+    ))
 }
 
 async fn get_user_runtime_config_route(
@@ -2362,11 +2588,13 @@ async fn get_user_runtime_config_route(
     headers: HeaderMap,
 ) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
     let session = ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state
-        .services
-        .runtime_config
-        .get_user_config(&session.user_id)
-        .await?))
+    Ok(Json(
+        state
+            .services
+            .runtime_config
+            .get_user_config(&session.user_id)
+            .await?,
+    ))
 }
 
 async fn validate_user_runtime_config_route(
@@ -2375,11 +2603,13 @@ async fn validate_user_runtime_config_route(
     Json(patch): Json<RuntimeConfigPatch>,
 ) -> Result<Json<RuntimeConfigValidationResult>, ApiError> {
     let session = ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state
-        .services
-        .runtime_config
-        .validate_user_config(&session.user_id, patch)
-        .await?))
+    Ok(Json(
+        state
+            .services
+            .runtime_config
+            .validate_user_config(&session.user_id, patch)
+            .await?,
+    ))
 }
 
 async fn save_user_runtime_config_route(
@@ -2388,11 +2618,13 @@ async fn save_user_runtime_config_route(
     Json(patch): Json<RuntimeConfigPatch>,
 ) -> Result<Json<RuntimeEffectiveConfig>, ApiError> {
     let session = ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
-    Ok(Json(state
-        .services
-        .runtime_config
-        .save_user_config(&session.user_id, patch)
-        .await?))
+    Ok(Json(
+        state
+            .services
+            .runtime_config
+            .save_user_config(&session.user_id, patch)
+            .await?,
+    ))
 }
 
 fn metric_record(id: &str, label: &str, value: usize) -> WorkspaceMetricRecord {
@@ -2455,7 +2687,10 @@ async fn list_activity_records(
         .map(|record| WorkspaceActivityRecord {
             id: record.id,
             title: record.action,
-            description: format!("{} {} {}", record.actor_type, record.actor_id, record.outcome),
+            description: format!(
+                "{} {} {}",
+                record.actor_type, record.actor_id, record.outcome
+            ),
             timestamp: record.created_at,
         })
         .collect())
@@ -2500,11 +2735,22 @@ async fn create_runtime_session(
 ) -> Result<Response, ApiError> {
     let request_id = request_id(&headers);
     let project_id = normalize_project_scope(&input.project_id);
-    let session =
-        ensure_authorized_session_with_request_id(&state, &headers, "runtime.read", project_id, &request_id)
-            .await?;
-    let idempotency_scope = idempotency_key(&headers)
-        .map(|key| idempotency_scope(&session, "runtime.create_session", &input.conversation_id, &key));
+    let session = ensure_authorized_session_with_request_id(
+        &state,
+        &headers,
+        "runtime.read",
+        project_id,
+        &request_id,
+    )
+    .await?;
+    let idempotency_scope = idempotency_key(&headers).map(|key| {
+        idempotency_scope(
+            &session,
+            "runtime.create_session",
+            &input.conversation_id,
+            &key,
+        )
+    });
     if let Some(scope) = idempotency_scope.as_deref() {
         if let Some(response) = load_idempotent_response(&state, scope, &request_id)? {
             return Ok(response);
@@ -2532,7 +2778,13 @@ async fn get_runtime_session(
 ) -> Result<Json<octopus_core::RuntimeSessionDetail>, ApiError> {
     let project_id = runtime_project_scope(&state, &session_id).await?;
     ensure_authorized_session(&state, &headers, "runtime.read", project_id.as_deref()).await?;
-    Ok(Json(state.services.runtime_session.get_session(&session_id).await?))
+    Ok(Json(
+        state
+            .services
+            .runtime_session
+            .get_session(&session_id)
+            .await?,
+    ))
 }
 
 async fn delete_runtime_session(
@@ -2542,7 +2794,11 @@ async fn delete_runtime_session(
 ) -> Result<StatusCode, ApiError> {
     let project_id = runtime_project_scope(&state, &session_id).await?;
     ensure_authorized_session(&state, &headers, "runtime.read", project_id.as_deref()).await?;
-    state.services.runtime_session.delete_session(&session_id).await?;
+    state
+        .services
+        .runtime_session
+        .delete_session(&session_id)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -2631,8 +2887,14 @@ async fn runtime_events(
 ) -> Result<Response, ApiError> {
     let request_id = request_id(&headers);
     let project_id = runtime_project_scope(&state, &session_id).await?;
-    ensure_authorized_session_with_request_id(&state, &headers, "runtime.read", project_id.as_deref(), &request_id)
-        .await?;
+    ensure_authorized_session_with_request_id(
+        &state,
+        &headers,
+        "runtime.read",
+        project_id.as_deref(),
+        &request_id,
+    )
+    .await?;
 
     let replay_after = query.after.or_else(|| last_event_id(&headers));
 
@@ -2815,12 +3077,13 @@ fn normalize_runtime_submit_input(input: &mut SubmitRuntimeTurnInput) -> Result<
         .take()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
-    let normalized = normalize_runtime_permission_mode_label(&input.permission_mode).ok_or_else(|| {
-        ApiError::from(AppError::invalid_input(format!(
-            "unsupported permission mode: {}",
-            input.permission_mode
-        )))
-    })?;
+    let normalized =
+        normalize_runtime_permission_mode_label(&input.permission_mode).ok_or_else(|| {
+            ApiError::from(AppError::invalid_input(format!(
+                "unsupported permission mode: {}",
+                input.permission_mode
+            )))
+        })?;
     input.permission_mode = normalized.to_string();
     Ok(())
 }
@@ -2829,7 +3092,11 @@ async fn runtime_project_scope(
     state: &ServerState,
     session_id: &str,
 ) -> Result<Option<String>, ApiError> {
-    let detail = state.services.runtime_session.get_session(session_id).await?;
+    let detail = state
+        .services
+        .runtime_session
+        .get_session(session_id)
+        .await?;
     Ok(normalize_project_scope(&detail.summary.project_id).map(ToOwned::to_owned))
 }
 
@@ -2858,13 +3125,16 @@ fn accepts_sse(headers: &HeaderMap) -> bool {
 mod tests {
     use std::sync::Arc;
 
-    use axum::{body::{to_bytes, Body}, http::{Method, Request}};
+    use axum::{
+        body::{to_bytes, Body},
+        http::{Method, Request},
+    };
     use octopus_core::{
         ApiErrorEnvelope, CreateRuntimeSessionInput, LoginRequest, LoginResponse,
-        RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse,
-        ResolveRuntimeApprovalInput, RuntimeConfigPatch, RuntimeConfigValidationResult,
-        RuntimeEffectiveConfig, RuntimeEventEnvelope, RuntimeSessionDetail, RuntimeRunSnapshot,
-        SessionRecord, SubmitRuntimeTurnInput,
+        RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse, ResolveRuntimeApprovalInput,
+        RuntimeConfigPatch, RuntimeConfigValidationResult, RuntimeEffectiveConfig,
+        RuntimeEventEnvelope, RuntimeRunSnapshot, RuntimeSessionDetail, SessionRecord,
+        SubmitRuntimeTurnInput,
     };
     use octopus_infra::{build_infra_bundle, InfraBundle};
     use octopus_platform::{ObservationService, PlatformServices};
@@ -2970,7 +3240,9 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
-        decode_json::<RegisterWorkspaceOwnerResponse>(response).await.session
+        decode_json::<RegisterWorkspaceOwnerResponse>(response)
+            .await
+            .session
     }
 
     async fn login_owner_session(router: &Router, client_app_id: &str) -> SessionRecord {
@@ -3068,10 +3340,7 @@ mod tests {
         decode_json::<RuntimeSessionDetail>(response).await
     }
 
-    async fn get_runtime_config(
-        router: &Router,
-        token: &str,
-    ) -> RuntimeEffectiveConfig {
+    async fn get_runtime_config(router: &Router, token: &str) -> RuntimeEffectiveConfig {
         let response = router
             .clone()
             .oneshot(
@@ -3121,11 +3390,7 @@ mod tests {
         decode_json::<Value>(response).await
     }
 
-    async fn patch_tool_catalog_disabled(
-        router: &Router,
-        token: &str,
-        body: Value,
-    ) -> Response {
+    async fn patch_tool_catalog_disabled(router: &Router, token: &str, body: Value) -> Response {
         router
             .clone()
             .oneshot(
@@ -3256,11 +3521,7 @@ mod tests {
             .expect("response")
     }
 
-    async fn import_workspace_skill_folder(
-        router: &Router,
-        token: &str,
-        body: Value,
-    ) -> Response {
+    async fn import_workspace_skill_folder(router: &Router, token: &str, body: Value) -> Response {
         router
             .clone()
             .oneshot(
@@ -3328,17 +3589,15 @@ mod tests {
             .expect("response")
     }
 
-    async fn get_workspace_mcp_server(
-        router: &Router,
-        token: &str,
-        server_name: &str,
-    ) -> Response {
+    async fn get_workspace_mcp_server(router: &Router, token: &str, server_name: &str) -> Response {
         router
             .clone()
             .oneshot(
                 Request::builder()
                     .method(Method::GET)
-                    .uri(format!("/api/v1/workspace/catalog/mcp-servers/{server_name}"))
+                    .uri(format!(
+                        "/api/v1/workspace/catalog/mcp-servers/{server_name}"
+                    ))
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
                     .body(Body::empty())
                     .expect("request"),
@@ -3358,7 +3617,9 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::PATCH)
-                    .uri(format!("/api/v1/workspace/catalog/mcp-servers/{server_name}"))
+                    .uri(format!(
+                        "/api/v1/workspace/catalog/mcp-servers/{server_name}"
+                    ))
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(serde_json::to_vec(&body).expect("json")))
@@ -3378,7 +3639,9 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::DELETE)
-                    .uri(format!("/api/v1/workspace/catalog/mcp-servers/{server_name}"))
+                    .uri(format!(
+                        "/api/v1/workspace/catalog/mcp-servers/{server_name}"
+                    ))
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
                     .body(Body::empty())
                     .expect("request"),
@@ -3404,11 +3667,7 @@ mod tests {
         decode_json::<Value>(response).await
     }
 
-    async fn create_project(
-        router: &Router,
-        token: &str,
-        body: Value,
-    ) -> Response {
+    async fn create_project(router: &Router, token: &str, body: Value) -> Response {
         router
             .clone()
             .oneshot(
@@ -3546,12 +3805,7 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("response body");
-        assert_eq!(
-            status,
-            StatusCode::OK,
-            "{}",
-            String::from_utf8_lossy(&body)
-        );
+        assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
         serde_json::from_slice::<RuntimeEffectiveConfig>(&body).expect("runtime config json")
     }
 
@@ -3682,7 +3936,9 @@ mod tests {
             .clone()
             .oneshot(
                 Request::builder()
-                    .uri(format!("/api/v1/runtime/sessions/{session_id}/events?after={after}"))
+                    .uri(format!(
+                        "/api/v1/runtime/sessions/{session_id}/events?after={after}"
+                    ))
                     .header(header::AUTHORIZATION, format!("Bearer {token}"))
                     .body(Body::empty())
                     .expect("request"),
@@ -3710,11 +3966,7 @@ mod tests {
         }
         let response = router
             .clone()
-            .oneshot(
-                request
-                    .body(Body::empty())
-                    .expect("request"),
-            )
+            .oneshot(request.body(Body::empty()).expect("request"))
             .await
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
@@ -3866,8 +4118,14 @@ mod tests {
         let created: Value = decode_json(create_response).await;
         assert_eq!(created["name"], "Agent Studio");
         assert_eq!(created["status"], "active");
-        assert_eq!(created["assignments"]["models"]["configuredModelIds"], json!(["anthropic-primary"]));
-        assert_eq!(created["assignments"]["tools"]["sourceKeys"], json!(["builtin:bash"]));
+        assert_eq!(
+            created["assignments"]["models"]["configuredModelIds"],
+            json!(["anthropic-primary"])
+        );
+        assert_eq!(
+            created["assignments"]["tools"]["sourceKeys"],
+            json!(["builtin:bash"])
+        );
 
         let created_id = created["id"].as_str().expect("project id");
         let update_response = update_project(
@@ -3898,8 +4156,14 @@ mod tests {
         let updated: Value = decode_json(update_response).await;
         assert_eq!(updated["status"], "archived");
         assert_eq!(updated["description"], "Updated project workspace surface.");
-        assert_eq!(updated["assignments"]["models"]["configuredModelIds"], json!(["anthropic-alt"]));
-        assert_eq!(updated["assignments"]["tools"]["sourceKeys"], json!(["builtin:bash", "mcp:ops"]));
+        assert_eq!(
+            updated["assignments"]["models"]["configuredModelIds"],
+            json!(["anthropic-alt"])
+        );
+        assert_eq!(
+            updated["assignments"]["tools"]["sourceKeys"],
+            json!(["builtin:bash", "mcp:ops"])
+        );
     }
 
     #[tokio::test]
@@ -3979,13 +4243,11 @@ mod tests {
     #[tokio::test]
     async fn workspace_tool_catalog_returns_runtime_backed_entries() {
         let harness = test_harness();
-        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+        let token = register_owner_session(&harness.router, "octopus-desktop")
+            .await
+            .token;
 
-        let skill_dir = harness
-            .infra
-            .paths
-            .root
-            .join("data/skills/help");
+        let skill_dir = harness.infra.paths.root.join("data/skills/help");
         std::fs::create_dir_all(&skill_dir).expect("skill dir");
         std::fs::write(
             skill_dir.join("SKILL.md"),
@@ -4013,18 +4275,25 @@ mod tests {
         let payload = get_tool_catalog(&harness.router, &token).await;
         let entries = payload["entries"].as_array().expect("entries array");
 
-        assert!(entries.iter().any(|entry| entry["kind"] == "builtin" && entry["name"] == "bash"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry["kind"] == "builtin" && entry["name"] == "bash"));
         let skill_entry = entries
             .iter()
             .find(|entry| entry["kind"] == "skill" && entry["name"] == "help")
             .expect("skill entry");
         assert_eq!(skill_entry["disabled"], Value::Bool(false));
         assert_eq!(skill_entry["workspaceOwned"], Value::Bool(true));
-        assert_eq!(skill_entry["relativePath"], Value::String("data/skills/help/SKILL.md".into()));
+        assert_eq!(
+            skill_entry["relativePath"],
+            Value::String("data/skills/help/SKILL.md".into())
+        );
         assert_eq!(skill_entry["management"]["canEdit"], Value::Bool(true));
         assert_eq!(skill_entry["management"]["canDelete"], Value::Bool(true));
         assert_eq!(skill_entry["management"]["canDisable"], Value::Bool(true));
-        assert!(entries.iter().any(|entry| entry["kind"] == "mcp" && entry["serverName"] == "ops"));
+        assert!(entries
+            .iter()
+            .any(|entry| entry["kind"] == "mcp" && entry["serverName"] == "ops"));
         let builtin_entry = entries
             .iter()
             .find(|entry| entry["kind"] == "builtin" && entry["name"] == "bash")
@@ -4038,7 +4307,9 @@ mod tests {
     #[tokio::test]
     async fn workspace_tool_catalog_disable_route_persists_runtime_overrides() {
         let harness = test_harness();
-        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+        let token = register_owner_session(&harness.router, "octopus-desktop")
+            .await
+            .token;
 
         let skill_dir = harness.infra.paths.root.join("data/skills/help");
         std::fs::create_dir_all(&skill_dir).expect("skill dir");
@@ -4110,7 +4381,11 @@ mod tests {
         }
 
         let written = std::fs::read_to_string(
-            harness.infra.paths.runtime_config_dir.join("workspace.json"),
+            harness
+                .infra
+                .paths
+                .runtime_config_dir
+                .join("workspace.json"),
         )
         .expect("workspace config");
         assert!(written.contains("\"toolCatalog\""));
@@ -4122,7 +4397,9 @@ mod tests {
     #[tokio::test]
     async fn workspace_skill_routes_create_update_and_delete_workspace_owned_skills() {
         let harness = test_harness();
-        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+        let token = register_owner_session(&harness.router, "octopus-desktop")
+            .await
+            .token;
 
         let create_response = create_workspace_skill(
             &harness.router,
@@ -4176,7 +4453,9 @@ mod tests {
     #[tokio::test]
     async fn workspace_skill_routes_expose_tree_and_file_documents_for_managed_skills() {
         let harness = test_harness();
-        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+        let token = register_owner_session(&harness.router, "octopus-desktop")
+            .await
+            .token;
 
         let skill_dir = harness.infra.paths.root.join("data/skills/ops-helper");
         std::fs::create_dir_all(skill_dir.join("templates")).expect("skill dir");
@@ -4206,7 +4485,8 @@ mod tests {
         assert!(nodes.iter().any(|node| node["path"] == "templates"));
 
         let file_response =
-            get_workspace_skill_file(&harness.router, &token, &skill_id, "templates/prompt.md").await;
+            get_workspace_skill_file(&harness.router, &token, &skill_id, "templates/prompt.md")
+                .await;
         assert_eq!(file_response.status(), StatusCode::OK);
         let file: Value = decode_json(file_response).await;
         assert_eq!(file["path"], "templates/prompt.md");
@@ -4224,9 +4504,15 @@ mod tests {
     #[tokio::test]
     async fn workspace_skill_routes_reject_mutating_non_workspace_owned_entries() {
         let harness = test_harness();
-        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+        let token = register_owner_session(&harness.router, "octopus-desktop")
+            .await
+            .token;
 
-        let skill_dir = harness.infra.paths.root.join(".claude/skills/external-help");
+        let skill_dir = harness
+            .infra
+            .paths
+            .root
+            .join(".claude/skills/external-help");
         std::fs::create_dir_all(&skill_dir).expect("skill dir");
         std::fs::write(
             skill_dir.join("SKILL.md"),
@@ -4262,9 +4548,15 @@ mod tests {
     #[tokio::test]
     async fn workspace_skill_routes_copy_external_skill_to_managed_root() {
         let harness = test_harness();
-        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+        let token = register_owner_session(&harness.router, "octopus-desktop")
+            .await
+            .token;
 
-        let skill_dir = harness.infra.paths.root.join(".claude/skills/external-help");
+        let skill_dir = harness
+            .infra
+            .paths
+            .root
+            .join(".claude/skills/external-help");
         std::fs::create_dir_all(skill_dir.join("templates")).expect("skill dir");
         std::fs::write(
             skill_dir.join("SKILL.md"),
@@ -4310,7 +4602,9 @@ mod tests {
     #[tokio::test]
     async fn workspace_skill_routes_import_folder_into_managed_root() {
         let harness = test_harness();
-        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+        let token = register_owner_session(&harness.router, "octopus-desktop")
+            .await
+            .token;
 
         let response = import_workspace_skill_folder(
             &harness.router,
@@ -4342,20 +4636,20 @@ mod tests {
             imported["relativePath"],
             Value::String("data/skills/imported-skill/SKILL.md".into())
         );
-        assert!(
-            harness
-                .infra
-                .paths
-                .root
-                .join("data/skills/imported-skill/templates/prompt.md")
-                .exists()
-        );
+        assert!(harness
+            .infra
+            .paths
+            .root
+            .join("data/skills/imported-skill/templates/prompt.md")
+            .exists());
     }
 
     #[tokio::test]
     async fn workspace_mcp_routes_create_update_and_delete_servers() {
         let harness = test_harness();
-        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+        let token = register_owner_session(&harness.router, "octopus-desktop")
+            .await
+            .token;
 
         let create_response = create_workspace_mcp_server(
             &harness.router,
@@ -4409,11 +4703,16 @@ mod tests {
     #[tokio::test]
     async fn workspace_model_catalog_returns_registry_snapshot_shape() {
         let harness = test_harness();
-        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+        let token = register_owner_session(&harness.router, "octopus-desktop")
+            .await
+            .token;
 
         let payload = get_model_catalog(&harness.router, &token).await;
 
-        assert!(payload.get("providers").is_some(), "missing providers snapshot");
+        assert!(
+            payload.get("providers").is_some(),
+            "missing providers snapshot"
+        );
         assert!(payload.get("models").is_some(), "missing models snapshot");
         assert!(
             payload.get("defaultSelections").is_some(),
@@ -4425,7 +4724,9 @@ mod tests {
     #[tokio::test]
     async fn workspace_model_catalog_reflects_runtime_registry_overrides_without_restart() {
         let harness = test_harness();
-        let token = register_owner_session(&harness.router, "octopus-desktop").await.token;
+        let token = register_owner_session(&harness.router, "octopus-desktop")
+            .await
+            .token;
 
         let _saved = save_runtime_config_without_session(
             &harness.router,
@@ -4487,7 +4788,9 @@ mod tests {
         let models = payload["models"].as_array().expect("models array");
         let defaults = &payload["defaultSelections"];
 
-        assert!(models.iter().any(|model| model["modelId"] == "deepseek-chat"));
+        assert!(models
+            .iter()
+            .any(|model| model["modelId"] == "deepseek-chat"));
         assert_eq!(defaults["conversation"]["modelId"], "deepseek-chat");
         assert_eq!(defaults["conversation"]["providerId"], "deepseek");
     }
@@ -4755,7 +5058,10 @@ mod tests {
         assert_eq!(listed.notifications.len(), 2);
         assert_eq!(listed.notifications[0].id, user_notification.id);
         assert_eq!(listed.notifications[1].id, workspace_notification.id);
-        assert!(listed.notifications.iter().all(|notification| notification.read_at.is_some()));
+        assert!(listed
+            .notifications
+            .iter()
+            .all(|notification| notification.read_at.is_some()));
         assert_eq!(listed.notifications[1].toast_visible_until, None);
     }
 
@@ -4916,16 +5222,27 @@ mod tests {
     async fn runtime_session_flow_supports_json_event_polling_and_observation_with_session_token() {
         let harness = test_harness();
         let session = login_owner_session(&harness.router, "octopus-desktop").await;
-        let created = create_runtime_session(&harness.router, &session.token, "Session", None).await;
+        let created =
+            create_runtime_session(&harness.router, &session.token, "Session", None).await;
 
-        let run = submit_turn(&harness.router, &session.token, &created.summary.id, "ask", None).await;
+        let run = submit_turn(
+            &harness.router,
+            &session.token,
+            &created.summary.id,
+            "ask",
+            None,
+        )
+        .await;
         assert_eq!(run.status, "waiting_approval");
 
         let events_response = harness
             .router
             .oneshot(
                 Request::builder()
-                    .uri(format!("/api/v1/runtime/sessions/{}/events?after=missing", created.summary.id))
+                    .uri(format!(
+                        "/api/v1/runtime/sessions/{}/events?after=missing",
+                        created.summary.id
+                    ))
                     .header(header::AUTHORIZATION, format!("Bearer {}", session.token))
                     .body(Body::empty())
                     .expect("request"),
@@ -4934,8 +5251,12 @@ mod tests {
             .expect("response");
         assert_eq!(events_response.status(), StatusCode::OK);
         let events = decode_json::<Vec<RuntimeEventEnvelope>>(events_response).await;
-        assert!(events.iter().any(|event| event.event_type == "runtime.approval.requested"));
-        assert!(events.iter().any(|event| event.event_type == "runtime.run.updated"));
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == "runtime.approval.requested"));
+        assert!(events
+            .iter()
+            .any(|event| event.event_type == "runtime.run.updated"));
 
         let trace_events = harness
             .infra
@@ -4949,7 +5270,9 @@ mod tests {
             .list_audit_records()
             .await
             .expect("audit records");
-        assert!(trace_events.iter().any(|event| event.event_kind == "turn_submitted"));
+        assert!(trace_events
+            .iter()
+            .any(|event| event.event_kind == "turn_submitted"));
         assert!(audit_records
             .iter()
             .any(|record| record.action == "runtime.submit_turn"));
@@ -4960,7 +5283,8 @@ mod tests {
         let harness = test_harness();
         let session = login_owner_session(&harness.router, "octopus-desktop").await;
         let created =
-            create_runtime_session(&harness.router, &session.token, "Execution Session", None).await;
+            create_runtime_session(&harness.router, &session.token, "Execution Session", None)
+                .await;
 
         let run = submit_turn_with_input(
             &harness.router,
@@ -4980,7 +5304,8 @@ mod tests {
 
         assert_eq!(run.status, "completed");
 
-        let detail = runtime_session_detail(&harness.router, &session.token, &created.summary.id).await;
+        let detail =
+            runtime_session_detail(&harness.router, &session.token, &created.summary.id).await;
         let assistant_message = detail
             .messages
             .iter()
@@ -4995,7 +5320,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn workspace_model_catalog_exposes_configured_models_and_submit_turn_accepts_configured_model_id() {
+    async fn workspace_model_catalog_exposes_configured_models_and_submit_turn_accepts_configured_model_id(
+    ) {
         let harness = test_harness();
         let owner = register_owner_session(&harness.router, "octopus-desktop").await;
 
@@ -5059,19 +5385,25 @@ mod tests {
             .expect("configured models array");
         assert!(configured_models
             .iter()
-            .any(|model| model["configuredModelId"] == "anthropic-primary" && model["name"] == "Claude Primary"));
+            .any(|model| model["configuredModelId"] == "anthropic-primary"
+                && model["name"] == "Claude Primary"));
         assert!(configured_models
             .iter()
-            .any(|model| model["configuredModelId"] == "anthropic-alt" && model["name"] == "Claude Alt"));
+            .any(|model| model["configuredModelId"] == "anthropic-alt"
+                && model["name"] == "Claude Alt"));
         assert_eq!(
             catalog_value["defaultSelections"]["conversation"]["configuredModelId"],
             "anthropic-primary"
         );
 
         let session = login_owner_session(&harness.router, "octopus-desktop").await;
-        let created =
-            create_runtime_session(&harness.router, &session.token, "Configured Model Session", None)
-                .await;
+        let created = create_runtime_session(
+            &harness.router,
+            &session.token,
+            "Configured Model Session",
+            None,
+        )
+        .await;
 
         let response = harness
             .router
@@ -5079,7 +5411,10 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(format!("/api/v1/runtime/sessions/{}/turns", created.summary.id))
+                    .uri(format!(
+                        "/api/v1/runtime/sessions/{}/turns",
+                        created.summary.id
+                    ))
                     .header(header::AUTHORIZATION, format!("Bearer {}", session.token))
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
@@ -5099,17 +5434,21 @@ mod tests {
         let body = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("response body");
-        assert_eq!(
-            status,
-            StatusCode::OK,
-            "{}",
-            String::from_utf8_lossy(&body)
-        );
+        assert_eq!(status, StatusCode::OK, "{}", String::from_utf8_lossy(&body));
         let run_value = serde_json::from_slice::<serde_json::Value>(&body).expect("run json");
         assert_eq!(run_value["configuredModelId"], "anthropic-alt");
-        assert_eq!(run_value["resolvedTarget"]["configuredModelId"], "anthropic-alt");
-        assert_eq!(run_value["resolvedTarget"]["configuredModelName"], "Claude Alt");
-        assert_eq!(run_value["resolvedTarget"]["credentialRef"], "env:ANTHROPIC_ALT_API_KEY");
+        assert_eq!(
+            run_value["resolvedTarget"]["configuredModelId"],
+            "anthropic-alt"
+        );
+        assert_eq!(
+            run_value["resolvedTarget"]["configuredModelName"],
+            "Claude Alt"
+        );
+        assert_eq!(
+            run_value["resolvedTarget"]["credentialRef"],
+            "env:ANTHROPIC_ALT_API_KEY"
+        );
     }
 
     #[tokio::test]
@@ -5196,7 +5535,10 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(format!("/api/v1/runtime/sessions/{}/turns", second_session.summary.id))
+                    .uri(format!(
+                        "/api/v1/runtime/sessions/{}/turns",
+                        second_session.summary.id
+                    ))
                     .header(header::AUTHORIZATION, format!("Bearer {}", owner.token))
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
@@ -5215,16 +5557,23 @@ mod tests {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let error = decode_json::<ApiErrorEnvelope>(response).await;
         assert_eq!(error.error.code, "INVALID_INPUT");
-        assert!(error.error.message.contains("has reached its total token limit"));
+        assert!(error
+            .error
+            .message
+            .contains("has reached its total token limit"));
     }
 
     #[tokio::test]
     async fn runtime_submit_turn_rejects_unknown_registry_model() {
         let harness = test_harness();
         let session = login_owner_session(&harness.router, "octopus-desktop").await;
-        let created =
-            create_runtime_session(&harness.router, &session.token, "Unknown Model Session", None)
-                .await;
+        let created = create_runtime_session(
+            &harness.router,
+            &session.token,
+            "Unknown Model Session",
+            None,
+        )
+        .await;
 
         let response = harness
             .router
@@ -5232,7 +5581,10 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(format!("/api/v1/runtime/sessions/{}/turns", created.summary.id))
+                    .uri(format!(
+                        "/api/v1/runtime/sessions/{}/turns",
+                        created.summary.id
+                    ))
                     .header(header::AUTHORIZATION, format!("Bearer {}", session.token))
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
@@ -5241,8 +5593,8 @@ mod tests {
                             model_id: Some("missing-model".into()),
                             configured_model_id: None,
                             permission_mode: "readonly".into(),
-                actor_kind: None,
-                actor_id: None,
+                            actor_kind: None,
+                            actor_id: None,
                         })
                         .expect("json"),
                     ))
@@ -5379,7 +5731,10 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(format!("/api/v1/runtime/sessions/{}/turns", created.summary.id))
+                    .uri(format!(
+                        "/api/v1/runtime/sessions/{}/turns",
+                        created.summary.id
+                    ))
                     .header(header::AUTHORIZATION, format!("Bearer {}", session.token))
                     .header(header::CONTENT_TYPE, "application/json")
                     .body(Body::from(
@@ -5388,8 +5743,8 @@ mod tests {
                             model_id: None,
                             configured_model_id: Some("anthropic-primary".into()),
                             permission_mode: "readonly".into(),
-                actor_kind: None,
-                actor_id: None,
+                            actor_kind: None,
+                            actor_id: None,
                         })
                         .expect("json"),
                     ))
@@ -5509,7 +5864,8 @@ mod tests {
     async fn runtime_events_support_sse_and_polling_consistency_for_session_tokens() {
         let harness = test_harness();
         let session = login_owner_session(&harness.router, "octopus-desktop").await;
-        let created = create_runtime_session(&harness.router, &session.token, "SSE Session", None).await;
+        let created =
+            create_runtime_session(&harness.router, &session.token, "SSE Session", None).await;
         let initial_events = runtime_events_after(
             &harness.router,
             &session.token,
@@ -5517,13 +5873,16 @@ mod tests {
             "missing",
         )
         .await;
-        let baseline_event = initial_events
-            .last()
-            .expect("baseline event")
-            .id
-            .clone();
+        let baseline_event = initial_events.last().expect("baseline event").id.clone();
 
-        let sse_event = next_sse_event(&harness.router, &session.token, &created.summary.id, None, true).await;
+        let sse_event = next_sse_event(
+            &harness.router,
+            &session.token,
+            &created.summary.id,
+            None,
+            true,
+        )
+        .await;
         let polled_events = runtime_events_after(
             &harness.router,
             &session.token,
@@ -5533,7 +5892,9 @@ mod tests {
         .await;
 
         assert!(polled_events.iter().any(|event| event.id == sse_event.id));
-        assert!(polled_events.iter().any(|event| event.event_type == "runtime.approval.requested"));
+        assert!(polled_events
+            .iter()
+            .any(|event| event.event_type == "runtime.approval.requested"));
     }
 
     #[tokio::test]
@@ -5542,7 +5903,14 @@ mod tests {
         let session = login_owner_session(&harness.router, "octopus-desktop").await;
         let created =
             create_runtime_session(&harness.router, &session.token, "Replay Session", None).await;
-        submit_turn(&harness.router, &session.token, &created.summary.id, "ask", None).await;
+        submit_turn(
+            &harness.router,
+            &session.token,
+            &created.summary.id,
+            "ask",
+            None,
+        )
+        .await;
 
         let initial_events = runtime_events_after(
             &harness.router,
@@ -5551,11 +5919,7 @@ mod tests {
             "missing",
         )
         .await;
-        let baseline_event = initial_events
-            .first()
-            .expect("baseline event")
-            .id
-            .clone();
+        let baseline_event = initial_events.first().expect("baseline event").id.clone();
 
         let replayed_event = next_sse_event(
             &harness.router,
@@ -5623,7 +5987,8 @@ mod tests {
             .await
             .expect("response");
         assert_eq!(sessions_response.status(), StatusCode::OK);
-        let sessions = decode_json::<Vec<octopus_core::RuntimeSessionSummary>>(sessions_response).await;
+        let sessions =
+            decode_json::<Vec<octopus_core::RuntimeSessionSummary>>(sessions_response).await;
         assert_eq!(sessions.len(), 1);
     }
 
@@ -5657,8 +6022,20 @@ mod tests {
 
         let approved_session =
             create_runtime_session(&harness.router, &session.token, "Approve Session", None).await;
-        submit_turn(&harness.router, &session.token, &approved_session.summary.id, "ask", None).await;
-        let detail = runtime_session_detail(&harness.router, &session.token, &approved_session.summary.id).await;
+        submit_turn(
+            &harness.router,
+            &session.token,
+            &approved_session.summary.id,
+            "ask",
+            None,
+        )
+        .await;
+        let detail = runtime_session_detail(
+            &harness.router,
+            &session.token,
+            &approved_session.summary.id,
+        )
+        .await;
         let approval = detail.pending_approval.expect("pending approval");
         let approve_response = harness
             .router
@@ -5685,9 +6062,12 @@ mod tests {
         assert_eq!(approve_response.status(), StatusCode::OK);
         let approved_run = decode_json::<RuntimeRunSnapshot>(approve_response).await;
         assert_eq!(approved_run.status, "completed");
-        let approved_detail =
-            runtime_session_detail(&harness.router, &session.token, &approved_session.summary.id)
-                .await;
+        let approved_detail = runtime_session_detail(
+            &harness.router,
+            &session.token,
+            &approved_session.summary.id,
+        )
+        .await;
         assert!(approved_detail
             .messages
             .iter()
@@ -5715,9 +6095,20 @@ mod tests {
 
         let rejected_session =
             create_runtime_session(&harness.router, &session.token, "Reject Session", None).await;
-        submit_turn(&harness.router, &session.token, &rejected_session.summary.id, "ask", None).await;
-        let reject_detail =
-            runtime_session_detail(&harness.router, &session.token, &rejected_session.summary.id).await;
+        submit_turn(
+            &harness.router,
+            &session.token,
+            &rejected_session.summary.id,
+            "ask",
+            None,
+        )
+        .await;
+        let reject_detail = runtime_session_detail(
+            &harness.router,
+            &session.token,
+            &rejected_session.summary.id,
+        )
+        .await;
         let reject_approval = reject_detail.pending_approval.expect("pending approval");
         let reject_response = harness
             .router
@@ -5879,7 +6270,10 @@ mod tests {
         assert!(probe.valid);
         assert!(probe.reachable);
         assert_eq!(probe.configured_model_id, "anthropic-primary");
-        assert_eq!(probe.configured_model_name.as_deref(), Some("Claude Primary"));
+        assert_eq!(
+            probe.configured_model_name.as_deref(),
+            Some("Claude Primary")
+        );
         assert_eq!(probe.consumed_tokens, Some(32));
         assert!(probe.errors.is_empty());
     }
@@ -5898,7 +6292,10 @@ mod tests {
             .expect("workspace source");
 
         assert_eq!(workspace_source.source_key, "workspace");
-        assert_eq!(workspace_source.display_path, "config/runtime/workspace.json");
+        assert_eq!(
+            workspace_source.display_path,
+            "config/runtime/workspace.json"
+        );
         assert!(workspace_source.owner_id.is_none());
         assert!(serialized.to_string().contains("\"displayPath\""));
         assert!(!serialized.to_string().contains("\"path\""));
@@ -5974,7 +6371,11 @@ mod tests {
         )
         .expect("write user settings");
         std::fs::write(
-            harness.infra.paths.runtime_config_dir.join("workspace.json"),
+            harness
+                .infra
+                .paths
+                .runtime_config_dir
+                .join("workspace.json"),
             r#"{
               "model": "workspace-model",
               "permissions": {
@@ -6008,7 +6409,10 @@ mod tests {
                 format!("project:{project_id}"),
             ]
         );
-        assert_eq!(fetched.effective_config.get("model"), Some(&json!("project-model")));
+        assert_eq!(
+            fetched.effective_config.get("model"),
+            Some(&json!("project-model"))
+        );
         assert_eq!(
             fetched.effective_config.pointer("/permissions/defaultMode"),
             Some(&json!("plan"))
@@ -6037,7 +6441,8 @@ mod tests {
             Some(&json!("project-default"))
         );
         assert_eq!(
-            saved.sources
+            saved
+                .sources
                 .iter()
                 .map(|source| source.source_key.clone())
                 .collect::<Vec<_>>(),
@@ -6079,7 +6484,10 @@ mod tests {
         let project_source = config
             .sources
             .iter()
-            .find(|source| source.scope == "workspace" && source.display_path == "config/runtime/workspace.json")
+            .find(|source| {
+                source.scope == "workspace"
+                    && source.display_path == "config/runtime/workspace.json"
+            })
             .expect("workspace source");
 
         assert_eq!(
@@ -6094,7 +6502,9 @@ mod tests {
             secret.path.ends_with("provider.apiKey") && secret.status == "inline-redacted"
         }));
         assert!(config.secret_references.iter().any(|secret| {
-            secret.path.ends_with("mcpServers.remote.headers.Authorization")
+            secret
+                .path
+                .ends_with("mcpServers.remote.headers.Authorization")
                 && secret.status == "inline-redacted"
         }));
     }
@@ -6156,7 +6566,11 @@ mod tests {
             .all(|(actual, expected)| actual == expected));
         assert_eq!(
             created.summary.started_from_scope_set,
-            vec!["user".to_string(), "workspace".to_string(), "project".to_string()]
+            vec![
+                "user".to_string(),
+                "workspace".to_string(),
+                "project".to_string()
+            ]
         );
         assert_eq!(
             created.run.config_snapshot_id,

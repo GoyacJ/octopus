@@ -3,8 +3,9 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use octopus_core::{
     AppError, CapabilityDescriptor, ConfiguredModelRecord, ConfiguredModelTokenQuota,
     ConfiguredModelTokenUsage, CredentialBinding, DefaultSelection, ModelCatalogSnapshot,
-    ModelRegistryDiagnostics, ModelRegistryRecord, ModelSurfaceBinding, ProjectWorkspaceAssignments,
-    ProviderConfig, ProviderRegistryRecord, ResolvedExecutionTarget, SurfaceDescriptor,
+    ModelRegistryDiagnostics, ModelRegistryRecord, ModelSurfaceBinding,
+    ProjectWorkspaceAssignments, ProviderConfig, ProviderRegistryRecord, ResolvedExecutionTarget,
+    SurfaceDescriptor,
 };
 use serde_json::{json, Value};
 
@@ -60,7 +61,8 @@ impl EffectiveModelRegistry {
             effective_config.get("configuredModels"),
             &mut diagnostics,
         )?;
-        let legacy_configured_models = build_legacy_configured_models(&models, &credential_bindings);
+        let legacy_configured_models =
+            build_legacy_configured_models(&models, &credential_bindings);
         if configured_models.is_empty() {
             configured_models = legacy_configured_models;
         } else {
@@ -71,7 +73,10 @@ impl EffectiveModelRegistry {
             }
         }
 
-        normalize_default_selection_configured_model_ids(&mut default_selections, &configured_models);
+        normalize_default_selection_configured_model_ids(
+            &mut default_selections,
+            &configured_models,
+        );
         let allowed_configured_model_ids = apply_project_settings(
             &mut default_selections,
             &configured_models,
@@ -159,8 +164,9 @@ impl EffectiveModelRegistry {
 
         let providers_list = sorted_values(&providers, |record| record.provider_id.clone());
         let models_list = sorted_values(&models, |record| record.model_id.clone());
-        let configured_models_list =
-            sorted_values(&configured_models, |record| record.configured_model_id.clone());
+        let configured_models_list = sorted_values(&configured_models, |record| {
+            record.configured_model_id.clone()
+        });
         let credential_bindings_list =
             sorted_values(&credential_bindings, |record| record.provider_id.clone());
 
@@ -295,12 +301,15 @@ impl EffectiveModelRegistry {
             )));
         }
 
-        let provider = self.providers_by_id.get(&configured_model.provider_id).ok_or_else(|| {
-            AppError::invalid_input(format!(
-                "provider `{}` for configured model `{configured_model_id}` is not registered",
-                configured_model.provider_id
-            ))
-        })?;
+        let provider = self
+            .providers_by_id
+            .get(&configured_model.provider_id)
+            .ok_or_else(|| {
+                AppError::invalid_input(format!(
+                    "provider `{}` for configured model `{configured_model_id}` is not registered",
+                    configured_model.provider_id
+                ))
+            })?;
         if !provider.enabled {
             return Err(AppError::invalid_input(format!(
                 "provider `{}` is disabled",
@@ -315,7 +324,12 @@ impl EffectiveModelRegistry {
                     .iter()
                     .find(|binding| binding.enabled && binding.surface == surface)
             })
-            .or_else(|| model.surface_bindings.iter().find(|binding| binding.enabled))
+            .or_else(|| {
+                model
+                    .surface_bindings
+                    .iter()
+                    .find(|binding| binding.enabled)
+            })
             .ok_or_else(|| {
                 AppError::invalid_input(format!(
                     "model `{}` does not expose an enabled surface",
@@ -348,14 +362,19 @@ impl EffectiveModelRegistry {
             .credential_bindings_by_provider
             .get(&provider.provider_id)
             .cloned();
-        let credential_ref = configured_model
-            .credential_ref
-            .clone()
-            .or_else(|| credential_binding.as_ref().map(|binding| binding.credential_ref.clone()));
+        let credential_ref = configured_model.credential_ref.clone().or_else(|| {
+            credential_binding
+                .as_ref()
+                .map(|binding| binding.credential_ref.clone())
+        });
         let base_url = configured_model
             .base_url
             .clone()
-            .or_else(|| credential_binding.as_ref().and_then(|binding| binding.base_url.clone()))
+            .or_else(|| {
+                credential_binding
+                    .as_ref()
+                    .and_then(|binding| binding.base_url.clone())
+            })
             .or_else(|| Some(provider_surface.base_url.clone()))
             .map(|value| {
                 normalize_execution_base_url(
@@ -438,7 +457,11 @@ fn surface(
     }
 }
 
-fn provider(provider_id: &str, label: &str, surfaces: Vec<SurfaceDescriptor>) -> ProviderRegistryRecord {
+fn provider(
+    provider_id: &str,
+    label: &str,
+    surfaces: Vec<SurfaceDescriptor>,
+) -> ProviderRegistryRecord {
     ProviderRegistryRecord {
         provider_id: provider_id.into(),
         label: label.into(),
@@ -494,7 +517,12 @@ fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                     "bearer",
                     "https://api.anthropic.com",
                     "allow_override",
-                    &["streaming", "tool_calling", "structured_output", "reasoning"],
+                    &[
+                        "streaming",
+                        "tool_calling",
+                        "structured_output",
+                        "reasoning",
+                    ],
                 )],
             ),
         ),
@@ -545,7 +573,12 @@ fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                     "bearer",
                     "https://api.x.ai/v1",
                     "allow_override",
-                    &["streaming", "tool_calling", "structured_output", "reasoning"],
+                    &[
+                        "streaming",
+                        "tool_calling",
+                        "structured_output",
+                        "reasoning",
+                    ],
                 )],
             ),
         ),
@@ -562,7 +595,12 @@ fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                         "bearer",
                         "https://api.deepseek.com",
                         "allow_override",
-                        &["streaming", "tool_calling", "structured_output", "reasoning"],
+                        &[
+                            "streaming",
+                            "tool_calling",
+                            "structured_output",
+                            "reasoning",
+                        ],
                     ),
                     surface(
                         "conversation",
@@ -571,7 +609,12 @@ fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                         "bearer",
                         "https://api.deepseek.com/anthropic",
                         "allow_override",
-                        &["streaming", "tool_calling", "structured_output", "reasoning"],
+                        &[
+                            "streaming",
+                            "tool_calling",
+                            "structured_output",
+                            "reasoning",
+                        ],
                     ),
                 ],
             ),
@@ -624,7 +667,12 @@ fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                     "bearer",
                     "https://api.moonshot.cn/v1",
                     "allow_override",
-                    &["streaming", "tool_calling", "structured_output", "reasoning"],
+                    &[
+                        "streaming",
+                        "tool_calling",
+                        "structured_output",
+                        "reasoning",
+                    ],
                 )],
             ),
         ),
@@ -633,25 +681,23 @@ fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
             provider(
                 "bigmodel",
                 "BigModel",
-                vec![
-                    surface(
-                        "conversation",
-                        "openai_chat",
-                        &["request_response", "sse"],
-                        "bearer",
-                        "https://open.bigmodel.cn/api/paas/v4",
-                        "allow_override",
-                        &[
-                            "streaming",
-                            "tool_calling",
-                            "structured_output",
-                            "context_cache",
-                            "mcp",
-                            "web_search",
-                            "batch",
-                        ],
-                    ),
-                ],
+                vec![surface(
+                    "conversation",
+                    "openai_chat",
+                    &["request_response", "sse"],
+                    "bearer",
+                    "https://open.bigmodel.cn/api/paas/v4",
+                    "allow_override",
+                    &[
+                        "streaming",
+                        "tool_calling",
+                        "structured_output",
+                        "context_cache",
+                        "mcp",
+                        "web_search",
+                        "batch",
+                    ],
+                )],
             ),
         ),
         (
@@ -695,17 +741,21 @@ fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
             provider(
                 "ark",
                 "Ark",
-                vec![
-                    surface(
-                        "responses",
-                        "openai_responses",
-                        &["request_response", "sse"],
-                        "bearer",
-                        "https://ark.cn-beijing.volces.com/api/v3",
-                        "allow_override",
-                        &["streaming", "tool_calling", "structured_output", "files", "context_cache"],
-                    ),
-                ],
+                vec![surface(
+                    "responses",
+                    "openai_responses",
+                    &["request_response", "sse"],
+                    "bearer",
+                    "https://ark.cn-beijing.volces.com/api/v3",
+                    "allow_override",
+                    &[
+                        "streaming",
+                        "tool_calling",
+                        "structured_output",
+                        "files",
+                        "context_cache",
+                    ],
+                )],
             ),
         ),
         (
@@ -721,7 +771,13 @@ fn baseline_providers() -> BTreeMap<String, ProviderRegistryRecord> {
                         "x_api_key",
                         "https://generativelanguage.googleapis.com",
                         "allow_override",
-                        &["streaming", "tool_calling", "structured_output", "vision_input", "web_search"],
+                        &[
+                            "streaming",
+                            "tool_calling",
+                            "structured_output",
+                            "vision_input",
+                            "web_search",
+                        ],
                     ),
                     surface(
                         "realtime",
@@ -783,7 +839,12 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                 "stable",
                 "Planning, coding, and reviews",
                 vec![binding("conversation", "anthropic_messages")],
-                &["streaming", "tool_calling", "structured_output", "reasoning"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "reasoning",
+                ],
                 Some(200_000),
                 Some(64_000),
             ),
@@ -799,7 +860,12 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                 "stable",
                 "Heavy reasoning and synthesis",
                 vec![binding("conversation", "anthropic_messages")],
-                &["streaming", "tool_calling", "structured_output", "reasoning"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "reasoning",
+                ],
                 Some(200_000),
                 Some(32_000),
             ),
@@ -847,7 +913,13 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                     binding("conversation", "openai_chat"),
                     binding("responses", "openai_responses"),
                 ],
-                &["streaming", "tool_calling", "structured_output", "reasoning", "files"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "reasoning",
+                    "files",
+                ],
                 Some(400_000),
                 Some(128_000),
             ),
@@ -882,7 +954,12 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                 "stable",
                 "General chat and reasoning",
                 vec![binding("conversation", "openai_chat")],
-                &["streaming", "tool_calling", "structured_output", "reasoning"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "reasoning",
+                ],
                 Some(131_072),
                 Some(64_000),
             ),
@@ -936,7 +1013,12 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                     binding("conversation", "openai_chat"),
                     binding("conversation", "anthropic_messages"),
                 ],
-                &["streaming", "tool_calling", "structured_output", "reasoning"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "reasoning",
+                ],
                 Some(128_000),
                 Some(64_000),
             ),
@@ -992,7 +1074,12 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                 "stable",
                 "Agentic coding and reasoning",
                 vec![binding("conversation", "openai_chat")],
-                &["streaming", "tool_calling", "structured_output", "reasoning"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "reasoning",
+                ],
                 None,
                 None,
             ),
@@ -1008,7 +1095,12 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                 "stable",
                 "Reasoning-heavy work",
                 vec![binding("conversation", "openai_chat")],
-                &["streaming", "tool_calling", "structured_output", "reasoning"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "reasoning",
+                ],
                 None,
                 None,
             ),
@@ -1086,7 +1178,12 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                     binding("conversation", "openai_chat"),
                     binding("conversation", "anthropic_messages"),
                 ],
-                &["streaming", "tool_calling", "structured_output", "reasoning"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "reasoning",
+                ],
                 None,
                 None,
             ),
@@ -1105,7 +1202,12 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                     binding("conversation", "openai_chat"),
                     binding("conversation", "anthropic_messages"),
                 ],
-                &["streaming", "tool_calling", "structured_output", "vision_input"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "vision_input",
+                ],
                 None,
                 None,
             ),
@@ -1121,7 +1223,13 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                 "stable",
                 "General responses and multimodal work",
                 vec![binding("responses", "openai_responses")],
-                &["streaming", "tool_calling", "structured_output", "files", "context_cache"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "files",
+                    "context_cache",
+                ],
                 None,
                 None,
             ),
@@ -1137,7 +1245,13 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                 "stable",
                 "Reasoning-heavy responses",
                 vec![binding("responses", "openai_responses")],
-                &["streaming", "tool_calling", "structured_output", "reasoning", "files"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "reasoning",
+                    "files",
+                ],
                 None,
                 None,
             ),
@@ -1153,7 +1267,14 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                 "stable",
                 "Multimodal reasoning and tools",
                 vec![binding("conversation", "gemini_native")],
-                &["streaming", "tool_calling", "structured_output", "reasoning", "vision_input", "web_search"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "reasoning",
+                    "vision_input",
+                    "web_search",
+                ],
                 None,
                 None,
             ),
@@ -1169,7 +1290,12 @@ fn baseline_models() -> BTreeMap<String, ModelRegistryRecord> {
                 "stable",
                 "Fast multimodal work",
                 vec![binding("conversation", "gemini_native")],
-                &["streaming", "tool_calling", "structured_output", "vision_input"],
+                &[
+                    "streaming",
+                    "tool_calling",
+                    "structured_output",
+                    "vision_input",
+                ],
                 None,
                 None,
             ),
@@ -1218,16 +1344,17 @@ fn apply_provider_overrides(
     };
 
     for (provider_id, value) in object {
-        let mut record = providers
-            .get(provider_id)
-            .cloned()
-            .unwrap_or_else(|| ProviderRegistryRecord {
-                provider_id: provider_id.clone(),
-                label: titleize(provider_id),
-                enabled: true,
-                surfaces: Vec::new(),
-                metadata: json!({}),
-            });
+        let mut record =
+            providers
+                .get(provider_id)
+                .cloned()
+                .unwrap_or_else(|| ProviderRegistryRecord {
+                    provider_id: provider_id.clone(),
+                    label: titleize(provider_id),
+                    enabled: true,
+                    surfaces: Vec::new(),
+                    metadata: json!({}),
+                });
 
         if let Some(label) = value.get("label").and_then(Value::as_str) {
             record.label = label.to_string();
@@ -1441,22 +1568,18 @@ fn apply_project_settings(
     let Some(project_settings) = project_settings_value.and_then(Value::as_object) else {
         return None;
     };
-    let workspace_assignments = parse_workspace_assignments(
-        project_settings.get("workspaceAssignments"),
-        diagnostics,
-    );
+    let workspace_assignments =
+        parse_workspace_assignments(project_settings.get("workspaceAssignments"), diagnostics);
 
-    let allowed_configured_model_ids = project_settings
-        .get("models")
-        .and_then(|value| {
-            apply_project_model_settings(
-                default_selections,
-                configured_models,
-                workspace_assignments.as_ref(),
-                value,
-                diagnostics,
-            )
-        });
+    let allowed_configured_model_ids = project_settings.get("models").and_then(|value| {
+        apply_project_model_settings(
+            default_selections,
+            configured_models,
+            workspace_assignments.as_ref(),
+            value,
+            diagnostics,
+        )
+    });
 
     if let Some(tool_settings) = project_settings.get("tools") {
         validate_project_tool_settings(
@@ -1468,7 +1591,11 @@ fn apply_project_settings(
     }
 
     if let Some(agent_settings) = project_settings.get("agents") {
-        validate_project_agent_settings(agent_settings, workspace_assignments.as_ref(), diagnostics);
+        validate_project_agent_settings(
+            agent_settings,
+            workspace_assignments.as_ref(),
+            diagnostics,
+        );
     }
 
     allowed_configured_model_ids
@@ -1623,9 +1750,10 @@ fn validate_project_tool_settings(
             return;
         };
         if enabled_source_keys.is_empty() {
-            diagnostics
-                .errors
-                .push("projectSettings.tools.enabledSourceKeys must include at least one sourceKey".into());
+            diagnostics.errors.push(
+                "projectSettings.tools.enabledSourceKeys must include at least one sourceKey"
+                    .into(),
+            );
         }
         for source_key in enabled_source_keys.iter().filter_map(Value::as_str) {
             if assigned_source_keys
@@ -1786,9 +1914,10 @@ fn validate_configured_models(
                 "configured model `{}` is missing a display name",
                 configured_model.configured_model_id
             ));
-        } else if let Some(existing) =
-            names.insert(trimmed_name.to_lowercase(), configured_model.configured_model_id.clone())
-        {
+        } else if let Some(existing) = names.insert(
+            trimmed_name.to_lowercase(),
+            configured_model.configured_model_id.clone(),
+        ) {
             diagnostics.errors.push(format!(
                 "configured model name `{trimmed_name}` is duplicated by `{existing}` and `{}`",
                 configured_model.configured_model_id
@@ -1812,7 +1941,9 @@ fn validate_configured_models(
         if model.provider_id != provider.provider_id {
             diagnostics.errors.push(format!(
                 "configured model `{}` model `{}` does not belong to provider `{}`",
-                configured_model.configured_model_id, configured_model.model_id, configured_model.provider_id
+                configured_model.configured_model_id,
+                configured_model.model_id,
+                configured_model.provider_id
             ));
         }
 
@@ -1832,7 +1963,13 @@ fn validate_configured_models(
                 .iter()
                 .find(|surface| surface.enabled && surface.surface == "conversation")
                 .map(|surface| surface.base_url.as_str())
-                .or_else(|| provider.surfaces.iter().find(|surface| surface.enabled).map(|surface| surface.base_url.as_str()));
+                .or_else(|| {
+                    provider
+                        .surfaces
+                        .iter()
+                        .find(|surface| surface.enabled)
+                        .map(|surface| surface.base_url.as_str())
+                });
             let configured_base_url = configured_model.base_url.as_deref();
             if configured_base_url == Some(CUSTOM_BASE_URL_PLACEHOLDER)
                 || provider_surface_base_url == Some(CUSTOM_BASE_URL_PLACEHOLDER)
@@ -1901,11 +2038,8 @@ fn build_configured_models(
             .map(ToOwned::to_owned)
             .or_else(|| models.get(&model_id).map(|model| model.label.clone()))
             .unwrap_or_else(|| configured_model_id.clone());
-        let token_quota = parse_token_quota(
-            value.get("tokenQuota"),
-            &configured_model_id,
-            diagnostics,
-        );
+        let token_quota =
+            parse_token_quota(value.get("tokenQuota"), &configured_model_id, diagnostics);
 
         let _ = providers;
         configured_models.insert(
@@ -1922,7 +2056,10 @@ fn build_configured_models(
                     .map(ToOwned::to_owned),
                 token_quota: token_quota.clone(),
                 token_usage: token_usage_summary(token_quota.as_ref(), 0),
-                enabled: value.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+                enabled: value
+                    .get("enabled")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true),
                 source: value
                     .get("source")
                     .and_then(Value::as_str)
@@ -2021,7 +2158,8 @@ fn build_credential_bindings(
 
     for provider in providers.values() {
         let env_name = default_credential_env(&provider.provider_id);
-        let configured_value = configured_object.and_then(|entries| entries.get(&provider.provider_id));
+        let configured_value =
+            configured_object.and_then(|entries| entries.get(&provider.provider_id));
 
         let mut credential_ref = env_name.map(|value| format!("env:{value}"));
         let mut label = format!("{} Primary", provider.label);
@@ -2115,7 +2253,10 @@ fn parse_surface_descriptor(value: &Value) -> Result<SurfaceDescriptor, AppError
             .and_then(Value::as_str)
             .unwrap_or("allow_override")
             .to_string(),
-        enabled: value.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+        enabled: value
+            .get("enabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
         capabilities: value
             .get("capabilities")
             .and_then(Value::as_array)
@@ -2133,7 +2274,10 @@ fn parse_surface_binding(value: &Value) -> Result<ModelSurfaceBinding, AppError>
             .and_then(Value::as_str)
             .unwrap_or("openai_chat")
             .to_string(),
-        enabled: value.get("enabled").and_then(Value::as_bool).unwrap_or(true),
+        enabled: value
+            .get("enabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
     })
 }
 
@@ -2150,7 +2294,8 @@ fn parse_capabilities(entries: &[Value]) -> Result<Vec<CapabilityDescriptor>, Ap
                     .get("label")
                     .and_then(Value::as_str)
                     .unwrap_or_else(|| {
-                        entry.get("capabilityId")
+                        entry
+                            .get("capabilityId")
                             .and_then(Value::as_str)
                             .unwrap_or_default()
                     })

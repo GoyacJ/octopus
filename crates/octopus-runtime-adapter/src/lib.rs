@@ -11,14 +11,15 @@ use std::{
 
 use async_trait::async_trait;
 use octopus_core::{
-    normalize_runtime_permission_mode_label, timestamp_now, AppError, ApprovalRequestRecord, AuditRecord,
-    ConfiguredModelRecord, CostLedgerEntry, CreateRuntimeSessionInput, ModelCatalogSnapshot,
-    ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput, ResolvedExecutionTarget,
-    RuntimeBootstrap, RuntimeConfigPatch, RuntimeConfigSource, RuntimeConfigValidationResult,
-    RuntimeConfigSnapshotSummary, RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult,
-    RuntimeEffectiveConfig, RuntimeEventEnvelope, RuntimeMessage, RuntimeRunSnapshot,
-    RuntimeSecretReferenceStatus, RuntimeSessionDetail, RuntimeSessionSummary, RuntimeTraceItem,
-    SubmitRuntimeTurnInput, TraceEventRecord, RUNTIME_PERMISSION_WORKSPACE_WRITE,
+    normalize_runtime_permission_mode_label, timestamp_now, AppError, ApprovalRequestRecord,
+    AuditRecord, ConfiguredModelRecord, CostLedgerEntry, CreateRuntimeSessionInput,
+    ModelCatalogSnapshot, ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput,
+    ResolvedExecutionTarget, RuntimeBootstrap, RuntimeConfigPatch, RuntimeConfigSnapshotSummary,
+    RuntimeConfigSource, RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
+    RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
+    RuntimeMessage, RuntimeRunSnapshot, RuntimeSecretReferenceStatus, RuntimeSessionDetail,
+    RuntimeSessionSummary, RuntimeTraceItem, SubmitRuntimeTurnInput, TraceEventRecord,
+    RUNTIME_PERMISSION_WORKSPACE_WRITE,
 };
 use octopus_infra::WorkspacePaths;
 use octopus_platform::{
@@ -26,8 +27,8 @@ use octopus_platform::{
     RuntimeSessionService,
 };
 use plugins as _;
-use rusqlite::{params, Connection, OptionalExtension};
 use runtime::{apply_config_patch, ConfigDocument, ConfigLoader, ConfigSource, JsonValue};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -35,8 +36,8 @@ use tokio::sync::broadcast;
 use tools as _;
 use uuid::Uuid;
 
-pub use executor::{LiveRuntimeModelExecutor, MockRuntimeModelExecutor, RuntimeModelExecutor};
 use executor::ExecutionResponse;
+pub use executor::{LiveRuntimeModelExecutor, MockRuntimeModelExecutor, RuntimeModelExecutor};
 use registry::EffectiveModelRegistry;
 
 #[derive(Clone)]
@@ -114,7 +115,11 @@ fn merge_project_assignments(
     );
 }
 
-fn resolve_actor_label(paths: &WorkspacePaths, actor_kind: Option<&str>, actor_id: Option<&str>) -> Option<String> {
+fn resolve_actor_label(
+    paths: &WorkspacePaths,
+    actor_kind: Option<&str>,
+    actor_id: Option<&str>,
+) -> Option<String> {
     let actor_id = actor_id?.trim();
     if actor_id.is_empty() {
         return None;
@@ -122,13 +127,21 @@ fn resolve_actor_label(paths: &WorkspacePaths, actor_kind: Option<&str>, actor_i
     let connection = Connection::open(&paths.db_path).ok()?;
     match actor_kind.unwrap_or_default() {
         "team" => connection
-            .query_row("SELECT name FROM teams WHERE id = ?1", params![actor_id], |row| row.get::<_, String>(0))
+            .query_row(
+                "SELECT name FROM teams WHERE id = ?1",
+                params![actor_id],
+                |row| row.get::<_, String>(0),
+            )
             .optional()
             .ok()
             .flatten()
             .map(|name| format!("{} · Team", name)),
         "agent" => connection
-            .query_row("SELECT name FROM agents WHERE id = ?1", params![actor_id], |row| row.get::<_, String>(0))
+            .query_row(
+                "SELECT name FROM agents WHERE id = ?1",
+                params![actor_id],
+                |row| row.get::<_, String>(0),
+            )
             .optional()
             .ok()
             .flatten()
@@ -396,7 +409,8 @@ impl RuntimeAdapter {
         else {
             return Ok(());
         };
-        let used_tokens = self.configured_model_used_tokens(&configured_model.configured_model_id)?;
+        let used_tokens =
+            self.configured_model_used_tokens(&configured_model.configured_model_id)?;
         if used_tokens >= total_tokens {
             return Err(AppError::invalid_input(format!(
                 "configured model `{}` has reached its total token limit",
@@ -480,7 +494,10 @@ impl RuntimeAdapter {
             let detail = serde_json::from_str::<RuntimeSessionDetail>(&detail_json)?;
             let events = self.load_event_log(&detail.summary.id)?;
             order.push(detail.summary.id.clone());
-            sessions.insert(detail.summary.id.clone(), RuntimeAggregate { detail, events });
+            sessions.insert(
+                detail.summary.id.clone(),
+                RuntimeAggregate { detail, events },
+            );
         }
 
         Ok(())
@@ -520,7 +537,11 @@ impl RuntimeAdapter {
         Ok(())
     }
 
-    fn persist_session(&self, session_id: &str, aggregate: &RuntimeAggregate) -> Result<(), AppError> {
+    fn persist_session(
+        &self,
+        session_id: &str,
+        aggregate: &RuntimeAggregate,
+    ) -> Result<(), AppError> {
         if let Some(parent) = self.runtime_debug_session_path(session_id).parent() {
             fs::create_dir_all(parent)?;
         }
@@ -711,12 +732,9 @@ impl RuntimeAdapter {
             JsonValue::Bool(value) => serde_json::Value::Bool(*value),
             JsonValue::Number(value) => serde_json::Value::Number((*value).into()),
             JsonValue::String(value) => serde_json::Value::String(value.clone()),
-            JsonValue::Array(values) => serde_json::Value::Array(
-                values
-                    .iter()
-                    .map(Self::runtime_json_to_serde)
-                    .collect(),
-            ),
+            JsonValue::Array(values) => {
+                serde_json::Value::Array(values.iter().map(Self::runtime_json_to_serde).collect())
+            }
             JsonValue::Object(entries) => serde_json::Value::Object(
                 entries
                     .iter()
@@ -802,11 +820,9 @@ impl RuntimeAdapter {
                 }
                 let parsed = JsonValue::parse(trimmed)
                     .map_err(|error| AppError::runtime(error.to_string()))?;
-                parsed
-                    .as_object()
-                    .cloned()
-                    .map(Some)
-                    .ok_or_else(|| AppError::runtime("runtime config document must be a JSON object"))
+                parsed.as_object().cloned().map(Some).ok_or_else(|| {
+                    AppError::runtime("runtime config document must be a JSON object")
+                })
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(error.into()),
@@ -840,7 +856,11 @@ impl RuntimeAdapter {
         let mut merged = BTreeMap::new();
         let mut found = false;
         for legacy_path in [
-            self.state.paths.config_dir.join(".claw").join("settings.json"),
+            self.state
+                .paths
+                .config_dir
+                .join(".claw")
+                .join("settings.json"),
             self.state.paths.root.join(".claw.json"),
             self.state.paths.root.join(".claw").join("settings.json"),
         ] {
@@ -1060,7 +1080,11 @@ impl RuntimeAdapter {
         documents: &[RuntimeConfigDocumentRecord],
     ) -> Result<RuntimeConfigValidationResult, AppError> {
         let internal_documents = Self::to_internal_documents(documents);
-        match self.state.config_loader.load_from_documents(&internal_documents) {
+        match self
+            .state
+            .config_loader
+            .load_from_documents(&internal_documents)
+        {
             Ok(_) => Ok(RuntimeConfigValidationResult {
                 valid: true,
                 errors: Vec::new(),
@@ -1130,10 +1154,7 @@ impl RuntimeAdapter {
                         &mut secret_references,
                     )
                 });
-                let content_hash = document_value
-                    .as_ref()
-                    .map(Self::hash_value)
-                    .transpose()?;
+                let content_hash = document_value.as_ref().map(Self::hash_value).transpose()?;
 
                 Ok(RuntimeConfigSource {
                     scope: Self::public_scope_label(document.scope).to_string(),
@@ -1170,7 +1191,9 @@ impl RuntimeAdapter {
         validation
             .warnings
             .extend(registry.diagnostics().warnings.clone());
-        validation.errors.extend(registry.diagnostics().errors.clone());
+        validation
+            .errors
+            .extend(registry.diagnostics().errors.clone());
         validation.valid = validation.errors.is_empty();
         Ok(validation)
     }
@@ -1183,9 +1206,9 @@ impl RuntimeAdapter {
         patch: &serde_json::Value,
     ) -> Result<Vec<RuntimeConfigDocumentRecord>, AppError> {
         let patch = Self::serde_to_runtime_json(patch)?;
-        let patch_object = patch.as_object().ok_or_else(|| {
-            AppError::invalid_input("runtime config patch must be a JSON object")
-        })?;
+        let patch_object = patch
+            .as_object()
+            .ok_or_else(|| AppError::invalid_input("runtime config patch must be a JSON object"))?;
 
         let mut documents = self.resolve_documents(project_id, user_id)?;
 
@@ -1202,10 +1225,7 @@ impl RuntimeAdapter {
         Ok(documents)
     }
 
-    fn write_document(
-        &self,
-        document: &RuntimeConfigDocumentRecord,
-    ) -> Result<(), AppError> {
+    fn write_document(&self, document: &RuntimeConfigDocumentRecord) -> Result<(), AppError> {
         self.write_runtime_document(
             &document.storage_path,
             &document.document.clone().unwrap_or_default(),
@@ -1228,7 +1248,11 @@ impl RuntimeAdapter {
         let mut started_from_scope_set = Vec::new();
         for document in &documents {
             let scope = Self::public_scope_label(document.scope).to_string();
-            if document.loaded && !started_from_scope_set.iter().any(|existing| existing == &scope) {
+            if document.loaded
+                && !started_from_scope_set
+                    .iter()
+                    .any(|existing| existing == &scope)
+            {
                 started_from_scope_set.push(scope);
             }
         }
@@ -1532,10 +1556,8 @@ impl RuntimeSessionService for RuntimeAdapter {
         let run_id = format!("run-{}", Uuid::new_v4());
         let now = timestamp_now();
         let project_id = input.project_id.clone();
-        let snapshot = self.current_config_snapshot(
-            optional_project_id(&project_id).as_deref(),
-            Some(user_id),
-        )?;
+        let snapshot = self
+            .current_config_snapshot(optional_project_id(&project_id).as_deref(), Some(user_id))?;
         self.persist_config_snapshot(&snapshot)?;
 
         let detail = RuntimeSessionDetail {
@@ -1731,12 +1753,8 @@ impl RuntimeConfigService for RuntimeAdapter {
         &self,
         patch: RuntimeConfigPatch,
     ) -> Result<RuntimeConfigValidationResult, AppError> {
-        let documents = self.patched_documents(
-            Self::parse_scope(&patch.scope)?,
-            None,
-            None,
-            &patch.patch,
-        )?;
+        let documents =
+            self.patched_documents(Self::parse_scope(&patch.scope)?, None, None, &patch.patch)?;
         self.validate_registry_documents(&documents)
     }
 
@@ -1900,11 +1918,13 @@ impl RuntimeExecutionService for RuntimeAdapter {
         input: SubmitRuntimeTurnInput,
     ) -> Result<RuntimeRunSnapshot, AppError> {
         let now = timestamp_now();
-        let normalized_permission_mode = normalize_runtime_permission_mode_label(&input.permission_mode)
-            .ok_or_else(|| AppError::invalid_input(format!(
-                "unsupported permission mode: {}",
-                input.permission_mode
-            )))?;
+        let normalized_permission_mode =
+            normalize_runtime_permission_mode_label(&input.permission_mode).ok_or_else(|| {
+                AppError::invalid_input(format!(
+                    "unsupported permission mode: {}",
+                    input.permission_mode
+                ))
+            })?;
         let requires_approval = normalized_permission_mode == RUNTIME_PERMISSION_WORKSPACE_WRITE;
         let config_snapshot_id = {
             let sessions = self
@@ -2031,7 +2051,9 @@ impl RuntimeExecutionService for RuntimeAdapter {
                     "success".into()
                 },
                 timestamp: now,
-                actor: resolved_actor_label.clone().unwrap_or_else(|| "user".into()),
+                actor: resolved_actor_label
+                    .clone()
+                    .unwrap_or_else(|| "user".into()),
                 actor_kind: resolved_actor_kind.clone(),
                 actor_id: resolved_actor_id.clone(),
                 related_message_id: Some(user_message.id.clone()),
@@ -2103,7 +2125,9 @@ impl RuntimeExecutionService for RuntimeAdapter {
                 ),
                 tone: "success".into(),
                 timestamp: now,
-                actor: resolved_actor_label.clone().unwrap_or_else(|| "assistant".into()),
+                actor: resolved_actor_label
+                    .clone()
+                    .unwrap_or_else(|| "assistant".into()),
                 actor_kind: resolved_actor_kind.clone(),
                 actor_id: resolved_actor_id.clone(),
                 related_message_id: assistant_message.as_ref().map(|message| message.id.clone()),
@@ -2136,8 +2160,10 @@ impl RuntimeExecutionService for RuntimeAdapter {
                 "completed".into()
             };
             aggregate.detail.run.updated_at = now;
-            aggregate.detail.run.configured_model_id = Some(resolved_target.configured_model_id.clone());
-            aggregate.detail.run.configured_model_name = Some(resolved_target.configured_model_name.clone());
+            aggregate.detail.run.configured_model_id =
+                Some(resolved_target.configured_model_id.clone());
+            aggregate.detail.run.configured_model_name =
+                Some(resolved_target.configured_model_name.clone());
             aggregate.detail.run.model_id = Some(resolved_target.registry_model_id.clone());
             aggregate.detail.run.consumed_tokens = consumed_tokens;
             aggregate.detail.run.next_action = Some(if requires_approval {
@@ -2418,7 +2444,13 @@ impl RuntimeExecutionService for RuntimeAdapter {
             }
         };
 
-        let (pending_input, pending_actor_kind, pending_actor_id, resolved_target, config_snapshot_id) = {
+        let (
+            pending_input,
+            pending_actor_kind,
+            pending_actor_id,
+            resolved_target,
+            config_snapshot_id,
+        ) = {
             let sessions = self
                 .state
                 .sessions
@@ -2509,14 +2541,7 @@ impl RuntimeExecutionService for RuntimeAdapter {
             _ => None,
         };
 
-        let (
-            approval,
-            execution_trace,
-            assistant_message,
-            run,
-            conversation_id,
-            project_id,
-        ) = {
+        let (approval, execution_trace, assistant_message, run, conversation_id, project_id) = {
             let mut sessions = self
                 .state
                 .sessions
@@ -2537,15 +2562,9 @@ impl RuntimeExecutionService for RuntimeAdapter {
             pending.status = decision_status.into();
             let approval = pending.clone();
 
-            if let Some(message) = aggregate
-                .detail
-                .messages
-                .iter_mut()
-                .rev()
-                .find(|message| {
-                    message.sender_type == "user" && message.status == "waiting_approval"
-                })
-            {
+            if let Some(message) = aggregate.detail.messages.iter_mut().rev().find(|message| {
+                message.sender_type == "user" && message.status == "waiting_approval"
+            }) {
                 message.status = if decision_status == "approved" {
                     "completed".into()
                 } else {
@@ -2890,9 +2909,11 @@ mod tests {
 
     use async_trait::async_trait;
     use octopus_core::CreateRuntimeSessionInput;
-    use rusqlite::params;
     use octopus_infra::build_infra_bundle;
-    use octopus_platform::{ModelRegistryService, RuntimeConfigService, RuntimeExecutionService, RuntimeSessionService};
+    use octopus_platform::{
+        ModelRegistryService, RuntimeConfigService, RuntimeExecutionService, RuntimeSessionService,
+    };
+    use rusqlite::params;
     use serde_json::json;
 
     fn test_root() -> std::path::PathBuf {
@@ -3057,11 +3078,15 @@ mod tests {
             Some(&json!("workspace-model"))
         );
         assert_eq!(
-            user_config.effective_config.pointer("/permissions/defaultMode"),
+            user_config
+                .effective_config
+                .pointer("/permissions/defaultMode"),
             Some(&json!("plan"))
         );
         assert_eq!(
-            user_config.effective_config.pointer("/provider/defaultModel"),
+            user_config
+                .effective_config
+                .pointer("/provider/defaultModel"),
             Some(&json!("user-default"))
         );
         assert_eq!(
@@ -3073,7 +3098,9 @@ mod tests {
             Some(&json!(true))
         );
         assert_eq!(
-            user_config.effective_config.pointer("/shared/workspaceOnly"),
+            user_config
+                .effective_config
+                .pointer("/shared/workspaceOnly"),
             Some(&json!(true))
         );
 
@@ -3098,11 +3125,15 @@ mod tests {
             Some(&json!("project-model"))
         );
         assert_eq!(
-            project_config.effective_config.pointer("/permissions/defaultMode"),
+            project_config
+                .effective_config
+                .pointer("/permissions/defaultMode"),
             Some(&json!("plan"))
         );
         assert_eq!(
-            project_config.effective_config.pointer("/provider/defaultModel"),
+            project_config
+                .effective_config
+                .pointer("/provider/defaultModel"),
             Some(&json!("user-default"))
         );
         assert_eq!(
@@ -3114,11 +3145,15 @@ mod tests {
             Some(&json!(true))
         );
         assert_eq!(
-            project_config.effective_config.pointer("/shared/workspaceOnly"),
+            project_config
+                .effective_config
+                .pointer("/shared/workspaceOnly"),
             Some(&json!(true))
         );
         assert_eq!(
-            project_config.effective_config.pointer("/shared/projectOnly"),
+            project_config
+                .effective_config
+                .pointer("/shared/projectOnly"),
             Some(&json!(true))
         );
 
@@ -3173,7 +3208,11 @@ mod tests {
 
         assert_eq!(
             detail.summary.started_from_scope_set,
-            vec!["user".to_string(), "workspace".to_string(), "project".to_string()]
+            vec![
+                "user".to_string(),
+                "workspace".to_string(),
+                "project".to_string()
+            ]
         );
 
         let connection = Connection::open(&infra.paths.db_path).expect("db");
@@ -3243,7 +3282,10 @@ mod tests {
     async fn submit_turn_updates_configured_model_token_usage_and_catalog_snapshot() {
         let root = test_root();
         let infra = build_infra_bundle(&root).expect("infra bundle");
-        write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), Some(100));
+        write_workspace_config(
+            &infra.paths.runtime_config_dir.join("workspace.json"),
+            Some(100),
+        );
 
         let adapter = RuntimeAdapter::new_with_executor(
             octopus_core::DEFAULT_WORKSPACE_ID,
@@ -3290,7 +3332,13 @@ mod tests {
             .iter()
             .find(|model| model.configured_model_id == "quota-model")
             .expect("configured model");
-        assert_eq!(configured_model.token_quota.as_ref().and_then(|quota| quota.total_tokens), Some(100));
+        assert_eq!(
+            configured_model
+                .token_quota
+                .as_ref()
+                .and_then(|quota| quota.total_tokens),
+            Some(100)
+        );
         assert_eq!(configured_model.token_usage.used_tokens, 32);
         assert_eq!(configured_model.token_usage.remaining_tokens, Some(68));
         assert!(!configured_model.token_usage.exhausted);
@@ -3320,7 +3368,10 @@ mod tests {
     async fn configured_model_token_usage_survives_adapter_restart() {
         let root = test_root();
         let infra = build_infra_bundle(&root).expect("infra bundle");
-        write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), Some(100));
+        write_workspace_config(
+            &infra.paths.runtime_config_dir.join("workspace.json"),
+            Some(100),
+        );
 
         let adapter = RuntimeAdapter::new_with_executor(
             octopus_core::DEFAULT_WORKSPACE_ID,
@@ -3382,7 +3433,10 @@ mod tests {
     async fn submit_turn_blocks_when_configured_model_token_quota_is_exhausted() {
         let root = test_root();
         let infra = build_infra_bundle(&root).expect("infra bundle");
-        write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), Some(32));
+        write_workspace_config(
+            &infra.paths.runtime_config_dir.join("workspace.json"),
+            Some(32),
+        );
 
         let adapter = RuntimeAdapter::new_with_executor(
             octopus_core::DEFAULT_WORKSPACE_ID,
@@ -3458,19 +3512,35 @@ mod tests {
     async fn submit_turn_injects_selected_agent_prompt_into_execution() {
         let root = test_root();
         let infra = build_infra_bundle(&root).expect("infra bundle");
-        write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), Some(100));
+        write_workspace_config(
+            &infra.paths.runtime_config_dir.join("workspace.json"),
+            Some(100),
+        );
 
         let connection = Connection::open(&infra.paths.db_path).expect("db");
         connection
             .execute(
-                "UPDATE agents SET personality = ?2, prompt = ?3 WHERE id = ?1",
+                "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
                 params![
                     "agent-project-delivery",
+                    octopus_core::DEFAULT_WORKSPACE_ID,
+                    octopus_core::DEFAULT_PROJECT_ID,
+                    "project",
+                    "Project Delivery Agent",
+                    Option::<String>::None,
                     "Structured and pragmatic",
+                    serde_json::to_string(&vec!["project", "delivery"]).expect("tags"),
                     "Always answer with an implementation plan first.",
+                    serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    "Tracks project work, runtime sessions, and follow-up actions.",
+                    "active",
+                    timestamp_now() as i64,
                 ],
             )
-            .expect("update agent prompt");
+            .expect("upsert agent prompt");
         drop(connection);
 
         let adapter = RuntimeAdapter::new_with_executor(
@@ -3509,7 +3579,10 @@ mod tests {
             .expect("run");
 
         assert_eq!(run.resolved_actor_kind.as_deref(), Some("agent"));
-        assert_eq!(run.resolved_actor_id.as_deref(), Some("agent-project-delivery"));
+        assert_eq!(
+            run.resolved_actor_id.as_deref(),
+            Some("agent-project-delivery")
+        );
 
         let detail = adapter
             .get_session(&session.summary.id)
@@ -3522,7 +3595,9 @@ mod tests {
             .expect("assistant message");
         assert!(assistant_message.content.contains("You are the agent `"));
         assert!(assistant_message.content.contains("Project Delivery Agent"));
-        assert!(assistant_message.content.contains("Personality: Structured and pragmatic"));
+        assert!(assistant_message
+            .content
+            .contains("Personality: Structured and pragmatic"));
         assert!(assistant_message
             .content
             .contains("Instructions: Always answer with an implementation plan first."));
@@ -3534,7 +3609,10 @@ mod tests {
     async fn resolve_approval_reuses_selected_team_prompt_for_execution() {
         let root = test_root();
         let infra = build_infra_bundle(&root).expect("infra bundle");
-        write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), Some(100));
+        write_workspace_config(
+            &infra.paths.runtime_config_dir.join("workspace.json"),
+            Some(100),
+        );
 
         let connection = Connection::open(&infra.paths.db_path).expect("db");
         connection
@@ -3618,14 +3696,18 @@ mod tests {
             .rev()
             .find(|message| message.sender_type == "assistant")
             .expect("assistant message");
-        assert!(assistant_message.content.contains("You are the team `Workspace Core` operating as a single execution actor."));
+        assert!(assistant_message
+            .content
+            .contains("You are the team `Workspace Core` operating as a single execution actor."));
         assert!(assistant_message
             .content
             .contains("Team personality: Cross-functional design review board"));
         assert!(assistant_message
             .content
             .contains("Team instructions: Debate options, then return a single aligned answer."));
-        assert!(assistant_message.content.contains("Leader agent id: agent-orchestrator"));
+        assert!(assistant_message
+            .content
+            .contains("Leader agent id: agent-orchestrator"));
         assert!(assistant_message
             .content
             .contains("Member agent ids: agent-orchestrator, agent-project-delivery"));
@@ -3637,7 +3719,10 @@ mod tests {
     async fn quota_enabled_models_require_provider_token_usage_metadata() {
         let root = test_root();
         let infra = build_infra_bundle(&root).expect("infra bundle");
-        write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), Some(64));
+        write_workspace_config(
+            &infra.paths.runtime_config_dir.join("workspace.json"),
+            Some(64),
+        );
 
         let adapter = RuntimeAdapter::new_with_executor(
             octopus_core::DEFAULT_WORKSPACE_ID,

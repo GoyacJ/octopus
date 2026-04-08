@@ -1,8 +1,14 @@
-use std::{collections::HashMap, env, net::SocketAddr, path::PathBuf, sync::{Arc, Mutex}};
+use std::{
+    collections::HashMap,
+    env,
+    net::SocketAddr,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use octopus_core::{
-    default_connection_stubs, default_preferences, AppError, HostState,
-    DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
+    default_connection_stubs, default_preferences, AppError, HostState, DEFAULT_PROJECT_ID,
+    DEFAULT_WORKSPACE_ID,
 };
 use octopus_infra::build_infra_bundle;
 use octopus_platform::PlatformServices;
@@ -136,8 +142,7 @@ impl BackendArgs {
                 .ok_or_else(|| AppError::invalid_input("missing --cargo-workspace"))?,
             host_platform: host_platform
                 .ok_or_else(|| AppError::invalid_input("missing --host-platform"))?,
-            host_mode: host_mode
-                .ok_or_else(|| AppError::invalid_input("missing --host-mode"))?,
+            host_mode: host_mode.ok_or_else(|| AppError::invalid_input("missing --host-mode"))?,
             host_shell: host_shell
                 .ok_or_else(|| AppError::invalid_input("missing --host-shell"))?,
             preferences_path: preferences_path

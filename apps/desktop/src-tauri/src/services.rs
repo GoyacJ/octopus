@@ -6,10 +6,9 @@ use std::{
 
 use octopus_core::{
     normalize_connection_base_url, normalize_notification_filter_scope,
-    notification_list_response_from_records, AppError, CreateNotificationInput,
+    notification_list_response_from_records, timestamp_now, AppError, CreateNotificationInput,
     HostWorkspaceConnectionRecord, NotificationFilter, NotificationListResponse,
     NotificationRecord, NotificationUnreadSummary, PreferencesPort, ShellPreferences,
-    timestamp_now,
 };
 use rusqlite::{params, Connection, OptionalExtension};
 use uuid::Uuid;
@@ -167,8 +166,8 @@ impl NotificationService {
 
     fn open(&self) -> Result<Connection, AppError> {
         self.ensure_parent_dir()?;
-        let connection = Connection::open(&self.path)
-            .map_err(|error| AppError::database(error.to_string()))?;
+        let connection =
+            Connection::open(&self.path).map_err(|error| AppError::database(error.to_string()))?;
         connection
             .execute_batch(
                 "CREATE TABLE IF NOT EXISTS notifications (
@@ -200,7 +199,9 @@ impl NotificationService {
             body: row.get("body")?,
             source: row.get("source")?,
             created_at: row.get::<_, i64>("created_at")? as u64,
-            read_at: row.get::<_, Option<i64>>("read_at")?.map(|value| value as u64),
+            read_at: row
+                .get::<_, Option<i64>>("read_at")?
+                .map(|value| value as u64),
             toast_visible_until: row
                 .get::<_, Option<i64>>("toast_visible_until")?
                 .map(|value| value as u64),
@@ -252,7 +253,9 @@ impl NotificationService {
     }
 
     pub fn unread_summary(&self) -> Result<NotificationUnreadSummary, AppError> {
-        Ok(self.list_notifications(NotificationFilter { scope: None })?.unread)
+        Ok(self
+            .list_notifications(NotificationFilter { scope: None })?
+            .unread)
     }
 
     pub fn create_notification(

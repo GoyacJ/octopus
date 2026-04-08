@@ -1,8 +1,8 @@
-use async_trait::async_trait;
 use api::{
-    AnthropicClient, AuthSource, InputMessage, MessageRequest, MessageResponse,
-    OpenAiCompatClient, OpenAiCompatConfig, OutputContentBlock,
+    AnthropicClient, AuthSource, InputMessage, MessageRequest, MessageResponse, OpenAiCompatClient,
+    OpenAiCompatConfig, OutputContentBlock,
 };
+use async_trait::async_trait;
 use octopus_core::{AppError, ResolvedExecutionTarget};
 use serde_json::{json, Value};
 
@@ -47,8 +47,12 @@ impl RuntimeModelExecutor for LiveRuntimeModelExecutor {
         match target.protocol_family.as_str() {
             "anthropic_messages" => execute_anthropic_messages(target, input, system_prompt).await,
             "openai_chat" => execute_openai_chat(target, input, system_prompt).await,
-            "openai_responses" => execute_openai_responses(&self.http, target, input, system_prompt).await,
-            "gemini_native" => execute_gemini_native(&self.http, target, input, system_prompt).await,
+            "openai_responses" => {
+                execute_openai_responses(&self.http, target, input, system_prompt).await
+            }
+            "gemini_native" => {
+                execute_gemini_native(&self.http, target, input, system_prompt).await
+            }
             other => Err(AppError::runtime(format!(
                 "runtime execution does not support protocol family `{other}` yet"
             ))),
@@ -87,8 +91,12 @@ async fn execute_anthropic_messages(
     system_prompt: Option<&str>,
 ) -> Result<ExecutionResponse, AppError> {
     let api_key = resolve_api_key(target)?;
-    let client = AnthropicClient::from_auth(AuthSource::ApiKey(api_key))
-        .with_base_url(target.base_url.clone().unwrap_or_else(|| "https://api.anthropic.com".into()));
+    let client = AnthropicClient::from_auth(AuthSource::ApiKey(api_key)).with_base_url(
+        target
+            .base_url
+            .clone()
+            .unwrap_or_else(|| "https://api.anthropic.com".into()),
+    );
     let request = message_request(target, input, system_prompt);
     let response: MessageResponse = client
         .send_message(&request)
@@ -162,8 +170,7 @@ async fn execute_openai_responses(
     if !status.is_success() {
         return Err(AppError::runtime(format!(
             "provider returned {} for responses request: {}",
-            status,
-            body
+            status, body
         )));
     }
 
@@ -218,8 +225,7 @@ async fn execute_gemini_native(
     if !status.is_success() {
         return Err(AppError::runtime(format!(
             "provider returned {} for gemini request: {}",
-            status,
-            body
+            status, body
         )));
     }
 

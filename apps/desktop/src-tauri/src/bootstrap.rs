@@ -1,11 +1,11 @@
 use octopus_core::{
     connection_profile_from_host_workspace_connection,
-    host_workspace_connection_record_from_profile, normalize_connection_base_url,
+    host_workspace_connection_record_from_profile, normalize_connection_base_url, timestamp_now,
     ConnectionProfile, CreateHostWorkspaceConnectionInput, CreateNotificationInput,
     DesktopBackendConnection, HealthcheckBackendStatus, HealthcheckStatus, HostState,
     HostWorkspaceConnectionRecord, NotificationFilter, NotificationListResponse,
     NotificationRecord, NotificationUnreadSummary, PreferencesPort, ShellBootstrap,
-    ShellPreferences, timestamp_now,
+    ShellPreferences,
 };
 
 use crate::{error::ShellResult, state::ShellState};
@@ -39,11 +39,7 @@ pub fn create_workspace_connection(
     input: CreateHostWorkspaceConnectionInput,
 ) -> ShellResult<HostWorkspaceConnectionRecord> {
     let connection = HostWorkspaceConnectionRecord {
-        workspace_connection_id: format!(
-            "conn-remote-{}-{}",
-            input.workspace_id,
-            timestamp_now()
-        ),
+        workspace_connection_id: format!("conn-remote-{}-{}", input.workspace_id, timestamp_now()),
         workspace_id: input.workspace_id,
         label: input.label,
         base_url: normalize_connection_base_url(&input.base_url),
@@ -144,10 +140,7 @@ pub fn create_notification(
     state.notification_service.create_notification(input)
 }
 
-pub fn mark_notification_read(
-    state: &ShellState,
-    id: &str,
-) -> ShellResult<NotificationRecord> {
+pub fn mark_notification_read(state: &ShellState, id: &str) -> ShellResult<NotificationRecord> {
     state.notification_service.mark_notification_read(id)
 }
 
@@ -155,13 +148,12 @@ pub fn mark_all_notifications_read(
     state: &ShellState,
     filter: NotificationFilter,
 ) -> ShellResult<NotificationUnreadSummary> {
-    state.notification_service.mark_all_notifications_read(filter)
+    state
+        .notification_service
+        .mark_all_notifications_read(filter)
 }
 
-pub fn dismiss_notification_toast(
-    state: &ShellState,
-    id: &str,
-) -> ShellResult<NotificationRecord> {
+pub fn dismiss_notification_toast(state: &ShellState, id: &str) -> ShellResult<NotificationRecord> {
     state.notification_service.dismiss_notification_toast(id)
 }
 

@@ -5742,7 +5742,9 @@ mod tests {
 
     #[test]
     fn skill_loads_local_skill_prompt() {
-        let _guard = env_lock().lock().expect("env lock should acquire");
+        let _guard = env_lock()
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let home = temp_path("skills-home");
         let skill_dir = home.join(".agents").join("skills").join("help");
         fs::create_dir_all(&skill_dir).expect("skill dir should exist");
@@ -7068,7 +7070,7 @@ printf 'pwsh:%s' "$1"
             .status()
             .expect("chmod");
         let original_path = std::env::var("PATH").unwrap_or_default();
-        std::env::set_var("PATH", format!("{}:{}", dir.display(), original_path));
+        std::env::set_var("PATH", format!("{}:/bin:/usr/bin", dir.display()));
 
         let result = execute_tool(
             "PowerShell",

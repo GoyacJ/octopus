@@ -1126,16 +1126,15 @@ pub fn apply_config_patch(
             JsonValue::Null => {
                 target.remove(key);
             }
-            JsonValue::Object(incoming) => match target.get_mut(key) {
-                Some(JsonValue::Object(existing)) => {
+            JsonValue::Object(incoming) => {
+                if let Some(JsonValue::Object(existing)) = target.get_mut(key) {
                     apply_config_patch(existing, incoming);
-                }
-                _ => {
+                } else {
                     let mut next = BTreeMap::new();
                     apply_config_patch(&mut next, incoming);
                     target.insert(key.clone(), JsonValue::Object(next));
                 }
-            },
+            }
             _ => {
                 target.insert(key.clone(), value.clone());
             }
@@ -1159,8 +1158,8 @@ fn push_unique(target: &mut Vec<String>, value: String) {
 mod tests {
     use super::{
         apply_config_patch, deep_merge_objects, parse_permission_mode_label, ConfigLoader,
-        ConfigSource, McpServerConfig, McpTransport, ResolvedPermissionMode,
-        RuntimeHookConfig, RuntimePluginConfig, CLAW_SETTINGS_SCHEMA_NAME,
+        ConfigSource, McpServerConfig, McpTransport, ResolvedPermissionMode, RuntimeHookConfig,
+        RuntimePluginConfig, CLAW_SETTINGS_SCHEMA_NAME,
     };
     use crate::json::JsonValue;
     use crate::sandbox::FilesystemIsolationMode;
@@ -1620,8 +1619,7 @@ mod tests {
         let user_settings = documents
             .iter()
             .find(|document| {
-                document.source == ConfigSource::User
-                    && document.path == home.join("settings.json")
+                document.source == ConfigSource::User && document.path == home.join("settings.json")
             })
             .expect("user settings document");
         assert!(user_settings.exists);

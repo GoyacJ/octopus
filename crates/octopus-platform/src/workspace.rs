@@ -2,15 +2,15 @@ use async_trait::async_trait;
 use octopus_core::{
     AgentRecord, AppError, AutomationRecord, BindPetConversationInput,
     ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse,
-    CopyWorkspaceSkillToManagedInput, CreateProjectRequest, CreateWorkspaceResourceInput,
-    CreateWorkspaceResourceFolderInput, CreateWorkspaceSkillInput, CreateWorkspaceUserRequest,
+    CopyWorkspaceSkillToManagedInput, CreateProjectRequest, CreateWorkspaceResourceFolderInput,
+    CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, CreateWorkspaceUserRequest,
     ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
     ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
-    ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, KnowledgeRecord,
-    MenuRecord, ModelCatalogRecord, PermissionRecord, PetConversationBinding,
-    PetPresenceState, PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord,
-    ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord, ProviderCredentialRecord,
-    RoleRecord, SavePetPresenceInput, SystemBootstrapStatus, TeamRecord, ToolRecord,
+    ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, KnowledgeRecord, MenuRecord,
+    ModelCatalogRecord, PermissionRecord, PetConversationBinding, PetPresenceState,
+    PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectRecord,
+    ProjectTeamLinkInput, ProjectTeamLinkRecord, ProviderCredentialRecord, RoleRecord,
+    SavePetPresenceInput, SystemBootstrapStatus, TeamRecord, ToolRecord,
     UpdateCurrentUserProfileRequest, UpdateProjectRequest, UpdateWorkspaceResourceInput,
     UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput, UpdateWorkspaceUserRequest,
     UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput, UserRecordSummary,
@@ -24,10 +24,20 @@ pub trait WorkspaceService: Send + Sync {
     async fn system_bootstrap(&self) -> Result<SystemBootstrapStatus, AppError>;
     async fn workspace_summary(&self) -> Result<WorkspaceSummary, AppError>;
     async fn list_projects(&self) -> Result<Vec<ProjectRecord>, AppError>;
-    async fn create_project(&self, request: CreateProjectRequest) -> Result<ProjectRecord, AppError>;
-    async fn update_project(&self, project_id: &str, request: UpdateProjectRequest) -> Result<ProjectRecord, AppError>;
+    async fn create_project(
+        &self,
+        request: CreateProjectRequest,
+    ) -> Result<ProjectRecord, AppError>;
+    async fn update_project(
+        &self,
+        project_id: &str,
+        request: UpdateProjectRequest,
+    ) -> Result<ProjectRecord, AppError>;
     async fn list_workspace_resources(&self) -> Result<Vec<WorkspaceResourceRecord>, AppError>;
-    async fn list_project_resources(&self, project_id: &str) -> Result<Vec<WorkspaceResourceRecord>, AppError>;
+    async fn list_project_resources(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<WorkspaceResourceRecord>, AppError>;
     async fn create_workspace_resource(
         &self,
         workspace_id: &str,
@@ -66,9 +76,15 @@ pub trait WorkspaceService: Send + Sync {
         input: UpdateWorkspaceResourceInput,
     ) -> Result<WorkspaceResourceRecord, AppError>;
     async fn list_workspace_knowledge(&self) -> Result<Vec<KnowledgeRecord>, AppError>;
-    async fn list_project_knowledge(&self, project_id: &str) -> Result<Vec<KnowledgeRecord>, AppError>;
+    async fn list_project_knowledge(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<KnowledgeRecord>, AppError>;
     async fn get_workspace_pet_snapshot(&self) -> Result<PetWorkspaceSnapshot, AppError>;
-    async fn get_project_pet_snapshot(&self, project_id: &str) -> Result<PetWorkspaceSnapshot, AppError>;
+    async fn get_project_pet_snapshot(
+        &self,
+        project_id: &str,
+    ) -> Result<PetWorkspaceSnapshot, AppError>;
     async fn save_workspace_pet_presence(
         &self,
         input: SavePetPresenceInput,
@@ -89,7 +105,11 @@ pub trait WorkspaceService: Send + Sync {
     ) -> Result<PetConversationBinding, AppError>;
     async fn list_agents(&self) -> Result<Vec<AgentRecord>, AppError>;
     async fn create_agent(&self, input: UpsertAgentInput) -> Result<AgentRecord, AppError>;
-    async fn update_agent(&self, agent_id: &str, input: UpsertAgentInput) -> Result<AgentRecord, AppError>;
+    async fn update_agent(
+        &self,
+        agent_id: &str,
+        input: UpsertAgentInput,
+    ) -> Result<AgentRecord, AppError>;
     async fn delete_agent(&self, agent_id: &str) -> Result<(), AppError>;
     async fn preview_import_agent_bundle(
         &self,
@@ -110,7 +130,11 @@ pub trait WorkspaceService: Send + Sync {
     async fn unlink_project_agent(&self, project_id: &str, agent_id: &str) -> Result<(), AppError>;
     async fn list_teams(&self) -> Result<Vec<TeamRecord>, AppError>;
     async fn create_team(&self, input: UpsertTeamInput) -> Result<TeamRecord, AppError>;
-    async fn update_team(&self, team_id: &str, input: UpsertTeamInput) -> Result<TeamRecord, AppError>;
+    async fn update_team(
+        &self,
+        team_id: &str,
+        input: UpsertTeamInput,
+    ) -> Result<TeamRecord, AppError>;
     async fn delete_team(&self, team_id: &str) -> Result<(), AppError>;
     async fn list_project_team_links(
         &self,
@@ -128,7 +152,8 @@ pub trait WorkspaceService: Send + Sync {
         &self,
         patch: WorkspaceToolDisablePatch,
     ) -> Result<WorkspaceToolCatalogSnapshot, AppError>;
-    async fn get_workspace_skill(&self, skill_id: &str) -> Result<WorkspaceSkillDocument, AppError>;
+    async fn get_workspace_skill(&self, skill_id: &str)
+        -> Result<WorkspaceSkillDocument, AppError>;
     async fn create_workspace_skill(
         &self,
         input: CreateWorkspaceSkillInput,
@@ -186,7 +211,10 @@ pub trait WorkspaceService: Send + Sync {
     async fn update_tool(&self, tool_id: &str, record: ToolRecord) -> Result<ToolRecord, AppError>;
     async fn delete_tool(&self, tool_id: &str) -> Result<(), AppError>;
     async fn list_automations(&self) -> Result<Vec<AutomationRecord>, AppError>;
-    async fn create_automation(&self, record: AutomationRecord) -> Result<AutomationRecord, AppError>;
+    async fn create_automation(
+        &self,
+        record: AutomationRecord,
+    ) -> Result<AutomationRecord, AppError>;
     async fn update_automation(
         &self,
         automation_id: &str,
@@ -219,7 +247,10 @@ pub trait WorkspaceService: Send + Sync {
     async fn update_role(&self, role_id: &str, record: RoleRecord) -> Result<RoleRecord, AppError>;
     async fn delete_role(&self, role_id: &str) -> Result<(), AppError>;
     async fn list_permissions(&self) -> Result<Vec<PermissionRecord>, AppError>;
-    async fn create_permission(&self, record: PermissionRecord) -> Result<PermissionRecord, AppError>;
+    async fn create_permission(
+        &self,
+        record: PermissionRecord,
+    ) -> Result<PermissionRecord, AppError>;
     async fn update_permission(
         &self,
         permission_id: &str,

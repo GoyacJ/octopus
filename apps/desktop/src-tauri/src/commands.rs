@@ -4,9 +4,8 @@ use base64::{engine::general_purpose::STANDARD, Engine as _};
 use octopus_core::{
     AvatarUploadPayload, ConnectionProfile, CreateHostWorkspaceConnectionInput,
     CreateNotificationInput, DesktopBackendConnection, HostState, HostWorkspaceConnectionRecord,
-    NotificationFilter, NotificationListResponse, NotificationRecord,
-    NotificationUnreadSummary, ShellPreferences, WorkspaceDirectoryUploadEntry,
-    WorkspaceFileUploadPayload,
+    NotificationFilter, NotificationListResponse, NotificationRecord, NotificationUnreadSummary,
+    ShellPreferences, WorkspaceDirectoryUploadEntry, WorkspaceFileUploadPayload,
 };
 use rfd::FileDialog;
 use tauri::{AppHandle, State};
@@ -17,9 +16,10 @@ use crate::{
         create_workspace_connection as create_workspace_connection_payload,
         delete_workspace_connection as delete_workspace_connection_payload,
         dismiss_notification_toast as dismiss_notification_toast_payload,
+        get_backend_connection_payload, get_host_state_payload,
         get_notification_unread_summary as get_notification_unread_summary_payload,
-        get_backend_connection_payload, get_host_state_payload, healthcheck_payload,
-        list_connections_payload, list_notifications as list_notifications_payload,
+        healthcheck_payload, list_connections_payload,
+        list_notifications as list_notifications_payload,
         list_workspace_connections as list_workspace_connections_payload, load_shell_preferences,
         mark_all_notifications_read as mark_all_notifications_read_payload,
         mark_notification_read as mark_notification_read_payload, save_shell_preferences,
@@ -189,7 +189,10 @@ pub fn pick_avatar_image() -> Result<Option<AvatarUploadPayload>, String> {
     }))
 }
 
-fn generic_file_payload(path: &Path, content_type: &str) -> Result<WorkspaceFileUploadPayload, String> {
+fn generic_file_payload(
+    path: &Path,
+    content_type: &str,
+) -> Result<WorkspaceFileUploadPayload, String> {
     let bytes = fs::read(path).map_err(|error| error.to_string())?;
     let metadata = fs::metadata(path).map_err(|error| error.to_string())?;
     let file_name = path
@@ -215,13 +218,17 @@ pub fn pick_skill_archive() -> Result<Option<Vec<WorkspaceFileUploadPayload>>, S
     };
 
     Ok(Some(
-        paths.iter()
+        paths
+            .iter()
             .map(|path| generic_file_payload(path, "application/zip"))
             .collect::<Result<Vec<_>, _>>()?,
     ))
 }
 
-fn read_folder_entries(root: &Path, current: &Path) -> Result<Vec<WorkspaceDirectoryUploadEntry>, String> {
+fn read_folder_entries(
+    root: &Path,
+    current: &Path,
+) -> Result<Vec<WorkspaceDirectoryUploadEntry>, String> {
     let mut entries = Vec::new();
     for child in fs::read_dir(current).map_err(|error| error.to_string())? {
         let child = child.map_err(|error| error.to_string())?;
@@ -254,7 +261,8 @@ pub fn pick_skill_folder() -> Result<Option<Vec<Vec<WorkspaceDirectoryUploadEntr
         return Ok(None);
     };
     Ok(Some(
-        paths.iter()
+        paths
+            .iter()
             .map(|path| read_folder_entries(path, path))
             .collect::<Result<Vec<_>, _>>()?,
     ))

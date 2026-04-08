@@ -17,7 +17,9 @@ use serde::Deserialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use crate::{catalog_hash_id, validate_skill_file_relative_path, validate_skill_slug, WorkspacePaths};
+use crate::{
+    catalog_hash_id, validate_skill_file_relative_path, validate_skill_slug, WorkspacePaths,
+};
 
 const SOURCE_KIND_USER_IMPORT: &str = "user_import";
 const SOURCE_KIND_BUNDLED_SEED: &str = "bundled_seed";
@@ -272,7 +274,11 @@ pub(crate) fn execute_agent_bundle_import(
                     source_id,
                     &skill.content_hash,
                     &skill.slug,
-                    skill.departments.first().map(String::as_str).unwrap_or_default(),
+                    skill
+                        .departments
+                        .first()
+                        .map(String::as_str)
+                        .unwrap_or_default(),
                     now,
                 )?;
             }
@@ -356,7 +362,9 @@ pub(crate) fn execute_agent_bundle_import(
                 &builtin_tool_keys,
                 &skill_ids,
             );
-            if let Err(error) = write_agent_record(connection, &record, actual_action == ImportAction::Update) {
+            if let Err(error) =
+                write_agent_record(connection, &record, actual_action == ImportAction::Update)
+            {
                 result_action = ImportAction::Failed;
                 issues.push(ImportIssue {
                     severity: ISSUE_ERROR.into(),
@@ -441,7 +449,8 @@ pub(crate) fn seed_bundled_agent_bundle(
         if skill_dir.exists() {
             continue;
         }
-        let Some(source_dir) = BUNDLED_AGENT_SEED_DIR.get_dir(format!("skills/{}", asset.slug)) else {
+        let Some(source_dir) = BUNDLED_AGENT_SEED_DIR.get_dir(format!("skills/{}", asset.slug))
+        else {
             continue;
         };
         write_embedded_directory(source_dir, &skill_dir)?;
@@ -510,15 +519,17 @@ fn build_bundle_plan(
 
     for ((department, agent_dir), root_files) in grouped_by_root {
         let expected_markdown = format!("{department}/{agent_dir}/{agent_dir}.md");
-        let Some(agent_file) = root_files.iter().find(|file| file.relative_path == expected_markdown) else {
+        let Some(agent_file) = root_files
+            .iter()
+            .find(|file| file.relative_path == expected_markdown)
+        else {
             issues.push(ImportIssue {
                 severity: ISSUE_WARNING.into(),
                 scope: SOURCE_SCOPE_AGENT.into(),
                 source_id: Some(format!("{department}/{agent_dir}")),
                 message: format!(
                     "skipped agent '{}': missing required '{}'",
-                    agent_dir,
-                    expected_markdown
+                    agent_dir, expected_markdown
                 ),
             });
             continue;
@@ -539,23 +550,26 @@ fn build_bundle_plan(
             .filter(|value| !value.trim().is_empty())
             .or_else(|| first_non_empty_paragraph(&body))
             .unwrap_or_else(|| agent_name.clone());
-        let agent_personality = first_paragraph_after_heading(&body, "\u{89d2}\u{8272}\u{5b9a}\u{4e49}")
-            .or_else(|| first_paragraph_after_heading(&body, "Role Definition"))
-            .unwrap_or_else(|| agent_name.clone());
+        let agent_personality =
+            first_paragraph_after_heading(&body, "\u{89d2}\u{8272}\u{5b9a}\u{4e49}")
+                .or_else(|| first_paragraph_after_heading(&body, "Role Definition"))
+                .unwrap_or_else(|| agent_name.clone());
         let agent_prompt = body.trim().to_string();
 
         let grouped_skills = group_agent_skill_files(&department, &agent_dir, &root_files);
         let mut skill_source_ids = Vec::new();
         for (skill_dir, skill_files) in grouped_skills {
-            let Some(skill_file) = skill_files.iter().find(|(path, _)| path == SKILL_FRONTMATTER_FILE) else {
+            let Some(skill_file) = skill_files
+                .iter()
+                .find(|(path, _)| path == SKILL_FRONTMATTER_FILE)
+            else {
                 issues.push(ImportIssue {
                     severity: ISSUE_WARNING.into(),
                     scope: SOURCE_SCOPE_SKILL.into(),
                     source_id: Some(format!("{agent_source_id}/skills/{skill_dir}")),
                     message: format!(
                         "skipped skill '{}': missing required '{}'",
-                        skill_dir,
-                        SKILL_FRONTMATTER_FILE
+                        skill_dir, SKILL_FRONTMATTER_FILE
                     ),
                 });
                 continue;
@@ -612,7 +626,10 @@ fn build_bundle_plan(
     let mut unique_skills = BTreeMap::<(String, String), PlannedSkill>::new();
     for skill_source in &parsed_skill_sources {
         let entry = unique_skills
-            .entry((skill_source.canonical_slug.clone(), skill_source.content_hash.clone()))
+            .entry((
+                skill_source.canonical_slug.clone(),
+                skill_source.content_hash.clone(),
+            ))
             .or_insert_with(|| PlannedSkill {
                 slug: String::new(),
                 skill_id: String::new(),
@@ -626,10 +643,18 @@ fn build_bundle_plan(
                 files: skill_source.files.clone(),
             });
         entry.source_ids.push(skill_source.source_id.clone());
-        if !entry.departments.iter().any(|item| item == &skill_source.department) {
+        if !entry
+            .departments
+            .iter()
+            .any(|item| item == &skill_source.department)
+        {
             entry.departments.push(skill_source.department.clone());
         }
-        if !entry.agent_names.iter().any(|item| item == &skill_source.agent_name) {
+        if !entry
+            .agent_names
+            .iter()
+            .any(|item| item == &skill_source.agent_name)
+        {
             entry.agent_names.push(skill_source.agent_name.clone());
         }
     }
@@ -692,7 +717,8 @@ fn build_bundle_plan(
     let skill_slug_by_source_id = planned_skills
         .iter()
         .flat_map(|skill| {
-            skill.source_ids
+            skill
+                .source_ids
                 .iter()
                 .cloned()
                 .map(move |source_id| (source_id, skill.slug.clone()))
@@ -961,7 +987,11 @@ fn unquote_frontmatter_value(value: &str) -> String {
     value
         .strip_prefix('"')
         .and_then(|trimmed| trimmed.strip_suffix('"'))
-        .or_else(|| value.strip_prefix('\'').and_then(|trimmed| trimmed.strip_suffix('\'')))
+        .or_else(|| {
+            value
+                .strip_prefix('\'')
+                .and_then(|trimmed| trimmed.strip_suffix('\''))
+        })
         .unwrap_or(value)
         .trim()
         .to_string()
@@ -1025,9 +1055,11 @@ fn first_paragraph_after_heading(body: &str, heading: &str) -> Option<String> {
 }
 
 fn path_contains_filtered_directory(relative_path: &str) -> bool {
-    relative_path
-        .split('/')
-        .any(|segment| FILTERED_DIR_NAMES.iter().any(|candidate| candidate == &segment))
+    relative_path.split('/').any(|segment| {
+        FILTERED_DIR_NAMES
+            .iter()
+            .any(|candidate| candidate == &segment)
+    })
 }
 
 fn slugify_skill_name(value: &str, fallback_prefix: &str) -> String {
@@ -1195,7 +1227,11 @@ fn write_agent_record(
     record: &AgentRecord,
     replace: bool,
 ) -> Result<(), AppError> {
-    let verb = if replace { "INSERT OR REPLACE" } else { "INSERT" };
+    let verb = if replace {
+        "INSERT OR REPLACE"
+    } else {
+        "INSERT"
+    };
     connection
         .execute(
             &format!(
@@ -1300,8 +1336,7 @@ fn load_existing_skill_import_sources(
 
     let mut mappings = HashMap::new();
     for row in rows {
-        let (source_id, mapping) =
-            row.map_err(|error| AppError::database(error.to_string()))?;
+        let (source_id, mapping) = row.map_err(|error| AppError::database(error.to_string()))?;
         mappings.insert(source_id, mapping);
     }
     Ok(mappings)
@@ -1327,8 +1362,7 @@ fn load_existing_agent_import_sources(
 
     let mut mappings = HashMap::new();
     for row in rows {
-        let (source_id, mapping) =
-            row.map_err(|error| AppError::database(error.to_string()))?;
+        let (source_id, mapping) = row.map_err(|error| AppError::database(error.to_string()))?;
         mappings.insert(source_id, mapping);
     }
     Ok(mappings)
@@ -1494,7 +1528,10 @@ mod tests {
         let (frontmatter, body) = split_frontmatter(
             "---\nname: 通用助手\ndescription: 测试\n-----------\n\n# 角色定义\n你好\n",
         );
-        assert_eq!(frontmatter.get("name").map(String::as_str), Some("通用助手"));
+        assert_eq!(
+            frontmatter.get("name").map(String::as_str),
+            Some("通用助手")
+        );
         assert!(body.contains("# 角色定义"));
     }
 

@@ -93,7 +93,8 @@ export const usePetStore = defineStore('pet', () => {
   })
   const snapshot = computed(() => snapshots.value[activeScopeKey.value] ?? defaultSnapshot())
   const petConfig = computed(() => {
-    const value = userCenterStore.runtimeConfig?.effectiveConfig?.pet
+    const effectiveConfig = userCenterStore.runtimeConfig?.effectiveConfig
+    const value = isObjectRecord(effectiveConfig) ? effectiveConfig.pet : undefined
     return isObjectRecord(value) ? value : null
   })
   const profile = computed<PetProfile>(() => ({

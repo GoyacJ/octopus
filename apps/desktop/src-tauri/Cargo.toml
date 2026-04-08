@@ -39,3 +39,6 @@ path = "tests/shell_contract.rs"
 
 [dev-dependencies]
 tempfile.workspace = true
+
+[lints]
+workspace = true

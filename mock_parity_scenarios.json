@@ -1,0 +1,110 @@
+[
+  {
+    "name": "streaming_text",
+    "category": "baseline",
+    "description": "Verifies the clean-environment CLI can complete a single streaming assistant turn without tool use.",
+    "parity_refs": [
+      "mock-anthropic-service:streaming_text",
+      "rusty-claude-cli:json-output"
+    ]
+  },
+  {
+    "name": "read_file_roundtrip",
+    "category": "tooling",
+    "description": "Exercises a read-only file roundtrip where the model reads a local fixture and answers from its contents.",
+    "parity_refs": [
+      "tool:read_file",
+      "permission-mode:read-only"
+    ]
+  },
+  {
+    "name": "grep_chunk_assembly",
+    "category": "tooling",
+    "description": "Checks that grep search output is assembled correctly across streamed tool/result turns.",
+    "parity_refs": [
+      "tool:grep_search",
+      "stream-assembly:tool-results"
+    ]
+  },
+  {
+    "name": "write_file_allowed",
+    "category": "permissions",
+    "description": "Confirms a workspace-write session can write a file and surface the successful tool roundtrip.",
+    "parity_refs": [
+      "tool:write_file",
+      "permission-mode:workspace-write"
+    ]
+  },
+  {
+    "name": "write_file_denied",
+    "category": "permissions",
+    "description": "Confirms a read-only session denies file writes while preserving a structured tool error response.",
+    "parity_refs": [
+      "tool:write_file",
+      "permission-mode:read-only"
+    ]
+  },
+  {
+    "name": "multi_tool_turn_roundtrip",
+    "category": "tooling",
+    "description": "Validates a single turn that chains multiple approved tools and returns a coherent final answer.",
+    "parity_refs": [
+      "tool:read_file",
+      "tool:grep_search"
+    ]
+  },
+  {
+    "name": "bash_stdout_roundtrip",
+    "category": "bash",
+    "description": "Exercises unrestricted bash execution and captures stdout through the JSON response envelope.",
+    "parity_refs": [
+      "tool:bash",
+      "permission-mode:danger-full-access"
+    ]
+  },
+  {
+    "name": "bash_permission_prompt_approved",
+    "category": "permissions",
+    "description": "Checks that an approval-gated bash command proceeds when the interactive prompt is approved.",
+    "parity_refs": [
+      "tool:bash",
+      "prompt-approval:approved"
+    ]
+  },
+  {
+    "name": "bash_permission_prompt_denied",
+    "category": "permissions",
+    "description": "Checks that an approval-gated bash command is blocked when the interactive prompt is denied.",
+    "parity_refs": [
+      "tool:bash",
+      "prompt-approval:denied"
+    ]
+  },
+  {
+    "name": "plugin_tool_roundtrip",
+    "category": "plugins",
+    "description": "Verifies an externally discovered plugin tool can be enabled, invoked, and reported through the CLI.",
+    "parity_refs": [
+      "plugin:external",
+      "tool:plugin_echo"
+    ]
+  },
+  {
+    "name": "auto_compact_triggered",
+    "category": "sessions",
+    "description": "Ensures the CLI emits auto-compaction metadata when a resumed session crosses the compaction threshold.",
+    "parity_refs": [
+      "session:auto-compact",
+      "resume:jsonl"
+    ]
+  },
+  {
+    "name": "token_cost_reporting",
+    "category": "usage",
+    "description": "Ensures token totals and estimated cost fields are present in the structured JSON response.",
+    "parity_refs": [
+      "usage:token-count",
+      "usage:estimated-cost"
+    ]
+  }
+]
