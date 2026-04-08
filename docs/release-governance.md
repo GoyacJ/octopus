@@ -37,6 +37,7 @@ Because `apps/desktop/src-tauri/tauri.conf.json` bundles `bin/octopus-desktop-ba
 
 - release publication is tag-driven only: pushing `vX.Y.Z` runs `.github/workflows/release.yml`
 - the release workflow builds real desktop bundles on macOS and Windows runners
+- hosted Windows release builds publish the NSIS installer path and do not rely on WiX/MSI, because GitHub-hosted runner environments do not provide a stable `light.exe` execution surface for formal releases
 - `pnpm release:collect-artifacts` normalizes Tauri bundle output into `release-artifacts/publish/<platform>`
 - `pnpm release:verify-artifacts` blocks publication unless release metadata plus formal macOS and Windows installers are present
 - GitHub Releases only upload the verified release directory:

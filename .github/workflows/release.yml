@@ -120,8 +120,13 @@ jobs:
       - name: Build desktop sidecar
         run: node scripts/prepare-desktop-sidecar.mjs
 
-      - name: Build Tauri release bundle
+      - name: Build Tauri release bundle (macOS)
+        if: runner.os == 'macOS'
         run: pnpm build:desktop
+
+      - name: Build Tauri release bundle (Windows NSIS)
+        if: runner.os == 'Windows'
+        run: pnpm tauri build --bundles nsis --config apps/desktop/src-tauri/tauri.conf.json
 
       - name: Collect macOS release artifacts
         if: runner.os == 'macOS'
