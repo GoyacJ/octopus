@@ -29,6 +29,8 @@ Every release must pass:
 
 `pnpm check:all` is the local and CI entrypoint for the full repository gate.
 
+Because the Rust workspace includes the Tauri desktop shell, Ubuntu-based CI and release verification jobs must install the official Tauri Linux system dependencies before running `cargo clippy` and `cargo test`. The governance target is the full workspace gate, not a reduced Linux-only crate subset.
+
 ## Formal Release Flow
 
 - release publication is tag-driven only: pushing `vX.Y.Z` runs `.github/workflows/release.yml`
