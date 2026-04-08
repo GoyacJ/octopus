@@ -689,7 +689,11 @@ impl CommandWithStdin {
     ) -> std::io::Result<CommandExecution> {
         let mut child = self.command.spawn()?;
         if let Some(mut child_stdin) = child.stdin.take() {
-            child_stdin.write_all(stdin)?;
+            if let Err(error) = child_stdin.write_all(stdin) {
+                if error.kind() != std::io::ErrorKind::BrokenPipe {
+                    return Err(error);
+                }
+            }
         }
 
         loop {
@@ -745,6 +749,29 @@ mod tests {
         let result = runner.run_pre_tool_use("Read", r#"{"path":"README.md"}"#);
 
         assert_eq!(result, HookRunResult::allow(vec!["pre ok".to_string()]));
+    }
+
+    #[test]
+    fn command_runner_allows_hooks_that_close_stdin_before_payload_is_consumed() {
+        let mut command =
+            super::shell_command(&shell_snippet("exec 0<&-; printf 'post hook still ran'"));
+        command.stdin(std::process::Stdio::piped());
+        command.stdout(std::process::Stdio::piped());
+        command.stderr(std::process::Stdio::piped());
+
+        let output = command
+            .output_with_stdin(&vec![b'x'; 1024 * 1024], None)
+            .expect("hook command should tolerate closed stdin");
+
+        let output = match output {
+            super::CommandExecution::Finished(output) => output,
+            super::CommandExecution::Cancelled => panic!("hook command should not be cancelled"),
+        };
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "post hook still ran"
+        );
     }
 
     #[test]

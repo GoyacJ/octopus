@@ -337,7 +337,11 @@ impl CommandWithStdin {
         let mut child = self.command.spawn()?;
         if let Some(mut child_stdin) = child.stdin.take() {
             use std::io::Write as _;
-            child_stdin.write_all(stdin)?;
+            if let Err(error) = child_stdin.write_all(stdin) {
+                if error.kind() != std::io::ErrorKind::BrokenPipe {
+                    return Err(error);
+                }
+            }
         }
         child.wait_with_output()
     }
@@ -495,5 +499,26 @@ mod tests {
             .messages()
             .iter()
             .any(|message| message == "later plugin hook"));
+    }
+
+    #[test]
+    fn command_runner_allows_hooks_that_close_stdin_before_payload_is_consumed() {
+        // given
+        let mut command = super::shell_command("exec 0<&-; printf 'post hook still ran'");
+        command.stdin(std::process::Stdio::piped());
+        command.stdout(std::process::Stdio::piped());
+        command.stderr(std::process::Stdio::piped());
+        let payload = vec![b'x'; 1024 * 1024];
+
+        // when
+        let output = command.output_with_stdin(&payload);
+
+        // then
+        let output = output.expect("hook command should tolerate closed stdin");
+        assert!(output.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout).trim(),
+            "post hook still ran"
+        );
     }
 }
