@@ -43,6 +43,13 @@ Because `apps/desktop/src-tauri/tauri.conf.json` bundles `bin/octopus-desktop-ba
 - GitHub Releases only upload the verified release directory:
   - `release-artifacts/publish/macos/*`
   - `release-artifacts/publish/windows/*`
+
+## Preview Release Flow
+
+- preview publication is branch-driven: pushing `main` or manually dispatching `.github/workflows/release-preview.yml` produces a preview release
+- preview releases do not rewrite `VERSION`; they derive a unique prerelease tag as `vX.Y.Z-preview.<run_number>`
+- preview releases reuse the same metadata normalization, artifact collection, checksum generation, and installer verification gates as formal releases
+- preview GitHub Releases are published as `prerelease=true` and are not marked as latest
   - `release-artifacts/metadata/*`
   - `release-artifacts/SHA256SUMS.txt`
 

@@ -11,6 +11,7 @@ const verifyScriptPath = path.join(repoRoot, 'scripts', 'verify-release-artifact
 const collectScriptPath = path.join(repoRoot, 'scripts', 'collect-release-artifacts.mjs')
 const collectMetadataScriptPath = path.join(repoRoot, 'scripts', 'collect-release-metadata.mjs')
 const releaseNotesScriptPath = path.join(repoRoot, 'scripts', 'generate-release-notes.mjs')
+const previewTagScriptPath = path.join(repoRoot, 'scripts', 'generate-preview-release-tag.mjs')
 const tempDirectories: string[] = []
 
 function createTempDir(prefix: string) {
@@ -47,6 +48,51 @@ describe('release artifact governance scripts', () => {
     const notes = readFileSync(outputPath, 'utf8')
     expect(notes).toContain('2026-04-08-initial-release-governance')
     expect(notes).not.toContain('## README')
+  })
+
+  it('generates preview release notes with channel, sha, and run metadata', () => {
+    const outputDir = createTempDir('octopus-preview-release-notes-')
+    const outputPath = path.join(outputDir, 'v0.1.0-preview.42.md')
+
+    execFileSync(nodeExecutable, [
+      releaseNotesScriptPath,
+      '--channel',
+      'preview',
+      '--tag',
+      'v0.1.0-preview.42',
+      '--run-number',
+      '42',
+      '--sha',
+      'deadbeefcafebabe',
+      '--output',
+      outputPath,
+    ], {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    })
+
+    const notes = readFileSync(outputPath, 'utf8')
+    expect(notes).toContain('# Octopus v0.1.0-preview.42')
+    expect(notes).toContain('Release channel: preview')
+    expect(notes).toContain('Run number: 42')
+    expect(notes).toContain('Commit SHA: deadbeefcafebabe')
+    expect(notes).toContain('- Preview release from main branch governance')
+  })
+
+  it('generates preview release tags from version and run number', () => {
+    const tag = execFileSync(nodeExecutable, [
+      previewTagScriptPath,
+      '--version',
+      '0.1.0',
+      '--run-number',
+      '42',
+    ], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: 'pipe',
+    }).trim()
+
+    expect(tag).toBe('v0.1.0-preview.42')
   })
 
   it('collects canonical release metadata into a flat directory for publish verification', () => {

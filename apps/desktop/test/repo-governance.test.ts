@@ -50,6 +50,26 @@ describe('repository governance', () => {
     expect(workflow).toContain('release-artifacts/metadata')
   })
 
+  it('publishes preview releases from main and manual dispatch without formal tag gating', () => {
+    const workflowPath = path.join(repoRoot, '.github', 'workflows', 'release-preview.yml')
+
+    expect(existsSync(workflowPath)).toBe(true)
+
+    const workflow = readFileSync(workflowPath, 'utf8')
+    expect(workflow).toContain('branches:')
+    expect(workflow).toContain('- main')
+    expect(workflow).toContain('workflow_dispatch:')
+    expect(workflow).toContain('pnpm release:notes:preview')
+    expect(workflow).toContain('pnpm release:tag:preview')
+    expect(workflow).toContain('pnpm release:collect-metadata')
+    expect(workflow).toContain('pnpm release:verify-artifacts')
+    expect(workflow).toContain('prerelease: true')
+    expect(workflow).not.toContain('export RELEASE_TAG="${GITHUB_REF_NAME}"')
+    expect(workflow).not.toContain('pnpm version:check "${RELEASE_TAG}"')
+    expect(workflow).toContain('pnpm version:check')
+    expect(workflow).toContain('target_commitish: ${{ github.sha }}')
+  })
+
   it('uses a single version source and validates mirrored versions', () => {
     const versionFile = path.join(repoRoot, 'VERSION')
 
@@ -63,7 +83,9 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['version:sync']).toBe('node scripts/sync-version.mjs')
     expect(packageJson.scripts?.['version:check']).toBe('node scripts/check-version-governance.mjs')
     expect(packageJson.scripts?.['release:notes']).toBe('node scripts/generate-release-notes.mjs')
+    expect(packageJson.scripts?.['release:notes:preview']).toBe('node scripts/generate-release-notes.mjs --channel preview')
     expect(packageJson.scripts?.['release:collect-artifacts']).toBe('node scripts/collect-release-artifacts.mjs')
+    expect(packageJson.scripts?.['release:tag:preview']).toBe('node scripts/generate-preview-release-tag.mjs')
     expect(packageJson.scripts?.['release:verify-artifacts']).toBe('node scripts/verify-release-artifacts.mjs')
     expect(packageJson.scripts?.['check:rust']).toContain('pnpm prepare:desktop-backend:sidecar')
   })
@@ -71,11 +93,14 @@ describe('repository governance', () => {
   it('uses nsis-only Windows hosted builds to avoid WiX-only MSI coupling in CI and release', () => {
     const ciWorkflow = readRepoFile('.github', 'workflows', 'ci.yml')
     const releaseWorkflow = readRepoFile('.github', 'workflows', 'release.yml')
+    const previewWorkflow = readRepoFile('.github', 'workflows', 'release-preview.yml')
 
     expect(ciWorkflow).toContain("if: runner.os == 'Windows'")
     expect(ciWorkflow).toContain('pnpm tauri build --bundles nsis --config apps/desktop/src-tauri/tauri.conf.json')
     expect(releaseWorkflow).toContain("if: runner.os == 'Windows'")
     expect(releaseWorkflow).toContain('pnpm tauri build --bundles nsis --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(previewWorkflow).toContain("if: runner.os == 'Windows'")
+    expect(previewWorkflow).toContain('pnpm tauri build --bundles nsis --config apps/desktop/src-tauri/tauri.conf.json')
   })
 
   it('treats OpenAPI as the canonical shared schema source and checks generated freshness', () => {
