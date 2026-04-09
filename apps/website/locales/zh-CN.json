@@ -1,0 +1,397 @@
+{
+  "site": {
+    "name": "Octopus",
+    "tagline": "Human + AI Work System"
+  },
+  "nav": {
+    "home": "首页",
+    "product": "产品",
+    "scenarios": "场景",
+    "about": "关于",
+    "bookDemo": "预约演示"
+  },
+  "theme": {
+    "system": "跟随系统",
+    "light": "浅色",
+    "dark": "深色"
+  },
+  "footer": {
+    "tagline": "Octopus 不是把更多 AI 功能堆到一起，而是把会话、执行、知识、追踪与治理组织成一套真正可工作的系统。",
+    "note": "官网 v1 · 品牌叙事站",
+    "signals": {
+      "collaboration": "让 AI 参与真实工作，而不是只回答问题",
+      "runtime": "让运行、审批与追踪留在同一个表面之下",
+      "memory": "让知识与经验持续沉淀，而不是随对话消散"
+    }
+  },
+  "seo": {
+    "home": {
+      "title": "人与 AI 协作",
+      "description": "Octopus 让 AI 从回答问题走向参与工作，在同一套系统里连接会话、执行、知识、追踪与治理。"
+    },
+    "product": {
+      "title": "产品能力",
+      "description": "从 Conversations、Agents 到 Knowledge、Trace、Automations 与 Runtime，Octopus 组织完整的人与 AI 协作闭环。"
+    },
+    "scenarios": {
+      "title": "使用场景",
+      "description": "无论是个人、团队还是企业，Octopus 都以同一套产品主线承接执行、协作、沉淀与治理。"
+    },
+    "about": {
+      "title": "关于 Octopus",
+      "description": "了解 Octopus 为何从“人与 AI 协作”出发，构建一种更 calm、更可信、更可持续的工作系统。"
+    },
+    "bookDemo": {
+      "title": "预约演示",
+      "description": "预约一次 Octopus 演示，围绕你的团队节奏、治理要求与落地场景一起看产品。"
+    }
+  },
+  "home": {
+    "hero": {
+      "eyebrow": "人与 AI 协作",
+      "title": "把 AI 带进工作，而不是留在工具栏里。",
+      "description": "Octopus 让会话、执行、知识、追踪和自动化进入同一套工作系统。个人可以更快行动，团队可以更稳协作，组织可以持续沉淀经验。",
+      "note": "我们相信未来的工作不是人在一边提问、AI 在另一边回答，而是两者在同一个系统里持续推进任务、积累上下文、保留决策痕迹。",
+      "primary": "预约演示",
+      "secondary": "查看产品能力",
+      "quoteLabel": "Brand Note",
+      "quote": "你不需要另一个会说话的工具。你需要一套真正能协作的工作系统。",
+      "badge": "Calm, tracked, reusable",
+      "diagramAlt": "Octopus 价值闭环图"
+    },
+    "belief": {
+      "eyebrow": "New Working Relationship",
+      "title": "人与 AI 的关系，不该只是请求与回应。",
+      "description": "当 AI 真的参与工作，它就必须进入真实上下文、承担连续任务、接受追踪与约束，并把成果沉淀为下一次协作的起点。Octopus 的设计，就是把这种关系变成可以被组织、被扩展、被长期使用的系统。"
+    },
+    "proofStrip": {
+      "items": {
+        "conversations": {
+          "label": "Conversations",
+          "value": "连续上下文",
+          "description": "会话不只是聊天窗口，而是项目与执行的真实入口。"
+        },
+        "knowledge": {
+          "label": "Knowledge",
+          "value": "沉淀为资产",
+          "description": "有价值的经验被保留、可引用、可复用，而不是停留在个人记忆里。"
+        },
+        "trace": {
+          "label": "Trace + Runtime",
+          "value": "运行可见",
+          "description": "每一步执行、阻塞与审批都可以被看见、被追踪、被解释。"
+        }
+      }
+    },
+    "narrative": {
+      "eyebrow": "How It Feels",
+      "title": "同一套系统里，完成从思考到执行再到沉淀。",
+      "description": "Octopus 的官网不会把产品拆成零碎功能，而是展示一种工作流：先理解，再推进，再留下可以继续使用的东西。",
+      "sections": {
+        "think": {
+          "eyebrow": "Together / Think",
+          "title": "一起思考",
+          "description": "把会话从一次性问答变成长期上下文，理解任务、目标、约束和下一步行动。",
+          "bullets": [
+            "让对话天然挂在项目与工作区上下文之中",
+            "把知识、资源、角色和当前任务放在同一个表面上",
+            "让人与 AI 的讨论可以持续，而不是每次重新开始"
+          ]
+        },
+        "execute": {
+          "eyebrow": "Together / Execute",
+          "title": "一起执行",
+          "description": "把动作真正推进下去，连接智能体、工具、自动化与运行时能力，而不是停在建议层。",
+          "bullets": [
+            "让 Agents、Tools 和 Automations 参与真实工作流",
+            "让 Runtime 能力带着权限和约束进入执行现场",
+            "让协作结果不仅被说出来，而且被做出来"
+          ]
+        },
+        "retain": {
+          "eyebrow": "Together / Retain",
+          "title": "一起沉淀",
+          "description": "让追踪、知识和治理自然留下痕迹，把今天的协作变成明天的起点。",
+          "bullets": [
+            "通过 Trace 保留运行线索、阻塞和决策依据",
+            "通过 Knowledge 将经验从对话中提炼出来",
+            "让组织获得可复用的记忆，而不是不断重复试错"
+          ]
+        }
+      }
+    },
+    "scenarios": {
+      "eyebrow": "For Every Scale",
+      "title": "同一个 Octopus，可以服务不同规模的工作方式。",
+      "description": "我们不把个人、团队、企业拆成三套割裂产品，而是让同一条产品主线在不同规模下自然展开。",
+      "cta": "查看更多场景"
+    },
+    "interface": {
+      "eyebrow": "Interface Proof",
+      "title": "真正的协作，应该能在界面里被看见。",
+      "description": "所以官网不用抽象概念替代证据。我们直接展示实际的工作台、知识、追踪与治理表面。"
+    },
+    "cta": {
+      "eyebrow": "Start With A Conversation",
+      "title": "如果你正在寻找的不是另一个 AI 工具，而是一套更完整的工作系统。",
+      "description": "从个人效率，到团队协作，再到组织沉淀，Octopus 适合被认真地放进真实工作中。",
+      "primary": "预约演示",
+      "secondary": "查看产品能力"
+    }
+  },
+  "product": {
+    "hero": {
+      "eyebrow": "Product",
+      "title": "一套把协作、执行、记忆与治理串起来的产品。",
+      "description": "Octopus 把人与 AI 协作真正需要的几个层面放到一起：会话、智能体、知识、追踪、自动化和运行时配置不再各自分离，而是在同一个系统内配合工作。",
+      "primary": "预约演示",
+      "secondary": "查看适用场景",
+      "diagramAlt": "Octopus 产品结构图"
+    },
+    "structure": {
+      "eyebrow": "Capability Loop",
+      "title": "不是更多模块，而是更完整的闭环。",
+      "description": "每个能力都不是单独存在，它们一起定义了人与 AI 如何进入工作、推进任务并留下可复用成果。"
+    },
+    "features": {
+      "conversations": {
+        "eyebrow": "Conversations",
+        "title": "会话是工作入口，不是孤立窗口。",
+        "description": "对话天然挂在项目与上下文里，让 AI 能持续理解当前任务与组织方式。",
+        "bullets": [
+          "会话与项目、资源和运行上下文自然关联",
+          "不是一次性提问，而是可继续推进的工作流起点",
+          "把讨论、行动与结果保持在同一条连续脉络中"
+        ]
+      },
+      "agents": {
+        "eyebrow": "Agents",
+        "title": "智能体进入工作系统，而不是游离在系统之外。",
+        "description": "Octopus 让个人代理、团队代理和任务分工都在同一个产品表面内组织起来。",
+        "bullets": [
+          "围绕角色、能力和责任组织智能体",
+          "让团队协作中的代理关系可以被显性管理",
+          "把调用频率、分工关系和使用状态留在系统中"
+        ]
+      },
+      "knowledge": {
+        "eyebrow": "Knowledge",
+        "title": "把经验沉淀成组织能继续使用的东西。",
+        "description": "有价值的对话和产出不该只停在当下，而应该成为下一轮协作的起点。",
+        "bullets": [
+          "把运行中的经验、资源和结论纳入知识层",
+          "让项目知识与全局知识保持各自边界",
+          "为未来的检索、复用和协作提供可追溯来源"
+        ]
+      },
+      "trace": {
+        "eyebrow": "Trace",
+        "title": "让执行过程可见，而不是只能看到结果。",
+        "description": "Trace 让运行状态、阻塞、审批和下一步动作都保持可解释。",
+        "bullets": [
+          "把关键步骤、阻塞与审批保留在同一时间线上",
+          "帮助团队在扩大 AI 使用范围时仍保持可追踪",
+          "让问题复盘不再依赖个人记忆"
+        ]
+      },
+      "automations": {
+        "eyebrow": "Automations",
+        "title": "让重复性协作持续运行，而不是每次重新发起。",
+        "description": "Octopus 把自动化视为协作延伸，让系统能够持续推进行动。",
+        "bullets": [
+          "让例行工作以自然的节奏被托管和推进",
+          "把自动化留在同一个产品与治理表面内",
+          "避免把关键流程拆散到外部工具里"
+        ]
+      },
+      "runtime": {
+        "eyebrow": "Runtime",
+        "title": "真正可运行的 AI，需要运行时边界。",
+        "description": "权限、模型、工具和运行配置决定了 AI 如何进入实际工作，而不是停留在抽象能力层。",
+        "bullets": [
+          "让运行时配置、权限与表面能力保持一致",
+          "让执行能力具备组织级的边界感与清晰度",
+          "为不同范围的协作提供稳定而可控的基础"
+        ]
+      }
+    },
+    "cta": {
+      "eyebrow": "See It In Context",
+      "title": "想看这些能力如何在真实场景里协同出现。",
+      "description": "Octopus 的价值不在于单个模块，而在于这些能力如何共同构成一套更完整的工作系统。",
+      "primary": "预约演示",
+      "secondary": "了解我们为何这样设计"
+    }
+  },
+  "scenarios": {
+    "hero": {
+      "eyebrow": "Scenarios",
+      "title": "同样的系统，适配不同规模的工作。",
+      "description": "Octopus 既不把个人用户挡在门外，也不把团队与组织需求压扁成个人工具体验。它允许同一套产品逻辑在不同规模上自然展开。"
+    },
+    "matrix": {
+      "eyebrow": "Use Cases",
+      "title": "从一个人开始，也能延伸到整个团队与组织。",
+      "description": "重点不是把人群分开，而是让每个规模都获得合适的协作密度、沉淀方式与治理能力。"
+    },
+    "groups": {
+      "individual": {
+        "eyebrow": "For Individuals",
+        "title": "个人",
+        "description": "适合需要持续推进任务、保存上下文、积累个人工作记忆的人。",
+        "bullets": [
+          "把日常工作从零散提问提升为连续协作",
+          "让会话、资源与产出保持在一个工作系统里",
+          "为个人知识与未来复用保留清晰线索"
+        ]
+      },
+      "team": {
+        "eyebrow": "For Teams",
+        "title": "团队",
+        "description": "适合需要共享上下文、协调角色分工、减少重复沟通的团队。",
+        "bullets": [
+          "让团队成员与智能体围绕同一项目推进",
+          "通过追踪和知识层降低协作断层",
+          "让自动化成为团队节奏的一部分"
+        ]
+      },
+      "enterprise": {
+        "eyebrow": "For Organizations",
+        "title": "企业",
+        "description": "适合对权限、审批、审计和知识资产化有更高要求的组织环境。",
+        "bullets": [
+          "把 AI 使用纳入清晰的治理和运行边界",
+          "把流程追踪、审批与知识沉淀留在同一体系内",
+          "在扩大使用规模时仍保持可解释与可控"
+        ]
+      }
+    },
+    "cta": {
+      "eyebrow": "Bring Your Own Workflow",
+      "title": "你可以从任何规模进入，但不必在成长时更换逻辑。",
+      "description": "Octopus 的设计目标，是让同一条产品主线陪着工作方式一起长大。",
+      "primary": "预约演示",
+      "secondary": "返回产品能力"
+    }
+  },
+  "about": {
+    "hero": {
+      "eyebrow": "About",
+      "title": "我们想做的，不是更吵闹的 AI 产品。",
+      "description": "Octopus 从一开始就更关心一件事：当 AI 真的进入工作，它要如何被组织、被信任、被持续使用，而不是只在演示时看起来聪明。",
+      "diagramAlt": "Octopus 治理流程图"
+    },
+    "principlesEyebrow": "Principles",
+    "principlesTitle": "四个设计判断，决定了官网和产品都应该保持什么样子。",
+    "principlesDescription": "我们希望体验既温暖亲和，又足够克制；既允许个人快速进入，也能承接更复杂的团队与组织要求。",
+    "principles": {
+      "calm": {
+        "title": "Calm",
+        "description": "保持克制与秩序感，让用户感受到系统在承载工作，而不是在消耗注意力。"
+      },
+      "systems": {
+        "title": "Systemic",
+        "description": "拒绝堆砌单点能力，而是围绕真实工作流程组织功能与界面。"
+      },
+      "memory": {
+        "title": "Memorable",
+        "description": "让知识与经验留下来，成为下一次协作能继续调用的资产。"
+      },
+      "trust": {
+        "title": "Trustworthy",
+        "description": "让追踪、审批、权限与解释能力贯穿产品，而不是后补。"
+      }
+    },
+    "journey": {
+      "eyebrow": "Why Octopus",
+      "title": "从一次对话，到一套真正能持续运行的系统。",
+      "lead": "我们并不认为 AI 的价值只来自模型能力本身。真正的价值，来自它是否能进入上下文、承担连续任务、保留痕迹，并把成果沉淀下来。",
+      "points": [
+        "如果 AI 不能留下上下文，它就只能不断重新开始。",
+        "如果 AI 不能进入执行，它就只能给出建议而无法推进工作。",
+        "如果 AI 不能被追踪和治理，它就很难被认真纳入组织系统。",
+        "如果 AI 不能沉淀经验，它带来的价值就无法持续放大。"
+      ],
+      "diagramAlt": "Octopus 平台分层图"
+    },
+    "cta": {
+      "eyebrow": "See The Product",
+      "title": "这些判断最终都会落回产品，而不只是停留在品牌表述里。",
+      "description": "如果这套思路与你正在寻找的方向一致，可以直接查看产品能力，或者预约一场更具体的演示。",
+      "primary": "预约演示",
+      "secondary": "查看产品能力"
+    }
+  },
+  "bookDemo": {
+    "hero": {
+      "eyebrow": "Book A Demo",
+      "title": "把你的工作方式带过来，我们一起看 Octopus 是否适合它。",
+      "description": "一次合适的演示，不是看更多酷炫功能，而是围绕你的协作节奏、治理要求、知识沉淀需求和真实工作场景来判断。"
+    },
+    "summary": {
+      "eyebrow": "What We Cover",
+      "title": "你可以期待看到的，不只是功能列表。",
+      "description": "演示会围绕以下几个层面展开，帮助你更快判断 Octopus 与当前工作方式的匹配度。"
+    },
+    "options": {
+      "call": {
+        "eyebrow": "Live Demo",
+        "title": "预约一场现场演示",
+        "description": "最适合团队、项目负责人或希望快速判断落地方式的人。",
+        "cta": "打开预约链接"
+      },
+      "email": {
+        "eyebrow": "Email",
+        "title": "直接发起联系",
+        "description": "如果你有明确的问题、背景信息或定制需求，邮件会更高效。",
+        "cta": "发送邮件"
+      },
+      "product": {
+        "eyebrow": "Self-guided",
+        "title": "先浏览产品能力",
+        "description": "如果你还在建立初步认知，可以先回到产品页继续看细节。",
+        "cta": "返回产品页"
+      }
+    },
+    "checklist": {
+      "items": [
+        "你当前最想解决的是效率、协作、沉淀还是治理问题",
+        "你希望 AI 参与的是个人任务、团队流程还是组织级工作",
+        "你对审批、权限、追踪和知识沉淀是否已有明确要求",
+        "你希望先验证一个具体场景，还是先看完整产品框架"
+      ]
+    }
+  },
+  "media": {
+    "dashboard": {
+      "eyebrow": "Workspace Overview",
+      "title": "工作台从总览开始，而不是从一堆散乱入口开始。",
+      "description": "Dashboard 让工作区状态、重点项目和关键运行信号放在同一视野里。",
+      "alt": "Octopus 工作区概览截图"
+    },
+    "conversation": {
+      "eyebrow": "Conversation",
+      "title": "让会话带着项目与上下文继续往前走。",
+      "description": "对话、上下文面板和运行动作保持在同一表面里，而不是被拆散。",
+      "alt": "Octopus 会话界面截图"
+    },
+    "knowledge": {
+      "eyebrow": "Knowledge",
+      "title": "让经验进入知识层，而不是留在聊天记录深处。",
+      "description": "Knowledge 表面强调来源、信任度与上下文关联，而不是简单的素材堆叠。",
+      "alt": "Octopus 知识界面截图"
+    },
+    "trace": {
+      "eyebrow": "Trace",
+      "title": "执行过程可见，问题与决策也就更容易被理解。",
+      "description": "Trace 让执行路径、阻塞状态与审批动作都能被明确看到。",
+      "alt": "Octopus Trace 界面截图"
+    },
+    "governance": {
+      "eyebrow": "Runtime Governance",
+      "title": "主题、运行与治理不是附加层，而是系统的一部分。",
+      "description": "设置与运行表面保持同一种语言，帮助组织理解 AI 如何进入真实工作边界。",
+      "alt": "Octopus 运行治理界面截图"
+    }
+  }
+}

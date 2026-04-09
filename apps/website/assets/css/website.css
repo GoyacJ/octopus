@@ -1,0 +1,198 @@
+@import "@octopus/ui/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    --brand-paper-shadow: 0 28px 80px rgba(31, 30, 29, 0.08);
+    --brand-edge-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  }
+
+  html {
+    min-height: 100%;
+    background:
+      radial-gradient(circle at top, rgba(11, 110, 208, 0.08), transparent 28%),
+      linear-gradient(180deg, rgba(251, 250, 248, 0.98), rgba(247, 244, 239, 0.98));
+    scroll-behavior: smooth;
+  }
+
+  html[data-theme='dark'] {
+    background:
+      radial-gradient(circle at top, rgba(79, 154, 230, 0.16), transparent 32%),
+      linear-gradient(180deg, rgba(31, 29, 27, 1), rgba(25, 23, 21, 1));
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: transparent;
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    background-image:
+      linear-gradient(rgba(31, 30, 29, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(31, 30, 29, 0.03) 1px, transparent 1px);
+    background-size: 56px 56px;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.16), transparent 72%);
+  }
+
+  html[data-theme='dark'] body::before {
+    background-image:
+      linear-gradient(rgba(255, 252, 248, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 252, 248, 0.04) 1px, transparent 1px);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    margin: 0;
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-weight: 600;
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+  }
+
+  p {
+    margin: 0;
+  }
+
+  img {
+    display: block;
+    max-width: 100%;
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--brand-primary) 18%, transparent);
+  }
+}
+
+@layer components {
+  .brand-shell {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .brand-container {
+    margin-inline: auto;
+    width: min(1160px, calc(100% - 2rem));
+  }
+
+  .brand-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 9999px;
+    padding: 0.4rem 0.85rem;
+    background: color-mix(in srgb, var(--bg-surface) 82%, transparent);
+    box-shadow: var(--brand-edge-shadow);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .brand-kicker::before {
+    content: '';
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: 9999px;
+    background: var(--brand-primary);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--brand-primary) 14%, transparent);
+  }
+
+  .brand-display {
+    font-size: clamp(3.4rem, 8vw, 6.8rem);
+    line-height: 0.94;
+  }
+
+  .brand-display .muted {
+    color: var(--text-secondary);
+  }
+
+  .brand-lead {
+    max-width: 42rem;
+    color: var(--text-secondary);
+    font-size: clamp(1rem, 2vw, 1.2rem);
+    line-height: 1.8;
+  }
+
+  .brand-panel {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle);
+    border-radius: 28px;
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--bg-surface) 94%, transparent), color-mix(in srgb, var(--bg-surface) 84%, transparent)),
+      linear-gradient(135deg, rgba(11, 110, 208, 0.06), transparent 40%);
+    box-shadow: var(--brand-paper-shadow);
+  }
+
+  html[data-theme='dark'] .brand-panel {
+    background:
+      linear-gradient(180deg, rgba(37, 35, 33, 0.96), rgba(28, 26, 24, 0.94)),
+      linear-gradient(135deg, rgba(79, 154, 230, 0.12), transparent 42%);
+  }
+
+  .brand-panel::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 18%);
+  }
+
+  .brand-section {
+    padding-block: clamp(4rem, 8vw, 7rem);
+  }
+
+  .brand-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-strong), transparent);
+  }
+
+  .brand-metadata {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-tertiary);
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .brand-metadata::before {
+    content: '';
+    width: 2.75rem;
+    height: 1px;
+    background: color-mix(in srgb, var(--brand-primary) 42%, var(--border-subtle));
+  }
+
+  .brand-link {
+    transition:
+      color var(--duration-fast) var(--ease-apple),
+      opacity var(--duration-fast) var(--ease-apple);
+  }
+
+  .brand-link:hover {
+    color: var(--text-primary);
+  }
+
+  .brand-grid {
+    display: grid;
+    gap: 1.5rem;
+  }
+}

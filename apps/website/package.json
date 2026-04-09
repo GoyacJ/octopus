@@ -1,0 +1,27 @@
+{
+  "name": "octopus-website",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@octopus/schema": "workspace:*",
+    "@octopus/ui": "workspace:*",
+    "@nuxtjs/i18n": "^10.2.4",
+    "@nuxtjs/tailwindcss": "^6.14.0",
+    "lucide-vue-next": "^0.400.0",
+    "nuxt": "^3.21.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.24",
+    "vitest": "^4.1.3"
+  }
+}
