@@ -12,6 +12,7 @@ use crate::{
     backend::BackendSupervisor,
     error::ShellResult,
     services::{NotificationService, PreferencesService, WorkspaceConnectionRegistryService},
+    updates::AppUpdateService,
 };
 
 #[derive(Clone)]
@@ -22,6 +23,7 @@ pub struct ShellState {
     pub workspace_connection_registry_service: WorkspaceConnectionRegistryService,
     pub notification_service: NotificationService,
     pub backend_supervisor: BackendSupervisor,
+    pub app_update_service: AppUpdateService,
 }
 
 impl ShellState {
@@ -69,6 +71,7 @@ impl ShellState {
             workspace_connection_registry_service,
             notification_service,
             backend_supervisor,
+            app_update_service: AppUpdateService::new(),
         }
     }
 

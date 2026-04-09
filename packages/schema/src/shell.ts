@@ -14,6 +14,7 @@ import type {
   Locale,
   ThemeMode,
 } from './shared'
+import type { HostUpdateChannel } from './updates'
 import type {
   WorkspaceConnectionRecord,
   WorkspaceSessionTokenEnvelope,
@@ -43,6 +44,7 @@ export function createDefaultShellPreferences(defaultWorkspaceId: string, defaul
     compactSidebar: false,
     leftSidebarCollapsed: false,
     rightSidebarCollapsed: false,
+    updateChannel: 'formal',
     defaultWorkspaceId,
     lastVisitedRoute: `/workspaces/${defaultWorkspaceId}/overview?project=${defaultProjectId}`,
   }
@@ -74,9 +76,14 @@ export function normalizeShellPreferences(
       : leftSidebarCollapsed,
     leftSidebarCollapsed,
     rightSidebarCollapsed: preferences?.rightSidebarCollapsed ?? fallback.rightSidebarCollapsed,
+    updateChannel: normalizeUpdateChannel(preferences?.updateChannel),
     defaultWorkspaceId: nextWorkspaceId,
     lastVisitedRoute: nextRoute,
   }
+}
+
+function normalizeUpdateChannel(channel?: HostUpdateChannel | null): HostUpdateChannel {
+  return channel === 'preview' ? 'preview' : 'formal'
 }
 
 export function createFallbackHostState(platform: HostPlatform = 'web'): HostState {

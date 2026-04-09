@@ -780,6 +780,7 @@ function createHostBootstrap(): ShellBootstrap {
       compactSidebar: false,
       leftSidebarCollapsed: false,
       rightSidebarCollapsed: false,
+      updateChannel: 'formal',
       fontSize: 16,
       fontFamily: 'Inter, sans-serif',
       fontStyle: 'sans',
@@ -3802,6 +3803,96 @@ export function installWorkspaceApiFixture(options: FixtureOptions = {}): void {
     return clone(hostBootstrap)
   })
   vi.spyOn(tauriClient, 'savePreferences').mockImplementation(async (preferences) => clone(preferences))
+  vi.spyOn(tauriClient, 'getHostUpdateStatus').mockResolvedValue({
+    currentVersion: hostBootstrap.hostState.appVersion,
+    currentChannel: hostBootstrap.preferences.updateChannel,
+    state: 'idle',
+    latestRelease: null,
+    lastCheckedAt: null,
+    progress: null,
+    capabilities: {
+      canCheck: true,
+      canDownload: true,
+      canInstall: true,
+      supportsChannels: true,
+    },
+    errorCode: null,
+    errorMessage: null,
+  })
+  vi.spyOn(tauriClient, 'checkHostUpdate').mockImplementation(async (channel) => ({
+    currentVersion: hostBootstrap.hostState.appVersion,
+    currentChannel: channel ?? hostBootstrap.preferences.updateChannel,
+    state: 'update_available',
+    latestRelease: {
+      version: '0.2.1',
+      channel: channel ?? hostBootstrap.preferences.updateChannel,
+      publishedAt: '2026-04-09T08:00:00.000Z',
+      notes: '本次更新聚焦版本中心、更新流程和更清晰的产品化说明。',
+      notesUrl: 'https://example.test/releases/0.2.1',
+    },
+    lastCheckedAt: 1_710_000_000_000,
+    progress: null,
+    capabilities: {
+      canCheck: true,
+      canDownload: true,
+      canInstall: true,
+      supportsChannels: true,
+    },
+    errorCode: null,
+    errorMessage: null,
+  }))
+  vi.spyOn(tauriClient, 'downloadHostUpdate').mockResolvedValue({
+    currentVersion: hostBootstrap.hostState.appVersion,
+    currentChannel: hostBootstrap.preferences.updateChannel,
+    state: 'downloaded',
+    latestRelease: {
+      version: '0.2.1',
+      channel: hostBootstrap.preferences.updateChannel,
+      publishedAt: '2026-04-09T08:00:00.000Z',
+      notes: '本次更新聚焦版本中心、更新流程和更清晰的产品化说明。',
+      notesUrl: 'https://example.test/releases/0.2.1',
+    },
+    lastCheckedAt: 1_710_000_000_000,
+    progress: {
+      downloadedBytes: 1024,
+      totalBytes: 1024,
+      percent: 100,
+    },
+    capabilities: {
+      canCheck: true,
+      canDownload: true,
+      canInstall: true,
+      supportsChannels: true,
+    },
+    errorCode: null,
+    errorMessage: null,
+  })
+  vi.spyOn(tauriClient, 'installHostUpdate').mockResolvedValue({
+    currentVersion: hostBootstrap.hostState.appVersion,
+    currentChannel: hostBootstrap.preferences.updateChannel,
+    state: 'installing',
+    latestRelease: {
+      version: '0.2.1',
+      channel: hostBootstrap.preferences.updateChannel,
+      publishedAt: '2026-04-09T08:00:00.000Z',
+      notes: '本次更新聚焦版本中心、更新流程和更清晰的产品化说明。',
+      notesUrl: 'https://example.test/releases/0.2.1',
+    },
+    lastCheckedAt: 1_710_000_000_000,
+    progress: {
+      downloadedBytes: 1024,
+      totalBytes: 1024,
+      percent: 100,
+    },
+    capabilities: {
+      canCheck: true,
+      canDownload: true,
+      canInstall: true,
+      supportsChannels: true,
+    },
+    errorCode: null,
+    errorMessage: null,
+  })
   vi.spyOn(tauriClient, 'healthcheck').mockResolvedValue({
     backend: { state: 'ready', transport: 'http' },
   })

@@ -174,8 +174,50 @@ pub struct ShellPreferences {
     pub compact_sidebar: bool,
     pub left_sidebar_collapsed: bool,
     pub right_sidebar_collapsed: bool,
+    pub update_channel: String,
     pub default_workspace_id: String,
     pub last_visited_route: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HostReleaseSummary {
+    pub version: String,
+    pub channel: String,
+    pub published_at: String,
+    pub notes: Option<String>,
+    pub notes_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HostUpdateCapabilities {
+    pub can_check: bool,
+    pub can_download: bool,
+    pub can_install: bool,
+    pub supports_channels: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HostUpdateProgress {
+    pub downloaded_bytes: u64,
+    pub total_bytes: u64,
+    pub percent: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct HostUpdateStatus {
+    pub current_version: String,
+    pub current_channel: String,
+    pub state: String,
+    pub latest_release: Option<HostReleaseSummary>,
+    pub last_checked_at: Option<u64>,
+    pub progress: Option<HostUpdateProgress>,
+    pub capabilities: HostUpdateCapabilities,
+    pub error_code: Option<String>,
+    pub error_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1823,8 +1865,37 @@ pub fn default_preferences(
         compact_sidebar: false,
         left_sidebar_collapsed: false,
         right_sidebar_collapsed: false,
+        update_channel: "formal".into(),
         default_workspace_id: workspace_id.clone(),
         last_visited_route: format!("/workspaces/{workspace_id}/overview?project={project_id}"),
+    }
+}
+
+#[must_use]
+pub fn default_host_update_capabilities() -> HostUpdateCapabilities {
+    HostUpdateCapabilities {
+        can_check: true,
+        can_download: false,
+        can_install: false,
+        supports_channels: true,
+    }
+}
+
+#[must_use]
+pub fn default_host_update_status(
+    current_version: impl Into<String>,
+    current_channel: impl Into<String>,
+) -> HostUpdateStatus {
+    HostUpdateStatus {
+        current_version: current_version.into(),
+        current_channel: current_channel.into(),
+        state: "idle".into(),
+        latest_release: None,
+        last_checked_at: None,
+        progress: None,
+        capabilities: default_host_update_capabilities(),
+        error_code: None,
+        error_message: None,
     }
 }
 

@@ -12,6 +12,7 @@ import { useWorkbenchRouteSync } from '@/composables/useWorkbenchRouteSync'
 import WorkbenchLayout from '@/layouts/WorkbenchLayout.vue'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationStore } from '@/stores/notifications'
+import { useAppUpdateStore } from '@/stores/app-update'
 import { usePetStore } from '@/stores/pet'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
@@ -19,6 +20,7 @@ import { WORKSPACE_AUTH_FAILURE_EVENT, type WorkspaceAuthFailureDetail } from '@
 
 const auth = useAuthStore()
 const notifications = useNotificationStore()
+const appUpdate = useAppUpdateStore()
 const router = useRouter()
 const shell = useShellStore()
 const runtime = useRuntimeStore()
@@ -40,6 +42,9 @@ async function bootstrapShell() {
   await notifications.bootstrap()
   await auth.bootstrapAuth()
   runtime.syncWorkspaceScopeFromShell()
+  void appUpdate.initialize().catch((error) => {
+    console.warn('failed to initialize app update status', error)
+  })
 }
 
 const notificationScopeLabels = computed(() => ({

@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 185b68468dfb82d0dcb14ed390ec0cfd39240784f5dafa3327272dc322212baa
+// Source hash: c5b9852391994992b352a32ca0faf2b0a42b9f55955bd71b73a31fbb398e6dc8
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.0"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "185b68468dfb82d0dcb14ed390ec0cfd39240784f5dafa3327272dc322212baa"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "c5b9852391994992b352a32ca0faf2b0a42b9f55955bd71b73a31fbb398e6dc8"
 
 export interface AgentRecord {
   avatar?: string
@@ -268,12 +268,53 @@ export type HostExecutionMode = "local" | "remote"
 
 export type HostPlatform = "tauri" | "web"
 
+export interface HostReleaseSummary {
+  channel: HostUpdateChannel
+  notes?: string
+  notesUrl?: string
+  publishedAt: string
+  version: string
+}
+
 export interface HostState {
   appVersion: string
   cargoWorkspace: boolean
   mode: HostExecutionMode
   platform: HostPlatform
   shell: string
+}
+
+export interface HostUpdateCapabilities {
+  canCheck: boolean
+  canDownload: boolean
+  canInstall: boolean
+  supportsChannels: boolean
+}
+
+export type HostUpdateChannel = "formal" | "preview"
+
+export interface HostUpdateCheckRequest {
+  channel?: HostUpdateChannel
+}
+
+export interface HostUpdateProgress {
+  downloadedBytes: number
+  percent: number
+  totalBytes: number
+}
+
+export type HostUpdateState = "idle" | "checking" | "up_to_date" | "update_available" | "downloading" | "downloaded" | "installing" | "error"
+
+export interface HostUpdateStatus {
+  capabilities: HostUpdateCapabilities
+  currentChannel: HostUpdateChannel
+  currentVersion: string
+  errorCode?: string
+  errorMessage?: string
+  lastCheckedAt?: number
+  latestRelease?: HostReleaseSummary
+  progress?: HostUpdateProgress
+  state: HostUpdateState
 }
 
 export interface ImportedAgentPreviewItem {
@@ -946,6 +987,7 @@ export interface ShellPreferences {
   locale: Locale
   rightSidebarCollapsed: boolean
   theme: ThemeMode
+  updateChannel: HostUpdateChannel
 }
 
 export interface SubmitRuntimeTurnInput {
@@ -1409,6 +1451,18 @@ export interface OctopusApiPaths {
   "/api/v1/host/preferences": {
     get: { operationId: "getHostPreferences"; response: ShellPreferences; error: ApiErrorEnvelope }
     put: { operationId: "saveHostPreferences"; response: ShellPreferences; error: ApiErrorEnvelope }
+  }
+  "/api/v1/host/update-check": {
+    post: { operationId: "checkHostUpdate"; response: HostUpdateStatus; error: ApiErrorEnvelope }
+  }
+  "/api/v1/host/update-download": {
+    post: { operationId: "downloadHostUpdate"; response: HostUpdateStatus; error: ApiErrorEnvelope }
+  }
+  "/api/v1/host/update-install": {
+    post: { operationId: "installHostUpdate"; response: HostUpdateStatus; error: ApiErrorEnvelope }
+  }
+  "/api/v1/host/update-status": {
+    get: { operationId: "getHostUpdateStatus"; response: HostUpdateStatus; error: ApiErrorEnvelope }
   }
   "/api/v1/host/workspace-connections": {
     get: { operationId: "listHostWorkspaceConnections"; response: WorkspaceConnectionRecord[]; error: ApiErrorEnvelope }

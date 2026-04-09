@@ -130,6 +130,9 @@ function mergeSavedPreferences(
     rightSidebarCollapsed: hasPreferencePatchKey(patch, 'rightSidebarCollapsed')
       ? savedPreferences.rightSidebarCollapsed
       : currentPreferences.rightSidebarCollapsed,
+    updateChannel: hasPreferencePatchKey(patch, 'updateChannel')
+      ? savedPreferences.updateChannel
+      : currentPreferences.updateChannel,
     defaultWorkspaceId: hasPreferencePatchKey(patch, 'defaultWorkspaceId')
       ? savedPreferences.defaultWorkspaceId
       : currentPreferences.defaultWorkspaceId,

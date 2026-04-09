@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { RotateCcw } from 'lucide-vue-next'
-import { createDefaultShellPreferences } from '@octopus/schema'
-import type { RuntimeConfigSource } from '@octopus/schema'
+import {
+  createDefaultHostUpdateStatus,
+  createDefaultShellPreferences,
+} from '@octopus/schema'
+import type {
+  HostUpdateChannel,
+  RuntimeConfigSource,
+} from '@octopus/schema'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
@@ -13,6 +19,7 @@ import {
   UiEmptyState,
   UiField,
   UiListRow,
+  UiMetricCard,
   UiPageHeader,
   UiPageShell,
   UiRecordCard,
@@ -23,12 +30,14 @@ import {
 } from '@octopus/ui'
 
 import { enumLabel } from '@/i18n/copy'
+import { useAppUpdateStore } from '@/stores/app-update'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 
 type SettingsTab = 'general' | 'connection' | 'theme' | 'runtime' | 'version'
 
 const { t } = useI18n()
+const appUpdate = useAppUpdateStore()
 const shell = useShellStore()
 const runtime = useRuntimeStore()
 const route = useRoute()
@@ -134,24 +143,110 @@ const localeOptions = computed(() => [
   { value: 'en-US', label: t('settings.preferences.localeOptions.en-US') },
 ])
 
-const activeWorkspaceName = computed(() =>
-  shell.activeWorkspaceConnection
-    ? shell.activeWorkspaceConnection.label
-    : t('common.na'),
+const updateChannelOptions = computed(() => [
+  { value: 'formal', label: t('settings.version.channels.formal') },
+  { value: 'preview', label: t('settings.version.channels.preview') },
+])
+
+const versionStatus = computed(() =>
+  appUpdate.status ?? createDefaultHostUpdateStatus({
+    currentVersion: shell.hostState.appVersion,
+    currentChannel: shell.preferences.updateChannel,
+  }),
 )
 
-const versionRows = computed(() => [
-  { id: 'appVersion', label: t('settings.version.fields.appVersion'), value: shell.hostState.appVersion },
-  { id: 'shell', label: t('settings.version.fields.shell'), value: shell.hostState.shell },
-  { id: 'workspace', label: t('settings.version.fields.workspace'), value: activeWorkspaceName.value },
-  {
-    id: 'cargoWorkspace',
-    label: t('settings.version.fields.cargoWorkspace'),
-    value: shell.hostState.cargoWorkspace
-      ? t('settings.version.values.enabled')
-      : t('settings.version.values.disabled'),
+const updateChannel = computed({
+  get: () => versionStatus.value.currentChannel,
+  set: (value: string) => {
+    if (value && value !== versionStatus.value.currentChannel) {
+      void appUpdate.setUpdateChannel(value as HostUpdateChannel)
+    }
   },
-])
+})
+
+const latestRelease = computed(() => versionStatus.value.latestRelease)
+
+const updateStatusTone = computed<'info' | 'success' | 'warning' | 'error'>(() => {
+  switch (versionStatus.value.state) {
+    case 'up_to_date':
+    case 'downloaded':
+      return 'success'
+    case 'update_available':
+    case 'downloading':
+    case 'installing':
+    case 'checking':
+      return 'warning'
+    case 'error':
+      return 'error'
+    default:
+      return 'info'
+  }
+})
+
+const updateStatusLabel = computed(() => t(`settings.version.states.${versionStatus.value.state}`))
+
+const updateStatusDescription = computed(() => {
+  if (versionStatus.value.state === 'error' && versionStatus.value.errorMessage) {
+    return versionStatus.value.errorMessage
+  }
+
+  if (!versionStatus.value.capabilities.canDownload || !versionStatus.value.capabilities.canInstall) {
+    return t('settings.version.environment.unsupported')
+  }
+
+  if (versionStatus.value.state === 'update_available' && latestRelease.value?.version) {
+    return t('settings.version.statusDescriptions.updateAvailable', {
+      version: latestRelease.value.version,
+    })
+  }
+
+  if (versionStatus.value.state === 'downloaded') {
+    return t('settings.version.statusDescriptions.downloaded')
+  }
+
+  if (versionStatus.value.state === 'downloading' && typeof versionStatus.value.progress?.percent === 'number') {
+    return t('settings.version.statusDescriptions.downloading', {
+      percent: versionStatus.value.progress.percent,
+    })
+  }
+
+  return t(`settings.version.statusDescriptions.${versionStatus.value.state}`)
+})
+
+const primaryUpdateActionLabel = computed(() => {
+  switch (versionStatus.value.state) {
+    case 'checking':
+      return t('settings.version.actions.checking')
+    case 'update_available':
+      return t('settings.version.actions.download')
+    case 'downloading':
+      return t('settings.version.actions.downloading')
+    case 'downloaded':
+      return t('settings.version.actions.install')
+    case 'installing':
+      return t('settings.version.actions.installing')
+    default:
+      return t('settings.version.actions.check')
+  }
+})
+
+const primaryUpdateActionDisabled = computed(() => {
+  if (versionStatus.value.state === 'checking' || versionStatus.value.state === 'downloading' || versionStatus.value.state === 'installing') {
+    return true
+  }
+
+  if (versionStatus.value.state === 'update_available') {
+    return !versionStatus.value.capabilities.canDownload
+  }
+
+  if (versionStatus.value.state === 'downloaded') {
+    return !versionStatus.value.capabilities.canInstall
+  }
+
+  return !versionStatus.value.capabilities.canCheck
+})
+
+const hasReleaseNotesLink = computed(() => Boolean(latestRelease.value?.notesUrl))
 
 const canManageSettings = computed(() => true)
 
@@ -229,6 +324,48 @@ async function saveWorkspaceRuntime() {
 
 async function reloadRuntimeConfig() {
   await runtime.loadConfig(true)
+}
+
+function formatRelativeTimestamp(value: number | null): string {
+  if (!value) {
+    return t('settings.version.values.notChecked')
+  }
+
+  return new Intl.DateTimeFormat(shell.preferences.locale, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(value)
+}
+
+function formatReleaseDate(value?: string | null): string {
+  if (!value) {
+    return t('common.na')
+  }
+
+  return new Intl.DateTimeFormat(shell.preferences.locale, {
+    dateStyle: 'medium',
+  }).format(new Date(value))
+}
+
+async function handlePrimaryUpdateAction() {
+  switch (versionStatus.value.state) {
+    case 'update_available':
+      await appUpdate.downloadUpdate()
+      return
+    case 'downloaded':
+      await appUpdate.installUpdate()
+      return
+    default:
+      await appUpdate.checkForUpdates()
+  }
+}
+
+function openReleaseNotes() {
+  if (!latestRelease.value?.notesUrl) {
+    return
+  }
+
+  window.open(latestRelease.value.notesUrl, '_blank', 'noopener,noreferrer')
 }
 </script>
 
@@ -562,19 +699,167 @@ async function reloadRuntimeConfig() {
         </section>
 
         <!-- Version Tab -->
-        <section v-else class="space-y-8">
-          <div class="space-y-6">
-            <div class="overflow-hidden rounded-[var(--radius-l)] border border-border bg-surface">
-              <div
-                v-for="(row, i) in versionRows"
-                :key="row.id"
-                :data-testid="`settings-version-row-${row.id}`"
-                class="flex items-center justify-between px-6 py-4"
-                :class="i !== versionRows.length - 1 ? 'border-b border-border/60' : ''"
-              >
-                <span class="text-[14px] text-text-secondary font-medium">{{ row.label }}</span>
-                <span class="text-[14px] font-bold text-text-primary tracking-tight font-mono">{{ row.value }}</span>
+        <section v-else data-testid="settings-version-center" class="space-y-8">
+          <UiRecordCard
+            test-id="settings-version-summary-card"
+            :title="t('settings.version.summary.title')"
+            :description="t('settings.version.summary.description')"
+            class="overflow-hidden border-border-strong bg-[linear-gradient(135deg,rgba(14,165,233,0.08),rgba(16,185,129,0.06),rgba(255,255,255,0))]"
+          >
+            <template #eyebrow>
+              {{ t('settings.tabs.version') }}
+            </template>
+            <template #badges>
+              <UiBadge :label="t(`settings.version.channels.${versionStatus.currentChannel}`)" tone="info" />
+              <UiBadge :label="updateStatusLabel" :tone="updateStatusTone" />
+            </template>
+
+            <div class="space-y-4">
+              <p class="max-w-3xl text-[15px] leading-7 text-text-secondary">
+                {{ updateStatusDescription }}
+              </p>
+
+              <div class="grid gap-3 md:grid-cols-3">
+                <UiMetricCard
+                  :label="t('settings.version.metrics.currentVersion')"
+                  :value="versionStatus.currentVersion"
+                  :helper="t('settings.version.metrics.currentVersionHelper')"
+                />
+                <UiMetricCard
+                  :label="t('settings.version.metrics.lastCheckedAt')"
+                  :value="formatRelativeTimestamp(versionStatus.lastCheckedAt)"
+                  :helper="t('settings.version.metrics.lastCheckedHelper')"
+                />
+                <UiMetricCard
+                  :label="t('settings.version.metrics.latestVersion')"
+                  :value="latestRelease?.version ?? t('settings.version.values.noRelease')"
+                  :helper="latestRelease ? formatReleaseDate(latestRelease.publishedAt) : t('settings.version.metrics.latestVersionHelper')"
+                  :progress="versionStatus.progress?.percent ?? null"
+                  :progress-label="typeof versionStatus.progress?.percent === 'number' ? `${versionStatus.progress.percent}%` : ''"
+                  :tone="versionStatus.state === 'update_available' ? 'warning' : versionStatus.state === 'downloaded' ? 'success' : 'default'"
+                />
               </div>
+            </div>
+
+            <template #actions>
+              <UiButton
+                :disabled="primaryUpdateActionDisabled"
+                @click="handlePrimaryUpdateAction"
+              >
+                {{ primaryUpdateActionLabel }}
+              </UiButton>
+              <UiButton
+                variant="ghost"
+                :disabled="!versionStatus.capabilities.canCheck || versionStatus.state === 'checking'"
+                @click="appUpdate.checkForUpdates()"
+              >
+                {{ t('settings.version.actions.check') }}
+              </UiButton>
+              <UiButton
+                v-if="hasReleaseNotesLink"
+                variant="ghost"
+                @click="openReleaseNotes"
+              >
+                {{ t('settings.version.actions.viewReleaseNotes') }}
+              </UiButton>
+            </template>
+          </UiRecordCard>
+
+          <div class="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
+            <UiRecordCard
+              test-id="settings-version-release-card"
+              :title="t('settings.version.release.title')"
+              :description="t('settings.version.release.description')"
+            >
+              <template #badges>
+                <UiBadge
+                  v-if="latestRelease"
+                  :label="t(`settings.version.channels.${latestRelease.channel}`)"
+                  tone="info"
+                />
+                <UiBadge
+                  :label="updateStatusLabel"
+                  :tone="updateStatusTone"
+                />
+              </template>
+
+              <div v-if="latestRelease" class="space-y-4">
+                <div class="space-y-1">
+                  <p class="text-[24px] font-bold tracking-[-0.03em] text-text-primary">
+                    {{ latestRelease.version }}
+                  </p>
+                  <p class="text-[13px] text-text-secondary">
+                    {{ t('settings.version.release.publishedAt', { date: formatReleaseDate(latestRelease.publishedAt) }) }}
+                  </p>
+                </div>
+                <p class="text-[14px] leading-7 text-text-secondary">
+                  {{ latestRelease.notes || t('settings.version.values.noReleaseNotes') }}
+                </p>
+              </div>
+              <UiEmptyState
+                v-else
+                :title="t('settings.version.release.emptyTitle')"
+                :description="t('settings.version.release.emptyDescription')"
+              />
+
+              <template #actions>
+                <UiButton
+                  v-if="hasReleaseNotesLink"
+                  variant="ghost"
+                  @click="openReleaseNotes"
+                >
+                  {{ t('settings.version.actions.viewReleaseNotes') }}
+                </UiButton>
+              </template>
+            </UiRecordCard>
+
+            <div class="space-y-4">
+              <UiRecordCard
+                :title="t('settings.version.settings.title')"
+                :description="t('settings.version.settings.description')"
+              >
+                <div
+                  data-testid="settings-version-channel-select"
+                  class="space-y-3"
+                >
+                  <UiField :label="t('settings.version.settings.channelLabel')">
+                    <UiSelect
+                      v-model="updateChannel"
+                      :options="updateChannelOptions"
+                      :disabled="!versionStatus.capabilities.supportsChannels"
+                    />
+                  </UiField>
+                  <p class="text-[13px] leading-6 text-text-secondary">
+                    {{ t('settings.version.settings.channelHint') }}
+                  </p>
+                </div>
+              </UiRecordCard>
+
+              <UiRecordCard
+                :title="t('settings.version.details.title')"
+                :description="t('settings.version.details.description')"
+              >
+                <div class="space-y-3">
+                  <div class="flex items-center justify-between gap-4 rounded-[var(--radius-m)] bg-subtle px-3 py-3">
+                    <span class="text-[13px] text-text-secondary">{{ t('settings.version.details.currentVersion') }}</span>
+                    <span class="font-mono text-[13px] font-semibold text-text-primary">{{ versionStatus.currentVersion }}</span>
+                  </div>
+                  <div class="flex items-center justify-between gap-4 rounded-[var(--radius-m)] bg-subtle px-3 py-3">
+                    <span class="text-[13px] text-text-secondary">{{ t('settings.version.details.channel') }}</span>
+                    <UiBadge :label="t(`settings.version.channels.${versionStatus.currentChannel}`)" tone="info" />
+                  </div>
+                  <div class="flex items-center justify-between gap-4 rounded-[var(--radius-m)] bg-subtle px-3 py-3">
+                    <span class="text-[13px] text-text-secondary">{{ t('settings.version.details.status') }}</span>
+                    <UiBadge :label="updateStatusLabel" :tone="updateStatusTone" />
+                  </div>
+                </div>
+              </UiRecordCard>
+
+              <UiStatusCallout
+                :tone="updateStatusTone"
+                :title="t('settings.version.callout.title')"
+                :description="updateStatusDescription"
+              />
             </div>
           </div>
         </section>

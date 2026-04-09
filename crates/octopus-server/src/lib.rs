@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs,
+    env, fs,
     path::{Path as StdPath, PathBuf},
     sync::{Arc, Mutex},
     time::Duration,
@@ -19,24 +19,26 @@ use axum::{
 };
 use octopus_core::{
     connection_profile_from_host_workspace_connection, create_default_notification_unread_summary,
-    host_workspace_connection_record_from_profile, normalize_connection_base_url,
-    normalize_notification_filter_scope, normalize_runtime_permission_mode_label,
-    notification_list_response_from_records, timestamp_now, AgentRecord, ApiErrorDetail,
-    ApiErrorEnvelope, AppError, AutomationRecord, ChangeCurrentUserPasswordRequest,
-    ChangeCurrentUserPasswordResponse, ClientAppRecord, ConnectionProfile, ConversationRecord,
-    CopyWorkspaceSkillToManagedInput, CreateHostWorkspaceConnectionInput, CreateNotificationInput,
-    CreateProjectRequest, CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput,
-    CreateWorkspaceSkillInput, CreateWorkspaceUserRequest, DesktopBackendConnection,
-    HealthcheckBackendStatus, HealthcheckStatus, HostState, HostWorkspaceConnectionRecord,
-    ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
-    ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
-    ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, KnowledgeRecord,
-    LoginRequest, MenuRecord, ModelCatalogSnapshot, NotificationFilter, NotificationListResponse,
-    NotificationRecord, NotificationUnreadSummary, PermissionRecord, PetConversationBinding,
-    PetPresenceState, PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord,
-    ProjectDashboardSnapshot, ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord,
-    ProviderCredentialRecord, RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse,
-    ResolveRuntimeApprovalInput, RoleRecord, RuntimeConfigPatch, RuntimeConfigValidationResult,
+    default_host_update_status, host_workspace_connection_record_from_profile,
+    normalize_connection_base_url, normalize_notification_filter_scope,
+    normalize_runtime_permission_mode_label, notification_list_response_from_records,
+    timestamp_now, AgentRecord, ApiErrorDetail, ApiErrorEnvelope, AppError, AutomationRecord,
+    ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse, ClientAppRecord,
+    ConnectionProfile, ConversationRecord, CopyWorkspaceSkillToManagedInput,
+    CreateHostWorkspaceConnectionInput, CreateNotificationInput, CreateProjectRequest,
+    CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput, CreateWorkspaceSkillInput,
+    CreateWorkspaceUserRequest, DesktopBackendConnection, HealthcheckBackendStatus,
+    HealthcheckStatus, HostReleaseSummary, HostState, HostUpdateStatus,
+    HostWorkspaceConnectionRecord, ImportWorkspaceAgentBundleInput,
+    ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
+    ImportWorkspaceAgentBundleResult, ImportWorkspaceSkillArchiveInput,
+    ImportWorkspaceSkillFolderInput, KnowledgeRecord, LoginRequest, MenuRecord,
+    ModelCatalogSnapshot, NotificationFilter, NotificationListResponse, NotificationRecord,
+    NotificationUnreadSummary, PermissionRecord, PetConversationBinding, PetPresenceState,
+    PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectDashboardSnapshot,
+    ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord, ProviderCredentialRecord,
+    RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse, ResolveRuntimeApprovalInput,
+    RoleRecord, RuntimeConfigPatch, RuntimeConfigValidationResult,
     RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
     SavePetPresenceInput, SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput,
     TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
@@ -48,6 +50,7 @@ use octopus_core::{
     WorkspaceSkillTreeDocument, WorkspaceToolCatalogSnapshot, WorkspaceToolDisablePatch,
 };
 use octopus_platform::PlatformServices;
+use reqwest::Client;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Deserialize;
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -72,6 +75,39 @@ struct ApiError {
     source: AppError,
     request_id: String,
 }
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HostUpdateCheckRequestPayload {
+    channel: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProductUpdateConfig {
+    formal_endpoint: Option<String>,
+    preview_endpoint: Option<String>,
+    pubkey: Option<String>,
+    #[serde(rename = "releaseRepo")]
+    _release_repo: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+struct RemoteUpdateManifest {
+    version: Option<String>,
+    notes: Option<String>,
+    #[serde(rename = "pub_date")]
+    pub_date: Option<String>,
+    channel: Option<String>,
+    #[serde(alias = "notes_url", alias = "notesUrl")]
+    notes_url: Option<String>,
+}
+
+const UPDATE_ENDPOINT_FORMAL_ENV: &str = "OCTOPUS_UPDATE_ENDPOINT_FORMAL";
+const UPDATE_ENDPOINT_PREVIEW_ENV: &str = "OCTOPUS_UPDATE_ENDPOINT_PREVIEW";
+const UPDATE_PUBKEY_ENV: &str = "OCTOPUS_UPDATE_PUBKEY";
+const BUILTIN_UPDATER_CONFIG: &str =
+    include_str!("../../../apps/desktop/src-tauri/updater.config.json");
 
 impl ApiError {
     fn new(source: AppError, request_id: impl Into<String>) -> Self {
@@ -297,6 +333,19 @@ pub fn build_router(state: ServerState) -> Router {
         .route(
             "/api/v1/host/preferences",
             get(load_host_preferences_route).put(save_host_preferences_route),
+        )
+        .route(
+            "/api/v1/host/update-status",
+            get(get_host_update_status_route),
+        )
+        .route("/api/v1/host/update-check", post(check_host_update_route))
+        .route(
+            "/api/v1/host/update-download",
+            post(download_host_update_route),
+        )
+        .route(
+            "/api/v1/host/update-install",
+            post(install_host_update_route),
         )
         .route(
             "/api/v1/host/workspace-connections",
@@ -642,6 +691,198 @@ fn save_host_preferences(
     )
     .map_err(|error| ApiError::from(AppError::from(error)))?;
     Ok(preferences.clone())
+}
+
+fn normalize_host_update_channel(value: Option<&str>, fallback: &str) -> String {
+    match value.map(str::trim) {
+        Some("preview") => "preview".into(),
+        Some("formal") => "formal".into(),
+        _ => match fallback.trim() {
+            "preview" => "preview".into(),
+            _ => "formal".into(),
+        },
+    }
+}
+
+fn default_browser_host_update_status(state: &ServerState, channel: &str) -> HostUpdateStatus {
+    let mut status = default_host_update_status(state.host_state.app_version.clone(), channel);
+    let config = update_runtime_config(channel);
+    status.capabilities.can_check = config.endpoint.is_some();
+    status.capabilities.can_download = false;
+    status.capabilities.can_install = false;
+    status.capabilities.supports_channels = true;
+    status
+}
+
+async fn load_host_update_status(
+    state: &ServerState,
+    requested_channel: Option<&str>,
+) -> Result<HostUpdateStatus, ApiError> {
+    let preferences = load_host_preferences(state)?;
+    let channel = normalize_host_update_channel(requested_channel, &preferences.update_channel);
+    refresh_browser_host_update_status(state, &channel).await
+}
+
+async fn check_host_update(
+    state: &ServerState,
+    requested_channel: Option<&str>,
+) -> Result<HostUpdateStatus, ApiError> {
+    let preferences = load_host_preferences(state)?;
+    let channel = normalize_host_update_channel(requested_channel, &preferences.update_channel);
+    refresh_browser_host_update_status(state, &channel).await
+}
+
+fn unsupported_host_update_action(
+    state: &ServerState,
+    requested_channel: Option<&str>,
+    error_code: &str,
+    error_message: &str,
+) -> Result<HostUpdateStatus, ApiError> {
+    let preferences = load_host_preferences(state)?;
+    let channel = normalize_host_update_channel(requested_channel, &preferences.update_channel);
+    let mut status = default_browser_host_update_status(state, &channel);
+    status.state = "error".into();
+    status.error_code = Some(error_code.into());
+    status.error_message = Some(error_message.into());
+    Ok(status)
+}
+
+async fn refresh_browser_host_update_status(
+    state: &ServerState,
+    channel: &str,
+) -> Result<HostUpdateStatus, ApiError> {
+    let runtime_config = update_runtime_config(channel);
+    refresh_browser_host_update_status_with_endpoint(
+        state,
+        channel,
+        runtime_config.endpoint.as_deref(),
+    )
+    .await
+}
+
+async fn refresh_browser_host_update_status_with_endpoint(
+    state: &ServerState,
+    channel: &str,
+    endpoint: Option<&str>,
+) -> Result<HostUpdateStatus, ApiError> {
+    let mut status = default_browser_host_update_status(state, channel);
+    let Some(endpoint) = endpoint else {
+        return Ok(status);
+    };
+
+    status.last_checked_at = Some(timestamp_now());
+
+    match fetch_remote_update_manifest(&endpoint).await {
+        Ok(manifest) => {
+            let latest_version = manifest
+                .version
+                .clone()
+                .unwrap_or_else(|| state.host_state.app_version.clone());
+            let latest_channel = manifest
+                .channel
+                .clone()
+                .unwrap_or_else(|| normalize_host_update_channel(Some(channel), channel));
+            status.latest_release = Some(HostReleaseSummary {
+                version: latest_version.clone(),
+                channel: latest_channel,
+                published_at: manifest
+                    .pub_date
+                    .unwrap_or_else(|| "1970-01-01T00:00:00Z".into()),
+                notes: manifest.notes,
+                notes_url: manifest.notes_url,
+            });
+            status.state = if latest_version == state.host_state.app_version {
+                "up_to_date".into()
+            } else {
+                "update_available".into()
+            };
+            Ok(status)
+        }
+        Err(error) => {
+            status.state = "error".into();
+            status.error_code = Some("UPDATE_CHECK_FAILED".into());
+            status.error_message = Some(format!("无法连接更新服务，请稍后重试。{error}"));
+            Ok(status)
+        }
+    }
+}
+
+async fn fetch_remote_update_manifest(endpoint: &str) -> Result<RemoteUpdateManifest, AppError> {
+    let response = Client::new()
+        .get(endpoint)
+        .header(reqwest::header::USER_AGENT, "octopus-browser-host")
+        .send()
+        .await
+        .map_err(|error| AppError::runtime(format!("failed to fetch update manifest: {error}")))?;
+    let response = response
+        .error_for_status()
+        .map_err(|error| AppError::runtime(format!("update manifest request failed: {error}")))?;
+    response
+        .json::<RemoteUpdateManifest>()
+        .await
+        .map_err(|error| AppError::runtime(format!("failed to parse update manifest: {error}")))
+}
+
+fn update_runtime_config(channel: &str) -> UpdateRuntimeConfig {
+    let built_in = load_product_update_config();
+    UpdateRuntimeConfig {
+        endpoint: env_var(update_endpoint_env(channel))
+            .or_else(|| built_in.endpoint_for_channel(channel)),
+        _pubkey: env_var(UPDATE_PUBKEY_ENV).or_else(|| built_in.pubkey()),
+    }
+}
+
+#[derive(Clone, Default)]
+struct UpdateRuntimeConfig {
+    endpoint: Option<String>,
+    _pubkey: Option<String>,
+}
+
+fn update_endpoint_env(channel: &str) -> &'static str {
+    match normalize_host_update_channel(Some(channel), "formal").as_str() {
+        "preview" => UPDATE_ENDPOINT_PREVIEW_ENV,
+        _ => UPDATE_ENDPOINT_FORMAL_ENV,
+    }
+}
+
+fn env_var(key: &str) -> Option<String> {
+    env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn load_product_update_config() -> ProductUpdateConfig {
+    serde_json::from_str::<ProductUpdateConfig>(BUILTIN_UPDATER_CONFIG)
+        .unwrap_or_default()
+        .normalized()
+}
+
+impl ProductUpdateConfig {
+    fn normalized(mut self) -> Self {
+        self.formal_endpoint = normalize_optional_string(self.formal_endpoint);
+        self.preview_endpoint = normalize_optional_string(self.preview_endpoint);
+        self.pubkey = normalize_optional_string(self.pubkey);
+        self._release_repo = normalize_optional_string(self._release_repo);
+        self
+    }
+
+    fn endpoint_for_channel(&self, channel: &str) -> Option<String> {
+        match normalize_host_update_channel(Some(channel), "formal").as_str() {
+            "preview" => self.preview_endpoint.clone(),
+            _ => self.formal_endpoint.clone(),
+        }
+    }
+
+    fn pubkey(&self) -> Option<String> {
+        self.pubkey.clone()
+    }
+}
+
+fn normalize_optional_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
 }
 
 fn load_remote_host_workspace_connections(
@@ -1072,6 +1313,55 @@ async fn save_host_preferences_route(
     let request_id = request_id(&headers);
     ensure_host_authorized(&state, &headers, &request_id)?;
     Ok(Json(save_host_preferences(&state, &preferences)?))
+}
+
+async fn get_host_update_status_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<HostUpdateStatus>, ApiError> {
+    let request_id = request_id(&headers);
+    ensure_host_authorized(&state, &headers, &request_id)?;
+    Ok(Json(load_host_update_status(&state, None).await?))
+}
+
+async fn check_host_update_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(request): Json<HostUpdateCheckRequestPayload>,
+) -> Result<Json<HostUpdateStatus>, ApiError> {
+    let request_id = request_id(&headers);
+    ensure_host_authorized(&state, &headers, &request_id)?;
+    Ok(Json(
+        check_host_update(&state, request.channel.as_deref()).await?,
+    ))
+}
+
+async fn download_host_update_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<HostUpdateStatus>, ApiError> {
+    let request_id = request_id(&headers);
+    ensure_host_authorized(&state, &headers, &request_id)?;
+    Ok(Json(unsupported_host_update_action(
+        &state,
+        None,
+        "UPDATE_DOWNLOAD_UNSUPPORTED",
+        "当前环境不支持应用内下载安装更新。",
+    )?))
+}
+
+async fn install_host_update_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<HostUpdateStatus>, ApiError> {
+    let request_id = request_id(&headers);
+    ensure_host_authorized(&state, &headers, &request_id)?;
+    Ok(Json(unsupported_host_update_action(
+        &state,
+        None,
+        "UPDATE_INSTALL_UNSUPPORTED",
+        "当前环境不支持应用内安装更新。",
+    )?))
 }
 
 async fn list_host_workspace_connections_route(
@@ -3128,6 +3418,8 @@ mod tests {
     use axum::{
         body::{to_bytes, Body},
         http::{Method, Request},
+        routing::get,
+        Json,
     };
     use octopus_core::{
         ApiErrorEnvelope, AuditRecord, ClientAppRecord, CreateRuntimeSessionInput,
@@ -3151,6 +3443,7 @@ mod tests {
     struct TestHarness {
         router: Router,
         infra: InfraBundle,
+        state: ServerState,
     }
 
     fn test_harness() -> TestHarness {
@@ -3180,7 +3473,7 @@ mod tests {
             knowledge: infra.knowledge.clone(),
             observation: infra.observation.clone(),
         };
-        let router = build_router(ServerState {
+        let state = ServerState {
             services,
             host_auth_token: "desktop-test-token".into(),
             transport_security: "loopback".into(),
@@ -3199,9 +3492,14 @@ mod tests {
                 state: "ready".into(),
                 transport: "http".into(),
             },
-        });
+        };
+        let router = build_router(state.clone());
 
-        TestHarness { router, infra }
+        TestHarness {
+            router,
+            infra,
+            state,
+        }
     }
 
     async fn decode_json<T: serde::de::DeserializeOwned>(response: Response) -> T {
@@ -4904,6 +5202,7 @@ mod tests {
                             compact_sidebar: true,
                             left_sidebar_collapsed: true,
                             right_sidebar_collapsed: false,
+                            update_channel: "preview".into(),
                             default_workspace_id: "ws-local".into(),
                             last_visited_route:
                                 "/workspaces/ws-local/overview?project=proj-redesign".into(),
@@ -4931,7 +5230,142 @@ mod tests {
         let preferences = decode_json::<octopus_core::ShellPreferences>(preferences_response).await;
         assert_eq!(preferences.theme, "dark");
         assert_eq!(preferences.locale, "en-US");
+        assert_eq!(preferences.update_channel, "preview");
         assert!(preferences.left_sidebar_collapsed);
+    }
+
+    #[tokio::test]
+    async fn host_update_routes_return_browser_safe_contracts() {
+        let manifest_router = Router::new()
+            .route(
+                "/formal/latest.json",
+                get(|| async {
+                    Json(json!({
+                        "version": "0.2.0",
+                        "notes": "Formal release body",
+                        "pub_date": "2026-04-08T11:30:00Z",
+                        "channel": "formal",
+                        "notesUrl": "https://github.com/GoyacJ/octopus/releases/tag/v0.2.0",
+                        "platforms": {
+                            "darwin-aarch64": {
+                                "signature": "formal-signature",
+                                "url": "https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Lobster.app.tar.gz"
+                            }
+                        }
+                    }))
+                }),
+            )
+            .route(
+                "/preview/latest.json",
+                get(|| async {
+                    Json(json!({
+                        "version": "0.2.0-preview.4",
+                        "notes": "Preview release body",
+                        "pub_date": "2026-04-09T09:15:00Z",
+                        "channel": "preview",
+                        "notesUrl": "https://github.com/GoyacJ/octopus/releases/tag/v0.2.0-preview.4",
+                        "platforms": {
+                            "darwin-aarch64": {
+                                "signature": "preview-signature",
+                                "url": "https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Lobster.app.tar.gz"
+                            }
+                        }
+                    }))
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("manifest listener");
+        let address = listener.local_addr().expect("manifest addr");
+        let manifest_server = tokio::spawn(async move {
+            axum::serve(listener, manifest_router)
+                .await
+                .expect("manifest server");
+        });
+
+        let harness = test_harness();
+        let formal_status = refresh_browser_host_update_status_with_endpoint(
+            &harness.state,
+            "formal",
+            Some(&format!("http://{address}/formal/latest.json")),
+        )
+        .await
+        .expect("formal update status");
+        assert_eq!(formal_status.current_version, "0.1.0-test");
+        assert_eq!(formal_status.current_channel, "formal");
+        assert_eq!(formal_status.state, "update_available");
+        assert_eq!(
+            formal_status
+                .latest_release
+                .as_ref()
+                .map(|release| release.version.as_str()),
+            Some("0.2.0")
+        );
+        assert_eq!(
+            formal_status
+                .latest_release
+                .as_ref()
+                .and_then(|release| release.notes_url.as_deref()),
+            Some("https://github.com/GoyacJ/octopus/releases/tag/v0.2.0")
+        );
+        assert!(!formal_status.capabilities.can_download);
+        assert!(!formal_status.capabilities.can_install);
+        assert!(formal_status.capabilities.supports_channels);
+        assert!(formal_status.last_checked_at.is_some());
+
+        let preview_status = refresh_browser_host_update_status_with_endpoint(
+            &harness.state,
+            "preview",
+            Some(&format!("http://{address}/preview/latest.json")),
+        )
+        .await
+        .expect("preview update status");
+        assert_eq!(preview_status.current_channel, "preview");
+        assert_eq!(preview_status.state, "update_available");
+        assert_eq!(
+            preview_status
+                .latest_release
+                .as_ref()
+                .map(|release| release.version.as_str()),
+            Some("0.2.0-preview.4")
+        );
+        assert!(preview_status.last_checked_at.is_some());
+
+        let download_response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/host/update-download")
+                    .header(header::AUTHORIZATION, "Bearer desktop-test-token")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(download_response.status(), StatusCode::OK);
+        let download_status: serde_json::Value = decode_json(download_response).await;
+        assert_eq!(download_status["state"], "error");
+        assert_eq!(download_status["errorCode"], "UPDATE_DOWNLOAD_UNSUPPORTED");
+
+        let install_response = harness
+            .router
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/host/update-install")
+                    .header(header::AUTHORIZATION, "Bearer desktop-test-token")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(install_response.status(), StatusCode::OK);
+        let install_status: serde_json::Value = decode_json(install_response).await;
+        assert_eq!(install_status["state"], "error");
+        assert_eq!(install_status["errorCode"], "UPDATE_INSTALL_UNSUPPORTED");
+        manifest_server.abort();
     }
 
     #[tokio::test]

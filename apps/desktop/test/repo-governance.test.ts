@@ -61,6 +61,8 @@ describe('repository governance', () => {
     expect(workflow).toContain('pnpm release:collect-artifacts --platform macos')
     expect(workflow).toContain('pnpm release:collect-artifacts --platform linux')
     expect(workflow).toContain('pnpm release:collect-artifacts --platform windows')
+    expect(workflow).toContain('TAURI_SIGNING_PRIVATE_KEY')
+    expect(workflow).toContain('TAURI_SIGNING_PRIVATE_KEY_PASSWORD')
     expect(workflow).toContain('pnpm release:verify-artifacts')
     expect(workflow).toContain('pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json')
     expect(workflow).toContain('sudo apt update')
@@ -89,6 +91,8 @@ describe('repository governance', () => {
     expect(workflow).toContain('pnpm release:notes:preview')
     expect(workflow).toContain('pnpm release:tag:preview')
     expect(workflow).toContain('pnpm release:collect-metadata')
+    expect(workflow).toContain('TAURI_SIGNING_PRIVATE_KEY')
+    expect(workflow).toContain('TAURI_SIGNING_PRIVATE_KEY_PASSWORD')
     expect(workflow).toContain('pnpm release:verify-artifacts')
     expect(workflow).toContain('release_name=Octopus Preview ${PREVIEW_TAG}')
     expect(workflow).toContain('--language zh-CN')
@@ -122,6 +126,7 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['release:collect-artifacts']).toBe('node scripts/collect-release-artifacts.mjs')
     expect(packageJson.scripts?.['release:tag:preview']).toBe('node scripts/generate-preview-release-tag.mjs')
     expect(packageJson.scripts?.['release:verify-artifacts']).toBe('node scripts/verify-release-artifacts.mjs')
+    expect(packageJson.scripts?.['release:generate-update-manifests']).toBe('node scripts/generate-update-manifests.mjs')
     expect(packageJson.scripts?.['check:rust']).toContain('pnpm prepare:desktop-backend:sidecar')
   })
 
@@ -142,6 +147,24 @@ describe('repository governance', () => {
     expect(previewWorkflow).toContain('pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json')
     expect(previewWorkflow).toContain('pnpm tauri build --bundles appimage,deb --target x86_64-unknown-linux-gnu --config apps/desktop/src-tauri/tauri.conf.json')
     expect(previewWorkflow).toContain('macos-15-intel')
+  })
+
+  it('deploys a full GitHub Pages updater manifest site for both channels', () => {
+    const workflowPath = path.join(repoRoot, '.github', 'workflows', 'update-manifests.yml')
+
+    expect(existsSync(workflowPath)).toBe(true)
+
+    const workflow = readFileSync(workflowPath, 'utf8')
+    expect(workflow).toContain('release:')
+    expect(workflow).toContain('- published')
+    expect(workflow).toContain('- edited')
+    expect(workflow).toContain('workflow_dispatch:')
+    expect(workflow).toContain('actions/configure-pages')
+    expect(workflow).toContain('actions/upload-pages-artifact')
+    expect(workflow).toContain('actions/deploy-pages')
+    expect(workflow).toContain('pnpm release:generate-update-manifests')
+    expect(workflow).toContain('updates/formal/latest.json')
+    expect(workflow).toContain('updates/preview/latest.json')
   })
 
   it('treats OpenAPI as the canonical shared schema source and checks generated freshness', () => {

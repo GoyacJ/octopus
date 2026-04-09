@@ -192,6 +192,76 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/host/update-status:
+  get:
+    operationId: getHostUpdateStatus
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HostUpdateStatus"
+        description: Host app update status payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/update-check:
+  post:
+    operationId: checkHostUpdate
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/HostUpdateCheckRequest"
+      required: false
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HostUpdateStatus"
+        description: Host app update check result payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/update-download:
+  post:
+    operationId: downloadHostUpdate
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HostUpdateStatus"
+        description: Host app update download result payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/update-install:
+  post:
+    operationId: installHostUpdate
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HostUpdateStatus"
+        description: Host app update install result payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/host/workspace-connections:
   get:
     operationId: listHostWorkspaceConnections

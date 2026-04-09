@@ -1141,7 +1141,7 @@
       "connection": "Connections",
       "theme": "Aesthetics",
       "runtime": "Runtime Settings",
-      "version": "About"
+      "version": "Updates & Version"
     },
     "preferences": {
       "title": "Appearance",
@@ -1208,22 +1208,81 @@
       }
     },
     "version": {
-      "runtimeTitle": "Runtime Info",
-      "fields": {
-        "shell": "Kernel Core",
-        "appVersion": "Current Version",
-        "workspace": "Active Workspace",
-        "backendState": "Backend State",
-        "backendTransport": "Backend Transport",
-        "cargoWorkspace": "Build Env"
+      "summary": {
+        "title": "Updates & Version Center",
+        "description": "Review the installed version, available updates, install progress, and release notes from one product surface."
       },
-      "values": {
-        "enabled": "Enabled",
-        "disabled": "Disabled"
+      "metrics": {
+        "currentVersion": "Current version",
+        "currentVersionHelper": "The version currently installed on this device.",
+        "lastCheckedAt": "Last checked",
+        "lastCheckedHelper": "The app checks once on startup and can always be checked again manually.",
+        "latestVersion": "Available version",
+        "latestVersionHelper": "No newer release is currently available."
+      },
+      "channels": {
+        "formal": "Formal channel",
+        "preview": "Preview channel"
+      },
+      "states": {
+        "idle": "Ready to check",
+        "checking": "Checking for updates",
+        "up_to_date": "Up to date",
+        "update_available": "Update available",
+        "downloading": "Downloading update",
+        "downloaded": "Ready to install",
+        "installing": "Installing update",
+        "error": "Update needs attention"
+      },
+      "statusDescriptions": {
+        "idle": "You can check for a newer release at any time.",
+        "checking": "Contacting the update service and syncing release metadata.",
+        "up_to_date": "This device is already on the latest release for the selected channel.",
+        "updateAvailable": "Version {version} is available and ready to download.",
+        "downloading": "The update package is downloading. Current progress: {percent}%.",
+        "downloaded": "The update package is ready. Restart the app to install it.",
+        "installing": "The application is preparing the update install.",
+        "error": "The update flow could not complete. Try again in a moment."
       },
       "actions": {
-        "refreshBackend": "Refresh Backend Status",
-        "restartBackend": "Restart Desktop Backend"
+        "check": "Check for updates",
+        "checking": "Checking…",
+        "download": "Update now",
+        "downloading": "Downloading…",
+        "install": "Restart to install",
+        "installing": "Preparing install…",
+        "viewReleaseNotes": "View release notes"
+      },
+      "release": {
+        "title": "Available release",
+        "description": "See the latest release summary and jump to the full notes.",
+        "publishedAt": "Published: {date}",
+        "emptyTitle": "No update is available",
+        "emptyDescription": "There is no newer release yet for the currently selected channel."
+      },
+      "settings": {
+        "title": "Update settings",
+        "description": "Changing the release channel immediately triggers a fresh update check.",
+        "channelLabel": "Release channel",
+        "channelHint": "The formal channel favors stability. The preview channel receives features earlier."
+      },
+      "details": {
+        "title": "Version details",
+        "description": "Confirm the installed version, selected channel, and current update state.",
+        "currentVersion": "Current version",
+        "channel": "Current channel",
+        "status": "Update status"
+      },
+      "callout": {
+        "title": "Update status"
+      },
+      "environment": {
+        "unsupported": "This environment does not support in-app download and install updates. Version details and release notes are still available."
+      },
+      "values": {
+        "notChecked": "Not checked yet",
+        "noRelease": "No new release",
+        "noReleaseNotes": "No release summary is available for the current version."
       }
     }
   },

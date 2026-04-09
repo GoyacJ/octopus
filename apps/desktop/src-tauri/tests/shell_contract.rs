@@ -19,6 +19,7 @@ use octopus_desktop_shell::services::{
     NotificationService, PreferencesService, WorkspaceConnectionRegistryService,
 };
 use octopus_desktop_shell::state::ShellState;
+use octopus_desktop_shell::updates::get_host_update_status;
 use parking_lot::RwLock;
 use tempfile::tempdir;
 
@@ -178,6 +179,7 @@ fn save_then_load_preferences_roundtrips_to_disk() {
         compact_sidebar: true,
         left_sidebar_collapsed: true,
         right_sidebar_collapsed: false,
+        update_channel: "preview".into(),
         default_workspace_id: "ws-enterprise".into(),
         last_visited_route: "/workspaces/ws-enterprise/overview?project=proj-launch".into(),
     };
@@ -201,6 +203,44 @@ fn healthcheck_reflects_tauri_local_workspace_status() {
     assert!(payload.cargo_workspace);
     assert_eq!(payload.backend.state, "unavailable");
     assert_eq!(payload.backend.transport, "http");
+}
+
+#[test]
+fn host_update_status_defaults_to_current_version_and_saved_channel() {
+    let temp = tempdir().expect("tempdir");
+    let state = test_state(temp.path().to_path_buf());
+
+    let default_status = get_host_update_status(&state).expect("default host update status");
+    assert_eq!(default_status.current_version, "0.1.0-test");
+    assert_eq!(default_status.current_channel, "formal");
+    assert_eq!(default_status.state, "idle");
+    assert!(default_status.capabilities.can_check);
+    assert!(default_status.capabilities.can_download);
+    assert!(default_status.capabilities.can_install);
+    assert!(default_status.capabilities.supports_channels);
+
+    save_shell_preferences(
+        &state,
+        ShellPreferences {
+            theme: "system".into(),
+            locale: "zh-CN".into(),
+            font_size: 14,
+            font_family: "Inter, sans-serif".into(),
+            font_style: "sans".into(),
+            compact_sidebar: false,
+            left_sidebar_collapsed: false,
+            right_sidebar_collapsed: false,
+            update_channel: "preview".into(),
+            default_workspace_id: "ws-local".into(),
+            last_visited_route: "/workspaces/ws-local/overview?project=proj-redesign".into(),
+        },
+    )
+    .expect("save preview channel preferences");
+
+    let preview_status = get_host_update_status(&state).expect("preview host update status");
+    assert_eq!(preview_status.current_version, "0.1.0-test");
+    assert_eq!(preview_status.current_channel, "preview");
+    assert_eq!(preview_status.state, "idle");
 }
 
 #[test]

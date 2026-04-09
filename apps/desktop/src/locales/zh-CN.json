@@ -1141,7 +1141,7 @@
       "connection": "连接配置",
       "theme": "外观设置",
       "runtime": "运行配置",
-      "version": "版本信息"
+      "version": "版本与更新"
     },
     "preferences": {
       "title": "外观配置",
@@ -1208,22 +1208,81 @@
       }
     },
     "version": {
-      "runtimeTitle": "运行时信息",
-      "fields": {
-        "shell": "内核核心",
-        "appVersion": "当前版本",
-        "workspace": "活跃工作区",
-        "backendState": "后端状态",
-        "backendTransport": "后端传输",
-        "cargoWorkspace": "编译环境"
+      "summary": {
+        "title": "版本与更新中心",
+        "description": "集中查看当前版本、可用更新、安装进度和发行说明。"
       },
-      "values": {
-        "enabled": "已开启",
-        "disabled": "未开启"
+      "metrics": {
+        "currentVersion": "当前版本",
+        "currentVersionHelper": "当前已安装到这台设备的应用版本。",
+        "lastCheckedAt": "最近检查",
+        "lastCheckedHelper": "启动时会自动检查一次，也可以随时手动重查。",
+        "latestVersion": "可更新版本",
+        "latestVersionHelper": "当前还没有发现新版本。"
+      },
+      "channels": {
+        "formal": "正式通道",
+        "preview": "预览通道"
+      },
+      "states": {
+        "idle": "等待检查",
+        "checking": "正在检查更新",
+        "up_to_date": "已是最新版本",
+        "update_available": "发现新版本",
+        "downloading": "正在下载更新",
+        "downloaded": "更新已准备完成",
+        "installing": "正在安装更新",
+        "error": "更新遇到问题"
+      },
+      "statusDescriptions": {
+        "idle": "您可以随时检查是否有新版本。",
+        "checking": "正在连接更新服务并同步最新版本信息。",
+        "up_to_date": "当前设备已经安装最新正式版本。",
+        "updateAvailable": "发现 {version} 可供更新，建议尽快安装。",
+        "downloading": "正在下载更新包，当前进度 {percent}%。",
+        "downloaded": "更新包已下载完成，重启应用后即可安装。",
+        "installing": "应用正在准备安装更新，请稍候。",
+        "error": "暂时无法完成更新操作，请稍后重试。"
       },
       "actions": {
-        "refreshBackend": "刷新后端状态",
-        "restartBackend": "重启桌面后端"
+        "check": "检查更新",
+        "checking": "检查中…",
+        "download": "立即更新",
+        "downloading": "下载中…",
+        "install": "重启并安装",
+        "installing": "准备安装…",
+        "viewReleaseNotes": "查看发行说明"
+      },
+      "release": {
+        "title": "可更新版本",
+        "description": "查看最新版本摘要与发行说明入口。",
+        "publishedAt": "发布日期：{date}",
+        "emptyTitle": "暂时没有可更新版本",
+        "emptyDescription": "当前通道还没有比您已安装版本更高的新版本。"
+      },
+      "settings": {
+        "title": "更新设置",
+        "description": "切换接收版本的通道，新的通道会立即触发一次重新检查。",
+        "channelLabel": "更新通道",
+        "channelHint": "正式通道提供稳定发布；预览通道会更早收到新功能。"
+      },
+      "details": {
+        "title": "版本说明",
+        "description": "快速确认当前安装状态和更新环境。",
+        "currentVersion": "当前版本",
+        "channel": "当前通道",
+        "status": "更新状态"
+      },
+      "callout": {
+        "title": "更新状态"
+      },
+      "environment": {
+        "unsupported": "当前环境不支持应用内下载安装更新。您仍可查看版本信息和发行说明。"
+      },
+      "values": {
+        "notChecked": "尚未检查",
+        "noRelease": "暂无新版本",
+        "noReleaseNotes": "当前版本还没有可展示的发行说明摘要。"
       }
     }
   },

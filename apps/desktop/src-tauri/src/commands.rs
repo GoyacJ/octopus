@@ -3,9 +3,10 @@ use std::{fs, path::Path};
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use octopus_core::{
     AvatarUploadPayload, ConnectionProfile, CreateHostWorkspaceConnectionInput,
-    CreateNotificationInput, DesktopBackendConnection, HostState, HostWorkspaceConnectionRecord,
-    NotificationFilter, NotificationListResponse, NotificationRecord, NotificationUnreadSummary,
-    ShellPreferences, WorkspaceDirectoryUploadEntry, WorkspaceFileUploadPayload,
+    CreateNotificationInput, DesktopBackendConnection, HostState, HostUpdateStatus,
+    HostWorkspaceConnectionRecord, NotificationFilter, NotificationListResponse,
+    NotificationRecord, NotificationUnreadSummary, ShellPreferences, WorkspaceDirectoryUploadEntry,
+    WorkspaceFileUploadPayload,
 };
 use rfd::FileDialog;
 use tauri::{AppHandle, State};
@@ -27,6 +28,12 @@ use crate::{
     },
     error::into_command_error,
     state::ShellState,
+    updates::{
+        check_host_update as check_host_update_payload,
+        download_host_update as download_host_update_payload,
+        get_host_update_status as get_host_update_status_payload,
+        install_host_update as install_host_update_payload,
+    },
 };
 
 #[tauri::command]
@@ -37,6 +44,36 @@ pub fn bootstrap_shell(state: State<'_, ShellState>) -> Result<ShellBootstrapPay
 #[tauri::command]
 pub fn get_host_state(state: State<'_, ShellState>) -> HostState {
     get_host_state_payload(state.inner())
+}
+
+#[tauri::command]
+pub fn get_host_update_status(state: State<'_, ShellState>) -> Result<HostUpdateStatus, String> {
+    get_host_update_status_payload(state.inner()).map_err(into_command_error)
+}
+
+#[tauri::command]
+pub async fn check_host_update(
+    app: AppHandle,
+    state: State<'_, ShellState>,
+    channel: Option<String>,
+) -> Result<HostUpdateStatus, String> {
+    check_host_update_payload(&app, state.inner(), channel.as_deref())
+        .await
+        .map_err(into_command_error)
+}
+
+#[tauri::command]
+pub async fn download_host_update(
+    state: State<'_, ShellState>,
+) -> Result<HostUpdateStatus, String> {
+    download_host_update_payload(state.inner())
+        .await
+        .map_err(into_command_error)
+}
+
+#[tauri::command]
+pub fn install_host_update(state: State<'_, ShellState>) -> Result<HostUpdateStatus, String> {
+    install_host_update_payload(state.inner()).map_err(into_command_error)
 }
 
 #[tauri::command]

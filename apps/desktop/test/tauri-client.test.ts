@@ -33,6 +33,7 @@ function createHostBootstrap(overrides: Partial<ShellBootstrap> = {}): ShellBoot
       compactSidebar: false,
       leftSidebarCollapsed: false,
       rightSidebarCollapsed: false,
+      updateChannel: 'formal',
       fontSize: 16,
       fontFamily: 'Inter, sans-serif',
       fontStyle: 'sans',
@@ -101,6 +102,26 @@ function createNotificationRecord(overrides: Partial<NotificationRecord> = {}): 
     scopeOwnerId: undefined,
     routeTo: undefined,
     actionLabel: undefined,
+    ...overrides,
+  }
+}
+
+function createHostUpdateStatus(overrides: Record<string, unknown> = {}) {
+  return {
+    currentVersion: '0.2.0',
+    currentChannel: 'formal',
+    state: 'idle',
+    latestRelease: null,
+    lastCheckedAt: null,
+    progress: null,
+    capabilities: {
+      canCheck: true,
+      canDownload: true,
+      canInstall: true,
+      supportsChannels: true,
+    },
+    errorCode: null,
+    errorMessage: null,
     ...overrides,
   }
 }
@@ -1442,6 +1463,132 @@ describe('host client transport', () => {
     const headers = request.headers as Headers
     expect(headers.get('Authorization')).toBe('Bearer browser-host-token')
     expect(headers.get('Content-Type')).toBe('application/json')
+  })
+
+  it('bridges host update actions through Tauri commands', async () => {
+    invokeSpy
+      .mockResolvedValueOnce(createHostUpdateStatus())
+      .mockResolvedValueOnce(createHostUpdateStatus({
+        state: 'up_to_date',
+        lastCheckedAt: 1_710_000_000_000,
+      }))
+      .mockResolvedValueOnce(createHostUpdateStatus({
+        state: 'downloading',
+        progress: {
+          downloadedBytes: 512,
+          totalBytes: 1024,
+          percent: 50,
+        },
+      }))
+      .mockResolvedValueOnce(createHostUpdateStatus({
+        state: 'installing',
+      }))
+
+    const client = await loadClientModule()
+    const updateStatus = await (client as typeof client & {
+      getHostUpdateStatus: () => Promise<unknown>
+      checkHostUpdate: (channel: string) => Promise<unknown>
+      downloadHostUpdate: () => Promise<unknown>
+      installHostUpdate: () => Promise<unknown>
+    }).getHostUpdateStatus()
+
+    expect(updateStatus).toMatchObject({
+      currentVersion: '0.2.0',
+      currentChannel: 'formal',
+      state: 'idle',
+    })
+    expect(invokeSpy).toHaveBeenCalledWith('get_host_update_status')
+
+    await (client as typeof client & {
+      checkHostUpdate: (channel: string) => Promise<unknown>
+    }).checkHostUpdate('preview')
+    expect(invokeSpy).toHaveBeenCalledWith('check_host_update', {
+      channel: 'preview',
+    })
+
+    await (client as typeof client & {
+      downloadHostUpdate: () => Promise<unknown>
+    }).downloadHostUpdate()
+    expect(invokeSpy).toHaveBeenCalledWith('download_host_update')
+
+    await (client as typeof client & {
+      installHostUpdate: () => Promise<unknown>
+    }).installHostUpdate()
+    expect(invokeSpy).toHaveBeenCalledWith('install_host_update')
+  })
+
+  it('uses browser host update HTTP endpoints when VITE_HOST_RUNTIME=browser', async () => {
+    vi.stubEnv('VITE_HOST_RUNTIME', 'browser')
+    vi.stubEnv('VITE_HOST_API_BASE_URL', 'http://127.0.0.1:43127')
+    vi.stubEnv('VITE_HOST_AUTH_TOKEN', 'browser-host-token')
+    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => createHostUpdateStatus(),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => createHostUpdateStatus({
+          currentChannel: 'preview',
+          state: 'update_available',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => createHostUpdateStatus({
+          state: 'downloaded',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => createHostUpdateStatus({
+          state: 'installing',
+        }),
+      })
+
+    const client = await loadClientModule()
+    await (client as typeof client & {
+      getHostUpdateStatus: () => Promise<unknown>
+      checkHostUpdate: (channel: string) => Promise<unknown>
+      downloadHostUpdate: () => Promise<unknown>
+      installHostUpdate: () => Promise<unknown>
+    }).getHostUpdateStatus()
+    await (client as typeof client & {
+      checkHostUpdate: (channel: string) => Promise<unknown>
+    }).checkHostUpdate('preview')
+    await (client as typeof client & {
+      downloadHostUpdate: () => Promise<unknown>
+    }).downloadHostUpdate()
+    await (client as typeof client & {
+      installHostUpdate: () => Promise<unknown>
+    }).installHostUpdate()
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:43127/api/v1/host/update-status',
+      expect.objectContaining({ method: 'GET' }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:43127/api/v1/host/update-check',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      3,
+      'http://127.0.0.1:43127/api/v1/host/update-download',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      4,
+      'http://127.0.0.1:43127/api/v1/host/update-install',
+      expect.objectContaining({ method: 'POST' }),
+    )
   })
 
   it('creates, lists, and deletes host workspace connections through Tauri commands', async () => {

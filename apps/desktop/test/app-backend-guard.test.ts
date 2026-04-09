@@ -4,11 +4,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createApp, nextTick } from 'vue'
 
-const { bootstrapShellHostMock, savePreferencesMock, listNotificationsMock, subscribeToNotificationsMock } = vi.hoisted(() => ({
+const {
+  bootstrapShellHostMock,
+  savePreferencesMock,
+  listNotificationsMock,
+  subscribeToNotificationsMock,
+  getHostUpdateStatusMock,
+  checkHostUpdateMock,
+} = vi.hoisted(() => ({
   bootstrapShellHostMock: vi.fn(),
   savePreferencesMock: vi.fn(),
   listNotificationsMock: vi.fn(),
   subscribeToNotificationsMock: vi.fn(),
+  getHostUpdateStatusMock: vi.fn(),
+  checkHostUpdateMock: vi.fn(),
 }))
 
 vi.mock('@/tauri/client', async (importOriginal) => {
@@ -19,6 +28,8 @@ vi.mock('@/tauri/client', async (importOriginal) => {
     savePreferences: savePreferencesMock,
     listNotifications: listNotificationsMock,
     subscribeToNotifications: subscribeToNotificationsMock,
+    getHostUpdateStatus: getHostUpdateStatusMock,
+    checkHostUpdate: checkHostUpdateMock,
   }
 })
 
@@ -26,7 +37,7 @@ import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 
-import type { ShellBootstrap } from '@octopus/schema'
+import { createDefaultHostUpdateStatus, type ShellBootstrap } from '@octopus/schema'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -103,6 +114,8 @@ describe('App host bootstrap guard', () => {
     savePreferencesMock.mockReset()
     listNotificationsMock.mockReset()
     subscribeToNotificationsMock.mockReset()
+    getHostUpdateStatusMock.mockReset()
+    checkHostUpdateMock.mockReset()
     savePreferencesMock.mockImplementation(async (preferences) => preferences)
     listNotificationsMock.mockResolvedValue({
       notifications: [],
@@ -116,6 +129,20 @@ describe('App host bootstrap guard', () => {
       },
     })
     subscribeToNotificationsMock.mockReturnValue(() => {})
+    getHostUpdateStatusMock.mockResolvedValue(createDefaultHostUpdateStatus({
+      currentVersion: '0.1.0-test',
+      currentChannel: 'formal',
+      capabilities: {
+        canCheck: false,
+        canDownload: false,
+        canInstall: false,
+        supportsChannels: true,
+      },
+    }))
+    checkHostUpdateMock.mockResolvedValue(createDefaultHostUpdateStatus({
+      currentVersion: '0.1.0-test',
+      currentChannel: 'formal',
+    }))
     window.localStorage.clear()
     document.body.innerHTML = ''
     await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')

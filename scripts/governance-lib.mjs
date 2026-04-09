@@ -17,7 +17,8 @@ export const openApiSpecPath = path.join(repoRoot, 'contracts', 'openapi', 'octo
 export const generatedSchemaPath = path.join(repoRoot, 'packages', 'schema', 'src', 'generated.ts')
 export const releasePlatformArtifactRules = {
   macos: {
-    artifactExtensions: ['.dmg', '.zip'],
+    artifactExtensions: ['.dmg', '.zip', '.tar.gz', '.sig', '.json'],
+    sourcePathHints: ['/dmg/', '/macos/', '/app/'],
     requiredArtifacts: [
       {
         label: 'Apple Silicon installer (.dmg or .zip)',
@@ -30,7 +31,8 @@ export const releasePlatformArtifactRules = {
     ],
   },
   linux: {
-    artifactExtensions: ['.appimage', '.deb'],
+    artifactExtensions: ['.appimage', '.deb', '.tar.gz', '.sig', '.json'],
+    sourcePathHints: ['/appimage/', '/deb/', '/linux/'],
     requiredArtifacts: [
       {
         label: 'AppImage bundle (.AppImage)',
@@ -43,7 +45,8 @@ export const releasePlatformArtifactRules = {
     ],
   },
   windows: {
-    artifactExtensions: ['.msi', '.exe'],
+    artifactExtensions: ['.msi', '.exe', '.zip', '.sig', '.json'],
+    sourcePathHints: ['/nsis/', '/msi/', '/windows/'],
     requiredArtifacts: [
       {
         label: 'x64 NSIS installer (.exe)',
@@ -60,6 +63,7 @@ export const releasePlatformArtifactRules = {
 export const mirroredVersionJsonFiles = [
   'package.json',
   'apps/desktop/package.json',
+  'apps/website/package.json',
   'packages/schema/package.json',
   'packages/ui/package.json',
   'apps/desktop/src-tauri/tauri.conf.json',

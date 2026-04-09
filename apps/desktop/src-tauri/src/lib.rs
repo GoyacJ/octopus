@@ -4,6 +4,7 @@ pub mod commands;
 pub mod error;
 pub mod services;
 pub mod state;
+pub mod updates;
 
 use tauri::Manager;
 
@@ -12,6 +13,10 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
+
             app.handle().plugin(
                 tauri_plugin_log::Builder::default()
                     .level(log::LevelFilter::Info)
@@ -36,6 +41,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap_shell,
             commands::get_host_state,
+            commands::get_host_update_status,
+            commands::check_host_update,
+            commands::download_host_update,
+            commands::install_host_update,
             commands::load_preferences,
             commands::save_preferences,
             commands::list_connections_stub,

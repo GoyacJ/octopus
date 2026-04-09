@@ -66,7 +66,7 @@ describe('Settings view', () => {
     document.body.innerHTML = ''
   })
 
-  it('uses shared tabs and record/list rows for general and version sections', async () => {
+  it('renders a productized version center instead of legacy technical rows', async () => {
     const mounted = mountApp()
 
     await waitForSelector(mounted.container, '[data-testid="settings-tabs"]')
@@ -75,10 +75,16 @@ describe('Settings view', () => {
     expect(mounted.container.querySelector('[data-testid="settings-layout-row-leftSidebarCollapsed"]')).not.toBeNull()
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-version"]')?.click()
-    await waitForSelector(mounted.container, '[data-testid="settings-version-row-shell"]')
+    await waitForSelector(mounted.container, '[data-testid="settings-version-center"]')
 
-    expect(mounted.container.querySelector('[data-testid="settings-version-row-shell"]')).not.toBeNull()
-    expect(mounted.container.textContent).toContain('tauri2')
+    expect(mounted.container.querySelector('[data-testid="settings-version-center"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="settings-version-summary-card"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="settings-version-release-card"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="settings-version-channel-select"]')).not.toBeNull()
+    expect(mounted.container.textContent).toMatch(/检查更新|Check for updates/)
+    expect(mounted.container.textContent).toMatch(/当前版本|Current version/)
+    expect(mounted.container.textContent).not.toContain('tauri2')
+    expect(mounted.container.querySelector('[data-testid="settings-version-row-shell"]')).toBeNull()
 
     mounted.destroy()
   })

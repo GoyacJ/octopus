@@ -31,10 +31,17 @@ if (!platform || !releasePlatformArtifactRules[platform]) {
 const sourceDir = path.resolve(repoRoot, readArgument('--source-dir') ?? path.join('target', 'release', 'bundle'))
 const outputDir = path.resolve(repoRoot, readArgument('--output-dir') ?? path.join('release-artifacts', 'publish'))
 const platformOutputDir = path.join(outputDir, platform)
-const { artifactExtensions } = releasePlatformArtifactRules[platform]
+const { artifactExtensions, sourcePathHints = [] } = releasePlatformArtifactRules[platform]
 
 const bundleFiles = (await collectFiles(sourceDir))
-  .filter((filePath) => artifactExtensions.some((extension) => filePath.toLowerCase().endsWith(extension)))
+  .filter((filePath) => {
+    const normalizedPath = `/${path.relative(sourceDir, filePath).replaceAll(path.sep, '/')}`.toLowerCase()
+    const matchesExtension = artifactExtensions.some((extension) => normalizedPath.endsWith(extension))
+    if (!matchesExtension) {
+      return false
+    }
+    return sourcePathHints.length === 0 || sourcePathHints.some((hint) => normalizedPath.includes(hint))
+  })
   .sort()
 
 if (bundleFiles.length === 0) {

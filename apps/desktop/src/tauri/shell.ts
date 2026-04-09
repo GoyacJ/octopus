@@ -9,6 +9,8 @@ import type {
   HostWorkspaceConnectionRecord,
   HostBackendConnection,
   HostState,
+  HostUpdateChannel,
+  HostUpdateStatus,
   NotificationFilter,
   NotificationListResponse,
   NotificationRecord,
@@ -22,6 +24,7 @@ import type {
 } from '@octopus/schema'
 import {
   extractProjectIdFromShellRoute,
+  normalizeHostUpdateStatus,
   normalizeNotificationListResponse,
   normalizeShellPreferences,
 } from '@octopus/schema'
@@ -210,6 +213,34 @@ async function getHostStateTauri(): Promise<HostState> {
   return await invoke<HostState>('get_host_state')
 }
 
+async function getHostUpdateStatusTauri(): Promise<HostUpdateStatus> {
+  assertTauriHostAvailable()
+  return normalizeHostUpdateStatus(
+    await invoke<HostUpdateStatus>('get_host_update_status'),
+  )
+}
+
+async function checkHostUpdateTauri(channel?: HostUpdateChannel): Promise<HostUpdateStatus> {
+  assertTauriHostAvailable()
+  return normalizeHostUpdateStatus(
+    await invoke<HostUpdateStatus>('check_host_update', { channel }),
+  )
+}
+
+async function downloadHostUpdateTauri(): Promise<HostUpdateStatus> {
+  assertTauriHostAvailable()
+  return normalizeHostUpdateStatus(
+    await invoke<HostUpdateStatus>('download_host_update'),
+  )
+}
+
+async function installHostUpdateTauri(): Promise<HostUpdateStatus> {
+  assertTauriHostAvailable()
+  return normalizeHostUpdateStatus(
+    await invoke<HostUpdateStatus>('install_host_update'),
+  )
+}
+
 async function healthcheckTauri(): Promise<HealthcheckStatus> {
   assertTauriHostAvailable()
   return await invoke<HealthcheckStatus>('healthcheck')
@@ -371,6 +402,57 @@ async function healthcheckBrowser(): Promise<HealthcheckStatus> {
     authToken,
     '/api/v1/host/health',
     'get',
+  )
+}
+
+async function getHostUpdateStatusBrowser(): Promise<HostUpdateStatus> {
+  const { baseUrl, authToken } = resolveBrowserHostConfig()
+  return normalizeHostUpdateStatus(
+    await fetchHostOpenApi(
+      baseUrl,
+      authToken,
+      '/api/v1/host/update-status',
+      'get',
+    ),
+  )
+}
+
+async function checkHostUpdateBrowser(channel?: HostUpdateChannel): Promise<HostUpdateStatus> {
+  const { baseUrl, authToken } = resolveBrowserHostConfig()
+  return normalizeHostUpdateStatus(
+    await fetchHostOpenApi(
+      baseUrl,
+      authToken,
+      '/api/v1/host/update-check',
+      'post',
+      {
+        body: JSON.stringify(channel ? { channel } : {}),
+      },
+    ),
+  )
+}
+
+async function downloadHostUpdateBrowser(): Promise<HostUpdateStatus> {
+  const { baseUrl, authToken } = resolveBrowserHostConfig()
+  return normalizeHostUpdateStatus(
+    await fetchHostOpenApi(
+      baseUrl,
+      authToken,
+      '/api/v1/host/update-download',
+      'post',
+    ),
+  )
+}
+
+async function installHostUpdateBrowser(): Promise<HostUpdateStatus> {
+  const { baseUrl, authToken } = resolveBrowserHostConfig()
+  return normalizeHostUpdateStatus(
+    await fetchHostOpenApi(
+      baseUrl,
+      authToken,
+      '/api/v1/host/update-install',
+      'post',
+    ),
   )
 }
 
@@ -656,6 +738,30 @@ export async function getHostState(): Promise<HostState> {
     : await getHostStateTauri()
 }
 
+export async function getHostUpdateStatus(): Promise<HostUpdateStatus> {
+  return resolveHostRuntime() === 'browser'
+    ? await getHostUpdateStatusBrowser()
+    : await getHostUpdateStatusTauri()
+}
+
+export async function checkHostUpdate(channel?: HostUpdateChannel): Promise<HostUpdateStatus> {
+  return resolveHostRuntime() === 'browser'
+    ? await checkHostUpdateBrowser(channel)
+    : await checkHostUpdateTauri(channel)
+}
+
+export async function downloadHostUpdate(): Promise<HostUpdateStatus> {
+  return resolveHostRuntime() === 'browser'
+    ? await downloadHostUpdateBrowser()
+    : await downloadHostUpdateTauri()
+}
+
+export async function installHostUpdate(): Promise<HostUpdateStatus> {
+  return resolveHostRuntime() === 'browser'
+    ? await installHostUpdateBrowser()
+    : await installHostUpdateTauri()
+}
+
 export async function healthcheck(): Promise<HealthcheckStatus> {
   return resolveHostRuntime() === 'browser'
     ? await healthcheckBrowser()
@@ -779,6 +885,10 @@ export const hostClient = {
   loadPreferences,
   savePreferences,
   getHostState,
+  getHostUpdateStatus,
+  checkHostUpdate,
+  downloadHostUpdate,
+  installHostUpdate,
   healthcheck,
   restartDesktopBackend,
   resolveDesktopBackendConnection: resolveDesktopBackendConnectionForHost,

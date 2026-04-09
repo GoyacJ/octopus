@@ -347,6 +347,76 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/host/update-check:
+    post:
+      operationId: checkHostUpdate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HostUpdateCheckRequest"
+        required: false
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HostUpdateStatus"
+          description: Host app update check result payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/host/update-download:
+    post:
+      operationId: downloadHostUpdate
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HostUpdateStatus"
+          description: Host app update download result payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/host/update-install:
+    post:
+      operationId: installHostUpdate
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HostUpdateStatus"
+          description: Host app update install result payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/host/update-status:
+    get:
+      operationId: getHostUpdateStatus
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HostUpdateStatus"
+          description: Host app update status payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/host/workspace-connections:
     get:
       operationId: listHostWorkspaceConnections
@@ -3390,6 +3460,25 @@ components:
         - tauri
         - web
       type: string
+    HostReleaseSummary:
+      additionalProperties: false
+      properties:
+        channel:
+          $ref: "#/components/schemas/HostUpdateChannel"
+        notes:
+          type: string
+        notesUrl:
+          type: string
+        publishedAt:
+          format: date-time
+          type: string
+        version:
+          type: string
+      required:
+        - version
+        - channel
+        - publishedAt
+      type: object
     HostState:
       additionalProperties: false
       properties:
@@ -3409,6 +3498,86 @@ components:
         - appVersion
         - cargoWorkspace
         - shell
+      type: object
+    HostUpdateCapabilities:
+      additionalProperties: false
+      properties:
+        canCheck:
+          type: boolean
+        canDownload:
+          type: boolean
+        canInstall:
+          type: boolean
+        supportsChannels:
+          type: boolean
+      required:
+        - canCheck
+        - canDownload
+        - canInstall
+        - supportsChannels
+      type: object
+    HostUpdateChannel:
+      enum:
+        - formal
+        - preview
+      type: string
+    HostUpdateCheckRequest:
+      additionalProperties: false
+      properties:
+        channel:
+          $ref: "#/components/schemas/HostUpdateChannel"
+      type: object
+    HostUpdateProgress:
+      additionalProperties: false
+      properties:
+        downloadedBytes:
+          type: integer
+        percent:
+          type: integer
+        totalBytes:
+          type: integer
+      required:
+        - downloadedBytes
+        - totalBytes
+        - percent
+      type: object
+    HostUpdateState:
+      enum:
+        - idle
+        - checking
+        - up_to_date
+        - update_available
+        - downloading
+        - downloaded
+        - installing
+        - error
+      type: string
+    HostUpdateStatus:
+      additionalProperties: false
+      properties:
+        capabilities:
+          $ref: "#/components/schemas/HostUpdateCapabilities"
+        currentChannel:
+          $ref: "#/components/schemas/HostUpdateChannel"
+        currentVersion:
+          type: string
+        errorCode:
+          type: string
+        errorMessage:
+          type: string
+        lastCheckedAt:
+          type: integer
+        latestRelease:
+          $ref: "#/components/schemas/HostReleaseSummary"
+        progress:
+          $ref: "#/components/schemas/HostUpdateProgress"
+        state:
+          $ref: "#/components/schemas/HostUpdateState"
+      required:
+        - currentVersion
+        - currentChannel
+        - state
+        - capabilities
       type: object
     ImportedAgentPreviewItem:
       additionalProperties: false
@@ -5235,6 +5404,8 @@ components:
           type: boolean
         theme:
           $ref: "#/components/schemas/ThemeMode"
+        updateChannel:
+          $ref: "#/components/schemas/HostUpdateChannel"
       required:
         - theme
         - locale
@@ -5244,6 +5415,7 @@ components:
         - compactSidebar
         - leftSidebarCollapsed
         - rightSidebarCollapsed
+        - updateChannel
         - defaultWorkspaceId
         - lastVisitedRoute
       type: object

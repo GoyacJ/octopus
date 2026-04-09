@@ -1,7 +1,11 @@
 export {
   bootstrapShellHost,
+  checkHostUpdate,
+  downloadHostUpdate,
   getHostState,
+  getHostUpdateStatus,
   healthcheck,
+  installHostUpdate,
   hostClient,
   loadPreferences,
   pickAvatarImage,

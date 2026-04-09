@@ -151,6 +151,105 @@ HostState:
     - cargoWorkspace
     - shell
   type: object
+HostReleaseSummary:
+  additionalProperties: false
+  properties:
+    channel:
+      $ref: "#/components/schemas/HostUpdateChannel"
+    notes:
+      type: string
+    notesUrl:
+      type: string
+    publishedAt:
+      format: date-time
+      type: string
+    version:
+      type: string
+  required:
+    - version
+    - channel
+    - publishedAt
+  type: object
+HostUpdateCapabilities:
+  additionalProperties: false
+  properties:
+    canCheck:
+      type: boolean
+    canDownload:
+      type: boolean
+    canInstall:
+      type: boolean
+    supportsChannels:
+      type: boolean
+  required:
+    - canCheck
+    - canDownload
+    - canInstall
+    - supportsChannels
+  type: object
+HostUpdateChannel:
+  enum:
+    - formal
+    - preview
+  type: string
+HostUpdateCheckRequest:
+  additionalProperties: false
+  properties:
+    channel:
+      $ref: "#/components/schemas/HostUpdateChannel"
+  type: object
+HostUpdateProgress:
+  additionalProperties: false
+  properties:
+    downloadedBytes:
+      type: integer
+    percent:
+      type: integer
+    totalBytes:
+      type: integer
+  required:
+    - downloadedBytes
+    - totalBytes
+    - percent
+  type: object
+HostUpdateState:
+  enum:
+    - idle
+    - checking
+    - up_to_date
+    - update_available
+    - downloading
+    - downloaded
+    - installing
+    - error
+  type: string
+HostUpdateStatus:
+  additionalProperties: false
+  properties:
+    capabilities:
+      $ref: "#/components/schemas/HostUpdateCapabilities"
+    currentChannel:
+      $ref: "#/components/schemas/HostUpdateChannel"
+    currentVersion:
+      type: string
+    errorCode:
+      type: string
+    errorMessage:
+      type: string
+    lastCheckedAt:
+      type: integer
+    latestRelease:
+      $ref: "#/components/schemas/HostReleaseSummary"
+    progress:
+      $ref: "#/components/schemas/HostUpdateProgress"
+    state:
+      $ref: "#/components/schemas/HostUpdateState"
+  required:
+    - currentVersion
+    - currentChannel
+    - state
+    - capabilities
+  type: object
 NotificationFilter:
   additionalProperties: false
   properties:
@@ -280,6 +379,8 @@ ShellPreferences:
       type: boolean
     theme:
       $ref: "#/components/schemas/ThemeMode"
+    updateChannel:
+      $ref: "#/components/schemas/HostUpdateChannel"
   required:
     - theme
     - locale
@@ -289,6 +390,7 @@ ShellPreferences:
     - compactSidebar
     - leftSidebarCollapsed
     - rightSidebarCollapsed
+    - updateChannel
     - defaultWorkspaceId
     - lastVisitedRoute
   type: object

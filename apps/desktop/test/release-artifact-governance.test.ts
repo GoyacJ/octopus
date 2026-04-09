@@ -1,7 +1,9 @@
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
+import { createServer } from 'node:http'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { promisify } from 'node:util'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
@@ -10,9 +12,11 @@ const nodeExecutable = process.execPath
 const verifyScriptPath = path.join(repoRoot, 'scripts', 'verify-release-artifacts.mjs')
 const collectScriptPath = path.join(repoRoot, 'scripts', 'collect-release-artifacts.mjs')
 const collectMetadataScriptPath = path.join(repoRoot, 'scripts', 'collect-release-metadata.mjs')
+const generateUpdateManifestsScriptPath = path.join(repoRoot, 'scripts', 'generate-update-manifests.mjs')
 const releaseNotesScriptPath = path.join(repoRoot, 'scripts', 'generate-release-notes.mjs')
 const previewTagScriptPath = path.join(repoRoot, 'scripts', 'generate-preview-release-tag.mjs')
 const tempDirectories: string[] = []
+const execFileAsync = promisify(execFile)
 
 function createTempDir(prefix: string) {
   const directory = mkdtempSync(path.join(os.tmpdir(), prefix))
@@ -297,11 +301,20 @@ describe('release artifact governance scripts', () => {
 
     writeFile(path.join(sourceDir, 'dmg', 'Octopus_0.1.0_aarch64.dmg'), 'macos arm64 bundle')
     writeFile(path.join(sourceDir, 'dmg', 'Octopus_0.1.0_x64.dmg'), 'macos x64 bundle')
+    writeFile(path.join(sourceDir, 'updater', 'macos', 'Octopus.app.tar.gz'), 'macos updater archive')
+    writeFile(path.join(sourceDir, 'updater', 'macos', 'Octopus.app.tar.gz.sig'), 'macos updater signature')
+    writeFile(path.join(sourceDir, 'updater', 'macos', 'latest.json'), '{"version":"0.1.0"}\n')
     writeFile(path.join(sourceDir, 'macos', 'Octopus.app', 'Contents', 'Info.plist'), 'ignored app bundle')
     writeFile(path.join(sourceDir, 'appimage', 'Octopus_0.1.0_amd64.AppImage'), 'linux appimage')
     writeFile(path.join(sourceDir, 'deb', 'octopus_0.1.0_amd64.deb'), 'linux deb')
+    writeFile(path.join(sourceDir, 'updater', 'linux', 'Octopus.AppImage.tar.gz'), 'linux updater archive')
+    writeFile(path.join(sourceDir, 'updater', 'linux', 'Octopus.AppImage.tar.gz.sig'), 'linux updater signature')
+    writeFile(path.join(sourceDir, 'updater', 'linux', 'latest.json'), '{"version":"0.1.0"}\n')
     writeFile(path.join(sourceDir, 'nsis', 'Octopus_0.1.0_x64-setup.exe'), 'windows setup')
     writeFile(path.join(sourceDir, 'nsis', 'Octopus_0.1.0_arm64-setup.exe'), 'windows arm64 setup')
+    writeFile(path.join(sourceDir, 'updater', 'windows', 'Octopus.nsis.zip'), 'windows updater archive')
+    writeFile(path.join(sourceDir, 'updater', 'windows', 'Octopus.nsis.zip.sig'), 'windows updater signature')
+    writeFile(path.join(sourceDir, 'updater', 'windows', 'latest.json'), '{"version":"0.1.0"}\n')
     writeFile(path.join(sourceDir, 'README.txt'), 'ignore me')
 
     writeFile(path.join(metadataDir, 'VERSION'), '0.1.0\n')
@@ -373,10 +386,211 @@ describe('release artifact governance scripts', () => {
     expect(checksums).toContain('metadata/change-log.json')
     expect(checksums).toContain('publish/macos/Octopus_0.1.0_aarch64.dmg')
     expect(checksums).toContain('publish/macos/Octopus_0.1.0_x64.dmg')
+    expect(checksums).toContain('publish/macos/Octopus.app.tar.gz')
+    expect(checksums).toContain('publish/macos/Octopus.app.tar.gz.sig')
+    expect(checksums).toContain('publish/macos/latest.json')
     expect(checksums).toContain('publish/linux/Octopus_0.1.0_amd64.AppImage')
     expect(checksums).toContain('publish/linux/octopus_0.1.0_amd64.deb')
+    expect(checksums).toContain('publish/linux/Octopus.AppImage.tar.gz')
+    expect(checksums).toContain('publish/linux/Octopus.AppImage.tar.gz.sig')
+    expect(checksums).toContain('publish/linux/latest.json')
     expect(checksums).toContain('publish/windows/Octopus_0.1.0_x64-setup.exe')
     expect(checksums).toContain('publish/windows/Octopus_0.1.0_arm64-setup.exe')
-    expect(checksums).not.toContain('Octopus.app')
+    expect(checksums).toContain('publish/windows/Octopus.nsis.zip')
+    expect(checksums).toContain('publish/windows/Octopus.nsis.zip.sig')
+    expect(checksums).toContain('publish/windows/latest.json')
+    expect(checksums).not.toContain('publish/macos/Octopus.app/')
+    expect(checksums).not.toContain('Info.plist')
+  })
+
+  it('generates GitHub Pages updater manifests for both formal and preview channels from release assets', async () => {
+    const outputDir = createTempDir('octopus-update-manifests-')
+
+    const manifestByPath = new Map<string, unknown>([
+      ['/asset/formal-macos-latest.json', {
+        version: '0.2.0',
+        notes: 'formal notes from asset should be replaced by release body',
+        pub_date: '2026-04-08T10:00:00Z',
+        platforms: {
+          'darwin-aarch64': {
+            signature: 'formal-macos-signature',
+            url: 'https://example.invalid/Lobster.app.tar.gz',
+          },
+        },
+      }],
+      ['/asset/formal-windows-latest.json', {
+        version: '0.2.0',
+        notes: 'formal notes from asset should be replaced by release body',
+        pub_date: '2026-04-08T10:00:00Z',
+        platforms: {
+          'windows-x86_64': {
+            signature: 'formal-windows-signature',
+            url: 'https://example.invalid/Lobster.nsis.zip',
+          },
+        },
+      }],
+      ['/asset/preview-macos-latest.json', {
+        version: '0.2.0-preview.4',
+        notes: 'preview notes from asset should be replaced by release body',
+        pub_date: '2026-04-09T08:00:00Z',
+        platforms: {
+          'darwin-aarch64': {
+            signature: 'preview-macos-signature',
+            url: 'https://example.invalid/Lobster.app.tar.gz',
+          },
+        },
+      }],
+      ['/asset/preview-linux-latest.json', {
+        version: '0.2.0-preview.4',
+        notes: 'preview notes from asset should be replaced by release body',
+        pub_date: '2026-04-09T08:00:00Z',
+        platforms: {
+          'linux-x86_64': {
+            signature: 'preview-linux-signature',
+            url: 'https://example.invalid/Lobster.AppImage.tar.gz',
+          },
+        },
+      }],
+    ])
+
+    const server = createServer((request, response) => {
+      if (!request.url) {
+        response.statusCode = 404
+        response.end('missing url')
+        return
+      }
+
+      if (request.url === '/repos/GoyacJ/octopus/releases?per_page=20') {
+        response.setHeader('content-type', 'application/json')
+        response.end(JSON.stringify([
+          {
+            tag_name: 'v0.2.0',
+            prerelease: false,
+            published_at: '2026-04-08T11:30:00Z',
+            body: 'Formal release body',
+            html_url: 'https://github.com/GoyacJ/octopus/releases/tag/v0.2.0',
+            assets: [
+              {
+                name: 'macos-latest.json',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0/macos-latest.json',
+                url: `http://127.0.0.1:${(server.address() as { port: number }).port}/asset/formal-macos-latest.json`,
+              },
+              {
+                name: 'windows-latest.json',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0/windows-latest.json',
+                url: `http://127.0.0.1:${(server.address() as { port: number }).port}/asset/formal-windows-latest.json`,
+              },
+              {
+                name: 'Lobster.app.tar.gz',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Lobster.app.tar.gz',
+                url: 'unused',
+              },
+              {
+                name: 'Lobster.nsis.zip',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Lobster.nsis.zip',
+                url: 'unused',
+              },
+            ],
+          },
+          {
+            tag_name: 'v0.2.0-preview.4',
+            prerelease: true,
+            published_at: '2026-04-09T09:15:00Z',
+            body: 'Preview release body',
+            html_url: 'https://github.com/GoyacJ/octopus/releases/tag/v0.2.0-preview.4',
+            assets: [
+              {
+                name: 'macos-latest.json',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/macos-latest.json',
+                url: `http://127.0.0.1:${(server.address() as { port: number }).port}/asset/preview-macos-latest.json`,
+              },
+              {
+                name: 'linux-latest.json',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/linux-latest.json',
+                url: `http://127.0.0.1:${(server.address() as { port: number }).port}/asset/preview-linux-latest.json`,
+              },
+              {
+                name: 'Lobster.app.tar.gz',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Lobster.app.tar.gz',
+                url: 'unused',
+              },
+              {
+                name: 'Lobster.AppImage.tar.gz',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Lobster.AppImage.tar.gz',
+                url: 'unused',
+              },
+            ],
+          },
+        ]))
+        return
+      }
+
+      const payload = manifestByPath.get(request.url)
+      if (payload) {
+        response.setHeader('content-type', 'application/json')
+        response.end(JSON.stringify(payload))
+        return
+      }
+
+      response.statusCode = 404
+      response.end('not found')
+    })
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()))
+    const closeServer = async () => {
+      server.closeAllConnections()
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    }
+
+    const port = (server.address() as { port: number }).port
+
+    try {
+      await execFileAsync(nodeExecutable, [
+        generateUpdateManifestsScriptPath,
+        '--repo',
+        'GoyacJ/octopus',
+        '--api-base-url',
+        `http://127.0.0.1:${port}`,
+        '--output-dir',
+        outputDir,
+      ], {
+        cwd: repoRoot,
+      })
+
+      const formalManifest = JSON.parse(readFileSync(path.join(outputDir, 'formal', 'latest.json'), 'utf8')) as {
+        version: string
+        notes: string
+        pub_date: string
+        channel: string
+        notesUrl: string
+        platforms: Record<string, { signature: string, url: string }>
+      }
+      const previewManifest = JSON.parse(readFileSync(path.join(outputDir, 'preview', 'latest.json'), 'utf8')) as {
+        version: string
+        notes: string
+        pub_date: string
+        channel: string
+        notesUrl: string
+        platforms: Record<string, { signature: string, url: string }>
+      }
+
+      expect(formalManifest.version).toBe('0.2.0')
+      expect(formalManifest.notes).toBe('Formal release body')
+      expect(formalManifest.pub_date).toBe('2026-04-08T11:30:00Z')
+      expect(formalManifest.channel).toBe('formal')
+      expect(formalManifest.notesUrl).toBe('https://github.com/GoyacJ/octopus/releases/tag/v0.2.0')
+      expect(formalManifest.platforms['darwin-aarch64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Lobster.app.tar.gz')
+      expect(formalManifest.platforms['windows-x86_64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Lobster.nsis.zip')
+
+      expect(previewManifest.version).toBe('0.2.0-preview.4')
+      expect(previewManifest.notes).toBe('Preview release body')
+      expect(previewManifest.pub_date).toBe('2026-04-09T09:15:00Z')
+      expect(previewManifest.channel).toBe('preview')
+      expect(previewManifest.notesUrl).toBe('https://github.com/GoyacJ/octopus/releases/tag/v0.2.0-preview.4')
+      expect(previewManifest.platforms['darwin-aarch64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Lobster.app.tar.gz')
+      expect(previewManifest.platforms['linux-x86_64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Lobster.AppImage.tar.gz')
+    } finally {
+      await closeServer()
+    }
   })
 })
