@@ -302,17 +302,14 @@ describe('release artifact governance scripts', () => {
     writeFile(path.join(publishDir, 'macos', 'Octopus_0.1.0_aarch64.dmg'), 'macos arm64 bundle')
     writeFile(path.join(publishDir, 'macos', 'Octopus.app.tar.gz'), 'macos updater archive')
     writeFile(path.join(publishDir, 'macos', 'Octopus.app.tar.gz.sig'), 'macos updater signature')
-    writeFile(path.join(publishDir, 'macos', 'latest.json'), '{"version":"0.1.0-preview.42"}\n')
     writeFile(path.join(publishDir, 'linux', 'Octopus_0.1.0_amd64.AppImage'), 'linux appimage')
     writeFile(path.join(publishDir, 'linux', 'octopus_0.1.0_amd64.deb'), 'linux deb')
-    writeFile(path.join(publishDir, 'linux', 'Octopus.AppImage.tar.gz'), 'linux updater archive')
-    writeFile(path.join(publishDir, 'linux', 'Octopus.AppImage.tar.gz.sig'), 'linux updater signature')
-    writeFile(path.join(publishDir, 'linux', 'latest.json'), '{"version":"0.1.0-preview.42"}\n')
+    writeFile(path.join(publishDir, 'linux', 'Octopus_0.1.0_amd64.AppImage.sig'), 'linux updater signature')
+    writeFile(path.join(publishDir, 'linux', 'octopus_0.1.0_amd64.deb.sig'), 'linux deb signature')
     writeFile(path.join(publishDir, 'windows', 'Octopus_0.1.0_x64-setup.exe'), 'windows x64 setup')
     writeFile(path.join(publishDir, 'windows', 'Octopus_0.1.0_arm64-setup.exe'), 'windows arm64 setup')
-    writeFile(path.join(publishDir, 'windows', 'Octopus.nsis.zip'), 'windows updater archive')
-    writeFile(path.join(publishDir, 'windows', 'Octopus.nsis.zip.sig'), 'windows updater signature')
-    writeFile(path.join(publishDir, 'windows', 'latest.json'), '{"version":"0.1.0-preview.42"}\n')
+    writeFile(path.join(publishDir, 'windows', 'Octopus_0.1.0_x64-setup.exe.sig'), 'windows x64 updater signature')
+    writeFile(path.join(publishDir, 'windows', 'Octopus_0.1.0_arm64-setup.exe.sig'), 'windows arm64 updater signature')
 
     writeFile(path.join(metadataDir, 'VERSION'), '0.1.0\n')
     writeFile(path.join(metadataDir, 'octopus.openapi.yaml'), 'openapi: 3.1.0\n')
@@ -341,6 +338,7 @@ describe('release artifact governance scripts', () => {
     const checksums = readFileSync(checksumsPath, 'utf8')
     expect(checksums).toContain('publish/macos/Octopus_0.1.0_aarch64.dmg')
     expect(checksums).not.toContain('publish/macos/Octopus_0.1.0_x64.dmg')
+    expect(checksums).not.toContain('publish/macos/latest.json')
   })
 
   it('collects publishable bundles and verification writes release checksums for every required platform variant', () => {
@@ -355,18 +353,15 @@ describe('release artifact governance scripts', () => {
     writeFile(path.join(sourceDir, 'dmg', 'Octopus_0.1.0_x64.dmg'), 'macos x64 bundle')
     writeFile(path.join(sourceDir, 'updater', 'macos', 'Octopus.app.tar.gz'), 'macos updater archive')
     writeFile(path.join(sourceDir, 'updater', 'macos', 'Octopus.app.tar.gz.sig'), 'macos updater signature')
-    writeFile(path.join(sourceDir, 'updater', 'macos', 'latest.json'), '{"version":"0.1.0"}\n')
     writeFile(path.join(sourceDir, 'macos', 'Octopus.app', 'Contents', 'Info.plist'), 'ignored app bundle')
     writeFile(path.join(sourceDir, 'appimage', 'Octopus_0.1.0_amd64.AppImage'), 'linux appimage')
     writeFile(path.join(sourceDir, 'deb', 'octopus_0.1.0_amd64.deb'), 'linux deb')
-    writeFile(path.join(sourceDir, 'updater', 'linux', 'Octopus.AppImage.tar.gz'), 'linux updater archive')
-    writeFile(path.join(sourceDir, 'updater', 'linux', 'Octopus.AppImage.tar.gz.sig'), 'linux updater signature')
-    writeFile(path.join(sourceDir, 'updater', 'linux', 'latest.json'), '{"version":"0.1.0"}\n')
+    writeFile(path.join(sourceDir, 'appimage', 'Octopus_0.1.0_amd64.AppImage.sig'), 'linux updater signature')
+    writeFile(path.join(sourceDir, 'deb', 'octopus_0.1.0_amd64.deb.sig'), 'linux deb signature')
     writeFile(path.join(sourceDir, 'nsis', 'Octopus_0.1.0_x64-setup.exe'), 'windows setup')
     writeFile(path.join(sourceDir, 'nsis', 'Octopus_0.1.0_arm64-setup.exe'), 'windows arm64 setup')
-    writeFile(path.join(sourceDir, 'updater', 'windows', 'Octopus.nsis.zip'), 'windows updater archive')
-    writeFile(path.join(sourceDir, 'updater', 'windows', 'Octopus.nsis.zip.sig'), 'windows updater signature')
-    writeFile(path.join(sourceDir, 'updater', 'windows', 'latest.json'), '{"version":"0.1.0"}\n')
+    writeFile(path.join(sourceDir, 'nsis', 'Octopus_0.1.0_x64-setup.exe.sig'), 'windows updater signature')
+    writeFile(path.join(sourceDir, 'nsis', 'Octopus_0.1.0_arm64-setup.exe.sig'), 'windows updater signature')
     writeFile(path.join(sourceDir, 'README.txt'), 'ignore me')
 
     writeFile(path.join(metadataDir, 'VERSION'), '0.1.0\n')
@@ -440,29 +435,36 @@ describe('release artifact governance scripts', () => {
     expect(checksums).toContain('publish/macos/Octopus_0.1.0_x64.dmg')
     expect(checksums).toContain('publish/macos/Octopus.app.tar.gz')
     expect(checksums).toContain('publish/macos/Octopus.app.tar.gz.sig')
-    expect(checksums).toContain('publish/macos/latest.json')
     expect(checksums).toContain('publish/linux/Octopus_0.1.0_amd64.AppImage')
     expect(checksums).toContain('publish/linux/octopus_0.1.0_amd64.deb')
-    expect(checksums).toContain('publish/linux/Octopus.AppImage.tar.gz')
-    expect(checksums).toContain('publish/linux/Octopus.AppImage.tar.gz.sig')
-    expect(checksums).toContain('publish/linux/latest.json')
+    expect(checksums).toContain('publish/linux/Octopus_0.1.0_amd64.AppImage.sig')
+    expect(checksums).toContain('publish/linux/octopus_0.1.0_amd64.deb.sig')
     expect(checksums).toContain('publish/windows/Octopus_0.1.0_x64-setup.exe')
     expect(checksums).toContain('publish/windows/Octopus_0.1.0_arm64-setup.exe')
-    expect(checksums).toContain('publish/windows/Octopus.nsis.zip')
-    expect(checksums).toContain('publish/windows/Octopus.nsis.zip.sig')
-    expect(checksums).toContain('publish/windows/latest.json')
+    expect(checksums).toContain('publish/windows/Octopus_0.1.0_x64-setup.exe.sig')
+    expect(checksums).toContain('publish/windows/Octopus_0.1.0_arm64-setup.exe.sig')
     expect(checksums).not.toContain('publish/macos/Octopus.app/')
     expect(checksums).not.toContain('Info.plist')
   })
 
-  it('prepares unique updater manifest assets from recursively downloaded platform artifacts', () => {
+  it('prepares unique updater manifest assets from signed updater bundles and signatures', () => {
     const artifactsDir = createTempDir('octopus-release-assets-')
     const publishDir = path.join(artifactsDir, 'publish')
+    const metadataDir = path.join(artifactsDir, 'metadata')
     const releaseAssetsDir = path.join(artifactsDir, 'release-assets')
 
-    writeFile(path.join(publishDir, 'macos', 'octopus-desktop-macos-arm64-bundles', 'latest.json'), '{"version":"0.1.0"}\n')
-    writeFile(path.join(publishDir, 'linux', 'octopus-desktop-linux-x64-bundles', 'latest.json'), '{"version":"0.1.0"}\n')
-    writeFile(path.join(publishDir, 'windows', 'octopus-desktop-windows-x64-bundles', 'latest.json'), '{"version":"0.1.0"}\n')
+    writeFile(path.join(metadataDir, 'VERSION'), '0.1.0\n')
+    writeFile(path.join(publishDir, 'macos', 'octopus-desktop-macos-arm64-bundles', 'Octopus_0.1.0_aarch64.dmg'), 'macos installer')
+    writeFile(path.join(publishDir, 'macos', 'octopus-desktop-macos-arm64-bundles', 'Octopus.app.tar.gz'), 'macos updater archive')
+    writeFile(path.join(publishDir, 'macos', 'octopus-desktop-macos-arm64-bundles', 'Octopus.app.tar.gz.sig'), 'macos-signature\n')
+    writeFile(path.join(publishDir, 'linux', 'octopus-desktop-linux-x64-bundles', 'Octopus_0.1.0_amd64.AppImage'), 'linux updater bundle')
+    writeFile(path.join(publishDir, 'linux', 'octopus-desktop-linux-x64-bundles', 'Octopus_0.1.0_amd64.AppImage.sig'), 'linux-signature\n')
+    writeFile(path.join(publishDir, 'linux', 'octopus-desktop-linux-x64-bundles', 'octopus_0.1.0_amd64.deb'), 'linux installer')
+    writeFile(path.join(publishDir, 'linux', 'octopus-desktop-linux-x64-bundles', 'octopus_0.1.0_amd64.deb.sig'), 'linux-deb-signature\n')
+    writeFile(path.join(publishDir, 'windows', 'octopus-desktop-windows-x64-bundles', 'Octopus_0.1.0_x64-setup.exe'), 'windows x64 bundle')
+    writeFile(path.join(publishDir, 'windows', 'octopus-desktop-windows-x64-bundles', 'Octopus_0.1.0_x64-setup.exe.sig'), 'windows-x64-signature\n')
+    writeFile(path.join(publishDir, 'windows', 'octopus-desktop-windows-arm64-bundles', 'Octopus_0.1.0_arm64-setup.exe'), 'windows arm64 bundle')
+    writeFile(path.join(publishDir, 'windows', 'octopus-desktop-windows-arm64-bundles', 'Octopus_0.1.0_arm64-setup.exe.sig'), 'windows-arm64-signature\n')
 
     execFileSync(nodeExecutable, [
       prepareReleaseAssetsScriptPath,
@@ -475,10 +477,38 @@ describe('release artifact governance scripts', () => {
       stdio: 'pipe',
     })
 
-    expect(readFileSync(path.join(releaseAssetsDir, 'macos-latest.json'), 'utf8')).toContain('"0.1.0"')
-    expect(readFileSync(path.join(releaseAssetsDir, 'linux-latest.json'), 'utf8')).toContain('"0.1.0"')
-    expect(readFileSync(path.join(releaseAssetsDir, 'windows-latest.json'), 'utf8')).toContain('"0.1.0"')
-    expect(() => readFileSync(path.join(publishDir, 'macos', 'octopus-desktop-macos-arm64-bundles', 'latest.json'), 'utf8')).toThrow()
+    const macosManifest = JSON.parse(readFileSync(path.join(releaseAssetsDir, 'macos-latest.json'), 'utf8')) as {
+      version: string
+      platforms: Record<string, { signature: string, url: string }>
+    }
+    const linuxManifest = JSON.parse(readFileSync(path.join(releaseAssetsDir, 'linux-latest.json'), 'utf8')) as {
+      version: string
+      platforms: Record<string, { signature: string, url: string }>
+    }
+    const windowsManifest = JSON.parse(readFileSync(path.join(releaseAssetsDir, 'windows-latest.json'), 'utf8')) as {
+      version: string
+      platforms: Record<string, { signature: string, url: string }>
+    }
+
+    expect(macosManifest.version).toBe('0.1.0')
+    expect(macosManifest.platforms['darwin-aarch64']).toEqual({
+      signature: 'macos-signature',
+      url: 'Octopus.app.tar.gz',
+    })
+    expect(linuxManifest.version).toBe('0.1.0')
+    expect(linuxManifest.platforms['linux-x86_64']).toEqual({
+      signature: 'linux-signature',
+      url: 'Octopus_0.1.0_amd64.AppImage',
+    })
+    expect(windowsManifest.version).toBe('0.1.0')
+    expect(windowsManifest.platforms['windows-x86_64']).toEqual({
+      signature: 'windows-x64-signature',
+      url: 'Octopus_0.1.0_x64-setup.exe',
+    })
+    expect(windowsManifest.platforms['windows-aarch64']).toEqual({
+      signature: 'windows-arm64-signature',
+      url: 'Octopus_0.1.0_arm64-setup.exe',
+    })
   })
 
   it('generates GitHub Pages updater manifests for both formal and preview channels from release assets', async () => {
