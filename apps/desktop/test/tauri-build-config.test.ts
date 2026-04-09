@@ -9,6 +9,11 @@ const updaterConfigPath = path.join(repoRoot, 'apps/desktop/src-tauri/updater.co
 const packageJsonPath = path.join(repoRoot, 'package.json')
 const minisignPublicKeyPrefix = 'untrusted comment: minisign public key:'
 
+function decodeBase64Text(value: string | undefined) {
+  expect(value).toBeTruthy()
+  return Buffer.from(value!, 'base64').toString('utf8')
+}
+
 describe('desktop release build configuration', () => {
   it('exposes a dedicated desktop release build script', () => {
     const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
@@ -60,8 +65,9 @@ describe('desktop release build configuration', () => {
     }
 
     expect(tauriConfig.plugins?.updater?.endpoints).toEqual([])
-    expect(tauriConfig.plugins?.updater?.pubkey).toContain(minisignPublicKeyPrefix)
-    expect(tauriConfig.plugins?.updater?.pubkey).toContain('\n')
+    const decodedPubkey = decodeBase64Text(tauriConfig.plugins?.updater?.pubkey)
+    expect(decodedPubkey).toContain(minisignPublicKeyPrefix)
+    expect(decodedPubkey).toContain('\n')
   })
 
   it('tracks product updater defaults in repo so end users do not need local env configuration', () => {
@@ -75,8 +81,9 @@ describe('desktop release build configuration', () => {
     expect(updaterConfig.formalEndpoint).toBe('https://goyacj.github.io/octopus/updates/formal/latest.json')
     expect(updaterConfig.previewEndpoint).toBe('https://goyacj.github.io/octopus/updates/preview/latest.json')
     expect(updaterConfig.releaseRepo).toBe('GoyacJ/octopus')
-    expect(updaterConfig.pubkey).toContain(minisignPublicKeyPrefix)
-    expect(updaterConfig.pubkey).toContain('\n')
+    const decodedPubkey = decodeBase64Text(updaterConfig.pubkey)
+    expect(decodedPubkey).toContain(minisignPublicKeyPrefix)
+    expect(decodedPubkey).toContain('\n')
   })
 
   it('keeps release-time and runtime updater pubkeys aligned', () => {

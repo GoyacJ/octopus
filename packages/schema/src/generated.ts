@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 834633fb59362e618713a11f6695cfa349db98bbf65c7214c178aa71b1bdc4ae
+// Source hash: 0df18c96154874c06c41de3b3624c8fc4c2a43710608229cc943402165bb7d78
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
-export const OCTOPUS_API_VERSION = "0.2.2"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "834633fb59362e618713a11f6695cfa349db98bbf65c7214c178aa71b1bdc4ae"
+export const OCTOPUS_API_VERSION = "0.2.3"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "0df18c96154874c06c41de3b3624c8fc4c2a43710608229cc943402165bb7d78"
 
 export interface AgentRecord {
   avatar?: string

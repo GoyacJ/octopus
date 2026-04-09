@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   description: Canonical OpenAPI contract for Octopus host, workspace, and runtime APIs.
   title: Octopus API
-  version: 0.2.2
+  version: 0.2.3
 servers:
   - url: http://127.0.0.1:15421
 paths:
