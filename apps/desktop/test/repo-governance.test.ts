@@ -132,6 +132,8 @@ describe('repository governance', () => {
     expect(workflow).toContain('path: release-artifacts/publish/macos')
     expect(workflow).toContain('path: release-artifacts/publish/linux')
     expect(workflow).toContain('path: release-artifacts/publish/windows')
+    expect(workflow).not.toContain('Download macOS Intel bundles')
+    expect(workflow).not.toContain('octopus-desktop-macos-x64-bundles')
     expectPreviewDesktopMatrix(workflow)
   })
 

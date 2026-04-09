@@ -224,12 +224,6 @@ jobs:
           name: octopus-desktop-macos-arm64-bundles
           path: release-artifacts/publish/macos
 
-      - name: Download macOS Intel bundles
-        uses: actions/download-artifact@v4
-        with:
-          name: octopus-desktop-macos-x64-bundles
-          path: release-artifacts/publish/macos
-
       - name: Download Linux bundles
         uses: actions/download-artifact@v4
         with:
