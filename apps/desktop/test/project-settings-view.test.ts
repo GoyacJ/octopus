@@ -123,7 +123,7 @@ describe('Project settings view', () => {
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-users"]')?.click()
     await waitFor(() => mounted.container.textContent?.includes('Lin Zhou') ?? false)
     expect(mounted.container.textContent).toContain('Lin Zhou')
-    expect(mounted.container.textContent).toContain('Lobster Owner')
+    expect(mounted.container.textContent).toContain('Octopus Owner')
 
     mounted.destroy()
   })

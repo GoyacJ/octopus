@@ -1,8 +1,8 @@
 {
   "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "网易Lobster",
+  "productName": "Octopus",
   "version": "0.2.0",
-  "identifier": "com.weilaizhihuigu.lobster",
+  "identifier": "com.weilaizhihuigu.octopus",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://127.0.0.1:15420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "网易Lobster",
+        "title": "Octopus",
         "width": 1440,
         "height": 960,
         "minWidth": 1200,

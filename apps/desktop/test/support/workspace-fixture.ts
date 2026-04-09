@@ -1689,7 +1689,7 @@ function createWorkspaceFixtureState(
       ? [{
           id: 'user-owner',
           username: 'owner',
-          displayName: local ? 'Lobster Owner' : 'Enterprise Owner',
+          displayName: local ? 'Octopus Owner' : 'Enterprise Owner',
           avatar: 'data:image/png;base64,iVBORw0KGgo=',
           status: 'active',
           passwordState: 'set' as const,

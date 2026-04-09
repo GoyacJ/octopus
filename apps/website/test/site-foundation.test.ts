@@ -10,6 +10,7 @@ function readJson(filePath: string) {
   return JSON.parse(readFileSync(filePath, 'utf8')) as {
     scripts?: Record<string, string>
     dependencies?: Record<string, string>
+    devDependencies?: Record<string, string>
   }
 }
 
@@ -36,6 +37,7 @@ describe('website app foundation', () => {
     expect(appPackage.dependencies?.nuxt).toBeTruthy()
     expect(appPackage.dependencies?.['@nuxtjs/i18n']).toBeTruthy()
     expect(appPackage.dependencies?.['@nuxtjs/tailwindcss']).toBeTruthy()
+    expect(appPackage.devDependencies?.['vue-tsc']).toBeTruthy()
     expect(appPackage.scripts?.dev).toBe('nuxt dev')
     expect(appPackage.scripts?.generate).toBe('nuxt generate')
     expect(appPackage.scripts?.typecheck).toBe('nuxt typecheck')
@@ -43,6 +45,7 @@ describe('website app foundation', () => {
     expect(rootPackage.scripts?.['dev:website']).toBe('pnpm -C apps/website dev')
     expect(rootPackage.scripts?.['build:website']).toBe('pnpm -C apps/website generate')
     expect(rootPackage.scripts?.['check:website']).toBe('pnpm -C apps/website typecheck && pnpm -C apps/website test && pnpm -C apps/website generate')
-    expect(rootPackage.scripts?.['check:frontend']).toContain('pnpm check:website')
+    expect(rootPackage.scripts?.['check:frontend']).toBe('pnpm check:desktop && pnpm check:website')
+    expect(rootPackage.scripts?.['check:desktop-release']).not.toContain('pnpm check:website')
   })
 })

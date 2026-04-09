@@ -114,7 +114,7 @@ describe('Workbench shell layout', () => {
         ?.replace(/\s+/g, ' ')
         .trim() ?? ''
 
-    expect(breadcrumbText()).toContain('网易Lobster')
+    expect(breadcrumbText()).toContain('Octopus')
     expect(breadcrumbText()).toContain(localWorkspaceLabel)
     expect(breadcrumbText()).toContain('Desktop Redesign')
     expect(breadcrumbText()).toContain(String(i18n.global.t('sidebar.navigation.dashboard')))
@@ -122,7 +122,7 @@ describe('Workbench shell layout', () => {
     await router.push('/workspaces/ws-local/projects')
     await waitFor(() => router.currentRoute.value.name === 'workspace-projects')
 
-    expect(breadcrumbText()).toContain('网易Lobster')
+    expect(breadcrumbText()).toContain('Octopus')
     expect(breadcrumbText()).toContain(localWorkspaceLabel)
     expect(breadcrumbText()).not.toContain('Desktop Redesign')
     expect(breadcrumbText()).toContain(String(i18n.global.t('sidebar.navigation.projects')))
@@ -130,7 +130,7 @@ describe('Workbench shell layout', () => {
     await router.push('/settings')
     await waitFor(() => router.currentRoute.value.name === 'app-settings')
 
-    expect(breadcrumbText()).toContain('网易Lobster')
+    expect(breadcrumbText()).toContain('Octopus')
     expect(breadcrumbText()).not.toContain('Local Workspace')
     expect(breadcrumbText()).not.toContain('Desktop Redesign')
     expect(breadcrumbText()).toContain(String(i18n.global.t('topbar.settings')))

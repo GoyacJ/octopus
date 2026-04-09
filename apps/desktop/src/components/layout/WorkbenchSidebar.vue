@@ -406,8 +406,8 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
   >
     <div class="flex items-center justify-between gap-3 border-b border-border pb-3">
       <div class="flex items-center gap-3 min-w-0">
-        <img src="/logo.jpg" class="h-8 w-8 rounded-[var(--radius-m)] object-cover" alt="Logo" />
-        <div class="truncate text-[14px] font-semibold text-text-primary">网易Lobster</div>
+        <img src="/logo.png" class="h-8 w-8 rounded-[var(--radius-m)] object-cover" alt="Octopus logo" />
+        <div class="truncate text-[14px] font-semibold text-text-primary">Octopus</div>
       </div>
       <UiButton variant="ghost" size="icon" data-testid="sidebar-collapse" class="h-8 w-8" @click="shell.toggleLeftSidebar()">
         <PanelLeftClose :size="16" />

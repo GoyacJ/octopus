@@ -414,7 +414,7 @@ describe('release artifact governance scripts', () => {
         platforms: {
           'darwin-aarch64': {
             signature: 'formal-macos-signature',
-            url: 'https://example.invalid/Lobster.app.tar.gz',
+            url: 'https://example.invalid/Octopus.app.tar.gz',
           },
         },
       }],
@@ -425,7 +425,7 @@ describe('release artifact governance scripts', () => {
         platforms: {
           'windows-x86_64': {
             signature: 'formal-windows-signature',
-            url: 'https://example.invalid/Lobster.nsis.zip',
+            url: 'https://example.invalid/Octopus.nsis.zip',
           },
         },
       }],
@@ -436,7 +436,7 @@ describe('release artifact governance scripts', () => {
         platforms: {
           'darwin-aarch64': {
             signature: 'preview-macos-signature',
-            url: 'https://example.invalid/Lobster.app.tar.gz',
+            url: 'https://example.invalid/Octopus.app.tar.gz',
           },
         },
       }],
@@ -447,7 +447,7 @@ describe('release artifact governance scripts', () => {
         platforms: {
           'linux-x86_64': {
             signature: 'preview-linux-signature',
-            url: 'https://example.invalid/Lobster.AppImage.tar.gz',
+            url: 'https://example.invalid/Octopus.AppImage.tar.gz',
           },
         },
       }],
@@ -481,13 +481,13 @@ describe('release artifact governance scripts', () => {
                 url: `http://127.0.0.1:${(server.address() as { port: number }).port}/asset/formal-windows-latest.json`,
               },
               {
-                name: 'Lobster.app.tar.gz',
-                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Lobster.app.tar.gz',
+                name: 'Octopus.app.tar.gz',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Octopus.app.tar.gz',
                 url: 'unused',
               },
               {
-                name: 'Lobster.nsis.zip',
-                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Lobster.nsis.zip',
+                name: 'Octopus.nsis.zip',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Octopus.nsis.zip',
                 url: 'unused',
               },
             ],
@@ -510,13 +510,13 @@ describe('release artifact governance scripts', () => {
                 url: `http://127.0.0.1:${(server.address() as { port: number }).port}/asset/preview-linux-latest.json`,
               },
               {
-                name: 'Lobster.app.tar.gz',
-                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Lobster.app.tar.gz',
+                name: 'Octopus.app.tar.gz',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Octopus.app.tar.gz',
                 url: 'unused',
               },
               {
-                name: 'Lobster.AppImage.tar.gz',
-                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Lobster.AppImage.tar.gz',
+                name: 'Octopus.AppImage.tar.gz',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Octopus.AppImage.tar.gz',
                 url: 'unused',
               },
             ],
@@ -579,16 +579,16 @@ describe('release artifact governance scripts', () => {
       expect(formalManifest.pub_date).toBe('2026-04-08T11:30:00Z')
       expect(formalManifest.channel).toBe('formal')
       expect(formalManifest.notesUrl).toBe('https://github.com/GoyacJ/octopus/releases/tag/v0.2.0')
-      expect(formalManifest.platforms['darwin-aarch64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Lobster.app.tar.gz')
-      expect(formalManifest.platforms['windows-x86_64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Lobster.nsis.zip')
+      expect(formalManifest.platforms['darwin-aarch64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Octopus.app.tar.gz')
+      expect(formalManifest.platforms['windows-x86_64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Octopus.nsis.zip')
 
       expect(previewManifest.version).toBe('0.2.0-preview.4')
       expect(previewManifest.notes).toBe('Preview release body')
       expect(previewManifest.pub_date).toBe('2026-04-09T09:15:00Z')
       expect(previewManifest.channel).toBe('preview')
       expect(previewManifest.notesUrl).toBe('https://github.com/GoyacJ/octopus/releases/tag/v0.2.0-preview.4')
-      expect(previewManifest.platforms['darwin-aarch64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Lobster.app.tar.gz')
-      expect(previewManifest.platforms['linux-x86_64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Lobster.AppImage.tar.gz')
+      expect(previewManifest.platforms['darwin-aarch64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Octopus.app.tar.gz')
+      expect(previewManifest.platforms['linux-x86_64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Octopus.AppImage.tar.gz')
     } finally {
       await closeServer()
     }

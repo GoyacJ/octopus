@@ -18,16 +18,18 @@ Mirrored version fields are validated in:
 
 ## Quality Gates
 
-Every release must pass:
+Every desktop release must pass:
 
-- `pnpm check:frontend`
+- `pnpm check:desktop-release`
 - `cargo fmt --all --check`
 - `cargo clippy --workspace --all-targets -- -D warnings`
 - `cargo test --workspace --locked`
 - `pnpm schema:check`
 - `pnpm version:check`
 
-`pnpm check:all` is the local and CI entrypoint for the full repository gate.
+`pnpm check:desktop-release` is the desktop packaging and publication gate.
+
+`pnpm check:all` remains the full repository gate, and `pnpm check:website` stays independent from desktop bundle publication.
 
 Because the Rust workspace includes the Tauri desktop shell, Ubuntu-based CI and release verification jobs must install the official Tauri Linux system dependencies before running `cargo clippy` and `cargo test`. The governance target is the full workspace gate, not a reduced Linux-only crate subset.
 

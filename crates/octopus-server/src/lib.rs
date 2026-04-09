@@ -89,7 +89,7 @@ struct ProductUpdateConfig {
     preview_endpoint: Option<String>,
     pubkey: Option<String>,
     #[serde(rename = "releaseRepo")]
-    _release_repo: Option<String>,
+    release_repo: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -772,7 +772,7 @@ async fn refresh_browser_host_update_status_with_endpoint(
 
     status.last_checked_at = Some(timestamp_now());
 
-    match fetch_remote_update_manifest(&endpoint).await {
+    match fetch_remote_update_manifest(endpoint).await {
         Ok(manifest) => {
             let latest_version = manifest
                 .version
@@ -863,7 +863,7 @@ impl ProductUpdateConfig {
         self.formal_endpoint = normalize_optional_string(self.formal_endpoint);
         self.preview_endpoint = normalize_optional_string(self.preview_endpoint);
         self.pubkey = normalize_optional_string(self.pubkey);
-        self._release_repo = normalize_optional_string(self._release_repo);
+        self.release_repo = normalize_optional_string(self.release_repo);
         self
     }
 
@@ -5249,7 +5249,7 @@ mod tests {
                         "platforms": {
                             "darwin-aarch64": {
                                 "signature": "formal-signature",
-                                "url": "https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Lobster.app.tar.gz"
+                                "url": "https://github.com/GoyacJ/octopus/releases/download/v0.2.0/Octopus.app.tar.gz"
                             }
                         }
                     }))
@@ -5267,7 +5267,7 @@ mod tests {
                         "platforms": {
                             "darwin-aarch64": {
                                 "signature": "preview-signature",
-                                "url": "https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Lobster.app.tar.gz"
+                                "url": "https://github.com/GoyacJ/octopus/releases/download/v0.2.0-preview.4/Octopus.app.tar.gz"
                             }
                         }
                     }))

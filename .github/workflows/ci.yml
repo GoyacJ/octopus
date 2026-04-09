@@ -21,8 +21,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  repo-quality-gates:
-    name: Repository quality gates
+  desktop-quality-gates:
+    name: Desktop quality gates
     runs-on: ubuntu-latest
 
     steps:
@@ -57,8 +57,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check frontend surfaces
-        run: pnpm check:frontend
+      - name: Check desktop frontend surfaces
+        run: pnpm check:desktop
 
       - name: Prepare desktop sidecar for Rust workspace checks
         run: pnpm prepare:desktop-backend:sidecar
@@ -78,13 +78,38 @@ jobs:
       - name: Check version governance
         run: pnpm version:check
 
-      - name: Run repository verification
-        run: pnpm check:all
+      - name: Run desktop release verification
+        run: pnpm check:desktop-release
+
+  website-quality-gates:
+    name: Website quality gates
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check website surfaces
+        run: pnpm check:website
 
   desktop-release-build:
     name: Desktop release build (${{ matrix.label }})
     runs-on: ${{ matrix.runs_on }}
-    needs: repo-quality-gates
+    needs: desktop-quality-gates
     strategy:
       fail-fast: false
       matrix:

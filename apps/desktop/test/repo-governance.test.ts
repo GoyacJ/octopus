@@ -29,16 +29,20 @@ function expectDesktopMatrix(workflow: string) {
 }
 
 describe('repository governance', () => {
-  it('runs CI for mainline changes and enforces all-repo quality gates', () => {
+  it('runs CI for mainline changes while keeping desktop and website quality gates independent', () => {
     const workflow = readRepoFile('.github', 'workflows', 'ci.yml')
 
     expect(workflow).toContain('- main')
+    expect(workflow).toContain('name: Desktop quality gates')
+    expect(workflow).toContain('name: Website quality gates')
     expect(workflow).toContain('sudo apt update')
     expect(workflow).toContain('libwebkit2gtk-4.1-dev')
     expect(workflow).toContain('libayatana-appindicator3-dev')
     expect(workflow).toContain('librsvg2-dev')
+    expect(workflow).toContain('pnpm check:desktop')
+    expect(workflow).toContain('pnpm check:website')
+    expect(workflow).toContain('pnpm check:desktop-release')
     expect(workflow).toContain('pnpm prepare:desktop-backend:sidecar')
-    expect(workflow).toContain('pnpm check:all')
     expect(workflow).toContain('cargo fmt --all --check')
     expect(workflow).toContain('cargo clippy --workspace --all-targets -- -D warnings')
     expect(workflow).toContain('cargo test --workspace --locked')
@@ -69,7 +73,8 @@ describe('repository governance', () => {
     expect(workflow).toContain('libwebkit2gtk-4.1-dev')
     expect(workflow).toContain('libayatana-appindicator3-dev')
     expect(workflow).toContain('librsvg2-dev')
-    expect(workflow).toContain('pnpm prepare:desktop-backend:sidecar')
+    expect(workflow).toContain('pnpm check:desktop-release')
+    expect(workflow).not.toContain('pnpm check:website')
     expect(workflow).toContain('release-artifacts/publish')
     expect(workflow).toContain('release-artifacts/metadata')
     expect(workflow).toContain('release-artifacts/publish/linux/*')
@@ -99,7 +104,8 @@ describe('repository governance', () => {
     expect(workflow).toContain('prerelease: true')
     expect(workflow).not.toContain('export RELEASE_TAG="${GITHUB_REF_NAME}"')
     expect(workflow).not.toContain('pnpm version:check "${RELEASE_TAG}"')
-    expect(workflow).toContain('pnpm version:check')
+    expect(workflow).toContain('pnpm check:desktop-release')
+    expect(workflow).not.toContain('pnpm check:website')
     expect(workflow).toContain('target_commitish: ${{ github.sha }}')
     expect(workflow).toContain('release-artifacts/publish/linux/*')
     expect(workflow).toContain('path: release-artifacts/publish/macos')
@@ -127,6 +133,8 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['release:tag:preview']).toBe('node scripts/generate-preview-release-tag.mjs')
     expect(packageJson.scripts?.['release:verify-artifacts']).toBe('node scripts/verify-release-artifacts.mjs')
     expect(packageJson.scripts?.['release:generate-update-manifests']).toBe('node scripts/generate-update-manifests.mjs')
+    expect(packageJson.scripts?.['check:desktop']).toBe('pnpm check:frontend-governance && pnpm -C apps/desktop typecheck && pnpm -C apps/desktop test')
+    expect(packageJson.scripts?.['check:desktop-release']).toBe('pnpm check:desktop && pnpm check:rust && pnpm schema:check && pnpm version:check')
     expect(packageJson.scripts?.['check:rust']).toContain('pnpm prepare:desktop-backend:sidecar')
   })
 
@@ -186,7 +194,8 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['schema:check:routes']).toBe('node scripts/check-openapi-route-parity.mjs')
     expect(packageJson.scripts?.['schema:check:adapters']).toBe('node scripts/check-openapi-adapter-parity.mjs')
     expect(packageJson.scripts?.['schema:check']).toBe('pnpm schema:check:generated && pnpm schema:check:routes && pnpm schema:check:adapters')
-    expect(packageJson.scripts?.['check:all']).toBe('pnpm check:frontend && pnpm check:rust && pnpm schema:check && pnpm version:check')
+    expect(packageJson.scripts?.['check:frontend']).toBe('pnpm check:desktop && pnpm check:website')
+    expect(packageJson.scripts?.['check:all']).toBe('pnpm check:desktop-release && pnpm check:website')
   })
 
   it('tracks OpenAPI parity assets and audit artifacts in the repository', () => {

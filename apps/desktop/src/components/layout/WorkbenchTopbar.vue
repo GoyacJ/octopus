@@ -59,7 +59,7 @@ const currentPageName = computed(() =>
     : '',
 )
 const breadcrumbItems = computed(() => {
-  const items: string[] = ['网易Lobster']
+  const items: string[] = ['Octopus']
   const section = currentRouteMenuDefinition.value?.section
 
   if (section && section !== 'app') {

@@ -65,9 +65,7 @@ jobs:
       - name: Check release tag and repo governance
         run: |
           export RELEASE_TAG="${GITHUB_REF_NAME}"
-          pnpm version:check "${RELEASE_TAG}"
-          pnpm schema:check
-          pnpm check:all
+          pnpm check:desktop-release
 
       - name: Generate release notes
         run: pnpm release:notes -- --tag "${GITHUB_REF_NAME}" --sha "${GITHUB_SHA}" --language zh-CN --require-manual-summary true --output tmp/release-notes/${GITHUB_REF_NAME}.md

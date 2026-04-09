@@ -43,7 +43,7 @@ struct ProductUpdateConfig {
     preview_endpoint: Option<String>,
     pubkey: Option<String>,
     #[serde(rename = "releaseRepo")]
-    _release_repo: Option<String>,
+    release_repo: Option<String>,
 }
 
 impl AppUpdateService {
@@ -89,43 +89,34 @@ impl AppUpdateService {
 
         let updater = builder.build().map_err(update_error)?;
         let checked_at = timestamp_now();
-        match updater.check().await.map_err(update_error)? {
-            Some(update) => {
-                let status = HostUpdateStatus {
-                    current_version: current_version.to_string(),
-                    current_channel: normalize_update_channel(
-                        Some(current_channel),
-                        current_channel,
-                    ),
-                    state: "update_available".into(),
-                    latest_release: Some(release_summary_from_update(&update, current_channel)),
-                    last_checked_at: Some(checked_at),
-                    progress: None,
-                    capabilities: capabilities_for_channel(current_channel),
-                    error_code: None,
-                    error_message: None,
-                };
-                self.replace_status(status.clone(), Some(update), None);
-                Ok(status)
-            }
-            None => {
-                let status = HostUpdateStatus {
-                    current_version: current_version.to_string(),
-                    current_channel: normalize_update_channel(
-                        Some(current_channel),
-                        current_channel,
-                    ),
-                    state: "up_to_date".into(),
-                    latest_release: None,
-                    last_checked_at: Some(checked_at),
-                    progress: None,
-                    capabilities: capabilities_for_channel(current_channel),
-                    error_code: None,
-                    error_message: None,
-                };
-                self.replace_status(status.clone(), None, None);
-                Ok(status)
-            }
+        if let Some(update) = updater.check().await.map_err(update_error)? {
+            let status = HostUpdateStatus {
+                current_version: current_version.to_string(),
+                current_channel: normalize_update_channel(Some(current_channel), current_channel),
+                state: "update_available".into(),
+                latest_release: Some(release_summary_from_update(&update, current_channel)),
+                last_checked_at: Some(checked_at),
+                progress: None,
+                capabilities: capabilities_for_channel(current_channel),
+                error_code: None,
+                error_message: None,
+            };
+            self.replace_status(status.clone(), Some(update), None);
+            Ok(status)
+        } else {
+            let status = HostUpdateStatus {
+                current_version: current_version.to_string(),
+                current_channel: normalize_update_channel(Some(current_channel), current_channel),
+                state: "up_to_date".into(),
+                latest_release: None,
+                last_checked_at: Some(checked_at),
+                progress: None,
+                capabilities: capabilities_for_channel(current_channel),
+                error_code: None,
+                error_message: None,
+            };
+            self.replace_status(status.clone(), None, None);
+            Ok(status)
         }
     }
 
@@ -460,7 +451,7 @@ impl ProductUpdateConfig {
         self.formal_endpoint = normalize_optional_string(self.formal_endpoint);
         self.preview_endpoint = normalize_optional_string(self.preview_endpoint);
         self.pubkey = normalize_optional_string(self.pubkey);
-        self._release_repo = normalize_optional_string(self._release_repo);
+        self.release_repo = normalize_optional_string(self.release_repo);
         self
     }
 

@@ -77,9 +77,7 @@ jobs:
             echo "Preview releases must run from main; received ${GITHUB_REF_NAME}" >&2
             exit 1
           fi
-          pnpm version:check
-          pnpm schema:check
-          pnpm check:all
+          pnpm check:desktop-release
 
       - name: Generate preview release notes
         run: pnpm release:notes:preview -- --tag "${{ steps.preview-release.outputs.tag }}" --run-number "${GITHUB_RUN_NUMBER}" --sha "${GITHUB_SHA}" --language zh-CN --output "${{ steps.preview-release.outputs.notes_path }}"

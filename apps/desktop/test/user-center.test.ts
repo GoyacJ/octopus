@@ -167,7 +167,7 @@ describe('User center RBAC prototype', () => {
     expect(mounted.container.textContent).toContain('角色管理')
     expect(mounted.container.textContent).toContain('权限管理')
     expect(mounted.container.textContent).toContain('导航管理')
-    expect(mounted.container.textContent).toContain('Lobster Owner')
+    expect(mounted.container.textContent).toContain('Octopus Owner')
     expect(mounted.container.textContent).toContain('Lin Zhou')
 
     mounted.destroy()
@@ -209,9 +209,9 @@ describe('User center RBAC prototype', () => {
     expect(mounted.container.textContent).toContain('成员管理')
 
     await router.push('/workspaces/ws-local/user-center/profile')
-    await waitForText(mounted.container, 'Lobster Owner')
+    await waitForText(mounted.container, 'Octopus Owner')
     expect(mounted.container.querySelector('[data-testid="user-center-profile-view"]')).not.toBeNull()
-    expect(mounted.container.textContent).toContain('Lobster Owner')
+    expect(mounted.container.textContent).toContain('Octopus Owner')
     expect(mounted.container.textContent).toContain('owner')
     expect(mounted.container.querySelector('[data-testid="profile-access-card"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="profile-access-roles"]')?.textContent).toContain('Owner')
@@ -314,7 +314,7 @@ describe('User center RBAC prototype', () => {
   it('navigates to roles, permissions, and menus from the profile access overview', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/user-center/profile')
 
-    await waitForText(mounted.container, 'Lobster Owner')
+    await waitForText(mounted.container, 'Octopus Owner')
 
     const rolesLink = mounted.container.querySelector('[data-testid="profile-access-roles-link"]')
     if (!(rolesLink instanceof HTMLButtonElement)) {
@@ -325,7 +325,7 @@ describe('User center RBAC prototype', () => {
     await waitForText(mounted.container, 'Operator')
 
     await router.push('/workspaces/ws-local/user-center/profile')
-    await waitForText(mounted.container, 'Lobster Owner')
+    await waitForText(mounted.container, 'Octopus Owner')
 
     const permissionsLink = mounted.container.querySelector('[data-testid="profile-access-permissions-link"]')
     if (!(permissionsLink instanceof HTMLButtonElement)) {
@@ -336,7 +336,7 @@ describe('User center RBAC prototype', () => {
     await waitForText(mounted.container, 'Manage users')
 
     await router.push('/workspaces/ws-local/user-center/profile')
-    await waitForText(mounted.container, 'Lobster Owner')
+    await waitForText(mounted.container, 'Octopus Owner')
 
     const menusLink = mounted.container.querySelector('[data-testid="profile-access-menus-link"]')
     if (!(menusLink instanceof HTMLButtonElement)) {
@@ -359,7 +359,7 @@ describe('User center RBAC prototype', () => {
     })
     const mounted = await mountRoutedApp('/workspaces/ws-local/user-center/profile')
 
-    await waitForText(mounted.container, 'Lobster Owner')
+    await waitForText(mounted.container, 'Octopus Owner')
     expect(mounted.container.querySelector('[data-testid="profile-avatar-file-label"]')?.textContent).toContain('当前头像')
     expect(mounted.container.textContent).not.toContain('未选择新的头像文件')
 
@@ -406,7 +406,7 @@ describe('User center RBAC prototype', () => {
   it('supports changing the current user password and refreshes the password badge immediately', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/user-center/profile')
 
-    await waitForText(mounted.container, 'Lobster Owner')
+    await waitForText(mounted.container, 'Octopus Owner')
 
     const currentPasswordInput = await findInput(mounted.container, '[data-testid="profile-current-password-input"]')
     const newPasswordInput = await findInput(mounted.container, '[data-testid="profile-new-password-input"]')
@@ -434,7 +434,7 @@ describe('User center RBAC prototype', () => {
   it('shows server-side password change errors for invalid current password and short new password', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/user-center/profile')
 
-    await waitForText(mounted.container, 'Lobster Owner')
+    await waitForText(mounted.container, 'Octopus Owner')
 
     const currentPasswordInput = await findInput(mounted.container, '[data-testid="profile-current-password-input"]')
     const newPasswordInput = await findInput(mounted.container, '[data-testid="profile-new-password-input"]')
