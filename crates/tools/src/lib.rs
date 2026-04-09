@@ -22,10 +22,10 @@ use runtime::{
     team_cron_registry::{CronRegistry, TeamRegistry},
     worker_boot::{WorkerReadySnapshot, WorkerRegistry},
     write_file, ApiClient, ApiRequest, AssistantEvent, BashCommandInput, BashCommandOutput,
-    BranchFreshness, ContentBlock, ConversationMessage, ConversationRuntime, GrepSearchInput,
-    LaneCommitProvenance, LaneEvent, LaneEventBlocker, LaneEventName, LaneEventStatus,
-    LaneFailureClass, McpDegradedReport, MessageRole, PermissionMode, PermissionPolicy,
-    PromptCacheEvent, RuntimeError, Session, TaskPacket, ToolError, ToolExecutor,
+    BranchFreshness, ConfigLoader, ContentBlock, ConversationMessage, ConversationRuntime,
+    GrepSearchInput, LaneCommitProvenance, LaneEvent, LaneEventBlocker, LaneEventName,
+    LaneEventStatus, LaneFailureClass, McpDegradedReport, MessageRole, PermissionMode,
+    PermissionPolicy, PromptCacheEvent, RuntimeError, Session, TaskPacket, ToolError, ToolExecutor,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -963,6 +963,21 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             required_permission: PermissionMode::DangerFullAccess,
         },
         ToolSpec {
+            name: "WorkerObserveCompletion",
+            description: "Report session completion to the worker, classifying finish_reason into finished or failed provider-degraded terminal states.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "worker_id": { "type": "string" },
+                    "finish_reason": { "type": "string" },
+                    "tokens_output": { "type": "integer", "minimum": 0 }
+                },
+                "required": ["worker_id", "finish_reason", "tokens_output"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::DangerFullAccess,
+        },
+        ToolSpec {
             name: "TeamCreate",
             description: "Create a team of sub-agents for parallel task execution.",
             input_schema: json!({
@@ -1228,6 +1243,8 @@ fn execute_tool_with_enforcer(
         }
         "WorkerRestart" => from_value::<WorkerIdInput>(input).and_then(run_worker_restart),
         "WorkerTerminate" => from_value::<WorkerIdInput>(input).and_then(run_worker_terminate),
+        "WorkerObserveCompletion" => from_value::<WorkerObserveCompletionInput>(input)
+            .and_then(run_worker_observe_completion),
         "TeamCreate" => from_value::<TeamCreateInput>(input).and_then(run_team_create),
         "TeamDelete" => from_value::<TeamDeleteInput>(input).and_then(run_team_delete),
         "CronCreate" => from_value::<CronCreateInput>(input).and_then(run_cron_create),
@@ -1426,9 +1443,18 @@ fn run_task_output(input: TaskIdInput) -> Result<String, String> {
 
 #[allow(clippy::needless_pass_by_value)]
 fn run_worker_create(input: WorkerCreateInput) -> Result<String, String> {
+    let config_roots = ConfigLoader::default_for(&input.cwd)
+        .load()
+        .ok()
+        .map(|config| config.trusted_roots().to_vec())
+        .unwrap_or_default();
+    let trusted_roots = config_roots
+        .into_iter()
+        .chain(input.trusted_roots.iter().cloned())
+        .collect::<Vec<_>>();
     let worker = global_worker_registry().create(
         &input.cwd,
-        &input.trusted_roots,
+        &trusted_roots,
         input.auto_recover_prompt_misdelivery,
     );
     to_pretty_json(worker)
@@ -1475,6 +1501,16 @@ fn run_worker_restart(input: WorkerIdInput) -> Result<String, String> {
 #[allow(clippy::needless_pass_by_value)]
 fn run_worker_terminate(input: WorkerIdInput) -> Result<String, String> {
     let worker = global_worker_registry().terminate(&input.worker_id)?;
+    to_pretty_json(worker)
+}
+
+#[allow(clippy::needless_pass_by_value)]
+fn run_worker_observe_completion(input: WorkerObserveCompletionInput) -> Result<String, String> {
+    let worker = global_worker_registry().observe_completion(
+        &input.worker_id,
+        &input.finish_reason,
+        input.tokens_output,
+    )?;
     to_pretty_json(worker)
 }
 
@@ -2223,6 +2259,13 @@ struct WorkerSendPromptInput {
     worker_id: String,
     #[serde(default)]
     prompt: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct WorkerObserveCompletionInput {
+    worker_id: String,
+    finish_reason: String,
+    tokens_output: u64,
 }
 
 const fn default_auto_recover_prompt_misdelivery() -> bool {
@@ -3528,6 +3571,12 @@ impl ApiClient for ProviderRuntimeClient {
             tools: (!tools.is_empty()).then_some(tools),
             tool_choice: (!self.allowed_tools.is_empty()).then_some(ToolChoice::Auto),
             stream: true,
+            temperature: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            reasoning_effort: None,
         };
 
         self.runtime.block_on(async {
@@ -5132,6 +5181,7 @@ mod tests {
         assert!(names.contains(&"WorkerObserve"));
         assert!(names.contains(&"WorkerAwaitReady"));
         assert!(names.contains(&"WorkerSendPrompt"));
+        assert!(names.contains(&"WorkerObserveCompletion"));
     }
 
     #[test]
@@ -5289,6 +5339,348 @@ mod tests {
         assert_eq!(replayed_output["status"], "running");
         assert_eq!(replayed_output["prompt_delivery_attempts"], 2);
         assert_eq!(replayed_output["prompt_in_flight"], true);
+    }
+
+    #[test]
+    fn worker_observe_completion_marks_provider_degraded_failures() {
+        let created = execute_tool(
+            "WorkerCreate",
+            &json!({
+                "cwd": "/tmp/repo/worker-completion"
+            }),
+        )
+        .expect("WorkerCreate should succeed");
+        let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
+        let worker_id = created_output["worker_id"]
+            .as_str()
+            .expect("worker id")
+            .to_string();
+
+        execute_tool(
+            "WorkerObserve",
+            &json!({
+                "worker_id": worker_id,
+                "screen_text": "Ready for input\n>"
+            }),
+        )
+        .expect("worker should become ready");
+        execute_tool(
+            "WorkerSendPrompt",
+            &json!({
+                "worker_id": worker_id,
+                "prompt": "Run the lane"
+            }),
+        )
+        .expect("prompt send should succeed");
+
+        let observed = execute_tool(
+            "WorkerObserveCompletion",
+            &json!({
+                "worker_id": worker_id,
+                "finish_reason": "unknown",
+                "tokens_output": 0
+            }),
+        )
+        .expect("WorkerObserveCompletion should succeed");
+        let observed_output: serde_json::Value = serde_json::from_str(&observed).expect("json");
+        assert_eq!(observed_output["status"], "failed");
+        assert_eq!(observed_output["last_error"]["kind"], "provider");
+    }
+
+    #[test]
+    fn worker_observe_completion_success_finish_sets_finished_status() {
+        let created = execute_tool(
+            "WorkerCreate",
+            &json!({
+                "cwd": "/tmp/observe-completion-success",
+                "trusted_roots": ["/tmp"]
+            }),
+        )
+        .expect("WorkerCreate should succeed");
+        let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
+        let worker_id = created_output["worker_id"]
+            .as_str()
+            .expect("worker id")
+            .to_string();
+
+        let completed = execute_tool(
+            "WorkerObserveCompletion",
+            &json!({
+                "worker_id": worker_id,
+                "finish_reason": "end_turn",
+                "tokens_output": 512
+            }),
+        )
+        .expect("WorkerObserveCompletion should succeed");
+        let completed_output: serde_json::Value = serde_json::from_str(&completed).expect("json");
+        assert_eq!(completed_output["status"], "finished");
+        assert_eq!(completed_output["prompt_in_flight"], false);
+    }
+
+    #[test]
+    fn worker_get_returns_worker_state() {
+        let created = execute_tool(
+            "WorkerCreate",
+            &json!({
+                "cwd": "/tmp/worker-get-state",
+                "trusted_roots": ["/tmp"]
+            }),
+        )
+        .expect("WorkerCreate should succeed");
+        let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
+        let worker_id = created_output["worker_id"]
+            .as_str()
+            .expect("worker id")
+            .to_string();
+
+        let fetched = execute_tool(
+            "WorkerGet",
+            &json!({
+                "worker_id": worker_id
+            }),
+        )
+        .expect("WorkerGet should succeed");
+        let fetched_output: serde_json::Value = serde_json::from_str(&fetched).expect("json");
+        assert_eq!(fetched_output["worker_id"], worker_id);
+        assert_eq!(fetched_output["status"], "spawning");
+        assert_eq!(fetched_output["cwd"], "/tmp/worker-get-state");
+    }
+
+    #[test]
+    fn worker_get_on_unknown_id_returns_error() {
+        let result = execute_tool(
+            "WorkerGet",
+            &json!({
+                "worker_id": "worker_nonexistent_get_00000000"
+            }),
+        );
+        assert!(
+            result.is_err(),
+            "WorkerGet on unknown id should return error"
+        );
+        assert!(result
+            .expect_err("unknown worker get should fail")
+            .contains("worker not found"));
+    }
+
+    #[test]
+    fn worker_await_ready_on_spawning_worker_returns_not_ready() {
+        let created = execute_tool(
+            "WorkerCreate",
+            &json!({
+                "cwd": "/tmp/worker-await-not-ready"
+            }),
+        )
+        .expect("WorkerCreate should succeed");
+        let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
+        let worker_id = created_output["worker_id"]
+            .as_str()
+            .expect("worker id")
+            .to_string();
+
+        let snapshot = execute_tool(
+            "WorkerAwaitReady",
+            &json!({
+                "worker_id": worker_id
+            }),
+        )
+        .expect("WorkerAwaitReady should succeed on spawning worker");
+        let snapshot_output: serde_json::Value = serde_json::from_str(&snapshot).expect("json");
+        assert_eq!(snapshot_output["ready"], false);
+        assert_eq!(snapshot_output["worker_id"], worker_id);
+    }
+
+    #[test]
+    fn stall_detect_and_resolve_trust_end_to_end() {
+        let created = execute_tool(
+            "WorkerCreate",
+            &json!({
+                "cwd": "/no/trusted/root/here"
+            }),
+        )
+        .expect("WorkerCreate should succeed");
+        let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
+        let worker_id = created_output["worker_id"]
+            .as_str()
+            .expect("worker id")
+            .to_string();
+        assert_eq!(created_output["trust_auto_resolve"], false);
+
+        let stalled = execute_tool(
+            "WorkerObserve",
+            &json!({
+                "worker_id": worker_id,
+                "screen_text": "Do you trust the files in this folder?\n[Allow] [Deny]"
+            }),
+        )
+        .expect("WorkerObserve should succeed");
+        let stalled_output: serde_json::Value = serde_json::from_str(&stalled).expect("json");
+        assert_eq!(stalled_output["status"], "trust_required");
+        assert_eq!(stalled_output["trust_gate_cleared"], false);
+
+        let resolved = execute_tool(
+            "WorkerResolveTrust",
+            &json!({
+                "worker_id": worker_id
+            }),
+        )
+        .expect("WorkerResolveTrust should succeed");
+        let resolved_output: serde_json::Value = serde_json::from_str(&resolved).expect("json");
+        assert_eq!(resolved_output["status"], "spawning");
+        assert_eq!(resolved_output["trust_gate_cleared"], true);
+
+        let ready = execute_tool(
+            "WorkerObserve",
+            &json!({
+                "worker_id": worker_id,
+                "screen_text": "Ready for input\n>"
+            }),
+        )
+        .expect("WorkerObserve should succeed after trust resolved");
+        let ready_output: serde_json::Value = serde_json::from_str(&ready).expect("json");
+        assert_eq!(ready_output["status"], "ready_for_prompt");
+    }
+
+    #[test]
+    fn stall_detect_and_restart_recovery_end_to_end() {
+        let created = execute_tool(
+            "WorkerCreate",
+            &json!({
+                "cwd": "/no/trusted/root/restart-test"
+            }),
+        )
+        .expect("WorkerCreate should succeed");
+        let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
+        let worker_id = created_output["worker_id"]
+            .as_str()
+            .expect("worker id")
+            .to_string();
+
+        let stalled = execute_tool(
+            "WorkerObserve",
+            &json!({
+                "worker_id": worker_id,
+                "screen_text": "trust this folder? [Yes] [No]"
+            }),
+        )
+        .expect("WorkerObserve should succeed");
+        let stalled_output: serde_json::Value = serde_json::from_str(&stalled).expect("json");
+        assert_eq!(stalled_output["status"], "trust_required");
+
+        let restarted = execute_tool(
+            "WorkerRestart",
+            &json!({
+                "worker_id": worker_id
+            }),
+        )
+        .expect("WorkerRestart should succeed");
+        let restarted_output: serde_json::Value = serde_json::from_str(&restarted).expect("json");
+        assert_eq!(restarted_output["status"], "spawning");
+        assert_eq!(restarted_output["trust_gate_cleared"], false);
+    }
+
+    #[test]
+    fn recovery_loop_state_file_reflects_transitions() {
+        use std::fs;
+
+        let worktree = temp_path("recovery-loop-state");
+        fs::create_dir_all(&worktree).expect("create worktree");
+        let cwd = worktree.to_str().expect("utf-8").to_string();
+        let state_path = worktree.join(".claw").join("worker-state.json");
+
+        let created = execute_tool(
+            "WorkerCreate",
+            &json!({
+                "cwd": cwd
+            }),
+        )
+        .expect("WorkerCreate should succeed");
+        let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
+        let worker_id = created_output["worker_id"]
+            .as_str()
+            .expect("worker id")
+            .to_string();
+
+        assert!(state_path.exists(), "state file should exist after create");
+        let created_state: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&state_path).expect("read state"))
+                .expect("json");
+        assert_eq!(created_state["status"], "spawning");
+        assert_eq!(created_state["is_ready"], false);
+        assert!(created_state["seconds_since_update"].is_number());
+
+        execute_tool(
+            "WorkerObserve",
+            &json!({
+                "worker_id": worker_id,
+                "screen_text": "Do you trust the files in this folder?"
+            }),
+        )
+        .expect("WorkerObserve should succeed");
+        let trust_required_state: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&state_path).expect("read state"))
+                .expect("json");
+        assert_eq!(trust_required_state["status"], "trust_required");
+        assert_eq!(trust_required_state["trust_gate_cleared"], false);
+        assert!(trust_required_state["seconds_since_update"].is_number());
+
+        execute_tool(
+            "WorkerResolveTrust",
+            &json!({
+                "worker_id": worker_id
+            }),
+        )
+        .expect("WorkerResolveTrust should succeed");
+        let resolved_state: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&state_path).expect("read state"))
+                .expect("json");
+        assert_eq!(resolved_state["status"], "spawning");
+        assert_eq!(resolved_state["trust_gate_cleared"], true);
+
+        execute_tool(
+            "WorkerObserve",
+            &json!({
+                "worker_id": worker_id,
+                "screen_text": "Ready for input\n>"
+            }),
+        )
+        .expect("WorkerObserve ready should succeed");
+        let ready_state: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(&state_path).expect("read state"))
+                .expect("json");
+        assert_eq!(ready_state["status"], "ready_for_prompt");
+        assert_eq!(ready_state["is_ready"], true);
+
+        fs::remove_dir_all(&worktree).ok();
+    }
+
+    #[test]
+    fn worker_create_uses_config_trusted_roots_by_default() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time should be after epoch")
+            .as_nanos();
+        let cwd = std::env::temp_dir().join(format!("worker-create-config-{}", nanos));
+        let project_dir = cwd.join("repo");
+        std::fs::create_dir_all(project_dir.join(".claw")).expect("project config dir");
+        std::fs::write(
+            project_dir.join(".claw").join("settings.json"),
+            format!(r#"{{"trustedRoots":["{}"]}}"#, cwd.display()),
+        )
+        .expect("write project settings");
+
+        let created = execute_tool(
+            "WorkerCreate",
+            &json!({
+                "cwd": project_dir.display().to_string()
+            }),
+        )
+        .expect("WorkerCreate should succeed");
+        let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
+
+        assert_eq!(created_output["trust_auto_resolve"], true);
+
+        std::fs::remove_dir_all(&cwd).expect("cleanup worker create dir");
     }
 
     #[test]

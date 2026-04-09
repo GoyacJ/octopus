@@ -80,6 +80,7 @@ pub struct Session {
     pub messages: Vec<ConversationMessage>,
     pub compaction: Option<SessionCompaction>,
     pub fork: Option<SessionFork>,
+    pub workspace_root: Option<PathBuf>,
     persistence: Option<SessionPersistence>,
 }
 
@@ -92,6 +93,7 @@ impl PartialEq for Session {
             && self.messages == other.messages
             && self.compaction == other.compaction
             && self.fork == other.fork
+            && self.workspace_root == other.workspace_root
     }
 }
 
@@ -141,6 +143,7 @@ impl Session {
             messages: Vec::new(),
             compaction: None,
             fork: None,
+            workspace_root: None,
             persistence: None,
         }
     }
@@ -149,6 +152,17 @@ impl Session {
     pub fn with_persistence_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.persistence = Some(SessionPersistence { path: path.into() });
         self
+    }
+
+    #[must_use]
+    pub fn with_workspace_root(mut self, workspace_root: impl Into<PathBuf>) -> Self {
+        self.workspace_root = Some(workspace_root.into());
+        self
+    }
+
+    #[must_use]
+    pub fn workspace_root(&self) -> Option<&Path> {
+        self.workspace_root.as_deref()
     }
 
     #[must_use]
@@ -225,6 +239,7 @@ impl Session {
                 parent_session_id: self.session_id.clone(),
                 branch_name: normalize_optional_string(branch_name),
             }),
+            workspace_root: self.workspace_root.clone(),
             persistence: None,
         }
     }
@@ -261,6 +276,12 @@ impl Session {
         }
         if let Some(fork) = &self.fork {
             object.insert("fork".to_string(), fork.to_json());
+        }
+        if let Some(workspace_root) = &self.workspace_root {
+            object.insert(
+                "workspace_root".to_string(),
+                JsonValue::String(workspace_root_to_string(workspace_root)?),
+            );
         }
         Ok(JsonValue::Object(object))
     }
@@ -302,6 +323,10 @@ impl Session {
             .map(SessionCompaction::from_json)
             .transpose()?;
         let fork = object.get("fork").map(SessionFork::from_json).transpose()?;
+        let workspace_root = object
+            .get("workspace_root")
+            .and_then(JsonValue::as_str)
+            .map(PathBuf::from);
         Ok(Self {
             version,
             session_id,
@@ -310,6 +335,7 @@ impl Session {
             messages,
             compaction,
             fork,
+            workspace_root,
             persistence: None,
         })
     }
@@ -322,6 +348,7 @@ impl Session {
         let mut messages = Vec::new();
         let mut compaction = None;
         let mut fork = None;
+        let mut workspace_root = None;
 
         for (line_number, raw_line) in contents.lines().enumerate() {
             let line = raw_line.trim();
@@ -356,6 +383,10 @@ impl Session {
                     created_at_ms = Some(required_u64(object, "created_at_ms")?);
                     updated_at_ms = Some(required_u64(object, "updated_at_ms")?);
                     fork = object.get("fork").map(SessionFork::from_json).transpose()?;
+                    workspace_root = object
+                        .get("workspace_root")
+                        .and_then(JsonValue::as_str)
+                        .map(PathBuf::from);
                 }
                 "message" => {
                     let message_value = object.get("message").ok_or_else(|| {
@@ -389,6 +420,7 @@ impl Session {
             messages,
             compaction,
             fork,
+            workspace_root,
             persistence: None,
         })
     }
@@ -448,6 +480,12 @@ impl Session {
         );
         if let Some(fork) = &self.fork {
             object.insert("fork".to_string(), fork.to_json());
+        }
+        if let Some(workspace_root) = &self.workspace_root {
+            object.insert(
+                "workspace_root".to_string(),
+                JsonValue::String(workspace_root_to_string(workspace_root)?),
+            );
         }
         Ok(JsonValue::Object(object))
     }
@@ -823,6 +861,15 @@ fn i64_from_u64(value: u64, key: &str) -> Result<i64, SessionError> {
 fn i64_from_usize(value: usize, key: &str) -> Result<i64, SessionError> {
     i64::try_from(value)
         .map_err(|_| SessionError::Format(format!("{key} out of range for JSON number")))
+}
+
+fn workspace_root_to_string(path: &Path) -> Result<String, SessionError> {
+    path.to_str().map(ToOwned::to_owned).ok_or_else(|| {
+        SessionError::Format(format!(
+            "workspace_root is not valid UTF-8: {}",
+            path.display()
+        ))
+    })
 }
 
 fn normalize_optional_string(value: Option<String>) -> Option<String> {
@@ -1204,6 +1251,35 @@ mod tests {
 
         // then
         assert!(error.to_string().contains("unsupported block type"));
+    }
+
+    #[test]
+    fn preserves_workspace_root_across_json_round_trip() {
+        let workspace_root = std::env::temp_dir().join("session-workspace-root-json");
+        let session = Session::new().with_workspace_root(&workspace_root);
+
+        let json = session.to_json().expect("session should serialize");
+        let restored = Session::from_json(&json).expect("session should deserialize");
+
+        assert_eq!(restored.workspace_root(), Some(workspace_root.as_path()));
+    }
+
+    #[test]
+    fn persists_workspace_root_in_jsonl_snapshot_and_forks() {
+        let path = temp_session_path("workspace-root");
+        let workspace_root = std::env::temp_dir().join("session-workspace-root-jsonl");
+        let mut session = Session::new().with_workspace_root(&workspace_root);
+        session
+            .push_user_text("bound to workspace")
+            .expect("message should append");
+        session.save_to_path(&path).expect("session should save");
+
+        let restored = Session::load_from_path(&path).expect("session should load");
+        let forked = restored.fork(Some("workspace-fork".to_string()));
+        fs::remove_file(&path).expect("temp file should be removable");
+
+        assert_eq!(restored.workspace_root(), Some(workspace_root.as_path()));
+        assert_eq!(forked.workspace_root(), Some(workspace_root.as_path()));
     }
 
     fn temp_session_path(label: &str) -> PathBuf {

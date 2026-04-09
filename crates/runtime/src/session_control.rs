@@ -7,6 +7,232 @@ use std::time::UNIX_EPOCH;
 
 use crate::session::{Session, SessionError};
 
+/// Per-worktree session store that namespaces on-disk session files by
+/// workspace fingerprint so that parallel runtime instances do not collide.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionStore {
+    sessions_root: PathBuf,
+    workspace_root: PathBuf,
+}
+
+impl SessionStore {
+    pub fn from_cwd(cwd: impl AsRef<Path>) -> Result<Self, SessionControlError> {
+        let cwd = cwd.as_ref();
+        let sessions_root = cwd
+            .join(".claw")
+            .join("sessions")
+            .join(workspace_fingerprint(cwd));
+        fs::create_dir_all(&sessions_root)?;
+        Ok(Self {
+            sessions_root,
+            workspace_root: cwd.to_path_buf(),
+        })
+    }
+
+    pub fn from_data_dir(
+        data_dir: impl AsRef<Path>,
+        workspace_root: impl AsRef<Path>,
+    ) -> Result<Self, SessionControlError> {
+        let workspace_root = workspace_root.as_ref();
+        let sessions_root = data_dir
+            .as_ref()
+            .join("sessions")
+            .join(workspace_fingerprint(workspace_root));
+        fs::create_dir_all(&sessions_root)?;
+        Ok(Self {
+            sessions_root,
+            workspace_root: workspace_root.to_path_buf(),
+        })
+    }
+
+    #[must_use]
+    pub fn sessions_dir(&self) -> &Path {
+        &self.sessions_root
+    }
+
+    #[must_use]
+    pub fn workspace_root(&self) -> &Path {
+        &self.workspace_root
+    }
+
+    pub fn create_handle(&self, session_id: &str) -> SessionHandle {
+        let id = session_id.to_string();
+        let path = self
+            .sessions_root
+            .join(format!("{id}.{PRIMARY_SESSION_EXTENSION}"));
+        SessionHandle { id, path }
+    }
+
+    pub fn resolve_reference(&self, reference: &str) -> Result<SessionHandle, SessionControlError> {
+        if is_session_reference_alias(reference) {
+            let latest = self.latest_session()?;
+            return Ok(SessionHandle {
+                id: latest.id,
+                path: latest.path,
+            });
+        }
+
+        let direct = PathBuf::from(reference);
+        let candidate = if direct.is_absolute() {
+            direct.clone()
+        } else {
+            self.workspace_root.join(&direct)
+        };
+        let looks_like_path = direct.extension().is_some() || direct.components().count() > 1;
+        let path = if candidate.exists() {
+            candidate
+        } else if looks_like_path {
+            return Err(SessionControlError::Format(
+                format_missing_session_reference(reference),
+            ));
+        } else {
+            self.resolve_managed_path(reference)?
+        };
+
+        Ok(SessionHandle {
+            id: session_id_from_path(&path).unwrap_or_else(|| reference.to_string()),
+            path,
+        })
+    }
+
+    pub fn resolve_managed_path(&self, session_id: &str) -> Result<PathBuf, SessionControlError> {
+        for extension in [PRIMARY_SESSION_EXTENSION, LEGACY_SESSION_EXTENSION] {
+            let path = self.sessions_root.join(format!("{session_id}.{extension}"));
+            if path.exists() {
+                return Ok(path);
+            }
+        }
+        Err(SessionControlError::Format(
+            format_missing_session_reference(session_id),
+        ))
+    }
+
+    pub fn list_sessions(&self) -> Result<Vec<ManagedSessionSummary>, SessionControlError> {
+        let mut sessions = Vec::new();
+        let entries = match fs::read_dir(&self.sessions_root) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(sessions),
+            Err(error) => return Err(error.into()),
+        };
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+            if !is_managed_session_file(&path) {
+                continue;
+            }
+            let metadata = entry.metadata()?;
+            let modified_epoch_millis = metadata
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                .map(|duration| duration.as_millis())
+                .unwrap_or_default();
+            let (id, message_count, parent_session_id, branch_name, workspace_root) =
+                match Session::load_from_path(&path) {
+                    Ok(session) => {
+                        let parent_session_id = session
+                            .fork
+                            .as_ref()
+                            .map(|fork| fork.parent_session_id.clone());
+                        let branch_name = session
+                            .fork
+                            .as_ref()
+                            .and_then(|fork| fork.branch_name.clone());
+                        let workspace_root = session.workspace_root().map(Path::to_path_buf);
+                        (
+                            session.session_id,
+                            session.messages.len(),
+                            parent_session_id,
+                            branch_name,
+                            workspace_root,
+                        )
+                    }
+                    Err(_) => (
+                        path.file_stem()
+                            .and_then(|value| value.to_str())
+                            .unwrap_or("unknown")
+                            .to_string(),
+                        0,
+                        None,
+                        None,
+                        None,
+                    ),
+                };
+            sessions.push(ManagedSessionSummary {
+                id,
+                path,
+                modified_epoch_millis,
+                message_count,
+                parent_session_id,
+                branch_name,
+                workspace_root,
+            });
+        }
+        sessions.sort_by(|left, right| {
+            right
+                .modified_epoch_millis
+                .cmp(&left.modified_epoch_millis)
+                .then_with(|| right.id.cmp(&left.id))
+        });
+        Ok(sessions)
+    }
+
+    pub fn latest_session(&self) -> Result<ManagedSessionSummary, SessionControlError> {
+        self.list_sessions()?
+            .into_iter()
+            .next()
+            .ok_or_else(|| SessionControlError::Format(format_no_managed_sessions()))
+    }
+
+    pub fn load_session(
+        &self,
+        reference: &str,
+    ) -> Result<LoadedManagedSession, SessionControlError> {
+        let handle = self.resolve_reference(reference)?;
+        let session = Session::load_from_path(&handle.path)?;
+        Ok(LoadedManagedSession {
+            handle: SessionHandle {
+                id: session.session_id.clone(),
+                path: handle.path,
+            },
+            session,
+        })
+    }
+
+    pub fn fork_session(
+        &self,
+        session: &Session,
+        branch_name: Option<String>,
+    ) -> Result<ForkedManagedSession, SessionControlError> {
+        let parent_session_id = session.session_id.clone();
+        let forked = session.fork(branch_name);
+        let handle = self.create_handle(&forked.session_id);
+        let branch_name = forked
+            .fork
+            .as_ref()
+            .and_then(|fork| fork.branch_name.clone());
+        let forked = forked.with_persistence_path(handle.path.clone());
+        forked.save_to_path(&handle.path)?;
+        Ok(ForkedManagedSession {
+            parent_session_id,
+            handle,
+            session: forked,
+            branch_name,
+        })
+    }
+}
+
+#[must_use]
+pub fn workspace_fingerprint(workspace_root: &Path) -> String {
+    let input = workspace_root.to_string_lossy();
+    let mut hash = 0xcbf2_9ce4_8422_2325_u64;
+    for byte in input.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
 pub const PRIMARY_SESSION_EXTENSION: &str = "jsonl";
 pub const LEGACY_SESSION_EXTENSION: &str = "json";
 pub const LATEST_SESSION_REFERENCE: &str = "latest";
@@ -27,6 +253,7 @@ pub struct ManagedSessionSummary {
     pub message_count: usize,
     pub parent_session_id: Option<String>,
     pub branch_name: Option<String>,
+    pub workspace_root: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -192,7 +419,7 @@ pub fn list_managed_sessions_for(
             .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
             .map(|duration| duration.as_millis())
             .unwrap_or_default();
-        let (id, message_count, parent_session_id, branch_name) =
+        let (id, message_count, parent_session_id, branch_name, workspace_root) =
             match Session::load_from_path(&path) {
                 Ok(session) => {
                     let parent_session_id = session
@@ -203,11 +430,13 @@ pub fn list_managed_sessions_for(
                         .fork
                         .as_ref()
                         .and_then(|fork| fork.branch_name.clone());
+                    let workspace_root = session.workspace_root().map(Path::to_path_buf);
                     (
                         session.session_id,
                         session.messages.len(),
                         parent_session_id,
                         branch_name,
+                        workspace_root,
                     )
                 }
                 Err(_) => (
@@ -216,6 +445,7 @@ pub fn list_managed_sessions_for(
                         .unwrap_or("unknown")
                         .to_string(),
                     0,
+                    None,
                     None,
                     None,
                 ),
@@ -227,6 +457,7 @@ pub fn list_managed_sessions_for(
             message_count,
             parent_session_id,
             branch_name,
+            workspace_root,
         });
     }
     sessions.sort_by(|left, right| {
@@ -333,7 +564,7 @@ mod tests {
     use super::{
         create_managed_session_handle_for, fork_managed_session_for, is_session_reference_alias,
         list_managed_sessions_for, load_managed_session_for, resolve_session_reference_for,
-        ManagedSessionSummary, LATEST_SESSION_REFERENCE,
+        workspace_fingerprint, ManagedSessionSummary, SessionStore, LATEST_SESSION_REFERENCE,
     };
     use crate::session::Session;
     use std::fs;
@@ -355,6 +586,19 @@ mod tests {
             .expect("session message should save");
         let handle = create_managed_session_handle_for(root, &session.session_id)
             .expect("managed session handle should build");
+        let session = session.with_persistence_path(handle.path.clone());
+        session
+            .save_to_path(&handle.path)
+            .expect("session should persist");
+        session
+    }
+
+    fn persist_session_via_store(store: &SessionStore, text: &str) -> Session {
+        let mut session = Session::new();
+        session
+            .push_user_text(text)
+            .expect("session message should save");
+        let handle = store.create_handle(&session.session_id);
         let session = session.with_persistence_path(handle.path.clone());
         session
             .save_to_path(&handle.path)
@@ -454,6 +698,161 @@ mod tests {
             forked.session.persistence_path(),
             Some(forked.handle.path.as_path())
         );
+        fs::remove_dir_all(root).expect("temp dir should clean up");
+    }
+
+    #[test]
+    fn managed_session_summaries_preserve_workspace_root_metadata() {
+        let root = temp_dir();
+        fs::create_dir_all(&root).expect("root dir should exist");
+        let workspace_root = root.join("workspace-a");
+        fs::create_dir_all(&workspace_root).expect("workspace root should exist");
+
+        let session = Session::new().with_workspace_root(&workspace_root);
+        let handle = create_managed_session_handle_for(&root, &session.session_id)
+            .expect("managed session handle should build");
+        let session = session.with_persistence_path(handle.path.clone());
+        session
+            .save_to_path(&handle.path)
+            .expect("session should persist");
+
+        let summary = list_managed_sessions_for(&root)
+            .expect("managed sessions should list")
+            .into_iter()
+            .find(|summary| summary.id == session.session_id)
+            .expect("workspace root summary should exist");
+        let loaded = load_managed_session_for(&root, &session.session_id)
+            .expect("workspace-root session should load");
+
+        assert_eq!(
+            summary.workspace_root.as_deref(),
+            Some(workspace_root.as_path())
+        );
+        assert_eq!(
+            loaded.session.workspace_root(),
+            Some(workspace_root.as_path())
+        );
+
+        fs::remove_dir_all(root).expect("temp dir should clean up");
+    }
+
+    #[test]
+    fn workspace_fingerprint_is_deterministic_and_differs_per_path() {
+        let path_a = Path::new("/tmp/worktree-alpha");
+        let path_b = Path::new("/tmp/worktree-beta");
+
+        let fingerprint_a_1 = workspace_fingerprint(path_a);
+        let fingerprint_a_2 = workspace_fingerprint(path_a);
+        let fingerprint_b = workspace_fingerprint(path_b);
+
+        assert_eq!(fingerprint_a_1, fingerprint_a_2);
+        assert_ne!(fingerprint_a_1, fingerprint_b);
+        assert_eq!(fingerprint_a_1.len(), 16);
+    }
+
+    #[test]
+    fn session_store_from_cwd_isolates_sessions_by_workspace() {
+        let root = temp_dir();
+        let workspace_a = root.join("repo-alpha");
+        let workspace_b = root.join("repo-beta");
+        fs::create_dir_all(&workspace_a).expect("workspace a should exist");
+        fs::create_dir_all(&workspace_b).expect("workspace b should exist");
+
+        let store_a = SessionStore::from_cwd(&workspace_a).expect("store a should build");
+        let store_b = SessionStore::from_cwd(&workspace_b).expect("store b should build");
+
+        let session_a = persist_session_via_store(&store_a, "alpha work");
+        let _session_b = persist_session_via_store(&store_b, "beta work");
+
+        let list_a = store_a.list_sessions().expect("list a");
+        let list_b = store_b.list_sessions().expect("list b");
+        assert_eq!(list_a.len(), 1);
+        assert_eq!(list_b.len(), 1);
+        assert_eq!(list_a[0].id, session_a.session_id);
+        assert_ne!(store_a.sessions_dir(), store_b.sessions_dir());
+
+        fs::remove_dir_all(root).expect("temp dir should clean up");
+    }
+
+    #[test]
+    fn session_store_from_data_dir_namespaces_by_workspace() {
+        let root = temp_dir();
+        let data_dir = root.join("global-data");
+        let workspace_a = PathBuf::from("/tmp/project-one");
+        let workspace_b = PathBuf::from("/tmp/project-two");
+        fs::create_dir_all(&data_dir).expect("data dir should exist");
+
+        let store_a =
+            SessionStore::from_data_dir(&data_dir, &workspace_a).expect("store a should build");
+        let store_b =
+            SessionStore::from_data_dir(&data_dir, &workspace_b).expect("store b should build");
+
+        persist_session_via_store(&store_a, "work in project one");
+        persist_session_via_store(&store_b, "work in project two");
+
+        assert_ne!(store_a.sessions_dir(), store_b.sessions_dir());
+        assert_eq!(store_a.list_sessions().expect("list a").len(), 1);
+        assert_eq!(store_b.list_sessions().expect("list b").len(), 1);
+        assert_eq!(store_a.workspace_root(), workspace_a.as_path());
+        assert_eq!(store_b.workspace_root(), workspace_b.as_path());
+
+        fs::remove_dir_all(root).expect("temp dir should clean up");
+    }
+
+    #[test]
+    fn session_store_create_and_load_round_trip() {
+        let root = temp_dir();
+        fs::create_dir_all(&root).expect("root dir should exist");
+        let store = SessionStore::from_cwd(&root).expect("store should build");
+        let session = persist_session_via_store(&store, "round trip message");
+
+        let loaded = store
+            .load_session(&session.session_id)
+            .expect("session should load via store");
+
+        assert_eq!(loaded.handle.id, session.session_id);
+        assert_eq!(loaded.session.messages.len(), 1);
+
+        fs::remove_dir_all(root).expect("temp dir should clean up");
+    }
+
+    #[test]
+    fn session_store_latest_and_resolve_reference() {
+        let root = temp_dir();
+        fs::create_dir_all(&root).expect("root dir should exist");
+        let store = SessionStore::from_cwd(&root).expect("store should build");
+        let _older = persist_session_via_store(&store, "older");
+        wait_for_next_millisecond();
+        let newer = persist_session_via_store(&store, "newer");
+
+        let latest = store.latest_session().expect("latest should resolve");
+        let handle = store
+            .resolve_reference("latest")
+            .expect("latest alias should resolve");
+
+        assert_eq!(latest.id, newer.session_id);
+        assert_eq!(handle.id, newer.session_id);
+
+        fs::remove_dir_all(root).expect("temp dir should clean up");
+    }
+
+    #[test]
+    fn session_store_fork_stays_in_same_namespace() {
+        let root = temp_dir();
+        fs::create_dir_all(&root).expect("root dir should exist");
+        let store = SessionStore::from_cwd(&root).expect("store should build");
+        let source = persist_session_via_store(&store, "parent work");
+
+        let forked = store
+            .fork_session(&source, Some("bugfix".to_string()))
+            .expect("fork should succeed");
+        let sessions = store.list_sessions().expect("list sessions");
+
+        assert_eq!(sessions.len(), 2);
+        assert_eq!(forked.parent_session_id, source.session_id);
+        assert_eq!(forked.branch_name.as_deref(), Some("bugfix"));
+        assert!(forked.handle.path.starts_with(store.sessions_dir()));
+
         fs::remove_dir_all(root).expect("temp dir should clean up");
     }
 }

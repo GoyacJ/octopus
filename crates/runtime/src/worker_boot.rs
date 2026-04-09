@@ -560,6 +560,7 @@ fn push_event(
     let timestamp = now_secs();
     let seq = worker.events.len() as u64 + 1;
     worker.updated_at = timestamp;
+    worker.status = status;
     worker.events.push(WorkerEvent {
         seq,
         kind,
@@ -568,6 +569,45 @@ fn push_event(
         payload,
         timestamp,
     });
+    emit_state_file(worker);
+}
+
+fn emit_state_file(worker: &Worker) {
+    let state_dir = Path::new(&worker.cwd).join(".claw");
+    if std::fs::create_dir_all(&state_dir).is_err() {
+        return;
+    }
+    let state_path = state_dir.join("worker-state.json");
+    let tmp_path = state_dir.join("worker-state.json.tmp");
+
+    #[derive(Serialize)]
+    struct StateSnapshot<'a> {
+        worker_id: &'a str,
+        status: WorkerStatus,
+        is_ready: bool,
+        trust_gate_cleared: bool,
+        prompt_in_flight: bool,
+        last_event: Option<&'a WorkerEvent>,
+        updated_at: u64,
+        seconds_since_update: u64,
+    }
+
+    let now = now_secs();
+    let snapshot = StateSnapshot {
+        worker_id: &worker.worker_id,
+        status: worker.status,
+        is_ready: worker.status == WorkerStatus::ReadyForPrompt,
+        trust_gate_cleared: worker.trust_gate_cleared,
+        prompt_in_flight: worker.prompt_in_flight,
+        last_event: worker.events.last(),
+        updated_at: worker.updated_at,
+        seconds_since_update: now.saturating_sub(worker.updated_at),
+    };
+
+    if let Ok(json) = serde_json::to_string_pretty(&snapshot) {
+        let _ = std::fs::write(&tmp_path, json);
+        let _ = std::fs::rename(&tmp_path, &state_path);
+    }
 }
 
 fn path_matches_allowlist(cwd: &str, trusted_root: &str) -> bool {
@@ -753,6 +793,17 @@ fn cwd_matches_observed_target(expected_cwd: &str, observed_cwd: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time should be after epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("worker-boot-{label}-{nanos}"))
+    }
 
     #[test]
     fn allowlisted_trust_prompt_auto_resolves_then_reaches_ready_state() {
@@ -1079,5 +1130,39 @@ mod tests {
             .events
             .iter()
             .any(|event| event.kind == WorkerEventKind::Finished));
+    }
+
+    #[test]
+    fn emits_worker_state_file_with_seconds_since_update() {
+        let cwd = temp_dir("state-file");
+        fs::create_dir_all(&cwd).expect("worker cwd should exist");
+        let cwd_str = cwd.to_string_lossy().into_owned();
+
+        let registry = WorkerRegistry::new();
+        let worker = registry.create(&cwd_str, &[], true);
+        let state_path = cwd.join(".claw").join("worker-state.json");
+
+        let created_state: Value = serde_json::from_str(
+            &fs::read_to_string(&state_path).expect("worker state should be written on create"),
+        )
+        .expect("state file should be valid json");
+        assert_eq!(created_state["worker_id"], worker.worker_id);
+        assert_eq!(created_state["status"], "spawning");
+        assert_eq!(created_state["is_ready"], false);
+        assert!(created_state["seconds_since_update"].is_u64());
+
+        registry
+            .observe(&worker.worker_id, "Ready for input\n>")
+            .expect("ready observe should succeed");
+
+        let ready_state: Value = serde_json::from_str(
+            &fs::read_to_string(&state_path).expect("worker state should be updated on observe"),
+        )
+        .expect("state file should be valid json");
+        assert_eq!(ready_state["status"], "ready_for_prompt");
+        assert_eq!(ready_state["is_ready"], true);
+        assert_eq!(ready_state["last_event"]["kind"], "ready_for_prompt");
+
+        fs::remove_dir_all(&cwd).expect("temp worker cwd should clean up");
     }
 }

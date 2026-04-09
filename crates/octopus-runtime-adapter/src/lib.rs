@@ -70,6 +70,35 @@ enum RuntimeConfigScopeKind {
     User,
 }
 
+const KNOWN_RUNTIME_CONFIG_TOP_LEVEL_KEYS: &[&str] = &[
+    "$schema",
+    "aliases",
+    "configuredModels",
+    "credentialRefs",
+    "defaultSelections",
+    "enabledPlugins",
+    "env",
+    "hooks",
+    "mcpServers",
+    "model",
+    "modelRegistry",
+    "oauth",
+    "permissionMode",
+    "permissions",
+    "plugins",
+    "projectSettings",
+    "provider",
+    "providerFallbacks",
+    "providerOverrides",
+    "sandbox",
+    "trustedRoots",
+];
+
+const DEPRECATED_RUNTIME_CONFIG_TOP_LEVEL_KEYS: &[(&str, &str)] = &[
+    ("allowedTools", "permissions.allow"),
+    ("ignorePatterns", "permissions.deny"),
+];
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct RuntimeConfigDocumentRecord {
     scope: RuntimeConfigScopeKind,
@@ -1080,6 +1109,7 @@ impl RuntimeAdapter {
         documents: &[RuntimeConfigDocumentRecord],
     ) -> Result<RuntimeConfigValidationResult, AppError> {
         let internal_documents = Self::to_internal_documents(documents);
+        let warnings = Self::document_validation_warnings(documents);
         match self
             .state
             .config_loader
@@ -1088,14 +1118,42 @@ impl RuntimeAdapter {
             Ok(_) => Ok(RuntimeConfigValidationResult {
                 valid: true,
                 errors: Vec::new(),
-                warnings: Vec::new(),
+                warnings,
             }),
             Err(error) => Ok(RuntimeConfigValidationResult {
                 valid: false,
                 errors: vec![error.to_string()],
-                warnings: Vec::new(),
+                warnings,
             }),
         }
+    }
+
+    fn document_validation_warnings(documents: &[RuntimeConfigDocumentRecord]) -> Vec<String> {
+        let mut warnings = Vec::new();
+        for document in documents {
+            let Some(record) = document.document.as_ref() else {
+                continue;
+            };
+            for key in record.keys() {
+                if let Some((_, replacement)) = DEPRECATED_RUNTIME_CONFIG_TOP_LEVEL_KEYS
+                    .iter()
+                    .find(|(deprecated, _)| key == deprecated)
+                {
+                    warnings.push(format!(
+                        "{}: deprecated runtime config key `{key}`; use `{replacement}` instead",
+                        document.display_path
+                    ));
+                    continue;
+                }
+                if !KNOWN_RUNTIME_CONFIG_TOP_LEVEL_KEYS.contains(&key.as_str()) {
+                    warnings.push(format!(
+                        "{}: unknown runtime config key `{key}`",
+                        document.display_path
+                    ));
+                }
+            }
+        }
+        warnings
     }
 
     fn load_effective_config_json(
@@ -3274,6 +3332,211 @@ mod tests {
             .errors
             .iter()
             .any(|error| error.contains("tokenQuota.totalTokens")));
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn runtime_config_validation_accepts_backfilled_upstream_fields_across_scopes() {
+        let root = test_root();
+        let infra = build_infra_bundle(&root).expect("infra bundle");
+        let adapter = RuntimeAdapter::new_with_executor(
+            octopus_core::DEFAULT_WORKSPACE_ID,
+            infra.paths.clone(),
+            infra.observation.clone(),
+            Arc::new(MockRuntimeModelExecutor),
+        );
+
+        let patch = json!({
+            "aliases": {
+                "fast": "gpt-5-mini"
+            },
+            "providerFallbacks": {
+                "primary": "anthropic",
+                "fallbacks": ["openai"]
+            },
+            "trustedRoots": ["/tmp/octopus"],
+            "plugins": {
+                "maxOutputTokens": 4096
+            }
+        });
+
+        let workspace = adapter
+            .validate_config(RuntimeConfigPatch {
+                scope: "workspace".into(),
+                patch: patch.clone(),
+            })
+            .await
+            .expect("workspace validation");
+        assert!(workspace.valid);
+        assert!(workspace.errors.is_empty());
+        assert!(workspace.warnings.is_empty());
+
+        let project = adapter
+            .validate_project_config(
+                "proj-sync",
+                "user-sync",
+                RuntimeConfigPatch {
+                    scope: "project".into(),
+                    patch: patch.clone(),
+                },
+            )
+            .await
+            .expect("project validation");
+        assert!(project.valid);
+        assert!(project.errors.is_empty());
+        assert!(project.warnings.is_empty());
+
+        let user = adapter
+            .validate_user_config(
+                "user-sync",
+                RuntimeConfigPatch {
+                    scope: "user".into(),
+                    patch,
+                },
+            )
+            .await
+            .expect("user validation");
+        assert!(user.valid);
+        assert!(user.errors.is_empty());
+        assert!(user.warnings.is_empty());
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn runtime_config_validation_warns_for_unknown_and_deprecated_top_level_keys() {
+        let root = test_root();
+        let infra = build_infra_bundle(&root).expect("infra bundle");
+        let adapter = RuntimeAdapter::new_with_executor(
+            octopus_core::DEFAULT_WORKSPACE_ID,
+            infra.paths.clone(),
+            infra.observation.clone(),
+            Arc::new(MockRuntimeModelExecutor),
+        );
+
+        let validation = adapter
+            .validate_config(RuntimeConfigPatch {
+                scope: "workspace".into(),
+                patch: json!({
+                    "telemetry": true,
+                    "allowedTools": ["read_file"]
+                }),
+            })
+            .await
+            .expect("validation result");
+
+        assert!(validation.valid);
+        assert!(validation.errors.is_empty());
+        assert!(validation
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("unknown runtime config key `telemetry`")));
+        assert!(validation.warnings.iter().any(|warning| {
+            warning.contains("deprecated runtime config key `allowedTools`")
+                && warning.contains("permissions.allow")
+        }));
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn runtime_config_validation_reports_wrong_type_for_backfilled_fields() {
+        let root = test_root();
+        let infra = build_infra_bundle(&root).expect("infra bundle");
+        let adapter = RuntimeAdapter::new_with_executor(
+            octopus_core::DEFAULT_WORKSPACE_ID,
+            infra.paths.clone(),
+            infra.observation.clone(),
+            Arc::new(MockRuntimeModelExecutor),
+        );
+
+        let validation = adapter
+            .validate_config(RuntimeConfigPatch {
+                scope: "workspace".into(),
+                patch: json!({
+                    "trustedRoots": "not-an-array"
+                }),
+            })
+            .await
+            .expect("validation result");
+
+        assert!(!validation.valid);
+        assert!(validation
+            .errors
+            .iter()
+            .any(|error| error.contains("trustedRoots")));
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn runtime_effective_config_includes_backfilled_upstream_fields() {
+        let root = test_root();
+        let infra = build_infra_bundle(&root).expect("infra bundle");
+        let adapter = RuntimeAdapter::new_with_executor(
+            octopus_core::DEFAULT_WORKSPACE_ID,
+            infra.paths.clone(),
+            infra.observation.clone(),
+            Arc::new(MockRuntimeModelExecutor),
+        );
+
+        write_json(
+            &infra.paths.runtime_config_dir.join("workspace.json"),
+            json!({
+                "aliases": {
+                    "fast": "gpt-5-mini"
+                },
+                "trustedRoots": ["/workspace/root"],
+                "plugins": {
+                    "maxOutputTokens": 2048
+                }
+            }),
+        );
+        write_json(
+            &infra
+                .paths
+                .runtime_project_config_dir
+                .join("proj-sync.json"),
+            json!({
+                "providerFallbacks": {
+                    "primary": "anthropic",
+                    "fallbacks": ["openai", "dashscope"]
+                }
+            }),
+        );
+
+        let effective = adapter
+            .get_project_config("proj-sync", "")
+            .await
+            .expect("effective config");
+
+        assert_eq!(
+            effective.effective_config.pointer("/aliases/fast"),
+            Some(&json!("gpt-5-mini"))
+        );
+        assert_eq!(
+            effective.effective_config.pointer("/trustedRoots/0"),
+            Some(&json!("/workspace/root"))
+        );
+        assert_eq!(
+            effective
+                .effective_config
+                .pointer("/plugins/maxOutputTokens"),
+            Some(&json!(2048))
+        );
+        assert_eq!(
+            effective
+                .effective_config
+                .pointer("/providerFallbacks/primary"),
+            Some(&json!("anthropic"))
+        );
+        assert_eq!(
+            effective
+                .effective_config
+                .pointer("/providerFallbacks/fallbacks/1"),
+            Some(&json!("dashscope"))
+        );
 
         fs::remove_dir_all(root).expect("cleanup temp dir");
     }

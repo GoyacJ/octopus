@@ -1613,6 +1613,7 @@ pub struct ResolvedExecutionTarget {
     pub protocol_family: String,
     pub credential_ref: Option<String>,
     pub base_url: Option<String>,
+    pub max_output_tokens: Option<u32>,
     pub capabilities: Vec<CapabilityDescriptor>,
 }
 

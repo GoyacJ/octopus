@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::error::ApiError;
+use crate::http_client::build_http_client_or_default;
 use crate::types::{
     ContentBlockDelta, ContentBlockDeltaEvent, ContentBlockStartEvent, ContentBlockStopEvent,
     InputContentBlock, InputMessage, MessageDelta, MessageDeltaEvent, MessageRequest,
@@ -16,6 +17,7 @@ use super::{preflight_message_request, Provider, ProviderFuture};
 
 pub const DEFAULT_XAI_BASE_URL: &str = "https://api.x.ai/v1";
 pub const DEFAULT_OPENAI_BASE_URL: &str = "https://api.openai.com/v1";
+pub const DEFAULT_DASHSCOPE_BASE_URL: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 const REQUEST_ID_HEADER: &str = "request-id";
 const ALT_REQUEST_ID_HEADER: &str = "x-request-id";
 const DEFAULT_INITIAL_BACKOFF: Duration = Duration::from_millis(200);
@@ -32,6 +34,7 @@ pub struct OpenAiCompatConfig {
 
 const XAI_ENV_VARS: &[&str] = &["XAI_API_KEY"];
 const OPENAI_ENV_VARS: &[&str] = &["OPENAI_API_KEY"];
+const DASHSCOPE_ENV_VARS: &[&str] = &["DASHSCOPE_API_KEY"];
 
 impl OpenAiCompatConfig {
     #[must_use]
@@ -53,11 +56,23 @@ impl OpenAiCompatConfig {
             default_base_url: DEFAULT_OPENAI_BASE_URL,
         }
     }
+
+    #[must_use]
+    pub const fn dashscope() -> Self {
+        Self {
+            provider_name: "DashScope",
+            api_key_env: "DASHSCOPE_API_KEY",
+            base_url_env: "DASHSCOPE_BASE_URL",
+            default_base_url: DEFAULT_DASHSCOPE_BASE_URL,
+        }
+    }
+
     #[must_use]
     pub fn credential_env_vars(self) -> &'static [&'static str] {
         match self.provider_name {
             "xAI" => XAI_ENV_VARS,
             "OpenAI" => OPENAI_ENV_VARS,
+            "DashScope" => DASHSCOPE_ENV_VARS,
             _ => &[],
         }
     }
@@ -81,7 +96,7 @@ impl OpenAiCompatClient {
     #[must_use]
     pub fn new(api_key: impl Into<String>, config: OpenAiCompatConfig) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: build_http_client_or_default(),
             api_key: api_key.into(),
             config,
             base_url: read_base_url(config),
@@ -131,7 +146,10 @@ impl OpenAiCompatClient {
         preflight_message_request(&request)?;
         let response = self.send_with_retry(&request).await?;
         let request_id = request_id_from_headers(response.headers());
-        let payload = response.json::<ChatCompletionResponse>().await?;
+        let body = response.text().await.map_err(ApiError::from)?;
+        let payload = serde_json::from_str::<ChatCompletionResponse>(&body).map_err(|error| {
+            ApiError::json_deserialize(self.config.provider_name, &request.model, &body, error)
+        })?;
         let mut normalized = normalize_response(&request.model, payload)?;
         if normalized.request_id.is_none() {
             normalized.request_id = request_id;
@@ -150,7 +168,7 @@ impl OpenAiCompatClient {
         Ok(MessageStream {
             request_id: request_id_from_headers(response.headers()),
             response,
-            parser: OpenAiSseParser::new(),
+            parser: OpenAiSseParser::with_context(self.config.provider_name, request.model.clone()),
             pending: VecDeque::new(),
             done: false,
             state: StreamState::new(request.model.clone()),
@@ -282,11 +300,17 @@ impl MessageStream {
 #[derive(Debug, Default)]
 struct OpenAiSseParser {
     buffer: Vec<u8>,
+    provider: String,
+    model: String,
 }
 
 impl OpenAiSseParser {
-    fn new() -> Self {
-        Self::default()
+    fn with_context(provider: impl Into<String>, model: impl Into<String>) -> Self {
+        Self {
+            buffer: Vec::new(),
+            provider: provider.into(),
+            model: model.into(),
+        }
     }
 
     fn push(&mut self, chunk: &[u8]) -> Result<Vec<ChatCompletionChunk>, ApiError> {
@@ -294,7 +318,7 @@ impl OpenAiSseParser {
         let mut events = Vec::new();
 
         while let Some(frame) = next_sse_frame(&mut self.buffer) {
-            if let Some(event) = parse_sse_frame(&frame)? {
+            if let Some(event) = parse_sse_frame(&frame, &self.provider, &self.model)? {
                 events.push(event);
             }
         }
@@ -652,9 +676,16 @@ fn build_chat_completion_request(request: &MessageRequest, config: OpenAiCompatC
         messages.extend(translate_message(message));
     }
 
+    let wire_model = strip_routing_prefix(&request.model);
+    let max_tokens_key = if wire_model.starts_with("gpt-5") {
+        "max_completion_tokens"
+    } else {
+        "max_tokens"
+    };
+
     let mut payload = json!({
-        "model": request.model,
-        "max_tokens": request.max_tokens,
+        "model": wire_model,
+        max_tokens_key: request.max_tokens,
         "messages": messages,
         "stream": request.stream,
     });
@@ -671,7 +702,55 @@ fn build_chat_completion_request(request: &MessageRequest, config: OpenAiCompatC
         payload["tool_choice"] = openai_tool_choice(tool_choice);
     }
 
+    if !is_reasoning_model(&request.model) {
+        if let Some(temperature) = request.temperature {
+            payload["temperature"] = json!(temperature);
+        }
+        if let Some(top_p) = request.top_p {
+            payload["top_p"] = json!(top_p);
+        }
+        if let Some(frequency_penalty) = request.frequency_penalty {
+            payload["frequency_penalty"] = json!(frequency_penalty);
+        }
+        if let Some(presence_penalty) = request.presence_penalty {
+            payload["presence_penalty"] = json!(presence_penalty);
+        }
+    }
+    if let Some(stop) = &request.stop {
+        if !stop.is_empty() {
+            payload["stop"] = json!(stop);
+        }
+    }
+    if let Some(reasoning_effort) = &request.reasoning_effort {
+        payload["reasoning_effort"] = json!(reasoning_effort);
+    }
+
     payload
+}
+
+fn is_reasoning_model(model: &str) -> bool {
+    let lowered = model.to_ascii_lowercase();
+    let canonical = lowered.rsplit('/').next().unwrap_or(lowered.as_str());
+    canonical.starts_with("o1")
+        || canonical.starts_with("o3")
+        || canonical.starts_with("o4")
+        || canonical == "grok-3-mini"
+        || canonical.starts_with("qwen-qwq")
+        || canonical.starts_with("qwq")
+        || canonical.contains("thinking")
+}
+
+fn strip_routing_prefix(model: &str) -> &str {
+    if let Some(pos) = model.find('/') {
+        let prefix = &model[..pos];
+        if matches!(prefix, "openai" | "xai" | "grok" | "qwen") {
+            &model[pos + 1..]
+        } else {
+            model
+        }
+    } else {
+        model
+    }
 }
 
 fn translate_message(message: &InputMessage) -> Vec<Value> {
@@ -738,13 +817,38 @@ fn flatten_tool_result_content(content: &[ToolResultContentBlock]) -> String {
         .join("\n")
 }
 
+fn normalize_object_schema(schema: &mut Value) {
+    if let Some(obj) = schema.as_object_mut() {
+        if obj.get("type").and_then(Value::as_str) == Some("object") {
+            obj.entry("properties").or_insert_with(|| json!({}));
+            obj.entry("additionalProperties")
+                .or_insert(Value::Bool(false));
+        }
+        if let Some(props) = obj.get_mut("properties") {
+            if let Some(props_obj) = props.as_object_mut() {
+                let keys: Vec<String> = props_obj.keys().cloned().collect();
+                for key in keys {
+                    if let Some(value) = props_obj.get_mut(&key) {
+                        normalize_object_schema(value);
+                    }
+                }
+            }
+        }
+        if let Some(items) = obj.get_mut("items") {
+            normalize_object_schema(items);
+        }
+    }
+}
+
 fn openai_tool_definition(tool: &ToolDefinition) -> Value {
+    let mut parameters = tool.input_schema.clone();
+    normalize_object_schema(&mut parameters);
     json!({
         "type": "function",
         "function": {
             "name": tool.name,
             "description": tool.description,
-            "parameters": tool.input_schema,
+            "parameters": parameters,
         }
     })
 }
@@ -835,7 +939,11 @@ fn next_sse_frame(buffer: &mut Vec<u8>) -> Option<String> {
     Some(String::from_utf8_lossy(&frame[..frame_len]).into_owned())
 }
 
-fn parse_sse_frame(frame: &str) -> Result<Option<ChatCompletionChunk>, ApiError> {
+fn parse_sse_frame(
+    frame: &str,
+    provider: &str,
+    model: &str,
+) -> Result<Option<ChatCompletionChunk>, ApiError> {
     let trimmed = frame.trim();
     if trimmed.is_empty() {
         return Ok(None);
@@ -857,15 +965,15 @@ fn parse_sse_frame(frame: &str) -> Result<Option<ChatCompletionChunk>, ApiError>
     if payload == "[DONE]" {
         return Ok(None);
     }
-    serde_json::from_str(&payload)
+    serde_json::from_str::<ChatCompletionChunk>(&payload)
         .map(Some)
-        .map_err(ApiError::from)
+        .map_err(|error| ApiError::json_deserialize(provider, model, &payload, error))
 }
 
 fn read_env_non_empty(key: &str) -> Result<Option<String>, ApiError> {
     match std::env::var(key) {
         Ok(value) if !value.is_empty() => Ok(Some(value)),
-        Ok(_) | Err(std::env::VarError::NotPresent) => Ok(None),
+        Ok(_) | Err(std::env::VarError::NotPresent) => Ok(super::dotenv_value(key)),
         Err(error) => Err(ApiError::from(error)),
     }
 }
@@ -956,7 +1064,8 @@ impl StringExt for String {
 mod tests {
     use super::{
         build_chat_completion_request, chat_completions_endpoint, normalize_finish_reason,
-        openai_tool_choice, parse_tool_arguments, OpenAiCompatClient, OpenAiCompatConfig,
+        openai_tool_choice, parse_sse_frame, parse_tool_arguments, OpenAiCompatClient,
+        OpenAiCompatConfig,
     };
     use crate::error::ApiError;
     use crate::types::{
@@ -995,6 +1104,12 @@ mod tests {
                 }]),
                 tool_choice: Some(ToolChoice::Auto),
                 stream: false,
+                temperature: None,
+                top_p: None,
+                frequency_penalty: None,
+                presence_penalty: None,
+                stop: None,
+                reasoning_effort: None,
             },
             OpenAiCompatConfig::xai(),
         );
@@ -1017,6 +1132,12 @@ mod tests {
                 tools: None,
                 tool_choice: None,
                 stream: true,
+                temperature: None,
+                top_p: None,
+                frequency_penalty: None,
+                presence_penalty: None,
+                stop: None,
+                reasoning_effort: None,
             },
             OpenAiCompatConfig::openai(),
         );
@@ -1035,6 +1156,12 @@ mod tests {
                 tools: None,
                 tool_choice: None,
                 stream: true,
+                temperature: None,
+                top_p: None,
+                frequency_penalty: None,
+                presence_penalty: None,
+                stop: None,
+                reasoning_effort: None,
             },
             OpenAiCompatConfig::xai(),
         );
@@ -1060,6 +1187,48 @@ mod tests {
             json!({"city": "Paris"})
         );
         assert_eq!(parse_tool_arguments("not-json"), json!({"raw": "not-json"}));
+    }
+
+    #[test]
+    fn tool_definition_normalizes_object_schema_for_strict_endpoints() {
+        let payload = build_chat_completion_request(
+            &MessageRequest {
+                model: "gpt-4o".to_string(),
+                max_tokens: 64,
+                messages: vec![InputMessage::user_text("hello")],
+                system: None,
+                tools: Some(vec![ToolDefinition {
+                    name: "weather".to_string(),
+                    description: Some("Get weather".to_string()),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "location": {
+                                "type": "object"
+                            }
+                        }
+                    }),
+                }]),
+                tool_choice: Some(ToolChoice::Auto),
+                stream: false,
+                temperature: None,
+                top_p: None,
+                frequency_penalty: None,
+                presence_penalty: None,
+                stop: None,
+                reasoning_effort: None,
+            },
+            OpenAiCompatConfig::openai(),
+        );
+
+        let parameters = &payload["tools"][0]["function"]["parameters"];
+        assert_eq!(parameters["additionalProperties"], json!(false));
+        assert!(parameters["properties"].is_object());
+        assert_eq!(
+            parameters["properties"]["location"]["additionalProperties"],
+            json!(false)
+        );
+        assert!(parameters["properties"]["location"]["properties"].is_object());
     }
 
     #[test]
@@ -1104,5 +1273,117 @@ mod tests {
     fn normalizes_stop_reasons() {
         assert_eq!(normalize_finish_reason("stop"), "end_turn");
         assert_eq!(normalize_finish_reason("tool_calls"), "tool_use");
+    }
+
+    #[test]
+    fn tuning_params_included_in_payload_when_set() {
+        let request: MessageRequest = serde_json::from_value(json!({
+            "model": "gpt-4o",
+            "max_tokens": 1024,
+            "messages": [],
+            "stream": false,
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "frequency_penalty": 0.5,
+            "presence_penalty": 0.3,
+            "stop": ["\n"]
+        }))
+        .expect("request should deserialize");
+
+        let payload = build_chat_completion_request(&request, OpenAiCompatConfig::openai());
+        assert_eq!(payload["temperature"], json!(0.7));
+        assert_eq!(payload["top_p"], json!(0.9));
+        assert_eq!(payload["frequency_penalty"], json!(0.5));
+        assert_eq!(payload["presence_penalty"], json!(0.3));
+        assert_eq!(payload["stop"], json!(["\n"]));
+    }
+
+    #[test]
+    fn reasoning_model_strips_tuning_params() {
+        let request: MessageRequest = serde_json::from_value(json!({
+            "model": "o1-mini",
+            "max_tokens": 1024,
+            "messages": [],
+            "stream": false,
+            "temperature": 0.7,
+            "top_p": 0.9,
+            "frequency_penalty": 0.5,
+            "presence_penalty": 0.3,
+            "stop": ["\n"]
+        }))
+        .expect("request should deserialize");
+
+        let payload = build_chat_completion_request(&request, OpenAiCompatConfig::openai());
+        assert!(
+            payload.get("temperature").is_none(),
+            "reasoning model should strip temperature"
+        );
+        assert!(
+            payload.get("top_p").is_none(),
+            "reasoning model should strip top_p"
+        );
+        assert!(payload.get("frequency_penalty").is_none());
+        assert!(payload.get("presence_penalty").is_none());
+        assert_eq!(payload["stop"], json!(["\n"]));
+    }
+
+    #[test]
+    fn reasoning_effort_is_included_when_set() {
+        let request: MessageRequest = serde_json::from_value(json!({
+            "model": "o4-mini",
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "think hard"}]}],
+            "reasoning_effort": "high"
+        }))
+        .expect("request should deserialize");
+
+        let payload = build_chat_completion_request(&request, OpenAiCompatConfig::openai());
+        assert_eq!(payload["reasoning_effort"], json!("high"));
+    }
+
+    #[test]
+    fn gpt5_uses_max_completion_tokens_not_max_tokens() {
+        let request = MessageRequest {
+            model: "gpt-5.2".to_string(),
+            max_tokens: 512,
+            messages: vec![],
+            system: None,
+            tools: None,
+            tool_choice: None,
+            stream: false,
+            temperature: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            reasoning_effort: None,
+        };
+
+        let payload = build_chat_completion_request(&request, OpenAiCompatConfig::openai());
+        assert_eq!(
+            payload["max_completion_tokens"],
+            json!(512),
+            "gpt-5.2 should emit max_completion_tokens"
+        );
+        assert!(
+            payload.get("max_tokens").is_none(),
+            "gpt-5.2 must not emit max_tokens"
+        );
+    }
+
+    #[test]
+    fn parse_sse_frame_reports_provider_and_model_on_invalid_json() {
+        let error = parse_sse_frame("data: {not-json}\n\n", "OpenAI", "gpt-4o")
+            .expect_err("invalid frame should fail");
+
+        match error {
+            ApiError::Json {
+                provider, model, ..
+            } => {
+                assert_eq!(provider, "OpenAI");
+                assert_eq!(model, "gpt-4o");
+            }
+            other => panic!("expected contextual json error, got {other:?}"),
+        }
     }
 }

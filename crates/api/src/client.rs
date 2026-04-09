@@ -31,9 +31,15 @@ impl ProviderClient {
             ProviderKind::Xai => Ok(Self::Xai(OpenAiCompatClient::from_env(
                 OpenAiCompatConfig::xai(),
             )?)),
-            ProviderKind::OpenAi => Ok(Self::OpenAi(OpenAiCompatClient::from_env(
-                OpenAiCompatConfig::openai(),
-            )?)),
+            ProviderKind::OpenAi => {
+                let config = match providers::metadata_for_model(&resolved_model) {
+                    Some(meta) if meta.auth_env == "DASHSCOPE_API_KEY" => {
+                        OpenAiCompatConfig::dashscope()
+                    }
+                    _ => OpenAiCompatConfig::openai(),
+                };
+                Ok(Self::OpenAi(OpenAiCompatClient::from_env(config)?))
+            }
         }
     }
 

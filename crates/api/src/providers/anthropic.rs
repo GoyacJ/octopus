@@ -12,9 +12,10 @@ use serde_json::{Map, Value};
 use telemetry::{AnalyticsEvent, AnthropicRequestProfile, ClientIdentity, SessionTracer};
 
 use crate::error::ApiError;
+use crate::http_client::build_http_client_or_default;
 use crate::prompt_cache::{PromptCache, PromptCacheRecord, PromptCacheStats};
 
-use super::{preflight_message_request, Provider, ProviderFuture};
+use super::{anthropic_missing_credentials, preflight_message_request, Provider, ProviderFuture};
 use crate::sse::SseParser;
 use crate::types::{MessageDeltaEvent, MessageRequest, MessageResponse, StreamEvent, Usage};
 
@@ -47,10 +48,7 @@ impl AuthSource {
             }),
             (Some(api_key), None) => Ok(Self::ApiKey(api_key)),
             (None, Some(bearer_token)) => Ok(Self::BearerToken(bearer_token)),
-            (None, None) => Err(ApiError::missing_credentials(
-                "Anthropic",
-                &["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"],
-            )),
+            (None, None) => Err(anthropic_missing_credentials()),
         }
     }
 
@@ -127,7 +125,7 @@ impl AnthropicClient {
     #[must_use]
     pub fn new(api_key: impl Into<String>) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: build_http_client_or_default(),
             auth: AuthSource::ApiKey(api_key.into()),
             base_url: DEFAULT_BASE_URL.to_string(),
             max_retries: DEFAULT_MAX_RETRIES,
@@ -143,7 +141,7 @@ impl AnthropicClient {
     #[must_use]
     pub fn from_auth(auth: AuthSource) -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: build_http_client_or_default(),
             auth,
             base_url: DEFAULT_BASE_URL.to_string(),
             max_retries: DEFAULT_MAX_RETRIES,
@@ -346,7 +344,7 @@ impl AnthropicClient {
         Ok(MessageStream {
             request_id: request_id_from_headers(response.headers()),
             response,
-            parser: SseParser::new(),
+            parser: SseParser::new().with_context("Anthropic", request.model.clone()),
             pending: VecDeque::new(),
             done: false,
             request: request.clone(),
@@ -434,6 +432,7 @@ impl AnthropicClient {
                         last_error = Some(error);
                     }
                     Err(error) => {
+                        let error = enrich_bearer_auth_error(error, &self.auth);
                         self.record_request_failure(attempts, &error);
                         return Err(error);
                     }
@@ -475,9 +474,15 @@ impl AnthropicClient {
             request_builder = request_builder.header(header_name, header_value);
         }
 
-        let request_body = self.request_profile.render_json_body(request)?;
+        let request_body = self.render_request_body(request)?;
         request_builder = request_builder.json(&request_body);
         request_builder.send().await.map_err(ApiError::from)
+    }
+
+    fn render_request_body(&self, request: &MessageRequest) -> Result<Value, ApiError> {
+        let mut request_body = self.request_profile.render_json_body(request)?;
+        strip_unsupported_beta_body_fields(&mut request_body);
+        Ok(request_body)
     }
 
     fn record_request_failure(&self, attempt: u32, error: &ApiError) {
@@ -540,10 +545,7 @@ impl AuthSource {
                 }
             }
             Ok(Some(token_set)) => Ok(Self::BearerToken(token_set.access_token)),
-            Ok(None) => Err(ApiError::missing_credentials(
-                "Anthropic",
-                &["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"],
-            )),
+            Ok(None) => Err(anthropic_missing_credentials()),
             Err(error) => Err(error),
         }
     }
@@ -587,10 +589,7 @@ where
     }
 
     let Some(token_set) = load_saved_oauth_token()? else {
-        return Err(ApiError::missing_credentials(
-            "Anthropic",
-            &["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"],
-        ));
+        return Err(anthropic_missing_credentials());
     };
     if !oauth_token_is_expired(&token_set) {
         return Ok(AuthSource::BearerToken(token_set.access_token));
@@ -676,8 +675,21 @@ fn now_unix_timestamp() -> u64 {
 fn read_env_non_empty(key: &str) -> Result<Option<String>, ApiError> {
     match std::env::var(key) {
         Ok(value) if !value.is_empty() => Ok(Some(value)),
-        Ok(_) | Err(std::env::VarError::NotPresent) => Ok(None),
+        Ok(_) | Err(std::env::VarError::NotPresent) => Ok(super::dotenv_value(key)),
         Err(error) => Err(ApiError::from(error)),
+    }
+}
+
+fn strip_unsupported_beta_body_fields(body: &mut Value) {
+    if let Some(object) = body.as_object_mut() {
+        object.remove("betas");
+        object.remove("frequency_penalty");
+        object.remove("presence_penalty");
+        if let Some(stop_val) = object.remove("stop") {
+            if stop_val.as_array().is_some_and(|values| !values.is_empty()) {
+                object.insert("stop_sequences".to_string(), stop_val);
+            }
+        }
     }
 }
 
@@ -687,10 +699,7 @@ fn read_api_key() -> Result<String, ApiError> {
     auth.api_key()
         .or_else(|| auth.bearer_token())
         .map(ToOwned::to_owned)
-        .ok_or(ApiError::missing_credentials(
-            "Anthropic",
-            &["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"],
-        ))
+        .ok_or_else(anthropic_missing_credentials)
 }
 
 #[cfg(test)]
@@ -829,6 +838,64 @@ async fn expect_success(response: reqwest::Response) -> Result<reqwest::Response
 
 const fn is_retryable_status(status: reqwest::StatusCode) -> bool {
     matches!(status.as_u16(), 408 | 409 | 429 | 500 | 502 | 503 | 504)
+}
+
+const SK_ANT_BEARER_HINT: &str = "sk-ant-* keys go in ANTHROPIC_API_KEY (x-api-key header), not ANTHROPIC_AUTH_TOKEN (Bearer header). Move your key to ANTHROPIC_API_KEY.";
+
+fn enrich_bearer_auth_error(error: ApiError, auth: &AuthSource) -> ApiError {
+    let ApiError::Api {
+        status,
+        error_type,
+        message,
+        request_id,
+        body,
+        retryable,
+    } = error
+    else {
+        return error;
+    };
+    if status.as_u16() != 401 {
+        return ApiError::Api {
+            status,
+            error_type,
+            message,
+            request_id,
+            body,
+            retryable,
+        };
+    }
+    let Some(bearer_token) = auth.bearer_token() else {
+        return ApiError::Api {
+            status,
+            error_type,
+            message,
+            request_id,
+            body,
+            retryable,
+        };
+    };
+    if !bearer_token.starts_with("sk-ant-") || auth.api_key().is_some() {
+        return ApiError::Api {
+            status,
+            error_type,
+            message,
+            request_id,
+            body,
+            retryable,
+        };
+    }
+    let enriched_message = match message {
+        Some(existing) => Some(format!("{existing} — hint: {SK_ANT_BEARER_HINT}")),
+        None => Some(format!("hint: {SK_ANT_BEARER_HINT}")),
+    };
+    ApiError::Api {
+        status,
+        error_type,
+        message: enriched_message,
+        request_id,
+        body,
+        retryable,
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -985,6 +1052,26 @@ mod tests {
         assert_eq!(auth.bearer_token(), Some("auth-token"));
         std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
         std::env::remove_var("ANTHROPIC_API_KEY");
+    }
+
+    #[test]
+    fn auth_source_from_env_surfaces_foreign_provider_hint() {
+        let _guard = env_lock();
+        std::env::remove_var("ANTHROPIC_AUTH_TOKEN");
+        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::set_var("OPENAI_API_KEY", "openai-key");
+
+        let error = AuthSource::from_env().expect_err("missing anthropic auth should error");
+        match error {
+            crate::error::ApiError::MissingCredentials { hint, .. } => {
+                let hint = hint.expect("foreign provider hint should be present");
+                assert!(hint.contains("OPENAI_API_KEY is set"));
+                assert!(hint.contains("openai/"));
+            }
+            other => panic!("expected missing credentials error, got {other:?}"),
+        }
+
+        std::env::remove_var("OPENAI_API_KEY");
     }
 
     #[test]
@@ -1157,6 +1244,12 @@ mod tests {
             tools: None,
             tool_choice: None,
             stream: false,
+            temperature: None,
+            top_p: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            stop: None,
+            reasoning_effort: None,
         };
 
         assert!(request.with_streaming().stream);
@@ -1246,5 +1339,36 @@ mod tests {
             headers.get("authorization").and_then(|v| v.to_str().ok()),
             Some("Bearer proxy-token")
         );
+    }
+
+    #[test]
+    fn request_profile_body_preserves_temperature_but_strips_openai_only_fields() {
+        let client = AnthropicClient::new("test-key");
+        let request: MessageRequest = serde_json::from_value(serde_json::json!({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 1024,
+            "messages": [],
+            "temperature": 0.7,
+            "frequency_penalty": 0.5,
+            "presence_penalty": 0.3,
+            "stop": ["\n"]
+        }))
+        .expect("request should deserialize");
+
+        let body = client
+            .render_request_body(&request)
+            .expect("request body should render");
+
+        assert_eq!(body["temperature"], serde_json::json!(0.7));
+        assert!(
+            body.get("frequency_penalty").is_none(),
+            "frequency_penalty must be stripped for Anthropic"
+        );
+        assert!(
+            body.get("presence_penalty").is_none(),
+            "presence_penalty must be stripped for Anthropic"
+        );
+        assert!(body.get("stop").is_none(), "stop must be renamed");
+        assert_eq!(body["stop_sequences"], serde_json::json!(["\n"]));
     }
 }

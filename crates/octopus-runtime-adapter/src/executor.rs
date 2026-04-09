@@ -1,6 +1,6 @@
 use api::{
-    AnthropicClient, AuthSource, InputMessage, MessageRequest, MessageResponse, OpenAiCompatClient,
-    OpenAiCompatConfig, OutputContentBlock,
+    build_http_client_or_default, AnthropicClient, AuthSource, InputMessage, MessageRequest,
+    MessageResponse, OpenAiCompatClient, OpenAiCompatConfig, OutputContentBlock,
 };
 use async_trait::async_trait;
 use octopus_core::{AppError, ResolvedExecutionTarget};
@@ -23,7 +23,7 @@ pub trait RuntimeModelExecutor: Send + Sync {
     ) -> Result<ExecutionResponse, AppError>;
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct LiveRuntimeModelExecutor {
     http: reqwest::Client,
 }
@@ -31,8 +31,14 @@ pub struct LiveRuntimeModelExecutor {
 impl LiveRuntimeModelExecutor {
     pub fn new() -> Self {
         Self {
-            http: reqwest::Client::new(),
+            http: build_http_client_or_default(),
         }
+    }
+}
+
+impl Default for LiveRuntimeModelExecutor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -148,12 +154,11 @@ async fn execute_openai_responses(
     let response = http
         .post(format!("{}/responses", base_url.trim_end_matches('/')))
         .bearer_auth(api_key)
-        .json(&json!({
-            "model": target.model_id,
-            "input": input,
-            "instructions": system_prompt,
-            "stream": false,
-        }))
+        .json(&build_openai_responses_request_body(
+            target,
+            input,
+            system_prompt,
+        ))
         .send()
         .await
         .map_err(|error| AppError::runtime(error.to_string()))?;
@@ -203,17 +208,11 @@ async fn execute_gemini_native(
             target.model_id,
             api_key
         ))
-        .json(&json!({
-            "systemInstruction": system_prompt.map(|value| {
-                json!({
-                    "parts": [{ "text": value }]
-                })
-            }),
-            "contents": [{
-                "role": "user",
-                "parts": [{ "text": input }]
-            }]
-        }))
+        .json(&build_gemini_native_request_body(
+            target,
+            input,
+            system_prompt,
+        ))
         .send()
         .await
         .map_err(|error| AppError::runtime(error.to_string()))?;
@@ -350,13 +349,58 @@ fn message_request(
 ) -> MessageRequest {
     MessageRequest {
         model: target.model_id.clone(),
-        max_tokens: 2_048,
+        max_tokens: target_max_output_tokens(target),
         messages: vec![InputMessage::user_text(input)],
         system: system_prompt.map(|value| value.to_string()),
         tools: None,
         tool_choice: None,
         stream: false,
+        temperature: None,
+        top_p: None,
+        frequency_penalty: None,
+        presence_penalty: None,
+        stop: None,
+        reasoning_effort: None,
     }
+}
+
+fn build_openai_responses_request_body(
+    target: &ResolvedExecutionTarget,
+    input: &str,
+    system_prompt: Option<&str>,
+) -> Value {
+    json!({
+        "model": target.model_id,
+        "input": input,
+        "instructions": system_prompt,
+        "stream": false,
+        "max_output_tokens": target_max_output_tokens(target),
+    })
+}
+
+fn build_gemini_native_request_body(
+    target: &ResolvedExecutionTarget,
+    input: &str,
+    system_prompt: Option<&str>,
+) -> Value {
+    json!({
+        "systemInstruction": system_prompt.map(|value| {
+            json!({
+                "parts": [{ "text": value }]
+            })
+        }),
+        "contents": [{
+            "role": "user",
+            "parts": [{ "text": input }]
+        }],
+        "generationConfig": {
+            "maxOutputTokens": target_max_output_tokens(target),
+        }
+    })
+}
+
+fn target_max_output_tokens(target: &ResolvedExecutionTarget) -> u32 {
+    target.max_output_tokens.unwrap_or(2_048)
 }
 
 fn flatten_output_content(content: &[OutputContentBlock]) -> String {
@@ -402,4 +446,64 @@ fn extract_responses_output_text(body: &Value) -> String {
                 .join("")
         })
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        build_gemini_native_request_body, build_openai_responses_request_body, message_request,
+        ResolvedExecutionTarget,
+    };
+
+    fn target(protocol_family: &str, max_output_tokens: Option<u32>) -> ResolvedExecutionTarget {
+        ResolvedExecutionTarget {
+            configured_model_id: "configured".into(),
+            configured_model_name: "Configured".into(),
+            provider_id: "openai".into(),
+            registry_model_id: "gpt-5".into(),
+            model_id: "gpt-5".into(),
+            surface: "conversation".into(),
+            protocol_family: protocol_family.into(),
+            credential_ref: Some("env:OPENAI_API_KEY".into()),
+            base_url: Some("https://api.openai.com/v1".into()),
+            max_output_tokens,
+            capabilities: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn message_request_prefers_target_max_output_tokens() {
+        let request = message_request(&target("openai_chat", Some(4096)), "hello", Some("system"));
+
+        assert_eq!(request.max_tokens, 4096);
+    }
+
+    #[test]
+    fn message_request_falls_back_to_default_when_override_missing() {
+        let request = message_request(&target("anthropic_messages", None), "hello", None);
+
+        assert_eq!(request.max_tokens, 2048);
+    }
+
+    #[test]
+    fn responses_payload_includes_max_output_tokens_override() {
+        let body = build_openai_responses_request_body(
+            &target("openai_responses", Some(3072)),
+            "hello",
+            Some("system"),
+        );
+
+        assert_eq!(body["max_output_tokens"], 3072);
+    }
+
+    #[test]
+    fn gemini_payload_includes_generation_config_max_output_tokens() {
+        let body = build_gemini_native_request_body(
+            &target("gemini_native", Some(1024)),
+            "hello",
+            Some("system"),
+        );
+
+        assert_eq!(body["generationConfig"]["maxOutputTokens"], 1024);
+    }
 }

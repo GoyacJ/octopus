@@ -32,9 +32,9 @@ pub mod recovery_recipes;
 mod remote;
 pub mod sandbox;
 mod session;
-#[cfg(test)]
-mod session_control;
+pub mod session_control;
 mod sse;
+pub mod stale_base;
 pub mod stale_branch;
 pub mod summary_compression;
 pub mod task_packet;
@@ -56,9 +56,9 @@ pub use config::{
     apply_config_patch, ConfigDocument, ConfigEntry, ConfigError, ConfigLoader, ConfigSource,
     McpConfigCollection, McpManagedProxyServerConfig, McpOAuthConfig, McpRemoteServerConfig,
     McpSdkServerConfig, McpServerConfig, McpStdioServerConfig, McpTransport,
-    McpWebSocketServerConfig, OAuthConfig, ResolvedPermissionMode, RuntimeConfig,
-    RuntimeFeatureConfig, RuntimeHookConfig, RuntimePermissionRuleConfig, RuntimePluginConfig,
-    ScopedMcpServerConfig, CLAW_SETTINGS_SCHEMA_NAME,
+    McpWebSocketServerConfig, OAuthConfig, ProviderFallbackConfig, ResolvedPermissionMode,
+    RuntimeConfig, RuntimeFeatureConfig, RuntimeHookConfig, RuntimePermissionRuleConfig,
+    RuntimePluginConfig, ScopedMcpServerConfig, CLAW_SETTINGS_SCHEMA_NAME,
 };
 pub use conversation::{
     auto_compaction_threshold_from_env, ApiClient, ApiRequest, AssistantEvent, AutoCompactionEvent,
@@ -141,7 +141,12 @@ pub use session::{
     ContentBlock, ConversationMessage, MessageRole, Session, SessionCompaction, SessionError,
     SessionFork,
 };
+pub use session_control::SessionStore;
 pub use sse::{IncrementalSseParser, SseEvent};
+pub use stale_base::{
+    check_base_commit, format_stale_base_warning, read_claw_base_file, resolve_expected_base,
+    BaseCommitSource, BaseCommitState,
+};
 pub use stale_branch::{
     apply_policy, check_freshness, BranchFreshness, StaleBranchAction, StaleBranchEvent,
     StaleBranchPolicy,

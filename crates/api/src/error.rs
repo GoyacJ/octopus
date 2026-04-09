@@ -7,11 +7,22 @@ const GENERIC_FATAL_WRAPPER_MARKERS: &[&str] = &[
     "please try again, or use /new to start a fresh session",
 ];
 
+const CONTEXT_WINDOW_ERROR_MARKERS: &[&str] = &[
+    "maximum context length",
+    "context window",
+    "context length",
+    "too many tokens",
+    "prompt is too long",
+    "input is too long",
+    "request is too large",
+];
+
 #[derive(Debug)]
 pub enum ApiError {
     MissingCredentials {
         provider: &'static str,
         env_vars: &'static [&'static str],
+        hint: Option<String>,
     },
     ContextWindowExceeded {
         model: String,
@@ -25,7 +36,12 @@ pub enum ApiError {
     InvalidApiKeyEnv(VarError),
     Http(reqwest::Error),
     Io(std::io::Error),
-    Json(serde_json::Error),
+    Json {
+        provider: String,
+        model: String,
+        body_snippet: String,
+        source: serde_json::Error,
+    },
     Api {
         status: reqwest::StatusCode,
         error_type: Option<String>,
@@ -51,7 +67,39 @@ impl ApiError {
         provider: &'static str,
         env_vars: &'static [&'static str],
     ) -> Self {
-        Self::MissingCredentials { provider, env_vars }
+        Self::MissingCredentials {
+            provider,
+            env_vars,
+            hint: None,
+        }
+    }
+
+    #[must_use]
+    pub fn missing_credentials_with_hint(
+        provider: &'static str,
+        env_vars: &'static [&'static str],
+        hint: impl Into<String>,
+    ) -> Self {
+        Self::MissingCredentials {
+            provider,
+            env_vars,
+            hint: Some(hint.into()),
+        }
+    }
+
+    #[must_use]
+    pub fn json_deserialize(
+        provider: impl Into<String>,
+        model: impl Into<String>,
+        body: &str,
+        source: serde_json::Error,
+    ) -> Self {
+        Self::Json {
+            provider: provider.into(),
+            model: model.into(),
+            body_snippet: truncate_body_snippet(body, 200),
+            source,
+        }
     }
 
     #[must_use]
@@ -66,7 +114,7 @@ impl ApiError {
             | Self::Auth(_)
             | Self::InvalidApiKeyEnv(_)
             | Self::Io(_)
-            | Self::Json(_)
+            | Self::Json { .. }
             | Self::InvalidSseFrame(_)
             | Self::BackoffOverflow { .. } => false,
         }
@@ -84,7 +132,7 @@ impl ApiError {
             | Self::InvalidApiKeyEnv(_)
             | Self::Http(_)
             | Self::Io(_)
-            | Self::Json(_)
+            | Self::Json { .. }
             | Self::InvalidSseFrame(_)
             | Self::BackoffOverflow { .. } => None,
         }
@@ -93,19 +141,24 @@ impl ApiError {
     #[must_use]
     pub fn safe_failure_class(&self) -> &'static str {
         match self {
-            Self::RetriesExhausted { .. } => "provider_retry_exhausted",
+            Self::RetriesExhausted { .. } if self.is_context_window_failure() => "context_window",
+            Self::RetriesExhausted { .. } if self.is_generic_fatal_wrapper() => {
+                "provider_retry_exhausted"
+            }
+            Self::RetriesExhausted { last_error, .. } => last_error.safe_failure_class(),
             Self::MissingCredentials { .. } | Self::ExpiredOAuthToken | Self::Auth(_) => {
                 "provider_auth"
             }
             Self::Api { status, .. } if matches!(status.as_u16(), 401 | 403) => "provider_auth",
             Self::ContextWindowExceeded { .. } => "context_window",
+            Self::Api { .. } if self.is_context_window_failure() => "context_window",
             Self::Api { status, .. } if status.as_u16() == 429 => "provider_rate_limit",
             Self::Api { .. } if self.is_generic_fatal_wrapper() => "provider_internal",
             Self::Api { .. } => "provider_error",
             Self::Http(_) | Self::InvalidSseFrame(_) | Self::BackoffOverflow { .. } => {
                 "provider_transport"
             }
-            Self::InvalidApiKeyEnv(_) | Self::Io(_) | Self::Json(_) => "runtime_io",
+            Self::InvalidApiKeyEnv(_) | Self::Io(_) | Self::Json { .. } => "runtime_io",
         }
     }
 
@@ -126,7 +179,36 @@ impl ApiError {
             | Self::InvalidApiKeyEnv(_)
             | Self::Http(_)
             | Self::Io(_)
-            | Self::Json(_)
+            | Self::Json { .. }
+            | Self::InvalidSseFrame(_)
+            | Self::BackoffOverflow { .. } => false,
+        }
+    }
+
+    #[must_use]
+    pub fn is_context_window_failure(&self) -> bool {
+        match self {
+            Self::ContextWindowExceeded { .. } => true,
+            Self::Api {
+                status,
+                message,
+                body,
+                ..
+            } => {
+                matches!(status.as_u16(), 400 | 413 | 422)
+                    && (message
+                        .as_deref()
+                        .is_some_and(looks_like_context_window_error)
+                        || looks_like_context_window_error(body))
+            }
+            Self::RetriesExhausted { last_error, .. } => last_error.is_context_window_failure(),
+            Self::MissingCredentials { .. }
+            | Self::ExpiredOAuthToken
+            | Self::Auth(_)
+            | Self::InvalidApiKeyEnv(_)
+            | Self::Http(_)
+            | Self::Io(_)
+            | Self::Json { .. }
             | Self::InvalidSseFrame(_)
             | Self::BackoffOverflow { .. } => false,
         }
@@ -136,11 +218,21 @@ impl ApiError {
 impl Display for ApiError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::MissingCredentials { provider, env_vars } => write!(
-                f,
-                "missing {provider} credentials; export {} before calling the {provider} API",
-                env_vars.join(" or ")
-            ),
+            Self::MissingCredentials {
+                provider,
+                env_vars,
+                hint,
+            } => {
+                write!(
+                    f,
+                    "missing {provider} credentials; export {} before calling the {provider} API",
+                    env_vars.join(" or ")
+                )?;
+                if let Some(hint) = hint {
+                    write!(f, " — hint: {hint}")?;
+                }
+                Ok(())
+            }
             Self::ContextWindowExceeded {
                 model,
                 estimated_input_tokens,
@@ -163,7 +255,15 @@ impl Display for ApiError {
             }
             Self::Http(error) => write!(f, "http error: {error}"),
             Self::Io(error) => write!(f, "io error: {error}"),
-            Self::Json(error) => write!(f, "json error: {error}"),
+            Self::Json {
+                provider,
+                model,
+                body_snippet,
+                source,
+            } => write!(
+                f,
+                "failed to parse {provider} response for model {model}: {source}; first 200 chars of body: {body_snippet}"
+            ),
             Self::Api {
                 status,
                 error_type,
@@ -218,7 +318,12 @@ impl From<std::io::Error> for ApiError {
 
 impl From<serde_json::Error> for ApiError {
     fn from(value: serde_json::Error) -> Self {
-        Self::Json(value)
+        Self::Json {
+            provider: "unknown".to_string(),
+            model: "unknown".to_string(),
+            body_snippet: String::new(),
+            source: value,
+        }
     }
 }
 
@@ -235,9 +340,58 @@ fn looks_like_generic_fatal_wrapper(text: &str) -> bool {
         .any(|marker| lowered.contains(marker))
 }
 
+fn looks_like_context_window_error(text: &str) -> bool {
+    let lowered = text.to_ascii_lowercase();
+    CONTEXT_WINDOW_ERROR_MARKERS
+        .iter()
+        .any(|marker| lowered.contains(marker))
+}
+
+fn truncate_body_snippet(body: &str, max_chars: usize) -> String {
+    let mut taken_chars = 0;
+    let mut byte_end = 0;
+    for (offset, character) in body.char_indices() {
+        if taken_chars >= max_chars {
+            break;
+        }
+        taken_chars += 1;
+        byte_end = offset + character.len_utf8();
+    }
+    if taken_chars >= max_chars && byte_end < body.len() {
+        format!("{}…", &body[..byte_end])
+    } else {
+        body[..byte_end].to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::ApiError;
+
+    #[test]
+    fn json_deserialize_captures_provider_model_and_body_snippet() {
+        let source = serde_json::from_str::<serde_json::Value>("{\"broken\":")
+            .expect_err("payload should be invalid json");
+        let error = ApiError::json_deserialize("OpenAI", "gpt-5", "{\"broken\":", source);
+
+        match &error {
+            ApiError::Json {
+                provider,
+                model,
+                body_snippet,
+                ..
+            } => {
+                assert_eq!(provider, "OpenAI");
+                assert_eq!(model, "gpt-5");
+                assert!(body_snippet.contains("\"broken\""));
+            }
+            other => panic!("expected contextual json error, got {other:?}"),
+        }
+
+        let rendered = error.to_string();
+        assert!(rendered.contains("OpenAI"));
+        assert!(rendered.contains("gpt-5"));
+    }
 
     #[test]
     fn detects_generic_fatal_wrapper_and_classifies_it_as_provider_internal() {

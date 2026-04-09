@@ -58,6 +58,7 @@ pub struct RuntimePluginConfig {
     install_root: Option<String>,
     registry_path: Option<String>,
     bundled_root: Option<String>,
+    max_output_tokens: Option<u32>,
 }
 
 /// Structured feature configuration consumed by runtime subsystems.
@@ -68,9 +69,18 @@ pub struct RuntimeFeatureConfig {
     mcp: McpConfigCollection,
     oauth: Option<OAuthConfig>,
     model: Option<String>,
+    aliases: BTreeMap<String, String>,
     permission_mode: Option<ResolvedPermissionMode>,
     permission_rules: RuntimePermissionRuleConfig,
     sandbox: SandboxConfig,
+    provider_fallbacks: ProviderFallbackConfig,
+    trusted_roots: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ProviderFallbackConfig {
+    primary: Option<String>,
+    fallbacks: Vec<String>,
 }
 
 /// Hook command lists grouped by lifecycle stage.
@@ -322,9 +332,12 @@ impl ConfigLoader {
             },
             oauth: parse_optional_oauth_config(&merged_value, "merged settings.oauth")?,
             model: parse_optional_model(&merged_value),
+            aliases: parse_optional_aliases(&merged_value)?,
             permission_mode: parse_optional_permission_mode(&merged_value)?,
             permission_rules: parse_optional_permission_rules(&merged_value)?,
             sandbox: parse_optional_sandbox_config(&merged_value)?,
+            provider_fallbacks: parse_optional_provider_fallbacks(&merged_value)?,
+            trusted_roots: parse_optional_trusted_roots(&merged_value)?,
         };
 
         Ok(RuntimeConfig {
@@ -401,6 +414,11 @@ impl RuntimeConfig {
     }
 
     #[must_use]
+    pub fn aliases(&self) -> &BTreeMap<String, String> {
+        &self.feature_config.aliases
+    }
+
+    #[must_use]
     pub fn permission_mode(&self) -> Option<ResolvedPermissionMode> {
         self.feature_config.permission_mode
     }
@@ -413,6 +431,16 @@ impl RuntimeConfig {
     #[must_use]
     pub fn sandbox(&self) -> &SandboxConfig {
         &self.feature_config.sandbox
+    }
+
+    #[must_use]
+    pub fn provider_fallbacks(&self) -> &ProviderFallbackConfig {
+        &self.feature_config.provider_fallbacks
+    }
+
+    #[must_use]
+    pub fn trusted_roots(&self) -> &[String] {
+        &self.feature_config.trusted_roots
     }
 }
 
@@ -455,6 +483,11 @@ impl RuntimeFeatureConfig {
     }
 
     #[must_use]
+    pub fn aliases(&self) -> &BTreeMap<String, String> {
+        &self.aliases
+    }
+
+    #[must_use]
     pub fn permission_mode(&self) -> Option<ResolvedPermissionMode> {
         self.permission_mode
     }
@@ -467,6 +500,38 @@ impl RuntimeFeatureConfig {
     #[must_use]
     pub fn sandbox(&self) -> &SandboxConfig {
         &self.sandbox
+    }
+
+    #[must_use]
+    pub fn provider_fallbacks(&self) -> &ProviderFallbackConfig {
+        &self.provider_fallbacks
+    }
+
+    #[must_use]
+    pub fn trusted_roots(&self) -> &[String] {
+        &self.trusted_roots
+    }
+}
+
+impl ProviderFallbackConfig {
+    #[must_use]
+    pub fn new(primary: Option<String>, fallbacks: Vec<String>) -> Self {
+        Self { primary, fallbacks }
+    }
+
+    #[must_use]
+    pub fn primary(&self) -> Option<&str> {
+        self.primary.as_deref()
+    }
+
+    #[must_use]
+    pub fn fallbacks(&self) -> &[String] {
+        &self.fallbacks
+    }
+
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.fallbacks.is_empty()
     }
 }
 
@@ -494,6 +559,15 @@ impl RuntimePluginConfig {
     #[must_use]
     pub fn bundled_root(&self) -> Option<&str> {
         self.bundled_root.as_deref()
+    }
+
+    #[must_use]
+    pub fn max_output_tokens(&self) -> Option<u32> {
+        self.max_output_tokens
+    }
+
+    pub fn set_max_output_tokens(&mut self, max_output_tokens: Option<u32>) {
+        self.max_output_tokens = max_output_tokens;
     }
 
     pub fn set_plugin_state(&mut self, plugin_id: String, enabled: bool) {
@@ -684,6 +758,13 @@ fn parse_optional_model(root: &JsonValue) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+fn parse_optional_aliases(root: &JsonValue) -> Result<BTreeMap<String, String>, ConfigError> {
+    let Some(object) = root.as_object() else {
+        return Ok(BTreeMap::new());
+    };
+    Ok(optional_string_map(object, "aliases", "merged settings")?.unwrap_or_default())
+}
+
 fn parse_optional_hooks_config(root: &JsonValue) -> Result<RuntimeHookConfig, ConfigError> {
     let Some(object) = root.as_object() else {
         return Ok(RuntimeHookConfig::default());
@@ -761,6 +842,7 @@ fn parse_optional_plugin_config(root: &JsonValue) -> Result<RuntimePluginConfig,
         optional_string(plugins, "registryPath", "merged settings.plugins")?.map(str::to_string);
     config.bundled_root =
         optional_string(plugins, "bundledRoot", "merged settings.plugins")?.map(str::to_string);
+    config.max_output_tokens = optional_u32(plugins, "maxOutputTokens", "merged settings.plugins")?;
     Ok(config)
 }
 
@@ -821,6 +903,33 @@ fn parse_optional_sandbox_config(root: &JsonValue) -> Result<SandboxConfig, Conf
         allowed_mounts: optional_string_array(sandbox, "allowedMounts", "merged settings.sandbox")?
             .unwrap_or_default(),
     })
+}
+
+fn parse_optional_provider_fallbacks(
+    root: &JsonValue,
+) -> Result<ProviderFallbackConfig, ConfigError> {
+    let Some(object) = root.as_object() else {
+        return Ok(ProviderFallbackConfig::default());
+    };
+    let Some(value) = object.get("providerFallbacks") else {
+        return Ok(ProviderFallbackConfig::default());
+    };
+    let entry = expect_object(value, "merged settings.providerFallbacks")?;
+    let primary =
+        optional_string(entry, "primary", "merged settings.providerFallbacks")?.map(str::to_string);
+    let fallbacks = optional_string_array(entry, "fallbacks", "merged settings.providerFallbacks")?
+        .unwrap_or_default();
+    Ok(ProviderFallbackConfig { primary, fallbacks })
+}
+
+fn parse_optional_trusted_roots(root: &JsonValue) -> Result<Vec<String>, ConfigError> {
+    let Some(object) = root.as_object() else {
+        return Ok(Vec::new());
+    };
+    Ok(
+        optional_string_array(object, "trustedRoots", "merged settings.trustedRoots")?
+            .unwrap_or_default(),
+    )
 }
 
 fn parse_filesystem_mode_label(value: &str) -> Result<FilesystemIsolationMode, ConfigError> {
@@ -1017,6 +1126,27 @@ fn optional_u64(
                 )));
             };
             let number = u64::try_from(number).map_err(|_| {
+                ConfigError::Parse(format!("{context}: field {key} is out of range"))
+            })?;
+            Ok(Some(number))
+        }
+        None => Ok(None),
+    }
+}
+
+fn optional_u32(
+    object: &BTreeMap<String, JsonValue>,
+    key: &str,
+    context: &str,
+) -> Result<Option<u32>, ConfigError> {
+    match object.get(key) {
+        Some(value) => {
+            let Some(number) = value.as_i64() else {
+                return Err(ConfigError::Parse(format!(
+                    "{context}: field {key} must be a non-negative integer"
+                )));
+            };
+            let number = u32::try_from(number).map_err(|_| {
                 ConfigError::Parse(format!("{context}: field {key} is out of range"))
             })?;
             Ok(Some(number))
@@ -1841,5 +1971,54 @@ mod tests {
         assert!(config.state_for("known", false));
         assert!(config.state_for("missing", true));
         assert!(!config.state_for("missing", false));
+    }
+
+    #[test]
+    fn parses_aliases_provider_fallbacks_trusted_roots_and_plugin_max_output_tokens() {
+        let root = temp_dir();
+        let cwd = root.join("project");
+        let home = root.join("home").join(".claw");
+        fs::create_dir_all(cwd.join(".claw")).expect("project config dir");
+        fs::create_dir_all(&home).expect("home config dir");
+
+        fs::write(
+            home.join("settings.json"),
+            r#"{
+              "aliases": {
+                "fast": "gpt-5-mini",
+                "deep": "claude-sonnet-4-5"
+              },
+              "providerFallbacks": {
+                "primary": "anthropic",
+                "fallbacks": ["openai", "dashscope"]
+              },
+              "trustedRoots": ["/tmp/worktrees", "/srv/octopus"],
+              "plugins": {
+                "maxOutputTokens": 2048
+              }
+            }"#,
+        )
+        .expect("write user settings");
+
+        let loaded = ConfigLoader::new(&cwd, &home)
+            .load()
+            .expect("config should load");
+
+        assert_eq!(
+            loaded.aliases().get("fast").map(String::as_str),
+            Some("gpt-5-mini")
+        );
+        assert_eq!(loaded.provider_fallbacks().primary(), Some("anthropic"));
+        assert_eq!(
+            loaded.provider_fallbacks().fallbacks(),
+            &["openai".to_string(), "dashscope".to_string()]
+        );
+        assert_eq!(
+            loaded.trusted_roots(),
+            &["/tmp/worktrees".to_string(), "/srv/octopus".to_string()]
+        );
+        assert_eq!(loaded.plugins().max_output_tokens(), Some(2048));
+
+        fs::remove_dir_all(root).expect("cleanup temp dir");
     }
 }

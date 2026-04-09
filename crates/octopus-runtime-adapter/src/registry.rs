@@ -22,6 +22,7 @@ pub struct EffectiveModelRegistry {
     configured_models_by_id: HashMap<String, ConfiguredModelRecord>,
     credential_bindings_by_provider: HashMap<String, CredentialBinding>,
     allowed_configured_model_ids: Option<HashSet<String>>,
+    plugin_max_output_tokens: Option<u32>,
 }
 
 impl EffectiveModelRegistry {
@@ -84,6 +85,11 @@ impl EffectiveModelRegistry {
             effective_config.get("mcpServers"),
             &mut diagnostics,
         );
+        let plugin_max_output_tokens = effective_config
+            .get("plugins")
+            .and_then(|plugins| plugins.get("maxOutputTokens"))
+            .and_then(Value::as_u64)
+            .map(|value| value as u32);
 
         validate_configured_models(&providers, &models, &configured_models, &mut diagnostics);
         for (purpose, selection) in &default_selections {
@@ -186,6 +192,7 @@ impl EffectiveModelRegistry {
             configured_models_by_id: configured_models.into_iter().collect(),
             credential_bindings_by_provider: credential_bindings.into_iter().collect(),
             allowed_configured_model_ids,
+            plugin_max_output_tokens,
         })
     }
 
@@ -394,6 +401,7 @@ impl EffectiveModelRegistry {
             protocol_family: provider_surface.protocol_family.clone(),
             credential_ref,
             base_url,
+            max_output_tokens: self.plugin_max_output_tokens.or(model.max_output_tokens),
             capabilities: model.capabilities.clone(),
         })
     }
@@ -2479,5 +2487,32 @@ mod tests {
             resolved.base_url.as_deref(),
             Some("https://api.minimaxi.com/anthropic")
         );
+    }
+
+    #[test]
+    fn plugin_max_output_tokens_overrides_registry_model_default_for_target() {
+        let registry = EffectiveModelRegistry::from_effective_config(&json!({
+            "plugins": {
+                "maxOutputTokens": 4096
+            },
+            "configuredModels": {
+                "quota-model": {
+                    "configuredModelId": "quota-model",
+                    "name": "Quota Model",
+                    "providerId": "anthropic",
+                    "modelId": "claude-opus-4-6",
+                    "credentialRef": "env:ANTHROPIC_API_KEY",
+                    "enabled": true,
+                    "source": "workspace"
+                }
+            }
+        }))
+        .expect("registry should load");
+
+        let resolved = registry
+            .resolve_target("quota-model", Some("conversation"))
+            .expect("target should resolve");
+
+        assert_eq!(resolved.max_output_tokens, Some(4096));
     }
 }

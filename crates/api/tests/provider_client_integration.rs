@@ -22,7 +22,9 @@ fn provider_client_reports_missing_xai_credentials_for_grok_models() {
         .expect_err("grok requests without XAI_API_KEY should fail fast");
 
     match error {
-        ApiError::MissingCredentials { provider, env_vars } => {
+        ApiError::MissingCredentials {
+            provider, env_vars, ..
+        } => {
             assert_eq!(provider, "xAI");
             assert_eq!(env_vars, &["XAI_API_KEY"]);
         }
@@ -51,6 +53,18 @@ fn read_xai_base_url_prefers_env_override() {
     let _xai_base_url = EnvVarGuard::set("XAI_BASE_URL", Some("https://example.xai.test/v1"));
 
     assert_eq!(read_xai_base_url(), "https://example.xai.test/v1");
+}
+
+#[test]
+fn provider_client_routes_qwen_models_through_dashscope_config() {
+    let _lock = env_lock();
+    let _dashscope_api_key = EnvVarGuard::set("DASHSCOPE_API_KEY", Some("dashscope-test-key"));
+    let _openai_api_key = EnvVarGuard::set("OPENAI_API_KEY", None);
+
+    let client = ProviderClient::from_model("qwen-plus")
+        .expect("qwen-plus with DASHSCOPE_API_KEY should construct a provider client");
+
+    assert_eq!(client.provider_kind(), ProviderKind::OpenAi);
 }
 
 fn env_lock() -> std::sync::MutexGuard<'static, ()> {

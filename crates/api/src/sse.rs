@@ -4,6 +4,8 @@ use crate::types::StreamEvent;
 #[derive(Debug, Default)]
 pub struct SseParser {
     buffer: Vec<u8>,
+    provider: Option<String>,
+    model: Option<String>,
 }
 
 impl SseParser {
@@ -12,12 +14,19 @@ impl SseParser {
         Self::default()
     }
 
+    #[must_use]
+    pub fn with_context(mut self, provider: impl Into<String>, model: impl Into<String>) -> Self {
+        self.provider = Some(provider.into());
+        self.model = Some(model.into());
+        self
+    }
+
     pub fn push(&mut self, chunk: &[u8]) -> Result<Vec<StreamEvent>, ApiError> {
         self.buffer.extend_from_slice(chunk);
         let mut events = Vec::new();
 
         while let Some(frame) = self.next_frame() {
-            if let Some(event) = parse_frame(&frame)? {
+            if let Some(event) = self.parse_frame_with_context(&frame)? {
                 events.push(event);
             }
         }
@@ -31,10 +40,16 @@ impl SseParser {
         }
 
         let trailing = std::mem::take(&mut self.buffer);
-        match parse_frame(&String::from_utf8_lossy(&trailing))? {
+        match self.parse_frame_with_context(&String::from_utf8_lossy(&trailing))? {
             Some(event) => Ok(vec![event]),
             None => Ok(Vec::new()),
         }
+    }
+
+    fn parse_frame_with_context(&self, frame: &str) -> Result<Option<StreamEvent>, ApiError> {
+        let provider = self.provider.as_deref().unwrap_or("unknown");
+        let model = self.model.as_deref().unwrap_or("unknown");
+        parse_frame_with_provider(frame, provider, model)
     }
 
     fn next_frame(&mut self) -> Option<String> {
@@ -61,6 +76,14 @@ impl SseParser {
 }
 
 pub fn parse_frame(frame: &str) -> Result<Option<StreamEvent>, ApiError> {
+    parse_frame_with_provider(frame, "unknown", "unknown")
+}
+
+pub(crate) fn parse_frame_with_provider(
+    frame: &str,
+    provider: &str,
+    model: &str,
+) -> Result<Option<StreamEvent>, ApiError> {
     let trimmed = frame.trim();
     if trimmed.is_empty() {
         return Ok(None);
@@ -97,12 +120,13 @@ pub fn parse_frame(frame: &str) -> Result<Option<StreamEvent>, ApiError> {
 
     serde_json::from_str::<StreamEvent>(&payload)
         .map(Some)
-        .map_err(ApiError::from)
+        .map_err(|error| ApiError::json_deserialize(provider, model, &payload, error))
 }
 
 #[cfg(test)]
 mod tests {
     use super::{parse_frame, SseParser};
+    use crate::error::ApiError;
     use crate::types::{ContentBlockDelta, MessageDelta, OutputContentBlock, StreamEvent, Usage};
 
     #[test]
@@ -215,6 +239,24 @@ mod tests {
                 }
             ))
         );
+    }
+
+    #[test]
+    fn parser_with_context_reports_provider_and_model_on_bad_json() {
+        let mut parser = SseParser::new().with_context("Anthropic", "claude-sonnet-4-6");
+        let error = parser
+            .push(b"event: message_start\ndata: {not-json}\n\n")
+            .expect_err("invalid frame should fail");
+
+        match error {
+            ApiError::Json {
+                provider, model, ..
+            } => {
+                assert_eq!(provider, "Anthropic");
+                assert_eq!(model, "claude-sonnet-4-6");
+            }
+            other => panic!("expected contextual json error, got {other:?}"),
+        }
     }
 
     #[test]
