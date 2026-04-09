@@ -2,6 +2,8 @@
 
 This document describes the current Octopus runtime config model and the public API and adapter contracts that power it.
 
+General HTTP/OpenAPI policy lives in `docs/api-openapi-governance.md`. This document only records runtime-config-specific contract behavior and runtime-facing adapter expectations.
+
 ## Ownership Model
 
 Runtime config is no longer discovered from `.claw/settings*.json` as the canonical Octopus model.

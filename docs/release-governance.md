@@ -78,15 +78,36 @@ Because `apps/desktop/src-tauri/tauri.conf.json` bundles `bin/octopus-desktop-ba
 
 ## Shared Schema Governance
 
-- `contracts/openapi/octopus.openapi.yaml` is the canonical protocol spec.
-- `packages/schema/src/generated.ts` is generated from the OpenAPI spec.
+- `docs/api-openapi-governance.md` is the canonical development policy for HTTP contract work.
+- `contracts/openapi/src/**` is the only human-maintained OpenAPI source tree.
+- `contracts/openapi/octopus.openapi.yaml` is the bundled canonical protocol artifact consumed by release metadata, parity gates, and schema generation.
+- `packages/schema/src/generated.ts` is the generated TypeScript transport artifact derived from the bundled OpenAPI spec.
 - Generated contract drift is blocked by `pnpm schema:check`.
+- `pnpm schema:check` now enforces three gates:
+  - bundled artifact drift between `contracts/openapi/src/**` and `contracts/openapi/octopus.openapi.yaml`
+  - generated schema drift
+  - server `/api/v1/*` route parity against OpenAPI plus `contracts/openapi/route-parity-allowlist.json`
+  - frontend adapter parity against OpenAPI plus `contracts/openapi/adapter-parity-allowlist.json`
+
+OpenAPI maintenance order is now fixed:
+
+1. edit `contracts/openapi/src/**`
+2. run `pnpm openapi:bundle`
+3. run `pnpm schema:generate`
+4. wire implementation and tests against the generated surface
 
 Current scope:
 
-- host bootstrap and health contracts
-- workspace bootstrap and overview contracts
+- host bootstrap, health, preferences, workspace connections, and notifications contracts
+- workspace bootstrap, health, auth, summary, and overview contracts
+- project, resource, knowledge, and artifact contracts for the primary workspace/project surfaces
 - runtime effective config contract
 - shared error envelope
 
-This is the governance foundation for migrating remaining transport contracts onto the same OpenAPI source.
+Temporary migration rules:
+
+- allowlists are transitional inventory, not a second source of truth
+- new HTTP routes must be added to OpenAPI first or explicitly added to an allowlist with audit context
+- transport types already represented in OpenAPI should resolve back to generated aliases instead of parallel handwritten declarations
+
+This is the governance foundation for keeping the HTTP contract source modular without changing downstream release and verification behavior.

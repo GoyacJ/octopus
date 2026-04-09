@@ -3,6 +3,9 @@
 ## Frontend Governance
 
 - This root file defines repo-wide defaults. If a more specific `AGENTS.md` exists deeper in the tree, the nearest file wins for that subtree.
+- Before changing HTTP/API/OpenAPI-related code or docs, read `docs/api-openapi-governance.md`.
+- Before changing files under `docs/**`, follow `docs/AGENTS.md`.
+- Before changing files under `contracts/openapi/**`, follow `contracts/openapi/AGENTS.md`.
 - Desktop frontend baseline: `Vue 3 + Vite + Pinia + Vue Router + Vue I18n + Tauri 2`.
 - UI/UX source of truth for product surfaces is `docs/design/DESIGN.md`. Any AI agent generating or modifying UI must read and follow it before changing layouts, components, motion, copy hierarchy, or visual styling.
 - `docs/design/DESIGN.md` is the canonical visual and interaction standard for desktop UI and design-system evolution. Treat preview files in `docs/design/*` as references only.
@@ -49,38 +52,16 @@
 
 ## Request Contract Governance
 
-- Shared request/response contracts must be defined in `packages/schema/src/*` and consumed from `@octopus/schema` by both frontend and backend. Do not invent view-local API shapes for host or backend requests.
-- `apps/desktop` business code must not call `fetch` directly for workspace business APIs. Use the existing adapter boundary:
-  - shell/host requests through `apps/desktop/src/tauri/shell.ts`
-  - workspace/domain requests through `apps/desktop/src/tauri/workspace-client.ts`
-  - shared header/session helpers through `apps/desktop/src/tauri/shared.ts`
-- Pages should talk to Pinia stores or view-model actions. Stores talk to the adapter client. Views must not embed backend request assembly, auth header logic, or idempotency logic.
-- Browser host and Tauri host must expose the same contract shape through the same adapter surface. New capabilities should extend the adapter and schema first, then be consumed by stores/pages.
-- Frontend integration is adapter-first and real-API-first:
-  - every new primary flow must have a real adapter-backed path
-  - browser host and Tauri host must return the same `@octopus/schema` payloads through the same adapter surface
-  - frontend stores must not bypass the adapter layer with ad-hoc transport logic
-- Request headers and transport conventions are standardized:
-  - every backend request carries `X-Request-Id`
-  - workspace-scoped requests carry `X-Workspace-Id`
-  - authenticated workspace requests use bearer session tokens
-  - mutation endpoints that can be retried must support `Idempotency-Key`
-  - SSE resume uses `Last-Event-ID`
-- Route design conventions:
-  - public/system bootstrap routes are explicit and minimal
-  - workspace-scoped APIs live under `/api/v1/*`
-  - runtime APIs live under `/api/v1/runtime/*`
-  - request validation happens at the server boundary before touching services
-- Service boundary conventions:
-  - `crates/octopus-server` owns HTTP transport, auth checks, request-id/idempotency/cors mechanics, and response shaping
-  - `crates/octopus-platform` owns trait contracts between transport and implementations
-  - adapters/services return typed domain results, not ad-hoc JSON maps
-- When adding a new endpoint or command:
-  - update `@octopus/schema`
-  - update the client adapter
-  - update relevant fixtures or test stubs if they cover the same contract
-  - add or update store usage
-  - add tests for client/store/server as appropriate
+- `docs/api-openapi-governance.md` is the canonical policy for frontend/backend HTTP contract work.
+- Shared request/response contracts must be defined in `packages/schema/src/*` and consumed from `@octopus/schema`. Do not invent view-local API shapes for host or backend requests.
+- Frontend integration remains adapter-first, store-first, and real-API-first.
+- `apps/desktop` business code must not call bare `fetch` for host or workspace business APIs. Use the existing adapter boundary:
+  - shell and host requests through `apps/desktop/src/tauri/shell.ts`
+  - workspace and runtime requests through `apps/desktop/src/tauri/workspace-client.ts`
+  - shared header, session, and error helpers through `apps/desktop/src/tauri/shared.ts`
+- Browser host and Tauri host must expose the same public adapter contract shape.
+- For `/api/v1/*` HTTP changes, the required order is: update `contracts/openapi/src/**`, run `pnpm openapi:bundle`, run `pnpm schema:generate`, update adapter/store/server/tests, then run the relevant checks.
+- Never hand-edit `contracts/openapi/octopus.openapi.yaml` or `packages/schema/src/generated.ts`.
 
 ## Persistence Governance
 

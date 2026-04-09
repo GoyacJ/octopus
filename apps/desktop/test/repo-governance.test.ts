@@ -113,10 +113,134 @@ describe('repository governance', () => {
       scripts?: Record<string, string>
     }
 
+    expect(existsSync(path.join(repoRoot, 'contracts', 'openapi', 'src', 'root.yaml'))).toBe(true)
+    expect(existsSync(path.join(repoRoot, 'contracts', 'openapi', 'src', 'info.yaml'))).toBe(true)
+    expect(existsSync(path.join(repoRoot, 'contracts', 'openapi', 'src', 'paths', 'host.yaml'))).toBe(true)
+    expect(existsSync(path.join(repoRoot, 'contracts', 'openapi', 'src', 'components', 'schemas', 'runtime.yaml'))).toBe(true)
+    expect(existsSync(path.join(repoRoot, 'contracts', 'openapi', 'src', 'components', 'parameters', 'common.yaml'))).toBe(true)
+    expect(existsSync(path.join(repoRoot, 'contracts', 'openapi', 'src', 'components', 'responses', 'errors.yaml'))).toBe(true)
     expect(existsSync(path.join(repoRoot, 'contracts', 'openapi', 'octopus.openapi.yaml'))).toBe(true)
     expect(existsSync(path.join(repoRoot, 'packages', 'schema', 'src', 'generated.ts'))).toBe(true)
-    expect(packageJson.scripts?.['schema:generate']).toBe('node scripts/generate-schema.mjs')
-    expect(packageJson.scripts?.['schema:check']).toBe('node scripts/check-schema-governance.mjs')
+    expect(packageJson.scripts?.['openapi:bundle']).toBe('node scripts/bundle-openapi.mjs')
+    expect(packageJson.scripts?.['schema:generate']).toBe('pnpm openapi:bundle && node scripts/generate-schema.mjs')
+    expect(packageJson.scripts?.['schema:check:generated']).toBe('node scripts/check-schema-governance.mjs')
+    expect(packageJson.scripts?.['schema:check:routes']).toBe('node scripts/check-openapi-route-parity.mjs')
+    expect(packageJson.scripts?.['schema:check:adapters']).toBe('node scripts/check-openapi-adapter-parity.mjs')
+    expect(packageJson.scripts?.['schema:check']).toBe('pnpm schema:check:generated && pnpm schema:check:routes && pnpm schema:check:adapters')
     expect(packageJson.scripts?.['check:all']).toBe('pnpm check:frontend && pnpm check:rust && pnpm schema:check && pnpm version:check')
+  })
+
+  it('tracks OpenAPI parity assets and audit artifacts in the repository', () => {
+    expect(existsSync(path.join(repoRoot, 'scripts', 'check-openapi-route-parity.mjs'))).toBe(true)
+    expect(existsSync(path.join(repoRoot, 'scripts', 'check-openapi-adapter-parity.mjs'))).toBe(true)
+    expect(existsSync(path.join(repoRoot, 'contracts', 'openapi', 'route-parity-allowlist.json'))).toBe(true)
+    expect(existsSync(path.join(repoRoot, 'contracts', 'openapi', 'adapter-parity-allowlist.json'))).toBe(true)
+    expect(existsSync(path.join(repoRoot, 'docs', 'openapi-audit.md'))).toBe(true)
+  })
+
+  it('documents AI-first API governance through canonical policy docs and local AGENTS files', () => {
+    const rootAgents = readRepoFile('AGENTS.md')
+    const docsAgentsPath = path.join(repoRoot, 'docs', 'AGENTS.md')
+    const docsAgents = readRepoFile('docs', 'AGENTS.md')
+    const openApiAgentsPath = path.join(repoRoot, 'contracts', 'openapi', 'AGENTS.md')
+    const openApiAgents = readRepoFile('contracts', 'openapi', 'AGENTS.md')
+    const apiGovernance = readRepoFile('docs', 'api-openapi-governance.md')
+
+    expect(existsSync(path.join(repoRoot, 'docs', 'api-openapi-governance.md'))).toBe(true)
+    expect(existsSync(docsAgentsPath)).toBe(true)
+    expect(existsSync(openApiAgentsPath)).toBe(true)
+
+    expect(docsAgents.trim().length).toBeGreaterThan(0)
+    expect(openApiAgents.trim().length).toBeGreaterThan(0)
+
+    expect(rootAgents).toContain('docs/api-openapi-governance.md')
+    expect(rootAgents).toContain('docs/AGENTS.md')
+    expect(rootAgents).toContain('contracts/openapi/AGENTS.md')
+
+    expect(apiGovernance).toContain('contracts/openapi/src/**')
+    expect(apiGovernance).toContain('contracts/openapi/octopus.openapi.yaml')
+    expect(apiGovernance).toContain('packages/schema/src/generated.ts')
+    expect(apiGovernance).toContain('pnpm openapi:bundle')
+    expect(apiGovernance).toContain('pnpm schema:generate')
+    expect(apiGovernance).toContain('pnpm schema:check')
+    expect(apiGovernance).toContain('apps/desktop/src/tauri/shell.ts')
+    expect(apiGovernance).toContain('apps/desktop/src/tauri/workspace-client.ts')
+
+    expect(docsAgents).toContain('api-openapi-governance.md')
+    expect(docsAgents).toContain('openapi-audit.md')
+    expect(openApiAgents).toContain('src/**')
+    expect(openApiAgents).toContain('octopus.openapi.yaml')
+    expect(openApiAgents).toContain('generated.ts')
+  })
+
+  it('extends OpenAPI and generated transport coverage for the next workspace, catalog, and runtime clusters', () => {
+    const openApiSpec = readRepoFile('contracts', 'openapi', 'octopus.openapi.yaml')
+    const generatedSchema = readRepoFile('packages', 'schema', 'src', 'generated.ts')
+
+    expect(openApiSpec).toContain('/api/v1/workspace/pet:')
+    expect(openApiSpec).toContain('/api/v1/workspace/agents:')
+    expect(openApiSpec).toContain('/api/v1/workspace/automations:')
+    expect(openApiSpec).toContain('/api/v1/workspace/teams:')
+    expect(openApiSpec).toContain('/api/v1/workspace/rbac/users:')
+    expect(openApiSpec).toContain('/api/v1/workspace/catalog/models:')
+    expect(openApiSpec).toContain('/api/v1/workspace/catalog/tools:')
+    expect(openApiSpec).toContain('/api/v1/workspace/catalog/skills/{skillId}/files/{relativePath}:')
+    expect(openApiSpec).toContain('/api/v1/projects/{projectId}/agent-links:')
+    expect(openApiSpec).toContain('/api/v1/runtime/bootstrap:')
+    expect(openApiSpec).toContain('/api/v1/runtime/config/validate:')
+    expect(openApiSpec).toContain('/api/v1/runtime/config/configured-models/probe:')
+    expect(openApiSpec).toContain('/api/v1/runtime/config/scopes/{scope}:')
+    expect(openApiSpec).toContain('/api/v1/runtime/sessions:')
+    expect(openApiSpec).toContain('/api/v1/runtime/sessions/{sessionId}:')
+    expect(openApiSpec).toContain('/api/v1/runtime/sessions/{sessionId}/turns:')
+    expect(openApiSpec).toContain('/api/v1/runtime/sessions/{sessionId}/approvals/{approvalId}:')
+    expect(openApiSpec).toContain('/api/v1/runtime/sessions/{sessionId}/events:')
+    expect(openApiSpec).toContain('/api/v1/projects/{projectId}/runtime-config:')
+    expect(openApiSpec).toContain('/api/v1/projects/{projectId}/runtime-config/validate:')
+    expect(openApiSpec).toContain('/api/v1/workspace/user-center/profile/runtime-config:')
+    expect(openApiSpec).toContain('/api/v1/workspace/user-center/profile/runtime-config/validate:')
+
+    expect(generatedSchema).toContain('"/api/v1/workspace/pet": {')
+    expect(generatedSchema).toContain('"/api/v1/workspace/agents": {')
+    expect(generatedSchema).toContain('"/api/v1/workspace/automations": {')
+    expect(generatedSchema).toContain('"/api/v1/workspace/catalog/tools": {')
+    expect(generatedSchema).toContain('"/api/v1/projects/{projectId}/agent-links": {')
+    expect(generatedSchema).toContain('"/api/v1/workspace/catalog/skills/{skillId}/files/{relativePath}": {')
+    expect(generatedSchema).toContain('"/api/v1/runtime/config/validate": {')
+    expect(generatedSchema).toContain('"/api/v1/runtime/config/configured-models/probe": {')
+    expect(generatedSchema).toContain('"/api/v1/runtime/config/scopes/{scope}": {')
+    expect(generatedSchema).toContain('"/api/v1/runtime/sessions": {')
+    expect(generatedSchema).toContain('"/api/v1/runtime/sessions/{sessionId}": {')
+    expect(generatedSchema).toContain('"/api/v1/runtime/sessions/{sessionId}/turns": {')
+    expect(generatedSchema).toContain('"/api/v1/runtime/sessions/{sessionId}/approvals/{approvalId}": {')
+    expect(generatedSchema).toContain('"/api/v1/runtime/sessions/{sessionId}/events": {')
+    expect(generatedSchema).toContain('"/api/v1/projects/{projectId}/runtime-config": {')
+    expect(generatedSchema).toContain('"/api/v1/projects/{projectId}/runtime-config/validate": {')
+    expect(generatedSchema).toContain('"/api/v1/workspace/user-center/profile/runtime-config": {')
+    expect(generatedSchema).toContain('"/api/v1/workspace/user-center/profile/runtime-config/validate": {')
+  })
+
+  it('finishes OpenAPI convergence for remaining apps, audit, inbox, and knowledge routes', () => {
+    const openApiSpec = readRepoFile('contracts', 'openapi', 'octopus.openapi.yaml')
+    const generatedSchema = readRepoFile('packages', 'schema', 'src', 'generated.ts')
+    const routeAllowlist = JSON.parse(
+      readRepoFile('contracts', 'openapi', 'route-parity-allowlist.json'),
+    ) as { paths?: string[] }
+    const adapterAllowlist = JSON.parse(
+      readRepoFile('contracts', 'openapi', 'adapter-parity-allowlist.json'),
+    ) as { paths?: string[] }
+
+    expect(openApiSpec).toContain('/api/v1/apps:')
+    expect(openApiSpec).toContain('/api/v1/audit:')
+    expect(openApiSpec).toContain('/api/v1/inbox:')
+    expect(openApiSpec).toContain('/api/v1/knowledge:')
+
+    expect(generatedSchema).toContain('"/api/v1/apps": {')
+    expect(generatedSchema).toContain('"/api/v1/audit": {')
+    expect(generatedSchema).toContain('"/api/v1/inbox": {')
+    expect(generatedSchema).toContain('"/api/v1/knowledge": {')
+
+    expect(routeAllowlist.paths ?? []).toEqual([])
+    expect(adapterAllowlist.paths ?? []).toEqual([])
   })
 })
