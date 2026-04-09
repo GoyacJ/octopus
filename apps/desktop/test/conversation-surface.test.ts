@@ -89,6 +89,8 @@ describe('Conversation surfaces', () => {
 
     await waitFor(() => runtime.activeMessages.length >= 3)
     expect(mounted.container.querySelector('[data-testid="conversation-tabs"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="conversation-message-list"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="conversation-context-pane"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="conversation-composer"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="conversation-model-select"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="conversation-permission-select"]')).not.toBeNull()

@@ -152,6 +152,8 @@ describe('User center RBAC prototype', () => {
     await waitForSelector(mounted.container, '[data-testid="user-center-tabs"]')
     await waitForText(mounted.container, 'Lin Zhou')
 
+    expect(mounted.container.querySelector('[data-testid="user-center-users-shell"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="user-center-users-inspector"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="user-center-tabs"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-user-center-profile"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-user-center-pet"]')).not.toBeNull()
@@ -176,6 +178,7 @@ describe('User center RBAC prototype', () => {
 
     await router.push('/workspaces/ws-local/user-center/pet')
     await waitForSelector(mounted.container, '[data-testid="user-center-pet-card"]')
+    expect(mounted.container.querySelector('[data-testid="user-center-pet-view"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('宠物')
     expect((await findInput(mounted.container, '[data-testid="user-center-pet-display-name"]')).value).toBe('小章')
     expect((await findSelect(mounted.container, '[data-testid="user-center-pet-model-select"]')).value).toBe('openai-primary')
@@ -189,21 +192,25 @@ describe('User center RBAC prototype', () => {
 
     await router.push('/workspaces/ws-local/user-center/permissions')
     await waitForText(mounted.container, 'Manage users')
+    expect(mounted.container.querySelector('[data-testid="user-center-permissions-shell"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Manage users')
     expect(mounted.container.textContent).toContain('Manage roles')
 
     await router.push('/workspaces/ws-local/user-center/roles')
     await waitForText(mounted.container, 'Owner')
+    expect(mounted.container.querySelector('[data-testid="user-center-roles-shell"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Owner')
     expect(mounted.container.textContent).toContain('Operator')
 
     await router.push('/workspaces/ws-local/user-center/menus')
     await waitForText(mounted.container, '基本资料')
+    expect(mounted.container.querySelector('[data-testid="user-center-menus-shell"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('基本资料')
     expect(mounted.container.textContent).toContain('成员管理')
 
     await router.push('/workspaces/ws-local/user-center/profile')
     await waitForText(mounted.container, 'Lobster Owner')
+    expect(mounted.container.querySelector('[data-testid="user-center-profile-view"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Lobster Owner')
     expect(mounted.container.textContent).toContain('owner')
     expect(mounted.container.querySelector('[data-testid="profile-access-card"]')).not.toBeNull()
@@ -248,10 +255,12 @@ describe('User center RBAC prototype', () => {
 
     await router.push('/workspaces/ws-local/user-center/recent-conversations')
     await waitForText(mounted.container, '最近会话')
+    expect(mounted.container.querySelector('[data-testid="user-center-recent-conversations"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('全局最近会话功能开发中')
 
     await router.push('/workspaces/ws-local/user-center/todos')
     await waitForText(mounted.container, '待办事项')
+    expect(mounted.container.querySelector('[data-testid="user-center-todos-view"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('全局待办事项功能开发中')
 
     mounted.destroy()

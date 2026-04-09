@@ -99,7 +99,7 @@ function toggleValue(value: string) {
     </template>
 
     <div class="flex flex-col">
-      <div class="border-b border-border/40 px-3 py-3 dark:border-white/[0.08]">
+      <div class="border-b border-border/40 px-3 py-3">
         <div class="relative">
           <Search :size="14" class="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
           <UiInput

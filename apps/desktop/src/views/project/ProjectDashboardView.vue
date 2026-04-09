@@ -3,7 +3,15 @@ import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute } from 'vue-router'
 
-import { UiEmptyState, UiMetricCard, UiRecordCard, UiSectionHeading, UiTimelineList } from '@octopus/ui'
+import {
+  UiEmptyState,
+  UiMetricCard,
+  UiPageHeader,
+  UiPageShell,
+  UiPanelFrame,
+  UiRecordCard,
+  UiTimelineList,
+} from '@octopus/ui'
 
 import { formatDateTime } from '@/i18n/copy'
 import { createProjectConversationTarget } from '@/i18n/navigation'
@@ -61,16 +69,14 @@ function resolveMetricTone(tone?: string): MetricTone {
 </script>
 
 <template>
-  <div class="flex w-full flex-col gap-8 pb-20">
-    <header class="px-2">
-      <UiSectionHeading
-        :eyebrow="t('projectDashboard.header.eyebrow')"
-        :title="project?.name ?? t('projectDashboard.header.titleFallback')"
-        :subtitle="project?.description ?? t('projectDashboard.header.subtitleFallback')"
-      />
-    </header>
+  <UiPageShell width="standard" test-id="project-dashboard-view">
+    <UiPageHeader
+      :eyebrow="t('projectDashboard.header.eyebrow')"
+      :title="project?.name ?? t('projectDashboard.header.titleFallback')"
+      :description="project?.description ?? t('projectDashboard.header.subtitleFallback')"
+    />
 
-    <section class="grid gap-3 px-2 sm:grid-cols-2 xl:grid-cols-4">
+    <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       <UiMetricCard
         v-for="metric in metrics"
         :key="metric.id"
@@ -81,9 +87,12 @@ function resolveMetricTone(tone?: string): MetricTone {
       />
     </section>
 
-    <div class="grid gap-8 px-2 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section class="space-y-4">
-        <h3 class="text-lg font-semibold text-text-primary">{{ t('projectDashboard.conversations.title') }}</h3>
+    <section class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <UiPanelFrame
+        variant="panel"
+        padding="md"
+        :title="t('projectDashboard.conversations.title')"
+      >
         <div v-if="conversations.length" class="grid gap-3">
           <UiRecordCard
             v-for="conversation in conversations"
@@ -101,14 +110,25 @@ function resolveMetricTone(tone?: string): MetricTone {
             </template>
           </UiRecordCard>
         </div>
-        <UiEmptyState v-else :title="t('projectDashboard.empty.conversationsTitle')" :description="t('projectDashboard.empty.conversationsDescription')" />
-      </section>
+        <UiEmptyState
+          v-else
+          :title="t('projectDashboard.empty.conversationsTitle')"
+          :description="t('projectDashboard.empty.conversationsDescription')"
+        />
+      </UiPanelFrame>
 
-      <section class="space-y-4">
-        <h3 class="text-lg font-semibold text-text-primary">{{ t('projectDashboard.activity.title') }}</h3>
-        <UiTimelineList v-if="activities.length" :items="activities" />
-        <UiEmptyState v-else :title="t('projectDashboard.empty.activityTitle')" :description="t('projectDashboard.empty.activityDescription')" />
-      </section>
-    </div>
-  </div>
+      <UiPanelFrame
+        variant="subtle"
+        padding="md"
+        :title="t('projectDashboard.activity.title')"
+      >
+        <UiTimelineList v-if="activities.length" :items="activities" density="compact" />
+        <UiEmptyState
+          v-else
+          :title="t('projectDashboard.empty.activityTitle')"
+          :description="t('projectDashboard.empty.activityDescription')"
+        />
+      </UiPanelFrame>
+    </section>
+  </UiPageShell>
 </template>

@@ -34,7 +34,7 @@ defineSlots<{
       v-for="(item, index) in props.items"
       :key="item.id"
       :class="cn(
-        'flex items-start gap-3 rounded-[calc(var(--radius-lg)+2px)] border border-border/80 dark:border-white/[0.08] bg-[color-mix(in_srgb,var(--bg-surface)_92%,var(--bg-subtle))] shadow-xs',
+        'flex items-start gap-3 rounded-[var(--radius-l)] border border-border bg-surface shadow-xs',
         props.density === 'compact' ? 'px-3 py-2.5' : 'px-4 py-3',
       )"
     >

@@ -71,6 +71,8 @@ describe('Connections view', () => {
 
     await waitForText(mounted.container, 'Local Workspace')
 
+    expect(mounted.container.querySelector('[data-testid="connections-view"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="connections-header"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="connections-product-list"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid^="connection-record-"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="connections-host-list"]')).not.toBeNull()

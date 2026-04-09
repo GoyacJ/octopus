@@ -3,7 +3,22 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { ProjectRecord, WorkspaceToolCatalogEntry, WorkspaceToolKind } from '@octopus/schema'
-import { UiBadge, UiButton, UiCheckbox, UiEmptyState, UiField, UiInput, UiMetricCard, UiRecordCard, UiSectionHeading, UiTextarea } from '@octopus/ui'
+import {
+  UiBadge,
+  UiButton,
+  UiCheckbox,
+  UiEmptyState,
+  UiField,
+  UiInput,
+  UiInspectorPanel,
+  UiListDetailShell,
+  UiMetricCard,
+  UiPageHeader,
+  UiPageShell,
+  UiRecordCard,
+  UiStatusCallout,
+  UiTextarea,
+} from '@octopus/ui'
 
 import { formatDateTime } from '@/i18n/copy'
 import { useAgentStore } from '@/stores/agent'
@@ -214,24 +229,35 @@ function statusLabel(status: ProjectRecord['status']) {
 </script>
 
 <template>
-  <div v-if="viewReady" class="flex w-full flex-col gap-6 pb-20" data-testid="workspace-projects-view">
-    <header class="space-y-4 px-2">
-      <UiSectionHeading
-        :eyebrow="t('projects.header.eyebrow')"
-        :title="t('sidebar.navigation.projects')"
-        :subtitle="errorMessage || t('projects.header.subtitle')"
-      />
+  <UiPageShell v-if="viewReady" width="standard" test-id="workspace-projects-view">
+    <UiPageHeader
+      :eyebrow="t('projects.header.eyebrow')"
+      :title="t('sidebar.navigation.projects')"
+      :description="errorMessage || t('projects.header.subtitle')"
+    >
+      <template #actions>
+        <UiButton data-testid="projects-create-header-button" @click="applyProject()">
+          {{ t('projects.actions.create') }}
+        </UiButton>
+      </template>
+    </UiPageHeader>
+
+    <section class="space-y-4">
       <div class="grid gap-3 md:grid-cols-3">
         <UiMetricCard v-for="metric in metrics" :key="metric.id" :label="metric.label" :value="metric.value" />
       </div>
-    </header>
+    </section>
 
-    <div v-if="errorMessage" data-testid="projects-error" class="px-2 text-sm text-danger">
-      {{ errorMessage }}
-    </div>
+    <UiStatusCallout
+      v-if="errorMessage"
+      data-testid="projects-error"
+      tone="error"
+      :description="errorMessage"
+    />
 
-    <div class="grid gap-6 px-2 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section class="space-y-3">
+    <UiListDetailShell>
+      <template #list>
+        <section class="space-y-3">
         <UiRecordCard
           v-for="project in projects"
           :key="project.id"
@@ -240,7 +266,7 @@ function statusLabel(status: ProjectRecord['status']) {
           :description="project.description"
           interactive
           class="cursor-pointer"
-          :class="selectedProjectId === project.id ? 'ring-1 ring-primary' : ''"
+          :active="selectedProjectId === project.id"
           @click="applyProject(project.id)"
         >
           <template #badges>
@@ -255,10 +281,12 @@ function statusLabel(status: ProjectRecord['status']) {
           :title="t('projects.empty.title')"
           :description="t('projects.empty.description')"
         />
-      </section>
+        </section>
+      </template>
 
-      <section class="space-y-4 rounded-xl border border-border-subtle p-5 dark:border-white/[0.05]">
-        <h3 class="text-base font-semibold text-text-primary">
+      <UiInspectorPanel :title="isCreateMode ? t('projects.actions.create') : t('projects.actions.edit')">
+        <div class="space-y-4">
+        <h3 class="sr-only">
           {{ isCreateMode ? t('projects.actions.create') : t('projects.actions.edit') }}
         </h3>
         <UiField :label="t('projects.fields.name')">
@@ -276,7 +304,7 @@ function statusLabel(status: ProjectRecord['status']) {
             <label
               v-for="modelOption in workspaceConfiguredModels"
               :key="modelOption.value"
-              class="flex items-start justify-between gap-4 rounded-2xl border border-border/40 bg-card/70 px-4 py-3 dark:border-white/[0.08]"
+              class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
             >
               <div class="min-w-0 space-y-1">
                 <div class="text-sm font-semibold text-text-primary">
@@ -305,7 +333,7 @@ function statusLabel(status: ProjectRecord['status']) {
           <select
             v-model="form.defaultConfiguredModelId"
             data-testid="projects-default-model-select"
-            class="w-full rounded-xl border border-border bg-transparent px-3 py-2 text-sm text-text-primary outline-none"
+            class="w-full rounded-[var(--radius-xs)] border border-input bg-transparent px-3 py-2 text-sm text-text-primary outline-none"
             :disabled="!form.configuredModelIds.length"
           >
             <option value="">
@@ -337,7 +365,7 @@ function statusLabel(status: ProjectRecord['status']) {
               <label
                 v-for="entry in section.entries"
                 :key="entry.sourceKey"
-                class="flex items-start justify-between gap-4 rounded-2xl border border-border/40 bg-card/70 px-4 py-3 dark:border-white/[0.08]"
+                class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
               >
                 <div class="min-w-0 space-y-1">
                   <div class="text-sm font-semibold text-text-primary">
@@ -368,7 +396,7 @@ function statusLabel(status: ProjectRecord['status']) {
             <label
               v-for="agent in workspaceAgents"
               :key="agent.id"
-              class="flex items-start justify-between gap-4 rounded-2xl border border-border/40 bg-card/70 px-4 py-3 dark:border-white/[0.08]"
+              class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
             >
               <div class="min-w-0 space-y-1">
                 <div class="text-sm font-semibold text-text-primary">
@@ -398,7 +426,7 @@ function statusLabel(status: ProjectRecord['status']) {
             <label
               v-for="team in workspaceTeams"
               :key="team.id"
-              class="flex items-start justify-between gap-4 rounded-2xl border border-border/40 bg-card/70 px-4 py-3 dark:border-white/[0.08]"
+              class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
             >
               <div class="min-w-0 space-y-1">
                 <div class="text-sm font-semibold text-text-primary">
@@ -444,7 +472,8 @@ function statusLabel(status: ProjectRecord['status']) {
             {{ t('projects.actions.restore') }}
           </UiButton>
         </div>
-      </section>
-    </div>
-  </div>
+        </div>
+      </UiInspectorPanel>
+    </UiListDetailShell>
+  </UiPageShell>
 </template>

@@ -26,7 +26,7 @@ const emit = defineEmits<{
       :disabled="props.disabled"
       class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed"
       :class="[
-        props.modelValue ? 'bg-primary' : 'bg-border-strong/60 dark:border-white/[0.1]'
+        props.modelValue ? 'border-primary bg-primary' : 'border-border bg-border-strong/60'
       ]"
       @click="emit('update:modelValue', !props.modelValue)"
     >

@@ -114,6 +114,18 @@ function handleLeafClick(leaf: MenuTreeLeaf) {
   }
 }
 
+function selectionIndicatorClass(checked: boolean) {
+  return checked
+    ? 'border-border bg-accent text-text-primary shadow-xs'
+    : 'border-border/60 bg-transparent text-text-tertiary'
+}
+
+function selectableLeafClass(active: boolean) {
+  return active
+    ? 'border-border bg-surface text-text-primary shadow-xs'
+    : 'border-transparent text-text-secondary hover:bg-accent/40'
+}
+
 function syncOpenValues(
   current: { value: string[] },
   known: { value: string[] },
@@ -147,12 +159,12 @@ function syncOpenValues(
       v-for="section in props.sections"
       :key="section.id"
       :data-testid="`${props.testIdPrefix}-group-${section.id}`"
-      class="rounded-lg bg-muted/12 px-2 py-1.5"
+      class="rounded-[var(--radius-l)] bg-subtle/60 px-2 py-1.5"
     >
       <button
         type="button"
         :data-testid="`ui-accordion-trigger-${sectionValue(section.id)}`"
-        class="group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm font-semibold uppercase tracking-[0.24em] text-text-tertiary transition-colors hover:bg-accent/30"
+        class="group flex w-full items-center gap-2 rounded-[var(--radius-m)] px-2 py-1 text-left text-sm font-semibold uppercase tracking-[0.24em] text-text-tertiary transition-colors hover:bg-surface hover:text-text-secondary"
         @click="toggleSection(section.id)"
       >
         <ChevronRight
@@ -168,12 +180,12 @@ function syncOpenValues(
           <div
             v-if="isMenuTreeGroup(entry)"
             :data-testid="`${props.testIdPrefix}-group-${entry.id}`"
-            class="rounded-lg bg-muted/20 px-2 py-1.5"
+            class="rounded-[var(--radius-m)] bg-surface/80 px-2 py-1.5"
           >
             <button
               type="button"
               :data-testid="`ui-accordion-trigger-${branchValue(entry.id)}`"
-              class="group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-sm font-semibold uppercase tracking-[0.2em] text-text-secondary transition-colors hover:bg-accent/30"
+              class="group flex w-full items-center gap-2 rounded-[var(--radius-s)] px-2 py-1 text-left text-sm font-semibold uppercase tracking-[0.2em] text-text-secondary transition-colors hover:bg-accent/30 hover:text-text-primary"
               @click="toggleBranch(entry.id)"
             >
               <ChevronRight
@@ -190,14 +202,13 @@ function syncOpenValues(
                   v-if="props.selectionMode === 'multiple'"
                   type="button"
                   :data-testid="leafTestId(entry.rootMenu.id)"
-                  class="flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/40"
+                  class="flex w-full min-w-0 items-start gap-2 rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+                  :class="selectableLeafClass(isLeafChecked(entry.rootMenu.id))"
                   @click="toggleLeafSelection(entry.rootMenu.id)"
                 >
                   <span
                     class="mt-0.5 flex size-[14px] shrink-0 items-center justify-center rounded-sm border transition-colors"
-                    :class="isLeafChecked(entry.rootMenu.id)
-                      ? 'bg-primary border-primary dark:border-white/[0.1] text-primary-foreground'
-                      : 'bg-transparent border-border/60 dark:border-white/[0.1]'"
+                    :class="selectionIndicatorClass(isLeafChecked(entry.rootMenu.id))"
                   >
                     <Check v-if="isLeafChecked(entry.rootMenu.id)" :size="10" stroke-width="3" />
                   </span>
@@ -210,8 +221,8 @@ function syncOpenValues(
                   v-else
                   type="button"
                   :data-testid="leafTestId(entry.rootMenu.id)"
-                  class="flex w-full min-w-0 items-start rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/40"
-                  :class="isLeafActive(entry.rootMenu.id) ? 'bg-accent/55' : ''"
+                  class="flex w-full min-w-0 items-start rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+                  :class="selectableLeafClass(isLeafActive(entry.rootMenu.id))"
                   @click="handleLeafClick(entry.rootMenu)"
                 >
                   <span class="inline-flex min-w-0 flex-col">
@@ -226,14 +237,13 @@ function syncOpenValues(
                   v-if="props.selectionMode === 'multiple'"
                   type="button"
                   :data-testid="leafTestId(child.id)"
-                  class="flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/40"
+                  class="flex w-full min-w-0 items-start gap-2 rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+                  :class="selectableLeafClass(isLeafChecked(child.id))"
                   @click="toggleLeafSelection(child.id)"
                 >
                   <span
                     class="mt-0.5 flex size-[14px] shrink-0 items-center justify-center rounded-sm border transition-colors"
-                    :class="isLeafChecked(child.id)
-                      ? 'bg-primary border-primary dark:border-white/[0.1] text-primary-foreground'
-                      : 'bg-transparent border-border/60 dark:border-white/[0.1]'"
+                    :class="selectionIndicatorClass(isLeafChecked(child.id))"
                   >
                     <Check v-if="isLeafChecked(child.id)" :size="10" stroke-width="3" />
                   </span>
@@ -246,8 +256,8 @@ function syncOpenValues(
                   v-else
                   type="button"
                   :data-testid="leafTestId(child.id)"
-                  class="flex w-full min-w-0 items-start rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/40"
-                  :class="isLeafActive(child.id) ? 'bg-accent/55' : ''"
+                  class="flex w-full min-w-0 items-start rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+                  :class="selectableLeafClass(isLeafActive(child.id))"
                   @click="handleLeafClick(child)"
                 >
                   <span class="inline-flex min-w-0 flex-col">
@@ -263,14 +273,13 @@ function syncOpenValues(
             v-else-if="props.selectionMode === 'multiple'"
             type="button"
             :data-testid="leafTestId(entry.id)"
-            class="flex w-full min-w-0 items-start gap-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/40"
+            class="flex w-full min-w-0 items-start gap-2 rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+            :class="selectableLeafClass(isLeafChecked(entry.id))"
             @click="toggleLeafSelection(entry.id)"
           >
             <span
               class="mt-0.5 flex size-[14px] shrink-0 items-center justify-center rounded-sm border transition-colors"
-              :class="isLeafChecked(entry.id)
-                ? 'bg-primary border-primary dark:border-white/[0.1] text-primary-foreground'
-                : 'bg-transparent border-border/60 dark:border-white/[0.1]'"
+              :class="selectionIndicatorClass(isLeafChecked(entry.id))"
             >
               <Check v-if="isLeafChecked(entry.id)" :size="10" stroke-width="3" />
             </span>
@@ -284,8 +293,8 @@ function syncOpenValues(
             v-else
             type="button"
             :data-testid="leafTestId(entry.id)"
-            class="flex w-full min-w-0 items-start rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/40"
-            :class="isLeafActive(entry.id) ? 'bg-accent/55' : ''"
+            class="flex w-full min-w-0 items-start rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+            :class="selectableLeafClass(isLeafActive(entry.id))"
             @click="handleLeafClick(entry)"
           >
             <span class="inline-flex min-w-0 flex-col">

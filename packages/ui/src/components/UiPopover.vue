@@ -29,7 +29,7 @@ const emit = defineEmits<{
 const root = ref<HTMLElement | null>(null)
 
 const contentClasses = computed(() => cn(
-  'z-50 min-w-[14rem] rounded-md border border-border-subtle dark:border-white/[0.08] bg-background p-1.5 shadow-lg outline-none',
+  'z-50 min-w-[14rem] rounded-[var(--radius-l)] border border-border bg-popover p-1.5 shadow-md outline-none',
   props.class,
 ))
 </script>

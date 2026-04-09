@@ -18,13 +18,14 @@ const props = withDefaults(
 </script>
 
 <template>
-  <article 
+  <article
+    :data-ui-tone="props.tone"
     :class="cn(
-      'flex flex-col gap-1.5 p-3 rounded-md border border-border dark:border-white/[0.03] transition-colors',
-      props.tone === 'success' && 'border-status-success/30',
-      props.tone === 'warning' && 'border-status-warning/30',
-      props.tone === 'error' && 'border-status-error/30',
-      props.tone === 'info' && 'border-primary/30 dark:border-primary/20',
+      'flex flex-col gap-1.5 rounded-[var(--radius-m)] border border-border bg-surface p-3 transition-colors',
+      props.tone === 'success' && 'border-transparent bg-[var(--color-status-success-soft)]',
+      props.tone === 'warning' && 'border-transparent bg-[var(--color-status-warning-soft)]',
+      props.tone === 'error' && 'border-transparent bg-[var(--color-status-error-soft)]',
+      props.tone === 'info' && 'border-transparent bg-accent',
       props.class
     )"
   >

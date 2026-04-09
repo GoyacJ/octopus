@@ -19,9 +19,11 @@ import {
   UiDialog,
   UiEmptyState,
   UiInput,
+  UiPageHeader,
+  UiPageShell,
   UiPagination,
-  UiSectionHeading,
   UiSelect,
+  UiStatusCallout,
   UiSurface,
 } from '@octopus/ui'
 
@@ -1041,16 +1043,21 @@ watch(createProviderType, () => {
 </script>
 
 <template>
-  <div class="flex flex-col gap-6 pb-10">
-    <header class="px-2">
-      <UiSectionHeading
-        :eyebrow="t('models.header.eyebrow')"
-        :title="t('models.header.title')"
-        :subtitle="t('models.header.subtitle')"
-      />
-    </header>
+  <UiPageShell width="wide" test-id="workspace-models-view">
+    <UiPageHeader
+      :eyebrow="t('models.header.eyebrow')"
+      :title="t('models.header.title')"
+      :description="t('models.header.subtitle')"
+    >
+      <template #actions>
+        <UiButton data-testid="models-create-button" size="sm" @click="openCreateDialog">
+          <Plus :size="14" />
+          {{ t('models.actions.create') }}
+        </UiButton>
+      </template>
+    </UiPageHeader>
 
-    <section class="px-2">
+    <section>
       <UiSurface variant="raised" padding="md">
         <UiDataTable
           :data="pagedRows"
@@ -1091,11 +1098,8 @@ watch(createProviderType, () => {
                   :options="[{ value: '', label: t('models.filters.allCapabilities') }, ...localFilterOptions.capabilities]"
                 />
               </div>
-              <div class="flex justify-end">
-                <UiButton data-testid="models-create-button" size="sm" @click="openCreateDialog">
-                  <Plus :size="14" />
-                  {{ t('models.actions.create') }}
-                </UiButton>
+              <div class="flex justify-end text-[12px] text-text-tertiary">
+                {{ t('models.pagination.summary', { count: filteredRows.length, page, total: pageCount }) }}
               </div>
             </div>
           </template>
@@ -1313,12 +1317,16 @@ watch(createProviderType, () => {
               </UiButton>
             </div>
 
-            <p v-if="runtime.configValidation.workspace?.errors.length" class="text-sm text-status-error">
-              {{ runtime.configValidation.workspace.errors.join(' ') }}
-            </p>
-            <p v-if="runtime.configValidation.workspace?.warnings.length" class="text-sm text-status-warning">
-              {{ runtime.configValidation.workspace.warnings.join(' ') }}
-            </p>
+            <UiStatusCallout
+              v-if="runtime.configValidation.workspace?.errors.length"
+              tone="error"
+              :description="runtime.configValidation.workspace.errors.join(' ')"
+            />
+            <UiStatusCallout
+              v-if="runtime.configValidation.workspace?.warnings.length"
+              tone="warning"
+              :description="runtime.configValidation.workspace.warnings.join(' ')"
+            />
             <p
               v-if="selectedProbeResult?.reachable"
               data-testid="models-validate-success"
@@ -1424,9 +1432,7 @@ watch(createProviderType, () => {
           @update:model-value="createEnabled = Boolean($event)"
         />
 
-        <p v-if="createFormError" class="text-sm text-status-error">
-          {{ createFormError }}
-        </p>
+        <UiStatusCallout v-if="createFormError" tone="error" :description="createFormError" />
       </div>
 
       <template #footer>
@@ -1438,5 +1444,5 @@ watch(createProviderType, () => {
         </UiButton>
       </template>
     </UiDialog>
-  </div>
+  </UiPageShell>
 </template>

@@ -14,7 +14,7 @@ import {
   Users,
   Wrench,
 } from 'lucide-vue-next'
-import { UiButton } from '@octopus/ui'
+import { UiBadge, UiButton, UiStatusCallout } from '@octopus/ui'
 import type { ConversationAttachment, Message, MessageProcessEntry, WorkspaceResourceRecord } from '@octopus/schema'
 
 const props = defineProps<{
@@ -66,22 +66,22 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
 
 <template>
   <div
-    class="flex w-full mb-8"
+    class="mb-8 flex w-full"
     :class="isUserMessage ? 'justify-end' : 'justify-start'"
   >
     <article
-      class="group relative flex gap-3 transition-all"
+      class="group relative flex max-w-[90%] gap-3 rounded-[var(--radius-xl)] border px-4 py-3 shadow-xs transition-colors"
       :class="[
-        isUserMessage 
-          ? 'flex-row-reverse p-3 rounded-xl bg-card border border-border-strong shadow-xs'
-          : 'flex-row p-1 bg-transparent border-none shadow-none',        'max-w-[90%]'
+        isUserMessage
+          ? 'flex-row-reverse border-border bg-surface'
+          : 'flex-row border-border bg-[color-mix(in_srgb,var(--bg-surface)_94%,transparent)]'
       ]"
     >
       <!-- Avatar Column -->
       <div class="flex flex-col items-center shrink-0 pt-1">
         <div
-          class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg text-[11px] font-bold shadow-sm"
-          :class="props.avatarSrc ? '' : (isUserMessage ? 'bg-primary text-white' : 'bg-subtle text-text-secondary border border-border-subtle')"
+          class="flex h-8 w-8 items-center justify-center overflow-hidden rounded-[var(--radius-m)] border border-border bg-subtle text-[11px] font-bold text-text-secondary"
+          :class="props.avatarSrc ? 'bg-transparent p-0' : (isUserMessage ? 'bg-accent text-primary' : '')"
         >
           <img
             v-if="props.avatarSrc"
@@ -95,7 +95,7 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
       </div>
 
       <!-- Content Column -->
-      <div class="flex-1 min-w-0 flex flex-col gap-2">
+      <div class="flex min-w-0 flex-1 flex-col gap-2">
         <!-- Sender & Meta Info -->
         <div class="flex items-center gap-3 min-h-6" :class="isUserMessage ? 'flex-row-reverse' : ''">
           <span class="text-[13px] font-bold text-text-primary">{{ isUserMessage ? 'You' : senderLabel }}</span>
@@ -103,11 +103,12 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
             {{ new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
           </span>
 
-          <div v-if="!isUserMessage && actorLabel" class="flex items-center gap-1 rounded-full border border-border-subtle bg-background/70 px-2 py-0.5 text-[10px] font-semibold text-text-secondary">
-            <component :is="actorKindIcon" :size="11" class="shrink-0" />
-            <span>{{ actorKindLabel }}</span>
-            <span class="text-text-tertiary">·</span>
-            <span class="truncate max-w-[180px]">{{ actorLabel }}</span>
+          <div v-if="!isUserMessage && actorLabel" class="flex min-w-0 items-center gap-2 text-[10px] font-semibold text-text-secondary">
+            <UiBadge v-if="actorKindLabel" :label="actorKindLabel" tone="info" />
+            <span class="flex min-w-0 items-center gap-1">
+              <component :is="actorKindIcon" :size="11" class="shrink-0 text-text-tertiary" />
+              <span class="max-w-[180px] truncate">{{ actorLabel }}</span>
+            </span>
           </div>
 
           <div class="flex-1" />
@@ -127,7 +128,7 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
         <div v-if="showProcessPanel" class="mt-1">
           <button
             type="button"
-            class="flex items-center gap-2 text-text-tertiary hover:text-text-secondary transition-colors py-1 px-1.5 rounded hover:bg-accent/50"
+            class="flex items-center gap-2 rounded-[var(--radius-s)] px-2 py-1 text-text-tertiary transition-colors hover:bg-subtle hover:text-text-secondary"
             @click="emit('toggle-detail', message.id)"
           >
             <component :is="isExpanded ? ChevronDown : ChevronRight" :size="14" class="shrink-0" />
@@ -138,12 +139,12 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
             </div>
           </button>
 
-          <div v-if="isExpanded" class="mt-2 pl-4 ml-2 border-l-2 border-border-strong space-y-4 py-1 animate-in fade-in slide-in-from-top-1 duration-200">
+          <div v-if="isExpanded" class="ml-2 mt-2 space-y-3 border-l border-border pl-4 py-1 animate-in fade-in slide-in-from-top-1 duration-200">
             <div
               v-for="entry in detailEntries"
               :key="entry.id"
-              class="space-y-1.5 rounded-lg px-2 py-1 transition-colors"
-              :class="entry.toolId && entry.toolId === focusedToolId ? 'bg-primary/5 ring-1 ring-primary/15' : ''"
+              class="space-y-1.5 rounded-[var(--radius-m)] border border-transparent px-3 py-2 transition-colors"
+              :class="entry.toolId && entry.toolId === focusedToolId ? 'border-border bg-accent' : 'bg-subtle/60'"
               :data-testid="entry.toolId && entry.toolId === focusedToolId ? 'conversation-focused-tool-entry' : undefined"
             >
               <div class="text-[12px] font-bold text-text-secondary flex items-center gap-2">
@@ -172,11 +173,11 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
             v-for="toolCall in toolCalls"
             :key="toolCall.toolId"
             type="button"
-            class="flex items-center gap-2 rounded-xl border border-border-subtle bg-background/70 px-3 py-2 text-[11px] text-text-secondary text-left transition-colors hover:bg-accent/40"
+            class="flex items-center gap-2 rounded-[var(--radius-l)] border border-border bg-surface px-3 py-2 text-left text-[11px] text-text-secondary transition-colors hover:bg-subtle"
             :data-testid="`conversation-inline-tool-${toolCall.toolId}`"
             @click="emit('focus-tool', { messageId: message.id, toolId: toolCall.toolId })"
           >
-            <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-text-secondary">
+            <div class="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-subtle text-text-secondary">
               <Wrench :size="12" class="shrink-0" />
             </div>
             <div class="min-w-0 flex-1">
@@ -190,21 +191,22 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
           </button>
         </div>
 
-        <div
+        <UiStatusCallout
           v-if="!isUserMessage && message.approval"
-          class="rounded-2xl border border-status-warning/20 bg-status-warning/5 px-4 py-3"
+          class="gap-3"
+          tone="warning"
+          :title="message.approval.summary"
+          :description="message.approval.detail"
           data-testid="conversation-inline-approval"
         >
-          <div class="flex flex-wrap items-center gap-2 text-[11px] font-semibold text-status-warning">
-            <AlertTriangle :size="13" class="shrink-0" />
-            <span>{{ message.approval.toolName }}</span>
-            <span v-if="approvalRiskLabel" class="rounded-full border border-status-warning/20 bg-background/80 px-2 py-0.5 text-[10px] uppercase tracking-wide text-text-secondary">
-              {{ approvalRiskLabel }}
+          <div class="flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+            <span class="inline-flex items-center gap-1.5 text-status-warning">
+              <AlertTriangle :size="13" class="shrink-0" />
+              <span>{{ message.approval.toolName }}</span>
             </span>
+            <UiBadge v-if="approvalRiskLabel" :label="approvalRiskLabel" subtle />
           </div>
-          <div class="mt-2 text-sm font-semibold text-text-primary">{{ message.approval.summary }}</div>
-          <div class="mt-1 text-sm text-text-secondary">{{ message.approval.detail }}</div>
-          <div v-if="hasPendingApproval" class="mt-3 flex flex-wrap gap-2">
+          <div v-if="hasPendingApproval" class="flex flex-wrap gap-2">
             <UiButton size="sm" data-testid="conversation-inline-approve" @click="emit('approve', message.id)">
               Approve
             </UiButton>
@@ -212,7 +214,7 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
               Reject
             </UiButton>
           </div>
-        </div>
+        </UiStatusCallout>
 
         <!-- Assets / Resources -->
         <div 
@@ -223,7 +225,7 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
           <button
             v-for="resource in resources"
             :key="resource.id"
-            class="flex items-center gap-2 rounded-lg border border-border-subtle bg-card px-2.5 py-1.5 text-[12px] font-medium hover:bg-accent transition-all shadow-xs"
+            class="flex items-center gap-2 rounded-[var(--radius-m)] border border-border bg-surface px-2.5 py-1.5 text-[12px] font-medium transition-colors hover:bg-subtle"
             @click="emit('open-resource', resource.id)"
           >
             <FolderOpen v-if="resource.kind === 'folder'" :size="13" class="text-text-tertiary" />
@@ -235,14 +237,12 @@ const processLabel = computed(() => (detailEntries.value.some(e => e.type === 't
           <button
             v-for="artifact in artifacts"
             :key="artifact.id"
-            class="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-1.5 text-[12px] font-bold text-primary hover:bg-primary/10 transition-all shadow-xs"
+            class="flex items-center gap-2 rounded-[var(--radius-m)] border border-border bg-accent px-2.5 py-1.5 text-[12px] font-semibold text-primary transition-colors hover:bg-accent/80"
             @click="emit('open-artifact', artifact.id)"
           >
             <FileText :size="13" />
             <span>{{ artifact.label }}</span>
-            <span v-if="artifact.kindLabel" class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary/80">
-              {{ artifact.kindLabel }}
-            </span>
+            <UiBadge v-if="artifact.kindLabel" :label="artifact.kindLabel" subtle />
           </button>
         </div>
         

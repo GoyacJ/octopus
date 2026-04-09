@@ -21,6 +21,64 @@ const disallowedUiLibraries = [
 const scopedStyleHardLimit = 120
 const forbiddenVisualPatternTokens = ['hero', 'panel', 'card', 'toolbar', 'dialog', 'ranking', 'timeline', 'metric', 'shell']
 const nativeFormControlRegex = /<\s*(input|select|textarea|button)\b/g
+const allowedTokenRoundedRegex = /^rounded-\[var\(--radius-(?:xs|s|m|l|xl|full)\)\]$/
+const visualDriftChecks = [
+  {
+    label: 'uses page-private accent color classes',
+    regex: /\bindigo-[A-Za-z0-9_[\]/.-]+\b/g,
+  },
+  {
+    label: 'uses backdrop blur',
+    regex: /\bbackdrop-blur(?:-[A-Za-z0-9_[\].-]+)?\b/g,
+  },
+  {
+    label: 'uses arbitrary rounded values outside canonical token radii',
+    regex: /rounded-\[[^\]]+\]/g,
+    allow: (match) => allowedTokenRoundedRegex.test(match),
+  },
+  {
+    label: 'uses arbitrary shadow values',
+    regex: /shadow-\[[^\]]+\]/g,
+  },
+  {
+    label: 'uses gradient backgrounds outside the shared design system',
+    regex: /\bbg-gradient-to-(?:t|tr|r|br|b|bl|l|tl)\b/g,
+  },
+]
+const businessVisualDriftChecks = [
+  {
+    label: 'business surface uses UiSectionHeading after the workbench header migration',
+    regex: /\bUiSectionHeading\b/g,
+  },
+  {
+    label: 'business surface uses legacy selected ring classes',
+    regex: /\bring-1\s+ring-primary\b/g,
+  },
+  {
+    label: 'business surface uses dark border white overrides',
+    regex: /dark:border-white\/[A-Za-z0-9.[\]-]+/g,
+  },
+  {
+    label: 'business surface uses direct primary tint backgrounds',
+    regex: /\bbg-primary\/5\b/g,
+  },
+  {
+    label: 'business surface uses direct primary tint borders',
+    regex: /\bborder-primary\/20\b/g,
+  },
+  {
+    label: 'business surface uses direct status tint backgrounds',
+    regex: /\bbg-status-(?:success|warning|error|info)\/5\b/g,
+  },
+  {
+    label: 'business surface uses direct status tint borders',
+    regex: /\bborder-status-(?:success|warning|error|info)\/20\b/g,
+  },
+  {
+    label: 'business surface defines one-off management console containers',
+    regex: /rounded-xl border border-border-subtle p-(?:4|5)\b/g,
+  },
+]
 
 const legacyAllowlist = {
   'apps/desktop/src/components/layout/ConversationTabsBar.vue': {
@@ -132,6 +190,25 @@ function hasNativeFormControls(content) {
   return nativeFormControlRegex.test(normalizedContent)
 }
 
+function collectMatches(content, check, limit = 8) {
+  const matches = new Set()
+  const regex = new RegExp(check.regex.source, check.regex.flags)
+  let match
+
+  while ((match = regex.exec(content))) {
+    const value = match[0]
+    if (check.allow?.(value)) {
+      continue
+    }
+    matches.add(value)
+    if (matches.size >= limit) {
+      break
+    }
+  }
+
+  return [...matches]
+}
+
 function isBusinessSurfaceFile(filePath) {
   return filePath.startsWith(businessViewDir) || filePath.startsWith(businessLayoutDir)
 }
@@ -166,10 +243,31 @@ async function main() {
       if (disallowedImport) {
         errors.push(`${rel}: business code imports an unapproved UI library -> ${disallowedImport}`)
       }
+
+      if (rel === 'apps/desktop/src/views/app/SettingsView.vue' && /\b(fontFamily|fontStyle)\b/.test(content)) {
+        errors.push(`${rel}: settings UI must not expose font family/style controls or related preference bindings`)
+      }
+    }
+
+    const shouldCheckVisualDrift = filePath.startsWith(desktopSrcDir) || filePath.startsWith(path.join(rootDir, 'packages/ui/src'))
+    if (shouldCheckVisualDrift) {
+      for (const check of visualDriftChecks) {
+        const matches = collectMatches(content, check)
+        if (matches.length) {
+          errors.push(`${rel}: ${check.label} -> ${matches.join(', ')}`)
+        }
+      }
     }
 
     if (!isBusinessSurfaceFile(filePath) || !filePath.endsWith('.vue')) {
       continue
+    }
+
+    for (const check of businessVisualDriftChecks) {
+      const matches = collectMatches(content, check)
+      if (matches.length) {
+        errors.push(`${rel}: ${check.label} -> ${matches.join(', ')}`)
+      }
     }
 
     const allowlistEntry = legacyAllowlist[rel]

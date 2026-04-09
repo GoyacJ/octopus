@@ -17,10 +17,14 @@ import {
   UiCheckbox,
   UiEmptyState,
   UiField,
+  UiInspectorPanel,
   UiInput,
+  UiListDetailShell,
+  UiPageHeader,
+  UiPageShell,
   UiRecordCard,
-  UiSectionHeading,
   UiSelect,
+  UiStatusCallout,
   UiTabs,
   UiTextarea,
 } from '@octopus/ui'
@@ -520,32 +524,35 @@ async function saveUsers() {
 </script>
 
 <template>
-  <div
+  <UiPageShell
     v-if="viewReady"
-    class="flex w-full flex-col gap-6 pb-20"
-    data-testid="project-settings-view"
+    width="wide"
+    test-id="project-settings-view"
   >
-    <header class="px-2">
-      <UiSectionHeading
-        :eyebrow="t('projectSettings.header.eyebrow')"
-        :title="project?.name ?? t('projectSettings.header.title')"
-        :subtitle="project?.description || t('projectSettings.header.subtitle')"
-      />
-    </header>
+    <UiPageHeader
+      :eyebrow="t('projectSettings.header.eyebrow')"
+      :title="project?.name ?? t('projectSettings.header.title')"
+      :description="project?.description || t('projectSettings.header.subtitle')"
+    >
+      <template #meta>
+        <UiBadge v-if="project" :label="statusLabel" :tone="badgeTone(project.status)" />
+      </template>
+      <template #actions>
+        <div class="w-full max-w-2xl md:w-auto">
+          <UiTabs v-model="activeTab" :tabs="tabs" />
+        </div>
+      </template>
+    </UiPageHeader>
 
     <UiEmptyState
       v-if="!project"
-      class="px-2"
       :title="t('projectSettings.emptyTitle')"
       :description="workspaceStore.error || t('projectSettings.emptyDescription')"
     />
 
     <template v-else>
-      <div class="px-2">
-        <UiTabs v-model="activeTab" :tabs="tabs" />
-      </div>
-
-      <div class="grid gap-6 px-2 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+      <UiListDetailShell class="xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+        <template #list>
         <UiRecordCard
           v-if="activeTab === 'basics'"
           :title="t('projectSettings.basics.title')"
@@ -575,9 +582,7 @@ async function saveUsers() {
               />
             </UiField>
 
-            <p v-if="basicsError" class="text-sm text-status-error">
-              {{ basicsError }}
-            </p>
+            <UiStatusCallout v-if="basicsError" tone="error" :description="basicsError" />
           </div>
 
           <template #actions>
@@ -622,7 +627,7 @@ async function saveUsers() {
                 <label
                   v-for="modelOption in allowedWorkspaceConfiguredModels"
                   :key="modelOption.value"
-                  class="flex items-start justify-between gap-4 rounded-2xl border border-border/40 bg-card/70 px-4 py-3 transition-colors dark:border-white/[0.08]"
+                  class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3 transition-colors"
                 >
                   <div class="min-w-0 space-y-1">
                     <div class="text-sm font-semibold text-text-primary">
@@ -657,9 +662,7 @@ async function saveUsers() {
               />
             </UiField>
 
-            <p v-if="modelsError" class="text-sm text-status-error">
-              {{ modelsError }}
-            </p>
+            <UiStatusCallout v-if="modelsError" tone="error" :description="modelsError" />
           </div>
 
           <template #actions>
@@ -701,7 +704,7 @@ async function saveUsers() {
                 <div
                   v-for="entry in section.entries"
                   :key="entry.sourceKey"
-                  class="rounded-2xl border border-border/40 bg-card/70 px-4 py-3 dark:border-white/[0.08]"
+                  class="rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
                 >
                   <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div class="min-w-0 space-y-1">
@@ -736,9 +739,7 @@ async function saveUsers() {
               </div>
             </section>
 
-            <p v-if="toolsError" class="text-sm text-status-error">
-              {{ toolsError }}
-            </p>
+            <UiStatusCallout v-if="toolsError" tone="error" :description="toolsError" />
           </div>
 
           <template #actions>
@@ -776,7 +777,7 @@ async function saveUsers() {
                   <label
                     v-for="agent in workspaceAssignedAgents"
                     :key="agent.id"
-                    class="flex items-start justify-between gap-4 rounded-2xl border border-border/40 bg-card/70 px-4 py-3 dark:border-white/[0.08]"
+                    class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
                   >
                     <div class="min-w-0 space-y-1">
                       <div class="text-sm font-semibold text-text-primary">
@@ -804,7 +805,7 @@ async function saveUsers() {
                   <label
                     v-for="team in workspaceAssignedTeams"
                     :key="team.id"
-                    class="flex items-start justify-between gap-4 rounded-2xl border border-border/40 bg-card/70 px-4 py-3 dark:border-white/[0.08]"
+                    class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
                   >
                     <div class="min-w-0 space-y-1">
                       <div class="text-sm font-semibold text-text-primary">
@@ -824,9 +825,7 @@ async function saveUsers() {
               </UiField>
             </section>
 
-            <p v-if="agentsError" class="text-sm text-status-error">
-              {{ agentsError }}
-            </p>
+            <UiStatusCallout v-if="agentsError" tone="error" :description="agentsError" />
           </div>
 
           <template #actions>
@@ -861,7 +860,7 @@ async function saveUsers() {
             <label
               v-for="user in workspaceUsers"
               :key="user.id"
-              class="flex items-start justify-between gap-4 rounded-2xl border border-border/40 bg-card/70 px-4 py-3 dark:border-white/[0.08]"
+              class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
             >
               <div class="min-w-0 space-y-1">
                 <div class="text-sm font-semibold text-text-primary">
@@ -878,9 +877,7 @@ async function saveUsers() {
               />
             </label>
 
-            <p v-if="usersError" class="text-sm text-status-error">
-              {{ usersError }}
-            </p>
+            <UiStatusCallout v-if="usersError" tone="error" :description="usersError" />
           </div>
 
           <template #actions>
@@ -893,9 +890,11 @@ async function saveUsers() {
           </template>
         </UiRecordCard>
 
-        <UiRecordCard
+        </template>
+
+        <UiInspectorPanel
           :title="t('projectSettings.summary.title')"
-          :description="t('projectSettings.summary.description')"
+          :subtitle="t('projectSettings.summary.description')"
         >
           <div class="space-y-4 text-sm text-text-secondary">
             <div class="space-y-1">
@@ -962,8 +961,8 @@ async function saveUsers() {
               </div>
             </div>
           </div>
-        </UiRecordCard>
-      </div>
+        </UiInspectorPanel>
+      </UiListDetailShell>
     </template>
-  </div>
+  </UiPageShell>
 </template>

@@ -75,14 +75,14 @@ function handleOpenChange(value: boolean) {
         <ComboboxInput
           :model-value="query"
           :placeholder="props.placeholder"
-          class="flex h-8 w-full rounded-md border border-border/60 dark:border-white/[0.1] bg-background px-3 py-1.5 text-sm text-text-primary shadow-[inset_0_1px_2px_rgba(15,15,15,0.05)] placeholder:text-text-tertiary transition-all duration-fast focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+          class="flex h-8 w-full rounded-[var(--radius-xs)] border border-input bg-background px-3 py-1.5 text-[13px] text-text-primary placeholder:text-text-tertiary transition-colors duration-fast focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="ui-combobox-input"
           @update:model-value="query = String($event)"
         />
       </ComboboxAnchor>
 
       <ComboboxContent
-        class="z-40 overflow-hidden rounded-md border border-border/40 dark:border-white/[0.12] bg-popover shadow-sm outline-none mt-1 w-full"
+        class="mt-1 z-40 w-full overflow-hidden rounded-[var(--radius-l)] border border-border bg-popover shadow-md outline-none"
         :side-offset="4"
         position="popper"
       >
@@ -93,7 +93,7 @@ function handleOpenChange(value: boolean) {
             :value="option.value"
             :text-value="`${option.label} ${(option.keywords ?? []).join(' ')}`"
             :data-testid="`ui-combobox-option-${option.value}`"
-            class="flex cursor-default items-center rounded text-left text-sm text-text-primary outline-none transition px-2 py-1.5 data-[highlighted]:bg-accent"
+            class="flex cursor-default items-center rounded-[var(--radius-xs)] px-2 py-1.5 text-left text-[13px] text-text-primary outline-none transition-colors data-[highlighted]:bg-accent"
           >
             {{ option.label }}
           </ComboboxItem>

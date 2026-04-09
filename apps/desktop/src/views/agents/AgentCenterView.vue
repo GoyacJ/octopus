@@ -6,7 +6,6 @@ import {
   LayoutGrid,
   List,
   Network,
-  Search,
   Trash2,
   UserCheck,
   Users,
@@ -32,10 +31,11 @@ import {
   UiEmptyState,
   UiField,
   UiInput,
+  UiPageHeader,
+  UiPageShell,
   UiPagination,
   UiRecordCard,
   UiSearchableMultiSelect,
-  UiSectionHeading,
   UiSelect,
   UiSurface,
   UiTabs,
@@ -132,8 +132,17 @@ const teamForm = reactive({
 
 const isProjectScope = computed(() => props.scope === 'project')
 const projectId = computed(() => typeof route.params.projectId === 'string' ? route.params.projectId : workspaceStore.currentProjectId || '')
+const currentProject = computed(() =>
+  workspaceStore.projects.find(project => project.id === projectId.value) ?? null,
+)
 const currentAgents = computed(() => isProjectScope.value ? agentStore.projectAgents : agentStore.workspaceAgents)
 const currentTeams = computed(() => isProjectScope.value ? teamStore.projectTeams : teamStore.workspaceTeams)
+const pageTitle = computed(() =>
+  isProjectScope.value ? (currentProject.value?.name ?? t('sidebar.navigation.agents')) : t('sidebar.navigation.agents'),
+)
+const pageDescription = computed(() =>
+  isProjectScope.value ? (currentProject.value?.description ?? '') : '',
+)
 const builtinOptions = computed<SelectOption[]>(() =>
   catalogStore.toolCatalogEntries
     .filter(entry => entry.kind === 'builtin')
@@ -591,34 +600,37 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 w-full flex-col gap-6 pb-20">
-    <AgentsStatsStrip :stats="centerStats" class="px-2" />
+  <UiPageShell width="wide" test-id="agent-center-view">
+    <UiPageHeader
+      eyebrow="Agent Center"
+      :title="pageTitle"
+      :description="pageDescription"
+    />
 
-    <div class="border-b border-border-subtle px-2 pb-1 dark:border-white/[0.05]">
+    <AgentsStatsStrip :stats="centerStats" />
+
+    <UiSurface data-testid="agent-center-tabs-shell" variant="subtle" padding="sm">
       <UiTabs
         v-model="activeTab"
         :tabs="tabs"
         @update:model-value="setTab"
       />
-    </div>
+    </UiSurface>
 
-    <section v-show="activeTab === 'agent'" class="space-y-4 px-2">
+    <section v-show="activeTab === 'agent'" class="space-y-4">
       <UiToolbarRow>
         <template #search>
-          <div class="relative flex max-w-md items-center group/search">
-            <Search :size="15" class="absolute left-0 text-text-tertiary transition-colors group-focus-within/search:text-primary" />
-            <UiInput
-              v-model="agentQuery"
-              placeholder="搜索员工、性格或工具"
-              class="border-none bg-transparent pl-7 pr-0 text-sm placeholder:text-text-tertiary/60 focus-visible:ring-0"
-            />
-          </div>
+          <UiInput
+            v-model="agentQuery"
+            placeholder="搜索员工、性格或工具"
+            class="max-w-md"
+          />
         </template>
         <template #views>
           <UiButton
             variant="ghost"
             size="sm"
-            :class="agentViewMode === 'list' ? 'bg-accent text-text-primary' : ''"
+            :class="agentViewMode === 'list' ? 'bg-subtle text-text-primary' : ''"
             @click="agentViewMode = 'list'"
           >
             <List :size="14" />
@@ -627,7 +639,7 @@ async function confirmDelete() {
           <UiButton
             variant="ghost"
             size="sm"
-            :class="agentViewMode === 'card' ? 'bg-accent text-text-primary' : ''"
+            :class="agentViewMode === 'card' ? 'bg-subtle text-text-primary' : ''"
             @click="agentViewMode = 'card'"
           >
             <LayoutGrid :size="14" />
@@ -635,6 +647,9 @@ async function confirmDelete() {
           </UiButton>
         </template>
         <template #actions>
+          <UiButton size="sm" @click="openCreateAgent">
+            新建员工
+          </UiButton>
           <UiButton
             v-if="!isProjectScope"
             variant="outline"
@@ -643,7 +658,7 @@ async function confirmDelete() {
             loading-label="Previewing"
             @click="openAgentImportDialog"
           >
-            Import Agent
+            导入员工
           </UiButton>
         </template>
       </UiToolbarRow>
@@ -678,33 +693,33 @@ async function confirmDelete() {
             v-else
             :title="agent.name"
             interactive
-            class="transition-all duration-300 hover:bg-accent/40 group/item"
+            class="hover:bg-subtle/60"
             @click="openEditAgent(agent)"
           >
             <template #leading>
-              <div class="flex size-10 items-center justify-center overflow-hidden rounded-xl bg-primary/5 text-xs font-bold text-primary/60 shadow-inner">
-                <img v-if="agent.avatar" :src="agent.avatar" alt="" class="size-full object-cover opacity-90 transition-opacity group-hover/item:opacity-100">
+              <div class="flex size-10 items-center justify-center overflow-hidden rounded-[var(--radius-m)] border border-border bg-subtle text-xs font-semibold text-text-secondary">
+                <img v-if="agent.avatar" :src="agent.avatar" alt="" class="size-full object-cover">
                 <span v-else>{{ initials(agent.name) }}</span>
               </div>
             </template>
             <template #badges>
               <div class="flex items-center gap-1.5">
-                <div 
-                  class="size-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.1)]"
-                  :class="agent.status === 'active' ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-slate-400'"
+                <div
+                  class="size-2 rounded-full"
+                  :class="agent.status === 'active' ? 'bg-status-success' : 'bg-text-tertiary'"
                 />
-                <UiBadge v-if="agent.integrationSource" label="Workspace" variant="outline" class="h-4 px-1 text-[8px] font-bold bg-primary/5 border-primary/20" />
+                <UiBadge v-if="agent.integrationSource" label="Workspace" subtle />
               </div>
             </template>
             <div class="flex items-center gap-8 w-full overflow-hidden">
               <div class="flex min-w-0 flex-[2] flex-col gap-0.5">
-                <span class="truncate text-[11px] font-bold uppercase tracking-wider text-primary/70">{{ agent.personality }}</span>
-                <p class="truncate text-sm text-text-secondary/80">
+                <span class="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary">{{ agent.personality }}</span>
+                <p class="truncate text-sm text-text-secondary">
                   {{ agent.description }}
                 </p>
               </div>
               <div class="hidden flex-1 shrink-0 items-center gap-1 overflow-hidden lg:flex">
-                <span v-for="tag in agent.tags.slice(0, 3)" :key="tag" class="truncate rounded-md bg-accent/30 px-2 py-0.5 text-[10px] font-medium text-text-tertiary">
+                <span v-for="tag in agent.tags.slice(0, 3)" :key="tag" class="truncate rounded-full border border-border bg-subtle px-2 py-0.5 text-[10px] font-medium text-text-tertiary">
                   #{{ tag }}
                 </span>
               </div>
@@ -720,8 +735,8 @@ async function confirmDelete() {
               </div>
             </div>
             <template #actions>
-              <div class="flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100">
-                <UiButton size="sm" variant="ghost" class="h-8 px-3 text-[11px] font-bold text-primary hover:bg-primary/5" @click.stop="openEditAgent(agent)">
+              <div class="flex items-center gap-1">
+                <UiButton size="sm" variant="ghost" class="h-8 px-3 text-[11px] font-semibold" @click.stop="openEditAgent(agent)">
                   配置
                 </UiButton>
                 <UiButton
@@ -753,23 +768,20 @@ async function confirmDelete() {
       />
     </section>
 
-    <section v-show="activeTab === 'team'" class="space-y-4 px-2">
+    <section v-show="activeTab === 'team'" class="space-y-4">
       <UiToolbarRow>
         <template #search>
-          <div class="relative flex max-w-md items-center group/search">
-            <Search :size="15" class="absolute left-0 text-text-tertiary transition-colors group-focus-within/search:text-primary" />
-            <UiInput
-              v-model="teamQuery"
-              placeholder="搜索团队名称、摘要或成员"
-              class="border-none bg-transparent pl-7 pr-0 text-sm placeholder:text-text-tertiary/60 focus-visible:ring-0"
-            />
-          </div>
+          <UiInput
+            v-model="teamQuery"
+            placeholder="搜索团队名称、摘要或成员"
+            class="max-w-md"
+          />
         </template>
         <template #views>
           <UiButton
             variant="ghost"
             size="sm"
-            :class="teamViewMode === 'list' ? 'bg-accent text-text-primary' : ''"
+            :class="teamViewMode === 'list' ? 'bg-subtle text-text-primary' : ''"
             @click="teamViewMode = 'list'"
           >
             <List :size="14" />
@@ -778,11 +790,16 @@ async function confirmDelete() {
           <UiButton
             variant="ghost"
             size="sm"
-            :class="teamViewMode === 'card' ? 'bg-accent text-text-primary' : ''"
+            :class="teamViewMode === 'card' ? 'bg-subtle text-text-primary' : ''"
             @click="teamViewMode = 'card'"
           >
             <LayoutGrid :size="14" />
             卡片
+          </UiButton>
+        </template>
+        <template #actions>
+          <UiButton size="sm" @click="openCreateTeam">
+            新建团队
           </UiButton>
         </template>
       </UiToolbarRow>
@@ -812,32 +829,32 @@ async function confirmDelete() {
             v-else
             :title="team.name"
             interactive
-            class="transition-all duration-300 hover:bg-accent/40 group/item"
+            class="hover:bg-subtle/60"
             @click="openEditTeam(team)"
           >
             <template #leading>
-              <div class="flex size-10 items-center justify-center overflow-hidden rounded-xl bg-indigo-500/5 text-xs font-bold text-indigo-600/70 shadow-inner">
+              <div class="flex size-10 items-center justify-center overflow-hidden rounded-[var(--radius-m)] border border-border bg-subtle text-text-secondary">
                 <UsersRound :size="18" />
               </div>
             </template>
             <template #badges>
               <div class="flex items-center gap-1.5">
-                <div 
-                  class="size-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.1)]"
-                  :class="team.status === 'active' ? 'bg-emerald-500 shadow-emerald-500/20' : 'bg-slate-400'"
+                <div
+                  class="size-2 rounded-full"
+                  :class="team.status === 'active' ? 'bg-status-success' : 'bg-text-tertiary'"
                 />
-                <UiBadge v-if="team.integrationSource" label="Workspace" variant="outline" class="h-4 px-1 text-[8px] font-bold bg-indigo-500/5 border-indigo-500/20 text-indigo-600" />
+                <UiBadge v-if="team.integrationSource" label="Workspace" subtle />
               </div>
             </template>
             <div class="flex items-center gap-8 w-full overflow-hidden">
               <div class="flex min-w-0 flex-[2] flex-col gap-0.5">
-                <span class="truncate text-[11px] font-bold uppercase tracking-wider text-indigo-600/70">{{ team.personality || '数字员工团队' }}</span>
-                <p class="truncate text-sm text-text-secondary/80">
+                <span class="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary">{{ team.personality || '数字员工团队' }}</span>
+                <p class="truncate text-sm text-text-secondary">
                   {{ team.description }}
                 </p>
               </div>
               <div class="hidden flex-1 shrink-0 items-center gap-1 overflow-hidden lg:flex">
-                <span v-for="tag in team.tags.slice(0, 3)" :key="tag" class="truncate rounded-md bg-indigo-500/5 px-2 py-0.5 text-[10px] font-medium text-indigo-600/70">
+                <span v-for="tag in team.tags.slice(0, 3)" :key="tag" class="truncate rounded-full border border-border bg-subtle px-2 py-0.5 text-[10px] font-medium text-text-tertiary">
                   #{{ tag }}
                 </span>
               </div>
@@ -855,8 +872,8 @@ async function confirmDelete() {
               </div>
             </div>
             <template #actions>
-              <div class="flex items-center gap-1 opacity-0 transition-opacity group-hover/item:opacity-100">
-                <UiButton size="sm" variant="ghost" class="h-8 px-3 text-[11px] font-bold text-indigo-600 hover:bg-indigo-500/5" @click.stop="openEditTeam(team)">
+              <div class="flex items-center gap-1">
+                <UiButton size="sm" variant="ghost" class="h-8 px-3 text-[11px] font-semibold" @click.stop="openEditTeam(team)">
                   配置
                 </UiButton>
                 <UiButton
@@ -894,15 +911,11 @@ async function confirmDelete() {
       description="配置数字员工的基本信息、核心性格与工具能力。"
       content-class="max-w-3xl"
       body-class="max-h-[75vh] overflow-y-auto pr-1"
+      content-test-id="agent-center-agent-dialog"
       @update:open="agentDialogOpen = $event"
     >
       <div class="flex flex-col gap-8 py-2">
-        <!-- Basic Info Section -->
-        <section class="space-y-4">
-          <UiSectionHeading title="基本信息" description="设置员工的展示名称、状态和视觉标识。">
-            <template #icon><UserCheck :size="16" class="text-primary" /></template>
-          </UiSectionHeading>
-          
+        <UiSurface variant="subtle" padding="md" title="基本信息" subtitle="设置员工的展示名称、状态和视觉标识。" class="space-y-4">
           <div class="grid gap-4 md:grid-cols-2">
             <UiField label="员工名称">
               <UiInput v-model="agentForm.name" placeholder="例如: 研发专家" />
@@ -911,8 +924,8 @@ async function confirmDelete() {
               <UiSelect v-model="agentForm.status" :options="statusOptions" />
             </UiField>
             <UiField class="md:col-span-2" label="头像标识">
-              <div class="flex items-center gap-4 rounded-2xl border border-border/40 bg-accent/20 p-4 dark:border-white/[0.08]">
-                <div class="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary/[0.08] text-lg font-bold text-primary shadow-inner">
+              <div class="flex items-center gap-4 rounded-[var(--radius-l)] border border-border bg-surface p-4">
+                <div class="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-l)] border border-border bg-subtle text-lg font-bold text-primary">
                   <img v-if="agentAvatarPreview(currentEditingAgent())" :src="agentAvatarPreview(currentEditingAgent())" alt="" class="size-full object-cover">
                   <span v-else>{{ initials(agentForm.name || 'A') }}</span>
                 </div>
@@ -929,14 +942,9 @@ async function confirmDelete() {
               <UiTextarea v-model="agentForm.description" :rows="2" placeholder="简要描述该员工的主要职责..." />
             </UiField>
           </div>
-        </section>
+        </UiSurface>
 
-        <!-- Personality & Prompt Section -->
-        <section class="space-y-4">
-          <UiSectionHeading title="性格与提示词" description="定义员工的行事风格、专业背景和核心工作指令。">
-            <template #icon><Wand2 :size="16" class="text-primary" /></template>
-          </UiSectionHeading>
-
+        <UiSurface variant="subtle" padding="md" title="性格与提示词" subtitle="定义员工的行事风格、专业背景和核心工作指令。" class="space-y-4">
           <div class="grid gap-4 md:grid-cols-1">
             <UiField label="性格设定">
               <UiInput v-model="agentForm.personality" placeholder="例如: 严谨、专业、富有逻辑" />
@@ -948,14 +956,9 @@ async function confirmDelete() {
               <UiInput v-model="agentForm.tagsText" placeholder="用逗号分隔，例如: 开发, 代码审查, Rust" />
             </UiField>
           </div>
-        </section>
+        </UiSurface>
 
-        <!-- Capabilities Section -->
-        <section class="space-y-4">
-          <UiSectionHeading title="能力与工具" description="通过内置工具、扩展技能和 MCP 服务增强员工能力。">
-            <template #icon><LayoutGrid :size="16" class="text-primary" /></template>
-          </UiSectionHeading>
-
+        <UiSurface variant="subtle" padding="md" title="能力与工具" subtitle="通过内置工具、扩展技能和 MCP 服务增强员工能力。" class="space-y-4">
           <div class="grid gap-4 md:grid-cols-2">
             <UiField label="内置工具">
               <UiSearchableMultiSelect
@@ -979,7 +982,7 @@ async function confirmDelete() {
               />
             </UiField>
           </div>
-        </section>
+        </UiSurface>
       </div>
       <template #footer>
         <div class="flex w-full items-center justify-between">
@@ -998,15 +1001,11 @@ async function confirmDelete() {
       description="配置团队负责人、核心成员以及协作背景。"
       content-class="max-w-3xl"
       body-class="max-h-[75vh] overflow-y-auto pr-1"
+      content-test-id="agent-center-team-dialog"
       @update:open="teamDialogOpen = $event"
     >
       <div class="flex flex-col gap-8 py-2">
-        <!-- Basic info -->
-        <section class="space-y-4">
-          <UiSectionHeading title="基础信息" description="设置团队名称、头像和运行状态。">
-            <template #icon><Users :size="16" class="text-primary" /></template>
-          </UiSectionHeading>
-          
+        <UiSurface variant="subtle" padding="md" title="基础信息" subtitle="设置团队名称、头像和运行状态。" class="space-y-4">
           <div class="grid gap-4 md:grid-cols-2">
             <UiField label="团队名称">
               <UiInput v-model="teamForm.name" placeholder="例如: 核心研发组" />
@@ -1015,8 +1014,8 @@ async function confirmDelete() {
               <UiSelect v-model="teamForm.status" :options="statusOptions" />
             </UiField>
             <UiField class="md:col-span-2" label="团队头像">
-              <div class="flex items-center gap-4 rounded-2xl border border-border/40 bg-accent/20 p-4 dark:border-white/[0.08]">
-                <div class="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary/[0.08] text-lg font-bold text-primary shadow-inner">
+              <div class="flex items-center gap-4 rounded-[var(--radius-l)] border border-border bg-surface p-4">
+                <div class="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-l)] border border-border bg-subtle text-lg font-bold text-primary">
                   <img v-if="teamAvatarPreview(currentEditingTeam())" :src="teamAvatarPreview(currentEditingTeam())" alt="" class="size-full object-cover">
                   <span v-else>{{ initials(teamForm.name || 'T') }}</span>
                 </div>
@@ -1033,14 +1032,9 @@ async function confirmDelete() {
               <UiInput v-model="teamForm.personality" placeholder="定义团队的协作风格和长期目标" />
             </UiField>
           </div>
-        </section>
+        </UiSurface>
 
-        <!-- Composition -->
-        <section class="space-y-4">
-          <UiSectionHeading title="编组管理" description="指定团队负责人 (Leader) 并选择参与协作的成员。">
-            <template #icon><Network :size="16" class="text-primary" /></template>
-          </UiSectionHeading>
-
+        <UiSurface variant="subtle" padding="md" title="编组管理" subtitle="指定团队负责人 (Leader) 并选择参与协作的成员。" class="space-y-4">
           <div class="grid gap-4 md:grid-cols-2">
             <UiField label="负责人 (Leader)">
               <UiCombobox
@@ -1059,7 +1053,7 @@ async function confirmDelete() {
 
             <!-- Relationship Visualization -->
             <div class="md:col-span-2">
-              <UiSurface class="overflow-hidden border-border/40 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--bg-subtle)_72%,transparent),transparent)] p-5 dark:border-white/[0.08]">
+              <UiSurface class="overflow-hidden border-border p-5">
                 <div class="mb-5 flex items-center justify-between">
                   <div class="flex items-center gap-2 text-sm font-semibold text-text-primary">
                     <Network :size="15" class="text-primary" />
@@ -1070,12 +1064,12 @@ async function confirmDelete() {
                 
                 <div class="flex flex-col items-center">
                   <div v-if="dialogTeamLeader" class="relative">
-                    <div class="min-w-[12rem] rounded-2xl border border-primary/20 bg-background px-4 py-3 text-center shadow-sm">
+                    <div class="min-w-[12rem] rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3 text-center">
                       <div class="text-[10px] font-bold uppercase tracking-[0.16em] text-primary">Leader</div>
                       <div class="mt-1 text-sm font-bold text-text-primary">{{ dialogTeamLeader.name }}</div>
                       <div class="mt-1 line-clamp-1 text-[11px] text-text-tertiary">{{ dialogTeamLeader.personality }}</div>
                     </div>
-                    <div class="mx-auto h-8 w-px bg-gradient-to-b from-primary/30 to-border/60" />
+                    <div class="mx-auto h-8 w-px bg-border" />
                   </div>
                   <div v-else class="py-6 text-sm text-text-tertiary italic">
                     尚未指定团队负责人
@@ -1085,11 +1079,11 @@ async function confirmDelete() {
                     <div
                       v-for="member in dialogTeamMembers"
                       :key="member.id"
-                      class="group relative rounded-xl border border-border/40 bg-background p-3 transition-colors hover:border-primary/30"
+                      class="group relative rounded-[var(--radius-m)] border border-border bg-surface p-3 transition-colors hover:border-border-strong"
                     >
                       <div class="flex items-center justify-between gap-2">
                         <strong class="truncate text-sm font-semibold text-text-primary group-hover:text-primary">{{ member.name }}</strong>
-                        <UiBadge v-if="member.integrationSource" label="Linked" variant="outline" class="scale-90" />
+                        <UiBadge v-if="member.integrationSource" label="Linked" subtle />
                       </div>
                       <div class="mt-1 line-clamp-1 text-[11px] text-text-tertiary">{{ member.personality }}</div>
                     </div>
@@ -1101,14 +1095,9 @@ async function confirmDelete() {
               </UiSurface>
             </div>
           </div>
-        </section>
+        </UiSurface>
 
-        <!-- Configuration -->
-        <section class="space-y-4">
-          <UiSectionHeading title="协作上下文" description="定义团队的工作流程标签、协作摘要及核心指令。">
-            <template #icon><Wand2 :size="16" class="text-primary" /></template>
-          </UiSectionHeading>
-
+        <UiSurface variant="subtle" padding="md" title="协作上下文" subtitle="定义团队的工作流程标签、协作摘要及核心指令。" class="space-y-4">
           <div class="grid gap-4">
             <UiField label="团队摘要">
               <UiTextarea v-model="teamForm.description" :rows="2" placeholder="简述团队的主要工作职责和产出目标..." />
@@ -1120,14 +1109,9 @@ async function confirmDelete() {
               <UiInput v-model="teamForm.tagsText" placeholder="用逗号分隔，例如: 并行研发, 自动化测试" />
             </UiField>
           </div>
-        </section>
+        </UiSurface>
 
-        <!-- Tools Integration -->
-        <section class="space-y-4">
-          <UiSectionHeading title="扩展能力" description="为整个团队集成工具能力。">
-            <template #icon><LayoutGrid :size="16" class="text-primary" /></template>
-          </UiSectionHeading>
-
+        <UiSurface variant="subtle" padding="md" title="扩展能力" subtitle="为整个团队集成工具能力。" class="space-y-4">
           <div class="grid gap-4 md:grid-cols-2">
             <UiField label="内置工具">
               <UiSearchableMultiSelect v-model="teamForm.builtinToolKeys" :options="builtinOptions" placeholder="选择内置工具" />
@@ -1139,7 +1123,7 @@ async function confirmDelete() {
               <UiSearchableMultiSelect v-model="teamForm.mcpServerNames" :options="mcpOptions" placeholder="选择 MCP 服务器" />
             </UiField>
           </div>
-        </section>
+        </UiSurface>
       </div>
       <template #footer>
         <div class="flex w-full items-center justify-between">
@@ -1179,5 +1163,5 @@ async function confirmDelete() {
       @update:open="handleAgentImportDialogOpen"
       @confirm="confirmAgentImport"
     />
-  </div>
+  </UiPageShell>
 </template>

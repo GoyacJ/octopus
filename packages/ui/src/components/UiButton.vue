@@ -5,26 +5,26 @@ import { Loader2 } from 'lucide-vue-next'
 import { cn } from '../lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all duration-fast disabled:pointer-events-none disabled:opacity-50 active:scale-[0.98]',
+  'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-[var(--radius-xs)] border text-[13px] font-semibold leading-none transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50',
   {
     variants: {
       variant: {
         primary:
-          'bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_1px_2px_rgba(15,15,15,0.1)]',
+          'border-transparent bg-primary text-primary-foreground hover:bg-primary-hover shadow-xs',
         destructive:
-          'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-[0_1px_2px_rgba(15,15,15,0.1)]',
+          'border-transparent bg-destructive text-destructive-foreground hover:opacity-92 shadow-xs',
         outline:
-          'border border-border/60 bg-background text-text-primary hover:bg-accent',
+          'border-border-subtle bg-background text-text-primary hover:bg-accent',
         secondary:
-          'bg-secondary text-secondary-foreground hover:bg-secondary/80 border border-border/40',
-        ghost: 'text-text-secondary hover:bg-accent hover:text-text-primary',
+          'border-border-subtle bg-surface text-secondary-foreground hover:bg-subtle',
+        ghost: 'border-transparent text-text-secondary hover:bg-accent hover:text-text-primary',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
-        default: 'h-8 px-3 py-1.5',
-        sm: 'h-7 px-2 text-xs',
-        lg: 'h-10 px-6 text-base',
-        icon: 'h-8 w-8',
+        default: 'h-8 px-3',
+        sm: 'h-7 px-2.5 text-[12px]',
+        lg: 'h-9 px-4 text-[14px]',
+        icon: 'h-8 w-8 px-0',
       },
     },
     defaultVariants: {

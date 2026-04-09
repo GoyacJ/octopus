@@ -4,7 +4,17 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { FileIcon, FolderIcon, MoreVerticalIcon, Trash2Icon, PowerOffIcon, UploadIcon } from 'lucide-vue-next'
 
-import { UiBadge, UiButton, UiEmptyState, UiInput, UiListRow, UiSectionHeading } from '@octopus/ui'
+import {
+  UiBadge,
+  UiButton,
+  UiEmptyState,
+  UiInput,
+  UiListRow,
+  UiPageHeader,
+  UiPageShell,
+  UiPanelFrame,
+  UiStatusCallout,
+} from '@octopus/ui'
 
 import { formatDateTime } from '@/i18n/copy'
 import { useResourceStore } from '@/stores/resource'
@@ -131,16 +141,20 @@ async function handleUploadFolder() {
 </script>
 
 <template>
-  <div class="flex w-full flex-col gap-6 pb-20">
-    <header class="space-y-4 px-2">
-      <UiSectionHeading
-        :eyebrow="t('resources.header.eyebrow')"
-        :title="workspaceStore.activeProject?.name ?? t('resources.header.projectTitleFallback')"
-        :subtitle="resourceStore.error || workspaceStore.activeProject?.description || t('resources.header.subtitle')"
-      />
-      <div class="flex items-center gap-3">
-        <UiInput v-model="searchQuery" :placeholder="t('resources.filters.searchPlaceholder')" class="max-w-md" />
-        <div class="flex gap-2">
+  <UiPageShell width="standard" test-id="project-resources-view">
+    <UiPageHeader
+      :eyebrow="t('resources.header.eyebrow')"
+      :title="workspaceStore.activeProject?.name ?? t('resources.header.projectTitleFallback')"
+      :description="workspaceStore.activeProject?.description || t('resources.header.subtitle')"
+    >
+      <template #actions>
+        <div class="flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center">
+          <UiInput
+            v-model="searchQuery"
+            :placeholder="t('resources.filters.searchPlaceholder')"
+            class="w-full md:w-[320px]"
+          />
+          <div class="flex flex-wrap gap-2">
           <UiButton variant="outline" size="sm" @click="handleUploadFile">
             <FileIcon :size="14" />
             {{ t('resources.actions.uploadFile') }}
@@ -149,11 +163,23 @@ async function handleUploadFolder() {
             <FolderIcon :size="14" />
             {{ t('resources.actions.uploadFolder') }}
           </UiButton>
+          </div>
         </div>
-      </div>
-    </header>
+      </template>
+    </UiPageHeader>
 
-    <main class="px-2">
+    <UiStatusCallout
+      v-if="resourceStore.error"
+      tone="error"
+      :description="resourceStore.error"
+    />
+
+    <UiPanelFrame
+      variant="panel"
+      padding="md"
+      :title="t('sidebar.navigation.resources')"
+      :subtitle="workspaceStore.activeProject?.description || t('resources.header.subtitle')"
+    >
       <div v-if="filteredResources.length" class="space-y-2">
         <UiListRow
           v-for="resource in filteredResources"
@@ -178,7 +204,7 @@ async function handleUploadFolder() {
             </UiButton>
             <div
               v-if="activeActionMenu === resource.id"
-              class="absolute right-2 top-8 z-50 flex flex-col gap-1 rounded-md border border-border/40 bg-background p-1 shadow-lg"
+              class="absolute right-2 top-8 z-50 flex flex-col gap-1 rounded-[var(--radius-l)] border border-border bg-surface p-1 shadow-md"
             >
               <UiButton
                 v-if="resource.status === 'healthy'"
@@ -203,7 +229,11 @@ async function handleUploadFolder() {
           </template>
         </UiListRow>
       </div>
-      <UiEmptyState v-else :title="t('resources.empty.title')" :description="t('resources.empty.description')" />
-    </main>
-  </div>
+      <UiEmptyState
+        v-else
+        :title="t('resources.empty.title')"
+        :description="t('resources.empty.description')"
+      />
+    </UiPanelFrame>
+  </UiPageShell>
 </template>

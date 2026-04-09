@@ -13,9 +13,11 @@ import {
   UiEmptyState,
   UiField,
   UiListRow,
+  UiPageHeader,
+  UiPageShell,
   UiRecordCard,
-  UiSectionHeading,
   UiSelect,
+  UiStatusCallout,
   UiSwitch,
   UiTabs,
 } from '@octopus/ui'
@@ -77,8 +79,6 @@ const activeTab = ref<SettingsTab>(resolveSettingsTab(route.query.tab))
 const theme = ref(shell.preferences.theme)
 const locale = ref(shell.preferences.locale)
 const fontSize = ref(String(shell.preferences.fontSize))
-const fontFamily = ref(shell.preferences.fontFamily)
-const fontStyle = ref(shell.preferences.fontStyle)
 const leftSidebarCollapsed = ref(shell.preferences.leftSidebarCollapsed)
 const rightSidebarCollapsed = ref(shell.preferences.rightSidebarCollapsed)
 const tabs = computed(() => [
@@ -134,12 +134,6 @@ const localeOptions = computed(() => [
   { value: 'en-US', label: t('settings.preferences.localeOptions.en-US') },
 ])
 
-const fontStyleOptions = computed(() => [
-  { value: 'sans', label: t('settings.preferences.fontStyleOptions.sans') },
-  { value: 'serif', label: t('settings.preferences.fontStyleOptions.serif') },
-  { value: 'mono', label: t('settings.preferences.fontStyleOptions.mono') },
-])
-
 const activeWorkspaceName = computed(() =>
   shell.activeWorkspaceConnection
     ? shell.activeWorkspaceConnection.label
@@ -175,8 +169,6 @@ watch(
     if (theme.value !== preferences.theme) theme.value = preferences.theme
     if (locale.value !== preferences.locale) locale.value = preferences.locale
     if (fontSize.value !== String(preferences.fontSize)) fontSize.value = String(preferences.fontSize)
-    if (fontFamily.value !== preferences.fontFamily) fontFamily.value = preferences.fontFamily
-    if (fontStyle.value !== preferences.fontStyle) fontStyle.value = preferences.fontStyle
     if (leftSidebarCollapsed.value !== preferences.leftSidebarCollapsed) leftSidebarCollapsed.value = preferences.leftSidebarCollapsed
     if (rightSidebarCollapsed.value !== preferences.rightSidebarCollapsed) rightSidebarCollapsed.value = preferences.rightSidebarCollapsed
   },
@@ -185,8 +177,8 @@ watch(
 
 // Automatically save changes to the store
 watch(
-  [theme, locale, fontSize, fontFamily, fontStyle, leftSidebarCollapsed, rightSidebarCollapsed],
-  async ([nextTheme, nextLocale, nextFontSize, nextFontFamily, nextFontStyle, nextLeftSidebar, nextRightSidebar]) => {
+  [theme, locale, fontSize, leftSidebarCollapsed, rightSidebarCollapsed],
+  async ([nextTheme, nextLocale, nextFontSize, nextLeftSidebar, nextRightSidebar]) => {
     if (!canManageSettings.value) return
 
     const patch: any = {}
@@ -196,8 +188,6 @@ watch(
     if (!Number.isNaN(parsedFontSize) && parsedFontSize !== shell.preferences.fontSize) {
       patch.fontSize = parsedFontSize
     }
-    if (nextFontFamily !== shell.preferences.fontFamily) patch.fontFamily = nextFontFamily
-    if (nextFontStyle !== shell.preferences.fontStyle) patch.fontStyle = nextFontStyle
     if (nextLeftSidebar !== shell.preferences.leftSidebarCollapsed) patch.leftSidebarCollapsed = nextLeftSidebar
     if (nextRightSidebar !== shell.preferences.rightSidebarCollapsed) patch.rightSidebarCollapsed = nextRightSidebar
 
@@ -243,19 +233,20 @@ async function reloadRuntimeConfig() {
 </script>
 
 <template>
-  <div class="w-full flex flex-col gap-8 pb-20">
-    <header class="px-2 space-y-4">
-      <UiSectionHeading
-        :eyebrow="t('settings.header.eyebrow')"
-        :title="t('settings.header.title')"
-        :subtitle="t('settings.header.subtitle')"
-      />
-      <div data-testid="settings-tabs" class="max-w-xl">
-        <UiTabs v-model="activeTab" :tabs="tabs" />
-      </div>
-    </header>
+  <UiPageShell width="standard" test-id="settings-view">
+    <UiPageHeader
+      :eyebrow="t('settings.header.eyebrow')"
+      :title="t('settings.header.title')"
+      :description="t('settings.header.subtitle')"
+    >
+      <template #actions>
+        <div data-testid="settings-tabs" class="w-full max-w-xl md:w-auto">
+          <UiTabs v-model="activeTab" :tabs="tabs" variant="segmented" />
+        </div>
+      </template>
+    </UiPageHeader>
 
-    <main class="px-2">
+    <main>
       <div class="flex flex-col gap-10">
         <section v-if="activeTab === 'general'" class="space-y-8">
           <div class="flex items-center justify-between">
@@ -272,16 +263,14 @@ async function reloadRuntimeConfig() {
           <div class="space-y-6">
             <div class="space-y-3">
               <h4 class="text-[14px] font-bold text-text-primary px-1">{{ t('settings.general.layoutTitle') }}</h4>
-              <div class="space-y-2 bg-subtle/10 rounded-lg border border-border-subtle/30 dark:border-white/[0.08] p-2">
+              <div class="space-y-2 rounded-[var(--radius-l)] border border-border bg-surface p-2">
                 <div data-testid="settings-layout-row-leftSidebarCollapsed">
                   <UiListRow
                     :title="t('settings.preferences.leftSidebarCollapsed')"
                     :subtitle="t('settings.general.leftSidebarHint')"
                   >
                     <template #actions>
-                      <div class="[&>label>button]:!bg-black/25 [&>label>button]:dark:!bg-white/25">
-                        <UiSwitch v-model="leftSidebarCollapsed" />
-                      </div>
+                      <UiSwitch v-model="leftSidebarCollapsed" />
                     </template>
                   </UiListRow>
                 </div>
@@ -292,9 +281,7 @@ async function reloadRuntimeConfig() {
                     :subtitle="t('settings.general.rightSidebarHint')"
                   >
                     <template #actions>
-                      <div class="[&>label>button]:!bg-black/25 [&>label>button]:dark:!bg-white/25">
-                        <UiSwitch v-model="rightSidebarCollapsed" />
-                      </div>
+                      <UiSwitch v-model="rightSidebarCollapsed" />
                     </template>
                   </UiListRow>
                 </div>
@@ -321,7 +308,7 @@ async function reloadRuntimeConfig() {
           <div class="grid gap-10 xl:grid-cols-2">
             <!-- Product Connections -->
             <section class="space-y-6">
-              <div class="space-y-1 border-b border-border-subtle dark:border-white/[0.05] pb-4">
+              <div class="space-y-1 border-b border-border-subtle pb-4">
                 <h3 class="text-lg font-bold text-text-primary">{{ t('connections.product.title') }}</h3>
                 <p class="text-[13px] text-text-secondary">{{ t('connections.product.subtitle') }}</p>
               </div>
@@ -349,7 +336,7 @@ async function reloadRuntimeConfig() {
 
             <!-- Host Connections -->
             <section class="space-y-6">
-              <div class="space-y-1 border-b border-border-subtle dark:border-white/[0.05] pb-4">
+              <div class="space-y-1 border-b border-border-subtle pb-4">
                 <h3 class="text-lg font-bold text-text-primary">{{ t('connections.host.title') }}</h3>
                 <p class="text-[13px] text-text-secondary">{{ t('connections.host.subtitle') }}</p>
               </div>
@@ -414,33 +401,18 @@ async function reloadRuntimeConfig() {
           </div>
 
           <div class="space-y-6">
-            <div class="max-w-md">
+            <div class="grid max-w-2xl gap-6 md:grid-cols-2">
               <UiField :label="t('settings.preferences.theme')">
                 <UiSelect v-model="theme" :options="themeOptions" />
-              </UiField>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl">
-              <UiField :label="t('settings.preferences.fontFamily')">
-                <UiSelect v-model="fontFamily" :options="[
-                  { value: 'Inter, sans-serif', label: 'Inter' },
-                  { value: 'system-ui, sans-serif', label: 'System UI' },
-                  { value: 'monospace', label: 'Monospace' }
-                ]" />
               </UiField>
 
               <UiField :label="t('settings.preferences.fontSize')">
                 <UiSelect v-model="fontSize" :options="[
-                  { value: '12', label: '12px' },
                   { value: '13', label: '13px' },
                   { value: '14', label: '14px' },
                   { value: '15', label: '15px' },
                   { value: '16', label: '16px' }
                 ]" />
-              </UiField>
-
-              <UiField :label="t('settings.preferences.fontStyle')">
-                <UiSelect v-model="fontStyle" :options="fontStyleOptions" />
               </UiField>
             </div>
           </div>
@@ -464,12 +436,10 @@ async function reloadRuntimeConfig() {
             </UiButton>
           </div>
 
-          <div
+          <UiStatusCallout
             v-if="runtime.configLoading && !runtime.config"
-            class="rounded-md border border-border/40 bg-subtle/10 px-4 py-6 text-[13px] text-text-secondary"
-          >
-            {{ t('settings.runtime.loading') }}
-          </div>
+            :description="t('settings.runtime.loading')"
+          />
 
           <UiEmptyState
             v-else-if="!runtime.config"
@@ -506,19 +476,17 @@ async function reloadRuntimeConfig() {
                     @update:model-value="runtime.setConfigDraft('workspace', $event)"
                   />
 
-                  <div
+                  <UiStatusCallout
                     v-if="runtime.configValidation.workspace?.errors.length"
-                    class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-[12px] text-status-error"
-                  >
-                    {{ runtime.configValidation.workspace.errors.join(' ') }}
-                  </div>
+                    tone="error"
+                    :description="runtime.configValidation.workspace.errors.join(' ')"
+                  />
 
-                  <div
+                  <UiStatusCallout
                     v-if="runtime.configValidation.workspace?.warnings.length"
-                    class="rounded-md border border-status-warning/20 bg-status-warning/5 px-3 py-2 text-[12px] text-status-warning"
-                  >
-                    {{ runtime.configValidation.workspace.warnings.join(' ') }}
-                  </div>
+                    tone="warning"
+                    :description="runtime.configValidation.workspace.warnings.join(' ')"
+                  />
                 </div>
 
                 <template #meta>
@@ -571,7 +539,7 @@ async function reloadRuntimeConfig() {
                     :model-value="runtimeEffectivePreview"
                   />
 
-                  <div class="rounded-md border border-border/40 bg-subtle/20 px-3 py-3 text-[12px] text-text-secondary">
+                  <div class="rounded-[var(--radius-l)] border border-border bg-subtle px-3 py-3 text-[12px] text-text-secondary">
                     <p class="text-[11px] font-bold uppercase tracking-[0.24em] text-text-tertiary">
                       {{ t('settings.runtime.secretReferencesTitle') }}
                     </p>
@@ -596,13 +564,13 @@ async function reloadRuntimeConfig() {
         <!-- Version Tab -->
         <section v-else class="space-y-8">
           <div class="space-y-6">
-            <div class="bg-subtle/10 border border-border-subtle/30 dark:border-white/[0.08] rounded-md overflow-hidden">
+            <div class="overflow-hidden rounded-[var(--radius-l)] border border-border bg-surface">
               <div
                 v-for="(row, i) in versionRows"
                 :key="row.id"
                 :data-testid="`settings-version-row-${row.id}`"
                 class="flex items-center justify-between px-6 py-4"
-                :class="i !== versionRows.length - 1 ? 'border-b border-border-subtle/20 dark:border-white/[0.05]' : ''"
+                :class="i !== versionRows.length - 1 ? 'border-b border-border/60' : ''"
               >
                 <span class="text-[14px] text-text-secondary font-medium">{{ row.label }}</span>
                 <span class="text-[14px] font-bold text-text-primary tracking-tight font-mono">{{ row.value }}</span>
@@ -612,5 +580,5 @@ async function reloadRuntimeConfig() {
         </section>
       </div>
     </main>
-  </div>
+  </UiPageShell>
 </template>

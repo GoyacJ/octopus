@@ -4,7 +4,16 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { Brain, FileText, FolderTree, Link2, PanelRight, Sparkles, Waypoints, Wrench } from 'lucide-vue-next'
 
-import { UiBadge, UiButton, UiEmptyState, UiInput, UiListRow, UiTimelineList } from '@octopus/ui'
+import {
+  UiBadge,
+  UiButton,
+  UiEmptyState,
+  UiInput,
+  UiListRow,
+  UiPanelFrame,
+  UiStatTile,
+  UiTimelineList,
+} from '@octopus/ui'
 
 import type { ConversationDetailFocus } from '@octopus/schema'
 
@@ -178,7 +187,8 @@ function setDetail(detail: string) {
 
 <template>
   <aside
-    class="h-full border-l border-border-subtle bg-sidebar dark:border-white/[0.05]"
+    data-testid="conversation-context-pane"
+    class="h-full border-l border-border bg-surface"
     :class="shell.rightSidebarCollapsed ? 'w-[48px]' : 'w-[360px]'"
   >
     <div v-if="shell.rightSidebarCollapsed" class="flex h-full flex-col items-center gap-3 py-4">
@@ -192,7 +202,7 @@ function setDetail(detail: string) {
         <PanelRight :size="18" />
       </UiButton>
 
-      <div class="h-px w-6 bg-border-subtle dark:bg-white/[0.05]" />
+      <div class="h-px w-6 bg-border-subtle" />
 
       <UiButton
         v-for="item in sectionItems"
@@ -208,7 +218,7 @@ function setDetail(detail: string) {
     </div>
 
     <div v-else class="flex h-full flex-col overflow-hidden">
-      <div class="flex items-center justify-between border-b border-border-subtle px-4 py-3 dark:border-white/[0.05]">
+      <div class="flex items-center justify-between border-b border-border px-4 py-3">
         <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">{{ t('conversation.detail.title') }}</div>
         <UiButton
           variant="ghost"
@@ -221,14 +231,14 @@ function setDetail(detail: string) {
         </UiButton>
       </div>
 
-      <nav class="flex flex-wrap gap-1 border-b border-border-subtle p-2 dark:border-white/[0.05]">
+      <nav class="flex flex-wrap gap-1 border-b border-border p-2">
         <UiButton
           v-for="item in sectionItems"
           :key="item.id"
           variant="ghost"
           size="sm"
-          class="h-auto rounded px-2.5 py-1.5 text-[11px]"
-          :class="shell.detailFocus === item.id ? 'bg-background text-text-primary shadow-xs' : 'text-text-tertiary hover:bg-accent hover:text-text-secondary'"
+          class="h-auto rounded-[var(--radius-s)] border border-transparent px-2.5 py-1.5 text-[11px]"
+          :class="shell.detailFocus === item.id ? 'border-border bg-surface text-text-primary shadow-xs' : 'text-text-tertiary hover:bg-subtle hover:text-text-secondary'"
           @click="setDetail(item.id)"
         >
           {{ item.label }}
@@ -237,21 +247,23 @@ function setDetail(detail: string) {
 
       <div class="flex-1 overflow-y-auto p-4">
         <div v-if="shell.detailFocus === 'summary'" class="space-y-4">
-          <div class="rounded-xl border border-border-subtle p-4 dark:border-white/[0.05]">
+          <UiPanelFrame variant="subtle" padding="md">
             <div class="text-xs text-text-secondary">{{ t('conversation.detail.summary.title') }}</div>
             <div class="mt-2 text-sm text-text-primary">{{ runtime.activeSession?.summary.title ?? t('common.na') }}</div>
             <div class="mt-2 text-xs text-text-secondary">{{ runtime.activeRunCurrentStepLabel }}</div>
-          </div>
+          </UiPanelFrame>
           <div class="grid grid-cols-2 gap-3">
-            <div v-for="card in summaryCards" :key="card.label" class="rounded-xl border border-border-subtle p-3 dark:border-white/[0.05]">
-              <div class="text-[11px] font-medium text-text-secondary">{{ card.label }}</div>
-              <div class="mt-1 text-sm font-semibold text-text-primary">{{ card.value }}</div>
-            </div>
+            <UiStatTile
+              v-for="card in summaryCards"
+              :key="card.label"
+              :label="card.label"
+              :value="card.value"
+            />
           </div>
-          <div class="rounded-xl border border-border-subtle p-4 dark:border-white/[0.05]">
+          <UiPanelFrame variant="subtle" padding="md">
             <div class="text-xs text-text-secondary">{{ t('conversation.detail.summary.tokenUsage') }}</div>
             <div class="mt-2 text-sm text-text-primary">{{ usageSummary }}</div>
-          </div>
+          </UiPanelFrame>
         </div>
 
         <div v-else-if="shell.detailFocus === 'memories'" class="space-y-4">
@@ -275,11 +287,11 @@ function setDetail(detail: string) {
         </div>
 
         <div v-else-if="shell.detailFocus === 'artifacts'" class="space-y-4">
-          <div class="rounded-xl border border-border-subtle p-3 dark:border-white/[0.05]">
+          <UiPanelFrame variant="subtle" padding="sm">
             <UiInput v-model="artifactFilter" :placeholder="t('conversation.detail.artifacts.filterPlaceholder')" />
-          </div>
+          </UiPanelFrame>
           <div v-if="selectedArtifact" class="space-y-4">
-            <div class="rounded-xl border border-border-subtle p-4 dark:border-white/[0.05]">
+            <UiPanelFrame variant="raised" padding="md">
               <div class="flex items-start justify-between gap-3">
                 <div class="space-y-1">
                   <div class="text-sm font-semibold text-text-primary">{{ selectedArtifact.title }}</div>
@@ -300,7 +312,7 @@ function setDetail(detail: string) {
                   <div class="mt-1 text-text-primary">{{ selectedArtifact.contentType ?? t('common.na') }}</div>
                 </div>
               </div>
-            </div>
+            </UiPanelFrame>
 
             <div class="space-y-2">
               <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">{{ t('conversation.detail.artifacts.listTitle') }}</div>
@@ -345,10 +357,10 @@ function setDetail(detail: string) {
         </div>
 
         <div v-else-if="shell.detailFocus === 'resources'" class="space-y-4">
-          <div class="rounded-xl border border-border-subtle p-3 dark:border-white/[0.05] space-y-3">
+          <UiPanelFrame variant="subtle" padding="sm" class="space-y-3">
             <UiInput v-model="resourceFilter" :placeholder="t('conversation.detail.resources.filterPlaceholder')" />
             <UiButton size="sm" variant="ghost" @click="openResource">{{ t('conversation.detail.resources.openFullPage') }}</UiButton>
-          </div>
+          </UiPanelFrame>
           <div v-if="filteredConversationResources.length" class="space-y-2">
             <UiListRow
               v-for="resource in filteredConversationResources"

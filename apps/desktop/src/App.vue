@@ -4,7 +4,7 @@ import { RouterView, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import type { NotificationRecord } from '@octopus/schema'
-import { UiButton, UiToastViewport } from '@octopus/ui'
+import { UiButton, UiStatusCallout, UiToastViewport } from '@octopus/ui'
 
 import AuthGateDialog from '@/components/auth/AuthGateDialog.vue'
 import i18n from '@/plugins/i18n'
@@ -102,31 +102,12 @@ watch(
 )
 
 watch(
-  [() => shell.preferences.fontSize, () => shell.preferences.fontFamily, () => shell.preferences.fontStyle],
-  ([fontSize, fontFamily, fontStyle]) => {
+  () => shell.preferences.fontSize,
+  (fontSize) => {
     const root = document.documentElement
-    
-    // Apply font size
     root.style.setProperty('--font-size-base', `${fontSize}px`)
     root.style.fontSize = `${fontSize}px`
-    
-    // Reset specific families to handle style switching
-    let primaryStack = fontFamily
-    if (fontStyle === 'serif') {
-      primaryStack = 'Georgia, "Times New Roman", serif'
-    } else if (fontStyle === 'mono') {
-      primaryStack = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
-    } else if (fontStyle === 'sans' && fontFamily === 'Inter, sans-serif') {
-      primaryStack = '"Inter", system-ui, -apple-system, sans-serif'
-    }
-    
-    // Update the variables that Tailwind and UI tokens use
-    root.style.setProperty('--font-sans', primaryStack)
-    root.style.setProperty('--font-serif', fontStyle === 'serif' ? primaryStack : 'Georgia, serif')
-    root.style.setProperty('--font-mono', fontStyle === 'mono' ? primaryStack : 'ui-monospace, monospace')
-    
-    // Force immediate body update for insurance
-    document.body.style.fontFamily = primaryStack
+    document.body.style.fontFamily = 'var(--font-sans)'
   },
   { immediate: true },
 )
@@ -152,7 +133,7 @@ watch(
     data-testid="desktop-backend-guard"
     class="flex min-h-screen items-center justify-center bg-background px-6"
   >
-    <div class="w-full max-w-xl rounded-2xl border border-border-subtle bg-card p-8 shadow-[0_24px_64px_rgba(15,23,42,0.08)] dark:border-white/[0.08]">
+    <div class="w-full max-w-xl rounded-[var(--radius-xl)] border border-border bg-card p-8 shadow-lg">
       <div class="space-y-2">
         <p class="text-[11px] font-semibold uppercase tracking-[0.24em] text-text-tertiary">
           {{ t('app.hostUnavailable.eyebrow') }}
@@ -164,6 +145,12 @@ watch(
           {{ hostUnavailableDescription }}
         </p>
       </div>
+
+      <UiStatusCallout
+        tone="warning"
+        class="mt-5"
+        :description="t('app.hostUnavailable.description')"
+      />
 
       <div class="mt-6 flex flex-wrap gap-3">
         <UiButton data-testid="desktop-backend-retry" @click="bootstrapShell">

@@ -3,7 +3,15 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { MenuRecord } from '@octopus/schema'
-import { UiButton, UiField, UiInput, UiSelect } from '@octopus/ui'
+import {
+  UiButton,
+  UiField,
+  UiInspectorPanel,
+  UiInput,
+  UiListDetailShell,
+  UiPanelFrame,
+  UiSelect,
+} from '@octopus/ui'
 
 import { enumLabel } from '@/i18n/copy'
 import { getMenuDefinition } from '@/navigation/menuRegistry'
@@ -107,37 +115,47 @@ function menuLabel(menuId: string, fallback: string) {
 </script>
 
 <template>
-  <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-    <section class="space-y-3">
-      <UserCenterMenuTree
-        selection-mode="single"
-        test-id-prefix="menus-tree"
-        :sections="menuTreeSections"
-        :active-id="selectedMenuId"
-        @select="applyMenu"
-      />
-    </section>
+  <div data-testid="user-center-menus-shell">
+    <UiListDetailShell>
+      <template #list>
+        <section class="space-y-3">
+          <UiPanelFrame variant="subtle" padding="md">
+            <div class="text-sm font-semibold text-text-primary">{{ menuLabel(selectedMenuId, form.label || t('common.na')) }}</div>
+            <div class="mt-1 text-xs text-text-secondary">{{ t('common.status') }}</div>
+          </UiPanelFrame>
+          <UserCenterMenuTree
+            selection-mode="single"
+            test-id-prefix="menus-tree"
+            :sections="menuTreeSections"
+            :active-id="selectedMenuId"
+            @select="applyMenu"
+          />
+        </section>
+      </template>
 
-    <section class="space-y-4 rounded-xl border border-border-subtle p-5 dark:border-white/[0.05]">
-      <UiField :label="t('userCenter.menus.fields.label')">
-        <UiInput v-model="form.label" data-testid="menus-label-input" />
-      </UiField>
-      <UiField :label="t('userCenter.menus.fields.source')">
-        <UiSelect v-model="form.source" :options="sourceOptions" />
-      </UiField>
-      <UiField :label="t('userCenter.menus.fields.routeName')">
-        <UiInput v-model="form.routeName" />
-      </UiField>
-      <UiField :label="t('userCenter.menus.fields.parentId')">
-        <UiInput v-model="form.parentId" />
-      </UiField>
-      <UiField :label="t('common.status')">
-        <UiSelect v-model="form.status" :options="statusOptions" />
-      </UiField>
-      <UiField :label="t('userCenter.menus.fields.order')">
-        <UiInput v-model="form.order" />
-      </UiField>
-      <UiButton @click="saveMenu">{{ t('common.save') }}</UiButton>
-    </section>
+      <UiInspectorPanel :title="menuLabel(selectedMenuId, form.label || t('common.na'))">
+        <div class="space-y-4">
+          <UiField :label="t('userCenter.menus.fields.label')">
+            <UiInput v-model="form.label" data-testid="menus-label-input" />
+          </UiField>
+          <UiField :label="t('userCenter.menus.fields.source')">
+            <UiSelect v-model="form.source" :options="sourceOptions" />
+          </UiField>
+          <UiField :label="t('userCenter.menus.fields.routeName')">
+            <UiInput v-model="form.routeName" />
+          </UiField>
+          <UiField :label="t('userCenter.menus.fields.parentId')">
+            <UiInput v-model="form.parentId" />
+          </UiField>
+          <UiField :label="t('common.status')">
+            <UiSelect v-model="form.status" :options="statusOptions" />
+          </UiField>
+          <UiField :label="t('userCenter.menus.fields.order')">
+            <UiInput v-model="form.order" />
+          </UiField>
+          <UiButton @click="saveMenu">{{ t('common.save') }}</UiButton>
+        </div>
+      </UiInspectorPanel>
+    </UiListDetailShell>
   </div>
 </template>

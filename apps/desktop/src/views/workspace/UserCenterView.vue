@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 
-import { UiSectionHeading, UiTabs } from '@octopus/ui'
+import { UiPageHeader, UiPageShell, UiPanelFrame, UiTabs } from '@octopus/ui'
 
 import { getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
 import { useUserCenterStore } from '@/stores/user-center'
@@ -71,26 +71,24 @@ function handleTabChange(menuId: string) {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 w-full flex-col gap-6 pb-20">
-    <header class="shrink-0 px-2">
-      <UiSectionHeading
-        :eyebrow="t('userCenter.header.eyebrow')"
-        :title="t('userCenter.header.title')"
-        :subtitle="userCenterStore.currentUser?.displayName ?? t('common.na')"
-      />
-    </header>
+  <UiPageShell width="wide" test-id="user-center-view" class="h-full">
+    <UiPageHeader
+      :eyebrow="t('userCenter.header.eyebrow')"
+      :title="t('userCenter.header.title')"
+      :description="userCenterStore.currentUser?.displayName ?? t('common.na')"
+    />
 
-    <div class="border-b border-border-subtle px-2 pb-4 dark:border-white/[0.05]">
+    <UiPanelFrame variant="subtle" padding="sm">
       <UiTabs
         v-model="activeTab"
         :tabs="tabs"
         data-testid="user-center-tabs"
         @update:model-value="handleTabChange"
       />
-    </div>
+    </UiPanelFrame>
 
-    <main class="flex-1 overflow-y-auto min-h-0 px-2 pb-8">
+    <main class="min-h-0 flex-1 overflow-y-auto pb-8">
       <RouterView />
     </main>
-  </div>
+  </UiPageShell>
 </template>

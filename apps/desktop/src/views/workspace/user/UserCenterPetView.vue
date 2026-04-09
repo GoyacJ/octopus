@@ -115,7 +115,7 @@ async function savePetPreferences() {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div data-testid="user-center-pet-view" class="space-y-6">
     <UiRecordCard
       v-if="userCenterStore.currentUser"
       :title="t('userCenter.pet.title')"
@@ -183,7 +183,7 @@ async function savePetPreferences() {
       :description="t('userCenter.pet.runtime.description')"
       test-id="user-center-pet-runtime-preview"
     >
-      <pre class="overflow-x-auto rounded-xl border border-border/50 bg-accent/20 p-4 text-xs leading-6 text-text-secondary">{{ runtimePreview }}</pre>
+      <pre class="overflow-x-auto rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3 text-xs leading-6 text-text-secondary">{{ runtimePreview }}</pre>
     </UiRecordCard>
 
     <UiEmptyState

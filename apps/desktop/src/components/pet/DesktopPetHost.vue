@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 import type { PetMotionState } from '@octopus/schema'
 
-import { UiSurface } from '@octopus/ui'
+import { UiStatusCallout, UiSurface } from '@octopus/ui'
 
 import DesktopPetAvatar from '@/components/pet/DesktopPetAvatar.vue'
 import DesktopPetChat from '@/components/pet/DesktopPetChat.vue'
@@ -153,31 +153,27 @@ onBeforeUnmount(() => {
       :style="panelReady ? panelStyle : { visibility: 'hidden' }"
       data-testid="desktop-pet-panel"
     >
-      <UiSurface
+      <UiStatusCallout
         v-if="helperText"
-        variant="overlay"
-        padding="sm"
+        tone="info"
         class="w-[22rem] max-w-[calc(100vw-2rem)] text-sm text-text-secondary"
+        :description="helperText"
         data-testid="desktop-pet-status"
-      >
-        {{ helperText }}
-      </UiSurface>
+      />
       <DesktopPetChat
         v-else
         :pet="pet.profile"
         :messages="pet.messages"
         :on-send="handleSend"
       />
-      <UiSurface
+      <UiStatusCallout
         v-if="runtimeError && !helperText"
-        variant="overlay"
-        padding="sm"
-        class="mt-2 w-[22rem] max-w-[calc(100vw-2rem)] border border-status-error/20 bg-status-error/5 text-sm text-status-error"
+        tone="error"
+        class="mt-2 w-[22rem] max-w-[calc(100vw-2rem)] text-sm"
+        :description="runtimeError"
         data-testid="desktop-pet-error"
         role="alert"
-      >
-        {{ runtimeError }}
-      </UiSurface>
+      />
     </div>
   </div>
 </template>

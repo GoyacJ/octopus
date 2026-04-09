@@ -32,7 +32,8 @@ function handleSelect(item: UiMenuItem) {
     </ContextMenuTrigger>
 
     <ContextMenuContent
-      class="z-50 min-w-44 rounded-xl border border-border dark:border-white/[0.12] bg-popover p-1 shadow-lg outline-none"
+      data-testid="ui-context-content"
+      class="z-50 min-w-44 rounded-[var(--radius-l)] border border-border bg-popover p-1 shadow-md outline-none"
       :side-offset="8"
     >
       <ContextMenuItem
@@ -40,7 +41,7 @@ function handleSelect(item: UiMenuItem) {
         :key="item.key"
         :data-testid="`ui-context-item-${item.key}`"
         :disabled="item.disabled"
-        class="flex cursor-default items-center rounded-lg px-3 py-2 text-left text-sm outline-none transition data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
+        class="flex cursor-default items-center rounded-[var(--radius-s)] px-3 py-2 text-left text-sm outline-none transition data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
         :class="item.tone === 'danger' ? 'text-destructive' : 'text-popover-foreground'"
         @select="handleSelect(item)"
       >

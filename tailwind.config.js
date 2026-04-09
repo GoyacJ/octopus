@@ -34,6 +34,7 @@ export default {
           DEFAULT: 'var(--destructive)',
           foreground: 'var(--destructive-foreground)',
         },
+        danger: 'var(--status-error)',
         text: {
           primary: 'var(--text-primary)',
           secondary: 'var(--text-secondary)',

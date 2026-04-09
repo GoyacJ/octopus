@@ -24,15 +24,15 @@ function handleMarkRead() {
 <template>
   <article
     :data-testid="`ui-notification-row-${props.notification.id}`"
-    class="group flex items-start gap-3 rounded-2xl border border-border/40 bg-gradient-to-br from-background via-background to-accent/30 px-3 py-3 text-left transition-all duration-normal ease-apple hover:border-border/60 hover:bg-accent/30"
+    class="group flex items-start gap-3 rounded-[var(--radius-xl)] border border-border bg-surface px-3 py-3 text-left transition-colors duration-fast hover:border-border-strong hover:bg-subtle"
     :class="{ 'opacity-70': props.notification.readAt }"
     @click="handleSelect"
   >
     <div class="mt-1 h-2.5 w-2.5 rounded-full bg-foreground/70" :class="{
-      'bg-emerald-500': props.notification.level === 'success',
-      'bg-amber-500': props.notification.level === 'warning',
-      'bg-rose-500': props.notification.level === 'error',
-      'bg-sky-500': props.notification.level === 'info',
+      'bg-status-success': props.notification.level === 'success',
+      'bg-status-warning': props.notification.level === 'warning',
+      'bg-status-error': props.notification.level === 'error',
+      'bg-status-info': props.notification.level === 'info',
     }" />
     <div class="min-w-0 flex-1 space-y-1">
       <div class="flex items-center gap-2">
@@ -52,7 +52,7 @@ function handleMarkRead() {
     </div>
     <button
       type="button"
-      class="rounded-full p-1 text-text-tertiary transition-colors hover:bg-accent hover:text-text-primary"
+      class="rounded-[var(--radius-full)] p-1 text-text-tertiary transition-colors hover:bg-accent hover:text-text-primary"
       :data-testid="`ui-notification-row-mark-read-${props.notification.id}`"
       @click.stop="handleMarkRead"
     >

@@ -12,9 +12,10 @@ const props = defineProps<{
 </script>
 
 <template>
-  <article 
+  <article
+    data-ui-artifact-block="true"
     :class="cn(
-      'flex flex-col gap-2 p-3 rounded-md border border-border/40 dark:border-white/[0.08] bg-background transition-all hover:border-border/60',
+      'flex flex-col gap-2 rounded-[var(--radius-l)] border border-border bg-surface p-3 shadow-xs transition-colors hover:border-border-strong hover:bg-subtle/60',
       props.class
     )"
   >
@@ -29,7 +30,7 @@ const props = defineProps<{
       {{ props.excerpt }}
     </p>
     
-    <footer class="flex items-center justify-between gap-4 pt-1 mt-auto border-t border-border/20 dark:border-white/[0.05] pt-2">
+    <footer class="mt-auto flex items-center justify-between gap-4 border-t border-border/70 pt-2">
       <span class="text-[11px] font-medium text-text-tertiary">{{ props.statusLabel }}</span>
       <div v-if="$slots.actions" class="flex items-center gap-1.5">
         <slot name="actions" />

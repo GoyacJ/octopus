@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { UiEmptyState, UiPanelFrame } from '@octopus/ui'
 
 const { t } = useI18n()
 </script>
 
 <template>
-  <div class="p-6">
-    <h1 class="mb-4 text-2xl font-bold">{{ t('userCenter.todos.title') }}</h1>
-    <div class="bg-card rounded-lg border p-12 text-center text-text-tertiary">
-      {{ t('userCenter.todos.emptyState') }}
-    </div>
+  <div data-testid="user-center-todos-view">
+    <UiPanelFrame
+      variant="subtle"
+      padding="lg"
+      :title="t('userCenter.todos.title')"
+      :subtitle="t('userCenter.todos.emptyState')"
+    >
+      <UiEmptyState
+        :title="t('userCenter.todos.title')"
+        :description="t('userCenter.todos.emptyState')"
+      />
+    </UiPanelFrame>
   </div>
 </template>

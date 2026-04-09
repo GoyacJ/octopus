@@ -173,7 +173,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
 
 <template>
   <header
-    class="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border-subtle bg-background px-4 dark:border-white/[0.05]"
+    class="sticky top-0 z-30 flex h-12 items-center justify-between border-b border-border bg-background px-4"
     data-testid="workbench-topbar"
   >
     <div class="flex min-w-0 items-center gap-3">
@@ -206,7 +206,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
       <button
         type="button"
         data-testid="global-search-trigger"
-        class="flex items-center gap-2 rounded-md border border-border-subtle px-2.5 py-1.5 text-xs text-text-secondary hover:bg-accent dark:border-white/[0.08]"
+        class="flex items-center gap-2 rounded-[var(--radius-xs)] border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-accent"
         @click="shell.openSearch"
       >
         <Search :size="14" />
@@ -217,7 +217,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
         <UiButton variant="ghost" size="icon" data-testid="topbar-theme-toggle" class="dropdown-trigger h-8 w-8" @click="themeMenuOpen = !themeMenuOpen">
           <component :is="themeIcons[shell.preferences.theme]" :size="15" />
         </UiButton>
-        <div v-if="themeMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-44 rounded-lg border border-border-subtle bg-background p-1 shadow-lg dark:border-white/[0.08]">
+        <div v-if="themeMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-44 rounded-[var(--radius-l)] border border-border bg-popover p-1 shadow-md">
           <button
             v-for="(icon, key) in themeIcons"
             :key="key"
@@ -238,7 +238,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
         <UiButton variant="ghost" size="icon" data-testid="topbar-locale-toggle" class="dropdown-trigger h-8 w-8" @click="localeMenuOpen = !localeMenuOpen">
           <span class="text-[11px] font-bold uppercase">{{ shell.preferences.locale === 'zh-CN' ? '中' : 'EN' }}</span>
         </UiButton>
-        <div v-if="localeMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-40 rounded-lg border border-border-subtle bg-background p-1 shadow-lg dark:border-white/[0.08]">
+        <div v-if="localeMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-40 rounded-[var(--radius-l)] border border-border bg-popover p-1 shadow-md">
           <button
             v-for="locale in localeOptions"
             :key="locale"
@@ -255,7 +255,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
       <button
         type="button"
         data-testid="topbar-settings-button"
-        class="rounded-md px-2.5 py-1.5 text-xs text-text-secondary hover:bg-accent"
+        class="rounded-[var(--radius-xs)] px-2.5 py-1.5 text-xs text-text-secondary hover:bg-accent"
         :class="{ 'bg-accent text-text-primary': isSettingsRoute }"
         @click="openSettings"
       >
@@ -277,7 +277,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
           <button
             type="button"
             data-testid="topbar-notification-trigger"
-            class="dropdown-trigger relative flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent"
+            class="dropdown-trigger relative flex h-8 w-8 items-center justify-center rounded-[var(--radius-xs)] hover:bg-accent"
             :aria-label="t('notifications.triggerAriaLabel')"
             @click="toggleNotifications"
           >
@@ -309,7 +309,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
         <button
           type="button"
           data-testid="topbar-profile-trigger"
-          class="dropdown-trigger flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
+          class="dropdown-trigger flex items-center gap-2 rounded-[var(--radius-xs)] px-2 py-1.5 hover:bg-accent"
           @click="accountMenuOpen = !accountMenuOpen"
         >
           <div class="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-primary text-[10px] font-bold text-white uppercase">
@@ -319,7 +319,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
           <UserRound :size="14" class="text-text-tertiary" />
         </button>
 
-        <div v-if="accountMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-64 rounded-lg border border-border-subtle bg-background p-3 shadow-lg dark:border-white/[0.08]">
+        <div v-if="accountMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-64 rounded-[var(--radius-l)] border border-border bg-popover p-3 shadow-md">
           <div class="space-y-3">
             <div class="flex items-center gap-3">
               <div class="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-bold text-white uppercase">
@@ -332,10 +332,10 @@ async function handleNotificationSelect(notification: NotificationRecord) {
               </div>
             </div>
 
-            <div class="border-t border-border-subtle pt-2 dark:border-white/[0.05]">
+            <div class="border-t border-border pt-2">
               <button
                 type="button"
-                class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-text-secondary hover:bg-accent"
+                class="flex w-full items-center gap-2 rounded-[var(--radius-xs)] px-2 py-1.5 text-left text-sm text-text-secondary hover:bg-accent"
                 @click="openUserCenter"
               >
                 <UserRound :size="14" />

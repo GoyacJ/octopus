@@ -130,7 +130,7 @@ async function submit() {
     @update:open="() => undefined"
   >
     <div class="space-y-5" data-testid="auth-gate-panel">
-      <div class="rounded-2xl border border-border/50 bg-gradient-to-r from-card to-accent/15 px-4 py-3 dark:border-white/[0.08]">
+      <div class="rounded-[var(--radius-xl)] border border-border bg-subtle px-4 py-3">
         <p class="text-[11px] font-semibold uppercase tracking-[0.28em] text-text-tertiary">
           {{ t('authGate.eyebrow') }}
         </p>
@@ -168,7 +168,7 @@ async function submit() {
         </UiField>
       </div>
 
-      <p v-if="activeError" class="rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+      <p v-if="activeError" class="rounded-[var(--radius-l)] border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm text-destructive">
         {{ activeError }}
       </p>
 

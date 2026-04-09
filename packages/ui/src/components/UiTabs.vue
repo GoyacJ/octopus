@@ -31,7 +31,9 @@ const emit = defineEmits<{
     <TabsList
       data-testid="ui-tabs-list"
       :class="cn(
-        'inline-flex min-w-0 flex-wrap gap-1 border-b border-border/50 dark:border-white/[0.08] w-full',
+        'inline-flex min-w-0 flex-wrap gap-1 w-full',
+        props.variant === 'default' && 'border-b border-border',
+        props.variant !== 'default' && 'rounded-[var(--radius-m)] border border-border bg-surface p-1',
       )"
     >
       <TabsTrigger
@@ -40,10 +42,13 @@ const emit = defineEmits<{
         :value="tab.value"
         type="button"
         :class="cn(
-          'min-h-[2rem] px-3 pb-1 text-[13px] font-medium transition-colors border-b-2 -mb-px',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded',
-          'data-[state=active]:border-primary data-[state=active]:text-text-primary',
-          'data-[state=inactive]:border-transparent data-[state=inactive]:text-text-tertiary data-[state=inactive]:hover:text-text-secondary'
+          'min-h-[2rem] px-3 text-[13px] font-medium transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:rounded-[var(--radius-xs)]',
+          props.variant === 'default' && 'border-b-2 -mb-px pb-1.5',
+          props.variant !== 'default' && 'rounded-[var(--radius-xs)]',
+          props.variant === 'default' && 'data-[state=active]:border-primary data-[state=active]:text-text-primary data-[state=inactive]:border-transparent',
+          props.variant !== 'default' && 'data-[state=active]:bg-accent data-[state=active]:text-text-primary data-[state=active]:shadow-xs',
+          'data-[state=inactive]:text-text-tertiary data-[state=inactive]:hover:text-text-secondary'
         )"
         :data-testid="`ui-tabs-trigger-${tab.value}`"
         @click="emit('update:modelValue', tab.value)"

@@ -9,10 +9,15 @@ import {
   UiCheckbox,
   UiDialog,
   UiField,
+  UiInspectorPanel,
   UiInput,
+  UiListDetailShell,
+  UiMetricCard,
+  UiPanelFrame,
   UiPagination,
   UiRecordCard,
   UiSelect,
+  UiStatusCallout,
   UiTextarea,
 } from '@octopus/ui'
 
@@ -172,108 +177,116 @@ function menuLabel(menuId: string, fallback: string) {
 </script>
 
 <template>
-  <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-    <section class="space-y-3">
-      <div class="grid gap-3 md:grid-cols-2">
-        <div v-for="metric in metrics" :key="metric.id" class="rounded-xl border border-border-subtle p-4 dark:border-white/[0.05]">
-          <div class="text-xs text-text-secondary">{{ metric.label }}</div>
-          <div class="mt-2 text-2xl font-semibold text-text-primary">{{ metric.value }}</div>
-        </div>
-      </div>
+  <div data-testid="user-center-roles-shell">
+    <UiListDetailShell>
+      <template #list>
+        <section class="space-y-3">
+          <div class="grid gap-3 md:grid-cols-2">
+            <UiMetricCard v-for="metric in metrics" :key="metric.id" :label="metric.label" :value="metric.value" />
+          </div>
 
-      <div class="flex items-center justify-between gap-3 rounded-xl border border-border-subtle p-4 dark:border-white/[0.05]">
-        <div>
-          <div class="text-sm font-semibold text-text-primary">{{ t('userCenter.roles.title') }}</div>
-          <div class="text-xs text-text-secondary">{{ t('userCenter.roles.listSubtitle') }}</div>
-        </div>
-        <UiButton data-testid="roles-create-button" @click="createRoleDraft">
-          {{ t('userCenter.roles.actions.create') }}
-        </UiButton>
-      </div>
-
-      <UiRecordCard
-        v-for="role in pagedRoles"
-        :key="role.id"
-        :title="role.name"
-        :description="role.description"
-        interactive
-        class="cursor-pointer"
-        :class="selectedRoleId === role.id ? 'ring-1 ring-primary' : ''"
-        @click="applyRole(role.id)"
-      >
-        <template #badges>
-          <UiBadge :label="enumLabel('recordStatus', role.status)" subtle />
-          <UiBadge :label="role.code" subtle />
-          <UiButton
-            variant="destructive"
-            size="sm"
-            :data-testid="`roles-delete-button-${role.code}`"
-            @click.stop="promptDeleteRole(role.id)"
+          <UiPanelFrame
+            variant="subtle"
+            padding="md"
+            :title="t('userCenter.roles.title')"
+            :subtitle="t('userCenter.roles.listSubtitle')"
           >
-            {{ t('userCenter.roles.actions.delete') }}
-          </UiButton>
-        </template>
-      </UiRecordCard>
+            <template #actions>
+              <UiButton data-testid="roles-create-button" @click="createRoleDraft">
+                {{ t('userCenter.roles.actions.create') }}
+              </UiButton>
+            </template>
+          </UiPanelFrame>
 
-      <UiPagination
-        v-model:page="currentPage"
-        :page-count="pageCount"
-        :summary-label="`${userCenterStore.roles.length}`"
-        root-test-id="roles-list-pagination"
-      />
-    </section>
-
-    <section class="space-y-4 rounded-xl border border-border-subtle p-5 dark:border-white/[0.05]">
-      <div v-if="saveMessage" class="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-[12px] text-primary">
-        {{ saveMessage }}
-      </div>
-
-      <UiField :label="t('userCenter.roles.fields.name')">
-        <UiInput v-model="form.name" data-testid="roles-name-input" />
-      </UiField>
-      <UiField :label="t('userCenter.roles.fields.code')">
-        <UiInput v-model="form.code" data-testid="roles-code-input" />
-      </UiField>
-      <UiField :label="t('common.status')">
-        <UiSelect v-model="form.status" :options="statusOptions" />
-      </UiField>
-      <UiField :label="t('userCenter.roles.fields.permissions')">
-        <div class="space-y-2">
-          <label
-            v-for="permission in permissionOptions"
-            :key="permission.id"
-            class="block rounded-md border border-border/40 p-3"
+          <UiRecordCard
+            v-for="role in pagedRoles"
+            :key="role.id"
+            :title="role.name"
+            :description="role.description"
+            interactive
+            :active="selectedRoleId === role.id"
+            @click="applyRole(role.id)"
           >
-            <UiCheckbox
-              v-model="form.permissionIds"
-              :value="permission.id"
-              :data-testid="`roles-permission-${permission.id}`"
-            >
-              <span class="font-medium text-text-primary">{{ permission.name }}</span>
-              <span class="ml-2 text-xs text-text-tertiary">{{ permission.code }}</span>
-            </UiCheckbox>
-            <div class="mt-1 text-xs text-text-secondary">
-              {{ permission.description }}
+            <template #badges>
+              <UiBadge :label="enumLabel('recordStatus', role.status)" subtle />
+              <UiBadge :label="role.code" subtle />
+              <UiButton
+                variant="destructive"
+                size="sm"
+                :data-testid="`roles-delete-button-${role.code}`"
+                @click.stop="promptDeleteRole(role.id)"
+              >
+                {{ t('userCenter.roles.actions.delete') }}
+              </UiButton>
+            </template>
+          </UiRecordCard>
+
+          <UiPagination
+            v-model:page="currentPage"
+            :page-count="pageCount"
+            :summary-label="`${userCenterStore.roles.length}`"
+            root-test-id="roles-list-pagination"
+          />
+        </section>
+      </template>
+
+      <div data-testid="user-center-roles-inspector">
+        <UiInspectorPanel
+          :title="selectedRoleId ? t('userCenter.roles.title') : t('userCenter.roles.actions.create')"
+          :subtitle="selectedRoleId ? form.code : t('userCenter.roles.listSubtitle')"
+        >
+          <div class="space-y-4">
+            <UiStatusCallout v-if="saveMessage" tone="success" :description="saveMessage" />
+
+            <UiField :label="t('userCenter.roles.fields.name')">
+              <UiInput v-model="form.name" data-testid="roles-name-input" />
+            </UiField>
+            <UiField :label="t('userCenter.roles.fields.code')">
+              <UiInput v-model="form.code" data-testid="roles-code-input" />
+            </UiField>
+            <UiField :label="t('common.status')">
+              <UiSelect v-model="form.status" :options="statusOptions" />
+            </UiField>
+            <UiField :label="t('userCenter.roles.fields.permissions')">
+              <div class="space-y-2">
+                <label
+                  v-for="permission in permissionOptions"
+                  :key="permission.id"
+                  class="block rounded-[var(--radius-m)] border border-border bg-surface p-3"
+                >
+                  <UiCheckbox
+                    v-model="form.permissionIds"
+                    :value="permission.id"
+                    :data-testid="`roles-permission-${permission.id}`"
+                  >
+                    <span class="font-medium text-text-primary">{{ permission.name }}</span>
+                    <span class="ml-2 text-xs text-text-tertiary">{{ permission.code }}</span>
+                  </UiCheckbox>
+                  <div class="mt-1 text-xs text-text-secondary">
+                    {{ permission.description }}
+                  </div>
+                </label>
+              </div>
+            </UiField>
+            <UiField :label="t('userCenter.roles.fields.menus')" :hint="t('userCenter.roles.menuHint')">
+              <UserCenterMenuTree
+                v-model="form.menuIds"
+                selection-mode="multiple"
+                test-id-prefix="roles-menu"
+                :sections="menuTreeSections"
+              />
+            </UiField>
+            <UiField :label="t('userCenter.roles.fields.description')">
+              <UiTextarea v-model="form.description" :rows="5" />
+            </UiField>
+            <div class="flex gap-3">
+              <UiButton data-testid="roles-save-button" @click="saveRole">{{ t('userCenter.roles.actions.save') }}</UiButton>
+              <UiButton variant="ghost" @click="selectedRoleId ? applyRole(selectedRoleId) : createRoleDraft()">{{ t('userCenter.roles.actions.reset') }}</UiButton>
             </div>
-          </label>
-        </div>
-      </UiField>
-      <UiField :label="t('userCenter.roles.fields.menus')" :hint="t('userCenter.roles.menuHint')">
-        <UserCenterMenuTree
-          v-model="form.menuIds"
-          selection-mode="multiple"
-          test-id-prefix="roles-menu"
-          :sections="menuTreeSections"
-        />
-      </UiField>
-      <UiField :label="t('userCenter.roles.fields.description')">
-        <UiTextarea v-model="form.description" :rows="5" />
-      </UiField>
-      <div class="flex gap-3">
-        <UiButton data-testid="roles-save-button" @click="saveRole">{{ t('userCenter.roles.actions.save') }}</UiButton>
-        <UiButton variant="ghost" @click="selectedRoleId ? applyRole(selectedRoleId) : createRoleDraft()">{{ t('userCenter.roles.actions.reset') }}</UiButton>
+          </div>
+        </UiInspectorPanel>
       </div>
-    </section>
+    </UiListDetailShell>
   </div>
 
   <UiDialog

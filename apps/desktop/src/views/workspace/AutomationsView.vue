@@ -3,7 +3,21 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { AutomationRecord } from '@octopus/schema'
-import { UiBadge, UiButton, UiEmptyState, UiField, UiInput, UiRecordCard, UiSectionHeading, UiSelect, UiTextarea } from '@octopus/ui'
+import {
+  UiBadge,
+  UiButton,
+  UiEmptyState,
+  UiField,
+  UiInput,
+  UiInspectorPanel,
+  UiListDetailShell,
+  UiPageHeader,
+  UiPageShell,
+  UiRecordCard,
+  UiSelect,
+  UiStatusCallout,
+  UiTextarea,
+} from '@octopus/ui'
 
 import { formatDateTime } from '@/i18n/copy'
 import { useAgentStore } from '@/stores/agent'
@@ -125,13 +139,28 @@ async function removeAutomation() {
 </script>
 
 <template>
-  <div class="flex w-full flex-col gap-6 pb-20">
-    <header class="px-2">
-      <UiSectionHeading :eyebrow="t('automations.header.eyebrow')" :title="t('sidebar.navigation.automations')" :subtitle="automationStore.error || t('automations.header.subtitle')" />
-    </header>
+  <UiPageShell width="wide" test-id="workspace-automations-view">
+    <UiPageHeader
+      :eyebrow="t('automations.header.eyebrow')"
+      :title="t('sidebar.navigation.automations')"
+      :description="t('automations.header.subtitle')"
+    >
+      <template #actions>
+        <UiButton variant="secondary" @click="applyAutomation()">
+          {{ t('automations.actions.create') }}
+        </UiButton>
+      </template>
+    </UiPageHeader>
 
-    <div class="grid gap-6 px-2 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section class="space-y-3">
+    <UiStatusCallout
+      v-if="automationStore.error"
+      tone="error"
+      :description="automationStore.error"
+    />
+
+    <UiListDetailShell>
+      <template #list>
+        <div class="space-y-3">
         <UiRecordCard
           v-for="automation in automationStore.automations"
           :key="automation.id"
@@ -139,7 +168,7 @@ async function removeAutomation() {
           :description="automation.description"
           interactive
           class="cursor-pointer"
-          :class="selectedAutomationId === automation.id ? 'ring-1 ring-primary' : ''"
+          :active="selectedAutomationId === automation.id"
           @click="applyAutomation(automation.id)"
         >
           <template #badges>
@@ -150,11 +179,19 @@ async function removeAutomation() {
             <span class="text-xs text-text-tertiary">{{ automation.lastRunAt ? formatDateTime(automation.lastRunAt) : automation.cadence }}</span>
           </template>
         </UiRecordCard>
-        <UiEmptyState v-if="!automationStore.automations.length" :title="t('automations.empty.title')" :description="t('automations.empty.description')" />
-      </section>
+          <UiEmptyState
+            v-if="!automationStore.automations.length"
+            :title="t('automations.empty.title')"
+            :description="t('automations.empty.description')"
+          />
+        </div>
+      </template>
 
-      <section class="space-y-4 rounded-xl border border-border-subtle p-5 dark:border-white/[0.05]">
-        <h3 class="text-base font-semibold text-text-primary">{{ selectedAutomationId ? t('automations.actions.edit') : t('automations.actions.create') }}</h3>
+      <UiInspectorPanel
+        :title="selectedAutomationId ? t('automations.actions.edit') : t('automations.actions.create')"
+        :subtitle="t('automations.header.subtitle')"
+      >
+        <div class="space-y-4">
         <UiField :label="t('automations.fields.title')">
           <UiInput v-model="form.title" />
         </UiField>
@@ -181,7 +218,8 @@ async function removeAutomation() {
           <UiButton variant="ghost" @click="applyAutomation()">{{ t('common.reset') }}</UiButton>
           <UiButton v-if="selectedAutomationId" variant="ghost" @click="removeAutomation">{{ t('common.delete') }}</UiButton>
         </div>
-      </section>
-    </div>
-  </div>
+        </div>
+      </UiInspectorPanel>
+    </UiListDetailShell>
+  </UiPageShell>
 </template>

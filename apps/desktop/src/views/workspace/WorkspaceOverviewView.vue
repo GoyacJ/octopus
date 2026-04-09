@@ -3,7 +3,15 @@ import { computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute } from 'vue-router'
 
-import { UiEmptyState, UiMetricCard, UiRecordCard, UiSectionHeading, UiTimelineList } from '@octopus/ui'
+import {
+  UiEmptyState,
+  UiMetricCard,
+  UiPageHeader,
+  UiPageShell,
+  UiPanelFrame,
+  UiRecordCard,
+  UiTimelineList,
+} from '@octopus/ui'
 
 import { formatDateTime } from '@/i18n/copy'
 import { createProjectConversationTarget, createProjectDashboardTarget } from '@/i18n/navigation'
@@ -61,16 +69,14 @@ function resolveMetricTone(tone?: string): MetricTone {
 </script>
 
 <template>
-  <div class="flex w-full flex-col gap-8 pb-20">
-    <header class="px-2">
-      <UiSectionHeading
-        :eyebrow="t('overview.header.eyebrow')"
-        :title="snapshot?.workspace.name ?? t('overview.header.titleFallback')"
-        :subtitle="snapshot?.workspace.listenAddress ?? t('overview.header.subtitleFallback')"
-      />
-    </header>
+  <UiPageShell width="standard" test-id="workspace-overview-view">
+    <UiPageHeader
+      :eyebrow="t('overview.header.eyebrow')"
+      :title="snapshot?.workspace.name ?? t('overview.header.titleFallback')"
+      :description="snapshot?.workspace.listenAddress ?? t('overview.header.subtitleFallback')"
+    />
 
-    <section class="grid gap-3 px-2 sm:grid-cols-2 xl:grid-cols-4">
+    <section class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       <UiMetricCard
         v-for="metric in metrics"
         :key="metric.id"
@@ -81,9 +87,13 @@ function resolveMetricTone(tone?: string): MetricTone {
       />
     </section>
 
-    <div class="grid gap-8 px-2 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <section class="space-y-4">
-        <h3 class="text-lg font-semibold text-text-primary">{{ t('overview.projects.title') }}</h3>
+    <section class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <UiPanelFrame
+        variant="panel"
+        padding="md"
+        :title="t('overview.projects.title')"
+        :subtitle="t('overview.projects.openDashboard')"
+      >
         <div v-if="projects.length" class="grid gap-3 lg:grid-cols-2">
           <UiRecordCard
             v-for="project in projects"
@@ -94,28 +104,43 @@ function resolveMetricTone(tone?: string): MetricTone {
             <template #meta>
               <RouterLink
                 class="text-sm font-medium text-primary hover:underline"
-                :to="createProjectDashboardTarget(project.workspaceId, project.id)"
-              >
-                {{ t('overview.projects.openDashboard') }}
-              </RouterLink>
-            </template>
-          </UiRecordCard>
-        </div>
-        <UiEmptyState v-else :title="t('overview.empty.projectsTitle')" :description="t('overview.empty.projectsDescription')" />
-      </section>
+              :to="createProjectDashboardTarget(project.workspaceId, project.id)"
+            >
+              {{ t('overview.projects.openDashboard') }}
+            </RouterLink>
+          </template>
+        </UiRecordCard>
+      </div>
+        <UiEmptyState
+          v-else
+          :title="t('overview.empty.projectsTitle')"
+          :description="t('overview.empty.projectsDescription')"
+        />
+      </UiPanelFrame>
 
-      <section class="space-y-4">
-        <h3 class="text-lg font-semibold text-text-primary">{{ t('overview.activity.title') }}</h3>
+      <UiPanelFrame
+        variant="subtle"
+        padding="md"
+        :title="t('overview.activity.title')"
+      >
         <UiTimelineList
           v-if="activities.length"
           :items="activities"
+          density="compact"
         />
-        <UiEmptyState v-else :title="t('overview.empty.activityTitle')" :description="t('overview.empty.activityDescription')" />
-      </section>
-    </div>
+        <UiEmptyState
+          v-else
+          :title="t('overview.empty.activityTitle')"
+          :description="t('overview.empty.activityDescription')"
+        />
+      </UiPanelFrame>
+    </section>
 
-    <section class="space-y-4 px-2">
-      <h3 class="text-lg font-semibold text-text-primary">{{ t('overview.conversations.title') }}</h3>
+    <UiPanelFrame
+      variant="panel"
+      padding="md"
+      :title="t('overview.conversations.title')"
+    >
       <div v-if="conversations.length" class="grid gap-3 lg:grid-cols-2">
         <UiRecordCard
           v-for="conversation in conversations"
@@ -133,7 +158,11 @@ function resolveMetricTone(tone?: string): MetricTone {
           </template>
         </UiRecordCard>
       </div>
-      <UiEmptyState v-else :title="t('overview.empty.conversationsTitle')" :description="t('overview.empty.conversationsDescription')" />
-    </section>
-  </div>
+      <UiEmptyState
+        v-else
+        :title="t('overview.empty.conversationsTitle')"
+        :description="t('overview.empty.conversationsDescription')"
+      />
+    </UiPanelFrame>
+  </UiPageShell>
 </template>

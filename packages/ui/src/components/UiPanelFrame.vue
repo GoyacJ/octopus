@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import { cn } from '../lib/utils'
 import UiSurface from './UiSurface.vue'
 
-type PanelFrameVariant = 'hero' | 'panel' | 'subtle' | 'interactive'
+type PanelFrameVariant = 'hero' | 'panel' | 'raised' | 'subtle' | 'interactive'
 type PanelFramePadding = 'none' | 'sm' | 'md' | 'lg'
 
 const props = withDefaults(defineProps<{
@@ -31,8 +31,11 @@ const frameClasses = computed(() => cn(
 ))
 
 const surfaceVariant = computed(() => {
-  if (props.variant === 'hero' || props.variant === 'panel') {
-    return 'raised' // Default to our simple 1px border surface
+  if (props.variant === 'hero') {
+    return 'overlay'
+  }
+  if (props.variant === 'panel' || props.variant === 'raised' || props.variant === 'interactive') {
+    return 'raised'
   }
   return 'subtle'
 })

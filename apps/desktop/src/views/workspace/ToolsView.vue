@@ -22,9 +22,13 @@ import {
   UiDialog,
   UiEmptyState,
   UiField,
+  UiInspectorPanel,
   UiInput,
+  UiListDetailShell,
+  UiPageHeader,
+  UiPageShell,
   UiRecordCard,
-  UiSectionHeading,
+  UiStatusCallout,
   UiSwitch,
   UiTabs,
   UiToolbarRow,
@@ -794,16 +798,20 @@ function parseJsonObjectDraft(value: string): Record<string, JsonValue> {
 </script>
 
 <template>
-  <div class="flex w-full flex-col gap-6 pb-20">
-    <header class="px-2">
-      <UiSectionHeading
-        :eyebrow="t('tools.header.eyebrow')"
-        :title="t('sidebar.navigation.tools')"
-        :subtitle="catalogStore.error || t('tools.header.subtitle')"
-      />
-    </header>
+  <UiPageShell width="wide" test-id="workspace-tools-view">
+    <UiPageHeader
+      :eyebrow="t('tools.header.eyebrow')"
+      :title="t('sidebar.navigation.tools')"
+      :description="t('tools.header.subtitle')"
+    />
 
-    <section class="px-2">
+    <UiStatusCallout
+      v-if="catalogStore.error"
+      tone="error"
+      :description="catalogStore.error"
+    />
+
+    <section>
       <UiToolbarRow test-id="workspace-tools-toolbar">
         <template #search>
           <UiInput
@@ -859,21 +867,22 @@ function parseJsonObjectDraft(value: string): Record<string, JsonValue> {
       </UiToolbarRow>
     </section>
 
-    <div class="grid gap-6 px-2 xl:grid-cols-[minmax(0,1fr)_520px]">
-      <section class="space-y-3">
-        <UiRecordCard
-          v-for="entry in filteredEntries"
-          :key="entry.id"
-          :title="entry.name"
-          :description="entry.description"
-          :active="draftMode === 'none' && selectedEntry?.id === entry.id"
-          :test-id="`tool-entry-${entry.id}`"
-          interactive
-          @click="selectEntry(entry.id)"
-        >
-          <template #eyebrow>
-            {{ kindLabel(entry.kind) }}
-          </template>
+    <UiListDetailShell class="xl:grid-cols-[minmax(0,1fr)_520px]">
+      <template #list>
+        <section class="space-y-3">
+          <UiRecordCard
+            v-for="entry in filteredEntries"
+            :key="entry.id"
+            :title="entry.name"
+            :description="entry.description"
+            :active="draftMode === 'none' && selectedEntry?.id === entry.id"
+            :test-id="`tool-entry-${entry.id}`"
+            interactive
+            @click="selectEntry(entry.id)"
+          >
+            <template #eyebrow>
+              {{ kindLabel(entry.kind) }}
+            </template>
 
           <template #badges>
             <UiBadge :label="availabilityLabel(entry.availability)" :tone="availabilityTone(entry.availability)" />
@@ -925,32 +934,44 @@ function parseJsonObjectDraft(value: string): Record<string, JsonValue> {
             </span>
           </template>
 
-          <template #actions>
-            <div
-              v-if="isExternalSkillEntry(entry)"
-              class="flex items-center"
-              @click.stop
-              @keydown.stop
-            >
-              <UiCheckbox
-                v-model="selectedExternalSkillIds"
-                :value="entry.id"
-                :label="t('tools.actions.selectForCopy')"
-                :class="'text-[12px] text-text-secondary'"
-                :data-testid="`tool-entry-select-${entry.id}`"
-              />
-            </div>
-          </template>
-        </UiRecordCard>
+            <template #actions>
+              <div
+                v-if="isExternalSkillEntry(entry)"
+                class="flex items-center"
+                @click.stop
+                @keydown.stop
+              >
+                <UiCheckbox
+                  v-model="selectedExternalSkillIds"
+                  :value="entry.id"
+                  :label="t('tools.actions.selectForCopy')"
+                  :class="'text-[12px] text-text-secondary'"
+                  :data-testid="`tool-entry-select-${entry.id}`"
+                />
+              </div>
+            </template>
+          </UiRecordCard>
 
-        <UiEmptyState
-          v-if="!filteredEntries.length"
-          :title="searchQuery ? t('tools.empty.filteredTitle') : t('tools.empty.title')"
-          :description="searchQuery ? t('tools.empty.filteredDescription') : t('tools.empty.description')"
-        />
-      </section>
+          <UiEmptyState
+            v-if="!filteredEntries.length"
+            :title="searchQuery ? t('tools.empty.filteredTitle') : t('tools.empty.title')"
+            :description="searchQuery ? t('tools.empty.filteredDescription') : t('tools.empty.description')"
+          />
+        </section>
+      </template>
 
-      <section>
+      <UiInspectorPanel
+        :title="draftMode === 'new-skill'
+          ? t('tools.actions.newSkill')
+          : draftMode === 'new-mcp'
+            ? t('tools.actions.newMcp')
+            : (selectedEntry?.name ?? t('tools.detail.title'))"
+        :subtitle="draftMode === 'new-skill'
+          ? t('tools.editor.skillCreateDescription')
+          : draftMode === 'new-mcp'
+            ? t('tools.editor.mcpCreateDescription')
+            : (selectedEntry?.description ?? t('tools.empty.selectionDescription'))"
+      >
         <UiRecordCard
           v-if="draftMode === 'new-skill'"
           :title="t('tools.actions.newSkill')"
@@ -974,9 +995,7 @@ function parseJsonObjectDraft(value: string): Record<string, JsonValue> {
               />
             </UiField>
 
-            <div v-if="panelError" class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-[12px] text-status-error">
-              {{ panelError }}
-            </div>
+            <UiStatusCallout v-if="panelError" tone="error" :description="panelError" />
 
             <div class="flex gap-2">
               <UiButton :loading="submitting" @click="saveCurrent">
@@ -1009,9 +1028,7 @@ function parseJsonObjectDraft(value: string): Record<string, JsonValue> {
               />
             </UiField>
 
-            <div v-if="panelError" class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-[12px] text-status-error">
-              {{ panelError }}
-            </div>
+            <UiStatusCallout v-if="panelError" tone="error" :description="panelError" />
 
             <div class="flex gap-2">
               <UiButton :loading="submitting" @click="saveCurrent">
@@ -1295,9 +1312,7 @@ function parseJsonObjectDraft(value: string): Record<string, JsonValue> {
                   </div>
                 </div>
 
-                <div v-if="panelError" class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-[12px] text-status-error">
-                  {{ panelError }}
-                </div>
+                <UiStatusCallout v-if="panelError" tone="error" :description="panelError" />
 
                 <div class="flex flex-wrap gap-2">
                   <UiButton
@@ -1404,9 +1419,7 @@ function parseJsonObjectDraft(value: string): Record<string, JsonValue> {
                   </UiField>
                 </template>
 
-                <div v-if="panelError" class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-[12px] text-status-error">
-                  {{ panelError }}
-                </div>
+                <UiStatusCallout v-if="panelError" tone="error" :description="panelError" />
 
                 <div class="flex gap-2">
                   <UiButton :loading="submitting" @click="saveCurrent">
@@ -1430,9 +1443,9 @@ function parseJsonObjectDraft(value: string): Record<string, JsonValue> {
           :title="t('tools.empty.selectionTitle')"
           :description="t('tools.empty.selectionDescription')"
         />
-      </section>
-    </div>
-  </div>
+      </UiInspectorPanel>
+    </UiListDetailShell>
+  </UiPageShell>
 
   <UiDialog
     v-model:open="skillActionDialogOpen"
@@ -1512,9 +1525,7 @@ function parseJsonObjectDraft(value: string): Record<string, JsonValue> {
         </div>
       </div>
 
-      <div v-if="panelError" class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-[12px] text-status-error">
-        {{ panelError }}
-      </div>
+      <UiStatusCallout v-if="panelError" tone="error" :description="panelError" />
     </div>
 
     <template #footer>

@@ -28,7 +28,7 @@ const inputElement = ref<HTMLInputElement | null>(null)
 
 const classes = computed(() =>
   cn(
-    'flex h-8 w-full rounded-md border border-border/60 dark:border-white/[0.03] bg-background px-3 py-1.5 text-sm text-text-primary shadow-[inset_0_1px_2px_rgba(15,15,15,0.03)] ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-text-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-fast',
+    'flex h-8 w-full rounded-[var(--radius-xs)] border border-input bg-background px-3 text-[13px] text-text-primary ring-offset-background file:border-0 file:bg-transparent file:text-[13px] file:font-medium placeholder:text-text-tertiary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:border-primary disabled:cursor-not-allowed disabled:opacity-50 transition-colors duration-fast',
     props.class,
   ),
 )

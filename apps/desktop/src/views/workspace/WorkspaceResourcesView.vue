@@ -2,7 +2,16 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { UiBadge, UiEmptyState, UiInput, UiListRow, UiSectionHeading } from '@octopus/ui'
+import {
+  UiBadge,
+  UiEmptyState,
+  UiInput,
+  UiListRow,
+  UiPageHeader,
+  UiPageShell,
+  UiPanelFrame,
+  UiStatusCallout,
+} from '@octopus/ui'
 
 import { formatDateTime } from '@/i18n/copy'
 import { useResourceStore } from '@/stores/resource'
@@ -42,17 +51,33 @@ const filteredResources = computed(() => {
 </script>
 
 <template>
-  <div class="flex w-full flex-col gap-6 pb-20">
-    <header class="space-y-4 px-2">
-      <UiSectionHeading
-        :eyebrow="t('resources.header.eyebrow')"
-        :title="t('sidebar.navigation.resources')"
-        :subtitle="resourceStore.error || t('resources.header.subtitle')"
-      />
-      <UiInput v-model="searchQuery" :placeholder="t('resources.filters.searchPlaceholder')" class="max-w-md" />
-    </header>
+  <UiPageShell width="standard" test-id="workspace-resources-view">
+    <UiPageHeader
+      :eyebrow="t('resources.header.eyebrow')"
+      :title="t('sidebar.navigation.resources')"
+      :description="t('resources.header.subtitle')"
+    >
+      <template #actions>
+        <UiInput
+          v-model="searchQuery"
+          :placeholder="t('resources.filters.searchPlaceholder')"
+          class="w-full md:w-[320px]"
+        />
+      </template>
+    </UiPageHeader>
 
-    <main class="px-2">
+    <UiStatusCallout
+      v-if="resourceStore.error"
+      tone="error"
+      :description="resourceStore.error"
+    />
+
+    <UiPanelFrame
+      variant="panel"
+      padding="md"
+      :title="t('sidebar.navigation.resources')"
+      :subtitle="t('resources.header.subtitle')"
+    >
       <div v-if="filteredResources.length" class="space-y-2">
         <UiListRow
           v-for="resource in filteredResources"
@@ -67,7 +92,11 @@ const filteredResources = computed(() => {
           </template>
         </UiListRow>
       </div>
-      <UiEmptyState v-else :title="t('resources.empty.title')" :description="t('resources.empty.description')" />
-    </main>
-  </div>
+      <UiEmptyState
+        v-else
+        :title="t('resources.empty.title')"
+        :description="t('resources.empty.description')"
+      />
+    </UiPanelFrame>
+  </UiPageShell>
 </template>

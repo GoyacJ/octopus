@@ -81,7 +81,7 @@ function selectItem(item: UiSelectionMenuItem) {
     </template>
 
     <div :data-testid="props.testId" class="flex flex-col">
-      <div v-if="props.title || props.description" class="border-b border-border/40 dark:border-white/[0.08] px-3 py-2.5">
+      <div v-if="props.title || props.description" class="border-b border-border/40 px-3 py-2.5">
         <strong v-if="props.title" class="block text-[13px] font-bold text-text-primary">{{ props.title }}</strong>
         <p v-if="props.description" class="pt-0.5 text-[11px] leading-relaxed text-text-tertiary">{{ props.description }}</p>
       </div>
@@ -129,7 +129,7 @@ function selectItem(item: UiSelectionMenuItem) {
                 <span class="flex shrink-0 items-center gap-2">
                   <span
                     v-if="item.badge"
-                    class="rounded px-1.5 py-0.5 bg-subtle text-[9px] font-bold uppercase text-text-tertiary border border-border/40 dark:border-white/[0.08]"
+                    class="rounded border border-border/40 bg-subtle px-1.5 py-0.5 text-[9px] font-bold uppercase text-text-tertiary"
                   >
                     {{ item.badge }}
                   </span>

@@ -23,7 +23,7 @@ import {
 } from 'lucide-vue-next'
 
 import type { ProjectRecord, WorkspaceConnectionRecord } from '@octopus/schema'
-import { UiButton, UiDialog, UiField, UiInput, UiPopover, UiTextarea } from '@octopus/ui'
+import { UiButton, UiDialog, UiField, UiInput, UiPopover, UiStatusCallout, UiTextarea } from '@octopus/ui'
 
 import ConnectWorkspaceDialog from '@/components/layout/ConnectWorkspaceDialog.vue'
 import DesktopPetHost from '@/components/pet/DesktopPetHost.vue'
@@ -401,22 +401,22 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
 
 <template>
   <aside
-    class="flex h-full w-[280px] shrink-0 flex-col border-r border-border-subtle bg-sidebar px-4 py-4 dark:border-white/[0.05]"
+    class="flex h-full w-[280px] shrink-0 flex-col border-r border-border bg-sidebar px-3 py-3"
     :class="shell.leftSidebarCollapsed ? 'hidden' : 'flex'"
   >
-    <div class="flex items-center justify-between gap-3 border-b border-border-subtle pb-4 dark:border-white/[0.05]">
+    <div class="flex items-center justify-between gap-3 border-b border-border pb-3">
       <div class="flex items-center gap-3 min-w-0">
-        <img src="/logo.jpg" class="h-8 w-8 rounded-lg object-cover" alt="Logo" />
-        <div class="truncate text-base font-bold text-text-primary">网易Lobster</div>
+        <img src="/logo.jpg" class="h-8 w-8 rounded-[var(--radius-m)] object-cover" alt="Logo" />
+        <div class="truncate text-[14px] font-semibold text-text-primary">网易Lobster</div>
       </div>
       <UiButton variant="ghost" size="icon" data-testid="sidebar-collapse" class="h-8 w-8" @click="shell.toggleLeftSidebar()">
         <PanelLeftClose :size="16" />
       </UiButton>
     </div>
 
-    <div class="mt-6 min-h-0 flex-1 overflow-y-auto">
+    <div class="mt-4 min-h-0 flex-1 overflow-y-auto">
       <div class="flex items-center justify-between gap-2 px-2 pb-2">
-        <div class="text-[11px] font-bold uppercase tracking-widest text-text-tertiary">
+        <div class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
           {{ t('sidebar.projectTree.title') }}
         </div>
         <UiPopover v-model:open="quickCreateOpen" align="end" side="bottom" class="w-[300px] p-0">
@@ -458,12 +458,11 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
               />
             </UiField>
 
-            <div
+            <UiStatusCallout
               v-if="workspaceStore.error"
-              class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-[12px] text-status-error"
-            >
-              {{ workspaceStore.error }}
-            </div>
+              tone="error"
+              :description="workspaceStore.error"
+            />
 
             <div class="flex justify-end gap-2">
               <UiButton
@@ -489,7 +488,7 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
           v-for="project in activeProjects"
           :key="project.id"
           :data-testid="`sidebar-project-${project.id}`"
-          class="group rounded-xl border border-border-subtle p-3 transition-colors dark:border-white/[0.05]"
+          class="group rounded-[var(--radius-l)] border border-border bg-surface p-3 shadow-xs transition-colors"
         >
           <div class="flex items-center gap-2">
             <button
@@ -526,8 +525,8 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
               :key="item.id"
               :to="item.to"
               :data-testid="item.testId"
-              class="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs"
-              :class="isProjectModuleActive(project.id, item.routeNames) ? 'bg-primary/[0.08] text-text-primary' : 'text-text-secondary hover:bg-accent'"
+              class="flex items-center gap-2 rounded-[var(--radius-xs)] px-2 py-1.5 text-[12px]"
+              :class="isProjectModuleActive(project.id, item.routeNames) ? 'bg-accent text-text-primary' : 'text-text-secondary hover:bg-accent'"
             >
               <component :is="item.icon" :size="14" />
               <span class="truncate">{{ item.label }}</span>
@@ -537,23 +536,23 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
       </div>
     </div>
 
-    <div class="mt-4 flex items-center gap-2 border-t border-border-subtle pt-4 dark:border-white/[0.05]">
+    <div class="mt-4 flex items-center gap-2 border-t border-border pt-4">
       <UiPopover v-model:open="workspaceMenuOpen" align="start" side="top" class="w-[256px] p-2">
         <template #trigger>
           <button
             type="button"
             data-testid="sidebar-workspace-menu-trigger"
-            class="group flex min-w-0 flex-1 items-center gap-3 rounded-xl border border-transparent p-2 text-left transition-all hover:border-border-subtle hover:bg-accent/50 active:scale-[0.98]"
-            :class="{ 'border-border-subtle bg-accent/50 shadow-sm': workspaceMenuOpen }"
+            class="group flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-l)] border border-transparent p-2 text-left transition-colors hover:border-border hover:bg-accent"
+            :class="{ 'border-border bg-accent shadow-xs': workspaceMenuOpen }"
           >
-            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 text-primary shadow-inner">
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-m)] bg-accent text-primary shadow-xs">
               <LayoutDashboard :size="18" />
             </div>
             <div class="flex min-w-0 flex-1 flex-col">
               <div class="truncate text-sm font-bold text-text-primary leading-tight">
                 {{ workspaceLabel }}
               </div>
-              <div class="truncate text-[11px] font-medium text-text-tertiary leading-tight mt-0.5 uppercase tracking-wider">
+              <div class="mt-0.5 truncate text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary leading-tight">
                 {{ t('sidebar.workspace.label') }}
               </div>
             </div>
@@ -562,7 +561,7 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
         </template>
 
         <div class="flex flex-col gap-2">
-          <div class="px-2 py-1.5 mb-1 text-[11px] font-bold uppercase tracking-widest text-text-tertiary/70">
+          <div class="mb-1 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
             {{ t('sidebar.workspaceMenu.title') }}
           </div>
           <div data-testid="sidebar-workspace-navigation-menu" class="flex flex-col gap-1">
@@ -571,8 +570,8 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
               :key="item.id"
               :data-testid="`sidebar-workspace-nav-${item.id}`"
               :to="item.to"
-              class="flex items-center gap-3 rounded-xl px-3 py-2 text-[13px] transition-colors"
-              :class="isRouteActive(item.routeNames) ? 'bg-primary/10 text-primary font-medium' : 'text-text-secondary hover:bg-accent hover:text-text-primary'"
+              class="flex items-center gap-3 rounded-[var(--radius-m)] px-3 py-2 text-[13px] transition-colors"
+              :class="isRouteActive(item.routeNames) ? 'bg-accent text-text-primary font-medium' : 'text-text-secondary hover:bg-accent hover:text-text-primary'"
               @click="closeWorkspaceMenu"
             >
               <component :is="item.icon" :size="16" />
@@ -580,9 +579,9 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
             </RouterLink>
           </div>
 
-          <div class="my-1 border-t border-border-subtle dark:border-white/[0.05]" />
+          <div class="my-1 border-t border-border" />
 
-          <div class="px-2 py-1.5 mb-1 text-[11px] font-bold uppercase tracking-widest text-text-tertiary/70">
+          <div class="mb-1 px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
             {{ t('topbar.workspaceSectionTitle') }}
           </div>
           <div data-testid="sidebar-workspace-menu-list" class="flex flex-col gap-1">
@@ -594,10 +593,10 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
               <button
                 :data-testid="`sidebar-workspace-menu-item-${connection.workspaceConnectionId}`"
                 type="button"
-                class="flex min-w-0 flex-1 items-center gap-3 rounded-xl border px-3 py-2 text-left transition-colors"
+                class="flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-m)] border px-3 py-2 text-left transition-colors"
                 :class="connection.workspaceConnectionId === shell.activeWorkspaceConnectionId
-                  ? 'border-primary/30 bg-primary/[0.08] text-text-primary'
-                  : 'border-border-subtle text-text-secondary hover:bg-accent dark:border-white/[0.05]'"
+                  ? 'border-border-strong bg-accent text-text-primary shadow-xs'
+                  : 'border-border text-text-secondary hover:bg-accent'"
                 @click="switchWorkspace(connection.workspaceConnectionId, connection.workspaceId)"
               >
                 <div class="min-w-0 flex-1">
@@ -634,7 +633,7 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
           <UiButton
             data-testid="sidebar-connect-workspace-trigger"
             variant="ghost"
-            class="w-full justify-start rounded-xl px-3 py-2"
+            class="w-full justify-start rounded-[var(--radius-m)] px-3 py-2"
             @click="openConnectWorkspaceDialog"
           >
             <Plus :size="16" class="mr-2" />
@@ -653,12 +652,11 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
       :description="t('sidebar.projectTree.deleteDialog.description', { name: deleteTargetProject?.name ?? '' })"
       content-test-id="sidebar-project-delete-dialog"
     >
-      <div
+      <UiStatusCallout
         v-if="workspaceStore.error"
-        class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-[12px] text-status-error"
-      >
-        {{ workspaceStore.error }}
-      </div>
+        tone="error"
+        :description="workspaceStore.error"
+      />
 
       <template #footer>
         <UiButton variant="ghost" @click="closeDeleteDialog">

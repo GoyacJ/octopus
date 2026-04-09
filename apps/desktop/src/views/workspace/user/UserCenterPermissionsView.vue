@@ -12,10 +12,15 @@ import {
   UiCheckbox,
   UiDialog,
   UiField,
+  UiInspectorPanel,
   UiInput,
+  UiListDetailShell,
+  UiMetricCard,
+  UiPanelFrame,
   UiPagination,
   UiRecordCard,
   UiSelect,
+  UiStatusCallout,
   UiTextarea,
 } from '@octopus/ui'
 
@@ -270,147 +275,157 @@ async function confirmDeletePermission() {
 </script>
 
 <template>
-  <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-    <section class="space-y-3">
-      <div class="grid gap-3 md:grid-cols-2">
-        <div v-for="metric in metrics" :key="metric.id" class="rounded-xl border border-border-subtle p-4 dark:border-white/[0.05]">
-          <div class="text-xs text-text-secondary">{{ metric.label }}</div>
-          <div class="mt-2 text-2xl font-semibold text-text-primary">{{ metric.value }}</div>
-        </div>
-      </div>
+  <div data-testid="user-center-permissions-shell">
+    <UiListDetailShell>
+      <template #list>
+        <section class="space-y-3">
+          <div class="grid gap-3 md:grid-cols-2">
+            <UiMetricCard v-for="metric in metrics" :key="metric.id" :label="metric.label" :value="metric.value" />
+          </div>
 
-      <div class="flex items-center justify-between gap-3 rounded-xl border border-border-subtle p-4 dark:border-white/[0.05]">
-        <div>
-          <div class="text-sm font-semibold text-text-primary">{{ t('userCenter.permissions.listTitle') }}</div>
-          <div class="text-xs text-text-secondary">{{ t('userCenter.permissions.listSubtitle') }}</div>
-        </div>
-        <UiButton data-testid="permissions-create-button" @click="createPermissionDraft">
-          {{ t('userCenter.permissions.actions.create') }}
-        </UiButton>
-      </div>
-
-      <UiRecordCard
-        v-for="permission in pagedPermissions"
-        :key="permission.id"
-        :title="permission.name"
-        :description="permission.description"
-        interactive
-        class="cursor-pointer"
-        :class="selectedPermissionId === permission.id ? 'ring-1 ring-primary' : ''"
-        @click="applyPermission(permission.id)"
-      >
-        <template #badges>
-          <UiBadge :label="enumLabel('rbacPermissionKind', permission.kind)" subtle />
-          <UiBadge :label="enumLabel('recordStatus', permission.status)" subtle />
-          <UiBadge
-            v-if="permission.targetType"
-            :label="enumLabel('rbacPermissionTargetType', permission.targetType)"
-            subtle
-          />
-          <UiButton
-            variant="destructive"
-            size="sm"
-            :data-testid="`permissions-delete-button-${permission.code}`"
-            @click.stop="promptDeletePermission(permission.id)"
+          <UiPanelFrame
+            variant="subtle"
+            padding="md"
+            :title="t('userCenter.permissions.listTitle')"
+            :subtitle="t('userCenter.permissions.listSubtitle')"
           >
-            {{ t('userCenter.permissions.actions.delete') }}
-          </UiButton>
-        </template>
-        <div class="mt-3 flex flex-wrap gap-2 text-xs text-text-secondary">
-          <span>{{ t('userCenter.permissions.usedByRoles', { count: roleUsageCountByPermissionId.get(permission.id) ?? 0 }) }}</span>
-          <span v-if="permission.kind === 'bundle'">{{ t('userCenter.permissions.bundleMembers', { count: permission.memberPermissionIds.length }) }}</span>
-        </div>
-      </UiRecordCard>
+            <template #actions>
+              <UiButton data-testid="permissions-create-button" @click="createPermissionDraft">
+                {{ t('userCenter.permissions.actions.create') }}
+              </UiButton>
+            </template>
+          </UiPanelFrame>
 
-      <UiPagination
-        v-model:page="currentPage"
-        :page-count="pageCount"
-        :summary-label="`${userCenterStore.permissions.length}`"
-        root-test-id="permissions-list-pagination"
-      />
-    </section>
-
-    <section class="space-y-4 rounded-xl border border-border-subtle p-5 dark:border-white/[0.05]">
-      <div v-if="saveMessage" class="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-[12px] text-primary">
-        {{ saveMessage }}
-      </div>
-
-      <UiField :label="t('userCenter.permissions.fields.name')">
-        <UiInput v-model="form.name" data-testid="permissions-name-input" />
-      </UiField>
-      <UiField :label="t('userCenter.permissions.fields.code')">
-        <UiInput v-model="form.code" data-testid="permissions-code-input" />
-      </UiField>
-      <UiField :label="t('common.status')">
-        <UiSelect v-model="form.status" :options="statusOptions" data-testid="permissions-status-select" />
-      </UiField>
-      <UiField :label="t('userCenter.permissions.fields.kind')">
-        <UiSelect v-model="form.kind" :options="kindOptions" data-testid="permissions-kind-select" />
-      </UiField>
-      <UiField :label="t('userCenter.permissions.fields.targetType')">
-        <UiSelect v-model="form.targetType" :options="targetTypeOptions" data-testid="permissions-target-type-select" />
-      </UiField>
-
-      <UiField v-if="form.kind === 'atomic'" :label="t('userCenter.permissions.fields.action')">
-        <UiInput v-model="form.action" data-testid="permissions-action-input" />
-      </UiField>
-
-      <UiField
-        v-if="form.kind === 'atomic' && targetOptions.length"
-        :label="t('userCenter.permissions.fields.targetIds')"
-      >
-        <div class="space-y-2">
-          <label
-            v-for="option in targetOptions"
-            :key="option.value"
-            class="block rounded-md border border-border/40 p-3"
+          <UiRecordCard
+            v-for="permission in pagedPermissions"
+            :key="permission.id"
+            :title="permission.name"
+            :description="permission.description"
+            interactive
+            :active="selectedPermissionId === permission.id"
+            @click="applyPermission(permission.id)"
           >
-            <UiCheckbox
-              v-model="form.targetIds"
-              :value="option.value"
-              :data-testid="`permissions-target-${option.value}`"
-            >
-              <span class="font-medium text-text-primary">{{ option.label }}</span>
-            </UiCheckbox>
-          </label>
-        </div>
-      </UiField>
-
-      <UiField v-else-if="form.kind === 'atomic'" :label="t('userCenter.permissions.fields.targetIds')">
-        <div class="rounded-md border border-dashed border-border/40 px-3 py-2 text-sm text-text-tertiary" data-testid="permissions-targets-empty">
-          {{ t('userCenter.permissions.emptyTargets') }}
-        </div>
-      </UiField>
-
-      <UiField v-if="form.kind === 'bundle'" :label="t('userCenter.permissions.fields.memberPermissionIds')">
-        <div class="space-y-2">
-          <label
-            v-for="permission in memberPermissionOptions"
-            :key="permission.value"
-            class="block rounded-md border border-border/40 p-3"
-          >
-            <UiCheckbox
-              v-model="form.memberPermissionIds"
-              :value="permission.value"
-              :data-testid="`permissions-member-${permission.value}`"
-            >
-              <span class="font-medium text-text-primary">{{ permission.label }}</span>
-            </UiCheckbox>
-            <div class="mt-1 text-xs text-text-secondary">
-              {{ permission.description }}
+            <template #badges>
+              <UiBadge :label="enumLabel('rbacPermissionKind', permission.kind)" subtle />
+              <UiBadge :label="enumLabel('recordStatus', permission.status)" subtle />
+              <UiBadge
+                v-if="permission.targetType"
+                :label="enumLabel('rbacPermissionTargetType', permission.targetType)"
+                subtle
+              />
+              <UiButton
+                variant="destructive"
+                size="sm"
+                :data-testid="`permissions-delete-button-${permission.code}`"
+                @click.stop="promptDeletePermission(permission.id)"
+              >
+                {{ t('userCenter.permissions.actions.delete') }}
+              </UiButton>
+            </template>
+            <div class="mt-3 flex flex-wrap gap-2 text-xs text-text-secondary">
+              <span>{{ t('userCenter.permissions.usedByRoles', { count: roleUsageCountByPermissionId.get(permission.id) ?? 0 }) }}</span>
+              <span v-if="permission.kind === 'bundle'">{{ t('userCenter.permissions.bundleMembers', { count: permission.memberPermissionIds.length }) }}</span>
             </div>
-          </label>
-        </div>
-      </UiField>
+          </UiRecordCard>
 
-      <UiField :label="t('userCenter.permissions.fields.description')">
-        <UiTextarea v-model="form.description" :rows="5" data-testid="permissions-description-input" />
-      </UiField>
-      <div class="flex gap-3">
-        <UiButton data-testid="permissions-save-button" @click="savePermission">{{ t('userCenter.permissions.actions.save') }}</UiButton>
-        <UiButton variant="ghost" @click="selectedPermissionId ? applyPermission(selectedPermissionId) : createPermissionDraft()">{{ t('userCenter.permissions.actions.reset') }}</UiButton>
+          <UiPagination
+            v-model:page="currentPage"
+            :page-count="pageCount"
+            :summary-label="`${userCenterStore.permissions.length}`"
+            root-test-id="permissions-list-pagination"
+          />
+        </section>
+      </template>
+
+      <div data-testid="user-center-permissions-inspector">
+        <UiInspectorPanel
+          :title="selectedPermissionId ? t('userCenter.permissions.listTitle') : t('userCenter.permissions.actions.create')"
+          :subtitle="selectedPermissionId ? form.code : t('userCenter.permissions.listSubtitle')"
+        >
+          <div class="space-y-4">
+            <UiStatusCallout v-if="saveMessage" tone="success" :description="saveMessage" />
+
+            <UiField :label="t('userCenter.permissions.fields.name')">
+              <UiInput v-model="form.name" data-testid="permissions-name-input" />
+            </UiField>
+            <UiField :label="t('userCenter.permissions.fields.code')">
+              <UiInput v-model="form.code" data-testid="permissions-code-input" />
+            </UiField>
+            <UiField :label="t('common.status')">
+              <UiSelect v-model="form.status" :options="statusOptions" data-testid="permissions-status-select" />
+            </UiField>
+            <UiField :label="t('userCenter.permissions.fields.kind')">
+              <UiSelect v-model="form.kind" :options="kindOptions" data-testid="permissions-kind-select" />
+            </UiField>
+            <UiField :label="t('userCenter.permissions.fields.targetType')">
+              <UiSelect v-model="form.targetType" :options="targetTypeOptions" data-testid="permissions-target-type-select" />
+            </UiField>
+
+            <UiField v-if="form.kind === 'atomic'" :label="t('userCenter.permissions.fields.action')">
+              <UiInput v-model="form.action" data-testid="permissions-action-input" />
+            </UiField>
+
+            <UiField
+              v-if="form.kind === 'atomic' && targetOptions.length"
+              :label="t('userCenter.permissions.fields.targetIds')"
+            >
+              <div class="space-y-2">
+                <label
+                  v-for="option in targetOptions"
+                  :key="option.value"
+                  class="block rounded-[var(--radius-m)] border border-border bg-surface p-3"
+                >
+                  <UiCheckbox
+                    v-model="form.targetIds"
+                    :value="option.value"
+                    :data-testid="`permissions-target-${option.value}`"
+                  >
+                    <span class="font-medium text-text-primary">{{ option.label }}</span>
+                  </UiCheckbox>
+                </label>
+              </div>
+            </UiField>
+
+            <UiField v-else-if="form.kind === 'atomic'" :label="t('userCenter.permissions.fields.targetIds')">
+              <UiPanelFrame variant="subtle" padding="sm">
+                <div class="text-sm text-text-tertiary" data-testid="permissions-targets-empty">
+                  {{ t('userCenter.permissions.emptyTargets') }}
+                </div>
+              </UiPanelFrame>
+            </UiField>
+
+            <UiField v-if="form.kind === 'bundle'" :label="t('userCenter.permissions.fields.memberPermissionIds')">
+              <div class="space-y-2">
+                <label
+                  v-for="permission in memberPermissionOptions"
+                  :key="permission.value"
+                  class="block rounded-[var(--radius-m)] border border-border bg-surface p-3"
+                >
+                  <UiCheckbox
+                    v-model="form.memberPermissionIds"
+                    :value="permission.value"
+                    :data-testid="`permissions-member-${permission.value}`"
+                  >
+                    <span class="font-medium text-text-primary">{{ permission.label }}</span>
+                  </UiCheckbox>
+                  <div class="mt-1 text-xs text-text-secondary">
+                    {{ permission.description }}
+                  </div>
+                </label>
+              </div>
+            </UiField>
+
+            <UiField :label="t('userCenter.permissions.fields.description')">
+              <UiTextarea v-model="form.description" :rows="5" data-testid="permissions-description-input" />
+            </UiField>
+            <div class="flex gap-3">
+              <UiButton data-testid="permissions-save-button" @click="savePermission">{{ t('userCenter.permissions.actions.save') }}</UiButton>
+              <UiButton variant="ghost" @click="selectedPermissionId ? applyPermission(selectedPermissionId) : createPermissionDraft()">{{ t('userCenter.permissions.actions.reset') }}</UiButton>
+            </div>
+          </div>
+        </UiInspectorPanel>
       </div>
-    </section>
+    </UiListDetailShell>
   </div>
 
   <UiDialog

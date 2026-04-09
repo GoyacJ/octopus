@@ -31,16 +31,14 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-screen w-screen overflow-hidden bg-background font-sans text-text-primary antialiased">
-    <!-- Notion Style: Sidebar is full height -->
     <WorkbenchSidebar />
 
     <div v-if="shell.leftSidebarCollapsed" data-testid="sidebar-rail" class="hidden" />
 
-    <div class="flex flex-1 flex-col min-w-0 relative">
+    <div class="relative flex min-w-0 flex-1 flex-col bg-background">
       <WorkbenchTopbar />
-      
+
       <main class="flex-1 overflow-y-auto min-w-0" data-testid="workbench-main">
-        <!-- Removed fixed padding to allow full-bleed layouts (like Conversation) -->
         <div class="w-full h-full">
           <slot />
         </div>

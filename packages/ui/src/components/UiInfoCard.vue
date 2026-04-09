@@ -18,10 +18,10 @@ const props = withDefaults(defineProps<{
 <template>
   <article
     :class="cn(
-      'flex min-h-[7.5rem] flex-col gap-2 rounded-[calc(var(--radius-lg)+4px)] p-4 transition-all duration-normal ease-apple hover:shadow-sm',
-      props.tone === 'default' && 'bg-black/[0.025] dark:bg-white/[0.04] text-text-secondary',
-      props.tone === 'accent' && 'bg-primary/[0.06] text-primary shadow-sm ring-1 ring-primary/5',
-      props.tone === 'muted' && 'bg-muted/50 text-text-tertiary',
+      'flex min-h-[7.5rem] flex-col gap-2 rounded-[var(--radius-xl)] border p-4 transition-colors duration-fast',
+      props.tone === 'default' && 'border-border bg-surface text-text-secondary',
+      props.tone === 'accent' && 'border-primary/15 bg-accent text-primary',
+      props.tone === 'muted' && 'border-border bg-subtle text-text-tertiary',
       props.class,
     )"
   >

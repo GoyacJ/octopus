@@ -26,7 +26,7 @@ const levelIcons = {
   <UiSurface
     variant="overlay"
     padding="sm"
-    class="w-full border-border/40 bg-gradient-to-br from-background via-background to-accent/20 shadow-[0_16px_44px_rgba(15,23,42,0.12)] dark:border-white/[0.08]"
+    class="w-full border-border bg-popover shadow-md"
   >
     <div
       class="flex items-start gap-3"
@@ -53,7 +53,7 @@ const levelIcons = {
       </div>
       <button
         type="button"
-        class="rounded-full p-1 text-text-tertiary transition-colors hover:bg-accent hover:text-text-primary"
+        class="rounded-[var(--radius-full)] p-1 text-text-tertiary transition-colors hover:bg-accent hover:text-text-primary"
         :data-testid="`ui-toast-close-${props.notification.id}`"
         @click.stop="emit('close', props.notification.id)"
       >

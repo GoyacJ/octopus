@@ -42,7 +42,7 @@ const filters: NotificationFilterScope[] = ['all', 'app', 'workspace', 'user']
     <UiSurface
       variant="overlay"
       padding="sm"
-      class="border-border/40 bg-gradient-to-br from-background via-background to-accent/20 shadow-[0_18px_48px_rgba(15,23,42,0.12)] dark:border-white/[0.08]"
+      class="border-border bg-popover shadow-md"
     >
       <div class="flex items-start justify-between gap-3 px-1 pb-3">
         <div class="space-y-1">
@@ -68,10 +68,10 @@ const filters: NotificationFilterScope[] = ['all', 'app', 'workspace', 'user']
           v-for="filter in filters"
           :key="filter"
           type="button"
-          class="rounded-full border px-2.5 py-1 text-xs font-medium transition-all duration-normal ease-apple"
+          class="rounded-full border px-2.5 py-1 text-xs font-medium transition-colors duration-fast"
           :class="filter === props.activeFilter
-            ? 'border-foreground/10 bg-foreground text-background'
-            : 'border-border/40 bg-background text-text-secondary hover:bg-accent'"
+            ? 'border-border-strong bg-accent text-text-primary shadow-xs'
+            : 'border-border bg-surface text-text-secondary hover:bg-accent'"
           :data-testid="`ui-notification-filter-${filter}`"
           @click="emit('update:filter', filter)"
         >
@@ -89,7 +89,7 @@ const filters: NotificationFilterScope[] = ['all', 'app', 'workspace', 'user']
           @select="emit('select', $event)"
         />
       </div>
-      <div v-else class="rounded-2xl border border-dashed border-border/40 px-4 py-8 text-center">
+      <div v-else class="rounded-[var(--radius-xl)] border border-dashed border-border px-4 py-8 text-center">
         <p class="text-sm font-semibold text-text-primary">
           {{ props.emptyTitle }}
         </p>

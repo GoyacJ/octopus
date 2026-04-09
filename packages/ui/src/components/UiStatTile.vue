@@ -19,12 +19,13 @@ const props = withDefaults(
 
 <template>
   <div
+    :data-ui-tone="props.tone"
     :class="cn(
-      'flex flex-col gap-1.5 p-4 rounded-md border border-border dark:border-white/[0.03] bg-background transition-colors',
-      props.tone === 'success' && 'border-status-success/20 bg-status-success/5',
-      props.tone === 'warning' && 'border-status-warning/20 bg-status-warning/5',
-      props.tone === 'error' && 'border-status-error/20 bg-status-error/5',
-      props.tone === 'info' && 'border-primary/20 dark:border-primary/20 bg-primary/5',
+      'flex flex-col gap-1.5 rounded-[var(--radius-l)] border border-border bg-surface p-4 shadow-xs transition-colors',
+      props.tone === 'success' && 'border-transparent bg-[var(--color-status-success-soft)]',
+      props.tone === 'warning' && 'border-transparent bg-[var(--color-status-warning-soft)]',
+      props.tone === 'error' && 'border-transparent bg-[var(--color-status-error-soft)]',
+      props.tone === 'info' && 'border-transparent bg-accent',
       props.class
     )"
   >

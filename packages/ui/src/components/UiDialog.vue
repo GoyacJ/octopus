@@ -46,12 +46,12 @@ const accessibleDescription = computed(() => visibleDescription.value || accessi
 <template>
   <DialogRoot :open="props.open" @update:open="emit('update:open', $event)">
     <DialogPortal>
-      <DialogOverlay class="fixed inset-0 z-50 bg-black/20 backdrop-blur-[2px] transition-opacity" />
+      <DialogOverlay class="fixed inset-0 z-50 bg-[var(--color-overlay)] transition-opacity" />
       <DialogContent
         :data-testid="props.contentTestId"
         data-ui-dialog-content="true"
         :class="cn(
-          'fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-lg border border-border/50 dark:border-white/[0.12] bg-background p-5 shadow-[0_12px_24px_-8px_rgba(15,15,15,0.15)] md:w-full md:p-6',
+          'fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 -translate-y-1/2 flex-col gap-4 rounded-[var(--radius-xl)] border border-border bg-popover p-5 shadow-lg md:w-full md:p-6',
           props.contentClass,
         )"
       >
@@ -64,15 +64,15 @@ const accessibleDescription = computed(() => visibleDescription.value || accessi
 
         <header
           v-if="$slots.header || props.title || props.description"
-          class="flex items-start justify-between gap-3 pb-2 border-b border-border/50 dark:border-white/[0.08]"
+          class="flex items-start justify-between gap-3 border-b border-border pb-2"
         >
           <div class="min-w-0 flex-1">
             <slot name="header">
               <div class="space-y-1.5">
-                <div class="text-[1.1rem] font-bold text-text-primary">
+                <div class="text-[22px] font-bold tracking-[-0.02em] text-text-primary">
                   {{ accessibleTitle }}
                 </div>
-                <div v-if="visibleDescription" class="text-[13px] leading-relaxed text-text-secondary">
+                <div v-if="visibleDescription" class="text-[14px] leading-relaxed text-text-secondary">
                   {{ visibleDescription }}
                 </div>
               </div>
@@ -82,7 +82,7 @@ const accessibleDescription = computed(() => visibleDescription.value || accessi
           <DialogClose as-child>
             <button
               type="button"
-              class="inline-flex size-6 shrink-0 items-center justify-center rounded text-text-tertiary transition-colors hover:bg-accent hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              class="inline-flex size-7 shrink-0 items-center justify-center rounded-[var(--radius-xs)] text-text-tertiary transition-colors hover:bg-accent hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               data-testid="ui-dialog-close"
               :aria-label="props.closeLabel"
             >
@@ -108,7 +108,7 @@ const accessibleDescription = computed(() => visibleDescription.value || accessi
 
         <section
           v-if="$slots.danger"
-          class="flex flex-col gap-3 rounded-md border border-destructive/20 bg-destructive/5 p-4 mt-2"
+          class="mt-2 flex flex-col gap-3 rounded-[var(--radius-l)] border border-transparent bg-[var(--color-status-error-soft)] p-4"
           data-testid="ui-dialog-danger"
         >
           <slot name="danger" />

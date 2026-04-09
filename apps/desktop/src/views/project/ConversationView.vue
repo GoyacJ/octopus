@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowUp, Bot, Plus, Shield, Sparkles } from 'lucide-vue-next'
 
 import type { ConversationActorKind, Message, PermissionMode, WorkspaceResourceRecord } from '@octopus/schema'
-import { UiButton, UiEmptyState, UiSelect, UiTextarea } from '@octopus/ui'
+import { UiButton, UiConversationComposerShell, UiEmptyState, UiSelect, UiStatusCallout, UiTextarea } from '@octopus/ui'
 
 import ConversationMessageBubble from '@/components/conversation/ConversationMessageBubble.vue'
 import ConversationQueueList from '@/components/conversation/ConversationQueueList.vue'
@@ -342,7 +342,7 @@ async function rejectMessageApproval() {
 
       <template v-else>
         <div ref="scrollContainer" class="flex-1 overflow-y-auto py-4">
-          <div class="mx-auto flex w-full max-w-[800px] flex-col">
+          <div data-testid="conversation-message-list" class="mx-auto flex w-full max-w-[800px] flex-col">
             <ConversationMessageBubble
               v-for="message in renderedMessages"
               :key="message.id"
@@ -376,17 +376,17 @@ async function rejectMessageApproval() {
           <ConversationQueueList :items="queueItems" @remove="runtime.removeQueuedTurn" />
         </div>
 
-        <div
+        <UiConversationComposerShell
           data-testid="conversation-composer"
-          class="mx-auto mt-4 w-full max-w-[840px] rounded-[26px] border border-border/40 bg-card/95 shadow-md transition-all duration-normal ease-apple dark:border-white/[0.08]"
+          class="mx-auto mt-4 w-full max-w-[840px]"
         >
-          <div
+          <UiStatusCallout
             v-if="runtime.error"
-            class="mx-3 mb-1 rounded-[18px] border border-status-error/20 bg-status-error/5 px-4 py-3 text-sm text-status-error"
+            class="mx-1 mb-1"
+            tone="error"
+            :description="runtime.error"
             role="alert"
-          >
-            {{ runtime.error }}
-          </div>
+          />
 
           <div class="px-5 pb-3 pt-3">
             <UiTextarea
@@ -401,13 +401,13 @@ async function rejectMessageApproval() {
               <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                 <div
                   aria-hidden="true"
-                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border/20 bg-background/60 text-text-secondary shadow-xs dark:border-white/5"
+                  class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-text-secondary shadow-xs"
                 >
                   <Plus :size="14" />
                 </div>
 
                 <div class="w-full sm:w-[10.5rem]">
-                  <div class="flex min-w-0 items-center gap-1 rounded-full border border-border/20 bg-background/70 px-1.5 shadow-xs dark:border-white/5">
+                  <div class="flex min-w-0 items-center gap-1 rounded-full border border-border bg-surface px-1.5 shadow-xs">
                     <Sparkles :size="14" class="ml-2 shrink-0 text-text-secondary" />
                     <UiSelect
                       v-model="selectedModelId"
@@ -420,7 +420,7 @@ async function rejectMessageApproval() {
                 </div>
 
                 <div class="w-full sm:w-[10rem]">
-                  <div class="flex min-w-[100px] items-center gap-1 rounded-full border border-border/20 bg-background/70 px-1.5 shadow-xs dark:border-white/5">
+                  <div class="flex min-w-[100px] items-center gap-1 rounded-full border border-border bg-surface px-1.5 shadow-xs">
                     <Shield :size="14" class="ml-2 shrink-0 text-text-secondary" />
                     <UiSelect
                       v-model="selectedPermissionMode"
@@ -432,7 +432,7 @@ async function rejectMessageApproval() {
                 </div>
 
                 <div class="w-full sm:w-[9.5rem]">
-                  <div class="flex min-w-0 items-center gap-1 rounded-full border border-border/20 bg-background/70 px-1.5 shadow-xs dark:border-white/5">
+                  <div class="flex min-w-0 items-center gap-1 rounded-full border border-border bg-surface px-1.5 shadow-xs">
                     <Bot :size="14" class="ml-2 shrink-0 text-text-secondary" />
                     <UiSelect
                       v-model="selectedActorValue"
@@ -457,7 +457,7 @@ async function rejectMessageApproval() {
               </UiButton>
             </div>
           </div>
-        </div>
+        </UiConversationComposerShell>
       </template>
     </div>
 

@@ -46,11 +46,11 @@ defineSlots<{
       :key="item.id"
       :data-testid="`ui-nav-card-${item.id}`"
       :class="cn(
-        'rounded-[calc(var(--radius-lg)+2px)] border transition-all duration-fast ease-apple',
+        'rounded-[var(--radius-l)] border transition-colors duration-fast',
         props.density === 'rail' ? 'w-full max-w-[3.25rem]' : '',
         item.active
-          ? 'is-active border-primary/30 dark:border-white/[0.05] bg-primary/[0.08] shadow-sm'
-          : 'border-transparent dark:border-transparent bg-[color-mix(in_srgb,var(--bg-surface)_94%,transparent)] hover:border-border/60 dark:hover:border-white/[0.05] hover:shadow-sm',
+          ? 'is-active border-border-strong bg-accent shadow-xs'
+          : 'border-border bg-surface hover:border-border-strong hover:bg-subtle',
       )"
     >
       <slot name="item" :item="item" :active="Boolean(item.active)" :select="() => emit('select', item.id)" :density="props.density">

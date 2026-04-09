@@ -13,10 +13,15 @@ import {
   UiCheckbox,
   UiDialog,
   UiField,
+  UiInspectorPanel,
   UiInput,
+  UiListDetailShell,
+  UiMetricCard,
+  UiPanelFrame,
   UiPagination,
   UiRecordCard,
   UiSelect,
+  UiStatusCallout,
 } from '@octopus/ui'
 
 import { enumLabel } from '@/i18n/copy'
@@ -232,24 +237,21 @@ async function confirmDeleteUser() {
 </script>
 
 <template>
-  <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-    <section class="space-y-3">
+  <div data-testid="user-center-users-shell">
+    <UiListDetailShell>
+      <template #list>
+        <section class="space-y-3">
       <div class="grid gap-3 md:grid-cols-2">
-        <div v-for="metric in metrics" :key="metric.id" class="rounded-xl border border-border-subtle p-4 dark:border-white/[0.05]">
-          <div class="text-xs text-text-secondary">{{ metric.label }}</div>
-          <div class="mt-2 text-2xl font-semibold text-text-primary">{{ metric.value }}</div>
-        </div>
+        <UiMetricCard v-for="metric in metrics" :key="metric.id" :label="metric.label" :value="metric.value" />
       </div>
 
-      <div class="flex items-center justify-between gap-3 rounded-xl border border-border-subtle p-4 dark:border-white/[0.05]">
-        <div>
-          <div class="text-sm font-semibold text-text-primary">{{ t('userCenter.users.title') }}</div>
-          <div class="text-xs text-text-secondary">{{ t('userCenter.users.subtitle') }}</div>
-        </div>
-        <UiButton data-testid="users-create-button" @click="createUserDraft">
-          {{ t('userCenter.users.actions.create') }}
-        </UiButton>
-      </div>
+          <UiPanelFrame variant="subtle" padding="md" :title="t('userCenter.users.title')" :subtitle="t('userCenter.users.subtitle')">
+            <template #actions>
+              <UiButton data-testid="users-create-button" @click="createUserDraft">
+                {{ t('userCenter.users.actions.create') }}
+              </UiButton>
+            </template>
+          </UiPanelFrame>
 
       <UiRecordCard
         v-for="user in pagedUsers"
@@ -257,8 +259,7 @@ async function confirmDeleteUser() {
         :title="user.displayName"
         :description="user.username"
         interactive
-        class="cursor-pointer"
-        :class="selectedUserId === user.id ? 'ring-1 ring-primary' : ''"
+        :active="selectedUserId === user.id"
         @click="applyUser(user.id)"
       >
         <template #leading>
@@ -288,14 +289,15 @@ async function confirmDeleteUser() {
         :summary-label="`${userCenterStore.users.length}`"
         root-test-id="users-list-pagination"
       />
-    </section>
+        </section>
+      </template>
 
-    <section class="space-y-4 rounded-xl border border-border-subtle p-5 dark:border-white/[0.05]">
-      <h3 class="text-base font-semibold text-text-primary">{{ selectedUserId ? t('userCenter.users.editTitle') : t('userCenter.users.createTitle') }}</h3>
+      <template #default>
+        <div data-testid="user-center-users-inspector">
+          <UiInspectorPanel :title="selectedUserId ? t('userCenter.users.editTitle') : t('userCenter.users.createTitle')">
+            <div class="space-y-4">
 
-      <div v-if="saveMessage" class="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-[12px] text-primary">
-        {{ saveMessage }}
-      </div>
+      <UiStatusCallout v-if="saveMessage" tone="success" :description="saveMessage" />
 
       <UiField :label="t('userCenter.users.fields.avatar')" :hint="t('userCenter.users.avatar.description')">
         <div class="space-y-3">
@@ -384,7 +386,11 @@ async function confirmDeleteUser() {
       <div v-if="isCurrentUserSelected" class="text-xs text-text-secondary">
         {{ t('userCenter.users.currentSessionUser') }}
       </div>
-    </section>
+            </div>
+          </UiInspectorPanel>
+        </div>
+      </template>
+    </UiListDetailShell>
   </div>
 
   <UiDialog

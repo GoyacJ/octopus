@@ -142,9 +142,9 @@ async function selectResult(item: SearchResult) {
     @update:open="(open) => { if (!open) shell.closeSearch() }"
   >
     <UiPanelFrame variant="hero" padding="none">
-      <div data-testid="search-overlay-panel" class="space-y-4">
+        <div data-testid="search-overlay-panel" class="space-y-4">
         <div class="border-b border-border px-5 py-4">
-          <div class="flex items-center gap-3 rounded-xl border border-border bg-background/85 px-4 py-3">
+          <div class="flex items-center gap-3 rounded-[var(--radius-l)] border border-border bg-background px-4 py-3">
             <Search :size="18" class="shrink-0 text-text-secondary" />
             <UiInput
               ref="searchInput"

@@ -80,6 +80,8 @@ describe('workspace and project agents pages', () => {
     const mounted = mountApp()
     await waitForText(mounted.container, 'Architect Agent')
 
+    expect(mounted.container.querySelector('[data-testid="agent-center-view"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="agent-center-tabs-shell"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Architect Agent')
     expect(mounted.container.textContent).toContain('Coder Agent')
     expect(mounted.container.textContent).toContain('Studio Direction Team')
@@ -144,6 +146,7 @@ describe('workspace and project agents pages', () => {
     teamOpenButton?.click()
     await nextTick()
 
+    expect(document.body.querySelector('[data-testid="agent-center-team-dialog"]')).not.toBeNull()
     expect(document.body.textContent).toContain('团队配置')
     expect(document.body.textContent).toContain('Studio Direction Team')
     expect(document.body.textContent).toContain('组织结构预览')

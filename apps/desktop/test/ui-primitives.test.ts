@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { defineComponent, h, ref } from 'vue'
 
 import {
+  UiArtifactBlock,
   UiActionCard,
   UiButton,
   UiCodeEditor,
@@ -17,17 +18,26 @@ import {
   UiInfoCard,
   UiMetricCard,
   UiNavCardList,
+  UiPageHeader,
   UiPageHero,
+  UiPageShell,
   UiPanelFrame,
   UiPopover,
   UiRecordCard,
   UiRankingList,
   UiSearchableMultiSelect,
   UiSelectionMenu,
+  UiConversationComposerShell,
+  UiInspectorPanel,
+  UiListRow,
+  UiListDetailShell,
   UiNotificationCenter,
   UiNotificationRow,
+  UiStatusCallout,
+  UiStatTile,
   UiToastItem,
   UiToastViewport,
+  UiTraceBlock,
   UiTimelineList,
   UiToolbarRow,
   UiAccordion,
@@ -70,7 +80,8 @@ describe('Shared UI primitives', () => {
     })
 
     expect(wrapper.text()).toContain('Save')
-    expect(wrapper.classes().join(' ')).toContain('bg-secondary')
+    expect(wrapper.classes().join(' ')).toContain('bg-surface')
+    expect(wrapper.classes().join(' ')).toContain('border-border-subtle')
   })
 
   it('renders a loading UiButton with disabled semantics and loading label', () => {
@@ -303,8 +314,62 @@ describe('Shared UI primitives', () => {
 
     await wrapper.get('[data-testid="ui-context-item-archive"]').trigger('click')
 
+    expect(document.body.querySelector('[data-testid="ui-context-content"]')).not.toBeNull()
     expect(wrapper.emitted('select')).toEqual([['archive']])
     wrapper.unmount()
+  })
+
+  it('renders UiListRow with shared active semantics and slot regions', () => {
+    const wrapper = mount(UiListRow, {
+      props: {
+        title: 'Workspace API',
+        subtitle: 'Shared adapter contract',
+        eyebrow: 'Runtime',
+        active: true,
+        interactive: true,
+      },
+      slots: {
+        meta: '<span data-testid="list-row-meta">Meta</span>',
+        actions: '<button data-testid="list-row-action" type="button">Open</button>',
+      },
+    })
+
+    expect(wrapper.attributes('data-ui-state')).toBe('active')
+    expect(wrapper.find('[data-testid="list-row-meta"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="list-row-action"]').exists()).toBe(true)
+  })
+
+  it('renders UiStatTile, UiTraceBlock, and UiArtifactBlock with canonical tone metadata', () => {
+    const statTile = mount(UiStatTile, {
+      props: {
+        label: 'Agents',
+        value: '12',
+        helper: 'Active workforce',
+        tone: 'warning',
+      },
+    })
+    const traceBlock = mount(UiTraceBlock, {
+      props: {
+        title: 'Workspace sync',
+        detail: 'Updated runtime snapshot.',
+        actor: 'Runtime',
+        timestampLabel: '09:41',
+        tone: 'info',
+      },
+    })
+    const artifactBlock = mount(UiArtifactBlock, {
+      props: {
+        title: 'Runtime Delivery Summary',
+        excerpt: 'Latest artifact emitted by the workspace runtime.',
+        typeLabel: 'Report',
+        versionLabel: 'v3',
+        statusLabel: 'Published',
+      },
+    })
+
+    expect(statTile.attributes('data-ui-tone')).toBe('warning')
+    expect(traceBlock.attributes('data-ui-tone')).toBe('info')
+    expect(artifactBlock.attributes('data-ui-artifact-block')).toBe('true')
   })
 
   it('renders UiDataTable with declarative columns', () => {
@@ -368,6 +433,47 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('Meta')
     expect(wrapper.text()).toContain('Action')
     expect(wrapper.text()).toContain('Aside')
+  })
+
+  it('renders the new shared page shell components through their public exports', () => {
+    const wrapper = mount(defineComponent({
+      components: {
+        UiConversationComposerShell,
+        UiInspectorPanel,
+        UiListDetailShell,
+        UiPageHeader,
+        UiPageShell,
+        UiStatusCallout,
+      },
+      template: `
+        <UiPageShell test-id="page-shell">
+          <UiPageHeader eyebrow="Workspace" title="Tools" description="Shared workbench shell">
+            <template #meta><span data-testid="page-header-meta">Meta</span></template>
+            <template #actions><button type="button" data-testid="page-header-action">Action</button></template>
+          </UiPageHeader>
+          <UiListDetailShell>
+            <template #list>
+              <div data-testid="list-slot">List</div>
+            </template>
+            <UiInspectorPanel title="Inspector" subtitle="Detail column">
+              <UiStatusCallout tone="warning" title="Heads up" description="Shared state" />
+              <UiConversationComposerShell>
+                <div data-testid="composer-shell">Composer</div>
+              </UiConversationComposerShell>
+            </UiInspectorPanel>
+          </UiListDetailShell>
+        </UiPageShell>
+      `,
+    }))
+
+    expect(wrapper.find('[data-testid="page-shell"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="list-slot"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="page-header-meta"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="page-header-action"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('Shared workbench shell')
+    expect(wrapper.text()).toContain('Inspector')
+    expect(wrapper.text()).toContain('Heads up')
+    expect(wrapper.find('[data-testid="composer-shell"]').exists()).toBe(true)
   })
 
   it('renders UiActionCard and UiInfoCard through shared page abstractions', () => {

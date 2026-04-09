@@ -6,7 +6,7 @@ import { useForm } from 'vee-validate'
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
 
-import { UiBadge, UiButton, UiCodeEditor, UiEmptyState, UiField, UiInput, UiMetricCard, UiRecordCard } from '@octopus/ui'
+import { UiBadge, UiButton, UiCodeEditor, UiEmptyState, UiField, UiInput, UiMetricCard, UiRecordCard, UiStatusCallout } from '@octopus/ui'
 import type { AvatarUploadPayload } from '@octopus/schema'
 
 import { enumLabel } from '@/i18n/copy'
@@ -253,7 +253,7 @@ function navigateToAccessTab(name: 'workspace-user-center-roles' | 'workspace-us
 </script>
 
 <template>
-  <div class="space-y-8">
+  <div data-testid="user-center-profile-view" class="space-y-8">
     <div v-if="currentUser" class="grid gap-4 md:grid-cols-3">
       <UiMetricCard v-for="metric in metrics" :key="metric.id" :label="metric.label" :value="metric.value" />
     </div>
@@ -422,7 +422,7 @@ function navigateToAccessTab(name: 'workspace-user-center-roles' | 'workspace-us
               <div class="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
                 <div
                   data-testid="profile-avatar-file-label"
-                  class="min-w-0 truncate rounded-md border border-border/50 bg-accent/30 px-3 py-2 text-sm text-text-secondary"
+                  class="min-w-0 truncate rounded-md border border-border bg-surface px-3 py-2 text-sm text-text-secondary"
                 >
                   {{ profileAvatarFileLabel }}
                 </div>
@@ -448,18 +448,16 @@ function navigateToAccessTab(name: 'workspace-user-center-roles' | 'workspace-us
           </UiField>
         </div>
 
-        <p
+        <UiStatusCallout
           v-if="userCenterStore.profileError"
-          class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-sm text-status-error"
-        >
-          {{ userCenterStore.profileError }}
-        </p>
-        <p
+          tone="error"
+          :description="userCenterStore.profileError"
+        />
+        <UiStatusCallout
           v-if="profileSuccessMessage"
-          class="rounded-md border border-status-success/20 bg-status-success/5 px-3 py-2 text-sm text-status-success"
-        >
-          {{ profileSuccessMessage }}
-        </p>
+          tone="success"
+          :description="profileSuccessMessage"
+        />
 
         <div class="flex items-center justify-end gap-2">
           <UiButton
@@ -524,18 +522,16 @@ function navigateToAccessTab(name: 'workspace-user-center-roles' | 'workspace-us
           </div>
         </div>
 
-        <p
+        <UiStatusCallout
           v-if="userCenterStore.passwordError"
-          class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-sm text-status-error"
-        >
-          {{ userCenterStore.passwordError }}
-        </p>
-        <p
+          tone="error"
+          :description="userCenterStore.passwordError"
+        />
+        <UiStatusCallout
           v-if="passwordSuccessMessage"
-          class="rounded-md border border-status-success/20 bg-status-success/5 px-3 py-2 text-sm text-status-success"
-        >
-          {{ passwordSuccessMessage }}
-        </p>
+          tone="success"
+          :description="passwordSuccessMessage"
+        />
 
         <div class="flex items-center justify-end">
           <UiButton
@@ -577,12 +573,11 @@ function navigateToAccessTab(name: 'workspace-user-center-roles' | 'workspace-us
           @update:model-value="userCenterStore.setCurrentUserRuntimeDraft($event)"
         />
 
-        <div
+        <UiStatusCallout
           v-if="userCenterStore.runtimeValidation?.errors.length"
-          class="rounded-md border border-status-error/20 bg-status-error/5 px-3 py-2 text-[12px] text-status-error"
-        >
-          {{ userCenterStore.runtimeValidation.errors.join(' ') }}
-        </div>
+          tone="error"
+          :description="userCenterStore.runtimeValidation.errors.join(' ')"
+        />
       </div>
 
       <template #meta>

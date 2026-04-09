@@ -83,6 +83,20 @@ describe('Settings view', () => {
     mounted.destroy()
   })
 
+  it('keeps only locale and layout controls in general settings and does not expose font family/style controls', async () => {
+    const mounted = mountApp()
+
+    await waitForSelector(mounted.container, '[data-testid="settings-tabs"]')
+
+    expect(mounted.container.textContent).toMatch(/显示语言|Locale/)
+    expect(mounted.container.textContent).not.toContain('System Font')
+    expect(mounted.container.textContent).not.toContain('Font Style')
+    expect(mounted.container.textContent).not.toContain('系统字体')
+    expect(mounted.container.textContent).not.toContain('字体风格')
+
+    mounted.destroy()
+  })
+
   it('renders only the workspace runtime editor and effective preview on the runtime tab', async () => {
     const mounted = mountApp()
 

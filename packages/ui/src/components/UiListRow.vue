@@ -17,14 +17,13 @@ const props = withDefaults(
 </script>
 
 <template>
-  <article 
-    class="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 min-w-0 p-3 rounded-md transition-colors border border-transparent"
+  <article
+    :data-ui-state="props.active ? 'active' : 'default'"
+    class="flex min-w-0 flex-col gap-3 rounded-[var(--radius-m)] border p-3 transition-colors sm:flex-row sm:items-start sm:justify-between"
     :class="[
-      props.active 
-        ? 'bg-accent/50 border-border/40 dark:border-white/[0.08]' 
-        : 'border-b border-b-border/15 dark:border-b-white/[0.02] rounded-none sm:rounded-md sm:border-b-transparent',
-      props.interactive && !props.active ? 'hover:bg-accent' : '',
-      props.interactive ? 'cursor-pointer' : ''
+      props.active ? 'border-border-strong bg-accent' : 'border-transparent bg-transparent',
+      props.interactive && !props.active ? 'hover:border-border hover:bg-subtle' : '',
+      props.interactive ? 'cursor-pointer' : '',
     ]"
   >
     <div class="flex flex-col flex-1 gap-1 min-w-0">

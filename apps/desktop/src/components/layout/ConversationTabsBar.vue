@@ -69,8 +69,8 @@ async function removeConversation(event: MouseEvent, sessionId: string) {
           >
             <UiButton
               variant="ghost"
-              class="flex h-8 min-w-0 max-w-[14rem] items-center gap-2 rounded-lg border border-transparent pl-2.5 pr-8 text-text-secondary hover:border-border/60 hover:bg-background/60 hover:text-text-primary"
-              :class="session.conversationId === activeConversationId ? 'border-primary/20 bg-primary/[0.06] text-text-primary shadow-xs' : ''"
+              class="flex h-8 min-w-0 max-w-[14rem] items-center gap-2 rounded-[var(--radius-m)] border border-transparent pl-2.5 pr-8 text-text-secondary hover:border-border hover:bg-surface hover:text-text-primary"
+              :class="session.conversationId === activeConversationId ? 'border-border bg-surface text-text-primary shadow-xs' : ''"
               @click="openConversation(session.conversationId)"
             >
               <MessageSquareText :size="12" class="shrink-0" />
