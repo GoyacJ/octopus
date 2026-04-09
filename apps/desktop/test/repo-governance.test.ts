@@ -28,6 +28,25 @@ function expectDesktopMatrix(workflow: string) {
   expect(workflow).toContain('target: aarch64-pc-windows-msvc')
 }
 
+function expectPreviewDesktopMatrix(workflow: string) {
+  expect(workflow).toContain('label: macos-arm64')
+  expect(workflow).toContain('runs_on: macos-latest')
+  expect(workflow).toContain('target: aarch64-apple-darwin')
+  expect(workflow).not.toContain('label: macos-x64')
+  expect(workflow).not.toContain('runs_on: macos-15-intel')
+  expect(workflow).not.toContain('target: x86_64-apple-darwin')
+  expect(workflow).toContain('label: linux-x64')
+  expect(workflow).toContain('runs_on: ubuntu-24.04')
+  expect(workflow).toContain('target: x86_64-unknown-linux-gnu')
+  expect(workflow).toContain('bundles: appimage,deb')
+  expect(workflow).toContain('label: windows-x64')
+  expect(workflow).toContain('runs_on: windows-latest')
+  expect(workflow).toContain('target: x86_64-pc-windows-msvc')
+  expect(workflow).toContain('label: windows-arm64')
+  expect(workflow).toContain('runs_on: windows-11-arm')
+  expect(workflow).toContain('target: aarch64-pc-windows-msvc')
+}
+
 describe('repository governance', () => {
   it('runs CI for mainline changes while keeping desktop and website quality gates independent', () => {
     const workflow = readRepoFile('.github', 'workflows', 'ci.yml')
@@ -46,7 +65,9 @@ describe('repository governance', () => {
     expect(workflow).toContain('cargo fmt --all --check')
     expect(workflow).toContain('cargo clippy --workspace --all-targets -- -D warnings')
     expect(workflow).toContain('cargo test --workspace --locked')
-    expectDesktopMatrix(workflow)
+    expect(workflow).not.toContain('name: Desktop release build (${{ matrix.label }})')
+    expect(workflow).not.toContain('pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(workflow).not.toContain('pnpm tauri build --bundles appimage,deb --target x86_64-unknown-linux-gnu --config apps/desktop/src-tauri/tauri.conf.json')
   })
 
   it('publishes releases from git tags instead of branch builds', () => {
@@ -111,7 +132,7 @@ describe('repository governance', () => {
     expect(workflow).toContain('path: release-artifacts/publish/macos')
     expect(workflow).toContain('path: release-artifacts/publish/linux')
     expect(workflow).toContain('path: release-artifacts/publish/windows')
-    expectDesktopMatrix(workflow)
+    expectPreviewDesktopMatrix(workflow)
   })
 
   it('uses a single version source and validates mirrored versions', () => {
@@ -138,15 +159,15 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['check:rust']).toContain('pnpm prepare:desktop-backend:sidecar')
   })
 
-  it('uses nsis-only Windows hosted builds while expanding desktop release coverage for macOS Intel, Linux, and Windows ARM64', () => {
+  it('keeps CI focused on quality gates while release workflows own hosted bundle coverage', () => {
     const ciWorkflow = readRepoFile('.github', 'workflows', 'ci.yml')
     const releaseWorkflow = readRepoFile('.github', 'workflows', 'release.yml')
     const previewWorkflow = readRepoFile('.github', 'workflows', 'release-preview.yml')
 
-    expect(ciWorkflow).toContain('windows-11-arm')
-    expect(ciWorkflow).toContain('pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json')
-    expect(ciWorkflow).toContain('pnpm tauri build --bundles appimage,deb --target x86_64-unknown-linux-gnu --config apps/desktop/src-tauri/tauri.conf.json')
-    expect(ciWorkflow).toContain('macos-15-intel')
+    expect(ciWorkflow).not.toContain('windows-11-arm')
+    expect(ciWorkflow).not.toContain('pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(ciWorkflow).not.toContain('pnpm tauri build --bundles appimage,deb --target x86_64-unknown-linux-gnu --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(ciWorkflow).not.toContain('macos-15-intel')
     expect(releaseWorkflow).toContain('windows-11-arm')
     expect(releaseWorkflow).toContain('pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json')
     expect(releaseWorkflow).toContain('pnpm tauri build --bundles appimage,deb --target x86_64-unknown-linux-gnu --config apps/desktop/src-tauri/tauri.conf.json')
@@ -154,7 +175,7 @@ describe('repository governance', () => {
     expect(previewWorkflow).toContain('windows-11-arm')
     expect(previewWorkflow).toContain('pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json')
     expect(previewWorkflow).toContain('pnpm tauri build --bundles appimage,deb --target x86_64-unknown-linux-gnu --config apps/desktop/src-tauri/tauri.conf.json')
-    expect(previewWorkflow).toContain('macos-15-intel')
+    expect(previewWorkflow).not.toContain('macos-15-intel')
   })
 
   it('deploys a full GitHub Pages updater manifest site for both channels', () => {
