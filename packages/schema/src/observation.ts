@@ -1,3 +1,5 @@
+import type { AuditRecord as OpenApiAuditRecord } from './generated'
+
 export interface TraceEventRecord {
   id: string
   workspaceId: string
@@ -10,17 +12,7 @@ export interface TraceEventRecord {
   createdAt: number
 }
 
-export interface AuditRecord {
-  id: string
-  workspaceId: string
-  projectId?: string
-  actorType: string
-  actorId: string
-  action: string
-  resource: string
-  outcome: string
-  createdAt: number
-}
+export type AuditRecord = OpenApiAuditRecord
 
 export interface CostLedgerEntry {
   id: string

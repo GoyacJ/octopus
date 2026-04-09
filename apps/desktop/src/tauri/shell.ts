@@ -27,7 +27,7 @@ import {
 } from '@octopus/schema'
 
 import {
-  fetchHostApi,
+  fetchHostOpenApi,
   isTauriRuntime,
   resolveBrowserHostApiBaseUrl,
   resolveBrowserHostAuthToken,
@@ -311,11 +311,11 @@ async function bootstrapShellHostBrowser(
   defaultProjectId: string,
 ): Promise<ShellBootstrap> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
-  const payload = await fetchHostApi<ShellBootstrap>(
+  const payload = await fetchHostOpenApi(
     baseUrl,
     authToken,
     '/api/v1/host/bootstrap',
-    { method: 'GET' },
+    'get',
   )
 
   return normalizeShellBootstrap(payload, defaultWorkspaceId, defaultProjectId)
@@ -327,11 +327,11 @@ async function loadPreferencesBrowser(
 ): Promise<ShellPreferences> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
   return normalizeShellPreferences(
-    await fetchHostApi<ShellPreferences>(
+    await fetchHostOpenApi(
       baseUrl,
       authToken,
       '/api/v1/host/preferences',
-      { method: 'GET' },
+      'get',
     ),
     defaultWorkspaceId,
     defaultProjectId,
@@ -343,12 +343,12 @@ async function savePreferencesBrowser(
 ): Promise<ShellPreferences> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
   return normalizeShellPreferences(
-    await fetchHostApi<ShellPreferences>(
+    await fetchHostOpenApi(
       baseUrl,
       authToken,
       '/api/v1/host/preferences',
+      'put',
       {
-        method: 'PUT',
         body: JSON.stringify(preferences),
       },
     ),
@@ -366,11 +366,11 @@ async function getHostStateBrowser(
 
 async function healthcheckBrowser(): Promise<HealthcheckStatus> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
-  return await fetchHostApi<HealthcheckStatus>(
+  return await fetchHostOpenApi(
     baseUrl,
     authToken,
     '/api/v1/host/health',
-    { method: 'GET' },
+    'get',
   )
 }
 
@@ -493,11 +493,11 @@ async function pickAgentBundleFolderBrowser(): Promise<WorkspaceDirectoryUploadE
 
 async function listWorkspaceConnectionsBrowser(): Promise<HostWorkspaceConnectionRecord[]> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
-  return await fetchHostApi<HostWorkspaceConnectionRecord[]>(
+  return await fetchHostOpenApi(
     baseUrl,
     authToken,
     '/api/v1/host/workspace-connections',
-    { method: 'GET' },
+    'get',
   )
 }
 
@@ -505,12 +505,12 @@ async function createWorkspaceConnectionBrowser(
   input: CreateHostWorkspaceConnectionInput,
 ): Promise<HostWorkspaceConnectionRecord> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
-  return await fetchHostApi<HostWorkspaceConnectionRecord>(
+  return await fetchHostOpenApi(
     baseUrl,
     authToken,
     '/api/v1/host/workspace-connections',
+    'post',
     {
-      method: 'POST',
       body: JSON.stringify(input),
     },
   )
@@ -520,11 +520,16 @@ async function deleteWorkspaceConnectionBrowser(
   workspaceConnectionId: string,
 ): Promise<void> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
-  await fetchHostApi<null>(
+  await fetchHostOpenApi(
     baseUrl,
     authToken,
-    `/api/v1/host/workspace-connections/${workspaceConnectionId}`,
-    { method: 'DELETE' },
+    '/api/v1/host/workspace-connections/{connectionId}',
+    'delete',
+    {
+      pathParams: {
+        connectionId: workspaceConnectionId,
+      },
+    },
   )
 }
 
@@ -532,17 +537,17 @@ async function listNotificationsBrowser(
   filter: NotificationFilter = { scope: 'all' },
 ): Promise<NotificationListResponse> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
-  const search = new URLSearchParams()
-  if (filter.scope) {
-    search.set('scope', filter.scope)
-  }
-
   return normalizeNotificationListResponse(
-    await fetchHostApi<NotificationListResponse>(
+    await fetchHostOpenApi(
       baseUrl,
       authToken,
-      `/api/v1/host/notifications${search.size ? `?${search.toString()}` : ''}`,
-      { method: 'GET' },
+      '/api/v1/host/notifications',
+      'get',
+      {
+        queryParams: {
+          scope: filter.scope,
+        },
+      },
     ),
   )
 }
@@ -551,12 +556,12 @@ async function createNotificationBrowser(
   input: CreateNotificationInput,
 ): Promise<NotificationRecord> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
-  const notification = await fetchHostApi<NotificationRecord>(
+  const notification = await fetchHostOpenApi(
     baseUrl,
     authToken,
     '/api/v1/host/notifications',
+    'post',
     {
-      method: 'POST',
       body: JSON.stringify(input),
     },
   )
@@ -566,11 +571,16 @@ async function createNotificationBrowser(
 
 async function markNotificationReadBrowser(id: string): Promise<NotificationRecord> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
-  return await fetchHostApi<NotificationRecord>(
+  return await fetchHostOpenApi(
     baseUrl,
     authToken,
-    `/api/v1/host/notifications/${id}/read`,
-    { method: 'POST' },
+    '/api/v1/host/notifications/{notificationId}/read',
+    'post',
+    {
+      pathParams: {
+        notificationId: id,
+      },
+    },
   )
 }
 
@@ -578,12 +588,12 @@ async function markAllNotificationsReadBrowser(
   filter: NotificationFilter = { scope: 'all' },
 ): Promise<NotificationUnreadSummary> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
-  return await fetchHostApi<NotificationUnreadSummary>(
+  return await fetchHostOpenApi(
     baseUrl,
     authToken,
     '/api/v1/host/notifications/read-all',
+    'post',
     {
-      method: 'POST',
       body: JSON.stringify(filter),
     },
   )
@@ -591,21 +601,26 @@ async function markAllNotificationsReadBrowser(
 
 async function dismissNotificationToastBrowser(id: string): Promise<NotificationRecord> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
-  return await fetchHostApi<NotificationRecord>(
+  return await fetchHostOpenApi(
     baseUrl,
     authToken,
-    `/api/v1/host/notifications/${id}/dismiss-toast`,
-    { method: 'POST' },
+    '/api/v1/host/notifications/{notificationId}/dismiss-toast',
+    'post',
+    {
+      pathParams: {
+        notificationId: id,
+      },
+    },
   )
 }
 
 async function getNotificationUnreadSummaryBrowser(): Promise<NotificationUnreadSummary> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
-  return await fetchHostApi<NotificationUnreadSummary>(
+  return await fetchHostOpenApi(
     baseUrl,
     authToken,
     '/api/v1/host/notifications/unread-summary',
-    { method: 'GET' },
+    'get',
   )
 }
 

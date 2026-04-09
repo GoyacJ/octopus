@@ -1,26 +1,38 @@
 import type {
+  ChangeCurrentUserPasswordRequest as OpenApiChangeCurrentUserPasswordRequest,
+  ChangeCurrentUserPasswordResponse as OpenApiChangeCurrentUserPasswordResponse,
+  CreateWorkspaceResourceFolderInput as OpenApiCreateWorkspaceResourceFolderInput,
+  CreateWorkspaceResourceInput as OpenApiCreateWorkspaceResourceInput,
+  CreateWorkspaceUserRequest as OpenApiCreateWorkspaceUserRequest,
+  ConversationRecord as OpenApiConversationRecord,
+  KnowledgeRecord as OpenApiKnowledgeRecord,
+  MenuRecord as OpenApiMenuRecord,
+  PermissionRecord as OpenApiPermissionRecord,
+  ProjectTeamLinkInput as OpenApiProjectTeamLinkInput,
+  ProjectTeamLinkRecord as OpenApiProjectTeamLinkRecord,
+  ProjectDashboardSnapshot as OpenApiProjectDashboardSnapshot,
+  RoleRecord as OpenApiRoleRecord,
+  TeamRecord as OpenApiTeamRecord,
+  UpdateCurrentUserProfileRequest as OpenApiUpdateCurrentUserProfileRequest,
+  UpdateWorkspaceUserRequest as OpenApiUpdateWorkspaceUserRequest,
+  UpsertTeamInput as OpenApiUpsertTeamInput,
+  UpdateWorkspaceResourceInput as OpenApiUpdateWorkspaceResourceInput,
+  UserCenterAlertRecord as OpenApiUserCenterAlertRecord,
+  UserCenterOverviewSnapshot as OpenApiUserCenterOverviewSnapshot,
+  UserRecordSummary as OpenApiUserRecordSummary,
+  WorkspaceResourceFolderUploadEntry as OpenApiWorkspaceResourceFolderUploadEntry,
+  WorkspaceResourceRecord as OpenApiWorkspaceResourceRecord,
+  WorkspaceActivityRecord as OpenApiWorkspaceActivityRecord,
+  WorkspaceMetricRecord as OpenApiWorkspaceMetricRecord,
+  WorkspaceOverviewSnapshot as OpenApiWorkspaceOverviewSnapshot,
+} from './generated'
+import type {
   AvatarUploadPayload,
 } from './auth'
 import type {
   AgentScope,
   AgentStatus,
   AutomationStatus,
-  KnowledgeKind,
-  KnowledgeSourceType,
-  KnowledgeStatus,
-  MenuSource,
-  MenuStatus,
-  PasswordState,
-  ProjectResourceKind,
-  ProjectResourceOrigin,
-  RbacPermissionKind,
-  RbacPermissionStatus,
-  RbacPermissionTargetType,
-  RbacRoleStatus,
-  RiskLevel,
-  TeamScope,
-  TeamStatus,
-  UserStatus,
   ViewStatus,
   WorkspaceToolPermissionMode,
   WorkspaceToolStatus,
@@ -33,78 +45,15 @@ import type {
   ModelRegistryRecord,
   ProviderRegistryRecord,
 } from './catalog'
-import type { ProjectRecord, WorkspaceSummary } from './workspace'
 
-export interface WorkspaceMetricRecord {
-  id: string
-  label: string
-  value: string
-  helper?: string
-  tone?: 'default' | 'success' | 'warning' | 'error' | 'info' | 'accent'
-}
-
-export interface WorkspaceActivityRecord {
-  id: string
-  title: string
-  description: string
-  timestamp: number
-}
-
-export interface ConversationRecord {
-  id: string
-  workspaceId: string
-  projectId: string
-  sessionId: string
-  title: string
-  status: string
-  updatedAt: number
-  lastMessagePreview?: string
-}
-
-export interface WorkspaceOverviewSnapshot {
-  workspace: WorkspaceSummary
-  metrics: WorkspaceMetricRecord[]
-  projects: ProjectRecord[]
-  recentConversations: ConversationRecord[]
-  recentActivity: WorkspaceActivityRecord[]
-}
-
-export interface ProjectDashboardSnapshot {
-  project: ProjectRecord
-  metrics: WorkspaceMetricRecord[]
-  recentConversations: ConversationRecord[]
-  recentActivity: WorkspaceActivityRecord[]
-}
-
-export interface WorkspaceResourceRecord {
-  id: string
-  workspaceId: string
-  projectId?: string
-  kind: ProjectResourceKind
-  name: string
-  location?: string
-  origin: ProjectResourceOrigin
-  status: ViewStatus
-  updatedAt: number
-  tags: string[]
-  sourceArtifactId?: string
-}
-
-export interface CreateWorkspaceResourceInput {
-  projectId?: string
-  kind: ProjectResourceKind
-  name: string
-  location?: string
-  tags?: string[]
-  sourceArtifactId?: string
-}
-
-export interface UpdateWorkspaceResourceInput {
-  name?: string
-  location?: string
-  status?: ViewStatus
-  tags?: string[]
-}
+export type WorkspaceMetricRecord = OpenApiWorkspaceMetricRecord
+export type WorkspaceActivityRecord = OpenApiWorkspaceActivityRecord
+export type ConversationRecord = OpenApiConversationRecord
+export type WorkspaceOverviewSnapshot = OpenApiWorkspaceOverviewSnapshot
+export type ProjectDashboardSnapshot = OpenApiProjectDashboardSnapshot
+export type WorkspaceResourceRecord = OpenApiWorkspaceResourceRecord
+export type CreateWorkspaceResourceInput = OpenApiCreateWorkspaceResourceInput
+export type UpdateWorkspaceResourceInput = OpenApiUpdateWorkspaceResourceInput
 
 export interface WorkspaceResourceUploadPayload {
   fileName: string
@@ -113,27 +62,9 @@ export interface WorkspaceResourceUploadPayload {
   byteSize: number
 }
 
-export interface WorkspaceResourceFolderUploadEntry extends WorkspaceResourceUploadPayload {
-  relativePath: string
-}
-
-export interface CreateWorkspaceResourceFolderInput {
-  projectId?: string
-  files: WorkspaceResourceFolderUploadEntry[]
-}
-
-export interface KnowledgeRecord {
-  id: string
-  workspaceId: string
-  projectId?: string
-  title: string
-  summary: string
-  kind: KnowledgeKind
-  status: KnowledgeStatus
-  sourceType: KnowledgeSourceType
-  sourceRef: string
-  updatedAt: number
-}
+export type WorkspaceResourceFolderUploadEntry = OpenApiWorkspaceResourceFolderUploadEntry
+export type CreateWorkspaceResourceFolderInput = OpenApiCreateWorkspaceResourceFolderInput
+export type KnowledgeRecord = OpenApiKnowledgeRecord
 
 export interface AgentRecord {
   id: string
@@ -155,27 +86,7 @@ export interface AgentRecord {
   updatedAt: number
 }
 
-export interface TeamRecord {
-  id: string
-  workspaceId: string
-  projectId?: string
-  scope: TeamScope
-  name: string
-  avatarPath?: string
-  avatar?: string
-  personality: string
-  tags: string[]
-  prompt: string
-  builtinToolKeys: string[]
-  skillIds: string[]
-  mcpServerNames: string[]
-  leaderAgentId?: string
-  memberAgentIds: string[]
-  integrationSource?: TeamIntegrationSource
-  description: string
-  status: TeamStatus
-  updatedAt: number
-}
+export type TeamRecord = OpenApiTeamRecord
 
 export interface WorkspaceLinkIntegrationSource {
   kind: 'workspace-link'
@@ -202,24 +113,7 @@ export interface UpsertAgentInput {
   status: AgentStatus
 }
 
-export interface UpsertTeamInput {
-  workspaceId: string
-  projectId?: string
-  scope: TeamScope
-  name: string
-  avatar?: AvatarUploadPayload
-  removeAvatar?: boolean
-  personality: string
-  tags: string[]
-  prompt: string
-  builtinToolKeys: string[]
-  skillIds: string[]
-  mcpServerNames: string[]
-  leaderAgentId?: string
-  memberAgentIds: string[]
-  description: string
-  status: TeamStatus
-}
+export type UpsertTeamInput = OpenApiUpsertTeamInput
 
 export interface ProjectAgentLinkRecord {
   workspaceId: string
@@ -228,22 +122,14 @@ export interface ProjectAgentLinkRecord {
   linkedAt: number
 }
 
-export interface ProjectTeamLinkRecord {
-  workspaceId: string
-  projectId: string
-  teamId: string
-  linkedAt: number
-}
+export type ProjectTeamLinkRecord = OpenApiProjectTeamLinkRecord
 
 export interface ProjectAgentLinkInput {
   projectId: string
   agentId: string
 }
 
-export interface ProjectTeamLinkInput {
-  projectId: string
-  teamId: string
-}
+export type ProjectTeamLinkInput = OpenApiProjectTeamLinkInput
 
 export interface ModelCatalogRecord {
   id: string
@@ -300,108 +186,24 @@ export interface AutomationRecord {
   output: string
 }
 
-export interface UserRecordSummary {
-  id: string
-  username: string
-  displayName: string
-  avatar?: string
-  status: UserStatus
-  passwordState: PasswordState
-  roleIds: string[]
-  scopeProjectIds: string[]
-}
+export type UserRecordSummary = OpenApiUserRecordSummary
 
-export interface CreateWorkspaceUserRequest {
-  username: string
-  displayName: string
-  status: UserStatus
-  roleIds: string[]
-  scopeProjectIds: string[]
-  avatar?: AvatarUploadPayload
-  useDefaultAvatar?: boolean
-  password?: string
-  confirmPassword?: string
-  useDefaultPassword?: boolean
-}
+export type CreateWorkspaceUserRequest = OpenApiCreateWorkspaceUserRequest
 
-export interface UpdateWorkspaceUserRequest {
-  username: string
-  displayName: string
-  status: UserStatus
-  roleIds: string[]
-  scopeProjectIds: string[]
-  avatar?: AvatarUploadPayload
-  removeAvatar?: boolean
-  password?: string
-  confirmPassword?: string
-  resetPasswordToDefault?: boolean
-}
+export type UpdateWorkspaceUserRequest = OpenApiUpdateWorkspaceUserRequest
 
-export interface UpdateCurrentUserProfileRequest {
-  username: string
-  displayName: string
-  avatar?: AvatarUploadPayload
-  removeAvatar?: boolean
-}
+export type UpdateCurrentUserProfileRequest = OpenApiUpdateCurrentUserProfileRequest
 
-export interface ChangeCurrentUserPasswordRequest {
-  currentPassword: string
-  newPassword: string
-  confirmPassword: string
-}
+export type ChangeCurrentUserPasswordRequest = OpenApiChangeCurrentUserPasswordRequest
 
-export interface ChangeCurrentUserPasswordResponse {
-  passwordState: PasswordState
-}
+export type ChangeCurrentUserPasswordResponse = OpenApiChangeCurrentUserPasswordResponse
 
-export interface RoleRecord {
-  id: string
-  workspaceId: string
-  name: string
-  code: string
-  description: string
-  status: RbacRoleStatus
-  permissionIds: string[]
-  menuIds: string[]
-}
+export type RoleRecord = OpenApiRoleRecord
 
-export interface PermissionRecord {
-  id: string
-  workspaceId: string
-  name: string
-  code: string
-  description: string
-  status: RbacPermissionStatus
-  kind: RbacPermissionKind
-  targetType?: RbacPermissionTargetType
-  targetIds: string[]
-  action?: string
-  memberPermissionIds: string[]
-}
+export type PermissionRecord = OpenApiPermissionRecord
 
-export interface MenuRecord {
-  id: string
-  workspaceId: string
-  parentId?: string
-  source: MenuSource
-  label: string
-  routeName?: string
-  status: MenuStatus
-  order: number
-}
+export type MenuRecord = OpenApiMenuRecord
 
-export interface UserCenterAlertRecord {
-  id: string
-  title: string
-  description: string
-  severity: RiskLevel
-}
+export type UserCenterAlertRecord = OpenApiUserCenterAlertRecord
 
-export interface UserCenterOverviewSnapshot {
-  workspaceId: string
-  currentUser: UserRecordSummary
-  roleNames: string[]
-  metrics: WorkspaceMetricRecord[]
-  alerts: UserCenterAlertRecord[]
-  quickLinks: MenuRecord[]
-}
+export type UserCenterOverviewSnapshot = OpenApiUserCenterOverviewSnapshot

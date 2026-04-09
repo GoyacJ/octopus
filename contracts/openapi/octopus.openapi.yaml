@@ -1,156 +1,2806 @@
 openapi: 3.1.0
 info:
+  description: Canonical OpenAPI contract for Octopus host, workspace, and runtime APIs.
   title: Octopus API
   version: 0.1.0
-  description: Canonical OpenAPI contract for Octopus host, workspace, and runtime APIs.
 servers:
   - url: http://127.0.0.1:15421
 paths:
+  /api/v1/apps:
+    get:
+      operationId: listClientApps
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ClientAppRecord"
+                type: array
+          description: Client app registry payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: registerClientApp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientAppRecord"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientAppRecord"
+          description: Registered client app payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/artifacts:
+    get:
+      operationId: listArtifacts
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ArtifactRecord"
+                type: array
+          description: Artifact list payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/audit:
+    get:
+      operationId: listAuditRecords
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/AuditRecord"
+                type: array
+          description: Audit record payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+          description: Workspace login payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      responses:
+        "204":
+          description: Logged out.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/auth/register-owner:
+    post:
+      operationId: registerOwner
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterWorkspaceOwnerRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterWorkspaceOwnerResponse"
+          description: Workspace owner registration payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/auth/session:
+    get:
+      operationId: getCurrentSession
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionRecord"
+          description: Current workspace session payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/host/bootstrap:
     get:
       operationId: getHostBootstrap
       responses:
-        '200':
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShellBootstrap"
           description: Host bootstrap payload.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ShellBootstrap'
         default:
-          description: API error envelope.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/host/health:
     get:
       operationId: getHostHealthcheck
       responses:
-        '200':
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthcheckStatus"
           description: Host healthcheck payload.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/HealthcheckStatus'
         default:
-          description: API error envelope.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-  /api/v1/system/bootstrap:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/host/notifications:
     get:
-      operationId: getSystemBootstrap
+      operationId: listHostNotifications
+      parameters:
+        - in: query
+          name: scope
+          required: false
+          schema:
+            $ref: "#/components/schemas/NotificationFilterScope"
       responses:
-        '200':
-          description: Workspace bootstrap payload.
+        "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SystemBootstrapStatus'
+                $ref: "#/components/schemas/NotificationListResponse"
+          description: Host notifications payload.
         default:
-          description: API error envelope.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
-  /api/v1/workspace/overview:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createHostNotification
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateNotificationInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationRecord"
+          description: Created notification payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/host/notifications/{notificationId}/dismiss-toast:
+    post:
+      operationId: dismissHostNotificationToast
+      parameters:
+        - in: path
+          name: notificationId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationRecord"
+          description: Updated notification payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/host/notifications/{notificationId}/read:
+    post:
+      operationId: markHostNotificationRead
+      parameters:
+        - in: path
+          name: notificationId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationRecord"
+          description: Updated notification payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/host/notifications/read-all:
+    post:
+      operationId: markAllHostNotificationsRead
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationFilter"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NotificationUnreadSummary"
+          description: Updated unread summary payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/host/notifications/unread-summary:
     get:
-      operationId: getWorkspaceOverview
+      operationId: getHostNotificationUnreadSummary
       responses:
-        '200':
-          description: Workspace overview payload.
+        "200":
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkspaceOverviewSnapshot'
+                $ref: "#/components/schemas/NotificationUnreadSummary"
+          description: Host notification unread summary payload.
         default:
-          description: API error envelope.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/host/preferences:
+    get:
+      operationId: getHostPreferences
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShellPreferences"
+          description: Host shell preferences payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    put:
+      operationId: saveHostPreferences
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShellPreferences"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShellPreferences"
+          description: Persisted host shell preferences payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/host/workspace-connections:
+    get:
+      operationId: listHostWorkspaceConnections
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/WorkspaceConnectionRecord"
+                type: array
+          description: Host workspace connections payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createHostWorkspaceConnection
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHostWorkspaceConnectionInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceConnectionRecord"
+          description: Created host workspace connection payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/host/workspace-connections/{connectionId}:
+    delete:
+      operationId: deleteHostWorkspaceConnection
+      parameters:
+        - in: path
+          name: connectionId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: "null"
+          description: Deleted host workspace connection payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/inbox:
+    get:
+      operationId: listInboxItems
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/InboxItemRecord"
+                type: array
+          description: Inbox list payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/knowledge:
+    get:
+      operationId: listKnowledgeEntries
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/KnowledgeEntryRecord"
+                type: array
+          description: Top-level knowledge list payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects:
+    get:
+      operationId: listProjects
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ProjectRecord"
+                type: array
+          description: Project list payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createProject
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectRecord"
+          description: Created project payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}:
+    patch:
+      operationId: updateProject
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProjectRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectRecord"
+          description: Updated project payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/agent-links:
+    get:
+      operationId: listProjectAgentLinks
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ProjectAgentLinkRecord"
+                type: array
+          description: Project agent link payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createProjectAgentLink
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectAgentLinkInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAgentLinkRecord"
+          description: Created project agent link payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/agent-links/{agentId}:
+    delete:
+      operationId: deleteProjectAgentLink
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Project agent link deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/dashboard:
+    get:
+      operationId: getProjectDashboard
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDashboardSnapshot"
+          description: Project dashboard payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/knowledge:
+    get:
+      operationId: listProjectKnowledge
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/KnowledgeRecord"
+                type: array
+          description: Project knowledge payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/pet:
+    get:
+      operationId: getProjectPetSnapshot
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PetWorkspaceSnapshot"
+          description: Project pet snapshot payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/pet/conversation:
+    put:
+      operationId: bindProjectPetConversation
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BindPetConversationInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PetConversationBinding"
+          description: Updated project pet conversation binding payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/pet/presence:
+    patch:
+      operationId: saveProjectPetPresence
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavePetPresenceInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PetPresenceState"
+          description: Updated project pet presence payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/resources:
+    get:
+      operationId: listProjectResources
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/WorkspaceResourceRecord"
+                type: array
+          description: Project resources payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createProjectResource
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceResourceInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResourceRecord"
+          description: Created project resource payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/resources/{resourceId}:
+    patch:
+      operationId: updateProjectResource
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: resourceId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkspaceResourceInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResourceRecord"
+          description: Updated project resource payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteProjectResource
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: resourceId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Project resource deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/resources/folder:
+    post:
+      operationId: createProjectResourceFolder
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceResourceFolderInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/WorkspaceResourceRecord"
+                type: array
+          description: Created project folder resource payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/runtime-config:
+    get:
+      operationId: getProjectRuntimeConfig
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeEffectiveConfig"
+          description: Project effective runtime configuration payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    patch:
+      operationId: saveProjectRuntimeConfig
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfigPatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeEffectiveConfig"
+          description: Saved project effective runtime configuration payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/runtime-config/validate:
+    post:
+      operationId: validateProjectRuntimeConfig
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfigPatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeConfigValidationResult"
+          description: Project runtime configuration validation payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/team-links:
+    get:
+      operationId: listProjectTeamLinks
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ProjectTeamLinkRecord"
+                type: array
+          description: Project team link payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createProjectTeamLink
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectTeamLinkInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectTeamLinkRecord"
+          description: Created project team link payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/team-links/{teamId}:
+    delete:
+      operationId: deleteProjectTeamLink
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: teamId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Project team link deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/runtime/bootstrap:
+    get:
+      operationId: getRuntimeBootstrap
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeBootstrap"
+          description: Runtime bootstrap payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/runtime/config:
     get:
       operationId: getRuntimeConfig
       responses:
-        '200':
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeEffectiveConfig"
           description: Effective runtime configuration payload.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RuntimeEffectiveConfig'
         default:
-          description: API error envelope.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiErrorEnvelope'
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/runtime/config/configured-models/probe:
+    post:
+      operationId: probeRuntimeConfiguredModel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfiguredModelProbeInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeConfiguredModelProbeResult"
+          description: Runtime configured model probe payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/runtime/config/scopes/{scope}:
+    patch:
+      operationId: saveRuntimeConfigScope
+      parameters:
+        - in: path
+          name: scope
+          required: true
+          schema:
+            $ref: "#/components/schemas/RuntimeConfigScope"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfigPatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeEffectiveConfig"
+          description: Saved runtime scoped configuration payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/runtime/config/validate:
+    post:
+      operationId: validateRuntimeConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfigPatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeConfigValidationResult"
+          description: Runtime configuration validation payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/runtime/sessions:
+    get:
+      operationId: listRuntimeSessions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/RuntimeSessionSummary"
+                type: array
+          description: Runtime sessions payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createRuntimeSession
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRuntimeSessionInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeSessionDetail"
+          description: Created runtime session payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/runtime/sessions/{sessionId}:
+    get:
+      operationId: getRuntimeSession
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeSessionDetail"
+          description: Runtime session detail payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteRuntimeSession
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Runtime session deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/runtime/sessions/{sessionId}/approvals/{approvalId}:
+    post:
+      operationId: resolveRuntimeApproval
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: approvalId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveRuntimeApprovalInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeRunSnapshot"
+          description: Runtime run snapshot payload after approval resolution.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/runtime/sessions/{sessionId}/events:
+    get:
+      operationId: listRuntimeSessionEvents
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: after
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/RuntimeEventEnvelope"
+                type: array
+            text/event-stream:
+              schema:
+                type: string
+          description: Runtime session event payload for JSON polling.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/runtime/sessions/{sessionId}/turns:
+    post:
+      operationId: submitRuntimeTurn
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitRuntimeTurnInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeRunSnapshot"
+          description: Runtime run snapshot payload after turn submission.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/system/bootstrap:
+    get:
+      operationId: getSystemBootstrap
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemBootstrapStatus"
+          description: Workspace bootstrap payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/system/health:
+    get:
+      operationId: getSystemHealthcheck
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthcheckStatus"
+          description: System healthcheck payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace:
+    get:
+      operationId: getWorkspaceSummary
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSummary"
+          description: Workspace summary payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/agents:
+    get:
+      operationId: listWorkspaceAgents
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/AgentRecord"
+                type: array
+          description: Workspace agent list payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createWorkspaceAgent
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertAgentInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRecord"
+          description: Created workspace agent payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/agents/{agentId}:
+    patch:
+      operationId: updateWorkspaceAgent
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertAgentInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRecord"
+          description: Updated workspace agent payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteWorkspaceAgent
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Workspace agent deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/agents/import:
+    post:
+      operationId: importWorkspaceAgentBundle
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportWorkspaceAgentBundleInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportWorkspaceAgentBundleResult"
+          description: Workspace agent bundle import result payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/agents/import-preview:
+    post:
+      operationId: previewWorkspaceAgentBundleImport
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportWorkspaceAgentBundlePreviewInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportWorkspaceAgentBundlePreview"
+          description: Workspace agent bundle preview payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/automations:
+    get:
+      operationId: listWorkspaceAutomations
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/AutomationRecord"
+                type: array
+          description: Workspace automation list payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createWorkspaceAutomation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRecord"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRecord"
+          description: Created workspace automation payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/automations/{automationId}:
+    patch:
+      operationId: updateWorkspaceAutomation
+      parameters:
+        - in: path
+          name: automationId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRecord"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutomationRecord"
+          description: Updated workspace automation payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteWorkspaceAutomation
+      parameters:
+        - in: path
+          name: automationId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Workspace automation deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/mcp-servers:
+    post:
+      operationId: createWorkspaceMcpServer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertWorkspaceMcpServerInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMcpServerDocument"
+          description: Created workspace MCP server payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/mcp-servers/{serverName}:
+    get:
+      operationId: getWorkspaceMcpServer
+      parameters:
+        - in: path
+          name: serverName
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMcpServerDocument"
+          description: Workspace MCP server payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    patch:
+      operationId: updateWorkspaceMcpServer
+      parameters:
+        - in: path
+          name: serverName
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertWorkspaceMcpServerInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMcpServerDocument"
+          description: Updated workspace MCP server payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteWorkspaceMcpServer
+      parameters:
+        - in: path
+          name: serverName
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Workspace MCP server deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/models:
+    get:
+      operationId: getWorkspaceCatalogModels
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelCatalogSnapshot"
+          description: Workspace model catalog snapshot payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/provider-credentials:
+    get:
+      operationId: listWorkspaceProviderCredentials
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/CredentialBinding"
+                type: array
+          description: Workspace provider credential bindings payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/skills:
+    post:
+      operationId: createWorkspaceSkill
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceSkillInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSkillDocument"
+          description: Created workspace skill payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/skills/{skillId}:
+    get:
+      operationId: getWorkspaceSkill
+      parameters:
+        - in: path
+          name: skillId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSkillDocument"
+          description: Workspace skill payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    patch:
+      operationId: updateWorkspaceSkill
+      parameters:
+        - in: path
+          name: skillId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkspaceSkillInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSkillDocument"
+          description: Updated workspace skill payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteWorkspaceSkill
+      parameters:
+        - in: path
+          name: skillId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Workspace skill deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/skills/{skillId}/copy-to-managed:
+    post:
+      operationId: copyWorkspaceSkillToManaged
+      parameters:
+        - in: path
+          name: skillId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CopyWorkspaceSkillToManagedInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSkillDocument"
+          description: Copied managed workspace skill payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/skills/{skillId}/files/{relativePath}:
+    get:
+      operationId: getWorkspaceSkillFile
+      parameters:
+        - in: path
+          name: skillId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: relativePath
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSkillFileDocument"
+          description: Workspace skill file payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    patch:
+      operationId: updateWorkspaceSkillFile
+      parameters:
+        - in: path
+          name: skillId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: relativePath
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkspaceSkillFileInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSkillFileDocument"
+          description: Updated workspace skill file payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/skills/{skillId}/tree:
+    get:
+      operationId: getWorkspaceSkillTree
+      parameters:
+        - in: path
+          name: skillId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSkillTreeDocument"
+          description: Workspace skill tree payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/skills/import-archive:
+    post:
+      operationId: importWorkspaceSkillArchive
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportWorkspaceSkillArchiveInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSkillDocument"
+          description: Imported workspace skill payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/skills/import-folder:
+    post:
+      operationId: importWorkspaceSkillFolder
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportWorkspaceSkillFolderInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSkillDocument"
+          description: Imported workspace skill folder payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/tool-catalog:
+    get:
+      operationId: getWorkspaceToolCatalog
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceToolCatalogSnapshot"
+          description: Workspace tool catalog snapshot payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/tool-catalog/disable:
+    patch:
+      operationId: setWorkspaceToolCatalogDisabled
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceToolDisablePatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceToolCatalogSnapshot"
+          description: Updated workspace tool catalog snapshot payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/tools:
+    get:
+      operationId: listWorkspaceTools
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ToolRecord"
+                type: array
+          description: Workspace tools payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createWorkspaceTool
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolRecord"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolRecord"
+          description: Created workspace tool payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/tools/{toolId}:
+    patch:
+      operationId: updateWorkspaceTool
+      parameters:
+        - in: path
+          name: toolId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolRecord"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ToolRecord"
+          description: Updated workspace tool payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteWorkspaceTool
+      parameters:
+        - in: path
+          name: toolId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Workspace tool deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/knowledge:
+    get:
+      operationId: listWorkspaceKnowledge
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/KnowledgeRecord"
+                type: array
+          description: Workspace knowledge payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/overview:
+    get:
+      operationId: getWorkspaceOverview
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceOverviewSnapshot"
+          description: Workspace overview payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/pet:
+    get:
+      operationId: getWorkspacePetSnapshot
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PetWorkspaceSnapshot"
+          description: Workspace pet snapshot payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/pet/conversation:
+    put:
+      operationId: bindWorkspacePetConversation
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BindPetConversationInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PetConversationBinding"
+          description: Updated workspace pet conversation binding payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/pet/presence:
+    patch:
+      operationId: saveWorkspacePetPresence
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavePetPresenceInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PetPresenceState"
+          description: Updated workspace pet presence payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/rbac/menus:
+    get:
+      operationId: listWorkspaceMenus
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/MenuRecord"
+                type: array
+          description: Workspace menus payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createWorkspaceMenu
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MenuRecord"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuRecord"
+          description: Created workspace menu payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/rbac/menus/{menuId}:
+    patch:
+      operationId: updateWorkspaceMenu
+      parameters:
+        - in: path
+          name: menuId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MenuRecord"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuRecord"
+          description: Updated workspace menu payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/rbac/permissions:
+    get:
+      operationId: listWorkspacePermissions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/PermissionRecord"
+                type: array
+          description: Workspace permissions payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createWorkspacePermission
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PermissionRecord"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionRecord"
+          description: Created workspace permission payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/rbac/permissions/{permissionId}:
+    patch:
+      operationId: updateWorkspacePermission
+      parameters:
+        - in: path
+          name: permissionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PermissionRecord"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionRecord"
+          description: Updated workspace permission payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteWorkspacePermission
+      parameters:
+        - in: path
+          name: permissionId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Workspace permission deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/rbac/roles:
+    get:
+      operationId: listWorkspaceRoles
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/RoleRecord"
+                type: array
+          description: Workspace roles payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createWorkspaceRole
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleRecord"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleRecord"
+          description: Created workspace role payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/rbac/roles/{roleId}:
+    patch:
+      operationId: updateWorkspaceRole
+      parameters:
+        - in: path
+          name: roleId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleRecord"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleRecord"
+          description: Updated workspace role payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteWorkspaceRole
+      parameters:
+        - in: path
+          name: roleId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Workspace role deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/rbac/users:
+    get:
+      operationId: listWorkspaceUsers
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/UserRecordSummary"
+                type: array
+          description: Workspace users payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createWorkspaceUser
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceUserRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserRecordSummary"
+          description: Created workspace user payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/rbac/users/{userId}:
+    patch:
+      operationId: updateWorkspaceUser
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkspaceUserRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserRecordSummary"
+          description: Updated workspace user payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteWorkspaceUser
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Workspace user deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/resources:
+    get:
+      operationId: listWorkspaceResources
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/WorkspaceResourceRecord"
+                type: array
+          description: Workspace resources payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createWorkspaceResource
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceResourceInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResourceRecord"
+          description: Created workspace resource payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/resources/{resourceId}:
+    patch:
+      operationId: updateWorkspaceResource
+      parameters:
+        - in: path
+          name: resourceId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkspaceResourceInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResourceRecord"
+          description: Updated workspace resource payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteWorkspaceResource
+      parameters:
+        - in: path
+          name: resourceId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Workspace resource deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/teams:
+    get:
+      operationId: listWorkspaceTeams
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/TeamRecord"
+                type: array
+          description: Workspace teams payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createWorkspaceTeam
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertTeamInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamRecord"
+          description: Created workspace team payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/teams/{teamId}:
+    patch:
+      operationId: updateWorkspaceTeam
+      parameters:
+        - in: path
+          name: teamId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertTeamInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamRecord"
+          description: Updated workspace team payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteWorkspaceTeam
+      parameters:
+        - in: path
+          name: teamId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Workspace team deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/user-center/overview:
+    get:
+      operationId: getUserCenterOverview
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserCenterOverviewSnapshot"
+          description: User center overview payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/user-center/profile:
+    patch:
+      operationId: updateCurrentUserProfile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCurrentUserProfileRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserRecordSummary"
+          description: Updated current user profile payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/user-center/profile/password:
+    post:
+      operationId: changeCurrentUserPassword
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeCurrentUserPasswordRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangeCurrentUserPasswordResponse"
+          description: Updated current user password payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/user-center/profile/runtime-config:
+    get:
+      operationId: getUserRuntimeConfig
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeEffectiveConfig"
+          description: User effective runtime configuration payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    patch:
+      operationId: saveUserRuntimeConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfigPatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeEffectiveConfig"
+          description: Saved user effective runtime configuration payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/user-center/profile/runtime-config/validate:
+    post:
+      operationId: validateUserRuntimeConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfigPatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeConfigValidationResult"
+          description: User runtime configuration validation payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
 components:
   schemas:
-    ThemeMode:
-      type: string
+    AgentRecord:
+      additionalProperties: false
+      properties:
+        avatar:
+          type: string
+        avatarPath:
+          type: string
+        builtinToolKeys:
+          items:
+            type: string
+          type: array
+        description:
+          type: string
+        id:
+          type: string
+        integrationSource:
+          additionalProperties: false
+          properties:
+            kind:
+              enum:
+                - workspace-link
+              type: string
+            sourceId:
+              type: string
+          required:
+            - kind
+            - sourceId
+          type: object
+        mcpServerNames:
+          items:
+            type: string
+          type: array
+        name:
+          type: string
+        personality:
+          type: string
+        projectId:
+          type: string
+        prompt:
+          type: string
+        scope:
+          $ref: "#/components/schemas/AgentScope"
+        skillIds:
+          items:
+            type: string
+          type: array
+        status:
+          $ref: "#/components/schemas/AgentStatus"
+        tags:
+          items:
+            type: string
+          type: array
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - scope
+        - name
+        - personality
+        - tags
+        - prompt
+        - builtinToolKeys
+        - skillIds
+        - mcpServerNames
+        - description
+        - status
+        - updatedAt
+      type: object
+    AgentScope:
       enum:
-        - light
-        - dark
-        - system
-    Locale:
+        - personal
+        - workspace
+        - project
       type: string
+    AgentStatus:
       enum:
-        - zh-CN
-        - en-US
-    HostPlatform:
+        - active
+        - archived
       type: string
-      enum:
-        - tauri
-        - web
-    HostExecutionMode:
-      type: string
-      enum:
-        - local
-        - remote
-    BackendTransport:
-      type: string
-      enum:
-        - http
-        - sse
-        - ws
-    BackendConnectionState:
-      type: string
-      enum:
-        - ready
-        - unavailable
-    ConnectionMode:
-      type: string
-      enum:
-        - local
-        - shared
-        - remote
-    ConnectionState:
-      type: string
-      enum:
-        - local-ready
-        - connected
-        - disconnected
-    TransportSecurityLevel:
-      type: string
-      enum:
-        - loopback
-        - trusted
-        - public
-    WorkspaceAuthMode:
-      type: string
-      enum:
-        - session-token
-    WorkspaceConnectionStatus:
-      type: string
-      enum:
-        - connected
-        - disconnected
-        - expired
-        - unreachable
     ApiErrorCode:
-      type: string
       enum:
         - UNAUTHENTICATED
         - SESSION_EXPIRED
@@ -162,79 +2812,2429 @@ components:
         - UNAVAILABLE
         - CAPABILITY_UNSUPPORTED
         - INTERNAL_ERROR
-    HostState:
-      type: object
+      type: string
+    ApiErrorDetailEnvelope:
       additionalProperties: false
-      required:
-        - platform
-        - mode
-        - appVersion
-        - cargoWorkspace
-        - shell
       properties:
-        platform:
-          $ref: '#/components/schemas/HostPlatform'
-        mode:
-          $ref: '#/components/schemas/HostExecutionMode'
-        appVersion:
+        code:
+          $ref: "#/components/schemas/ApiErrorCode"
+        details: {}
+        message:
           type: string
-        cargoWorkspace:
+        requestId:
+          type: string
+        retryable:
           type: boolean
-        shell:
-          type: string
-    HostBackendConnection:
-      type: object
-      additionalProperties: false
       required:
-        - state
-        - transport
+        - code
+        - message
+        - requestId
+        - retryable
+      type: object
+    ApiErrorEnvelope:
+      additionalProperties: false
+      properties:
+        error:
+          $ref: "#/components/schemas/ApiErrorDetailEnvelope"
+      required:
+        - error
+      type: object
+    ArtifactRecord:
+      additionalProperties: false
+      properties:
+        byteSize:
+          type: integer
+        contentHash:
+          type: string
+        contentType:
+          type: string
+        id:
+          type: string
+        latestVersion:
+          type: integer
+        projectId:
+          type: string
+        status:
+          $ref: "#/components/schemas/ArtifactStatus"
+        storagePath:
+          type: string
+        title:
+          type: string
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - title
+        - status
+        - latestVersion
+        - updatedAt
+      type: object
+    ArtifactStatus:
+      enum:
+        - draft
+        - review
+        - approved
+        - published
+      type: string
+    AuditRecord:
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+        actorId:
+          type: string
+        actorType:
+          type: string
+        createdAt:
+          type: integer
+        id:
+          type: string
+        outcome:
+          type: string
+        projectId:
+          type: string
+        resource:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - actorType
+        - actorId
+        - action
+        - resource
+        - outcome
+        - createdAt
+      type: object
+    AutomationRecord:
+      additionalProperties: false
+      properties:
+        cadence:
+          type: string
+        description:
+          type: string
+        id:
+          type: string
+        lastRunAt:
+          type: integer
+        nextRunAt:
+          type: integer
+        output:
+          type: string
+        ownerId:
+          type: string
+        ownerType:
+          enum:
+            - agent
+            - team
+          type: string
+        projectId:
+          type: string
+        status:
+          $ref: "#/components/schemas/AutomationStatus"
+        title:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - title
+        - description
+        - cadence
+        - ownerType
+        - ownerId
+        - status
+        - output
+      type: object
+    AutomationStatus:
+      enum:
+        - active
+        - paused
+        - error
+      type: string
+    AvatarUploadPayload:
+      additionalProperties: false
+      properties:
+        byteSize:
+          type: integer
+        contentType:
+          type: string
+        dataBase64:
+          type: string
+        fileName:
+          type: string
+      required:
+        - fileName
+        - contentType
+        - dataBase64
+        - byteSize
+      type: object
+    BackendConnectionState:
+      enum:
+        - ready
+        - unavailable
+      type: string
+    BackendTransport:
+      enum:
+        - http
+        - sse
+        - ws
+      type: string
+    BindPetConversationInput:
+      additionalProperties: false
+      properties:
+        conversationId:
+          type: string
+        petId:
+          type: string
+        sessionId:
+          type: string
+      required:
+        - petId
+        - conversationId
+      type: object
+    CapabilityDescriptor:
+      additionalProperties: false
+      properties:
+        capabilityId:
+          type: string
+        label:
+          type: string
+      required:
+        - capabilityId
+        - label
+      type: object
+    ChangeCurrentUserPasswordRequest:
+      additionalProperties: false
+      properties:
+        confirmPassword:
+          type: string
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+      required:
+        - currentPassword
+        - newPassword
+        - confirmPassword
+      type: object
+    ChangeCurrentUserPasswordResponse:
+      additionalProperties: false
+      properties:
+        passwordState:
+          $ref: "#/components/schemas/PasswordState"
+      required:
+        - passwordState
+      type: object
+    ClientAppRecord:
+      additionalProperties: false
+      properties:
+        allowedHosts:
+          items:
+            type: string
+          type: array
+        allowedOrigins:
+          items:
+            type: string
+          type: array
+        defaultScopes:
+          items:
+            type: string
+          type: array
+        firstParty:
+          type: boolean
+        id:
+          type: string
+        name:
+          type: string
+        platform:
+          type: string
+        sessionPolicy:
+          type: string
+        status:
+          type: string
+      required:
+        - id
+        - name
+        - platform
+        - status
+        - firstParty
+        - allowedOrigins
+        - allowedHosts
+        - sessionPolicy
+        - defaultScopes
+      type: object
+    ConnectionMode:
+      enum:
+        - local
+        - shared
+        - remote
+      type: string
+    ConnectionProfile:
+      additionalProperties: false
       properties:
         baseUrl:
           type: string
-        authToken:
+        id:
           type: string
+        label:
+          type: string
+        lastSyncAt:
+          type: integer
+        mode:
+          $ref: "#/components/schemas/ConnectionMode"
         state:
-          $ref: '#/components/schemas/BackendConnectionState'
-        transport:
-          $ref: '#/components/schemas/BackendTransport'
-    HealthcheckBackendStatus:
-      type: object
-      additionalProperties: false
-      required:
-        - state
-        - transport
-      properties:
-        state:
-          $ref: '#/components/schemas/BackendConnectionState'
-        transport:
-          $ref: '#/components/schemas/BackendTransport'
-    ConnectionProfile:
-      type: object
-      additionalProperties: false
+          $ref: "#/components/schemas/ConnectionState"
+        workspaceId:
+          type: string
       required:
         - id
         - mode
         - label
         - workspaceId
         - state
+      type: object
+    ConnectionState:
+      enum:
+        - local-ready
+        - connected
+        - disconnected
+      type: string
+    ConversationActorKind:
+      enum:
+        - agent
+        - team
+      type: string
+    ConversationRecord:
+      additionalProperties: false
       properties:
         id:
           type: string
-        mode:
-          $ref: '#/components/schemas/ConnectionMode'
+        lastMessagePreview:
+          type: string
+        projectId:
+          type: string
+        sessionId:
+          type: string
+        status:
+          type: string
+        title:
+          type: string
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - projectId
+        - sessionId
+        - title
+        - status
+        - updatedAt
+      type: object
+    CopyWorkspaceSkillToManagedInput:
+      additionalProperties: false
+      properties:
+        slug:
+          type: string
+      required:
+        - slug
+      type: object
+    CreateHostWorkspaceConnectionInput:
+      additionalProperties: false
+      properties:
+        authMode:
+          $ref: "#/components/schemas/WorkspaceAuthMode"
+        baseUrl:
+          type: string
         label:
           type: string
+        transportSecurity:
+          $ref: "#/components/schemas/TransportSecurityLevel"
         workspaceId:
+          type: string
+      required:
+        - workspaceId
+        - label
+        - baseUrl
+        - transportSecurity
+        - authMode
+      type: object
+    CreateNotificationInput:
+      additionalProperties: false
+      properties:
+        actionLabel:
+          type: string
+        body:
+          type: string
+        level:
+          $ref: "#/components/schemas/NotificationLevel"
+        routeTo:
+          type: string
+        scopeKind:
+          $ref: "#/components/schemas/NotificationScopeKind"
+        scopeOwnerId:
+          type: string
+        source:
+          type: string
+        title:
+          type: string
+        toastDurationMs:
+          type: integer
+      required:
+        - scopeKind
+      type: object
+    CreateProjectRequest:
+      additionalProperties: false
+      properties:
+        assignments:
+          $ref: "#/components/schemas/ProjectWorkspaceAssignments"
+        description:
+          type: string
+        name:
+          type: string
+      required:
+        - name
+        - description
+      type: object
+    CreateRuntimeSessionInput:
+      additionalProperties: false
+      properties:
+        conversationId:
+          type: string
+        projectId:
+          type: string
+        sessionKind:
+          $ref: "#/components/schemas/RuntimeSessionKind"
+        title:
+          type: string
+      required:
+        - conversationId
+        - projectId
+        - title
+      type: object
+    CreateWorkspaceResourceFolderInput:
+      additionalProperties: false
+      properties:
+        files:
+          items:
+            $ref: "#/components/schemas/WorkspaceResourceFolderUploadEntry"
+          type: array
+        projectId:
+          type: string
+      required:
+        - files
+      type: object
+    CreateWorkspaceResourceInput:
+      additionalProperties: false
+      properties:
+        kind:
+          $ref: "#/components/schemas/ProjectResourceKind"
+        location:
+          type: string
+        name:
+          type: string
+        projectId:
+          type: string
+        sourceArtifactId:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+      required:
+        - kind
+        - name
+      type: object
+    CreateWorkspaceSkillInput:
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+        slug:
+          type: string
+      required:
+        - slug
+        - content
+      type: object
+    CreateWorkspaceUserRequest:
+      additionalProperties: false
+      properties:
+        avatar:
+          $ref: "#/components/schemas/AvatarUploadPayload"
+        confirmPassword:
+          type: string
+        displayName:
+          type: string
+        password:
+          type: string
+        roleIds:
+          items:
+            type: string
+          type: array
+        scopeProjectIds:
+          items:
+            type: string
+          type: array
+        status:
+          $ref: "#/components/schemas/UserStatus"
+        useDefaultAvatar:
+          type: boolean
+        useDefaultPassword:
+          type: boolean
+        username:
+          type: string
+      required:
+        - username
+        - displayName
+        - status
+        - roleIds
+        - scopeProjectIds
+      type: object
+    CredentialBinding:
+      additionalProperties: false
+      properties:
+        baseUrl:
+          type: string
+        configured:
+          type: boolean
+        credentialRef:
+          type: string
+        label:
+          type: string
+        providerId:
+          type: string
+        source:
+          type: string
+        status:
+          enum:
+            - healthy
+            - error
+            - unconfigured
+            - configured
+          type: string
+      required:
+        - credentialRef
+        - providerId
+        - label
+        - status
+        - configured
+        - source
+      type: object
+    DecisionAction:
+      enum:
+        - approve
+        - reject
+      type: string
+    HealthcheckBackendStatus:
+      additionalProperties: false
+      properties:
+        state:
+          $ref: "#/components/schemas/BackendConnectionState"
+        transport:
+          $ref: "#/components/schemas/BackendTransport"
+      required:
+        - state
+        - transport
+      type: object
+    HealthcheckStatus:
+      additionalProperties: false
+      properties:
+        backend:
+          $ref: "#/components/schemas/HealthcheckBackendStatus"
+        cargoWorkspace:
+          type: boolean
+        host:
+          $ref: "#/components/schemas/HostPlatform"
+        mode:
+          $ref: "#/components/schemas/HostExecutionMode"
+        status:
+          enum:
+            - ok
+          type: string
+      required:
+        - status
+        - host
+        - mode
+        - cargoWorkspace
+        - backend
+      type: object
+    HostBackendConnection:
+      additionalProperties: false
+      properties:
+        authToken:
           type: string
         baseUrl:
           type: string
         state:
-          $ref: '#/components/schemas/ConnectionState'
-        lastSyncAt:
-          type: integer
-    ShellPreferences:
+          $ref: "#/components/schemas/BackendConnectionState"
+        transport:
+          $ref: "#/components/schemas/BackendTransport"
+      required:
+        - state
+        - transport
       type: object
+    HostExecutionMode:
+      enum:
+        - local
+        - remote
+      type: string
+    HostPlatform:
+      enum:
+        - tauri
+        - web
+      type: string
+    HostState:
       additionalProperties: false
+      properties:
+        appVersion:
+          type: string
+        cargoWorkspace:
+          type: boolean
+        mode:
+          $ref: "#/components/schemas/HostExecutionMode"
+        platform:
+          $ref: "#/components/schemas/HostPlatform"
+        shell:
+          type: string
+      required:
+        - platform
+        - mode
+        - appVersion
+        - cargoWorkspace
+        - shell
+      type: object
+    ImportedAgentPreviewItem:
+      additionalProperties: false
+      properties:
+        action:
+          enum:
+            - create
+            - update
+            - skip
+            - failed
+          type: string
+        agentId:
+          type: string
+        department:
+          type: string
+        name:
+          type: string
+        skillSlugs:
+          items:
+            type: string
+          type: array
+        sourceId:
+          type: string
+      required:
+        - sourceId
+        - name
+        - department
+        - action
+        - skillSlugs
+      type: object
+    ImportedSkillPreviewItem:
+      additionalProperties: false
+      properties:
+        action:
+          enum:
+            - create
+            - update
+            - skip
+            - failed
+          type: string
+        agentNames:
+          items:
+            type: string
+          type: array
+        contentHash:
+          type: string
+        departments:
+          items:
+            type: string
+          type: array
+        fileCount:
+          type: integer
+        name:
+          type: string
+        skillId:
+          type: string
+        slug:
+          type: string
+        sourceIds:
+          items:
+            type: string
+          type: array
+      required:
+        - slug
+        - skillId
+        - name
+        - action
+        - contentHash
+        - fileCount
+        - sourceIds
+        - departments
+        - agentNames
+      type: object
+    ImportIssue:
+      additionalProperties: false
+      properties:
+        message:
+          type: string
+        scope:
+          enum:
+            - bundle
+            - agent
+            - skill
+          type: string
+        severity:
+          enum:
+            - warning
+            - error
+          type: string
+        sourceId:
+          type: string
+      required:
+        - severity
+        - scope
+        - message
+      type: object
+    ImportWorkspaceAgentBundleInput:
+      additionalProperties: false
+      properties:
+        files:
+          items:
+            $ref: "#/components/schemas/WorkspaceDirectoryUploadEntry"
+          type: array
+      required:
+        - files
+      type: object
+    ImportWorkspaceAgentBundlePreview:
+      additionalProperties: false
+      properties:
+        agents:
+          items:
+            $ref: "#/components/schemas/ImportedAgentPreviewItem"
+          type: array
+        createCount:
+          type: integer
+        departmentCount:
+          type: integer
+        departments:
+          items:
+            type: string
+          type: array
+        detectedAgentCount:
+          type: integer
+        failureCount:
+          type: integer
+        filteredFileCount:
+          type: integer
+        importableAgentCount:
+          type: integer
+        issues:
+          items:
+            $ref: "#/components/schemas/ImportIssue"
+          type: array
+        skills:
+          items:
+            $ref: "#/components/schemas/ImportedSkillPreviewItem"
+          type: array
+        skipCount:
+          type: integer
+        uniqueSkillCount:
+          type: integer
+        updateCount:
+          type: integer
+      required:
+        - departments
+        - departmentCount
+        - detectedAgentCount
+        - importableAgentCount
+        - createCount
+        - updateCount
+        - skipCount
+        - failureCount
+        - uniqueSkillCount
+        - filteredFileCount
+        - agents
+        - skills
+        - issues
+      type: object
+    ImportWorkspaceAgentBundlePreviewInput:
+      additionalProperties: false
+      properties:
+        files:
+          items:
+            $ref: "#/components/schemas/WorkspaceDirectoryUploadEntry"
+          type: array
+      required:
+        - files
+      type: object
+    ImportWorkspaceAgentBundleResult:
+      additionalProperties: false
+      properties:
+        agents:
+          items:
+            $ref: "#/components/schemas/ImportedAgentPreviewItem"
+          type: array
+        createCount:
+          type: integer
+        departmentCount:
+          type: integer
+        departments:
+          items:
+            type: string
+          type: array
+        detectedAgentCount:
+          type: integer
+        failureCount:
+          type: integer
+        filteredFileCount:
+          type: integer
+        importableAgentCount:
+          type: integer
+        issues:
+          items:
+            $ref: "#/components/schemas/ImportIssue"
+          type: array
+        skills:
+          items:
+            $ref: "#/components/schemas/ImportedSkillPreviewItem"
+          type: array
+        skipCount:
+          type: integer
+        uniqueSkillCount:
+          type: integer
+        updateCount:
+          type: integer
+      required:
+        - departments
+        - departmentCount
+        - detectedAgentCount
+        - importableAgentCount
+        - createCount
+        - updateCount
+        - skipCount
+        - failureCount
+        - uniqueSkillCount
+        - filteredFileCount
+        - agents
+        - skills
+        - issues
+      type: object
+    ImportWorkspaceSkillArchiveInput:
+      additionalProperties: false
+      properties:
+        archive:
+          $ref: "#/components/schemas/WorkspaceFileUploadPayload"
+        slug:
+          type: string
+      required:
+        - slug
+        - archive
+      type: object
+    ImportWorkspaceSkillFolderInput:
+      additionalProperties: false
+      properties:
+        files:
+          items:
+            $ref: "#/components/schemas/WorkspaceDirectoryUploadEntry"
+          type: array
+        slug:
+          type: string
+      required:
+        - slug
+        - files
+      type: object
+    InboxItemRecord:
+      additionalProperties: false
+      properties:
+        createdAt:
+          type: integer
+        description:
+          type: string
+        id:
+          type: string
+        itemType:
+          type: string
+        priority:
+          type: string
+        projectId:
+          type: string
+        status:
+          type: string
+        title:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - itemType
+        - title
+        - description
+        - status
+        - priority
+        - createdAt
+      type: object
+    KnowledgeEntryRecord:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        projectId:
+          type: string
+        scope:
+          type: string
+        sourceRef:
+          type: string
+        sourceType:
+          type: string
+        status:
+          type: string
+        title:
+          type: string
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - title
+        - scope
+        - status
+        - sourceType
+        - sourceRef
+        - updatedAt
+      type: object
+    KnowledgeKind:
+      enum:
+        - private
+        - shared
+        - candidate
+      type: string
+    KnowledgeRecord:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        kind:
+          $ref: "#/components/schemas/KnowledgeKind"
+        projectId:
+          type: string
+        sourceRef:
+          type: string
+        sourceType:
+          $ref: "#/components/schemas/KnowledgeSourceType"
+        status:
+          $ref: "#/components/schemas/KnowledgeStatus"
+        summary:
+          type: string
+        title:
+          type: string
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - title
+        - summary
+        - kind
+        - status
+        - sourceType
+        - sourceRef
+        - updatedAt
+      type: object
+    KnowledgeSourceType:
+      enum:
+        - conversation
+        - artifact
+        - run
+      type: string
+    KnowledgeStatus:
+      enum:
+        - candidate
+        - reviewed
+        - shared
+        - archived
+      type: string
+    Locale:
+      enum:
+        - zh-CN
+        - en-US
+      type: string
+    LoginRequest:
+      additionalProperties: false
+      properties:
+        clientAppId:
+          type: string
+        password:
+          type: string
+        username:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - clientAppId
+        - username
+        - password
+      type: object
+    LoginResponse:
+      additionalProperties: false
+      properties:
+        session:
+          $ref: "#/components/schemas/SessionRecord"
+        workspace:
+          $ref: "#/components/schemas/WorkspaceSummary"
+      required:
+        - session
+        - workspace
+      type: object
+    MenuRecord:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        order:
+          type: integer
+        parentId:
+          type: string
+        routeName:
+          type: string
+        source:
+          $ref: "#/components/schemas/MenuSource"
+        status:
+          $ref: "#/components/schemas/MenuStatus"
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - source
+        - label
+        - status
+        - order
+      type: object
+    MenuSource:
+      enum:
+        - main-sidebar
+        - user-center
+      type: string
+    MenuStatus:
+      enum:
+        - active
+        - disabled
+      type: string
+    MessageProcessEntry:
+      additionalProperties: false
+      properties:
+        detail:
+          type: string
+        id:
+          type: string
+        timestamp:
+          type: integer
+        title:
+          type: string
+        toolId:
+          type: string
+        type:
+          enum:
+            - thinking
+            - execution
+            - tool
+            - result
+          type: string
+      required:
+        - id
+        - type
+        - title
+        - detail
+        - timestamp
+      type: object
+    MessageToolCall:
+      additionalProperties: false
+      properties:
+        count:
+          type: integer
+        kind:
+          $ref: "#/components/schemas/ToolCatalogKind"
+        label:
+          type: string
+        toolId:
+          type: string
+      required:
+        - toolId
+        - label
+        - kind
+        - count
+      type: object
+    MessageUsage:
+      additionalProperties: false
+      properties:
+        inputTokens:
+          type: integer
+        outputTokens:
+          type: integer
+        totalTokens:
+          type: integer
+      required:
+        - inputTokens
+        - outputTokens
+        - totalTokens
+      type: object
+    ModelCatalogSnapshot:
+      additionalProperties: false
+      properties:
+        configuredModels:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+        credentialBindings:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+        defaultSelections:
+          additionalProperties:
+            additionalProperties: true
+            type: object
+          type: object
+        diagnostics:
+          additionalProperties: true
+          type: object
+        models:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+        providers:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+      type: object
+    NotificationFilter:
+      additionalProperties: false
+      properties:
+        scope:
+          $ref: "#/components/schemas/NotificationFilterScope"
+      type: object
+    NotificationFilterScope:
+      enum:
+        - all
+        - app
+        - workspace
+        - user
+      type: string
+    NotificationLevel:
+      enum:
+        - info
+        - success
+        - warning
+        - error
+      type: string
+    NotificationListResponse:
+      additionalProperties: false
+      properties:
+        notifications:
+          items:
+            $ref: "#/components/schemas/NotificationRecord"
+          type: array
+        unread:
+          $ref: "#/components/schemas/NotificationUnreadSummary"
+      required:
+        - notifications
+        - unread
+      type: object
+    NotificationRecord:
+      additionalProperties: false
+      properties:
+        actionLabel:
+          type: string
+        body:
+          type: string
+        createdAt:
+          type: integer
+        id:
+          type: string
+        level:
+          $ref: "#/components/schemas/NotificationLevel"
+        readAt:
+          type: integer
+        routeTo:
+          type: string
+        scopeKind:
+          $ref: "#/components/schemas/NotificationScopeKind"
+        scopeOwnerId:
+          type: string
+        source:
+          type: string
+        title:
+          type: string
+        toastVisibleUntil:
+          type: integer
+      required:
+        - id
+        - scopeKind
+        - level
+        - title
+        - body
+        - source
+        - createdAt
+      type: object
+    NotificationScopeKind:
+      enum:
+        - app
+        - workspace
+        - user
+      type: string
+    NotificationUnreadScopeSummary:
+      additionalProperties: false
+      properties:
+        app:
+          type: integer
+        user:
+          type: integer
+        workspace:
+          type: integer
+      required:
+        - app
+        - workspace
+        - user
+      type: object
+    NotificationUnreadSummary:
+      additionalProperties: false
+      properties:
+        byScope:
+          $ref: "#/components/schemas/NotificationUnreadScopeSummary"
+        total:
+          type: integer
+      required:
+        - total
+        - byScope
+      type: object
+    PasswordState:
+      enum:
+        - set
+        - reset-required
+        - temporary
+      type: string
+    PermissionMode:
+      enum:
+        - auto
+        - readonly
+        - danger-full-access
+      type: string
+    PermissionRecord:
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        id:
+          type: string
+        kind:
+          $ref: "#/components/schemas/RbacPermissionKind"
+        memberPermissionIds:
+          items:
+            type: string
+          type: array
+        name:
+          type: string
+        status:
+          $ref: "#/components/schemas/RbacPermissionStatus"
+        targetIds:
+          items:
+            type: string
+          type: array
+        targetType:
+          $ref: "#/components/schemas/RbacPermissionTargetType"
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - name
+        - code
+        - description
+        - status
+        - kind
+        - targetIds
+        - memberPermissionIds
+      type: object
+    PetChatSender:
+      enum:
+        - user
+        - pet
+      type: string
+    PetConversationBinding:
+      additionalProperties: false
+      properties:
+        conversationId:
+          type: string
+        petId:
+          type: string
+        projectId:
+          type: string
+        sessionId:
+          type: string
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
+      required:
+        - petId
+        - workspaceId
+        - projectId
+        - conversationId
+        - updatedAt
+      type: object
+    PetMessage:
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+        id:
+          type: string
+        petId:
+          type: string
+        sender:
+          $ref: "#/components/schemas/PetChatSender"
+        timestamp:
+          type: integer
+      required:
+        - id
+        - petId
+        - sender
+        - content
+        - timestamp
+      type: object
+    PetMood:
+      enum:
+        - curious
+        - happy
+        - sleepy
+        - playful
+        - focused
+      type: string
+    PetMotionState:
+      enum:
+        - idle
+        - hover
+        - walk
+        - chat
+        - sleep
+      type: string
+    PetPosition:
+      additionalProperties: false
+      properties:
+        x:
+          type: number
+        y:
+          type: number
+      required:
+        - x
+        - y
+      type: object
+    PetPresenceState:
+      additionalProperties: false
+      properties:
+        chatOpen:
+          type: boolean
+        isVisible:
+          type: boolean
+        lastInteractionAt:
+          type: integer
+        motionState:
+          $ref: "#/components/schemas/PetMotionState"
+        petId:
+          type: string
+        position:
+          $ref: "#/components/schemas/PetPosition"
+        unreadCount:
+          type: integer
+      required:
+        - petId
+        - isVisible
+        - chatOpen
+        - motionState
+        - unreadCount
+        - lastInteractionAt
+        - position
+      type: object
+    PetProfile:
+      additionalProperties: false
+      properties:
+        avatarLabel:
+          type: string
+        displayName:
+          type: string
+        fallbackAsset:
+          type: string
+        favoriteSnack:
+          type: string
+        greeting:
+          type: string
+        id:
+          type: string
+        mood:
+          $ref: "#/components/schemas/PetMood"
+        ownerUserId:
+          type: string
+        promptHints:
+          items:
+            type: string
+          type: array
+        riveAsset:
+          type: string
+        species:
+          $ref: "#/components/schemas/PetSpecies"
+        stateMachine:
+          type: string
+        summary:
+          type: string
+      required:
+        - id
+        - species
+        - displayName
+        - ownerUserId
+        - avatarLabel
+        - summary
+        - greeting
+        - mood
+        - favoriteSnack
+        - promptHints
+        - fallbackAsset
+      type: object
+    PetSpecies:
+      enum:
+        - duck
+        - goose
+        - blob
+        - cat
+        - dragon
+        - octopus
+        - owl
+        - penguin
+        - turtle
+        - snail
+        - ghost
+        - axolotl
+        - capybara
+        - cactus
+        - robot
+        - rabbit
+        - mushroom
+        - chonk
+      type: string
+    PetWorkspaceSnapshot:
+      additionalProperties: false
+      properties:
+        binding:
+          $ref: "#/components/schemas/PetConversationBinding"
+        messages:
+          items:
+            $ref: "#/components/schemas/PetMessage"
+          type: array
+        presence:
+          $ref: "#/components/schemas/PetPresenceState"
+        profile:
+          $ref: "#/components/schemas/PetProfile"
+      required:
+        - profile
+        - presence
+        - messages
+      type: object
+    ProjectAgentAssignments:
+      additionalProperties: false
+      properties:
+        agentIds:
+          items:
+            type: string
+          type: array
+        teamIds:
+          items:
+            type: string
+          type: array
+      required:
+        - agentIds
+        - teamIds
+      type: object
+    ProjectAgentLinkInput:
+      additionalProperties: false
+      properties:
+        agentId:
+          type: string
+        projectId:
+          type: string
+      required:
+        - projectId
+        - agentId
+      type: object
+    ProjectAgentLinkRecord:
+      additionalProperties: false
+      properties:
+        agentId:
+          type: string
+        linkedAt:
+          type: integer
+        projectId:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - workspaceId
+        - projectId
+        - agentId
+        - linkedAt
+      type: object
+    ProjectDashboardSnapshot:
+      additionalProperties: false
+      properties:
+        metrics:
+          items:
+            $ref: "#/components/schemas/WorkspaceMetricRecord"
+          type: array
+        project:
+          $ref: "#/components/schemas/ProjectRecord"
+        recentActivity:
+          items:
+            $ref: "#/components/schemas/WorkspaceActivityRecord"
+          type: array
+        recentConversations:
+          items:
+            $ref: "#/components/schemas/ConversationRecord"
+          type: array
+      required:
+        - project
+        - metrics
+        - recentConversations
+        - recentActivity
+      type: object
+    ProjectModelAssignments:
+      additionalProperties: false
+      properties:
+        configuredModelIds:
+          items:
+            type: string
+          type: array
+        defaultConfiguredModelId:
+          type: string
+      required:
+        - configuredModelIds
+        - defaultConfiguredModelId
+      type: object
+    ProjectRecord:
+      additionalProperties: false
+      properties:
+        assignments:
+          $ref: "#/components/schemas/ProjectWorkspaceAssignments"
+        description:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          enum:
+            - active
+            - archived
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - name
+        - status
+        - description
+      type: object
+    ProjectResourceKind:
+      enum:
+        - file
+        - folder
+        - artifact
+        - url
+      type: string
+    ProjectResourceOrigin:
+      enum:
+        - source
+        - generated
+      type: string
+    ProjectTeamLinkInput:
+      additionalProperties: false
+      properties:
+        projectId:
+          type: string
+        teamId:
+          type: string
+      required:
+        - projectId
+        - teamId
+      type: object
+    ProjectTeamLinkRecord:
+      additionalProperties: false
+      properties:
+        linkedAt:
+          type: integer
+        projectId:
+          type: string
+        teamId:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - workspaceId
+        - projectId
+        - teamId
+        - linkedAt
+      type: object
+    ProjectToolAssignments:
+      additionalProperties: false
+      properties:
+        sourceKeys:
+          items:
+            type: string
+          type: array
+      required:
+        - sourceKeys
+      type: object
+    ProjectWorkspaceAssignments:
+      additionalProperties: false
+      properties:
+        agents:
+          $ref: "#/components/schemas/ProjectAgentAssignments"
+        models:
+          $ref: "#/components/schemas/ProjectModelAssignments"
+        tools:
+          $ref: "#/components/schemas/ProjectToolAssignments"
+      type: object
+    ProviderConfig:
+      additionalProperties: false
+      properties:
+        baseUrl:
+          type: string
+        credentialRef:
+          type: string
+        defaultModel:
+          type: string
+        defaultSurface:
+          type: string
+        protocolFamily:
+          type: string
+        providerId:
+          type: string
+      required:
+        - providerId
+      type: object
+    RbacPermissionKind:
+      enum:
+        - atomic
+        - bundle
+      type: string
+    RbacPermissionStatus:
+      enum:
+        - active
+        - disabled
+      type: string
+    RbacPermissionTargetType:
+      enum:
+        - workspace
+        - project
+        - user
+        - role
+        - permission
+        - menu
+        - resource
+        - agent
+        - knowledge
+        - tool
+        - skill
+        - mcp
+      type: string
+    RbacRoleStatus:
+      enum:
+        - active
+        - disabled
+      type: string
+    RegisterWorkspaceOwnerRequest:
+      additionalProperties: false
+      properties:
+        avatar:
+          $ref: "#/components/schemas/AvatarUploadPayload"
+        clientAppId:
+          type: string
+        confirmPassword:
+          type: string
+        displayName:
+          type: string
+        password:
+          type: string
+        username:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - clientAppId
+        - username
+        - displayName
+        - password
+        - confirmPassword
+        - avatar
+      type: object
+    RegisterWorkspaceOwnerResponse:
+      additionalProperties: false
+      properties:
+        session:
+          $ref: "#/components/schemas/SessionRecord"
+        workspace:
+          $ref: "#/components/schemas/WorkspaceSummary"
+      required:
+        - session
+        - workspace
+      type: object
+    ResolvedExecutionTarget:
+      additionalProperties: false
+      properties:
+        baseUrl:
+          type: string
+        capabilities:
+          items:
+            $ref: "#/components/schemas/CapabilityDescriptor"
+          type: array
+        configuredModelId:
+          type: string
+        configuredModelName:
+          type: string
+        credentialRef:
+          type: string
+        modelId:
+          type: string
+        protocolFamily:
+          type: string
+        providerId:
+          type: string
+        registryModelId:
+          type: string
+        surface:
+          type: string
+      required:
+        - configuredModelId
+        - configuredModelName
+        - providerId
+        - registryModelId
+        - modelId
+        - surface
+        - protocolFamily
+        - capabilities
+      type: object
+    ResolveRuntimeApprovalInput:
+      additionalProperties: false
+      properties:
+        decision:
+          $ref: "#/components/schemas/DecisionAction"
+      required:
+        - decision
+      type: object
+    RiskLevel:
+      enum:
+        - low
+        - medium
+        - high
+      type: string
+    RoleRecord:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        description:
+          type: string
+        id:
+          type: string
+        menuIds:
+          items:
+            type: string
+          type: array
+        name:
+          type: string
+        permissionIds:
+          items:
+            type: string
+          type: array
+        status:
+          $ref: "#/components/schemas/RbacRoleStatus"
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - name
+        - code
+        - description
+        - status
+        - permissionIds
+        - menuIds
+      type: object
+    RunStatus:
+      enum:
+        - idle
+        - draft
+        - planned
+        - running
+        - waiting_input
+        - waiting_approval
+        - blocked
+        - paused
+        - completed
+        - failed
+        - terminated
+      type: string
+    RuntimeActorType:
+      enum:
+        - user
+        - assistant
+        - system
+      type: string
+    RuntimeApprovalRequest:
+      additionalProperties: false
+      properties:
+        conversationId:
+          type: string
+        createdAt:
+          type: integer
+        detail:
+          type: string
+        id:
+          type: string
+        riskLevel:
+          $ref: "#/components/schemas/RiskLevel"
+        runId:
+          type: string
+        sessionId:
+          type: string
+        status:
+          enum:
+            - pending
+            - approved
+            - rejected
+          type: string
+        summary:
+          type: string
+        toolName:
+          type: string
+      required:
+        - id
+        - sessionId
+        - conversationId
+        - runId
+        - toolName
+        - summary
+        - detail
+        - riskLevel
+        - createdAt
+        - status
+      type: object
+    RuntimeBootstrap:
+      additionalProperties: false
+      properties:
+        provider:
+          $ref: "#/components/schemas/ProviderConfig"
+        sessions:
+          items:
+            $ref: "#/components/schemas/RuntimeSessionSummary"
+          type: array
+      required:
+        - provider
+        - sessions
+      type: object
+    RuntimeConfigPatch:
+      additionalProperties: false
+      properties:
+        patch:
+          additionalProperties: true
+          type: object
+        scope:
+          $ref: "#/components/schemas/RuntimeConfigScope"
+      required:
+        - scope
+        - patch
+      type: object
+    RuntimeConfigScope:
+      enum:
+        - workspace
+        - project
+        - user
+      type: string
+    RuntimeConfigSource:
+      additionalProperties: false
+      properties:
+        contentHash:
+          type: string
+        displayPath:
+          type: string
+        document:
+          additionalProperties: true
+          type: object
+        exists:
+          type: boolean
+        loaded:
+          type: boolean
+        ownerId:
+          type: string
+        scope:
+          $ref: "#/components/schemas/RuntimeConfigScope"
+        sourceKey:
+          type: string
+      required:
+        - scope
+        - displayPath
+        - sourceKey
+        - exists
+        - loaded
+      type: object
+    RuntimeConfiguredModelProbeInput:
+      additionalProperties: false
+      properties:
+        configuredModelId:
+          type: string
+        patch:
+          additionalProperties: true
+          type: object
+        scope:
+          $ref: "#/components/schemas/RuntimeConfigScope"
+      required:
+        - scope
+        - configuredModelId
+        - patch
+      type: object
+    RuntimeConfiguredModelProbeResult:
+      additionalProperties: false
+      properties:
+        configuredModelId:
+          type: string
+        configuredModelName:
+          type: string
+        consumedTokens:
+          type: integer
+        errors:
+          items:
+            type: string
+          type: array
+        reachable:
+          type: boolean
+        requestId:
+          type: string
+        valid:
+          type: boolean
+        warnings:
+          items:
+            type: string
+          type: array
+      required:
+        - valid
+        - reachable
+        - configuredModelId
+        - errors
+        - warnings
+      type: object
+    RuntimeConfigValidationResult:
+      additionalProperties: false
+      properties:
+        errors:
+          items:
+            type: string
+          type: array
+        valid:
+          type: boolean
+        warnings:
+          items:
+            type: string
+          type: array
+      required:
+        - valid
+        - errors
+        - warnings
+      type: object
+    RuntimeEffectiveConfig:
+      additionalProperties: false
+      properties:
+        effectiveConfig:
+          additionalProperties: true
+          type: object
+        effectiveConfigHash:
+          type: string
+        secretReferences:
+          items:
+            $ref: "#/components/schemas/RuntimeSecretReferenceStatus"
+          type: array
+        sources:
+          items:
+            $ref: "#/components/schemas/RuntimeConfigSource"
+          type: array
+        validation:
+          $ref: "#/components/schemas/RuntimeConfigValidationResult"
+      required:
+        - effectiveConfig
+        - effectiveConfigHash
+        - sources
+        - validation
+        - secretReferences
+      type: object
+    RuntimeEventEnvelope:
+      additionalProperties: false
+      properties:
+        approval:
+          $ref: "#/components/schemas/RuntimeApprovalRequest"
+        conversationId:
+          type: string
+        decision:
+          $ref: "#/components/schemas/DecisionAction"
+        emittedAt:
+          type: integer
+        error:
+          type: string
+        eventType:
+          $ref: "#/components/schemas/RuntimeEventKind"
+        id:
+          type: string
+        kind:
+          $ref: "#/components/schemas/RuntimeEventKind"
+        message:
+          $ref: "#/components/schemas/RuntimeMessage"
+        payload:
+          additionalProperties: true
+          type: object
+        projectId:
+          type: string
+        run:
+          $ref: "#/components/schemas/RuntimeRunSnapshot"
+        runId:
+          type: string
+        sequence:
+          type: integer
+        sessionId:
+          type: string
+        summary:
+          $ref: "#/components/schemas/RuntimeSessionSummary"
+        trace:
+          $ref: "#/components/schemas/RuntimeTraceItem"
+        workspaceId:
+          type: string
+      required:
+        - id
+        - eventType
+        - workspaceId
+        - sessionId
+        - conversationId
+        - emittedAt
+        - sequence
+      type: object
+    RuntimeEventKind:
+      enum:
+        - runtime.run.updated
+        - runtime.message.created
+        - runtime.trace.emitted
+        - runtime.approval.requested
+        - runtime.approval.resolved
+        - runtime.session.updated
+        - runtime.error
+      type: string
+    RuntimeMessage:
+      additionalProperties: false
+      properties:
+        artifacts:
+          items:
+            type: string
+          type: array
+        attachments:
+          items:
+            type: string
+          type: array
+        configuredModelId:
+          type: string
+        configuredModelName:
+          type: string
+        content:
+          type: string
+        conversationId:
+          type: string
+        id:
+          type: string
+        modelId:
+          type: string
+        processEntries:
+          items:
+            $ref: "#/components/schemas/MessageProcessEntry"
+          type: array
+        requestedActorId:
+          type: string
+        requestedActorKind:
+          $ref: "#/components/schemas/ConversationActorKind"
+        resolvedActorId:
+          type: string
+        resolvedActorKind:
+          $ref: "#/components/schemas/ConversationActorKind"
+        resolvedActorLabel:
+          type: string
+        resourceIds:
+          items:
+            type: string
+          type: array
+        senderLabel:
+          type: string
+        senderType:
+          $ref: "#/components/schemas/RuntimeActorType"
+        sessionId:
+          type: string
+        status:
+          $ref: "#/components/schemas/RunStatus"
+        timestamp:
+          type: integer
+        toolCalls:
+          items:
+            $ref: "#/components/schemas/MessageToolCall"
+          type: array
+        usage:
+          $ref: "#/components/schemas/MessageUsage"
+        usedDefaultActor:
+          type: boolean
+      required:
+        - id
+        - sessionId
+        - conversationId
+        - senderType
+        - senderLabel
+        - content
+        - timestamp
+        - status
+      type: object
+    RuntimePermissionMode:
+      enum:
+        - read-only
+        - workspace-write
+        - danger-full-access
+      type: string
+    RuntimeRunSnapshot:
+      additionalProperties: false
+      properties:
+        configSnapshotId:
+          type: string
+        configuredModelId:
+          type: string
+        configuredModelName:
+          type: string
+        consumedTokens:
+          type: integer
+        conversationId:
+          type: string
+        currentStep:
+          type: string
+        effectiveConfigHash:
+          type: string
+        id:
+          type: string
+        modelId:
+          type: string
+        nextAction:
+          type: string
+        requestedActorId:
+          type: string
+        requestedActorKind:
+          $ref: "#/components/schemas/ConversationActorKind"
+        resolvedActorId:
+          type: string
+        resolvedActorKind:
+          $ref: "#/components/schemas/ConversationActorKind"
+        resolvedActorLabel:
+          type: string
+        resolvedTarget:
+          $ref: "#/components/schemas/ResolvedExecutionTarget"
+        sessionId:
+          type: string
+        startedAt:
+          type: integer
+        startedFromScopeSet:
+          items:
+            $ref: "#/components/schemas/RuntimeConfigScope"
+          type: array
+        status:
+          $ref: "#/components/schemas/RunStatus"
+        updatedAt:
+          type: integer
+      required:
+        - id
+        - sessionId
+        - conversationId
+        - status
+        - currentStep
+        - startedAt
+        - updatedAt
+        - configSnapshotId
+        - effectiveConfigHash
+        - startedFromScopeSet
+      type: object
+    RuntimeSecretReferenceState:
+      enum:
+        - reference-present
+        - reference-missing
+        - inline-redacted
+      type: string
+    RuntimeSecretReferenceStatus:
+      additionalProperties: false
+      properties:
+        path:
+          type: string
+        reference:
+          type: string
+        scope:
+          $ref: "#/components/schemas/RuntimeConfigScope"
+        status:
+          $ref: "#/components/schemas/RuntimeSecretReferenceState"
+      required:
+        - scope
+        - path
+        - status
+      type: object
+    RuntimeSessionDetail:
+      additionalProperties: false
+      properties:
+        messages:
+          items:
+            $ref: "#/components/schemas/RuntimeMessage"
+          type: array
+        pendingApproval:
+          $ref: "#/components/schemas/RuntimeApprovalRequest"
+        run:
+          $ref: "#/components/schemas/RuntimeRunSnapshot"
+        summary:
+          $ref: "#/components/schemas/RuntimeSessionSummary"
+        trace:
+          items:
+            $ref: "#/components/schemas/RuntimeTraceItem"
+          type: array
+      required:
+        - summary
+        - run
+        - messages
+        - trace
+      type: object
+    RuntimeSessionKind:
+      enum:
+        - project
+        - pet
+      type: string
+    RuntimeSessionSummary:
+      additionalProperties: false
+      properties:
+        configSnapshotId:
+          type: string
+        conversationId:
+          type: string
+        effectiveConfigHash:
+          type: string
+        id:
+          type: string
+        lastMessagePreview:
+          type: string
+        projectId:
+          type: string
+        sessionKind:
+          $ref: "#/components/schemas/RuntimeSessionKind"
+        startedFromScopeSet:
+          items:
+            $ref: "#/components/schemas/RuntimeConfigScope"
+          type: array
+        status:
+          $ref: "#/components/schemas/RunStatus"
+        title:
+          type: string
+        updatedAt:
+          type: integer
+      required:
+        - id
+        - conversationId
+        - projectId
+        - title
+        - sessionKind
+        - status
+        - updatedAt
+        - configSnapshotId
+        - effectiveConfigHash
+        - startedFromScopeSet
+      type: object
+    RuntimeTraceItem:
+      additionalProperties: false
+      properties:
+        actor:
+          type: string
+        actorId:
+          type: string
+        actorKind:
+          $ref: "#/components/schemas/ConversationActorKind"
+        conversationId:
+          type: string
+        detail:
+          type: string
+        id:
+          type: string
+        kind:
+          $ref: "#/components/schemas/TraceKind"
+        relatedMessageId:
+          type: string
+        relatedToolName:
+          type: string
+        runId:
+          type: string
+        sessionId:
+          type: string
+        timestamp:
+          type: integer
+        title:
+          type: string
+        tone:
+          $ref: "#/components/schemas/TraceTone"
+      required:
+        - id
+        - sessionId
+        - runId
+        - conversationId
+        - kind
+        - title
+        - detail
+        - tone
+        - timestamp
+        - actor
+      type: object
+    SavePetPresenceInput:
+      additionalProperties: false
+      properties:
+        chatOpen:
+          type: boolean
+        isVisible:
+          type: boolean
+        lastInteractionAt:
+          type: integer
+        motionState:
+          $ref: "#/components/schemas/PetMotionState"
+        petId:
+          type: string
+        position:
+          $ref: "#/components/schemas/PetPosition"
+        unreadCount:
+          type: integer
+      required:
+        - petId
+      type: object
+    SessionRecord:
+      additionalProperties: false
+      properties:
+        clientAppId:
+          type: string
+        createdAt:
+          type: integer
+        expiresAt:
+          type: integer
+        id:
+          type: string
+        roleIds:
+          items:
+            type: string
+          type: array
+        scopeProjectIds:
+          items:
+            type: string
+          type: array
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+        token:
+          type: string
+        userId:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - userId
+        - clientAppId
+        - token
+        - status
+        - createdAt
+        - roleIds
+        - scopeProjectIds
+      type: object
+    SessionStatus:
+      enum:
+        - active
+        - revoked
+        - expired
+      type: string
+    ShellBootstrap:
+      additionalProperties: false
+      properties:
+        backend:
+          $ref: "#/components/schemas/HostBackendConnection"
+        connections:
+          items:
+            $ref: "#/components/schemas/ConnectionProfile"
+          type: array
+        hostState:
+          $ref: "#/components/schemas/HostState"
+        preferences:
+          $ref: "#/components/schemas/ShellPreferences"
+        workspaceConnections:
+          items:
+            $ref: "#/components/schemas/WorkspaceConnectionRecord"
+          type: array
+        workspaceSessions:
+          items:
+            $ref: "#/components/schemas/WorkspaceSessionTokenEnvelope"
+          type: array
+      required:
+        - hostState
+        - preferences
+        - connections
+      type: object
+    ShellPreferences:
+      additionalProperties: false
+      properties:
+        compactSidebar:
+          type: boolean
+        defaultWorkspaceId:
+          type: string
+        fontFamily:
+          type: string
+        fontSize:
+          type: integer
+        fontStyle:
+          type: string
+        lastVisitedRoute:
+          type: string
+        leftSidebarCollapsed:
+          type: boolean
+        locale:
+          $ref: "#/components/schemas/Locale"
+        rightSidebarCollapsed:
+          type: boolean
+        theme:
+          $ref: "#/components/schemas/ThemeMode"
       required:
         - theme
         - locale
@@ -246,258 +5246,49 @@ components:
         - rightSidebarCollapsed
         - defaultWorkspaceId
         - lastVisitedRoute
-      properties:
-        theme:
-          $ref: '#/components/schemas/ThemeMode'
-        locale:
-          $ref: '#/components/schemas/Locale'
-        fontSize:
-          type: integer
-        fontFamily:
-          type: string
-        fontStyle:
-          type: string
-        compactSidebar:
-          type: boolean
-        leftSidebarCollapsed:
-          type: boolean
-        rightSidebarCollapsed:
-          type: boolean
-        defaultWorkspaceId:
-          type: string
-        lastVisitedRoute:
-          type: string
-    SessionRecord:
       type: object
+    SubmitRuntimeTurnInput:
       additionalProperties: false
-      required:
-        - id
-        - workspaceId
-        - userId
-        - clientAppId
-        - token
-        - status
-        - createdAt
-        - roleIds
-        - scopeProjectIds
       properties:
-        id:
+        actorId:
           type: string
-        workspaceId:
+        actorKind:
+          $ref: "#/components/schemas/ConversationActorKind"
+        configuredModelId:
           type: string
-        userId:
+        content:
           type: string
-        clientAppId:
+        modelId:
           type: string
-        token:
-          type: string
-        status:
-          type: string
-        createdAt:
-          type: integer
-        expiresAt:
-          type: integer
-        roleIds:
-          type: array
-          items:
-            type: string
-        scopeProjectIds:
-          type: array
-          items:
-            type: string
-    WorkspaceConnectionRecord:
+        permissionMode:
+          $ref: "#/components/schemas/RuntimePermissionMode"
+      required:
+        - content
+        - permissionMode
       type: object
-      additionalProperties: false
-      required:
-        - workspaceConnectionId
-        - workspaceId
-        - label
-        - baseUrl
-        - transportSecurity
-        - authMode
-        - status
-      properties:
-        workspaceConnectionId:
-          type: string
-        workspaceId:
-          type: string
-        label:
-          type: string
-        baseUrl:
-          type: string
-        transportSecurity:
-          $ref: '#/components/schemas/TransportSecurityLevel'
-        authMode:
-          $ref: '#/components/schemas/WorkspaceAuthMode'
-        lastUsedAt:
-          type: integer
-        status:
-          $ref: '#/components/schemas/WorkspaceConnectionStatus'
-    WorkspaceSessionTokenEnvelope:
-      type: object
-      additionalProperties: false
-      required:
-        - workspaceConnectionId
-        - token
-        - session
-        - issuedAt
-      properties:
-        workspaceConnectionId:
-          type: string
-        token:
-          type: string
-        session:
-          $ref: '#/components/schemas/SessionRecord'
-        issuedAt:
-          type: integer
-        expiresAt:
-          type: integer
-    ShellBootstrap:
-      type: object
-      additionalProperties: false
-      required:
-        - hostState
-        - preferences
-        - connections
-      properties:
-        hostState:
-          $ref: '#/components/schemas/HostState'
-        preferences:
-          $ref: '#/components/schemas/ShellPreferences'
-        connections:
-          type: array
-          items:
-            $ref: '#/components/schemas/ConnectionProfile'
-        backend:
-          $ref: '#/components/schemas/HostBackendConnection'
-        workspaceConnections:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkspaceConnectionRecord'
-        workspaceSessions:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkspaceSessionTokenEnvelope'
-    HealthcheckStatus:
-      type: object
-      additionalProperties: false
-      required:
-        - status
-        - host
-        - mode
-        - cargoWorkspace
-        - backend
-      properties:
-        status:
-          type: string
-          enum:
-            - ok
-        host:
-          $ref: '#/components/schemas/HostPlatform'
-        mode:
-          $ref: '#/components/schemas/HostExecutionMode'
-        cargoWorkspace:
-          type: boolean
-        backend:
-          $ref: '#/components/schemas/HealthcheckBackendStatus'
-    ClientAppRecord:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - name
-        - platform
-        - status
-        - firstParty
-        - allowedOrigins
-        - allowedHosts
-        - sessionPolicy
-        - defaultScopes
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        platform:
-          type: string
-        status:
-          type: string
-        firstParty:
-          type: boolean
-        allowedOrigins:
-          type: array
-          items:
-            type: string
-        allowedHosts:
-          type: array
-          items:
-            type: string
-        sessionPolicy:
-          type: string
-        defaultScopes:
-          type: array
-          items:
-            type: string
-    WorkspaceSummary:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - name
-        - slug
-        - deployment
-        - bootstrapStatus
-        - host
-        - listenAddress
-        - defaultProjectId
-      properties:
-        id:
-          type: string
-        name:
-          type: string
-        slug:
-          type: string
-        deployment:
-          type: string
-          enum:
-            - local
-            - remote
-        bootstrapStatus:
-          type: string
-          enum:
-            - setup_required
-            - ready
-        ownerUserId:
-          type: string
-        host:
-          type: string
-        listenAddress:
-          type: string
-        defaultProjectId:
-          type: string
-    WorkspaceCapabilitySet:
-      type: object
-      additionalProperties: false
-      required:
-        - polling
-        - sse
-        - idempotency
-        - reconnect
-        - eventReplay
-      properties:
-        polling:
-          type: boolean
-        sse:
-          type: boolean
-        idempotency:
-          type: boolean
-        reconnect:
-          type: boolean
-        eventReplay:
-          type: boolean
     SystemBootstrapStatus:
-      type: object
       additionalProperties: false
+      properties:
+        apiBasePath:
+          type: string
+        authMode:
+          $ref: "#/components/schemas/WorkspaceAuthMode"
+        capabilities:
+          $ref: "#/components/schemas/WorkspaceCapabilitySet"
+        ownerReady:
+          type: boolean
+        protocolVersion:
+          type: string
+        registeredApps:
+          items:
+            $ref: "#/components/schemas/ClientAppRecord"
+          type: array
+        setupRequired:
+          type: boolean
+        transportSecurity:
+          $ref: "#/components/schemas/TransportSecurityLevel"
+        workspace:
+          $ref: "#/components/schemas/WorkspaceSummary"
       required:
         - workspace
         - setupRequired
@@ -508,296 +5299,1147 @@ components:
         - transportSecurity
         - authMode
         - capabilities
+      type: object
+    TeamRecord:
+      additionalProperties: false
       properties:
-        workspace:
-          $ref: '#/components/schemas/WorkspaceSummary'
-        setupRequired:
-          type: boolean
-        ownerReady:
-          type: boolean
-        registeredApps:
-          type: array
-          items:
-            $ref: '#/components/schemas/ClientAppRecord'
-        protocolVersion:
+        avatar:
           type: string
-        apiBasePath:
+        avatarPath:
           type: string
-        transportSecurity:
-          $ref: '#/components/schemas/TransportSecurityLevel'
-        authMode:
-          $ref: '#/components/schemas/WorkspaceAuthMode'
-        capabilities:
-          $ref: '#/components/schemas/WorkspaceCapabilitySet'
-    ProjectModelAssignments:
-      type: object
-      additionalProperties: false
-      required:
-        - configuredModelIds
-        - defaultConfiguredModelId
-      properties:
-        configuredModelIds:
-          type: array
+        builtinToolKeys:
           items:
             type: string
-        defaultConfiguredModelId:
+          type: array
+        description:
           type: string
-    ProjectToolAssignments:
-      type: object
-      additionalProperties: false
-      required:
-        - sourceKeys
-      properties:
-        sourceKeys:
-          type: array
+        id:
+          type: string
+        integrationSource:
+          additionalProperties: false
+          properties:
+            kind:
+              enum:
+                - workspace-link
+              type: string
+            sourceId:
+              type: string
+          required:
+            - kind
+            - sourceId
+          type: object
+        leaderAgentId:
+          type: string
+        mcpServerNames:
           items:
             type: string
-    ProjectAgentAssignments:
-      type: object
-      additionalProperties: false
-      required:
-        - agentIds
-        - teamIds
-      properties:
-        agentIds:
           type: array
+        memberAgentIds:
           items:
             type: string
-        teamIds:
           type: array
+        name:
+          type: string
+        personality:
+          type: string
+        projectId:
+          type: string
+        prompt:
+          type: string
+        scope:
+          $ref: "#/components/schemas/TeamScope"
+        skillIds:
           items:
             type: string
-    ProjectWorkspaceAssignments:
-      type: object
-      additionalProperties: false
-      properties:
-        models:
-          $ref: '#/components/schemas/ProjectModelAssignments'
-        tools:
-          $ref: '#/components/schemas/ProjectToolAssignments'
-        agents:
-          $ref: '#/components/schemas/ProjectAgentAssignments'
-    ProjectRecord:
-      type: object
-      additionalProperties: false
+          type: array
+        status:
+          $ref: "#/components/schemas/TeamStatus"
+        tags:
+          items:
+            type: string
+          type: array
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
       required:
         - id
         - workspaceId
+        - scope
         - name
-        - status
+        - personality
+        - tags
+        - prompt
+        - builtinToolKeys
+        - skillIds
+        - mcpServerNames
+        - memberAgentIds
         - description
+        - status
+        - updatedAt
+      type: object
+    TeamScope:
+      enum:
+        - workspace
+        - project
+      type: string
+    TeamStatus:
+      enum:
+        - active
+        - archived
+      type: string
+    ThemeMode:
+      enum:
+        - light
+        - dark
+        - system
+      type: string
+    ToolCatalogKind:
+      enum:
+        - builtin
+        - skill
+        - mcp
+      type: string
+    ToolRecord:
+      additionalProperties: false
       properties:
+        description:
+          type: string
         id:
           type: string
+        kind:
+          $ref: "#/components/schemas/ToolCatalogKind"
+        name:
+          type: string
+        permissionMode:
+          $ref: "#/components/schemas/WorkspaceToolPermissionMode"
+        status:
+          $ref: "#/components/schemas/WorkspaceToolStatus"
+        updatedAt:
+          type: integer
         workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - kind
+        - name
+        - description
+        - status
+        - permissionMode
+        - updatedAt
+      type: object
+    TraceKind:
+      enum:
+        - step
+        - tool
+        - approval
+        - pause
+        - resume
+        - artifact
+        - knowledge
+      type: string
+    TraceTone:
+      enum:
+        - info
+        - success
+        - warning
+        - error
+        - default
+      type: string
+    TransportSecurityLevel:
+      enum:
+        - loopback
+        - trusted
+        - public
+      type: string
+    UpdateCurrentUserProfileRequest:
+      additionalProperties: false
+      properties:
+        avatar:
+          $ref: "#/components/schemas/AvatarUploadPayload"
+        displayName:
+          type: string
+        removeAvatar:
+          type: boolean
+        username:
+          type: string
+      required:
+        - username
+        - displayName
+      type: object
+    UpdateProjectRequest:
+      additionalProperties: false
+      properties:
+        assignments:
+          $ref: "#/components/schemas/ProjectWorkspaceAssignments"
+        description:
           type: string
         name:
           type: string
         status:
-          type: string
           enum:
             - active
             - archived
+          type: string
+      required:
+        - name
+        - description
+        - status
+      type: object
+    UpdateWorkspaceResourceInput:
+      additionalProperties: false
+      properties:
+        location:
+          type: string
+        name:
+          type: string
+        status:
+          $ref: "#/components/schemas/ViewStatus"
+        tags:
+          items:
+            type: string
+          type: array
+      type: object
+    UpdateWorkspaceSkillFileInput:
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+      required:
+        - content
+      type: object
+    UpdateWorkspaceSkillInput:
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+      required:
+        - content
+      type: object
+    UpdateWorkspaceUserRequest:
+      additionalProperties: false
+      properties:
+        avatar:
+          $ref: "#/components/schemas/AvatarUploadPayload"
+        confirmPassword:
+          type: string
+        displayName:
+          type: string
+        password:
+          type: string
+        removeAvatar:
+          type: boolean
+        resetPasswordToDefault:
+          type: boolean
+        roleIds:
+          items:
+            type: string
+          type: array
+        scopeProjectIds:
+          items:
+            type: string
+          type: array
+        status:
+          $ref: "#/components/schemas/UserStatus"
+        username:
+          type: string
+      required:
+        - username
+        - displayName
+        - status
+        - roleIds
+        - scopeProjectIds
+      type: object
+    UpsertAgentInput:
+      additionalProperties: false
+      properties:
+        avatar:
+          $ref: "#/components/schemas/AvatarUploadPayload"
+        builtinToolKeys:
+          items:
+            type: string
+          type: array
         description:
           type: string
-        assignments:
-          $ref: '#/components/schemas/ProjectWorkspaceAssignments'
-    WorkspaceMetricRecord:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - label
-        - value
-      properties:
-        id:
+        mcpServerNames:
+          items:
+            type: string
+          type: array
+        name:
           type: string
-        label:
-          type: string
-        value:
-          type: string
-        helper:
-          type: string
-        tone:
-          type: string
-    ConversationRecord:
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - workspaceId
-        - projectId
-        - sessionId
-        - title
-        - status
-        - updatedAt
-      properties:
-        id:
-          type: string
-        workspaceId:
+        personality:
           type: string
         projectId:
           type: string
-        sessionId:
+        prompt:
           type: string
+        removeAvatar:
+          type: boolean
+        scope:
+          $ref: "#/components/schemas/AgentScope"
+        skillIds:
+          items:
+            type: string
+          type: array
+        status:
+          $ref: "#/components/schemas/AgentStatus"
+        tags:
+          items:
+            type: string
+          type: array
+        workspaceId:
+          type: string
+      required:
+        - workspaceId
+        - scope
+        - name
+        - personality
+        - tags
+        - prompt
+        - builtinToolKeys
+        - skillIds
+        - mcpServerNames
+        - description
+        - status
+      type: object
+    UpsertTeamInput:
+      additionalProperties: false
+      properties:
+        avatar:
+          $ref: "#/components/schemas/AvatarUploadPayload"
+        builtinToolKeys:
+          items:
+            type: string
+          type: array
+        description:
+          type: string
+        leaderAgentId:
+          type: string
+        mcpServerNames:
+          items:
+            type: string
+          type: array
+        memberAgentIds:
+          items:
+            type: string
+          type: array
+        name:
+          type: string
+        personality:
+          type: string
+        projectId:
+          type: string
+        prompt:
+          type: string
+        removeAvatar:
+          type: boolean
+        scope:
+          $ref: "#/components/schemas/TeamScope"
+        skillIds:
+          items:
+            type: string
+          type: array
+        status:
+          $ref: "#/components/schemas/TeamStatus"
+        tags:
+          items:
+            type: string
+          type: array
+        workspaceId:
+          type: string
+      required:
+        - workspaceId
+        - scope
+        - name
+        - personality
+        - tags
+        - prompt
+        - builtinToolKeys
+        - skillIds
+        - mcpServerNames
+        - memberAgentIds
+        - description
+        - status
+      type: object
+    UpsertWorkspaceMcpServerInput:
+      additionalProperties: false
+      properties:
+        config:
+          additionalProperties: true
+          type: object
+        serverName:
+          type: string
+      required:
+        - serverName
+        - config
+      type: object
+    UserCenterAlertRecord:
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+        id:
+          type: string
+        severity:
+          $ref: "#/components/schemas/RiskLevel"
         title:
           type: string
-        status:
-          type: string
-        updatedAt:
-          type: integer
-        lastMessagePreview:
-          type: string
-    WorkspaceActivityRecord:
+      required:
+        - id
+        - title
+        - description
+        - severity
       type: object
+    UserCenterOverviewSnapshot:
       additionalProperties: false
+      properties:
+        alerts:
+          items:
+            $ref: "#/components/schemas/UserCenterAlertRecord"
+          type: array
+        currentUser:
+          $ref: "#/components/schemas/UserRecordSummary"
+        metrics:
+          items:
+            $ref: "#/components/schemas/WorkspaceMetricRecord"
+          type: array
+        quickLinks:
+          items:
+            $ref: "#/components/schemas/MenuRecord"
+          type: array
+        roleNames:
+          items:
+            type: string
+          type: array
+        workspaceId:
+          type: string
+      required:
+        - workspaceId
+        - currentUser
+        - roleNames
+        - metrics
+        - alerts
+        - quickLinks
+      type: object
+    UserRecordSummary:
+      additionalProperties: false
+      properties:
+        avatar:
+          type: string
+        displayName:
+          type: string
+        id:
+          type: string
+        passwordState:
+          $ref: "#/components/schemas/PasswordState"
+        roleIds:
+          items:
+            type: string
+          type: array
+        scopeProjectIds:
+          items:
+            type: string
+          type: array
+        status:
+          $ref: "#/components/schemas/UserStatus"
+        username:
+          type: string
+      required:
+        - id
+        - username
+        - displayName
+        - status
+        - passwordState
+        - roleIds
+        - scopeProjectIds
+      type: object
+    UserStatus:
+      enum:
+        - active
+        - disabled
+      type: string
+    ViewStatus:
+      enum:
+        - healthy
+        - configured
+        - attention
+      type: string
+    WorkspaceActivityRecord:
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+        id:
+          type: string
+        timestamp:
+          type: integer
+        title:
+          type: string
       required:
         - id
         - title
         - description
         - timestamp
+      type: object
+    WorkspaceAuthMode:
+      enum:
+        - session-token
+      type: string
+    WorkspaceBuiltinToolCatalogEntry:
+      additionalProperties: false
       properties:
-        id:
-          type: string
-        title:
+        availability:
+          $ref: "#/components/schemas/ViewStatus"
+        builtinKey:
           type: string
         description:
           type: string
-        timestamp:
-          type: integer
-    WorkspaceOverviewSnapshot:
+        disabled:
+          type: boolean
+        displayPath:
+          type: string
+        id:
+          type: string
+        kind:
+          enum:
+            - builtin
+          type: string
+        management:
+          $ref: "#/components/schemas/WorkspaceToolManagementCapabilities"
+        name:
+          type: string
+        requiredPermission:
+          enum:
+            - readonly
+            - workspace-write
+            - danger-full-access
+            - "null"
+          type: string
+        sourceKey:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - name
+        - kind
+        - description
+        - availability
+        - sourceKey
+        - displayPath
+        - disabled
+        - management
+        - builtinKey
       type: object
+    WorkspaceCapabilitySet:
       additionalProperties: false
+      properties:
+        eventReplay:
+          type: boolean
+        idempotency:
+          type: boolean
+        polling:
+          type: boolean
+        reconnect:
+          type: boolean
+        sse:
+          type: boolean
+      required:
+        - polling
+        - sse
+        - idempotency
+        - reconnect
+        - eventReplay
+      type: object
+    WorkspaceConnectionRecord:
+      additionalProperties: false
+      properties:
+        authMode:
+          $ref: "#/components/schemas/WorkspaceAuthMode"
+        baseUrl:
+          type: string
+        label:
+          type: string
+        lastUsedAt:
+          type: integer
+        status:
+          $ref: "#/components/schemas/WorkspaceConnectionStatus"
+        transportSecurity:
+          $ref: "#/components/schemas/TransportSecurityLevel"
+        workspaceConnectionId:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - workspaceConnectionId
+        - workspaceId
+        - label
+        - baseUrl
+        - transportSecurity
+        - authMode
+        - status
+      type: object
+    WorkspaceConnectionStatus:
+      enum:
+        - connected
+        - disconnected
+        - expired
+        - unreachable
+      type: string
+    WorkspaceDirectoryUploadEntry:
+      allOf:
+        - $ref: "#/components/schemas/WorkspaceFileUploadPayload"
+        - additionalProperties: false
+          properties:
+            relativePath:
+              type: string
+          required:
+            - relativePath
+          type: object
+    WorkspaceFileUploadPayload:
+      additionalProperties: false
+      properties:
+        byteSize:
+          type: integer
+        contentType:
+          type: string
+        dataBase64:
+          type: string
+        fileName:
+          type: string
+      required:
+        - fileName
+        - contentType
+        - dataBase64
+        - byteSize
+      type: object
+    WorkspaceMcpServerDocument:
+      additionalProperties: false
+      properties:
+        config:
+          additionalProperties: true
+          type: object
+        displayPath:
+          type: string
+        scope:
+          enum:
+            - workspace
+            - project
+            - user
+          type: string
+        serverName:
+          type: string
+        sourceKey:
+          type: string
+      required:
+        - serverName
+        - sourceKey
+        - displayPath
+        - scope
+        - config
+      type: object
+    WorkspaceMcpToolCatalogEntry:
+      additionalProperties: false
+      properties:
+        availability:
+          $ref: "#/components/schemas/ViewStatus"
+        description:
+          type: string
+        disabled:
+          type: boolean
+        displayPath:
+          type: string
+        endpoint:
+          type: string
+        id:
+          type: string
+        kind:
+          enum:
+            - mcp
+          type: string
+        management:
+          $ref: "#/components/schemas/WorkspaceToolManagementCapabilities"
+        name:
+          type: string
+        requiredPermission:
+          enum:
+            - readonly
+            - workspace-write
+            - danger-full-access
+            - "null"
+          type: string
+        scope:
+          enum:
+            - workspace
+            - project
+            - user
+          type: string
+        serverName:
+          type: string
+        sourceKey:
+          type: string
+        statusDetail:
+          type: string
+        toolNames:
+          items:
+            type: string
+          type: array
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - name
+        - kind
+        - description
+        - availability
+        - sourceKey
+        - displayPath
+        - disabled
+        - management
+        - serverName
+        - endpoint
+        - toolNames
+        - scope
+      type: object
+    WorkspaceMetricRecord:
+      additionalProperties: false
+      properties:
+        helper:
+          type: string
+        id:
+          type: string
+        label:
+          type: string
+        tone:
+          $ref: "#/components/schemas/WorkspaceMetricTone"
+        value:
+          type: string
+      required:
+        - id
+        - label
+        - value
+      type: object
+    WorkspaceMetricTone:
+      enum:
+        - default
+        - success
+        - warning
+        - error
+        - info
+        - accent
+      type: string
+    WorkspaceOverviewSnapshot:
+      additionalProperties: false
+      properties:
+        metrics:
+          items:
+            $ref: "#/components/schemas/WorkspaceMetricRecord"
+          type: array
+        projects:
+          items:
+            $ref: "#/components/schemas/ProjectRecord"
+          type: array
+        recentActivity:
+          items:
+            $ref: "#/components/schemas/WorkspaceActivityRecord"
+          type: array
+        recentConversations:
+          items:
+            $ref: "#/components/schemas/ConversationRecord"
+          type: array
+        workspace:
+          $ref: "#/components/schemas/WorkspaceSummary"
       required:
         - workspace
         - metrics
         - projects
         - recentConversations
         - recentActivity
-      properties:
-        workspace:
-          $ref: '#/components/schemas/WorkspaceSummary'
-        metrics:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkspaceMetricRecord'
-        projects:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProjectRecord'
-        recentConversations:
-          type: array
-          items:
-            $ref: '#/components/schemas/ConversationRecord'
-        recentActivity:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkspaceActivityRecord'
-    RuntimeConfigSource:
       type: object
+    WorkspaceResourceFolderUploadEntry:
       additionalProperties: false
-      required:
-        - scope
-        - displayPath
-        - sourceKey
-        - exists
-        - loaded
       properties:
-        scope:
+        byteSize:
+          type: integer
+        contentType:
           type: string
-        ownerId:
+        dataBase64:
+          type: string
+        fileName:
+          type: string
+        relativePath:
+          type: string
+      required:
+        - fileName
+        - contentType
+        - dataBase64
+        - byteSize
+        - relativePath
+      type: object
+    WorkspaceResourceRecord:
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        kind:
+          $ref: "#/components/schemas/ProjectResourceKind"
+        location:
+          type: string
+        name:
+          type: string
+        origin:
+          $ref: "#/components/schemas/ProjectResourceOrigin"
+        projectId:
+          type: string
+        sourceArtifactId:
+          type: string
+        status:
+          $ref: "#/components/schemas/ViewStatus"
+        tags:
+          items:
+            type: string
+          type: array
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - kind
+        - name
+        - origin
+        - status
+        - updatedAt
+        - tags
+      type: object
+    WorkspaceSessionTokenEnvelope:
+      additionalProperties: false
+      properties:
+        expiresAt:
+          type: integer
+        issuedAt:
+          type: integer
+        session:
+          $ref: "#/components/schemas/SessionRecord"
+        token:
+          type: string
+        workspaceConnectionId:
+          type: string
+      required:
+        - workspaceConnectionId
+        - token
+        - session
+        - issuedAt
+      type: object
+    WorkspaceSkillDocument:
+      additionalProperties: false
+      properties:
+        content:
+          type: string
+        description:
           type: string
         displayPath:
           type: string
+        id:
+          type: string
+        name:
+          type: string
+        relativePath:
+          type: string
+        rootPath:
+          type: string
         sourceKey:
           type: string
-        exists:
-          type: boolean
-        loaded:
-          type: boolean
-        contentHash:
+        sourceOrigin:
+          enum:
+            - skills_dir
+            - legacy_commands_dir
           type: string
-        document: {}
-    RuntimeSecretReferenceStatus:
-      type: object
-      additionalProperties: false
+        tree:
+          items:
+            $ref: "#/components/schemas/WorkspaceSkillTreeNode"
+          type: array
+        workspaceOwned:
+          type: boolean
       required:
-        - scope
-        - path
-        - status
+        - id
+        - sourceKey
+        - name
+        - description
+        - content
+        - displayPath
+        - rootPath
+        - tree
+        - sourceOrigin
+        - workspaceOwned
+      type: object
+    WorkspaceSkillFileDocument:
+      additionalProperties: false
       properties:
-        scope:
+        byteSize:
+          type: integer
+        content:
+          type:
+            - string
+            - "null"
+        contentType:
+          type: string
+        displayPath:
+          type: string
+        isText:
+          type: boolean
+        language:
           type: string
         path:
           type: string
-        reference:
-          type: string
-        status:
-          type: string
-    RuntimeConfigValidationResult:
-      type: object
-      additionalProperties: false
-      required:
-        - valid
-        - errors
-        - warnings
-      properties:
-        valid:
+        readonly:
           type: boolean
-        errors:
-          type: array
-          items:
-            type: string
-        warnings:
-          type: array
-          items:
-            type: string
-    RuntimeEffectiveConfig:
-      type: object
-      additionalProperties: false
+        skillId:
+          type: string
+        sourceKey:
+          type: string
       required:
-        - effectiveConfig
-        - effectiveConfigHash
-        - sources
-        - validation
-        - secretReferences
-      properties:
-        effectiveConfig: {}
-        effectiveConfigHash:
-          type: string
-        sources:
-          type: array
-          items:
-            $ref: '#/components/schemas/RuntimeConfigSource'
-        validation:
-          $ref: '#/components/schemas/RuntimeConfigValidationResult'
-        secretReferences:
-          type: array
-          items:
-            $ref: '#/components/schemas/RuntimeSecretReferenceStatus'
-    ApiErrorDetailEnvelope:
+        - skillId
+        - sourceKey
+        - path
+        - displayPath
+        - byteSize
+        - isText
+        - readonly
       type: object
+    WorkspaceSkillToolCatalogEntry:
       additionalProperties: false
-      required:
-        - code
-        - message
-        - requestId
-        - retryable
       properties:
-        code:
-          $ref: '#/components/schemas/ApiErrorCode'
-        message:
-          type: string
-        details: {}
-        requestId:
-          type: string
-        retryable:
+        active:
           type: boolean
-    ApiErrorEnvelope:
-      type: object
-      additionalProperties: false
+        availability:
+          $ref: "#/components/schemas/ViewStatus"
+        description:
+          type: string
+        disabled:
+          type: boolean
+        displayPath:
+          type: string
+        id:
+          type: string
+        kind:
+          enum:
+            - skill
+          type: string
+        management:
+          $ref: "#/components/schemas/WorkspaceToolManagementCapabilities"
+        name:
+          type: string
+        relativePath:
+          type: string
+        requiredPermission:
+          enum:
+            - readonly
+            - workspace-write
+            - danger-full-access
+            - "null"
+          type: string
+        shadowedBy:
+          type: string
+        sourceKey:
+          type: string
+        sourceOrigin:
+          enum:
+            - skills_dir
+            - legacy_commands_dir
+          type: string
+        workspaceId:
+          type: string
+        workspaceOwned:
+          type: boolean
       required:
-        - error
+        - id
+        - workspaceId
+        - name
+        - kind
+        - description
+        - availability
+        - sourceKey
+        - displayPath
+        - disabled
+        - management
+        - active
+        - sourceOrigin
+        - workspaceOwned
+      type: object
+    WorkspaceSkillTreeDocument:
+      additionalProperties: false
       properties:
-        error:
-          $ref: '#/components/schemas/ApiErrorDetailEnvelope'
+        displayPath:
+          type: string
+        rootPath:
+          type: string
+        skillId:
+          type: string
+        sourceKey:
+          type: string
+        tree:
+          items:
+            $ref: "#/components/schemas/WorkspaceSkillTreeNode"
+          type: array
+      required:
+        - skillId
+        - sourceKey
+        - displayPath
+        - rootPath
+        - tree
+      type: object
+    WorkspaceSkillTreeNode:
+      additionalProperties: false
+      properties:
+        byteSize:
+          type: integer
+        children:
+          items:
+            $ref: "#/components/schemas/WorkspaceSkillTreeNode"
+          type: array
+        isText:
+          type: boolean
+        kind:
+          enum:
+            - directory
+            - file
+          type: string
+        name:
+          type: string
+        path:
+          type: string
+      required:
+        - path
+        - name
+        - kind
+      type: object
+    WorkspaceSummary:
+      additionalProperties: false
+      properties:
+        bootstrapStatus:
+          enum:
+            - setup_required
+            - ready
+          type: string
+        defaultProjectId:
+          type: string
+        deployment:
+          enum:
+            - local
+            - remote
+          type: string
+        host:
+          type: string
+        id:
+          type: string
+        listenAddress:
+          type: string
+        name:
+          type: string
+        ownerUserId:
+          type: string
+        slug:
+          type: string
+      required:
+        - id
+        - name
+        - slug
+        - deployment
+        - bootstrapStatus
+        - host
+        - listenAddress
+        - defaultProjectId
+      type: object
+    WorkspaceToolCatalogEntry:
+      oneOf:
+        - $ref: "#/components/schemas/WorkspaceBuiltinToolCatalogEntry"
+        - $ref: "#/components/schemas/WorkspaceSkillToolCatalogEntry"
+        - $ref: "#/components/schemas/WorkspaceMcpToolCatalogEntry"
+    WorkspaceToolCatalogSnapshot:
+      additionalProperties: false
+      properties:
+        entries:
+          items:
+            $ref: "#/components/schemas/WorkspaceToolCatalogEntry"
+          type: array
+      required:
+        - entries
+      type: object
+    WorkspaceToolDisablePatch:
+      additionalProperties: false
+      properties:
+        disabled:
+          type: boolean
+        sourceKey:
+          type: string
+      required:
+        - sourceKey
+        - disabled
+      type: object
+    WorkspaceToolManagementCapabilities:
+      additionalProperties: false
+      properties:
+        canDelete:
+          type: boolean
+        canDisable:
+          type: boolean
+        canEdit:
+          type: boolean
+      required:
+        - canDisable
+        - canEdit
+        - canDelete
+      type: object
+    WorkspaceToolPermissionMode:
+      enum:
+        - allow
+        - deny
+        - ask
+        - readonly
+      type: string
+    WorkspaceToolStatus:
+      enum:
+        - active
+        - disabled
+      type: string
+  parameters:
+    IdempotencyKeyHeader:
+      description: Idempotency token for retry-safe mutations.
+      in: header
+      name: Idempotency-Key
+      required: false
+      schema:
+        type: string
+    LastEventIdHeader:
+      description: Resume token for server-sent event streams.
+      in: header
+      name: Last-Event-ID
+      required: false
+      schema:
+        type: string
+    RequestIdHeader:
+      description: Opaque request correlation identifier.
+      in: header
+      name: X-Request-Id
+      required: false
+      schema:
+        type: string
+    WorkspaceIdHeader:
+      description: Workspace scope identifier for workspace transport calls.
+      in: header
+      name: X-Workspace-Id
+      required: false
+      schema:
+        type: string
+  responses:
+    ApiErrorResponse:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorEnvelope"
+      description: API error envelope.

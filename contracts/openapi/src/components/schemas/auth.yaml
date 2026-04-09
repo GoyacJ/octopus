@@ -1,0 +1,192 @@
+LoginRequest:
+  additionalProperties: false
+  properties:
+    clientAppId:
+      type: string
+    password:
+      type: string
+    username:
+      type: string
+    workspaceId:
+      type: string
+  required:
+    - clientAppId
+    - username
+    - password
+  type: object
+LoginResponse:
+  additionalProperties: false
+  properties:
+    session:
+      $ref: "#/components/schemas/SessionRecord"
+    workspace:
+      $ref: "#/components/schemas/WorkspaceSummary"
+  required:
+    - session
+    - workspace
+  type: object
+RegisterWorkspaceOwnerRequest:
+  additionalProperties: false
+  properties:
+    avatar:
+      $ref: "#/components/schemas/AvatarUploadPayload"
+    clientAppId:
+      type: string
+    confirmPassword:
+      type: string
+    displayName:
+      type: string
+    password:
+      type: string
+    username:
+      type: string
+    workspaceId:
+      type: string
+  required:
+    - clientAppId
+    - username
+    - displayName
+    - password
+    - confirmPassword
+    - avatar
+  type: object
+RegisterWorkspaceOwnerResponse:
+  additionalProperties: false
+  properties:
+    session:
+      $ref: "#/components/schemas/SessionRecord"
+    workspace:
+      $ref: "#/components/schemas/WorkspaceSummary"
+  required:
+    - session
+    - workspace
+  type: object
+SessionRecord:
+  additionalProperties: false
+  properties:
+    clientAppId:
+      type: string
+    createdAt:
+      type: integer
+    expiresAt:
+      type: integer
+    id:
+      type: string
+    roleIds:
+      items:
+        type: string
+      type: array
+    scopeProjectIds:
+      items:
+        type: string
+      type: array
+    status:
+      $ref: "#/components/schemas/SessionStatus"
+    token:
+      type: string
+    userId:
+      type: string
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - userId
+    - clientAppId
+    - token
+    - status
+    - createdAt
+    - roleIds
+    - scopeProjectIds
+  type: object
+SystemBootstrapStatus:
+  additionalProperties: false
+  properties:
+    apiBasePath:
+      type: string
+    authMode:
+      $ref: "#/components/schemas/WorkspaceAuthMode"
+    capabilities:
+      $ref: "#/components/schemas/WorkspaceCapabilitySet"
+    ownerReady:
+      type: boolean
+    protocolVersion:
+      type: string
+    registeredApps:
+      items:
+        $ref: "#/components/schemas/ClientAppRecord"
+      type: array
+    setupRequired:
+      type: boolean
+    transportSecurity:
+      $ref: "#/components/schemas/TransportSecurityLevel"
+    workspace:
+      $ref: "#/components/schemas/WorkspaceSummary"
+  required:
+    - workspace
+    - setupRequired
+    - ownerReady
+    - registeredApps
+    - protocolVersion
+    - apiBasePath
+    - transportSecurity
+    - authMode
+    - capabilities
+  type: object
+WorkspaceCapabilitySet:
+  additionalProperties: false
+  properties:
+    eventReplay:
+      type: boolean
+    idempotency:
+      type: boolean
+    polling:
+      type: boolean
+    reconnect:
+      type: boolean
+    sse:
+      type: boolean
+  required:
+    - polling
+    - sse
+    - idempotency
+    - reconnect
+    - eventReplay
+  type: object
+WorkspaceSummary:
+  additionalProperties: false
+  properties:
+    bootstrapStatus:
+      enum:
+        - setup_required
+        - ready
+      type: string
+    defaultProjectId:
+      type: string
+    deployment:
+      enum:
+        - local
+        - remote
+      type: string
+    host:
+      type: string
+    id:
+      type: string
+    listenAddress:
+      type: string
+    name:
+      type: string
+    ownerUserId:
+      type: string
+    slug:
+      type: string
+  required:
+    - id
+    - name
+    - slug
+    - deployment
+    - bootstrapStatus
+    - host
+    - listenAddress
+    - defaultProjectId
+  type: object

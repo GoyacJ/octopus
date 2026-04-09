@@ -25,7 +25,7 @@ export function createRuntimeConfigValidationState(): RuntimeConfigValidationSta
   }
 }
 
-export function stringifyRuntimeConfigDocument(document?: Record<string, JsonValue>): string {
+export function stringifyRuntimeConfigDocument(document?: Record<string, unknown>): string {
   return JSON.stringify(document ?? {}, null, 2)
 }
 

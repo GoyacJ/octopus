@@ -1,0 +1,341 @@
+AvatarUploadPayload:
+  additionalProperties: false
+  properties:
+    byteSize:
+      type: integer
+    contentType:
+      type: string
+    dataBase64:
+      type: string
+    fileName:
+      type: string
+  required:
+    - fileName
+    - contentType
+    - dataBase64
+    - byteSize
+  type: object
+ConnectionProfile:
+  additionalProperties: false
+  properties:
+    baseUrl:
+      type: string
+    id:
+      type: string
+    label:
+      type: string
+    lastSyncAt:
+      type: integer
+    mode:
+      $ref: "#/components/schemas/ConnectionMode"
+    state:
+      $ref: "#/components/schemas/ConnectionState"
+    workspaceId:
+      type: string
+  required:
+    - id
+    - mode
+    - label
+    - workspaceId
+    - state
+  type: object
+CreateHostWorkspaceConnectionInput:
+  additionalProperties: false
+  properties:
+    authMode:
+      $ref: "#/components/schemas/WorkspaceAuthMode"
+    baseUrl:
+      type: string
+    label:
+      type: string
+    transportSecurity:
+      $ref: "#/components/schemas/TransportSecurityLevel"
+    workspaceId:
+      type: string
+  required:
+    - workspaceId
+    - label
+    - baseUrl
+    - transportSecurity
+    - authMode
+  type: object
+CreateNotificationInput:
+  additionalProperties: false
+  properties:
+    actionLabel:
+      type: string
+    body:
+      type: string
+    level:
+      $ref: "#/components/schemas/NotificationLevel"
+    routeTo:
+      type: string
+    scopeKind:
+      $ref: "#/components/schemas/NotificationScopeKind"
+    scopeOwnerId:
+      type: string
+    source:
+      type: string
+    title:
+      type: string
+    toastDurationMs:
+      type: integer
+  required:
+    - scopeKind
+  type: object
+HealthcheckBackendStatus:
+  additionalProperties: false
+  properties:
+    state:
+      $ref: "#/components/schemas/BackendConnectionState"
+    transport:
+      $ref: "#/components/schemas/BackendTransport"
+  required:
+    - state
+    - transport
+  type: object
+HealthcheckStatus:
+  additionalProperties: false
+  properties:
+    backend:
+      $ref: "#/components/schemas/HealthcheckBackendStatus"
+    cargoWorkspace:
+      type: boolean
+    host:
+      $ref: "#/components/schemas/HostPlatform"
+    mode:
+      $ref: "#/components/schemas/HostExecutionMode"
+    status:
+      enum:
+        - ok
+      type: string
+  required:
+    - status
+    - host
+    - mode
+    - cargoWorkspace
+    - backend
+  type: object
+HostBackendConnection:
+  additionalProperties: false
+  properties:
+    authToken:
+      type: string
+    baseUrl:
+      type: string
+    state:
+      $ref: "#/components/schemas/BackendConnectionState"
+    transport:
+      $ref: "#/components/schemas/BackendTransport"
+  required:
+    - state
+    - transport
+  type: object
+HostState:
+  additionalProperties: false
+  properties:
+    appVersion:
+      type: string
+    cargoWorkspace:
+      type: boolean
+    mode:
+      $ref: "#/components/schemas/HostExecutionMode"
+    platform:
+      $ref: "#/components/schemas/HostPlatform"
+    shell:
+      type: string
+  required:
+    - platform
+    - mode
+    - appVersion
+    - cargoWorkspace
+    - shell
+  type: object
+NotificationFilter:
+  additionalProperties: false
+  properties:
+    scope:
+      $ref: "#/components/schemas/NotificationFilterScope"
+  type: object
+NotificationListResponse:
+  additionalProperties: false
+  properties:
+    notifications:
+      items:
+        $ref: "#/components/schemas/NotificationRecord"
+      type: array
+    unread:
+      $ref: "#/components/schemas/NotificationUnreadSummary"
+  required:
+    - notifications
+    - unread
+  type: object
+NotificationRecord:
+  additionalProperties: false
+  properties:
+    actionLabel:
+      type: string
+    body:
+      type: string
+    createdAt:
+      type: integer
+    id:
+      type: string
+    level:
+      $ref: "#/components/schemas/NotificationLevel"
+    readAt:
+      type: integer
+    routeTo:
+      type: string
+    scopeKind:
+      $ref: "#/components/schemas/NotificationScopeKind"
+    scopeOwnerId:
+      type: string
+    source:
+      type: string
+    title:
+      type: string
+    toastVisibleUntil:
+      type: integer
+  required:
+    - id
+    - scopeKind
+    - level
+    - title
+    - body
+    - source
+    - createdAt
+  type: object
+NotificationUnreadScopeSummary:
+  additionalProperties: false
+  properties:
+    app:
+      type: integer
+    user:
+      type: integer
+    workspace:
+      type: integer
+  required:
+    - app
+    - workspace
+    - user
+  type: object
+NotificationUnreadSummary:
+  additionalProperties: false
+  properties:
+    byScope:
+      $ref: "#/components/schemas/NotificationUnreadScopeSummary"
+    total:
+      type: integer
+  required:
+    - total
+    - byScope
+  type: object
+ShellBootstrap:
+  additionalProperties: false
+  properties:
+    backend:
+      $ref: "#/components/schemas/HostBackendConnection"
+    connections:
+      items:
+        $ref: "#/components/schemas/ConnectionProfile"
+      type: array
+    hostState:
+      $ref: "#/components/schemas/HostState"
+    preferences:
+      $ref: "#/components/schemas/ShellPreferences"
+    workspaceConnections:
+      items:
+        $ref: "#/components/schemas/WorkspaceConnectionRecord"
+      type: array
+    workspaceSessions:
+      items:
+        $ref: "#/components/schemas/WorkspaceSessionTokenEnvelope"
+      type: array
+  required:
+    - hostState
+    - preferences
+    - connections
+  type: object
+ShellPreferences:
+  additionalProperties: false
+  properties:
+    compactSidebar:
+      type: boolean
+    defaultWorkspaceId:
+      type: string
+    fontFamily:
+      type: string
+    fontSize:
+      type: integer
+    fontStyle:
+      type: string
+    lastVisitedRoute:
+      type: string
+    leftSidebarCollapsed:
+      type: boolean
+    locale:
+      $ref: "#/components/schemas/Locale"
+    rightSidebarCollapsed:
+      type: boolean
+    theme:
+      $ref: "#/components/schemas/ThemeMode"
+  required:
+    - theme
+    - locale
+    - fontSize
+    - fontFamily
+    - fontStyle
+    - compactSidebar
+    - leftSidebarCollapsed
+    - rightSidebarCollapsed
+    - defaultWorkspaceId
+    - lastVisitedRoute
+  type: object
+WorkspaceConnectionRecord:
+  additionalProperties: false
+  properties:
+    authMode:
+      $ref: "#/components/schemas/WorkspaceAuthMode"
+    baseUrl:
+      type: string
+    label:
+      type: string
+    lastUsedAt:
+      type: integer
+    status:
+      $ref: "#/components/schemas/WorkspaceConnectionStatus"
+    transportSecurity:
+      $ref: "#/components/schemas/TransportSecurityLevel"
+    workspaceConnectionId:
+      type: string
+    workspaceId:
+      type: string
+  required:
+    - workspaceConnectionId
+    - workspaceId
+    - label
+    - baseUrl
+    - transportSecurity
+    - authMode
+    - status
+  type: object
+WorkspaceSessionTokenEnvelope:
+  additionalProperties: false
+  properties:
+    expiresAt:
+      type: integer
+    issuedAt:
+      type: integer
+    session:
+      $ref: "#/components/schemas/SessionRecord"
+    token:
+      type: string
+    workspaceConnectionId:
+      type: string
+  required:
+    - workspaceConnectionId
+    - token
+    - session
+    - issuedAt
+  type: object

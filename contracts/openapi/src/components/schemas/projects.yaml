@@ -1,0 +1,229 @@
+ArtifactRecord:
+  additionalProperties: false
+  properties:
+    byteSize:
+      type: integer
+    contentHash:
+      type: string
+    contentType:
+      type: string
+    id:
+      type: string
+    latestVersion:
+      type: integer
+    projectId:
+      type: string
+    status:
+      $ref: "#/components/schemas/ArtifactStatus"
+    storagePath:
+      type: string
+    title:
+      type: string
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - title
+    - status
+    - latestVersion
+    - updatedAt
+  type: object
+CreateProjectRequest:
+  additionalProperties: false
+  properties:
+    assignments:
+      $ref: "#/components/schemas/ProjectWorkspaceAssignments"
+    description:
+      type: string
+    name:
+      type: string
+  required:
+    - name
+    - description
+  type: object
+ProjectAgentAssignments:
+  additionalProperties: false
+  properties:
+    agentIds:
+      items:
+        type: string
+      type: array
+    teamIds:
+      items:
+        type: string
+      type: array
+  required:
+    - agentIds
+    - teamIds
+  type: object
+ProjectAgentLinkInput:
+  additionalProperties: false
+  properties:
+    agentId:
+      type: string
+    projectId:
+      type: string
+  required:
+    - projectId
+    - agentId
+  type: object
+ProjectAgentLinkRecord:
+  additionalProperties: false
+  properties:
+    agentId:
+      type: string
+    linkedAt:
+      type: integer
+    projectId:
+      type: string
+    workspaceId:
+      type: string
+  required:
+    - workspaceId
+    - projectId
+    - agentId
+    - linkedAt
+  type: object
+ProjectDashboardSnapshot:
+  additionalProperties: false
+  properties:
+    metrics:
+      items:
+        $ref: "#/components/schemas/WorkspaceMetricRecord"
+      type: array
+    project:
+      $ref: "#/components/schemas/ProjectRecord"
+    recentActivity:
+      items:
+        $ref: "#/components/schemas/WorkspaceActivityRecord"
+      type: array
+    recentConversations:
+      items:
+        $ref: "#/components/schemas/ConversationRecord"
+      type: array
+  required:
+    - project
+    - metrics
+    - recentConversations
+    - recentActivity
+  type: object
+ProjectModelAssignments:
+  additionalProperties: false
+  properties:
+    configuredModelIds:
+      items:
+        type: string
+      type: array
+    defaultConfiguredModelId:
+      type: string
+  required:
+    - configuredModelIds
+    - defaultConfiguredModelId
+  type: object
+ProjectRecord:
+  additionalProperties: false
+  properties:
+    assignments:
+      $ref: "#/components/schemas/ProjectWorkspaceAssignments"
+    description:
+      type: string
+    id:
+      type: string
+    name:
+      type: string
+    status:
+      enum:
+        - active
+        - archived
+      type: string
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - name
+    - status
+    - description
+  type: object
+ProjectResourceKind:
+  enum:
+    - file
+    - folder
+    - artifact
+    - url
+  type: string
+ProjectResourceOrigin:
+  enum:
+    - source
+    - generated
+  type: string
+ProjectTeamLinkInput:
+  additionalProperties: false
+  properties:
+    projectId:
+      type: string
+    teamId:
+      type: string
+  required:
+    - projectId
+    - teamId
+  type: object
+ProjectTeamLinkRecord:
+  additionalProperties: false
+  properties:
+    linkedAt:
+      type: integer
+    projectId:
+      type: string
+    teamId:
+      type: string
+    workspaceId:
+      type: string
+  required:
+    - workspaceId
+    - projectId
+    - teamId
+    - linkedAt
+  type: object
+ProjectToolAssignments:
+  additionalProperties: false
+  properties:
+    sourceKeys:
+      items:
+        type: string
+      type: array
+  required:
+    - sourceKeys
+  type: object
+ProjectWorkspaceAssignments:
+  additionalProperties: false
+  properties:
+    agents:
+      $ref: "#/components/schemas/ProjectAgentAssignments"
+    models:
+      $ref: "#/components/schemas/ProjectModelAssignments"
+    tools:
+      $ref: "#/components/schemas/ProjectToolAssignments"
+  type: object
+UpdateProjectRequest:
+  additionalProperties: false
+  properties:
+    assignments:
+      $ref: "#/components/schemas/ProjectWorkspaceAssignments"
+    description:
+      type: string
+    name:
+      type: string
+    status:
+      enum:
+        - active
+        - archived
+      type: string
+  required:
+    - name
+    - description
+    - status
+  type: object

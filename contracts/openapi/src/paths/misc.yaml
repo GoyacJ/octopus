@@ -1,0 +1,93 @@
+/api/v1/apps:
+  get:
+    operationId: listClientApps
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/ClientAppRecord"
+              type: array
+        description: Client app registry payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: registerClientApp
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ClientAppRecord"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientAppRecord"
+        description: Registered client app payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/audit:
+  get:
+    operationId: listAuditRecords
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/AuditRecord"
+              type: array
+        description: Audit record payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/inbox:
+  get:
+    operationId: listInboxItems
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/InboxItemRecord"
+              type: array
+        description: Inbox list payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/knowledge:
+  get:
+    operationId: listKnowledgeEntries
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/KnowledgeEntryRecord"
+              type: array
+        description: Top-level knowledge list payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.

@@ -82,19 +82,10 @@ import {
   createWorkspaceHeaders,
   decodeApiError,
   fetchWorkspaceApi,
+  fetchWorkspaceOpenApi,
   joinBaseUrl,
+  openWorkspaceOpenApiStream,
 } from './shared'
-
-const API_BASE = '/api/v1'
-const RUNTIME_API_BASE = `${API_BASE}/runtime`
-
-function encodePathSegments(path: string): string {
-  return path
-    .split('/')
-    .filter(segment => segment.length > 0)
-    .map(segment => encodeURIComponent(segment))
-    .join('/')
-}
 
 export interface WorkspaceClientContext {
   connection: WorkspaceConnectionRecord
@@ -390,34 +381,27 @@ async function openRuntimeSseStream(
   options: RuntimeEventSubscriptionOptions,
 ): Promise<RuntimeEventSubscription> {
   const session = assertWorkspaceRequestReady(context)
-  const params = new URLSearchParams()
-  if (options.lastEventId) {
-    params.set('after', options.lastEventId)
-  }
-  const suffix = params.size ? `?${params.toString()}` : ''
   const controller = new AbortController()
-  const headers = createWorkspaceHeaders({
-    session,
-    workspace: context.connection,
-    headers: {
-      Accept: 'text/event-stream',
-      ...(options.lastEventId ? { 'Last-Event-ID': options.lastEventId } : {}),
+  const response = await openWorkspaceOpenApiStream(
+    context.connection,
+    '/api/v1/runtime/sessions/{sessionId}/events',
+    {
+      session,
+      signal: controller.signal,
+      pathParams: {
+        sessionId,
+      },
+      queryParams: options.lastEventId
+        ? {
+            after: options.lastEventId,
+          }
+        : undefined,
+      headers: {
+        Accept: 'text/event-stream',
+        ...(options.lastEventId ? { 'Last-Event-ID': options.lastEventId } : {}),
+      },
     },
-  })
-
-  const response = await fetch(joinBaseUrl(context.connection.baseUrl, `${RUNTIME_API_BASE}/sessions/${sessionId}/events${suffix}`), {
-    method: 'GET',
-    headers,
-    signal: controller.signal,
-  })
-
-  if (!response.ok) {
-    throw await decodeApiError(
-      response,
-      headers.get('X-Request-Id') ?? 'req-unknown',
-      context.connection.workspaceConnectionId,
-    )
-  }
+  )
 
   if (!response.headers.get('Content-Type')?.includes('text/event-stream')) {
     throw new Error('Runtime event stream is unavailable')
@@ -475,11 +459,11 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
   return {
     system: {
       async bootstrap() {
-        return await fetchWorkspaceApi<SystemBootstrapStatus>(
+        return await fetchWorkspaceOpenApi(
           context.connection,
-          `${API_BASE}/system/bootstrap`,
+          '/api/v1/system/bootstrap',
+          'get',
           {
-            method: 'GET',
             workspace: context.connection,
           },
         )
@@ -487,412 +471,568 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
     },
     auth: {
       async login(input) {
-        return await fetchWorkspaceApi<LoginResponse>(
+        return await fetchWorkspaceOpenApi(
           context.connection,
-          `${API_BASE}/auth/login`,
+          '/api/v1/auth/login',
+          'post',
           {
-            method: 'POST',
             body: JSON.stringify(input),
-            workspace: context.connection,
           },
         )
       },
       async registerOwner(input) {
-        return await fetchWorkspaceWithoutSession<RegisterWorkspaceOwnerResponse>(
-          context,
-          `${API_BASE}/auth/register-owner`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/auth/register-owner',
+          'post',
           {
-            method: 'POST',
             body: JSON.stringify(input),
           },
         )
       },
       async logout() {
-        await fetchWorkspaceVoid(context, `${API_BASE}/auth/logout`, {
-          method: 'POST',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/auth/logout', 'post', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
       async session() {
-        return await fetchWorkspace<WorkspaceSessionTokenEnvelope['session']>(context, `${API_BASE}/auth/session`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/auth/session', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
     },
     workspace: {
       async get() {
-        return await fetchWorkspace<WorkspaceOverviewSnapshot['workspace']>(context, `${API_BASE}/workspace`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
       async getOverview() {
-        return await fetchWorkspace<WorkspaceOverviewSnapshot>(context, `${API_BASE}/workspace/overview`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/overview', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
     },
     projects: {
       async list() {
-        return await fetchWorkspace<ProjectRecord[]>(context, `${API_BASE}/projects`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/projects', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
       async create(input) {
-        return await fetchWorkspace<ProjectRecord>(context, `${API_BASE}/projects`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/projects', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
         })
       },
       async update(projectId, input) {
-        return await fetchWorkspace<ProjectRecord>(context, `${API_BASE}/projects/${projectId}`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/projects/{projectId}', 'patch', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
+          pathParams: {
+            projectId,
+          },
         })
       },
       async getDashboard(projectId) {
-        return await fetchWorkspace<ProjectDashboardSnapshot>(
-          context,
-          `${API_BASE}/projects/${projectId}/dashboard`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/dashboard',
+          'get',
           {
-            method: 'GET',
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+            },
           },
         )
       },
     },
     resources: {
       async listWorkspace() {
-        return await fetchWorkspace<WorkspaceResourceRecord[]>(context, `${API_BASE}/workspace/resources`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/resources', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
       async listProject(projectId) {
-        return await fetchWorkspace<WorkspaceResourceRecord[]>(
-          context,
-          `${API_BASE}/projects/${projectId}/resources`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/resources',
+          'get',
           {
-            method: 'GET',
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+            },
           },
         )
       },
       async createWorkspace(input) {
-        return await fetchWorkspace<WorkspaceResourceRecord>(context, `${API_BASE}/workspace/resources`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/resources', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
         })
       },
       async createProject(projectId, input) {
-        return await fetchWorkspace<WorkspaceResourceRecord>(
-          context,
-          `${API_BASE}/projects/${projectId}/resources`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/resources',
+          'post',
           {
-            method: 'POST',
+            session: assertWorkspaceRequestReady(context),
             body: JSON.stringify(input),
+            pathParams: {
+              projectId,
+            },
           },
         )
       },
       async createProjectFolder(projectId, input) {
-        return await fetchWorkspace<WorkspaceResourceRecord[]>(
-          context,
-          `${API_BASE}/projects/${projectId}/resources/folder`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/resources/folder',
+          'post',
           {
-            method: 'POST',
+            session: assertWorkspaceRequestReady(context),
             body: JSON.stringify(input),
+            pathParams: {
+              projectId,
+            },
           },
         )
       },
       async updateWorkspace(resourceId, input) {
-        return await fetchWorkspace<WorkspaceResourceRecord>(
-          context,
-          `${API_BASE}/workspace/resources/${resourceId}`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/resources/{resourceId}',
+          'patch',
           {
-            method: 'PATCH',
+            session: assertWorkspaceRequestReady(context),
             body: JSON.stringify(input),
+            pathParams: {
+              resourceId,
+            },
           },
         )
       },
       async updateProject(projectId, resourceId, input) {
-        return await fetchWorkspace<WorkspaceResourceRecord>(
-          context,
-          `${API_BASE}/projects/${projectId}/resources/${resourceId}`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/resources/{resourceId}',
+          'patch',
           {
-            method: 'PATCH',
+            session: assertWorkspaceRequestReady(context),
             body: JSON.stringify(input),
+            pathParams: {
+              projectId,
+              resourceId,
+            },
           },
         )
       },
       async deleteWorkspace(resourceId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/resources/${resourceId}`, {
-          method: 'DELETE',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/resources/{resourceId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            resourceId,
+          },
         })
       },
       async deleteProject(projectId, resourceId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/projects/${projectId}/resources/${resourceId}`, {
-          method: 'DELETE',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/projects/{projectId}/resources/{resourceId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            projectId,
+            resourceId,
+          },
         })
       },
     },
     artifacts: {
       async listWorkspace() {
-        return await fetchWorkspace<ArtifactRecord[]>(context, `${API_BASE}/artifacts`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/artifacts', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
     },
     knowledge: {
       async listWorkspace() {
-        return await fetchWorkspace<KnowledgeRecord[]>(context, `${API_BASE}/workspace/knowledge`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/knowledge', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
       async listProject(projectId) {
-        return await fetchWorkspace<KnowledgeRecord[]>(
-          context,
-          `${API_BASE}/projects/${projectId}/knowledge`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/knowledge',
+          'get',
           {
-            method: 'GET',
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+            },
           },
         )
       },
     },
     pet: {
       async getSnapshot(projectId) {
-        return await fetchWorkspace<PetWorkspaceSnapshot>(
-          context,
-          projectId ? `${API_BASE}/projects/${projectId}/pet` : `${API_BASE}/workspace/pet`,
-          {
-            method: 'GET',
-          },
-        )
+        const session = assertWorkspaceRequestReady(context)
+        if (projectId) {
+          return await fetchWorkspaceOpenApi(context.connection, '/api/v1/projects/{projectId}/pet', 'get', {
+            session,
+            pathParams: {
+              projectId,
+            },
+          })
+        }
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/pet', 'get', {
+          session,
+        })
       },
       async savePresence(input, projectId) {
-        return await fetchWorkspace<PetPresenceState>(
-          context,
-          projectId ? `${API_BASE}/projects/${projectId}/pet/presence` : `${API_BASE}/workspace/pet/presence`,
-          {
-            method: 'PATCH',
-            body: JSON.stringify(input),
-          },
-        )
+        const session = assertWorkspaceRequestReady(context)
+        if (projectId) {
+          return await fetchWorkspaceOpenApi(
+            context.connection,
+            '/api/v1/projects/{projectId}/pet/presence',
+            'patch',
+            {
+              session,
+              pathParams: {
+                projectId,
+              },
+              body: JSON.stringify(input),
+            },
+          )
+        }
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/pet/presence', 'patch', {
+          session,
+          body: JSON.stringify(input),
+        })
       },
       async bindConversation(input, projectId) {
-        return await fetchWorkspace<PetConversationBinding>(
-          context,
-          projectId ? `${API_BASE}/projects/${projectId}/pet/conversation` : `${API_BASE}/workspace/pet/conversation`,
-          {
-            method: 'PUT',
-            body: JSON.stringify(input),
-          },
-        )
+        const session = assertWorkspaceRequestReady(context)
+        if (projectId) {
+          return await fetchWorkspaceOpenApi(
+            context.connection,
+            '/api/v1/projects/{projectId}/pet/conversation',
+            'put',
+            {
+              session,
+              pathParams: {
+                projectId,
+              },
+              body: JSON.stringify(input),
+            },
+          )
+        }
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/pet/conversation', 'put', {
+          session,
+          body: JSON.stringify(input),
+        })
       },
     },
     agents: {
       async list() {
-        return await fetchWorkspace<AgentRecord[]>(context, `${API_BASE}/workspace/agents`, {
-          method: 'GET',
-        })
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/agents', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        }) as unknown as AgentRecord[]
       },
       async create(input) {
-        return await fetchWorkspace<AgentRecord>(context, `${API_BASE}/workspace/agents`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/agents', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
-        })
+        }) as unknown as AgentRecord
       },
       async update(agentId, input) {
-        return await fetchWorkspace<AgentRecord>(context, `${API_BASE}/workspace/agents/${agentId}`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/agents/{agentId}', 'patch', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            agentId,
+          },
           body: JSON.stringify(input),
-        })
+        }) as unknown as AgentRecord
       },
       async delete(agentId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/agents/${agentId}`, {
-          method: 'DELETE',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/agents/{agentId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            agentId,
+          },
         })
       },
       async previewImportBundle(input) {
-        return await fetchWorkspace<ImportWorkspaceAgentBundlePreview>(
-          context,
-          `${API_BASE}/workspace/agents/import-preview`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/agents/import-preview',
+          'post',
           {
-            method: 'POST',
+            session: assertWorkspaceRequestReady(context),
             body: JSON.stringify(input),
           },
-        )
+        ) as unknown as ImportWorkspaceAgentBundlePreview
       },
       async importBundle(input) {
-        return await fetchWorkspace<ImportWorkspaceAgentBundleResult>(
-          context,
-          `${API_BASE}/workspace/agents/import`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/agents/import',
+          'post',
           {
-            method: 'POST',
+            session: assertWorkspaceRequestReady(context),
             body: JSON.stringify(input),
           },
-        )
+        ) as unknown as ImportWorkspaceAgentBundleResult
       },
       async listProjectLinks(projectId) {
-        return await fetchWorkspace<ProjectAgentLinkRecord[]>(
-          context,
-          `${API_BASE}/projects/${projectId}/agent-links`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/agent-links',
+          'get',
           {
-            method: 'GET',
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+            },
           },
-        )
+        ) as unknown as ProjectAgentLinkRecord[]
       },
       async linkProject(input) {
-        return await fetchWorkspace<ProjectAgentLinkRecord>(
-          context,
-          `${API_BASE}/projects/${input.projectId}/agent-links`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/agent-links',
+          'post',
           {
-            method: 'POST',
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId: input.projectId,
+            },
             body: JSON.stringify(input),
           },
-        )
+        ) as unknown as ProjectAgentLinkRecord
       },
       async unlinkProject(projectId, agentId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/projects/${projectId}/agent-links/${agentId}`, {
-          method: 'DELETE',
-        })
+        await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/agent-links/{agentId}',
+          'delete',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+              agentId,
+            },
+          },
+        )
       },
     },
     teams: {
       async list() {
-        return await fetchWorkspace<TeamRecord[]>(context, `${API_BASE}/workspace/teams`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/teams', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
+      
       async create(input) {
-        return await fetchWorkspace<TeamRecord>(context, `${API_BASE}/workspace/teams`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/teams', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
         })
       },
       async update(teamId, input) {
-        return await fetchWorkspace<TeamRecord>(context, `${API_BASE}/workspace/teams/${teamId}`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/teams/{teamId}', 'patch', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            teamId,
+          },
           body: JSON.stringify(input),
         })
       },
       async delete(teamId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/teams/${teamId}`, {
-          method: 'DELETE',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/teams/{teamId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            teamId,
+          },
         })
       },
       async listProjectLinks(projectId) {
-        return await fetchWorkspace<ProjectTeamLinkRecord[]>(
-          context,
-          `${API_BASE}/projects/${projectId}/team-links`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/team-links',
+          'get',
           {
-            method: 'GET',
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+            },
           },
         )
       },
       async linkProject(input) {
-        return await fetchWorkspace<ProjectTeamLinkRecord>(
-          context,
-          `${API_BASE}/projects/${input.projectId}/team-links`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/team-links',
+          'post',
           {
-            method: 'POST',
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId: input.projectId,
+            },
             body: JSON.stringify(input),
           },
         )
       },
       async unlinkProject(projectId, teamId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/projects/${projectId}/team-links/${teamId}`, {
-          method: 'DELETE',
-        })
+        await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/team-links/{teamId}',
+          'delete',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+              teamId,
+            },
+          },
+        )
       },
     },
     catalog: {
       async getSnapshot() {
-        return await fetchWorkspace<ModelCatalogSnapshot>(context, `${API_BASE}/workspace/catalog/models`, {
-          method: 'GET',
-        })
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/models', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        }) as unknown as ModelCatalogSnapshot
       },
       async getToolCatalog() {
-        return await fetchWorkspace<WorkspaceToolCatalogSnapshot>(context, `${API_BASE}/workspace/catalog/tool-catalog`, {
-          method: 'GET',
-        })
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/tool-catalog', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        }) as unknown as WorkspaceToolCatalogSnapshot
       },
       async setToolDisabled(patch) {
-        return await fetchWorkspace<WorkspaceToolCatalogSnapshot>(context, `${API_BASE}/workspace/catalog/tool-catalog/disable`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/tool-catalog/disable', 'patch', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(patch),
-        })
+        }) as unknown as WorkspaceToolCatalogSnapshot
       },
       async getSkill(skillId) {
-        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}`, {
-          method: 'GET',
-        })
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/skills/{skillId}', 'get', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            skillId,
+          },
+        }) as unknown as WorkspaceSkillDocument
       },
       async getSkillTree(skillId) {
-        return await fetchWorkspace<WorkspaceSkillTreeDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}/tree`, {
-          method: 'GET',
-        })
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/skills/{skillId}/tree', 'get', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            skillId,
+          },
+        }) as unknown as WorkspaceSkillTreeDocument
       },
       async getSkillFile(skillId, relativePath) {
-        return await fetchWorkspace<WorkspaceSkillFileDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}/files/${encodePathSegments(relativePath)}`, {
-          method: 'GET',
-        })
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/catalog/skills/{skillId}/files/{relativePath}',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              skillId,
+              relativePath,
+            },
+          },
+        ) as WorkspaceSkillFileDocument
       },
       async createSkill(input) {
-        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/skills', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
-        })
+        }) as unknown as WorkspaceSkillDocument
       },
       async updateSkill(skillId, input) {
-        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/skills/{skillId}', 'patch', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            skillId,
+          },
           body: JSON.stringify(input),
-        })
+        }) as unknown as WorkspaceSkillDocument
       },
       async updateSkillFile(skillId, relativePath, input) {
-        return await fetchWorkspace<WorkspaceSkillFileDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}/files/${encodePathSegments(relativePath)}`, {
-          method: 'PATCH',
-          body: JSON.stringify(input),
-        })
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/catalog/skills/{skillId}/files/{relativePath}',
+          'patch',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              skillId,
+              relativePath,
+            },
+            body: JSON.stringify(input),
+          },
+        ) as WorkspaceSkillFileDocument
       },
       async importSkillArchive(input) {
-        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills/import-archive`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/skills/import-archive', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
-        })
+        }) as unknown as WorkspaceSkillDocument
       },
       async importSkillFolder(input) {
-        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills/import-folder`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/skills/import-folder', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
-        })
+        }) as unknown as WorkspaceSkillDocument
       },
       async copySkillToManaged(skillId, input) {
-        return await fetchWorkspace<WorkspaceSkillDocument>(context, `${API_BASE}/workspace/catalog/skills/${skillId}/copy-to-managed`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/skills/{skillId}/copy-to-managed', 'post', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            skillId,
+          },
           body: JSON.stringify(input),
-        })
+        }) as unknown as WorkspaceSkillDocument
       },
       async deleteSkill(skillId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/catalog/skills/${skillId}`, {
-          method: 'DELETE',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/skills/{skillId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            skillId,
+          },
         })
       },
       async getMcpServer(serverName) {
-        return await fetchWorkspace<WorkspaceMcpServerDocument>(context, `${API_BASE}/workspace/catalog/mcp-servers/${serverName}`, {
-          method: 'GET',
-        })
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/mcp-servers/{serverName}', 'get', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            serverName,
+          },
+        }) as unknown as WorkspaceMcpServerDocument
       },
       async createMcpServer(input) {
-        return await fetchWorkspace<WorkspaceMcpServerDocument>(context, `${API_BASE}/workspace/catalog/mcp-servers`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/mcp-servers', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
-        })
+        }) as unknown as WorkspaceMcpServerDocument
       },
       async updateMcpServer(serverName, input) {
-        return await fetchWorkspace<WorkspaceMcpServerDocument>(context, `${API_BASE}/workspace/catalog/mcp-servers/${serverName}`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/mcp-servers/{serverName}', 'patch', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            serverName,
+          },
           body: JSON.stringify(input),
-        })
+        }) as unknown as WorkspaceMcpServerDocument
       },
       async deleteMcpServer(serverName) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/catalog/mcp-servers/${serverName}`, {
-          method: 'DELETE',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/mcp-servers/{serverName}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            serverName,
+          },
         })
       },
       async listModels() {
@@ -900,275 +1040,333 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
         return snapshot.models
       },
       async listProviderCredentials() {
-        return await fetchWorkspace<CredentialBinding[]>(
-          context,
-          `${API_BASE}/workspace/catalog/provider-credentials`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/catalog/provider-credentials',
+          'get',
           {
-            method: 'GET',
+            session: assertWorkspaceRequestReady(context),
           },
-        )
+        ) as unknown as CredentialBinding[]
       },
       async listTools() {
-        return await fetchWorkspace<ToolRecord[]>(context, `${API_BASE}/workspace/catalog/tools`, {
-          method: 'GET',
-        })
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/tools', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        }) as unknown as ToolRecord[]
       },
       async createTool(record) {
-        return await fetchWorkspace<ToolRecord>(context, `${API_BASE}/workspace/catalog/tools`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/tools', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(record),
-        })
+        }) as unknown as ToolRecord
       },
       async updateTool(toolId, record) {
-        return await fetchWorkspace<ToolRecord>(context, `${API_BASE}/workspace/catalog/tools/${toolId}`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/tools/{toolId}', 'patch', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            toolId,
+          },
           body: JSON.stringify(record),
-        })
+        }) as unknown as ToolRecord
       },
       async deleteTool(toolId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/catalog/tools/${toolId}`, {
-          method: 'DELETE',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/tools/{toolId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            toolId,
+          },
         })
       },
     },
     automations: {
       async list() {
-        return await fetchWorkspace<AutomationRecord[]>(context, `${API_BASE}/workspace/automations`, {
-          method: 'GET',
-        })
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/automations', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        }) as unknown as AutomationRecord[]
       },
       async create(record) {
-        return await fetchWorkspace<AutomationRecord>(context, `${API_BASE}/workspace/automations`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/automations', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(record),
-        })
+        }) as unknown as AutomationRecord
       },
       async update(automationId, record) {
-        return await fetchWorkspace<AutomationRecord>(context, `${API_BASE}/workspace/automations/${automationId}`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/automations/{automationId}', 'patch', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            automationId,
+          },
           body: JSON.stringify(record),
-        })
+        }) as unknown as AutomationRecord
       },
       async delete(automationId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/automations/${automationId}`, {
-          method: 'DELETE',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/automations/{automationId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            automationId,
+          },
         })
       },
     },
     rbac: {
       async getUserCenterOverview() {
-        return await fetchWorkspace<UserCenterOverviewSnapshot>(
-          context,
-          `${API_BASE}/workspace/user-center/overview`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/user-center/overview',
+          'get',
           {
-            method: 'GET',
+            session: assertWorkspaceRequestReady(context),
           },
         )
       },
       async listUsers() {
-        return await fetchWorkspace<UserRecordSummary[]>(context, `${API_BASE}/workspace/rbac/users`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/users', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
       async createUser(record) {
-        return await fetchWorkspace<UserRecordSummary>(context, `${API_BASE}/workspace/rbac/users`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/users', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(record),
         })
       },
       async updateUser(userId, record) {
-        return await fetchWorkspace<UserRecordSummary>(context, `${API_BASE}/workspace/rbac/users/${userId}`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/users/{userId}', 'patch', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            userId,
+          },
           body: JSON.stringify(record),
         })
       },
       async deleteUser(userId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/rbac/users/${userId}`, {
-          method: 'DELETE',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/users/{userId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            userId,
+          },
         })
       },
       async updateCurrentUserProfile(input) {
-        return await fetchWorkspace<UserRecordSummary>(context, `${API_BASE}/workspace/user-center/profile`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/user-center/profile', 'patch', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
         })
       },
       async changeCurrentUserPassword(input) {
-        return await fetchWorkspace<ChangeCurrentUserPasswordResponse>(context, `${API_BASE}/workspace/user-center/profile/password`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/user-center/profile/password', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
         })
       },
       async listRoles() {
-        return await fetchWorkspace<RoleRecord[]>(context, `${API_BASE}/workspace/rbac/roles`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/roles', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
       async createRole(record) {
-        return await fetchWorkspace<RoleRecord>(context, `${API_BASE}/workspace/rbac/roles`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/roles', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(record),
         })
       },
       async updateRole(roleId, record) {
-        return await fetchWorkspace<RoleRecord>(context, `${API_BASE}/workspace/rbac/roles/${roleId}`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/roles/{roleId}', 'patch', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            roleId,
+          },
           body: JSON.stringify(record),
         })
       },
       async deleteRole(roleId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/rbac/roles/${roleId}`, {
-          method: 'DELETE',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/roles/{roleId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            roleId,
+          },
         })
       },
       async listPermissions() {
-        return await fetchWorkspace<PermissionRecord[]>(
-          context,
-          `${API_BASE}/workspace/rbac/permissions`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/rbac/permissions',
+          'get',
           {
-            method: 'GET',
+            session: assertWorkspaceRequestReady(context),
           },
         )
       },
       async createPermission(record) {
-        return await fetchWorkspace<PermissionRecord>(
-          context,
-          `${API_BASE}/workspace/rbac/permissions`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/rbac/permissions',
+          'post',
           {
-            method: 'POST',
+            session: assertWorkspaceRequestReady(context),
             body: JSON.stringify(record),
           },
         )
       },
       async updatePermission(permissionId, record) {
-        return await fetchWorkspace<PermissionRecord>(
-          context,
-          `${API_BASE}/workspace/rbac/permissions/${permissionId}`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/rbac/permissions/{permissionId}',
+          'patch',
           {
-            method: 'PATCH',
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              permissionId,
+            },
             body: JSON.stringify(record),
           },
         )
       },
       async deletePermission(permissionId) {
-        await fetchWorkspaceVoid(context, `${API_BASE}/workspace/rbac/permissions/${permissionId}`, {
-          method: 'DELETE',
-        })
+        await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/rbac/permissions/{permissionId}',
+          'delete',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              permissionId,
+            },
+          },
+        )
       },
       async listMenus() {
-        return await fetchWorkspace<MenuRecord[]>(context, `${API_BASE}/workspace/rbac/menus`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/menus', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
       async createMenu(record) {
-        return await fetchWorkspace<MenuRecord>(context, `${API_BASE}/workspace/rbac/menus`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/menus', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(record),
         })
       },
       async updateMenu(menuId, record) {
-        return await fetchWorkspace<MenuRecord>(context, `${API_BASE}/workspace/rbac/menus/${menuId}`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/menus/{menuId}', 'patch', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            menuId,
+          },
           body: JSON.stringify(record),
         })
       },
     },
     runtime: {
       async bootstrap() {
-        return await fetchWorkspace<RuntimeBootstrap>(context, `${RUNTIME_API_BASE}/bootstrap`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/bootstrap', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
       async getConfig() {
-        return await fetchWorkspaceWithoutSession<RuntimeEffectiveConfig>(context, `${RUNTIME_API_BASE}/config`, {
-          method: 'GET',
-        })
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/config', 'get')
       },
       async validateConfig(patch) {
-        return await fetchWorkspaceWithoutSession<RuntimeConfigValidationResult>(context, `${RUNTIME_API_BASE}/config/validate`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/config/validate', 'post', {
           body: JSON.stringify(patch),
         })
       },
       async validateConfiguredModel(input) {
-        return await fetchWorkspaceWithoutSession<RuntimeConfiguredModelProbeResult>(context, `${RUNTIME_API_BASE}/config/configured-models/probe`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/config/configured-models/probe', 'post', {
           body: JSON.stringify(input),
         })
       },
       async saveConfig(patch) {
-        return await fetchWorkspaceWithoutSession<RuntimeEffectiveConfig>(context, `${RUNTIME_API_BASE}/config/scopes/workspace`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/config/scopes/{scope}', 'patch', {
+          pathParams: {
+            scope: 'workspace',
+          },
           body: JSON.stringify(patch),
         })
       },
       async getProjectConfig(projectId) {
-        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${API_BASE}/projects/${projectId}/runtime-config`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/projects/{projectId}/runtime-config', 'get', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            projectId,
+          },
         })
       },
       async validateProjectConfig(projectId, patch) {
-        return await fetchWorkspace<RuntimeConfigValidationResult>(context, `${API_BASE}/projects/${projectId}/runtime-config/validate`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/projects/{projectId}/runtime-config/validate', 'post', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            projectId,
+          },
           body: JSON.stringify(patch),
         })
       },
       async saveProjectConfig(projectId, patch) {
-        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${API_BASE}/projects/${projectId}/runtime-config`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/projects/{projectId}/runtime-config', 'patch', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            projectId,
+          },
           body: JSON.stringify(patch),
         })
       },
       async getUserConfig() {
-        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${API_BASE}/workspace/user-center/profile/runtime-config`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/user-center/profile/runtime-config', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
       async validateUserConfig(patch) {
-        return await fetchWorkspace<RuntimeConfigValidationResult>(context, `${API_BASE}/workspace/user-center/profile/runtime-config/validate`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/user-center/profile/runtime-config/validate', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(patch),
         })
       },
       async saveUserConfig(patch) {
-        return await fetchWorkspace<RuntimeEffectiveConfig>(context, `${API_BASE}/workspace/user-center/profile/runtime-config`, {
-          method: 'PATCH',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/user-center/profile/runtime-config', 'patch', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(patch),
         })
       },
       async listSessions() {
-        return await fetchWorkspace<RuntimeSessionSummary[]>(context, `${RUNTIME_API_BASE}/sessions`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions', 'get', {
+          session: assertWorkspaceRequestReady(context),
         })
       },
       async createSession(input, idempotencyKey) {
-        return await fetchWorkspace<RuntimeSessionDetail>(context, `${RUNTIME_API_BASE}/sessions`, {
-          method: 'POST',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions', 'post', {
+          session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
           idempotencyKey,
         })
       },
       async loadSession(sessionId) {
-        return await fetchWorkspace<RuntimeSessionDetail>(context, `${RUNTIME_API_BASE}/sessions/${sessionId}`, {
-          method: 'GET',
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions/{sessionId}', 'get', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            sessionId,
+          },
         })
       },
       async deleteSession(sessionId) {
-        await fetchWorkspaceVoid(context, `${RUNTIME_API_BASE}/sessions/${sessionId}`, {
-          method: 'DELETE',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions/{sessionId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            sessionId,
+          },
         })
       },
       async pollEvents(sessionId, options = {}) {
-        const params = new URLSearchParams()
-        if (options.after) {
-          params.set('after', options.after)
-        }
-        const suffix = params.size ? `?${params.toString()}` : ''
-        return await fetchWorkspace<RuntimeEventEnvelope[]>(
-          context,
-          `${RUNTIME_API_BASE}/sessions/${sessionId}/events${suffix}`,
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/runtime/sessions/{sessionId}/events',
+          'get',
           {
-            method: 'GET',
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              sessionId,
+            },
+            queryParams: {
+              after: options.after,
+            },
           },
         )
       },
@@ -1177,22 +1375,25 @@ export function createWorkspaceClient(context: WorkspaceClientContext): Workspac
       },
       async submitUserTurn(sessionId, input, idempotencyKey) {
         const resolvedPermissionMode: RuntimePermissionMode = resolveRuntimePermissionMode(input.permissionMode)
-        return await fetchWorkspace<RuntimeRunSnapshot>(
-          context,
-          `${RUNTIME_API_BASE}/sessions/${sessionId}/turns`,
-          {
-            method: 'POST',
-            body: JSON.stringify({
-              ...input,
-              permissionMode: resolvedPermissionMode,
-            }),
-            idempotencyKey,
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions/{sessionId}/turns', 'post', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            sessionId,
           },
-        )
+          body: JSON.stringify({
+            ...input,
+            permissionMode: resolvedPermissionMode,
+          }),
+          idempotencyKey,
+        })
       },
       async resolveApproval(sessionId, approvalId, input, idempotencyKey) {
-        await fetchWorkspaceVoid(context, `${RUNTIME_API_BASE}/sessions/${sessionId}/approvals/${approvalId}`, {
-          method: 'POST',
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions/{sessionId}/approvals/{approvalId}', 'post', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            sessionId,
+            approvalId,
+          },
           body: JSON.stringify(input),
           idempotencyKey,
         })

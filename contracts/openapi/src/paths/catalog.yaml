@@ -1,0 +1,697 @@
+/api/v1/workspace/agents:
+  get:
+    operationId: listWorkspaceAgents
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/AgentRecord"
+              type: array
+        description: Workspace agent list payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createWorkspaceAgent
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpsertAgentInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentRecord"
+        description: Created workspace agent payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/agents/import:
+  post:
+    operationId: importWorkspaceAgentBundle
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ImportWorkspaceAgentBundleInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportWorkspaceAgentBundleResult"
+        description: Workspace agent bundle import result payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/agents/import-preview:
+  post:
+    operationId: previewWorkspaceAgentBundleImport
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ImportWorkspaceAgentBundlePreviewInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportWorkspaceAgentBundlePreview"
+        description: Workspace agent bundle preview payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/agents/{agentId}:
+  delete:
+    operationId: deleteWorkspaceAgent
+    parameters:
+      - in: path
+        name: agentId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace agent deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateWorkspaceAgent
+    parameters:
+      - in: path
+        name: agentId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpsertAgentInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentRecord"
+        description: Updated workspace agent payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/automations:
+  get:
+    operationId: listWorkspaceAutomations
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/AutomationRecord"
+              type: array
+        description: Workspace automation list payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createWorkspaceAutomation
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AutomationRecord"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRecord"
+        description: Created workspace automation payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/automations/{automationId}:
+  delete:
+    operationId: deleteWorkspaceAutomation
+    parameters:
+      - in: path
+        name: automationId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace automation deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateWorkspaceAutomation
+    parameters:
+      - in: path
+        name: automationId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AutomationRecord"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutomationRecord"
+        description: Updated workspace automation payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/mcp-servers:
+  post:
+    operationId: createWorkspaceMcpServer
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpsertWorkspaceMcpServerInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMcpServerDocument"
+        description: Created workspace MCP server payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/mcp-servers/{serverName}:
+  delete:
+    operationId: deleteWorkspaceMcpServer
+    parameters:
+      - in: path
+        name: serverName
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace MCP server deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  get:
+    operationId: getWorkspaceMcpServer
+    parameters:
+      - in: path
+        name: serverName
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMcpServerDocument"
+        description: Workspace MCP server payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateWorkspaceMcpServer
+    parameters:
+      - in: path
+        name: serverName
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpsertWorkspaceMcpServerInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMcpServerDocument"
+        description: Updated workspace MCP server payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/models:
+  get:
+    operationId: getWorkspaceCatalogModels
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ModelCatalogSnapshot"
+        description: Workspace model catalog snapshot payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/provider-credentials:
+  get:
+    operationId: listWorkspaceProviderCredentials
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/CredentialBinding"
+              type: array
+        description: Workspace provider credential bindings payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/skills:
+  post:
+    operationId: createWorkspaceSkill
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateWorkspaceSkillInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSkillDocument"
+        description: Created workspace skill payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/skills/import-archive:
+  post:
+    operationId: importWorkspaceSkillArchive
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ImportWorkspaceSkillArchiveInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSkillDocument"
+        description: Imported workspace skill payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/skills/import-folder:
+  post:
+    operationId: importWorkspaceSkillFolder
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ImportWorkspaceSkillFolderInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSkillDocument"
+        description: Imported workspace skill folder payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/skills/{skillId}:
+  delete:
+    operationId: deleteWorkspaceSkill
+    parameters:
+      - in: path
+        name: skillId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace skill deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  get:
+    operationId: getWorkspaceSkill
+    parameters:
+      - in: path
+        name: skillId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSkillDocument"
+        description: Workspace skill payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateWorkspaceSkill
+    parameters:
+      - in: path
+        name: skillId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateWorkspaceSkillInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSkillDocument"
+        description: Updated workspace skill payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/skills/{skillId}/copy-to-managed:
+  post:
+    operationId: copyWorkspaceSkillToManaged
+    parameters:
+      - in: path
+        name: skillId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CopyWorkspaceSkillToManagedInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSkillDocument"
+        description: Copied managed workspace skill payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/skills/{skillId}/files/{relativePath}:
+  get:
+    operationId: getWorkspaceSkillFile
+    parameters:
+      - in: path
+        name: skillId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: relativePath
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSkillFileDocument"
+        description: Workspace skill file payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateWorkspaceSkillFile
+    parameters:
+      - in: path
+        name: skillId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: relativePath
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateWorkspaceSkillFileInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSkillFileDocument"
+        description: Updated workspace skill file payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/skills/{skillId}/tree:
+  get:
+    operationId: getWorkspaceSkillTree
+    parameters:
+      - in: path
+        name: skillId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSkillTreeDocument"
+        description: Workspace skill tree payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/tool-catalog:
+  get:
+    operationId: getWorkspaceToolCatalog
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceToolCatalogSnapshot"
+        description: Workspace tool catalog snapshot payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/tool-catalog/disable:
+  patch:
+    operationId: setWorkspaceToolCatalogDisabled
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/WorkspaceToolDisablePatch"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceToolCatalogSnapshot"
+        description: Updated workspace tool catalog snapshot payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/tools:
+  get:
+    operationId: listWorkspaceTools
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/ToolRecord"
+              type: array
+        description: Workspace tools payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createWorkspaceTool
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ToolRecord"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolRecord"
+        description: Created workspace tool payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/tools/{toolId}:
+  delete:
+    operationId: deleteWorkspaceTool
+    parameters:
+      - in: path
+        name: toolId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace tool deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateWorkspaceTool
+    parameters:
+      - in: path
+        name: toolId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ToolRecord"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ToolRecord"
+        description: Updated workspace tool payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.

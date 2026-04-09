@@ -1,0 +1,937 @@
+BindPetConversationInput:
+  additionalProperties: false
+  properties:
+    conversationId:
+      type: string
+    petId:
+      type: string
+    sessionId:
+      type: string
+  required:
+    - petId
+    - conversationId
+  type: object
+ChangeCurrentUserPasswordRequest:
+  additionalProperties: false
+  properties:
+    confirmPassword:
+      type: string
+    currentPassword:
+      type: string
+    newPassword:
+      type: string
+  required:
+    - currentPassword
+    - newPassword
+    - confirmPassword
+  type: object
+ChangeCurrentUserPasswordResponse:
+  additionalProperties: false
+  properties:
+    passwordState:
+      $ref: "#/components/schemas/PasswordState"
+  required:
+    - passwordState
+  type: object
+ConversationRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    lastMessagePreview:
+      type: string
+    projectId:
+      type: string
+    sessionId:
+      type: string
+    status:
+      type: string
+    title:
+      type: string
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - projectId
+    - sessionId
+    - title
+    - status
+    - updatedAt
+  type: object
+CreateWorkspaceResourceFolderInput:
+  additionalProperties: false
+  properties:
+    files:
+      items:
+        $ref: "#/components/schemas/WorkspaceResourceFolderUploadEntry"
+      type: array
+    projectId:
+      type: string
+  required:
+    - files
+  type: object
+CreateWorkspaceResourceInput:
+  additionalProperties: false
+  properties:
+    kind:
+      $ref: "#/components/schemas/ProjectResourceKind"
+    location:
+      type: string
+    name:
+      type: string
+    projectId:
+      type: string
+    sourceArtifactId:
+      type: string
+    tags:
+      items:
+        type: string
+      type: array
+  required:
+    - kind
+    - name
+  type: object
+CreateWorkspaceUserRequest:
+  additionalProperties: false
+  properties:
+    avatar:
+      $ref: "#/components/schemas/AvatarUploadPayload"
+    confirmPassword:
+      type: string
+    displayName:
+      type: string
+    password:
+      type: string
+    roleIds:
+      items:
+        type: string
+      type: array
+    scopeProjectIds:
+      items:
+        type: string
+      type: array
+    status:
+      $ref: "#/components/schemas/UserStatus"
+    useDefaultAvatar:
+      type: boolean
+    useDefaultPassword:
+      type: boolean
+    username:
+      type: string
+  required:
+    - username
+    - displayName
+    - status
+    - roleIds
+    - scopeProjectIds
+  type: object
+KnowledgeKind:
+  enum:
+    - private
+    - shared
+    - candidate
+  type: string
+KnowledgeRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    kind:
+      $ref: "#/components/schemas/KnowledgeKind"
+    projectId:
+      type: string
+    sourceRef:
+      type: string
+    sourceType:
+      $ref: "#/components/schemas/KnowledgeSourceType"
+    status:
+      $ref: "#/components/schemas/KnowledgeStatus"
+    summary:
+      type: string
+    title:
+      type: string
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - title
+    - summary
+    - kind
+    - status
+    - sourceType
+    - sourceRef
+    - updatedAt
+  type: object
+KnowledgeSourceType:
+  enum:
+    - conversation
+    - artifact
+    - run
+  type: string
+KnowledgeStatus:
+  enum:
+    - candidate
+    - reviewed
+    - shared
+    - archived
+  type: string
+MenuRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    label:
+      type: string
+    order:
+      type: integer
+    parentId:
+      type: string
+    routeName:
+      type: string
+    source:
+      $ref: "#/components/schemas/MenuSource"
+    status:
+      $ref: "#/components/schemas/MenuStatus"
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - source
+    - label
+    - status
+    - order
+  type: object
+MenuSource:
+  enum:
+    - main-sidebar
+    - user-center
+  type: string
+MenuStatus:
+  enum:
+    - active
+    - disabled
+  type: string
+PermissionMode:
+  enum:
+    - auto
+    - readonly
+    - danger-full-access
+  type: string
+PermissionRecord:
+  additionalProperties: false
+  properties:
+    action:
+      type: string
+    code:
+      type: string
+    description:
+      type: string
+    id:
+      type: string
+    kind:
+      $ref: "#/components/schemas/RbacPermissionKind"
+    memberPermissionIds:
+      items:
+        type: string
+      type: array
+    name:
+      type: string
+    status:
+      $ref: "#/components/schemas/RbacPermissionStatus"
+    targetIds:
+      items:
+        type: string
+      type: array
+    targetType:
+      $ref: "#/components/schemas/RbacPermissionTargetType"
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - name
+    - code
+    - description
+    - status
+    - kind
+    - targetIds
+    - memberPermissionIds
+  type: object
+PetChatSender:
+  enum:
+    - user
+    - pet
+  type: string
+PetConversationBinding:
+  additionalProperties: false
+  properties:
+    conversationId:
+      type: string
+    petId:
+      type: string
+    projectId:
+      type: string
+    sessionId:
+      type: string
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - petId
+    - workspaceId
+    - projectId
+    - conversationId
+    - updatedAt
+  type: object
+PetMessage:
+  additionalProperties: false
+  properties:
+    content:
+      type: string
+    id:
+      type: string
+    petId:
+      type: string
+    sender:
+      $ref: "#/components/schemas/PetChatSender"
+    timestamp:
+      type: integer
+  required:
+    - id
+    - petId
+    - sender
+    - content
+    - timestamp
+  type: object
+PetMood:
+  enum:
+    - curious
+    - happy
+    - sleepy
+    - playful
+    - focused
+  type: string
+PetMotionState:
+  enum:
+    - idle
+    - hover
+    - walk
+    - chat
+    - sleep
+  type: string
+PetPosition:
+  additionalProperties: false
+  properties:
+    x:
+      type: number
+    y:
+      type: number
+  required:
+    - x
+    - y
+  type: object
+PetPresenceState:
+  additionalProperties: false
+  properties:
+    chatOpen:
+      type: boolean
+    isVisible:
+      type: boolean
+    lastInteractionAt:
+      type: integer
+    motionState:
+      $ref: "#/components/schemas/PetMotionState"
+    petId:
+      type: string
+    position:
+      $ref: "#/components/schemas/PetPosition"
+    unreadCount:
+      type: integer
+  required:
+    - petId
+    - isVisible
+    - chatOpen
+    - motionState
+    - unreadCount
+    - lastInteractionAt
+    - position
+  type: object
+PetProfile:
+  additionalProperties: false
+  properties:
+    avatarLabel:
+      type: string
+    displayName:
+      type: string
+    fallbackAsset:
+      type: string
+    favoriteSnack:
+      type: string
+    greeting:
+      type: string
+    id:
+      type: string
+    mood:
+      $ref: "#/components/schemas/PetMood"
+    ownerUserId:
+      type: string
+    promptHints:
+      items:
+        type: string
+      type: array
+    riveAsset:
+      type: string
+    species:
+      $ref: "#/components/schemas/PetSpecies"
+    stateMachine:
+      type: string
+    summary:
+      type: string
+  required:
+    - id
+    - species
+    - displayName
+    - ownerUserId
+    - avatarLabel
+    - summary
+    - greeting
+    - mood
+    - favoriteSnack
+    - promptHints
+    - fallbackAsset
+  type: object
+PetSpecies:
+  enum:
+    - duck
+    - goose
+    - blob
+    - cat
+    - dragon
+    - octopus
+    - owl
+    - penguin
+    - turtle
+    - snail
+    - ghost
+    - axolotl
+    - capybara
+    - cactus
+    - robot
+    - rabbit
+    - mushroom
+    - chonk
+  type: string
+PetWorkspaceSnapshot:
+  additionalProperties: false
+  properties:
+    binding:
+      $ref: "#/components/schemas/PetConversationBinding"
+    messages:
+      items:
+        $ref: "#/components/schemas/PetMessage"
+      type: array
+    presence:
+      $ref: "#/components/schemas/PetPresenceState"
+    profile:
+      $ref: "#/components/schemas/PetProfile"
+  required:
+    - profile
+    - presence
+    - messages
+  type: object
+RoleRecord:
+  additionalProperties: false
+  properties:
+    code:
+      type: string
+    description:
+      type: string
+    id:
+      type: string
+    menuIds:
+      items:
+        type: string
+      type: array
+    name:
+      type: string
+    permissionIds:
+      items:
+        type: string
+      type: array
+    status:
+      $ref: "#/components/schemas/RbacRoleStatus"
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - name
+    - code
+    - description
+    - status
+    - permissionIds
+    - menuIds
+  type: object
+SavePetPresenceInput:
+  additionalProperties: false
+  properties:
+    chatOpen:
+      type: boolean
+    isVisible:
+      type: boolean
+    lastInteractionAt:
+      type: integer
+    motionState:
+      $ref: "#/components/schemas/PetMotionState"
+    petId:
+      type: string
+    position:
+      $ref: "#/components/schemas/PetPosition"
+    unreadCount:
+      type: integer
+  required:
+    - petId
+  type: object
+TeamRecord:
+  additionalProperties: false
+  properties:
+    avatar:
+      type: string
+    avatarPath:
+      type: string
+    builtinToolKeys:
+      items:
+        type: string
+      type: array
+    description:
+      type: string
+    id:
+      type: string
+    integrationSource:
+      additionalProperties: false
+      properties:
+        kind:
+          enum:
+            - workspace-link
+          type: string
+        sourceId:
+          type: string
+      required:
+        - kind
+        - sourceId
+      type: object
+    leaderAgentId:
+      type: string
+    mcpServerNames:
+      items:
+        type: string
+      type: array
+    memberAgentIds:
+      items:
+        type: string
+      type: array
+    name:
+      type: string
+    personality:
+      type: string
+    projectId:
+      type: string
+    prompt:
+      type: string
+    scope:
+      $ref: "#/components/schemas/TeamScope"
+    skillIds:
+      items:
+        type: string
+      type: array
+    status:
+      $ref: "#/components/schemas/TeamStatus"
+    tags:
+      items:
+        type: string
+      type: array
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - scope
+    - name
+    - personality
+    - tags
+    - prompt
+    - builtinToolKeys
+    - skillIds
+    - mcpServerNames
+    - memberAgentIds
+    - description
+    - status
+    - updatedAt
+  type: object
+TeamScope:
+  enum:
+    - workspace
+    - project
+  type: string
+TeamStatus:
+  enum:
+    - active
+    - archived
+  type: string
+UpdateCurrentUserProfileRequest:
+  additionalProperties: false
+  properties:
+    avatar:
+      $ref: "#/components/schemas/AvatarUploadPayload"
+    displayName:
+      type: string
+    removeAvatar:
+      type: boolean
+    username:
+      type: string
+  required:
+    - username
+    - displayName
+  type: object
+UpdateWorkspaceResourceInput:
+  additionalProperties: false
+  properties:
+    location:
+      type: string
+    name:
+      type: string
+    status:
+      $ref: "#/components/schemas/ViewStatus"
+    tags:
+      items:
+        type: string
+      type: array
+  type: object
+UpdateWorkspaceUserRequest:
+  additionalProperties: false
+  properties:
+    avatar:
+      $ref: "#/components/schemas/AvatarUploadPayload"
+    confirmPassword:
+      type: string
+    displayName:
+      type: string
+    password:
+      type: string
+    removeAvatar:
+      type: boolean
+    resetPasswordToDefault:
+      type: boolean
+    roleIds:
+      items:
+        type: string
+      type: array
+    scopeProjectIds:
+      items:
+        type: string
+      type: array
+    status:
+      $ref: "#/components/schemas/UserStatus"
+    username:
+      type: string
+  required:
+    - username
+    - displayName
+    - status
+    - roleIds
+    - scopeProjectIds
+  type: object
+UpsertTeamInput:
+  additionalProperties: false
+  properties:
+    avatar:
+      $ref: "#/components/schemas/AvatarUploadPayload"
+    builtinToolKeys:
+      items:
+        type: string
+      type: array
+    description:
+      type: string
+    leaderAgentId:
+      type: string
+    mcpServerNames:
+      items:
+        type: string
+      type: array
+    memberAgentIds:
+      items:
+        type: string
+      type: array
+    name:
+      type: string
+    personality:
+      type: string
+    projectId:
+      type: string
+    prompt:
+      type: string
+    removeAvatar:
+      type: boolean
+    scope:
+      $ref: "#/components/schemas/TeamScope"
+    skillIds:
+      items:
+        type: string
+      type: array
+    status:
+      $ref: "#/components/schemas/TeamStatus"
+    tags:
+      items:
+        type: string
+      type: array
+    workspaceId:
+      type: string
+  required:
+    - workspaceId
+    - scope
+    - name
+    - personality
+    - tags
+    - prompt
+    - builtinToolKeys
+    - skillIds
+    - mcpServerNames
+    - memberAgentIds
+    - description
+    - status
+  type: object
+UserCenterAlertRecord:
+  additionalProperties: false
+  properties:
+    description:
+      type: string
+    id:
+      type: string
+    severity:
+      $ref: "#/components/schemas/RiskLevel"
+    title:
+      type: string
+  required:
+    - id
+    - title
+    - description
+    - severity
+  type: object
+UserCenterOverviewSnapshot:
+  additionalProperties: false
+  properties:
+    alerts:
+      items:
+        $ref: "#/components/schemas/UserCenterAlertRecord"
+      type: array
+    currentUser:
+      $ref: "#/components/schemas/UserRecordSummary"
+    metrics:
+      items:
+        $ref: "#/components/schemas/WorkspaceMetricRecord"
+      type: array
+    quickLinks:
+      items:
+        $ref: "#/components/schemas/MenuRecord"
+      type: array
+    roleNames:
+      items:
+        type: string
+      type: array
+    workspaceId:
+      type: string
+  required:
+    - workspaceId
+    - currentUser
+    - roleNames
+    - metrics
+    - alerts
+    - quickLinks
+  type: object
+UserRecordSummary:
+  additionalProperties: false
+  properties:
+    avatar:
+      type: string
+    displayName:
+      type: string
+    id:
+      type: string
+    passwordState:
+      $ref: "#/components/schemas/PasswordState"
+    roleIds:
+      items:
+        type: string
+      type: array
+    scopeProjectIds:
+      items:
+        type: string
+      type: array
+    status:
+      $ref: "#/components/schemas/UserStatus"
+    username:
+      type: string
+  required:
+    - id
+    - username
+    - displayName
+    - status
+    - passwordState
+    - roleIds
+    - scopeProjectIds
+  type: object
+UserStatus:
+  enum:
+    - active
+    - disabled
+  type: string
+WorkspaceActivityRecord:
+  additionalProperties: false
+  properties:
+    description:
+      type: string
+    id:
+      type: string
+    timestamp:
+      type: integer
+    title:
+      type: string
+  required:
+    - id
+    - title
+    - description
+    - timestamp
+  type: object
+WorkspaceAuthMode:
+  enum:
+    - session-token
+  type: string
+WorkspaceConnectionStatus:
+  enum:
+    - connected
+    - disconnected
+    - expired
+    - unreachable
+  type: string
+WorkspaceMetricRecord:
+  additionalProperties: false
+  properties:
+    helper:
+      type: string
+    id:
+      type: string
+    label:
+      type: string
+    tone:
+      $ref: "#/components/schemas/WorkspaceMetricTone"
+    value:
+      type: string
+  required:
+    - id
+    - label
+    - value
+  type: object
+WorkspaceMetricTone:
+  enum:
+    - default
+    - success
+    - warning
+    - error
+    - info
+    - accent
+  type: string
+WorkspaceOverviewSnapshot:
+  additionalProperties: false
+  properties:
+    metrics:
+      items:
+        $ref: "#/components/schemas/WorkspaceMetricRecord"
+      type: array
+    projects:
+      items:
+        $ref: "#/components/schemas/ProjectRecord"
+      type: array
+    recentActivity:
+      items:
+        $ref: "#/components/schemas/WorkspaceActivityRecord"
+      type: array
+    recentConversations:
+      items:
+        $ref: "#/components/schemas/ConversationRecord"
+      type: array
+    workspace:
+      $ref: "#/components/schemas/WorkspaceSummary"
+  required:
+    - workspace
+    - metrics
+    - projects
+    - recentConversations
+    - recentActivity
+  type: object
+WorkspaceResourceFolderUploadEntry:
+  additionalProperties: false
+  properties:
+    byteSize:
+      type: integer
+    contentType:
+      type: string
+    dataBase64:
+      type: string
+    fileName:
+      type: string
+    relativePath:
+      type: string
+  required:
+    - fileName
+    - contentType
+    - dataBase64
+    - byteSize
+    - relativePath
+  type: object
+WorkspaceResourceRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    kind:
+      $ref: "#/components/schemas/ProjectResourceKind"
+    location:
+      type: string
+    name:
+      type: string
+    origin:
+      $ref: "#/components/schemas/ProjectResourceOrigin"
+    projectId:
+      type: string
+    sourceArtifactId:
+      type: string
+    status:
+      $ref: "#/components/schemas/ViewStatus"
+    tags:
+      items:
+        type: string
+      type: array
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - kind
+    - name
+    - origin
+    - status
+    - updatedAt
+    - tags
+  type: object

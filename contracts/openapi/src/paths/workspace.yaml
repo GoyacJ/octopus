@@ -1,0 +1,716 @@
+/api/v1/workspace:
+  get:
+    operationId: getWorkspaceSummary
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceSummary"
+        description: Workspace summary payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/knowledge:
+  get:
+    operationId: listWorkspaceKnowledge
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/KnowledgeRecord"
+              type: array
+        description: Workspace knowledge payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/overview:
+  get:
+    operationId: getWorkspaceOverview
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceOverviewSnapshot"
+        description: Workspace overview payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/pet:
+  get:
+    operationId: getWorkspacePetSnapshot
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PetWorkspaceSnapshot"
+        description: Workspace pet snapshot payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/pet/conversation:
+  put:
+    operationId: bindWorkspacePetConversation
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BindPetConversationInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PetConversationBinding"
+        description: Updated workspace pet conversation binding payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/pet/presence:
+  patch:
+    operationId: saveWorkspacePetPresence
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavePetPresenceInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PetPresenceState"
+        description: Updated workspace pet presence payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/rbac/menus:
+  get:
+    operationId: listWorkspaceMenus
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/MenuRecord"
+              type: array
+        description: Workspace menus payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createWorkspaceMenu
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MenuRecord"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MenuRecord"
+        description: Created workspace menu payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/rbac/menus/{menuId}:
+  patch:
+    operationId: updateWorkspaceMenu
+    parameters:
+      - in: path
+        name: menuId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MenuRecord"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MenuRecord"
+        description: Updated workspace menu payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/rbac/permissions:
+  get:
+    operationId: listWorkspacePermissions
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/PermissionRecord"
+              type: array
+        description: Workspace permissions payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createWorkspacePermission
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PermissionRecord"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PermissionRecord"
+        description: Created workspace permission payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/rbac/permissions/{permissionId}:
+  delete:
+    operationId: deleteWorkspacePermission
+    parameters:
+      - in: path
+        name: permissionId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace permission deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateWorkspacePermission
+    parameters:
+      - in: path
+        name: permissionId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PermissionRecord"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PermissionRecord"
+        description: Updated workspace permission payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/rbac/roles:
+  get:
+    operationId: listWorkspaceRoles
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/RoleRecord"
+              type: array
+        description: Workspace roles payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createWorkspaceRole
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RoleRecord"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleRecord"
+        description: Created workspace role payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/rbac/roles/{roleId}:
+  delete:
+    operationId: deleteWorkspaceRole
+    parameters:
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace role deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateWorkspaceRole
+    parameters:
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RoleRecord"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleRecord"
+        description: Updated workspace role payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/rbac/users:
+  get:
+    operationId: listWorkspaceUsers
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/UserRecordSummary"
+              type: array
+        description: Workspace users payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createWorkspaceUser
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateWorkspaceUserRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRecordSummary"
+        description: Created workspace user payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/rbac/users/{userId}:
+  delete:
+    operationId: deleteWorkspaceUser
+    parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace user deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateWorkspaceUser
+    parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateWorkspaceUserRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRecordSummary"
+        description: Updated workspace user payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/resources:
+  get:
+    operationId: listWorkspaceResources
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/WorkspaceResourceRecord"
+              type: array
+        description: Workspace resources payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createWorkspaceResource
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateWorkspaceResourceInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceResourceRecord"
+        description: Created workspace resource payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/resources/{resourceId}:
+  delete:
+    operationId: deleteWorkspaceResource
+    parameters:
+      - in: path
+        name: resourceId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace resource deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateWorkspaceResource
+    parameters:
+      - in: path
+        name: resourceId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateWorkspaceResourceInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceResourceRecord"
+        description: Updated workspace resource payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/teams:
+  get:
+    operationId: listWorkspaceTeams
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/TeamRecord"
+              type: array
+        description: Workspace teams payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createWorkspaceTeam
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpsertTeamInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamRecord"
+        description: Created workspace team payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/teams/{teamId}:
+  delete:
+    operationId: deleteWorkspaceTeam
+    parameters:
+      - in: path
+        name: teamId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace team deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateWorkspaceTeam
+    parameters:
+      - in: path
+        name: teamId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpsertTeamInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamRecord"
+        description: Updated workspace team payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/user-center/overview:
+  get:
+    operationId: getUserCenterOverview
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCenterOverviewSnapshot"
+        description: User center overview payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/user-center/profile:
+  patch:
+    operationId: updateCurrentUserProfile
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateCurrentUserProfileRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRecordSummary"
+        description: Updated current user profile payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/user-center/profile/password:
+  post:
+    operationId: changeCurrentUserPassword
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ChangeCurrentUserPasswordRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeCurrentUserPasswordResponse"
+        description: Updated current user password payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/user-center/profile/runtime-config:
+  get:
+    operationId: getUserRuntimeConfig
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeEffectiveConfig"
+        description: User effective runtime configuration payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: saveUserRuntimeConfig
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RuntimeConfigPatch"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeEffectiveConfig"
+        description: Saved user effective runtime configuration payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/user-center/profile/runtime-config/validate:
+  post:
+    operationId: validateUserRuntimeConfig
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RuntimeConfigPatch"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfigValidationResult"
+        description: User runtime configuration validation payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.

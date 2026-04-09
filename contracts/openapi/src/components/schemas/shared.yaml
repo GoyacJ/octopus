@@ -1,0 +1,218 @@
+ApiErrorCode:
+  enum:
+    - UNAUTHENTICATED
+    - SESSION_EXPIRED
+    - FORBIDDEN
+    - NOT_FOUND
+    - CONFLICT
+    - INVALID_INPUT
+    - RATE_LIMITED
+    - UNAVAILABLE
+    - CAPABILITY_UNSUPPORTED
+    - INTERNAL_ERROR
+  type: string
+ApiErrorDetailEnvelope:
+  additionalProperties: false
+  properties:
+    code:
+      $ref: "#/components/schemas/ApiErrorCode"
+    details: {}
+    message:
+      type: string
+    requestId:
+      type: string
+    retryable:
+      type: boolean
+  required:
+    - code
+    - message
+    - requestId
+    - retryable
+  type: object
+ApiErrorEnvelope:
+  additionalProperties: false
+  properties:
+    error:
+      $ref: "#/components/schemas/ApiErrorDetailEnvelope"
+  required:
+    - error
+  type: object
+ArtifactStatus:
+  enum:
+    - draft
+    - review
+    - approved
+    - published
+  type: string
+BackendConnectionState:
+  enum:
+    - ready
+    - unavailable
+  type: string
+BackendTransport:
+  enum:
+    - http
+    - sse
+    - ws
+  type: string
+ConnectionMode:
+  enum:
+    - local
+    - shared
+    - remote
+  type: string
+ConnectionState:
+  enum:
+    - local-ready
+    - connected
+    - disconnected
+  type: string
+ConversationActorKind:
+  enum:
+    - agent
+    - team
+  type: string
+DecisionAction:
+  enum:
+    - approve
+    - reject
+  type: string
+HostExecutionMode:
+  enum:
+    - local
+    - remote
+  type: string
+HostPlatform:
+  enum:
+    - tauri
+    - web
+  type: string
+Locale:
+  enum:
+    - zh-CN
+    - en-US
+  type: string
+NotificationFilterScope:
+  enum:
+    - all
+    - app
+    - workspace
+    - user
+  type: string
+NotificationLevel:
+  enum:
+    - info
+    - success
+    - warning
+    - error
+  type: string
+NotificationScopeKind:
+  enum:
+    - app
+    - workspace
+    - user
+  type: string
+PasswordState:
+  enum:
+    - set
+    - reset-required
+    - temporary
+  type: string
+RbacPermissionKind:
+  enum:
+    - atomic
+    - bundle
+  type: string
+RbacPermissionStatus:
+  enum:
+    - active
+    - disabled
+  type: string
+RbacPermissionTargetType:
+  enum:
+    - workspace
+    - project
+    - user
+    - role
+    - permission
+    - menu
+    - resource
+    - agent
+    - knowledge
+    - tool
+    - skill
+    - mcp
+  type: string
+RbacRoleStatus:
+  enum:
+    - active
+    - disabled
+  type: string
+RiskLevel:
+  enum:
+    - low
+    - medium
+    - high
+  type: string
+RunStatus:
+  enum:
+    - idle
+    - draft
+    - planned
+    - running
+    - waiting_input
+    - waiting_approval
+    - blocked
+    - paused
+    - completed
+    - failed
+    - terminated
+  type: string
+SessionStatus:
+  enum:
+    - active
+    - revoked
+    - expired
+  type: string
+ThemeMode:
+  enum:
+    - light
+    - dark
+    - system
+  type: string
+ToolCatalogKind:
+  enum:
+    - builtin
+    - skill
+    - mcp
+  type: string
+TraceKind:
+  enum:
+    - step
+    - tool
+    - approval
+    - pause
+    - resume
+    - artifact
+    - knowledge
+  type: string
+TraceTone:
+  enum:
+    - info
+    - success
+    - warning
+    - error
+    - default
+  type: string
+TransportSecurityLevel:
+  enum:
+    - loopback
+    - trusted
+    - public
+  type: string
+ViewStatus:
+  enum:
+    - healthy
+    - configured
+    - attention
+  type: string

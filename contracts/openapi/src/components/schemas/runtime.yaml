@@ -1,0 +1,681 @@
+CapabilityDescriptor:
+  additionalProperties: false
+  properties:
+    capabilityId:
+      type: string
+    label:
+      type: string
+  required:
+    - capabilityId
+    - label
+  type: object
+CreateRuntimeSessionInput:
+  additionalProperties: false
+  properties:
+    conversationId:
+      type: string
+    projectId:
+      type: string
+    sessionKind:
+      $ref: "#/components/schemas/RuntimeSessionKind"
+    title:
+      type: string
+  required:
+    - conversationId
+    - projectId
+    - title
+  type: object
+MessageProcessEntry:
+  additionalProperties: false
+  properties:
+    detail:
+      type: string
+    id:
+      type: string
+    timestamp:
+      type: integer
+    title:
+      type: string
+    toolId:
+      type: string
+    type:
+      enum:
+        - thinking
+        - execution
+        - tool
+        - result
+      type: string
+  required:
+    - id
+    - type
+    - title
+    - detail
+    - timestamp
+  type: object
+MessageToolCall:
+  additionalProperties: false
+  properties:
+    count:
+      type: integer
+    kind:
+      $ref: "#/components/schemas/ToolCatalogKind"
+    label:
+      type: string
+    toolId:
+      type: string
+  required:
+    - toolId
+    - label
+    - kind
+    - count
+  type: object
+MessageUsage:
+  additionalProperties: false
+  properties:
+    inputTokens:
+      type: integer
+    outputTokens:
+      type: integer
+    totalTokens:
+      type: integer
+  required:
+    - inputTokens
+    - outputTokens
+    - totalTokens
+  type: object
+ProviderConfig:
+  additionalProperties: false
+  properties:
+    baseUrl:
+      type: string
+    credentialRef:
+      type: string
+    defaultModel:
+      type: string
+    defaultSurface:
+      type: string
+    protocolFamily:
+      type: string
+    providerId:
+      type: string
+  required:
+    - providerId
+  type: object
+ResolveRuntimeApprovalInput:
+  additionalProperties: false
+  properties:
+    decision:
+      $ref: "#/components/schemas/DecisionAction"
+  required:
+    - decision
+  type: object
+ResolvedExecutionTarget:
+  additionalProperties: false
+  properties:
+    baseUrl:
+      type: string
+    capabilities:
+      items:
+        $ref: "#/components/schemas/CapabilityDescriptor"
+      type: array
+    configuredModelId:
+      type: string
+    configuredModelName:
+      type: string
+    credentialRef:
+      type: string
+    modelId:
+      type: string
+    protocolFamily:
+      type: string
+    providerId:
+      type: string
+    registryModelId:
+      type: string
+    surface:
+      type: string
+  required:
+    - configuredModelId
+    - configuredModelName
+    - providerId
+    - registryModelId
+    - modelId
+    - surface
+    - protocolFamily
+    - capabilities
+  type: object
+RuntimeActorType:
+  enum:
+    - user
+    - assistant
+    - system
+  type: string
+RuntimeApprovalRequest:
+  additionalProperties: false
+  properties:
+    conversationId:
+      type: string
+    createdAt:
+      type: integer
+    detail:
+      type: string
+    id:
+      type: string
+    riskLevel:
+      $ref: "#/components/schemas/RiskLevel"
+    runId:
+      type: string
+    sessionId:
+      type: string
+    status:
+      enum:
+        - pending
+        - approved
+        - rejected
+      type: string
+    summary:
+      type: string
+    toolName:
+      type: string
+  required:
+    - id
+    - sessionId
+    - conversationId
+    - runId
+    - toolName
+    - summary
+    - detail
+    - riskLevel
+    - createdAt
+    - status
+  type: object
+RuntimeBootstrap:
+  additionalProperties: false
+  properties:
+    provider:
+      $ref: "#/components/schemas/ProviderConfig"
+    sessions:
+      items:
+        $ref: "#/components/schemas/RuntimeSessionSummary"
+      type: array
+  required:
+    - provider
+    - sessions
+  type: object
+RuntimeConfigPatch:
+  additionalProperties: false
+  properties:
+    patch:
+      additionalProperties: true
+      type: object
+    scope:
+      $ref: "#/components/schemas/RuntimeConfigScope"
+  required:
+    - scope
+    - patch
+  type: object
+RuntimeConfigScope:
+  enum:
+    - workspace
+    - project
+    - user
+  type: string
+RuntimeConfigSource:
+  additionalProperties: false
+  properties:
+    contentHash:
+      type: string
+    displayPath:
+      type: string
+    document:
+      additionalProperties: true
+      type: object
+    exists:
+      type: boolean
+    loaded:
+      type: boolean
+    ownerId:
+      type: string
+    scope:
+      $ref: "#/components/schemas/RuntimeConfigScope"
+    sourceKey:
+      type: string
+  required:
+    - scope
+    - displayPath
+    - sourceKey
+    - exists
+    - loaded
+  type: object
+RuntimeConfigValidationResult:
+  additionalProperties: false
+  properties:
+    errors:
+      items:
+        type: string
+      type: array
+    valid:
+      type: boolean
+    warnings:
+      items:
+        type: string
+      type: array
+  required:
+    - valid
+    - errors
+    - warnings
+  type: object
+RuntimeConfiguredModelProbeInput:
+  additionalProperties: false
+  properties:
+    configuredModelId:
+      type: string
+    patch:
+      additionalProperties: true
+      type: object
+    scope:
+      $ref: "#/components/schemas/RuntimeConfigScope"
+  required:
+    - scope
+    - configuredModelId
+    - patch
+  type: object
+RuntimeConfiguredModelProbeResult:
+  additionalProperties: false
+  properties:
+    configuredModelId:
+      type: string
+    configuredModelName:
+      type: string
+    consumedTokens:
+      type: integer
+    errors:
+      items:
+        type: string
+      type: array
+    reachable:
+      type: boolean
+    requestId:
+      type: string
+    valid:
+      type: boolean
+    warnings:
+      items:
+        type: string
+      type: array
+  required:
+    - valid
+    - reachable
+    - configuredModelId
+    - errors
+    - warnings
+  type: object
+RuntimeEffectiveConfig:
+  additionalProperties: false
+  properties:
+    effectiveConfig:
+      additionalProperties: true
+      type: object
+    effectiveConfigHash:
+      type: string
+    secretReferences:
+      items:
+        $ref: "#/components/schemas/RuntimeSecretReferenceStatus"
+      type: array
+    sources:
+      items:
+        $ref: "#/components/schemas/RuntimeConfigSource"
+      type: array
+    validation:
+      $ref: "#/components/schemas/RuntimeConfigValidationResult"
+  required:
+    - effectiveConfig
+    - effectiveConfigHash
+    - sources
+    - validation
+    - secretReferences
+  type: object
+RuntimeEventEnvelope:
+  additionalProperties: false
+  properties:
+    approval:
+      $ref: "#/components/schemas/RuntimeApprovalRequest"
+    conversationId:
+      type: string
+    decision:
+      $ref: "#/components/schemas/DecisionAction"
+    emittedAt:
+      type: integer
+    error:
+      type: string
+    eventType:
+      $ref: "#/components/schemas/RuntimeEventKind"
+    id:
+      type: string
+    kind:
+      $ref: "#/components/schemas/RuntimeEventKind"
+    message:
+      $ref: "#/components/schemas/RuntimeMessage"
+    payload:
+      additionalProperties: true
+      type: object
+    projectId:
+      type: string
+    run:
+      $ref: "#/components/schemas/RuntimeRunSnapshot"
+    runId:
+      type: string
+    sequence:
+      type: integer
+    sessionId:
+      type: string
+    summary:
+      $ref: "#/components/schemas/RuntimeSessionSummary"
+    trace:
+      $ref: "#/components/schemas/RuntimeTraceItem"
+    workspaceId:
+      type: string
+  required:
+    - id
+    - eventType
+    - workspaceId
+    - sessionId
+    - conversationId
+    - emittedAt
+    - sequence
+  type: object
+RuntimeEventKind:
+  enum:
+    - runtime.run.updated
+    - runtime.message.created
+    - runtime.trace.emitted
+    - runtime.approval.requested
+    - runtime.approval.resolved
+    - runtime.session.updated
+    - runtime.error
+  type: string
+RuntimeMessage:
+  additionalProperties: false
+  properties:
+    artifacts:
+      items:
+        type: string
+      type: array
+    attachments:
+      items:
+        type: string
+      type: array
+    configuredModelId:
+      type: string
+    configuredModelName:
+      type: string
+    content:
+      type: string
+    conversationId:
+      type: string
+    id:
+      type: string
+    modelId:
+      type: string
+    processEntries:
+      items:
+        $ref: "#/components/schemas/MessageProcessEntry"
+      type: array
+    requestedActorId:
+      type: string
+    requestedActorKind:
+      $ref: "#/components/schemas/ConversationActorKind"
+    resolvedActorId:
+      type: string
+    resolvedActorKind:
+      $ref: "#/components/schemas/ConversationActorKind"
+    resolvedActorLabel:
+      type: string
+    resourceIds:
+      items:
+        type: string
+      type: array
+    senderLabel:
+      type: string
+    senderType:
+      $ref: "#/components/schemas/RuntimeActorType"
+    sessionId:
+      type: string
+    status:
+      $ref: "#/components/schemas/RunStatus"
+    timestamp:
+      type: integer
+    toolCalls:
+      items:
+        $ref: "#/components/schemas/MessageToolCall"
+      type: array
+    usage:
+      $ref: "#/components/schemas/MessageUsage"
+    usedDefaultActor:
+      type: boolean
+  required:
+    - id
+    - sessionId
+    - conversationId
+    - senderType
+    - senderLabel
+    - content
+    - timestamp
+    - status
+  type: object
+RuntimePermissionMode:
+  enum:
+    - read-only
+    - workspace-write
+    - danger-full-access
+  type: string
+RuntimeRunSnapshot:
+  additionalProperties: false
+  properties:
+    configSnapshotId:
+      type: string
+    configuredModelId:
+      type: string
+    configuredModelName:
+      type: string
+    consumedTokens:
+      type: integer
+    conversationId:
+      type: string
+    currentStep:
+      type: string
+    effectiveConfigHash:
+      type: string
+    id:
+      type: string
+    modelId:
+      type: string
+    nextAction:
+      type: string
+    requestedActorId:
+      type: string
+    requestedActorKind:
+      $ref: "#/components/schemas/ConversationActorKind"
+    resolvedActorId:
+      type: string
+    resolvedActorKind:
+      $ref: "#/components/schemas/ConversationActorKind"
+    resolvedActorLabel:
+      type: string
+    resolvedTarget:
+      $ref: "#/components/schemas/ResolvedExecutionTarget"
+    sessionId:
+      type: string
+    startedAt:
+      type: integer
+    startedFromScopeSet:
+      items:
+        $ref: "#/components/schemas/RuntimeConfigScope"
+      type: array
+    status:
+      $ref: "#/components/schemas/RunStatus"
+    updatedAt:
+      type: integer
+  required:
+    - id
+    - sessionId
+    - conversationId
+    - status
+    - currentStep
+    - startedAt
+    - updatedAt
+    - configSnapshotId
+    - effectiveConfigHash
+    - startedFromScopeSet
+  type: object
+RuntimeSecretReferenceState:
+  enum:
+    - reference-present
+    - reference-missing
+    - inline-redacted
+  type: string
+RuntimeSecretReferenceStatus:
+  additionalProperties: false
+  properties:
+    path:
+      type: string
+    reference:
+      type: string
+    scope:
+      $ref: "#/components/schemas/RuntimeConfigScope"
+    status:
+      $ref: "#/components/schemas/RuntimeSecretReferenceState"
+  required:
+    - scope
+    - path
+    - status
+  type: object
+RuntimeSessionDetail:
+  additionalProperties: false
+  properties:
+    messages:
+      items:
+        $ref: "#/components/schemas/RuntimeMessage"
+      type: array
+    pendingApproval:
+      $ref: "#/components/schemas/RuntimeApprovalRequest"
+    run:
+      $ref: "#/components/schemas/RuntimeRunSnapshot"
+    summary:
+      $ref: "#/components/schemas/RuntimeSessionSummary"
+    trace:
+      items:
+        $ref: "#/components/schemas/RuntimeTraceItem"
+      type: array
+  required:
+    - summary
+    - run
+    - messages
+    - trace
+  type: object
+RuntimeSessionKind:
+  enum:
+    - project
+    - pet
+  type: string
+RuntimeSessionSummary:
+  additionalProperties: false
+  properties:
+    configSnapshotId:
+      type: string
+    conversationId:
+      type: string
+    effectiveConfigHash:
+      type: string
+    id:
+      type: string
+    lastMessagePreview:
+      type: string
+    projectId:
+      type: string
+    sessionKind:
+      $ref: "#/components/schemas/RuntimeSessionKind"
+    startedFromScopeSet:
+      items:
+        $ref: "#/components/schemas/RuntimeConfigScope"
+      type: array
+    status:
+      $ref: "#/components/schemas/RunStatus"
+    title:
+      type: string
+    updatedAt:
+      type: integer
+  required:
+    - id
+    - conversationId
+    - projectId
+    - title
+    - sessionKind
+    - status
+    - updatedAt
+    - configSnapshotId
+    - effectiveConfigHash
+    - startedFromScopeSet
+  type: object
+RuntimeTraceItem:
+  additionalProperties: false
+  properties:
+    actor:
+      type: string
+    actorId:
+      type: string
+    actorKind:
+      $ref: "#/components/schemas/ConversationActorKind"
+    conversationId:
+      type: string
+    detail:
+      type: string
+    id:
+      type: string
+    kind:
+      $ref: "#/components/schemas/TraceKind"
+    relatedMessageId:
+      type: string
+    relatedToolName:
+      type: string
+    runId:
+      type: string
+    sessionId:
+      type: string
+    timestamp:
+      type: integer
+    title:
+      type: string
+    tone:
+      $ref: "#/components/schemas/TraceTone"
+  required:
+    - id
+    - sessionId
+    - runId
+    - conversationId
+    - kind
+    - title
+    - detail
+    - tone
+    - timestamp
+    - actor
+  type: object
+SubmitRuntimeTurnInput:
+  additionalProperties: false
+  properties:
+    actorId:
+      type: string
+    actorKind:
+      $ref: "#/components/schemas/ConversationActorKind"
+    configuredModelId:
+      type: string
+    content:
+      type: string
+    modelId:
+      type: string
+    permissionMode:
+      $ref: "#/components/schemas/RuntimePermissionMode"
+  required:
+    - content
+    - permissionMode
+  type: object

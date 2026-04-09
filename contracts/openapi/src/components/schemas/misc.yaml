@@ -1,0 +1,131 @@
+AuditRecord:
+  additionalProperties: false
+  properties:
+    action:
+      type: string
+    actorId:
+      type: string
+    actorType:
+      type: string
+    createdAt:
+      type: integer
+    id:
+      type: string
+    outcome:
+      type: string
+    projectId:
+      type: string
+    resource:
+      type: string
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - actorType
+    - actorId
+    - action
+    - resource
+    - outcome
+    - createdAt
+  type: object
+ClientAppRecord:
+  additionalProperties: false
+  properties:
+    allowedHosts:
+      items:
+        type: string
+      type: array
+    allowedOrigins:
+      items:
+        type: string
+      type: array
+    defaultScopes:
+      items:
+        type: string
+      type: array
+    firstParty:
+      type: boolean
+    id:
+      type: string
+    name:
+      type: string
+    platform:
+      type: string
+    sessionPolicy:
+      type: string
+    status:
+      type: string
+  required:
+    - id
+    - name
+    - platform
+    - status
+    - firstParty
+    - allowedOrigins
+    - allowedHosts
+    - sessionPolicy
+    - defaultScopes
+  type: object
+InboxItemRecord:
+  additionalProperties: false
+  properties:
+    createdAt:
+      type: integer
+    description:
+      type: string
+    id:
+      type: string
+    itemType:
+      type: string
+    priority:
+      type: string
+    projectId:
+      type: string
+    status:
+      type: string
+    title:
+      type: string
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - itemType
+    - title
+    - description
+    - status
+    - priority
+    - createdAt
+  type: object
+KnowledgeEntryRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    projectId:
+      type: string
+    scope:
+      type: string
+    sourceRef:
+      type: string
+    sourceType:
+      type: string
+    status:
+      type: string
+    title:
+      type: string
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - title
+    - scope
+    - status
+    - sourceType
+    - sourceRef
+    - updatedAt
+  type: object

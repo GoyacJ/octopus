@@ -1273,6 +1273,7 @@ describe('host client transport', () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
+      status: 204,
       headers: new Headers(),
       text: async () => '',
     })
@@ -1300,6 +1301,7 @@ describe('host client transport', () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
+      status: 204,
       headers: new Headers(),
       text: async () => '',
     })
@@ -1327,6 +1329,7 @@ describe('host client transport', () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
+      status: 204,
       headers: new Headers(),
       text: async () => '',
     })
@@ -1770,7 +1773,7 @@ describe('host client transport', () => {
     await workspaceClient.catalog.getSkillFile('skill-workspace-ops-helper', 'notes/overview.md')
     expect(fetchSpy).toHaveBeenNthCalledWith(
       6,
-      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills/skill-workspace-ops-helper/files/notes/overview.md',
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills/skill-workspace-ops-helper/files/notes%2Foverview.md',
       expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
     )
 
@@ -1779,7 +1782,7 @@ describe('host client transport', () => {
     })
     expect(fetchSpy).toHaveBeenNthCalledWith(
       7,
-      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills/skill-workspace-ops-helper/files/notes/overview.md',
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/skills/skill-workspace-ops-helper/files/notes%2Foverview.md',
       expect.objectContaining({ method: 'PATCH', headers: expect.any(Headers) }),
     )
 

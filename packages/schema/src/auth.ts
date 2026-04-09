@@ -1,46 +1,15 @@
-export interface LoginRequest {
-  clientAppId: string
-  username: string
-  password: string
-  workspaceId?: string
-}
+import type {
+  AvatarUploadPayload as OpenApiAvatarUploadPayload,
+  LoginRequest as OpenApiLoginRequest,
+  LoginResponse as OpenApiLoginResponse,
+  RegisterWorkspaceOwnerRequest as OpenApiRegisterWorkspaceOwnerRequest,
+  RegisterWorkspaceOwnerResponse as OpenApiRegisterWorkspaceOwnerResponse,
+  SessionRecord as OpenApiSessionRecord,
+} from './generated'
 
-export interface AvatarUploadPayload {
-  fileName: string
-  contentType: string
-  dataBase64: string
-  byteSize: number
-}
-
-export interface RegisterWorkspaceOwnerRequest {
-  clientAppId: string
-  username: string
-  displayName: string
-  password: string
-  confirmPassword: string
-  avatar: AvatarUploadPayload
-  workspaceId?: string
-}
-
-export interface SessionRecord {
-  id: string
-  workspaceId: string
-  userId: string
-  clientAppId: string
-  token: string
-  status: 'active' | 'revoked' | 'expired'
-  createdAt: number
-  expiresAt?: number
-  roleIds: string[]
-  scopeProjectIds: string[]
-}
-
-export interface LoginResponse {
-  session: SessionRecord
-  workspace: import('./workspace').WorkspaceSummary
-}
-
-export interface RegisterWorkspaceOwnerResponse {
-  session: SessionRecord
-  workspace: import('./workspace').WorkspaceSummary
-}
+export type LoginRequest = OpenApiLoginRequest
+export type AvatarUploadPayload = OpenApiAvatarUploadPayload
+export type RegisterWorkspaceOwnerRequest = OpenApiRegisterWorkspaceOwnerRequest
+export type SessionRecord = OpenApiSessionRecord
+export type LoginResponse = OpenApiLoginResponse
+export type RegisterWorkspaceOwnerResponse = OpenApiRegisterWorkspaceOwnerResponse

@@ -1,0 +1,960 @@
+AgentRecord:
+  additionalProperties: false
+  properties:
+    avatar:
+      type: string
+    avatarPath:
+      type: string
+    builtinToolKeys:
+      items:
+        type: string
+      type: array
+    description:
+      type: string
+    id:
+      type: string
+    integrationSource:
+      additionalProperties: false
+      properties:
+        kind:
+          enum:
+            - workspace-link
+          type: string
+        sourceId:
+          type: string
+      required:
+        - kind
+        - sourceId
+      type: object
+    mcpServerNames:
+      items:
+        type: string
+      type: array
+    name:
+      type: string
+    personality:
+      type: string
+    projectId:
+      type: string
+    prompt:
+      type: string
+    scope:
+      $ref: "#/components/schemas/AgentScope"
+    skillIds:
+      items:
+        type: string
+      type: array
+    status:
+      $ref: "#/components/schemas/AgentStatus"
+    tags:
+      items:
+        type: string
+      type: array
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - scope
+    - name
+    - personality
+    - tags
+    - prompt
+    - builtinToolKeys
+    - skillIds
+    - mcpServerNames
+    - description
+    - status
+    - updatedAt
+  type: object
+AgentScope:
+  enum:
+    - personal
+    - workspace
+    - project
+  type: string
+AgentStatus:
+  enum:
+    - active
+    - archived
+  type: string
+AutomationRecord:
+  additionalProperties: false
+  properties:
+    cadence:
+      type: string
+    description:
+      type: string
+    id:
+      type: string
+    lastRunAt:
+      type: integer
+    nextRunAt:
+      type: integer
+    output:
+      type: string
+    ownerId:
+      type: string
+    ownerType:
+      enum:
+        - agent
+        - team
+      type: string
+    projectId:
+      type: string
+    status:
+      $ref: "#/components/schemas/AutomationStatus"
+    title:
+      type: string
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - title
+    - description
+    - cadence
+    - ownerType
+    - ownerId
+    - status
+    - output
+  type: object
+AutomationStatus:
+  enum:
+    - active
+    - paused
+    - error
+  type: string
+CopyWorkspaceSkillToManagedInput:
+  additionalProperties: false
+  properties:
+    slug:
+      type: string
+  required:
+    - slug
+  type: object
+CreateWorkspaceSkillInput:
+  additionalProperties: false
+  properties:
+    content:
+      type: string
+    slug:
+      type: string
+  required:
+    - slug
+    - content
+  type: object
+CredentialBinding:
+  additionalProperties: false
+  properties:
+    baseUrl:
+      type: string
+    configured:
+      type: boolean
+    credentialRef:
+      type: string
+    label:
+      type: string
+    providerId:
+      type: string
+    source:
+      type: string
+    status:
+      enum:
+        - healthy
+        - error
+        - unconfigured
+        - configured
+      type: string
+  required:
+    - credentialRef
+    - providerId
+    - label
+    - status
+    - configured
+    - source
+  type: object
+ImportIssue:
+  additionalProperties: false
+  properties:
+    message:
+      type: string
+    scope:
+      enum:
+        - bundle
+        - agent
+        - skill
+      type: string
+    severity:
+      enum:
+        - warning
+        - error
+      type: string
+    sourceId:
+      type: string
+  required:
+    - severity
+    - scope
+    - message
+  type: object
+ImportWorkspaceAgentBundleInput:
+  additionalProperties: false
+  properties:
+    files:
+      items:
+        $ref: "#/components/schemas/WorkspaceDirectoryUploadEntry"
+      type: array
+  required:
+    - files
+  type: object
+ImportWorkspaceAgentBundlePreview:
+  additionalProperties: false
+  properties:
+    agents:
+      items:
+        $ref: "#/components/schemas/ImportedAgentPreviewItem"
+      type: array
+    createCount:
+      type: integer
+    departmentCount:
+      type: integer
+    departments:
+      items:
+        type: string
+      type: array
+    detectedAgentCount:
+      type: integer
+    failureCount:
+      type: integer
+    filteredFileCount:
+      type: integer
+    importableAgentCount:
+      type: integer
+    issues:
+      items:
+        $ref: "#/components/schemas/ImportIssue"
+      type: array
+    skills:
+      items:
+        $ref: "#/components/schemas/ImportedSkillPreviewItem"
+      type: array
+    skipCount:
+      type: integer
+    uniqueSkillCount:
+      type: integer
+    updateCount:
+      type: integer
+  required:
+    - departments
+    - departmentCount
+    - detectedAgentCount
+    - importableAgentCount
+    - createCount
+    - updateCount
+    - skipCount
+    - failureCount
+    - uniqueSkillCount
+    - filteredFileCount
+    - agents
+    - skills
+    - issues
+  type: object
+ImportWorkspaceAgentBundlePreviewInput:
+  additionalProperties: false
+  properties:
+    files:
+      items:
+        $ref: "#/components/schemas/WorkspaceDirectoryUploadEntry"
+      type: array
+  required:
+    - files
+  type: object
+ImportWorkspaceAgentBundleResult:
+  additionalProperties: false
+  properties:
+    agents:
+      items:
+        $ref: "#/components/schemas/ImportedAgentPreviewItem"
+      type: array
+    createCount:
+      type: integer
+    departmentCount:
+      type: integer
+    departments:
+      items:
+        type: string
+      type: array
+    detectedAgentCount:
+      type: integer
+    failureCount:
+      type: integer
+    filteredFileCount:
+      type: integer
+    importableAgentCount:
+      type: integer
+    issues:
+      items:
+        $ref: "#/components/schemas/ImportIssue"
+      type: array
+    skills:
+      items:
+        $ref: "#/components/schemas/ImportedSkillPreviewItem"
+      type: array
+    skipCount:
+      type: integer
+    uniqueSkillCount:
+      type: integer
+    updateCount:
+      type: integer
+  required:
+    - departments
+    - departmentCount
+    - detectedAgentCount
+    - importableAgentCount
+    - createCount
+    - updateCount
+    - skipCount
+    - failureCount
+    - uniqueSkillCount
+    - filteredFileCount
+    - agents
+    - skills
+    - issues
+  type: object
+ImportWorkspaceSkillArchiveInput:
+  additionalProperties: false
+  properties:
+    archive:
+      $ref: "#/components/schemas/WorkspaceFileUploadPayload"
+    slug:
+      type: string
+  required:
+    - slug
+    - archive
+  type: object
+ImportWorkspaceSkillFolderInput:
+  additionalProperties: false
+  properties:
+    files:
+      items:
+        $ref: "#/components/schemas/WorkspaceDirectoryUploadEntry"
+      type: array
+    slug:
+      type: string
+  required:
+    - slug
+    - files
+  type: object
+ImportedAgentPreviewItem:
+  additionalProperties: false
+  properties:
+    action:
+      enum:
+        - create
+        - update
+        - skip
+        - failed
+      type: string
+    agentId:
+      type: string
+    department:
+      type: string
+    name:
+      type: string
+    skillSlugs:
+      items:
+        type: string
+      type: array
+    sourceId:
+      type: string
+  required:
+    - sourceId
+    - name
+    - department
+    - action
+    - skillSlugs
+  type: object
+ImportedSkillPreviewItem:
+  additionalProperties: false
+  properties:
+    action:
+      enum:
+        - create
+        - update
+        - skip
+        - failed
+      type: string
+    agentNames:
+      items:
+        type: string
+      type: array
+    contentHash:
+      type: string
+    departments:
+      items:
+        type: string
+      type: array
+    fileCount:
+      type: integer
+    name:
+      type: string
+    skillId:
+      type: string
+    slug:
+      type: string
+    sourceIds:
+      items:
+        type: string
+      type: array
+  required:
+    - slug
+    - skillId
+    - name
+    - action
+    - contentHash
+    - fileCount
+    - sourceIds
+    - departments
+    - agentNames
+  type: object
+ModelCatalogSnapshot:
+  additionalProperties: false
+  properties:
+    configuredModels:
+      items:
+        additionalProperties: true
+        type: object
+      type: array
+    credentialBindings:
+      items:
+        additionalProperties: true
+        type: object
+      type: array
+    defaultSelections:
+      additionalProperties:
+        additionalProperties: true
+        type: object
+      type: object
+    diagnostics:
+      additionalProperties: true
+      type: object
+    models:
+      items:
+        additionalProperties: true
+        type: object
+      type: array
+    providers:
+      items:
+        additionalProperties: true
+        type: object
+      type: array
+  type: object
+ToolRecord:
+  additionalProperties: false
+  properties:
+    description:
+      type: string
+    id:
+      type: string
+    kind:
+      $ref: "#/components/schemas/ToolCatalogKind"
+    name:
+      type: string
+    permissionMode:
+      $ref: "#/components/schemas/WorkspaceToolPermissionMode"
+    status:
+      $ref: "#/components/schemas/WorkspaceToolStatus"
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - kind
+    - name
+    - description
+    - status
+    - permissionMode
+    - updatedAt
+  type: object
+UpdateWorkspaceSkillFileInput:
+  additionalProperties: false
+  properties:
+    content:
+      type: string
+  required:
+    - content
+  type: object
+UpdateWorkspaceSkillInput:
+  additionalProperties: false
+  properties:
+    content:
+      type: string
+  required:
+    - content
+  type: object
+UpsertAgentInput:
+  additionalProperties: false
+  properties:
+    avatar:
+      $ref: "#/components/schemas/AvatarUploadPayload"
+    builtinToolKeys:
+      items:
+        type: string
+      type: array
+    description:
+      type: string
+    mcpServerNames:
+      items:
+        type: string
+      type: array
+    name:
+      type: string
+    personality:
+      type: string
+    projectId:
+      type: string
+    prompt:
+      type: string
+    removeAvatar:
+      type: boolean
+    scope:
+      $ref: "#/components/schemas/AgentScope"
+    skillIds:
+      items:
+        type: string
+      type: array
+    status:
+      $ref: "#/components/schemas/AgentStatus"
+    tags:
+      items:
+        type: string
+      type: array
+    workspaceId:
+      type: string
+  required:
+    - workspaceId
+    - scope
+    - name
+    - personality
+    - tags
+    - prompt
+    - builtinToolKeys
+    - skillIds
+    - mcpServerNames
+    - description
+    - status
+  type: object
+UpsertWorkspaceMcpServerInput:
+  additionalProperties: false
+  properties:
+    config:
+      additionalProperties: true
+      type: object
+    serverName:
+      type: string
+  required:
+    - serverName
+    - config
+  type: object
+WorkspaceBuiltinToolCatalogEntry:
+  additionalProperties: false
+  properties:
+    availability:
+      $ref: "#/components/schemas/ViewStatus"
+    builtinKey:
+      type: string
+    description:
+      type: string
+    disabled:
+      type: boolean
+    displayPath:
+      type: string
+    id:
+      type: string
+    kind:
+      enum:
+        - builtin
+      type: string
+    management:
+      $ref: "#/components/schemas/WorkspaceToolManagementCapabilities"
+    name:
+      type: string
+    requiredPermission:
+      enum:
+        - readonly
+        - workspace-write
+        - danger-full-access
+        - "null"
+      type: string
+    sourceKey:
+      type: string
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - name
+    - kind
+    - description
+    - availability
+    - sourceKey
+    - displayPath
+    - disabled
+    - management
+    - builtinKey
+  type: object
+WorkspaceDirectoryUploadEntry:
+  allOf:
+    - $ref: "#/components/schemas/WorkspaceFileUploadPayload"
+    - additionalProperties: false
+      properties:
+        relativePath:
+          type: string
+      required:
+        - relativePath
+      type: object
+WorkspaceFileUploadPayload:
+  additionalProperties: false
+  properties:
+    byteSize:
+      type: integer
+    contentType:
+      type: string
+    dataBase64:
+      type: string
+    fileName:
+      type: string
+  required:
+    - fileName
+    - contentType
+    - dataBase64
+    - byteSize
+  type: object
+WorkspaceMcpServerDocument:
+  additionalProperties: false
+  properties:
+    config:
+      additionalProperties: true
+      type: object
+    displayPath:
+      type: string
+    scope:
+      enum:
+        - workspace
+        - project
+        - user
+      type: string
+    serverName:
+      type: string
+    sourceKey:
+      type: string
+  required:
+    - serverName
+    - sourceKey
+    - displayPath
+    - scope
+    - config
+  type: object
+WorkspaceMcpToolCatalogEntry:
+  additionalProperties: false
+  properties:
+    availability:
+      $ref: "#/components/schemas/ViewStatus"
+    description:
+      type: string
+    disabled:
+      type: boolean
+    displayPath:
+      type: string
+    endpoint:
+      type: string
+    id:
+      type: string
+    kind:
+      enum:
+        - mcp
+      type: string
+    management:
+      $ref: "#/components/schemas/WorkspaceToolManagementCapabilities"
+    name:
+      type: string
+    requiredPermission:
+      enum:
+        - readonly
+        - workspace-write
+        - danger-full-access
+        - "null"
+      type: string
+    scope:
+      enum:
+        - workspace
+        - project
+        - user
+      type: string
+    serverName:
+      type: string
+    sourceKey:
+      type: string
+    statusDetail:
+      type: string
+    toolNames:
+      items:
+        type: string
+      type: array
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - name
+    - kind
+    - description
+    - availability
+    - sourceKey
+    - displayPath
+    - disabled
+    - management
+    - serverName
+    - endpoint
+    - toolNames
+    - scope
+  type: object
+WorkspaceSkillDocument:
+  additionalProperties: false
+  properties:
+    content:
+      type: string
+    description:
+      type: string
+    displayPath:
+      type: string
+    id:
+      type: string
+    name:
+      type: string
+    relativePath:
+      type: string
+    rootPath:
+      type: string
+    sourceKey:
+      type: string
+    sourceOrigin:
+      enum:
+        - skills_dir
+        - legacy_commands_dir
+      type: string
+    tree:
+      items:
+        $ref: "#/components/schemas/WorkspaceSkillTreeNode"
+      type: array
+    workspaceOwned:
+      type: boolean
+  required:
+    - id
+    - sourceKey
+    - name
+    - description
+    - content
+    - displayPath
+    - rootPath
+    - tree
+    - sourceOrigin
+    - workspaceOwned
+  type: object
+WorkspaceSkillFileDocument:
+  additionalProperties: false
+  properties:
+    byteSize:
+      type: integer
+    content:
+      type:
+        - string
+        - "null"
+    contentType:
+      type: string
+    displayPath:
+      type: string
+    isText:
+      type: boolean
+    language:
+      type: string
+    path:
+      type: string
+    readonly:
+      type: boolean
+    skillId:
+      type: string
+    sourceKey:
+      type: string
+  required:
+    - skillId
+    - sourceKey
+    - path
+    - displayPath
+    - byteSize
+    - isText
+    - readonly
+  type: object
+WorkspaceSkillToolCatalogEntry:
+  additionalProperties: false
+  properties:
+    active:
+      type: boolean
+    availability:
+      $ref: "#/components/schemas/ViewStatus"
+    description:
+      type: string
+    disabled:
+      type: boolean
+    displayPath:
+      type: string
+    id:
+      type: string
+    kind:
+      enum:
+        - skill
+      type: string
+    management:
+      $ref: "#/components/schemas/WorkspaceToolManagementCapabilities"
+    name:
+      type: string
+    relativePath:
+      type: string
+    requiredPermission:
+      enum:
+        - readonly
+        - workspace-write
+        - danger-full-access
+        - "null"
+      type: string
+    shadowedBy:
+      type: string
+    sourceKey:
+      type: string
+    sourceOrigin:
+      enum:
+        - skills_dir
+        - legacy_commands_dir
+      type: string
+    workspaceId:
+      type: string
+    workspaceOwned:
+      type: boolean
+  required:
+    - id
+    - workspaceId
+    - name
+    - kind
+    - description
+    - availability
+    - sourceKey
+    - displayPath
+    - disabled
+    - management
+    - active
+    - sourceOrigin
+    - workspaceOwned
+  type: object
+WorkspaceSkillTreeDocument:
+  additionalProperties: false
+  properties:
+    displayPath:
+      type: string
+    rootPath:
+      type: string
+    skillId:
+      type: string
+    sourceKey:
+      type: string
+    tree:
+      items:
+        $ref: "#/components/schemas/WorkspaceSkillTreeNode"
+      type: array
+  required:
+    - skillId
+    - sourceKey
+    - displayPath
+    - rootPath
+    - tree
+  type: object
+WorkspaceSkillTreeNode:
+  additionalProperties: false
+  properties:
+    byteSize:
+      type: integer
+    children:
+      items:
+        $ref: "#/components/schemas/WorkspaceSkillTreeNode"
+      type: array
+    isText:
+      type: boolean
+    kind:
+      enum:
+        - directory
+        - file
+      type: string
+    name:
+      type: string
+    path:
+      type: string
+  required:
+    - path
+    - name
+    - kind
+  type: object
+WorkspaceToolCatalogEntry:
+  oneOf:
+    - $ref: "#/components/schemas/WorkspaceBuiltinToolCatalogEntry"
+    - $ref: "#/components/schemas/WorkspaceSkillToolCatalogEntry"
+    - $ref: "#/components/schemas/WorkspaceMcpToolCatalogEntry"
+WorkspaceToolCatalogSnapshot:
+  additionalProperties: false
+  properties:
+    entries:
+      items:
+        $ref: "#/components/schemas/WorkspaceToolCatalogEntry"
+      type: array
+  required:
+    - entries
+  type: object
+WorkspaceToolDisablePatch:
+  additionalProperties: false
+  properties:
+    disabled:
+      type: boolean
+    sourceKey:
+      type: string
+  required:
+    - sourceKey
+    - disabled
+  type: object
+WorkspaceToolManagementCapabilities:
+  additionalProperties: false
+  properties:
+    canDelete:
+      type: boolean
+    canDisable:
+      type: boolean
+    canEdit:
+      type: boolean
+  required:
+    - canDisable
+    - canEdit
+    - canDelete
+  type: object
+WorkspaceToolPermissionMode:
+  enum:
+    - allow
+    - deny
+    - ask
+    - readonly
+  type: string
+WorkspaceToolStatus:
+  enum:
+    - active
+    - disabled
+  type: string

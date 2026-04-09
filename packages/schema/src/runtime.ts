@@ -1,17 +1,35 @@
 import type {
-  ConversationActorKind,
+  CreateRuntimeSessionInput as OpenApiCreateRuntimeSessionInput,
+  ProviderConfig as OpenApiProviderConfig,
+  ResolvedExecutionTarget as OpenApiResolvedExecutionTarget,
+  ResolveRuntimeApprovalInput as OpenApiResolveRuntimeApprovalInput,
+  RuntimeActorType as OpenApiRuntimeActorType,
+  RuntimeApprovalRequest as OpenApiRuntimeApprovalRequest,
+  RuntimeBootstrap as OpenApiRuntimeBootstrap,
+  RuntimeConfigScope as OpenApiRuntimeConfigScope,
+  RuntimeConfigPatch as OpenApiRuntimeConfigPatch,
+  RuntimeConfigSource as OpenApiRuntimeConfigSource,
+  RuntimeConfigValidationResult as OpenApiRuntimeConfigValidationResult,
+  RuntimeConfiguredModelProbeInput as OpenApiRuntimeConfiguredModelProbeInput,
+  RuntimeConfiguredModelProbeResult as OpenApiRuntimeConfiguredModelProbeResult,
+  RuntimeEffectiveConfig as OpenApiRuntimeEffectiveConfig,
+  RuntimeEventEnvelope as OpenApiRuntimeEventEnvelope,
+  RuntimeEventKind as OpenApiRuntimeEventKind,
+  RuntimeMessage as OpenApiRuntimeMessage,
+  RuntimeRunSnapshot as OpenApiRuntimeRunSnapshot,
+  RuntimeSecretReferenceStatus as OpenApiRuntimeSecretReferenceStatus,
+  RuntimeSessionDetail as OpenApiRuntimeSessionDetail,
+  RuntimeSessionKind as OpenApiRuntimeSessionKind,
+  RuntimeSessionSummary as OpenApiRuntimeSessionSummary,
+  RuntimeTraceItem as OpenApiRuntimeTraceItem,
+  SubmitRuntimeTurnInput as OpenApiSubmitRuntimeTurnInput,
+} from './generated'
+import type {
   DecisionAction,
   PermissionMode,
-  RiskLevel,
-  RunStatus,
-  TraceKind,
-  TraceTone,
   WorkspaceToolPermissionMode,
 } from './shared'
-import type { MessageProcessEntry, MessageToolCall, MessageUsage } from './workbench'
 import type { RuntimePermissionMode } from './permissions'
-import type { SseEventEnvelope } from './workspace-protocol'
-import type { CapabilityDescriptor } from './catalog'
 
 export type JsonValue =
   | string
@@ -21,37 +39,11 @@ export type JsonValue =
   | { [key: string]: JsonValue }
   | JsonValue[]
 
-export interface ProviderConfig {
-  providerId: string
-  credentialRef?: string
-  baseUrl?: string
-  defaultModel?: string
-  defaultSurface?: string
-  protocolFamily?: string
-}
+export type RuntimeConfigScope = OpenApiRuntimeConfigScope
+export type RuntimeConfigSource = OpenApiRuntimeConfigSource
+export type RuntimeSecretReferenceStatus = OpenApiRuntimeSecretReferenceStatus
 
-export type RuntimeConfigScope = 'workspace' | 'project' | 'user'
-
-export interface RuntimeConfigSource {
-  scope: RuntimeConfigScope
-  ownerId?: string
-  displayPath: string
-  sourceKey: string
-  exists: boolean
-  loaded: boolean
-  contentHash?: string
-  document?: Record<string, JsonValue>
-}
-
-export interface RuntimeSecretReferenceStatus {
-  scope: RuntimeConfigScope
-  path: string
-  reference?: string
-  status: 'reference-present' | 'reference-missing' | 'inline-redacted'
-}
-
-export interface RuntimeConfigPatch {
-  scope: RuntimeConfigScope
+export interface RuntimeConfigPatch extends Omit<OpenApiRuntimeConfigPatch, 'patch'> {
   patch: Record<string, JsonValue>
 }
 
@@ -80,36 +72,15 @@ export interface ProjectSettingsConfig {
   agents?: ProjectAgentSettings
 }
 
-export interface RuntimeConfigValidationResult {
-  valid: boolean
-  errors: string[]
-  warnings: string[]
-}
+export type RuntimeConfigValidationResult = OpenApiRuntimeConfigValidationResult
 
-export interface RuntimeConfiguredModelProbeInput {
-  scope: RuntimeConfigScope
-  configuredModelId: string
+export interface RuntimeConfiguredModelProbeInput extends Omit<OpenApiRuntimeConfiguredModelProbeInput, 'patch'> {
   patch: Record<string, JsonValue>
 }
 
-export interface RuntimeConfiguredModelProbeResult {
-  valid: boolean
-  reachable: boolean
-  configuredModelId: string
-  configuredModelName?: string
-  requestId?: string
-  consumedTokens?: number
-  errors: string[]
-  warnings: string[]
-}
+export type RuntimeConfiguredModelProbeResult = OpenApiRuntimeConfiguredModelProbeResult
 
-export interface RuntimeEffectiveConfig {
-  effectiveConfig: Record<string, JsonValue>
-  effectiveConfigHash: string
-  sources: RuntimeConfigSource[]
-  validation: RuntimeConfigValidationResult
-  secretReferences: RuntimeSecretReferenceStatus[]
-}
+export type RuntimeEffectiveConfig = OpenApiRuntimeEffectiveConfig
 
 export interface RuntimeConfigSnapshotSummary {
   id: string
@@ -120,168 +91,26 @@ export interface RuntimeConfigSnapshotSummary {
   effectiveConfig?: Record<string, JsonValue>
 }
 
-export interface ResolvedExecutionTarget {
-  configuredModelId: string
-  configuredModelName: string
-  providerId: string
-  registryModelId: string
-  modelId: string
-  surface: string
-  protocolFamily: string
-  credentialRef?: string
-  baseUrl?: string
-  capabilities: CapabilityDescriptor[]
-}
-
-export type RuntimeActorType = 'user' | 'assistant' | 'system'
-export type RuntimeEventKind =
-  | 'runtime.run.updated'
-  | 'runtime.message.created'
-  | 'runtime.trace.emitted'
-  | 'runtime.approval.requested'
-  | 'runtime.approval.resolved'
-  | 'runtime.session.updated'
-  | 'runtime.error'
-
-export type RuntimeSessionKind = 'project' | 'pet'
-
-export interface RuntimeSessionSummary {
-  id: string
-  conversationId: string
-  projectId: string
-  title: string
-  sessionKind: RuntimeSessionKind
-  status: RunStatus
-  updatedAt: number
-  lastMessagePreview?: string
-  configSnapshotId: string
-  effectiveConfigHash: string
-  startedFromScopeSet: RuntimeConfigScope[]
-}
-
-export interface RuntimeRunSnapshot {
-  id: string
-  sessionId: string
-  conversationId: string
-  status: RunStatus
-  currentStep: string
-  startedAt: number
-  updatedAt: number
-  configuredModelId?: string
-  configuredModelName?: string
-  modelId?: string
-  consumedTokens?: number
-  nextAction?: string
-  configSnapshotId: string
-  effectiveConfigHash: string
-  startedFromScopeSet: RuntimeConfigScope[]
-  resolvedTarget?: ResolvedExecutionTarget
-  requestedActorKind?: ConversationActorKind
-  requestedActorId?: string
-  resolvedActorKind?: ConversationActorKind
-  resolvedActorId?: string
-  resolvedActorLabel?: string
-}
-
-export interface RuntimeMessage {
-  id: string
-  sessionId: string
-  conversationId: string
-  senderType: RuntimeActorType
-  senderLabel: string
-  content: string
-  timestamp: number
-  configuredModelId?: string
-  configuredModelName?: string
-  modelId?: string
-  status: RunStatus
-  requestedActorKind?: ConversationActorKind
-  requestedActorId?: string
-  resolvedActorKind?: ConversationActorKind
-  resolvedActorId?: string
-  resolvedActorLabel?: string
-  usedDefaultActor?: boolean
-  resourceIds?: string[]
-  attachments?: string[]
-  artifacts?: string[]
-  usage?: MessageUsage
-  toolCalls?: MessageToolCall[]
-  processEntries?: MessageProcessEntry[]
-}
-
-export interface RuntimeTraceItem {
-  id: string
-  sessionId: string
-  runId: string
-  conversationId: string
-  kind: TraceKind
-  title: string
-  detail: string
-  tone: TraceTone | 'default'
-  timestamp: number
-  actor: string
-  actorKind?: ConversationActorKind
-  actorId?: string
-  relatedMessageId?: string
-  relatedToolName?: string
-}
-
-export interface RuntimeApprovalRequest {
-  id: string
-  sessionId: string
-  conversationId: string
-  runId: string
-  toolName: string
-  summary: string
-  detail: string
-  riskLevel: RiskLevel
-  createdAt: number
-  status?: 'pending' | 'approved' | 'rejected'
-}
+export type ResolvedExecutionTarget = OpenApiResolvedExecutionTarget
+export type RuntimeActorType = OpenApiRuntimeActorType
+export type RuntimeEventKind = OpenApiRuntimeEventKind
+export type RuntimeSessionKind = OpenApiRuntimeSessionKind
+export type RuntimeSessionSummary = OpenApiRuntimeSessionSummary
+export type RuntimeRunSnapshot = OpenApiRuntimeRunSnapshot
+export type RuntimeMessage = OpenApiRuntimeMessage
+export type RuntimeTraceItem = OpenApiRuntimeTraceItem
+export type RuntimeApprovalRequest = OpenApiRuntimeApprovalRequest
 
 export type RuntimeDecisionAction = DecisionAction
 
-export interface RuntimeEventEnvelope extends SseEventEnvelope {
-  eventType: RuntimeEventKind
-  kind?: RuntimeEventKind
-  run?: RuntimeRunSnapshot
-  message?: RuntimeMessage
-  trace?: RuntimeTraceItem
-  approval?: RuntimeApprovalRequest
-  decision?: RuntimeDecisionAction
-  summary?: RuntimeSessionSummary
-  error?: string
-}
+export type RuntimeEventEnvelope = OpenApiRuntimeEventEnvelope
+export type RuntimeSessionDetail = OpenApiRuntimeSessionDetail
+export type ProviderConfig = OpenApiProviderConfig
+export type RuntimeBootstrap = OpenApiRuntimeBootstrap
+export type CreateRuntimeSessionInput = OpenApiCreateRuntimeSessionInput
 
-export interface RuntimeSessionDetail {
-  summary: RuntimeSessionSummary
-  run: RuntimeRunSnapshot
-  messages: RuntimeMessage[]
-  trace: RuntimeTraceItem[]
-  pendingApproval?: RuntimeApprovalRequest
-}
-
-export interface RuntimeBootstrap {
-  provider: ProviderConfig
-  sessions: RuntimeSessionSummary[]
-}
-
-export interface CreateRuntimeSessionInput {
-  conversationId: string
-  projectId: string
-  title: string
-  sessionKind?: RuntimeSessionKind
-}
-
-export interface SubmitRuntimeTurnInput {
-  content: string
-  modelId?: string
-  configuredModelId?: string
+export interface SubmitRuntimeTurnInput extends Omit<OpenApiSubmitRuntimeTurnInput, 'permissionMode'> {
   permissionMode: PermissionMode | RuntimePermissionMode
-  actorKind?: ConversationActorKind
-  actorId?: string
 }
 
-export interface ResolveRuntimeApprovalInput {
-  decision: RuntimeDecisionAction
-}
+export type ResolveRuntimeApprovalInput = OpenApiResolveRuntimeApprovalInput

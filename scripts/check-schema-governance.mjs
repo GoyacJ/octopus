@@ -1,30 +1,30 @@
 import { readFile } from 'node:fs/promises'
-import { spawnSync } from 'node:child_process'
 
-import { generatedSchemaPath, openApiSpecPath, repoRoot } from './governance-lib.mjs'
+import { generatedSchemaPath, openApiSourceEntryPath, openApiSpecPath } from './governance-lib.mjs'
+import { bundleOpenApiDocument, bundleOpenApiYaml } from './openapi-bundle-lib.mjs'
+import { renderGeneratedSchema } from './schema-generator-lib.mjs'
 
-const previousGenerated = await readFile(generatedSchemaPath, 'utf8').catch(() => '')
-const generation = spawnSync(process.execPath, ['scripts/generate-schema.mjs'], {
-  cwd: repoRoot,
-  encoding: 'utf8',
-})
-
-if (generation.status !== 0) {
-  process.stdout.write(generation.stdout)
-  process.stderr.write(generation.stderr)
-  process.exit(generation.status ?? 1)
-}
-
-const regenerated = await readFile(generatedSchemaPath, 'utf8')
 const spec = await readFile(openApiSpecPath, 'utf8')
+const generated = await readFile(generatedSchemaPath, 'utf8').catch(() => '')
+const bundledDocument = await bundleOpenApiDocument({ rootPath: openApiSourceEntryPath })
+const bundledSpec = await bundleOpenApiYaml({ rootPath: openApiSourceEntryPath })
+const regenerated = renderGeneratedSchema(bundledDocument, bundledSpec)
+const failures = []
 
-if (!spec.includes('openapi: 3.1.0')) {
-  console.error('Schema governance check failed:\n- contracts/openapi/octopus.openapi.yaml must declare OpenAPI 3.1.0')
-  process.exit(1)
+if (bundledDocument.openapi !== '3.1.0') {
+  failures.push('contracts/openapi/octopus.openapi.yaml must declare OpenAPI 3.1.0')
 }
 
-if (previousGenerated !== regenerated) {
-  console.error('Schema governance check failed:\n- packages/schema/src/generated.ts is not fresh; rerun pnpm schema:generate')
+if (spec !== bundledSpec) {
+  failures.push('contracts/openapi/octopus.openapi.yaml is not fresh; rerun pnpm openapi:bundle')
+}
+
+if (generated !== regenerated) {
+  failures.push('packages/schema/src/generated.ts is not fresh; rerun pnpm schema:generate')
+}
+
+if (failures.length) {
+  console.error(`Schema governance check failed:\n- ${failures.join('\n- ')}`)
   process.exit(1)
 }
 

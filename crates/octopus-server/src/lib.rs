@@ -3130,11 +3130,12 @@ mod tests {
         http::{Method, Request},
     };
     use octopus_core::{
-        ApiErrorEnvelope, CreateRuntimeSessionInput, LoginRequest, LoginResponse,
-        RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse, ResolveRuntimeApprovalInput,
-        RuntimeConfigPatch, RuntimeConfigValidationResult, RuntimeEffectiveConfig,
-        RuntimeEventEnvelope, RuntimeRunSnapshot, RuntimeSessionDetail, SessionRecord,
-        SubmitRuntimeTurnInput,
+        ApiErrorEnvelope, AuditRecord, ClientAppRecord, CreateRuntimeSessionInput,
+        CreateWorkspaceUserRequest, InboxItemRecord, KnowledgeEntryRecord, LoginRequest,
+        LoginResponse, RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse,
+        ResolveRuntimeApprovalInput, RuntimeConfigPatch, RuntimeConfigValidationResult,
+        RuntimeEffectiveConfig, RuntimeEventEnvelope, RuntimeRunSnapshot, RuntimeSessionDetail,
+        SessionRecord, SubmitRuntimeTurnInput,
     };
     use octopus_infra::{build_infra_bundle, InfraBundle};
     use octopus_platform::{ObservationService, PlatformServices};
@@ -3271,6 +3272,61 @@ mod tests {
         }
         assert_eq!(response.status(), StatusCode::OK);
         decode_json::<LoginResponse>(response).await.session
+    }
+
+    async fn create_member_session(router: &Router, client_app_id: &str) -> SessionRecord {
+        let owner = login_owner_session(router, client_app_id).await;
+        let create_user_response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/workspace/rbac/users")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", owner.token))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&CreateWorkspaceUserRequest {
+                            username: "member-alpha".into(),
+                            display_name: "Member Alpha".into(),
+                            status: "active".into(),
+                            role_ids: vec!["role-member".into()],
+                            scope_project_ids: Vec::new(),
+                            avatar: None,
+                            use_default_avatar: Some(true),
+                            password: Some("member-member".into()),
+                            confirm_password: Some("member-member".into()),
+                            use_default_password: Some(false),
+                        })
+                        .expect("json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(create_user_response.status(), StatusCode::OK);
+
+        let login_response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/auth/login")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&LoginRequest {
+                            client_app_id: client_app_id.into(),
+                            username: "member-alpha".into(),
+                            password: "member-member".into(),
+                            workspace_id: None,
+                        })
+                        .expect("json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(login_response.status(), StatusCode::OK);
+        decode_json::<LoginResponse>(login_response).await.session
     }
 
     async fn create_runtime_session(
@@ -5216,6 +5272,211 @@ mod tests {
         assert_eq!(runtime_response.status(), StatusCode::UNAUTHORIZED);
         let runtime_error = decode_json::<ApiErrorEnvelope>(runtime_response).await;
         assert_eq!(runtime_error.error.code, "UNAUTHENTICATED");
+    }
+
+    #[tokio::test]
+    async fn apps_routes_roundtrip_through_http_contract() {
+        let harness = test_harness();
+        let session = login_owner_session(&harness.router, "octopus-desktop").await;
+
+        let list_response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/apps")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", session.token))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(list_response.status(), StatusCode::OK);
+        let listed = decode_json::<Vec<ClientAppRecord>>(list_response).await;
+        assert!(listed.iter().any(|record| record.id == "octopus-web"));
+
+        let register_response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/apps")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", session.token))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&ClientAppRecord {
+                            id: "octopus-desktop-preview".into(),
+                            name: "Octopus Desktop Preview".into(),
+                            platform: "desktop".into(),
+                            status: "active".into(),
+                            first_party: true,
+                            allowed_origins: vec!["http://127.0.0.1".into()],
+                            allowed_hosts: vec!["127.0.0.1".into()],
+                            session_policy: "session_token".into(),
+                            default_scopes: vec!["workspace".into(), "runtime".into()],
+                        })
+                        .expect("json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(register_response.status(), StatusCode::OK);
+        let registered = decode_json::<ClientAppRecord>(register_response).await;
+        assert_eq!(registered.id, "octopus-desktop-preview");
+    }
+
+    #[tokio::test]
+    async fn audit_inbox_and_knowledge_routes_return_transport_records() {
+        let harness = test_harness();
+        let session = login_owner_session(&harness.router, "octopus-desktop").await;
+
+        let audit_response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/audit")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", session.token))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(audit_response.status(), StatusCode::OK);
+        let _audit_records = decode_json::<Vec<AuditRecord>>(audit_response).await;
+
+        let inbox_response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/inbox")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", session.token))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(inbox_response.status(), StatusCode::OK);
+        let _inbox_records = decode_json::<Vec<InboxItemRecord>>(inbox_response).await;
+
+        let knowledge_response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/knowledge")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", session.token))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(knowledge_response.status(), StatusCode::OK);
+        let _knowledge_records = decode_json::<Vec<KnowledgeEntryRecord>>(knowledge_response).await;
+    }
+
+    #[tokio::test]
+    async fn apps_audit_inbox_and_knowledge_routes_reject_non_owner_sessions() {
+        let harness = test_harness();
+        let member = create_member_session(&harness.router, "octopus-desktop").await;
+
+        let apps_read = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/apps")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", member.token))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(apps_read.status(), StatusCode::FORBIDDEN);
+        let apps_read_error = decode_json::<ApiErrorEnvelope>(apps_read).await;
+        assert_eq!(apps_read_error.error.code, "FORBIDDEN");
+
+        let apps_write = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/apps")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", member.token))
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&ClientAppRecord {
+                            id: "octopus-member-preview".into(),
+                            name: "Octopus Member Preview".into(),
+                            platform: "desktop".into(),
+                            status: "active".into(),
+                            first_party: true,
+                            allowed_origins: vec!["http://127.0.0.1".into()],
+                            allowed_hosts: vec!["127.0.0.1".into()],
+                            session_policy: "session_token".into(),
+                            default_scopes: vec!["workspace".into()],
+                        })
+                        .expect("json"),
+                    ))
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(apps_write.status(), StatusCode::FORBIDDEN);
+        let apps_write_error = decode_json::<ApiErrorEnvelope>(apps_write).await;
+        assert_eq!(apps_write_error.error.code, "FORBIDDEN");
+
+        let audit_response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/audit")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", member.token))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(audit_response.status(), StatusCode::FORBIDDEN);
+        let audit_error = decode_json::<ApiErrorEnvelope>(audit_response).await;
+        assert_eq!(audit_error.error.code, "FORBIDDEN");
+
+        let inbox_response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/inbox")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", member.token))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(inbox_response.status(), StatusCode::FORBIDDEN);
+        let inbox_error = decode_json::<ApiErrorEnvelope>(inbox_response).await;
+        assert_eq!(inbox_error.error.code, "FORBIDDEN");
+
+        let knowledge_response = harness
+            .router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/knowledge")
+                    .header(header::AUTHORIZATION, format!("Bearer {}", member.token))
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(knowledge_response.status(), StatusCode::FORBIDDEN);
+        let knowledge_error = decode_json::<ApiErrorEnvelope>(knowledge_response).await;
+        assert_eq!(knowledge_error.error.code, "FORBIDDEN");
     }
 
     #[tokio::test]

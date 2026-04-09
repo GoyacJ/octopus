@@ -1,5 +1,12 @@
 import type { ConnectionProfile } from './catalog'
 import type {
+  HealthcheckStatus as OpenApiHealthcheckStatus,
+  HostBackendConnection as OpenApiHostBackendConnection,
+  HostState as OpenApiHostState,
+  ShellBootstrap as OpenApiShellBootstrap,
+  ShellPreferences as OpenApiShellPreferences,
+} from './generated'
+import type {
   BackendConnectionState,
   BackendTransport,
   HostExecutionMode,
@@ -12,50 +19,11 @@ import type {
   WorkspaceSessionTokenEnvelope,
 } from './workspace-protocol'
 
-export interface HostState {
-  platform: HostPlatform
-  mode: HostExecutionMode
-  appVersion: string
-  cargoWorkspace: boolean
-  shell: string
-}
-
-export interface HostBackendConnection {
-  baseUrl?: string
-  authToken?: string
-  state: BackendConnectionState
-  transport: BackendTransport
-}
-
-export interface HealthcheckStatus {
-  status: 'ok'
-  host: HostPlatform
-  mode: HostExecutionMode
-  cargoWorkspace: boolean
-  backend: Pick<HostBackendConnection, 'state' | 'transport'>
-}
-
-export interface ShellPreferences {
-  theme: ThemeMode
-  locale: Locale
-  fontSize: number
-  fontFamily: string
-  fontStyle: string
-  compactSidebar: boolean
-  leftSidebarCollapsed: boolean
-  rightSidebarCollapsed: boolean
-  defaultWorkspaceId: string
-  lastVisitedRoute: string
-}
-
-export interface ShellBootstrap {
-  hostState: HostState
-  preferences: ShellPreferences
-  connections: ConnectionProfile[]
-  backend?: HostBackendConnection
-  workspaceConnections?: WorkspaceConnectionRecord[]
-  workspaceSessions?: WorkspaceSessionTokenEnvelope[]
-}
+export type HostState = OpenApiHostState
+export type HostBackendConnection = OpenApiHostBackendConnection
+export type HealthcheckStatus = OpenApiHealthcheckStatus
+export type ShellPreferences = OpenApiShellPreferences
+export type ShellBootstrap = OpenApiShellBootstrap
 
 export type ConversationDetailFocus = 'summary' | 'memories' | 'artifacts' | 'knowledge' | 'resources' | 'tools' | 'timeline'
 

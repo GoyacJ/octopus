@@ -1,0 +1,570 @@
+/api/v1/artifacts:
+  get:
+    operationId: listArtifacts
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/ArtifactRecord"
+              type: array
+        description: Artifact list payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects:
+  get:
+    operationId: listProjects
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/ProjectRecord"
+              type: array
+        description: Project list payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createProject
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateProjectRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectRecord"
+        description: Created project payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}:
+  patch:
+    operationId: updateProject
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateProjectRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectRecord"
+        description: Updated project payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/agent-links:
+  get:
+    operationId: listProjectAgentLinks
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/ProjectAgentLinkRecord"
+              type: array
+        description: Project agent link payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createProjectAgentLink
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectAgentLinkInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectAgentLinkRecord"
+        description: Created project agent link payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/agent-links/{agentId}:
+  delete:
+    operationId: deleteProjectAgentLink
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: agentId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Project agent link deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/dashboard:
+  get:
+    operationId: getProjectDashboard
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectDashboardSnapshot"
+        description: Project dashboard payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/knowledge:
+  get:
+    operationId: listProjectKnowledge
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/KnowledgeRecord"
+              type: array
+        description: Project knowledge payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/pet:
+  get:
+    operationId: getProjectPetSnapshot
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PetWorkspaceSnapshot"
+        description: Project pet snapshot payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/pet/conversation:
+  put:
+    operationId: bindProjectPetConversation
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/BindPetConversationInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PetConversationBinding"
+        description: Updated project pet conversation binding payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/pet/presence:
+  patch:
+    operationId: saveProjectPetPresence
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SavePetPresenceInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PetPresenceState"
+        description: Updated project pet presence payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/resources:
+  get:
+    operationId: listProjectResources
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/WorkspaceResourceRecord"
+              type: array
+        description: Project resources payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createProjectResource
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateWorkspaceResourceInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceResourceRecord"
+        description: Created project resource payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/resources/folder:
+  post:
+    operationId: createProjectResourceFolder
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateWorkspaceResourceFolderInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/WorkspaceResourceRecord"
+              type: array
+        description: Created project folder resource payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/resources/{resourceId}:
+  delete:
+    operationId: deleteProjectResource
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: resourceId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Project resource deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: updateProjectResource
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: resourceId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UpdateWorkspaceResourceInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceResourceRecord"
+        description: Updated project resource payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/runtime-config:
+  get:
+    operationId: getProjectRuntimeConfig
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeEffectiveConfig"
+        description: Project effective runtime configuration payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  patch:
+    operationId: saveProjectRuntimeConfig
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RuntimeConfigPatch"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeEffectiveConfig"
+        description: Saved project effective runtime configuration payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/runtime-config/validate:
+  post:
+    operationId: validateProjectRuntimeConfig
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RuntimeConfigPatch"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfigValidationResult"
+        description: Project runtime configuration validation payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/team-links:
+  get:
+    operationId: listProjectTeamLinks
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/ProjectTeamLinkRecord"
+              type: array
+        description: Project team link payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createProjectTeamLink
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProjectTeamLinkInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectTeamLinkRecord"
+        description: Created project team link payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/team-links/{teamId}:
+  delete:
+    operationId: deleteProjectTeamLink
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: teamId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Project team link deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.

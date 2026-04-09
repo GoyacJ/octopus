@@ -1,0 +1,104 @@
+/api/v1/auth/login:
+  post:
+    operationId: login
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/LoginRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginResponse"
+        description: Workspace login payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/auth/logout:
+  post:
+    operationId: logout
+    responses:
+      "204":
+        description: Logged out.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/auth/register-owner:
+  post:
+    operationId: registerOwner
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RegisterWorkspaceOwnerRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterWorkspaceOwnerResponse"
+        description: Workspace owner registration payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/auth/session:
+  get:
+    operationId: getCurrentSession
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionRecord"
+        description: Current workspace session payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/system/bootstrap:
+  get:
+    operationId: getSystemBootstrap
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SystemBootstrapStatus"
+        description: Workspace bootstrap payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/system/health:
+  get:
+    operationId: getSystemHealthcheck
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HealthcheckStatus"
+        description: System healthcheck payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.

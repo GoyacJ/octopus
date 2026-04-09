@@ -1,7 +1,25 @@
-export type ThemeMode = 'light' | 'dark' | 'system'
-export type Locale = 'zh-CN' | 'en-US'
+import type {
+  ArtifactStatus as OpenApiArtifactStatus,
+  BackendConnectionState as OpenApiBackendConnectionState,
+  BackendTransport as OpenApiBackendTransport,
+  ConnectionMode as OpenApiConnectionMode,
+  ConnectionState as OpenApiConnectionState,
+  HostExecutionMode as OpenApiHostExecutionMode,
+  HostPlatform as OpenApiHostPlatform,
+  KnowledgeKind as OpenApiKnowledgeKind,
+  KnowledgeSourceType as OpenApiKnowledgeSourceType,
+  KnowledgeStatus as OpenApiKnowledgeStatus,
+  Locale as OpenApiLocale,
+  ProjectResourceKind as OpenApiProjectResourceKind,
+  ProjectResourceOrigin as OpenApiProjectResourceOrigin,
+  ThemeMode as OpenApiThemeMode,
+  ViewStatus as OpenApiViewStatus,
+} from './generated'
+
+export type ThemeMode = OpenApiThemeMode
+export type Locale = OpenApiLocale
 export type RiskLevel = 'low' | 'medium' | 'high'
-export type ViewStatus = 'healthy' | 'configured' | 'attention'
+export type ViewStatus = OpenApiViewStatus
 export type DecisionAction = 'approve' | 'reject'
 export type PermissionMode = 'auto' | 'readonly' | 'danger-full-access'
 export type WorkspaceToolPermissionMode = 'allow' | 'deny' | 'ask' | 'readonly'
@@ -32,7 +50,7 @@ export type TeamScope = 'workspace' | 'project'
 export type AgentAssetKind = 'agent' | 'team'
 export type AgentStatus = 'active' | 'archived'
 export type TeamStatus = 'active' | 'archived'
-export type ArtifactStatus = 'draft' | 'review' | 'approved' | 'published'
+export type ArtifactStatus = OpenApiArtifactStatus
 export type PetSpecies =
   | 'duck'
   | 'goose'
@@ -55,8 +73,8 @@ export type PetSpecies =
 export type PetMood = 'curious' | 'happy' | 'sleepy' | 'playful' | 'focused'
 export type PetMotionState = 'idle' | 'hover' | 'walk' | 'chat' | 'sleep'
 export type PetChatSender = 'user' | 'pet'
-export type ProjectResourceKind = 'file' | 'folder' | 'artifact' | 'url'
-export type ProjectResourceOrigin = 'source' | 'generated'
+export type ProjectResourceKind = OpenApiProjectResourceKind
+export type ProjectResourceOrigin = OpenApiProjectResourceOrigin
 export type RunType = 'conversation_run' | 'review_run' | 'execution_run' | 'automation_run'
 export type RunStatus =
   | 'idle'
@@ -72,15 +90,15 @@ export type RunStatus =
   | 'terminated'
 export type TraceKind = 'step' | 'tool' | 'approval' | 'pause' | 'resume' | 'artifact' | 'knowledge'
 export type TraceTone = 'info' | 'success' | 'warning' | 'error'
-export type KnowledgeKind = 'private' | 'shared' | 'candidate'
-export type KnowledgeStatus = 'candidate' | 'reviewed' | 'shared' | 'archived'
-export type KnowledgeSourceType = 'conversation' | 'artifact' | 'run'
-export type ConnectionMode = 'local' | 'shared' | 'remote'
-export type ConnectionState = 'local-ready' | 'connected' | 'disconnected'
-export type HostPlatform = 'tauri' | 'web'
-export type HostExecutionMode = 'local' | 'remote'
-export type BackendTransport = 'http' | 'sse' | 'ws'
-export type BackendConnectionState = 'ready' | 'unavailable'
+export type KnowledgeKind = OpenApiKnowledgeKind
+export type KnowledgeStatus = OpenApiKnowledgeStatus
+export type KnowledgeSourceType = OpenApiKnowledgeSourceType
+export type ConnectionMode = OpenApiConnectionMode
+export type ConnectionState = OpenApiConnectionState
+export type HostPlatform = OpenApiHostPlatform
+export type HostExecutionMode = OpenApiHostExecutionMode
+export type BackendTransport = OpenApiBackendTransport
+export type BackendConnectionState = OpenApiBackendConnectionState
 export type AutomationStatus = 'active' | 'paused' | 'error'
 export type SettingsSectionId = 'connections' | 'roles' | 'policies' | 'audit' | 'integrations' | 'logs'
 export type DesktopSettingsTabId = 'general' | 'theme' | 'i18n' | 'version'

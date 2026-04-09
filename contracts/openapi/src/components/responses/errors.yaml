@@ -1,0 +1,6 @@
+ApiErrorResponse:
+  content:
+    application/json:
+      schema:
+        $ref: "#/components/schemas/ApiErrorEnvelope"
+  description: API error envelope.

@@ -1,0 +1,255 @@
+/api/v1/host/bootstrap:
+  get:
+    operationId: getHostBootstrap
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShellBootstrap"
+        description: Host bootstrap payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/health:
+  get:
+    operationId: getHostHealthcheck
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HealthcheckStatus"
+        description: Host healthcheck payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/notifications:
+  get:
+    operationId: listHostNotifications
+    parameters:
+      - in: query
+        name: scope
+        required: false
+        schema:
+          $ref: "#/components/schemas/NotificationFilterScope"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationListResponse"
+        description: Host notifications payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createHostNotification
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateNotificationInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationRecord"
+        description: Created notification payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/notifications/read-all:
+  post:
+    operationId: markAllHostNotificationsRead
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/NotificationFilter"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationUnreadSummary"
+        description: Updated unread summary payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/notifications/unread-summary:
+  get:
+    operationId: getHostNotificationUnreadSummary
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationUnreadSummary"
+        description: Host notification unread summary payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/notifications/{notificationId}/dismiss-toast:
+  post:
+    operationId: dismissHostNotificationToast
+    parameters:
+      - in: path
+        name: notificationId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationRecord"
+        description: Updated notification payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/notifications/{notificationId}/read:
+  post:
+    operationId: markHostNotificationRead
+    parameters:
+      - in: path
+        name: notificationId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NotificationRecord"
+        description: Updated notification payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/preferences:
+  get:
+    operationId: getHostPreferences
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShellPreferences"
+        description: Host shell preferences payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  put:
+    operationId: saveHostPreferences
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ShellPreferences"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShellPreferences"
+        description: Persisted host shell preferences payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/workspace-connections:
+  get:
+    operationId: listHostWorkspaceConnections
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/WorkspaceConnectionRecord"
+              type: array
+        description: Host workspace connections payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createHostWorkspaceConnection
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateHostWorkspaceConnectionInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceConnectionRecord"
+        description: Created host workspace connection payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/host/workspace-connections/{connectionId}:
+  delete:
+    operationId: deleteHostWorkspaceConnection
+    parameters:
+      - in: path
+        name: connectionId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              type: "null"
+        description: Deleted host workspace connection payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.

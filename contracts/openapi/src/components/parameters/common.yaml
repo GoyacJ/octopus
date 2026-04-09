@@ -1,0 +1,28 @@
+IdempotencyKeyHeader:
+  description: Idempotency token for retry-safe mutations.
+  in: header
+  name: Idempotency-Key
+  required: false
+  schema:
+    type: string
+LastEventIdHeader:
+  description: Resume token for server-sent event streams.
+  in: header
+  name: Last-Event-ID
+  required: false
+  schema:
+    type: string
+RequestIdHeader:
+  description: Opaque request correlation identifier.
+  in: header
+  name: X-Request-Id
+  required: false
+  schema:
+    type: string
+WorkspaceIdHeader:
+  description: Workspace scope identifier for workspace transport calls.
+  in: header
+  name: X-Workspace-Id
+  required: false
+  schema:
+    type: string

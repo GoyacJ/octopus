@@ -1,0 +1,3 @@
+description: Canonical OpenAPI contract for Octopus host, workspace, and runtime APIs.
+title: Octopus API
+version: 0.1.0

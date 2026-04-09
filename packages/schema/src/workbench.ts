@@ -1,4 +1,13 @@
 import type {
+  BindPetConversationInput as OpenApiBindPetConversationInput,
+  PetConversationBinding as OpenApiPetConversationBinding,
+  PetMessage as OpenApiPetMessage,
+  PetPresenceState as OpenApiPetPresenceState,
+  PetProfile as OpenApiPetProfile,
+  PetWorkspaceSnapshot as OpenApiPetWorkspaceSnapshot,
+  SavePetPresenceInput as OpenApiSavePetPresenceInput,
+} from './generated'
+import type {
   AgentAssetKind,
   AgentScope,
   AgentStatus,
@@ -6,10 +15,6 @@ import type {
   ConversationActorKind,
   ConversationIntent,
   PermissionMode,
-  PetChatSender,
-  PetMood,
-  PetMotionState,
-  PetSpecies,
   ProjectResourceKind,
   ProjectResourceOrigin,
   ProjectStatus,
@@ -267,77 +272,13 @@ export interface Message {
   timestamp: number
 }
 
-export interface PetProfile {
-  id: string
-  species: PetSpecies
-  displayName: string
-  ownerUserId: string
-  avatarLabel: string
-  summary: string
-  greeting: string
-  mood: PetMood
-  favoriteSnack: string
-  promptHints: string[]
-  fallbackAsset: string
-  riveAsset?: string
-  stateMachine?: string
-}
-
-export interface PetMessage {
-  id: string
-  petId: string
-  sender: PetChatSender
-  content: string
-  timestamp: number
-}
-
-export interface PetPresenceState {
-  petId: string
-  isVisible: boolean
-  chatOpen: boolean
-  motionState: PetMotionState
-  unreadCount: number
-  lastInteractionAt: number
-  position: {
-    x: number
-    y: number
-  }
-}
-
-export interface PetConversationBinding {
-  petId: string
-  workspaceId: string
-  projectId: string
-  conversationId: string
-  sessionId?: string
-  updatedAt: number
-}
-
-export interface SavePetPresenceInput {
-  petId: string
-  isVisible?: boolean
-  chatOpen?: boolean
-  motionState?: PetMotionState
-  unreadCount?: number
-  lastInteractionAt?: number
-  position?: {
-    x: number
-    y: number
-  }
-}
-
-export interface BindPetConversationInput {
-  petId: string
-  conversationId: string
-  sessionId?: string
-}
-
-export interface PetWorkspaceSnapshot {
-  profile: PetProfile
-  presence: PetPresenceState
-  binding?: PetConversationBinding
-  messages: PetMessage[]
-}
+export type PetProfile = OpenApiPetProfile
+export type PetMessage = OpenApiPetMessage
+export type PetPresenceState = OpenApiPetPresenceState
+export type PetConversationBinding = OpenApiPetConversationBinding
+export type SavePetPresenceInput = OpenApiSavePetPresenceInput
+export type BindPetConversationInput = OpenApiBindPetConversationInput
+export type PetWorkspaceSnapshot = OpenApiPetWorkspaceSnapshot
 
 export interface ConversationQueueItem {
   id: string

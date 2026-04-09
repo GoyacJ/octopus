@@ -1,0 +1,275 @@
+/api/v1/runtime/bootstrap:
+  get:
+    operationId: getRuntimeBootstrap
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeBootstrap"
+        description: Runtime bootstrap payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/runtime/config:
+  get:
+    operationId: getRuntimeConfig
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeEffectiveConfig"
+        description: Effective runtime configuration payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/runtime/config/configured-models/probe:
+  post:
+    operationId: probeRuntimeConfiguredModel
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RuntimeConfiguredModelProbeInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfiguredModelProbeResult"
+        description: Runtime configured model probe payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/runtime/config/scopes/{scope}:
+  patch:
+    operationId: saveRuntimeConfigScope
+    parameters:
+      - in: path
+        name: scope
+        required: true
+        schema:
+          $ref: "#/components/schemas/RuntimeConfigScope"
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RuntimeConfigPatch"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeEffectiveConfig"
+        description: Saved runtime scoped configuration payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/runtime/config/validate:
+  post:
+    operationId: validateRuntimeConfig
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RuntimeConfigPatch"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfigValidationResult"
+        description: Runtime configuration validation payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/runtime/sessions:
+  get:
+    operationId: listRuntimeSessions
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/RuntimeSessionSummary"
+              type: array
+        description: Runtime sessions payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createRuntimeSession
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateRuntimeSessionInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeSessionDetail"
+        description: Created runtime session payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/runtime/sessions/{sessionId}:
+  delete:
+    operationId: deleteRuntimeSession
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Runtime session deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  get:
+    operationId: getRuntimeSession
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeSessionDetail"
+        description: Runtime session detail payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/runtime/sessions/{sessionId}/approvals/{approvalId}:
+  post:
+    operationId: resolveRuntimeApproval
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: approvalId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ResolveRuntimeApprovalInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeRunSnapshot"
+        description: Runtime run snapshot payload after approval resolution.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/runtime/sessions/{sessionId}/events:
+  get:
+    operationId: listRuntimeSessionEvents
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: after
+        required: false
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/RuntimeEventEnvelope"
+              type: array
+          text/event-stream:
+            schema:
+              type: string
+        description: Runtime session event payload for JSON polling.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/runtime/sessions/{sessionId}/turns:
+  post:
+    operationId: submitRuntimeTurn
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SubmitRuntimeTurnInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeRunSnapshot"
+        description: Runtime run snapshot payload after turn submission.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.

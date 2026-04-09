@@ -10,6 +10,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export const repoRoot = path.resolve(__dirname, '..')
 export const versionFilePath = path.join(repoRoot, 'VERSION')
 export const cargoManifestPath = path.join(repoRoot, 'Cargo.toml')
+export const openApiSourceRootPath = path.join(repoRoot, 'contracts', 'openapi', 'src')
+export const openApiSourceEntryPath = path.join(openApiSourceRootPath, 'root.yaml')
+export const openApiInfoPath = path.join(openApiSourceRootPath, 'info.yaml')
 export const openApiSpecPath = path.join(repoRoot, 'contracts', 'openapi', 'octopus.openapi.yaml')
 export const generatedSchemaPath = path.join(repoRoot, 'packages', 'schema', 'src', 'generated.ts')
 export const releasePlatformArtifactRules = {
@@ -53,12 +56,12 @@ export async function writeText(relativePath, value) {
   await writeFile(path.join(repoRoot, relativePath), value)
 }
 
-export async function readOpenApiDocument() {
-  return parse(await readFile(openApiSpecPath, 'utf8'))
+export async function readOpenApiDocument(source = openApiSpecPath) {
+  return parse(await readFile(source, 'utf8'))
 }
 
-export async function writeOpenApiDocument(document) {
-  await writeFile(openApiSpecPath, stringify(document, { lineWidth: 0 }))
+export async function writeOpenApiDocument(document, target = openApiSpecPath) {
+  await writeFile(target, stringify(document, { lineWidth: 0 }))
 }
 
 export async function syncMirroredVersions() {
@@ -77,10 +80,15 @@ export async function syncMirroredVersions() {
   )
   await writeFile(cargoManifestPath, nextCargoManifest)
 
-  const openApiDocument = await readOpenApiDocument()
-  openApiDocument.info ??= {}
-  openApiDocument.info.version = version
-  await writeOpenApiDocument(openApiDocument)
+  const openApiInfo = parse(await readFile(openApiInfoPath, 'utf8')) ?? {}
+  openApiInfo.version = version
+  await writeOpenApiDocument(openApiInfo, openApiInfoPath)
+
+  const { writeBundledOpenApi } = await import('./openapi-bundle-lib.mjs')
+  await writeBundledOpenApi({
+    rootPath: openApiSourceEntryPath,
+    outputPath: openApiSpecPath,
+  })
 
   return version
 }
@@ -106,6 +114,12 @@ export async function collectVersionMismatches() {
   const openApiVersion = openApiDocument?.info?.version
   if (openApiVersion !== version) {
     mismatches.push(`contracts/openapi/octopus.openapi.yaml: expected ${version}, received ${openApiVersion ?? '<missing>'}`)
+  }
+
+  const openApiInfo = parse(await readFile(openApiInfoPath, 'utf8'))
+  const openApiSourceVersion = openApiInfo?.version
+  if (openApiSourceVersion !== version) {
+    mismatches.push(`contracts/openapi/src/info.yaml: expected ${version}, received ${openApiSourceVersion ?? '<missing>'}`)
   }
 
   return { mismatches, version }

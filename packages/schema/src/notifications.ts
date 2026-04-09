@@ -1,47 +1,22 @@
-export type NotificationScopeKind = 'app' | 'workspace' | 'user'
-export type NotificationLevel = 'info' | 'success' | 'warning' | 'error'
-export type NotificationFilterScope = 'all' | NotificationScopeKind
+import type {
+  CreateNotificationInput as OpenApiCreateNotificationInput,
+  NotificationFilter as OpenApiNotificationFilter,
+  NotificationFilterScope as OpenApiNotificationFilterScope,
+  NotificationLevel as OpenApiNotificationLevel,
+  NotificationListResponse as OpenApiNotificationListResponse,
+  NotificationRecord as OpenApiNotificationRecord,
+  NotificationScopeKind as OpenApiNotificationScopeKind,
+  NotificationUnreadSummary as OpenApiNotificationUnreadSummary,
+} from './generated'
 
-export interface NotificationRecord {
-  id: string
-  scopeKind: NotificationScopeKind
-  scopeOwnerId?: string
-  level: NotificationLevel
-  title: string
-  body: string
-  source: string
-  createdAt: number
-  readAt?: number
-  toastVisibleUntil?: number
-  routeTo?: string
-  actionLabel?: string
-}
-
-export interface CreateNotificationInput {
-  scopeKind: NotificationScopeKind
-  scopeOwnerId?: string
-  level?: NotificationLevel
-  title?: string
-  body?: string
-  source?: string
-  toastDurationMs?: number
-  routeTo?: string
-  actionLabel?: string
-}
-
-export interface NotificationFilter {
-  scope?: NotificationFilterScope
-}
-
-export interface NotificationUnreadSummary {
-  total: number
-  byScope: Record<NotificationScopeKind, number>
-}
-
-export interface NotificationListResponse {
-  notifications: NotificationRecord[]
-  unread: NotificationUnreadSummary
-}
+export type NotificationScopeKind = OpenApiNotificationScopeKind
+export type NotificationLevel = OpenApiNotificationLevel
+export type NotificationFilterScope = OpenApiNotificationFilterScope
+export type NotificationRecord = OpenApiNotificationRecord
+export type CreateNotificationInput = OpenApiCreateNotificationInput
+export type NotificationFilter = OpenApiNotificationFilter
+export type NotificationUnreadSummary = OpenApiNotificationUnreadSummary
+export type NotificationListResponse = OpenApiNotificationListResponse
 
 const NOTIFICATION_SCOPES: NotificationScopeKind[] = ['app', 'workspace', 'user']
 

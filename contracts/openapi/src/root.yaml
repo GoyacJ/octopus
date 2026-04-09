@@ -1,0 +1,29 @@
+openapi: 3.1.0
+info:
+  $ref: ./info.yaml
+servers:
+  - url: http://127.0.0.1:15421
+paths:
+  x-octopus-merge:
+    - ./paths/host.yaml
+    - ./paths/system-auth.yaml
+    - ./paths/workspace.yaml
+    - ./paths/projects.yaml
+    - ./paths/catalog.yaml
+    - ./paths/runtime.yaml
+    - ./paths/misc.yaml
+components:
+  schemas:
+    x-octopus-merge:
+      - ./components/schemas/shared.yaml
+      - ./components/schemas/host.yaml
+      - ./components/schemas/auth.yaml
+      - ./components/schemas/workspace.yaml
+      - ./components/schemas/projects.yaml
+      - ./components/schemas/catalog.yaml
+      - ./components/schemas/runtime.yaml
+      - ./components/schemas/misc.yaml
+  parameters:
+    $ref: ./components/parameters/common.yaml
+  responses:
+    $ref: ./components/responses/errors.yaml
