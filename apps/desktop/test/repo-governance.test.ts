@@ -9,6 +9,25 @@ function readRepoFile(...segments: string[]) {
   return readFileSync(path.join(repoRoot, ...segments), 'utf8')
 }
 
+function expectDesktopMatrix(workflow: string) {
+  expect(workflow).toContain('label: macos-arm64')
+  expect(workflow).toContain('runs_on: macos-latest')
+  expect(workflow).toContain('target: aarch64-apple-darwin')
+  expect(workflow).toContain('label: macos-x64')
+  expect(workflow).toContain('runs_on: macos-15-intel')
+  expect(workflow).toContain('target: x86_64-apple-darwin')
+  expect(workflow).toContain('label: linux-x64')
+  expect(workflow).toContain('runs_on: ubuntu-24.04')
+  expect(workflow).toContain('target: x86_64-unknown-linux-gnu')
+  expect(workflow).toContain('bundles: appimage,deb')
+  expect(workflow).toContain('label: windows-x64')
+  expect(workflow).toContain('runs_on: windows-latest')
+  expect(workflow).toContain('target: x86_64-pc-windows-msvc')
+  expect(workflow).toContain('label: windows-arm64')
+  expect(workflow).toContain('runs_on: windows-11-arm')
+  expect(workflow).toContain('target: aarch64-pc-windows-msvc')
+}
+
 describe('repository governance', () => {
   it('runs CI for mainline changes and enforces all-repo quality gates', () => {
     const workflow = readRepoFile('.github', 'workflows', 'ci.yml')
@@ -23,6 +42,7 @@ describe('repository governance', () => {
     expect(workflow).toContain('cargo fmt --all --check')
     expect(workflow).toContain('cargo clippy --workspace --all-targets -- -D warnings')
     expect(workflow).toContain('cargo test --workspace --locked')
+    expectDesktopMatrix(workflow)
   })
 
   it('publishes releases from git tags instead of branch builds', () => {
@@ -39,10 +59,10 @@ describe('repository governance', () => {
     expect(workflow).toContain('--require-manual-summary true')
     expect(workflow).toContain('--language zh-CN')
     expect(workflow).toContain('pnpm release:collect-artifacts --platform macos')
+    expect(workflow).toContain('pnpm release:collect-artifacts --platform linux')
     expect(workflow).toContain('pnpm release:collect-artifacts --platform windows')
     expect(workflow).toContain('pnpm release:verify-artifacts')
-    expect(workflow).toContain("if: runner.os == 'Windows'")
-    expect(workflow).toContain('pnpm tauri build --bundles nsis --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(workflow).toContain('pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json')
     expect(workflow).toContain('sudo apt update')
     expect(workflow).toContain('libwebkit2gtk-4.1-dev')
     expect(workflow).toContain('libayatana-appindicator3-dev')
@@ -50,6 +70,8 @@ describe('repository governance', () => {
     expect(workflow).toContain('pnpm prepare:desktop-backend:sidecar')
     expect(workflow).toContain('release-artifacts/publish')
     expect(workflow).toContain('release-artifacts/metadata')
+    expect(workflow).toContain('release-artifacts/publish/linux/*')
+    expectDesktopMatrix(workflow)
   })
 
   it('publishes preview releases from main and manual dispatch without formal tag gating', () => {
@@ -72,6 +94,8 @@ describe('repository governance', () => {
     expect(workflow).not.toContain('pnpm version:check "${RELEASE_TAG}"')
     expect(workflow).toContain('pnpm version:check')
     expect(workflow).toContain('target_commitish: ${{ github.sha }}')
+    expect(workflow).toContain('release-artifacts/publish/linux/*')
+    expectDesktopMatrix(workflow)
   })
 
   it('uses a single version source and validates mirrored versions', () => {
@@ -95,17 +119,23 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['check:rust']).toContain('pnpm prepare:desktop-backend:sidecar')
   })
 
-  it('uses nsis-only Windows hosted builds to avoid WiX-only MSI coupling in CI and release', () => {
+  it('uses nsis-only Windows hosted builds while expanding desktop release coverage for macOS Intel, Linux, and Windows ARM64', () => {
     const ciWorkflow = readRepoFile('.github', 'workflows', 'ci.yml')
     const releaseWorkflow = readRepoFile('.github', 'workflows', 'release.yml')
     const previewWorkflow = readRepoFile('.github', 'workflows', 'release-preview.yml')
 
-    expect(ciWorkflow).toContain("if: runner.os == 'Windows'")
-    expect(ciWorkflow).toContain('pnpm tauri build --bundles nsis --config apps/desktop/src-tauri/tauri.conf.json')
-    expect(releaseWorkflow).toContain("if: runner.os == 'Windows'")
-    expect(releaseWorkflow).toContain('pnpm tauri build --bundles nsis --config apps/desktop/src-tauri/tauri.conf.json')
-    expect(previewWorkflow).toContain("if: runner.os == 'Windows'")
-    expect(previewWorkflow).toContain('pnpm tauri build --bundles nsis --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(ciWorkflow).toContain('windows-11-arm')
+    expect(ciWorkflow).toContain('pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(ciWorkflow).toContain('pnpm tauri build --bundles appimage,deb --target x86_64-unknown-linux-gnu --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(ciWorkflow).toContain('macos-15-intel')
+    expect(releaseWorkflow).toContain('windows-11-arm')
+    expect(releaseWorkflow).toContain('pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(releaseWorkflow).toContain('pnpm tauri build --bundles appimage,deb --target x86_64-unknown-linux-gnu --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(releaseWorkflow).toContain('macos-15-intel')
+    expect(previewWorkflow).toContain('windows-11-arm')
+    expect(previewWorkflow).toContain('pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(previewWorkflow).toContain('pnpm tauri build --bundles appimage,deb --target x86_64-unknown-linux-gnu --config apps/desktop/src-tauri/tauri.conf.json')
+    expect(previewWorkflow).toContain('macos-15-intel')
   })
 
   it('treats OpenAPI as the canonical shared schema source and checks generated freshness', () => {

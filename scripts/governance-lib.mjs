@@ -18,11 +18,42 @@ export const generatedSchemaPath = path.join(repoRoot, 'packages', 'schema', 'sr
 export const releasePlatformArtifactRules = {
   macos: {
     artifactExtensions: ['.dmg', '.zip'],
-    requiredExtensions: ['.dmg', '.zip'],
+    requiredArtifacts: [
+      {
+        label: 'Apple Silicon installer (.dmg or .zip)',
+        pattern: /(aarch64|arm64).*\.(dmg|zip)$/i,
+      },
+      {
+        label: 'Intel installer (.dmg or .zip)',
+        pattern: /(x86_64|x64|intel).*\.(dmg|zip)$/i,
+      },
+    ],
+  },
+  linux: {
+    artifactExtensions: ['.appimage', '.deb'],
+    requiredArtifacts: [
+      {
+        label: 'AppImage bundle (.AppImage)',
+        pattern: /\.appimage$/i,
+      },
+      {
+        label: 'Debian package (.deb)',
+        pattern: /\.deb$/i,
+      },
+    ],
   },
   windows: {
     artifactExtensions: ['.msi', '.exe'],
-    requiredExtensions: ['.msi', '.exe'],
+    requiredArtifacts: [
+      {
+        label: 'x64 NSIS installer (.exe)',
+        pattern: /(x86_64|x64).*\.(msi|exe)$/i,
+      },
+      {
+        label: 'ARM64 NSIS installer (.exe)',
+        pattern: /arm64.*\.(msi|exe)$/i,
+      },
+    ],
   },
 }
 

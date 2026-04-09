@@ -49,7 +49,7 @@ for (const requiredPath of requiredMetadataFiles) {
 }
 
 const publishableArtifacts = []
-for (const [platform, { artifactExtensions, requiredExtensions }] of Object.entries(releasePlatformArtifactRules)) {
+for (const [platform, { artifactExtensions, requiredArtifacts }] of Object.entries(releasePlatformArtifactRules)) {
   const platformDir = path.join(publishDir, platform)
   const platformFiles = (await collectFiles(platformDir))
     .filter((filePath) => artifactExtensions.some((extension) => filePath.toLowerCase().endsWith(extension)))
@@ -57,8 +57,15 @@ for (const [platform, { artifactExtensions, requiredExtensions }] of Object.entr
 
   publishableArtifacts.push(...platformFiles)
 
-  if (!platformFiles.some((filePath) => requiredExtensions.some((extension) => filePath.toLowerCase().endsWith(extension)))) {
-    errors.push(`missing formal desktop installer for ${platform} under ${path.relative(repoRoot, platformDir)}`)
+  if (platformFiles.length === 0) {
+    errors.push(`missing publishable release artifacts for ${platform} under ${path.relative(repoRoot, platformDir)}`)
+    continue
+  }
+
+  for (const { label, pattern } of requiredArtifacts) {
+    if (!platformFiles.some((filePath) => pattern.test(path.basename(filePath)))) {
+      errors.push(`missing required release artifact for ${platform}: ${label} under ${path.relative(repoRoot, platformDir)}`)
+    }
   }
 }
 

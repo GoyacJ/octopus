@@ -36,19 +36,24 @@ Because `apps/desktop/src-tauri/tauri.conf.json` bundles `bin/octopus-desktop-ba
 ## Formal Release Flow
 
 - release publication is tag-driven only: pushing `vX.Y.Z` runs `.github/workflows/release.yml`
-- the release workflow builds real desktop bundles on macOS and Windows runners
+- the release workflow builds real desktop bundles on macOS, Linux, and Windows runners
+- formal desktop release coverage is fixed to:
+  - macOS `aarch64` and `x86_64` as separate installer artifacts
+  - Linux `x86_64` as both `AppImage` and `DEB`
+  - Windows `x64` and `ARM64` as `NSIS` installers
 - hosted Windows release builds publish the NSIS installer path and do not rely on WiX/MSI, because GitHub-hosted runner environments do not provide a stable `light.exe` execution surface for formal releases
 - `pnpm release:collect-artifacts` normalizes Tauri bundle output into `release-artifacts/publish/<platform>`
-- `pnpm release:verify-artifacts` blocks publication unless release metadata plus formal macOS and Windows installers are present
+- `pnpm release:verify-artifacts` blocks publication unless release metadata plus every required desktop platform artifact variant is present
 - GitHub Releases only upload the verified release directory:
   - `release-artifacts/publish/macos/*`
+  - `release-artifacts/publish/linux/*`
   - `release-artifacts/publish/windows/*`
 
 ## Preview Release Flow
 
 - preview publication is branch-driven: pushing `main` or manually dispatching `.github/workflows/release-preview.yml` produces a preview release
 - preview releases do not rewrite `VERSION`; they derive a unique prerelease tag as `vX.Y.Z-preview.<run_number>`
-- preview releases reuse the same metadata normalization, artifact collection, checksum generation, and installer verification gates as formal releases
+- preview releases reuse the same metadata normalization, artifact collection, checksum generation, and per-platform artifact verification gates as formal releases
 - preview GitHub Releases are published as `prerelease=true` and are not marked as latest
   - `release-artifacts/metadata/*`
   - `release-artifacts/SHA256SUMS.txt`

@@ -248,10 +248,46 @@ describe('release artifact governance scripts', () => {
         encoding: 'utf8',
         stdio: 'pipe',
       }),
-    ).toThrowError(/formal desktop installer/i)
+    ).toThrowError(/missing publishable release artifacts/i)
   })
 
-  it('collects publishable bundles and verification writes release checksums', () => {
+  it('fails verification when a platform is missing a required release artifact variant', () => {
+    const artifactsDir = createTempDir('octopus-release-artifacts-missing-variant-')
+    const metadataDir = path.join(artifactsDir, 'metadata')
+    const notesPath = path.join(metadataDir, 'v0.1.0.md')
+    const publishDir = path.join(artifactsDir, 'publish')
+
+    writeFile(path.join(publishDir, 'macos', 'Octopus_0.1.0_aarch64.dmg'), 'macos arm64 bundle')
+    writeFile(path.join(publishDir, 'macos', 'Octopus_0.1.0_x64.dmg'), 'macos x64 bundle')
+    writeFile(path.join(publishDir, 'linux', 'Octopus_0.1.0_amd64.AppImage'), 'linux appimage')
+    writeFile(path.join(publishDir, 'windows', 'Octopus_0.1.0_x64-setup.exe'), 'windows x64 setup')
+    writeFile(path.join(publishDir, 'windows', 'Octopus_0.1.0_arm64-setup.exe'), 'windows arm64 setup')
+
+    writeFile(path.join(metadataDir, 'VERSION'), '0.1.0\n')
+    writeFile(path.join(metadataDir, 'octopus.openapi.yaml'), 'openapi: 3.1.0\n')
+    writeFile(path.join(metadataDir, 'generated.ts'), 'export {}\n')
+    writeFile(path.join(metadataDir, 'release-notes.json'), '{"title":"Octopus v0.1.0"}\n')
+    writeFile(path.join(metadataDir, 'change-log.json'), '{"rangeLabel":"v0.0.9 -> v0.1.0"}\n')
+    writeFile(notesPath, '# Octopus v0.1.0\n')
+
+    expect(() =>
+      execFileSync(nodeExecutable, [
+        verifyScriptPath,
+        '--artifacts-dir',
+        artifactsDir,
+        '--metadata-dir',
+        metadataDir,
+        '--notes',
+        notesPath,
+      ], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        stdio: 'pipe',
+      }),
+    ).toThrowError(/missing required release artifact for linux: Debian package \(\.deb\)/i)
+  })
+
+  it('collects publishable bundles and verification writes release checksums for every required platform variant', () => {
     const sourceDir = createTempDir('octopus-release-source-')
     const artifactsDir = createTempDir('octopus-release-output-')
     const metadataDir = path.join(artifactsDir, 'metadata')
@@ -259,9 +295,13 @@ describe('release artifact governance scripts', () => {
     const publishDir = path.join(artifactsDir, 'publish')
     const checksumsPath = path.join(artifactsDir, 'SHA256SUMS.txt')
 
-    writeFile(path.join(sourceDir, 'dmg', 'Octopus_0.1.0_aarch64.dmg'), 'macos bundle')
+    writeFile(path.join(sourceDir, 'dmg', 'Octopus_0.1.0_aarch64.dmg'), 'macos arm64 bundle')
+    writeFile(path.join(sourceDir, 'dmg', 'Octopus_0.1.0_x64.dmg'), 'macos x64 bundle')
     writeFile(path.join(sourceDir, 'macos', 'Octopus.app', 'Contents', 'Info.plist'), 'ignored app bundle')
+    writeFile(path.join(sourceDir, 'appimage', 'Octopus_0.1.0_amd64.AppImage'), 'linux appimage')
+    writeFile(path.join(sourceDir, 'deb', 'octopus_0.1.0_amd64.deb'), 'linux deb')
     writeFile(path.join(sourceDir, 'nsis', 'Octopus_0.1.0_x64-setup.exe'), 'windows setup')
+    writeFile(path.join(sourceDir, 'nsis', 'Octopus_0.1.0_arm64-setup.exe'), 'windows arm64 setup')
     writeFile(path.join(sourceDir, 'README.txt'), 'ignore me')
 
     writeFile(path.join(metadataDir, 'VERSION'), '0.1.0\n')
@@ -275,6 +315,19 @@ describe('release artifact governance scripts', () => {
       collectScriptPath,
       '--platform',
       'macos',
+      '--source-dir',
+      sourceDir,
+      '--output-dir',
+      publishDir,
+    ], {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    })
+
+    execFileSync(nodeExecutable, [
+      collectScriptPath,
+      '--platform',
+      'linux',
       '--source-dir',
       sourceDir,
       '--output-dir',
@@ -319,7 +372,11 @@ describe('release artifact governance scripts', () => {
     expect(checksums).toContain('metadata/release-notes.json')
     expect(checksums).toContain('metadata/change-log.json')
     expect(checksums).toContain('publish/macos/Octopus_0.1.0_aarch64.dmg')
+    expect(checksums).toContain('publish/macos/Octopus_0.1.0_x64.dmg')
+    expect(checksums).toContain('publish/linux/Octopus_0.1.0_amd64.AppImage')
+    expect(checksums).toContain('publish/linux/octopus_0.1.0_amd64.deb')
     expect(checksums).toContain('publish/windows/Octopus_0.1.0_x64-setup.exe')
+    expect(checksums).toContain('publish/windows/Octopus_0.1.0_arm64-setup.exe')
     expect(checksums).not.toContain('Octopus.app')
   })
 })

@@ -96,20 +96,54 @@ jobs:
 
   desktop-preview-build:
     name: Desktop preview build (${{ matrix.label }})
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.runs_on }}
     needs: verify-preview
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            label: macos
-          - os: windows-latest
-            label: windows
+          - label: macos-arm64
+            platform: macos
+            runs_on: macos-latest
+            target: aarch64-apple-darwin
+          - label: macos-x64
+            platform: macos
+            runs_on: macos-15-intel
+            target: x86_64-apple-darwin
+          - label: linux-x64
+            platform: linux
+            runs_on: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            bundles: appimage,deb
+          - label: windows-x64
+            platform: windows
+            runs_on: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+          - label: windows-arm64
+            platform: windows
+            runs_on: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            bundles: nsis
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt update
+          sudo apt install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -124,6 +158,8 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -132,36 +168,35 @@ jobs:
         run: node scripts/prepare-desktop-sidecar.mjs
 
       - name: Build Tauri release bundle (macOS)
-        if: runner.os == 'macOS'
-        run: pnpm build:desktop
+        if: matrix.platform == 'macos'
+        run: pnpm tauri build --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json
+
+      - name: Build Tauri release bundle (Linux AppImage + DEB)
+        if: matrix.platform == 'linux'
+        run: pnpm tauri build --bundles appimage,deb --target x86_64-unknown-linux-gnu --config apps/desktop/src-tauri/tauri.conf.json
 
       - name: Build Tauri release bundle (Windows NSIS)
-        if: runner.os == 'Windows'
-        run: pnpm tauri build --bundles nsis --config apps/desktop/src-tauri/tauri.conf.json
+        if: matrix.platform == 'windows'
+        run: pnpm tauri build --bundles nsis --target ${{ matrix.target }} --config apps/desktop/src-tauri/tauri.conf.json
 
       - name: Collect macOS release artifacts
-        if: runner.os == 'macOS'
-        run: pnpm release:collect-artifacts --platform macos --source-dir target/release/bundle --output-dir release-artifacts/publish
+        if: matrix.platform == 'macos'
+        run: pnpm release:collect-artifacts --platform macos --source-dir target/${{ matrix.target }}/release/bundle --output-dir release-artifacts/publish
+
+      - name: Collect Linux release artifacts
+        if: matrix.platform == 'linux'
+        run: pnpm release:collect-artifacts --platform linux --source-dir target/${{ matrix.target }}/release/bundle --output-dir release-artifacts/publish
 
       - name: Collect Windows release artifacts
-        if: runner.os == 'Windows'
-        run: pnpm release:collect-artifacts --platform windows --source-dir target/release/bundle --output-dir release-artifacts/publish
+        if: matrix.platform == 'windows'
+        run: pnpm release:collect-artifacts --platform windows --source-dir target/${{ matrix.target }}/release/bundle --output-dir release-artifacts/publish
 
-      - name: Upload macOS bundles
-        if: runner.os == 'macOS'
+      - name: Upload desktop bundles
         uses: actions/upload-artifact@v4
         with:
-          name: octopus-desktop-macos-bundles
+          name: octopus-desktop-${{ matrix.label }}-bundles
           if-no-files-found: error
-          path: release-artifacts/publish/macos/*
-
-      - name: Upload Windows bundles
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: octopus-desktop-windows-bundles
-          if-no-files-found: error
-          path: release-artifacts/publish/windows/*
+          path: release-artifacts/publish/${{ matrix.platform }}
 
   publish-preview:
     name: Publish GitHub preview release
@@ -180,17 +215,35 @@ jobs:
           name: octopus-release-metadata
           path: release-artifacts/metadata
 
-      - name: Download macOS bundles
+      - name: Download macOS Apple Silicon bundles
         uses: actions/download-artifact@v4
         with:
-          name: octopus-desktop-macos-bundles
-          path: release-artifacts/publish/macos
+          name: octopus-desktop-macos-arm64-bundles
+          path: release-artifacts/publish
 
-      - name: Download Windows bundles
+      - name: Download macOS Intel bundles
         uses: actions/download-artifact@v4
         with:
-          name: octopus-desktop-windows-bundles
-          path: release-artifacts/publish/windows
+          name: octopus-desktop-macos-x64-bundles
+          path: release-artifacts/publish
+
+      - name: Download Linux bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: octopus-desktop-linux-x64-bundles
+          path: release-artifacts/publish
+
+      - name: Download Windows x64 bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: octopus-desktop-windows-x64-bundles
+          path: release-artifacts/publish
+
+      - name: Download Windows ARM64 bundles
+        uses: actions/download-artifact@v4
+        with:
+          name: octopus-desktop-windows-arm64-bundles
+          path: release-artifacts/publish
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -224,4 +277,5 @@ jobs:
             release-artifacts/metadata/octopus.openapi.yaml
             release-artifacts/metadata/generated.ts
             release-artifacts/publish/macos/*
+            release-artifacts/publish/linux/*
             release-artifacts/publish/windows/*
