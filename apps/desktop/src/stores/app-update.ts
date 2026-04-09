@@ -4,6 +4,7 @@ import {
   createDefaultHostUpdateStatus,
   normalizeHostUpdateStatus,
   type HostUpdateChannel,
+  type HostUpdateStatusInput,
   type HostUpdateStatus,
 } from '@octopus/schema'
 
@@ -33,12 +34,12 @@ export const useAppUpdateStore = defineStore('app-update', {
     },
   },
   actions: {
-    applyStatus(status: HostUpdateStatus | null | undefined) {
+    applyStatus(status: HostUpdateStatusInput | null | undefined) {
       const shell = useShellStore()
       this.statusState = normalizeHostUpdateStatus({
         currentVersion: shell.hostState.appVersion,
         currentChannel: shell.preferences.updateChannel,
-        ...status,
+        ...(status ?? {}),
       })
     },
     applyError(error: unknown, fallback: string) {
@@ -58,16 +59,18 @@ export const useAppUpdateStore = defineStore('app-update', {
     async refreshStatus() {
       this.applyStatus(await tauriClient.getHostUpdateStatus())
     },
-    async checkForUpdates(channel = this.currentChannel) {
+    async checkForUpdates(channel?: HostUpdateChannel) {
+      const nextChannel = channel ?? this.currentChannel
+
       try {
         this.applyStatus({
-          ...this.statusState,
-          currentChannel: channel,
+          ...(this.statusState ?? {}),
+          currentChannel: nextChannel,
           state: 'checking',
           errorCode: null,
           errorMessage: null,
         })
-        this.applyStatus(await tauriClient.checkHostUpdate(channel))
+        this.applyStatus(await tauriClient.checkHostUpdate(nextChannel))
       }
       catch (error) {
         this.applyError(error, 'Failed to check for updates')
@@ -102,7 +105,7 @@ export const useAppUpdateStore = defineStore('app-update', {
       const shell = useShellStore()
       await shell.updatePreferences({ updateChannel: channel })
       this.applyStatus({
-        ...this.statusState,
+        ...(this.statusState ?? {}),
         currentChannel: channel,
       })
 
@@ -111,7 +114,7 @@ export const useAppUpdateStore = defineStore('app-update', {
     async downloadUpdate() {
       try {
         this.applyStatus({
-          ...this.statusState,
+          ...(this.statusState ?? {}),
           state: 'downloading',
           errorCode: null,
           errorMessage: null,
@@ -125,7 +128,7 @@ export const useAppUpdateStore = defineStore('app-update', {
     async installUpdate() {
       try {
         this.applyStatus({
-          ...this.statusState,
+          ...(this.statusState ?? {}),
           state: 'installing',
           errorCode: null,
           errorMessage: null,

@@ -13,6 +13,14 @@ export type HostReleaseSummary = OpenApiHostReleaseSummary
 export type HostUpdateCapabilities = OpenApiHostUpdateCapabilities
 export type HostUpdateProgress = OpenApiHostUpdateProgress
 
+export interface HostUpdateStatusInput extends Partial<Omit<OpenApiHostUpdateStatus, 'latestRelease' | 'progress' | 'errorCode' | 'errorMessage' | 'lastCheckedAt'>> {
+  latestRelease?: HostReleaseSummary | null
+  progress?: HostUpdateProgress | null
+  errorCode?: string | null
+  errorMessage?: string | null
+  lastCheckedAt?: number | null
+}
+
 export interface HostUpdateStatus extends Omit<OpenApiHostUpdateStatus, 'latestRelease' | 'progress' | 'errorCode' | 'errorMessage' | 'lastCheckedAt'> {
   latestRelease: HostReleaseSummary | null
   progress: HostUpdateProgress | null
@@ -48,7 +56,7 @@ export function createDefaultHostUpdateStatus(
 }
 
 export function normalizeHostUpdateStatus(
-  status?: Partial<OpenApiHostUpdateStatus> | null,
+  status?: HostUpdateStatusInput | null,
 ): HostUpdateStatus {
   return createDefaultHostUpdateStatus({
     currentVersion: status?.currentVersion ?? '0.1.0',
