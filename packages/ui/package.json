@@ -13,6 +13,7 @@
     "@formkit/auto-animate": "^0.9.0",
     "@iconify/vue": "^4.1.2",
     "@lottiefiles/dotlottie-vue": "^0.6.0",
+    "@octopus/schema": "workspace:*",
     "@rive-app/canvas": "^2.26.4",
     "@tanstack/vue-table": "^8.20.5",
     "@tanstack/vue-virtual": "^3.10.8",
