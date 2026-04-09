@@ -23,6 +23,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@octopus/assets':
+        specifier: workspace:*
+        version: link:../../packages/assets
       '@octopus/schema':
         specifier: workspace:*
         version: link:../../packages/schema
@@ -121,6 +124,12 @@ importers:
       vue-tsc:
         specifier: ^2.2.12
         version: 2.2.12(typescript@5.9.3)
+
+  packages/assets:
+    dependencies:
+      '@octopus/schema':
+        specifier: workspace:*
+        version: link:../schema
 
   packages/schema: {}
 

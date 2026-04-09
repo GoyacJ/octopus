@@ -141,7 +141,7 @@ onBeforeUnmount(() => {
       :pet="pet.profile"
       :motion-state="pet.motionState"
       :unread-count="pet.unreadCount"
-      class="pet-avatar-mini"
+      size="sidebar"
       @hover-state="handleHoverState"
       @click="toggleChat"
     />

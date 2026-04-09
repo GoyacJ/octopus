@@ -1,0 +1,16 @@
+{
+  "name": "@octopus/assets",
+  "version": "0.2.0",
+  "main": "./index.ts",
+  "module": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./pets": "./pets/index.ts",
+    "./pets/*": "./pets/*"
+  },
+  "dependencies": {
+    "@octopus/schema": "workspace:*"
+  },
+  "license": "MIT"
+}

@@ -37,6 +37,17 @@ describe('desktop release build configuration', () => {
     expect(tauriConfig.bundle?.createUpdaterArtifacts).toBe(true)
   })
 
+  it('hides the native macOS window title so the custom workbench chrome remains the only visible title treatment', () => {
+    const tauriConfig = JSON.parse(readFileSync(tauriConfigPath, 'utf8')) as {
+      app?: {
+        windows?: Array<{ label?: string, hiddenTitle?: boolean }>
+      }
+    }
+
+    const mainWindow = tauriConfig.app?.windows?.find(window => window.label === 'main')
+    expect(mainWindow?.hiddenTitle).toBe(true)
+  })
+
   it('declares a concrete updater plugin config so desktop dev startup does not crash', () => {
     const tauriConfig = JSON.parse(readFileSync(tauriConfigPath, 'utf8')) as {
       plugins?: {

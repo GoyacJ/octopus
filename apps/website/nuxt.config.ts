@@ -31,6 +31,10 @@ export default defineNuxtConfig({
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { name: 'theme-color', content: '#fbfaf8' },
       ],
+      link: [
+        { rel: 'icon', type: 'image/png', href: '/brand/logo.png' },
+        { rel: 'apple-touch-icon', href: '/brand/logo.png' },
+      ],
       script: [
         {
           id: 'octopus-theme-boot',

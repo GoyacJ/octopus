@@ -1,24 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 import type { PetMotionState, PetProfile } from '@octopus/schema'
 
-import duckAsset from '@/assets/pets/duck.svg'
-import gooseAsset from '@/assets/pets/goose.svg'
-import blobAsset from '@/assets/pets/blob.svg'
-import catAsset from '@/assets/pets/cat.svg'
-import dragonAsset from '@/assets/pets/dragon.svg'
-import octopusAsset from '@/assets/pets/octopus.svg'
-import owlAsset from '@/assets/pets/owl.svg'
-import penguinAsset from '@/assets/pets/penguin.svg'
-import turtleAsset from '@/assets/pets/turtle.svg'
-import snailAsset from '@/assets/pets/snail.svg'
-import ghostAsset from '@/assets/pets/ghost.svg'
-import axolotlAsset from '@/assets/pets/axolotl.svg'
-import capybaraAsset from '@/assets/pets/capybara.svg'
-import cactusAsset from '@/assets/pets/cactus.svg'
-import robotAsset from '@/assets/pets/robot.svg'
-import rabbitAsset from '@/assets/pets/rabbit.svg'
-import mushroomAsset from '@/assets/pets/mushroom.svg'
-import chonkAsset from '@/assets/pets/chonk.svg'
+import { petAssetMap } from '@octopus/assets/pets'
 
 // 必须禁用默认属性继承，手动透传给 button 元素，否则 Popover 无法识别触发器
 defineOptions({
@@ -29,32 +14,24 @@ const props = defineProps<{
   pet: PetProfile
   motionState: PetMotionState
   unreadCount: number
+  size?: 'default' | 'sidebar'
 }>()
 
 const emit = defineEmits<{
   hoverState: [state: PetMotionState]
 }>()
 
-const petAssetMap: Record<PetProfile['species'], string> = {
-  duck: duckAsset,
-  goose: gooseAsset,
-  blob: blobAsset,
-  cat: catAsset,
-  dragon: dragonAsset,
-  octopus: octopusAsset,
-  owl: owlAsset,
-  penguin: penguinAsset,
-  turtle: turtleAsset,
-  snail: snailAsset,
-  ghost: ghostAsset,
-  axolotl: axolotlAsset,
-  capybara: capybaraAsset,
-  cactus: cactusAsset,
-  robot: robotAsset,
-  rabbit: rabbitAsset,
-  mushroom: mushroomAsset,
-  chonk: chonkAsset,
+function resolveFallbackAsset(fallbackAsset: string) {
+  if (Object.prototype.hasOwnProperty.call(petAssetMap, fallbackAsset)) {
+    return petAssetMap[fallbackAsset as keyof typeof petAssetMap]
+  }
+
+  return fallbackAsset
 }
+
+const resolvedPetAsset = computed(() =>
+  petAssetMap[props.pet.species] ?? resolveFallbackAsset(props.pet.fallbackAsset),
+)
 </script>
 
 <template>
@@ -62,13 +39,14 @@ const petAssetMap: Record<PetProfile['species'], string> = {
     v-bind="$attrs"
     type="button"
     class="pet-avatar-button"
+    :class="{ 'pet-avatar-button--sidebar': size === 'sidebar' }"
     data-testid="desktop-pet-trigger"
     @mouseenter="emit('hoverState', 'hover')"
     @mouseleave="emit('hoverState', 'idle')"
   >
     <div class="pet-avatar-stage" :class="`is-${motionState}`">
       <img
-        :src="petAssetMap[pet.species] || pet.fallbackAsset"
+        :src="resolvedPetAsset"
         :alt="pet.displayName"
         class="pet-avatar-image"
         data-testid="desktop-pet-image"
@@ -109,8 +87,17 @@ const petAssetMap: Record<PetProfile['species'], string> = {
   overflow: visible;
 }
 
+.pet-avatar-button--sidebar {
+  width: 36px;
+  height: 36px;
+}
+
 .pet-avatar-button:hover {
   transform: translateY(-2px) scale(1.05);
+}
+
+.pet-avatar-button--sidebar:hover {
+  transform: scale(1.04);
 }
 
 .pet-avatar-button:active {
@@ -126,6 +113,11 @@ const petAssetMap: Record<PetProfile['species'], string> = {
   overflow: visible;
   /* 确保内部元素不拦截事件，让点击能穿透到 button */
   pointer-events: none;
+}
+
+.pet-avatar-button--sidebar .pet-avatar-stage {
+  width: 32px;
+  height: 32px;
 }
 
 .pet-avatar-stage.is-idle {
@@ -148,6 +140,11 @@ const petAssetMap: Record<PetProfile['species'], string> = {
   filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
 }
 
+.pet-avatar-button--sidebar .pet-avatar-image {
+  width: 32px;
+  height: 32px;
+}
+
 .pet-unread-dot {
   position: absolute;
   top: 0.5rem;
@@ -166,5 +163,15 @@ const petAssetMap: Record<PetProfile['species'], string> = {
   box-shadow: 0 2px 6px rgba(0,0,0,0.25);
   pointer-events: none;
   z-index: 10;
+}
+
+.pet-avatar-button--sidebar .pet-unread-dot {
+  top: 0;
+  right: 0;
+  min-width: 11px;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  font-size: 7px;
 }
 </style>

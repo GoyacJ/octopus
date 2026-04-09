@@ -16,6 +16,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["src/*"],
+      "@octopus/assets/pets": ["../../packages/assets/pets/index.ts"],
+      "@octopus/assets/pets/*": ["../../packages/assets/pets/*"],
       "@octopus/schema": ["../../packages/schema/src/index.ts"],
       "@octopus/schema/*": ["../../packages/schema/src/*"]
     }

@@ -152,7 +152,7 @@ const petDefs = {
 };
 
 async function main() {
-  const targetDir = path.resolve(__dirname, '../apps/desktop/src/assets/pets');
+  const targetDir = path.resolve(__dirname, '../packages/assets/pets');
   await fs.mkdir(targetDir, { recursive: true });
 
   for (const [name, content] of Object.entries(petDefs)) {

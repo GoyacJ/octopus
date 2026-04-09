@@ -16,6 +16,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@octopus/assets/pets': path.resolve(__dirname, '../../packages/assets/pets/index.ts'),
       '@octopus/schema': path.resolve(__dirname, '../../packages/schema/src'),
       '@octopus/ui': path.resolve(__dirname, '../../packages/ui/src'),
     },

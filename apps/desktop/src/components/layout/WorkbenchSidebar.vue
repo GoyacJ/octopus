@@ -536,8 +536,8 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
       </div>
     </div>
 
-    <div class="mt-4 flex items-center gap-2 border-t border-border pt-4">
-      <UiPopover v-model:open="workspaceMenuOpen" align="start" side="top" class="w-[256px] p-2">
+    <div class="mt-4 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-t border-border pt-4">
+      <UiPopover v-model:open="workspaceMenuOpen" align="start" side="top" class="min-w-0 w-[256px] p-2">
         <template #trigger>
           <button
             type="button"
@@ -642,7 +642,7 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
         </div>
       </UiPopover>
 
-      <DesktopPetHost />
+      <DesktopPetHost class="justify-self-end shrink-0" />
     </div>
 
     <ConnectWorkspaceDialog v-model:open="connectWorkspaceDialogOpen" />
@@ -673,35 +673,3 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
     </UiDialog>
   </aside>
 </template>
-
-<style scoped>
-.pet-avatar-mini {
-  width: 44px !important;
-  height: 44px !important;
-  padding: 0 !important;
-  transition: transform var(--duration-fast) var(--ease-apple);
-}
-
-.pet-avatar-mini:hover {
-  transform: scale(1.15) translateY(-2px);
-}
-
-.pet-avatar-mini :deep(.pet-avatar-stage) {
-  width: 40px !important;
-  height: 40px !important;
-}
-
-.pet-avatar-mini :deep(.pet-avatar-image) {
-  width: 100% !important;
-  height: 100% !important;
-}
-
-.pet-avatar-mini :deep(.pet-unread-dot) {
-  width: 12px !important;
-  height: 12px !important;
-  min-width: 12px !important;
-  font-size: 8px !important;
-  top: 0 !important;
-  right: 0 !important;
-}
-</style>

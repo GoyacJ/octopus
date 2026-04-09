@@ -9,11 +9,5 @@ useHead(() => ({
 </script>
 
 <template>
-  <div class="brand-shell">
-    <BrandSiteHeader />
-    <main>
-      <NuxtPage />
-    </main>
-    <BrandSiteFooter />
-  </div>
+  <NuxtPage />
 </template>
