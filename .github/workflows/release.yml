@@ -258,12 +258,7 @@ jobs:
         run: pnpm release:verify-artifacts --artifacts-dir release-artifacts --metadata-dir release-artifacts/metadata --notes release-artifacts/metadata/${GITHUB_REF_NAME}.md --checksums release-artifacts/SHA256SUMS.txt
 
       - name: Prepare unique updater manifest assets for GitHub release
-        shell: bash
-        run: |
-          mkdir -p release-artifacts/release-assets
-          mv release-artifacts/publish/macos/latest.json release-artifacts/release-assets/macos-latest.json
-          mv release-artifacts/publish/linux/latest.json release-artifacts/release-assets/linux-latest.json
-          mv release-artifacts/publish/windows/latest.json release-artifacts/release-assets/windows-latest.json
+        run: node scripts/prepare-release-assets.mjs --artifacts-dir release-artifacts --output-dir release-artifacts/release-assets
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2

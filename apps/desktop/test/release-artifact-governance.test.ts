@@ -12,6 +12,7 @@ const nodeExecutable = process.execPath
 const verifyScriptPath = path.join(repoRoot, 'scripts', 'verify-release-artifacts.mjs')
 const collectScriptPath = path.join(repoRoot, 'scripts', 'collect-release-artifacts.mjs')
 const collectMetadataScriptPath = path.join(repoRoot, 'scripts', 'collect-release-metadata.mjs')
+const prepareReleaseAssetsScriptPath = path.join(repoRoot, 'scripts', 'prepare-release-assets.mjs')
 const generateUpdateManifestsScriptPath = path.join(repoRoot, 'scripts', 'generate-update-manifests.mjs')
 const releaseNotesScriptPath = path.join(repoRoot, 'scripts', 'generate-release-notes.mjs')
 const previewTagScriptPath = path.join(repoRoot, 'scripts', 'generate-preview-release-tag.mjs')
@@ -452,6 +453,32 @@ describe('release artifact governance scripts', () => {
     expect(checksums).toContain('publish/windows/latest.json')
     expect(checksums).not.toContain('publish/macos/Octopus.app/')
     expect(checksums).not.toContain('Info.plist')
+  })
+
+  it('prepares unique updater manifest assets from recursively downloaded platform artifacts', () => {
+    const artifactsDir = createTempDir('octopus-release-assets-')
+    const publishDir = path.join(artifactsDir, 'publish')
+    const releaseAssetsDir = path.join(artifactsDir, 'release-assets')
+
+    writeFile(path.join(publishDir, 'macos', 'octopus-desktop-macos-arm64-bundles', 'latest.json'), '{"version":"0.1.0"}\n')
+    writeFile(path.join(publishDir, 'linux', 'octopus-desktop-linux-x64-bundles', 'latest.json'), '{"version":"0.1.0"}\n')
+    writeFile(path.join(publishDir, 'windows', 'octopus-desktop-windows-x64-bundles', 'latest.json'), '{"version":"0.1.0"}\n')
+
+    execFileSync(nodeExecutable, [
+      prepareReleaseAssetsScriptPath,
+      '--artifacts-dir',
+      artifactsDir,
+      '--output-dir',
+      releaseAssetsDir,
+    ], {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    })
+
+    expect(readFileSync(path.join(releaseAssetsDir, 'macos-latest.json'), 'utf8')).toContain('"0.1.0"')
+    expect(readFileSync(path.join(releaseAssetsDir, 'linux-latest.json'), 'utf8')).toContain('"0.1.0"')
+    expect(readFileSync(path.join(releaseAssetsDir, 'windows-latest.json'), 'utf8')).toContain('"0.1.0"')
+    expect(() => readFileSync(path.join(publishDir, 'macos', 'octopus-desktop-macos-arm64-bundles', 'latest.json'), 'utf8')).toThrow()
   })
 
   it('generates GitHub Pages updater manifests for both formal and preview channels from release assets', async () => {
