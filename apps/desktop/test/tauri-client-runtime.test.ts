@@ -1,0 +1,445 @@
+// @vitest-environment jsdom
+
+import { describe, expect, it } from 'vitest'
+
+import type { RuntimeConfigPatch } from '@octopus/schema'
+
+import {
+  createHostBootstrap,
+  createWorkspaceSession,
+  fetchSpy,
+  firstRequest,
+  installTauriClientTestHooks,
+  invokeSpy,
+  loadClientModule,
+} from './tauri-client-test-helpers'
+
+describe('runtime client transport', () => {
+  installTauriClientTestHooks()
+
+  it('normalizes permission mode and forwards idempotency headers on runtime write requests', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'runtime-run-conv-1',
+        sessionId: 'runtime-session-conv-1',
+        conversationId: 'conv-1',
+        status: 'completed',
+        currentStep: 'runtime.run.completed',
+        startedAt: 1,
+        updatedAt: 2,
+        modelId: 'claude-sonnet-4-5',
+        nextAction: 'runtime.run.idle',
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.runtime.submitUserTurn('runtime-session-conv-1', {
+      content: 'hello',
+      modelId: 'claude-sonnet-4-5',
+      permissionMode: 'auto',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
+    }, 'idem-turn-1')
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      content: 'hello',
+      modelId: 'claude-sonnet-4-5',
+      permissionMode: 'workspace-write',
+      actorKind: 'agent',
+      actorId: 'agent-architect',
+    })
+    expect(headers.get('Idempotency-Key')).toBe('idem-turn-1')
+  })
+
+  it('preserves danger-full-access for authenticated runtime requests', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'runtime-run-conv-2',
+        sessionId: 'runtime-session-conv-2',
+        conversationId: 'conv-2',
+        status: 'completed',
+        currentStep: 'runtime.run.completed',
+        startedAt: 1,
+        updatedAt: 2,
+        modelId: 'claude-sonnet-4-5',
+        nextAction: 'runtime.run.idle',
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.runtime.submitUserTurn('runtime-session-conv-2', {
+      content: 'hello',
+      modelId: 'claude-sonnet-4-5',
+      permissionMode: 'danger-full-access',
+      actorKind: 'team',
+      actorId: 'team-studio',
+    })
+
+    const request = firstRequest()
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      permissionMode: 'danger-full-access',
+      actorKind: 'team',
+      actorId: 'team-studio',
+    })
+  })
+
+  it('loads runtime config through the workspace API without requiring a workspace session', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        effectiveConfig: {
+          model: 'claude-sonnet-4-5',
+        },
+        effectiveConfigHash: 'cfg-hash-1',
+        sources: [
+          {
+            scope: 'workspace',
+            displayPath: 'config/runtime/workspace.json',
+            sourceKey: 'workspace',
+            exists: true,
+            loaded: true,
+            contentHash: 'src-hash-1',
+            document: {
+              model: 'claude-sonnet-4-5',
+            },
+          },
+        ],
+        validation: {
+          valid: true,
+          errors: [],
+          warnings: [],
+        },
+        secretReferences: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+    })
+
+    const config = await workspaceClient.runtime.getConfig()
+
+    expect(config.effectiveConfigHash).toBe('cfg-hash-1')
+    expect(config.sources[0]).toMatchObject({
+      scope: 'workspace',
+      displayPath: 'config/runtime/workspace.json',
+      sourceKey: 'workspace',
+    })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/config',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBeNull()
+    expect(headers.get('X-Workspace-Id')).toBe('ws-local')
+  })
+
+  it('posts runtime config validation requests to the workspace API without requiring a workspace session', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        valid: true,
+        errors: [],
+        warnings: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+    })
+
+    const patch: RuntimeConfigPatch = {
+      scope: 'workspace',
+      patch: {
+        model: 'claude-sonnet-4-5',
+      },
+    }
+
+    const result = await workspaceClient.runtime.validateConfig(patch)
+
+    expect(result.valid).toBe(true)
+    const request = firstRequest()
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      scope: 'workspace',
+      patch: {
+        model: 'claude-sonnet-4-5',
+      },
+    })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/config/validate',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBeNull()
+  })
+
+  it('posts configured model probe requests to the workspace API without requiring a workspace session', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        valid: true,
+        reachable: true,
+        configuredModelId: 'anthropic-primary',
+        configuredModelName: 'Claude Primary',
+        requestId: 'probe-request-1',
+        consumedTokens: 12,
+        errors: [],
+        warnings: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+    })
+
+    const result = await workspaceClient.runtime.validateConfiguredModel({
+      scope: 'workspace',
+      configuredModelId: 'anthropic-primary',
+      patch: {
+        configuredModels: {
+          'anthropic-primary': {
+            baseUrl: 'https://anthropic.example.test',
+          },
+        },
+      },
+    })
+
+    expect(result.reachable).toBe(true)
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/config/configured-models/probe',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBeNull()
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      scope: 'workspace',
+      configuredModelId: 'anthropic-primary',
+      patch: {
+        configuredModels: {
+          'anthropic-primary': {
+            baseUrl: 'https://anthropic.example.test',
+          },
+        },
+      },
+    })
+  })
+
+  it('patches runtime config scopes through the workspace API without requiring a workspace session', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        effectiveConfig: {
+          model: 'claude-sonnet-4-5',
+          permissions: {
+            defaultMode: 'plan',
+          },
+        },
+        effectiveConfigHash: 'cfg-hash-2',
+        sources: [
+          {
+            scope: 'workspace',
+            displayPath: 'config/runtime/workspace.json',
+            sourceKey: 'workspace',
+            exists: true,
+            loaded: true,
+            contentHash: 'src-hash-2',
+            document: {
+              model: 'claude-sonnet-4-5',
+            },
+          },
+        ],
+        validation: {
+          valid: true,
+          errors: [],
+          warnings: [],
+        },
+        secretReferences: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+    })
+
+    await workspaceClient.runtime.saveConfig({
+      scope: 'workspace',
+      patch: {
+        permissions: {
+          defaultMode: 'plan',
+        },
+      },
+    })
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/config/scopes/workspace',
+      expect.objectContaining({
+        method: 'PATCH',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBeNull()
+  })
+
+  it('uses authenticated project runtime config endpoints for project-scoped overrides', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        effectiveConfig: { model: 'claude-sonnet-4-5' },
+        effectiveConfigHash: 'project-cfg-hash-1',
+        sources: [
+          {
+            scope: 'project',
+            ownerId: 'proj-redesign',
+            displayPath: 'config/runtime/projects/proj-redesign.json',
+            sourceKey: 'project:proj-redesign',
+            exists: true,
+            loaded: true,
+            contentHash: 'project-src-hash-1',
+            document: {
+              model: 'claude-sonnet-4-5',
+            },
+          },
+        ],
+        validation: {
+          valid: true,
+          errors: [],
+          warnings: [],
+        },
+        secretReferences: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.runtime.getProjectConfig('proj-redesign')
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/runtime-config',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
+  })
+
+  it('uses authenticated user runtime config endpoints for user-scoped overrides', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        effectiveConfig: { model: 'claude-sonnet-4-5' },
+        effectiveConfigHash: 'user-cfg-hash-1',
+        sources: [
+          {
+            scope: 'user',
+            ownerId: 'user-owner',
+            displayPath: 'config/runtime/users/user-owner.json',
+            sourceKey: 'user:user-owner',
+            exists: true,
+            loaded: true,
+            contentHash: 'user-src-hash-1',
+            document: {
+              model: 'claude-sonnet-4-5',
+            },
+          },
+        ],
+        validation: {
+          valid: true,
+          errors: [],
+          warnings: [],
+        },
+        secretReferences: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await workspaceClient.runtime.getUserConfig()
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/user-center/profile/runtime-config',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+  })
+})
