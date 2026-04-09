@@ -701,4 +701,146 @@ describe('release artifact governance scripts', () => {
       await closeServer()
     }
   })
+
+  it('generates preview updater manifests even when the latest formal release is missing updater assets', async () => {
+    const outputDir = createTempDir('octopus-update-manifests-preview-only-')
+
+    const manifestByPath = new Map<string, unknown>([
+      ['/asset/preview-macos-latest.json', {
+        version: '0.2.4-preview.20',
+        notes: 'preview notes from asset should be replaced by release body',
+        pub_date: '2026-04-09T16:40:52Z',
+        platforms: {
+          'darwin-aarch64': {
+            signature: 'preview-macos-signature',
+            url: 'https://example.invalid/Octopus.app.tar.gz',
+          },
+        },
+      }],
+      ['/asset/preview-linux-latest.json', {
+        version: '0.2.4-preview.20',
+        notes: 'preview notes from asset should be replaced by release body',
+        pub_date: '2026-04-09T16:40:52Z',
+        platforms: {
+          'linux-x86_64': {
+            signature: 'preview-linux-signature',
+            url: 'https://example.invalid/Octopus.AppImage.tar.gz',
+          },
+        },
+      }],
+    ])
+
+    const server = createServer((request, response) => {
+      if (!request.url) {
+        response.statusCode = 404
+        response.end('missing url')
+        return
+      }
+
+      if (request.url === '/repos/GoyacJ/octopus/releases?per_page=20') {
+        response.setHeader('content-type', 'application/json')
+        response.end(JSON.stringify([
+          {
+            tag_name: 'v0.2.0',
+            prerelease: false,
+            published_at: '2026-04-09T05:49:42Z',
+            body: 'Formal release body without updater assets',
+            html_url: 'https://github.com/GoyacJ/octopus/releases/tag/v0.2.0',
+            assets: [
+              {
+                name: 'VERSION',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.0/VERSION',
+                url: 'unused',
+              },
+            ],
+          },
+          {
+            tag_name: 'v0.2.4-preview.20',
+            prerelease: true,
+            published_at: '2026-04-09T16:40:52Z',
+            body: 'Preview release body',
+            html_url: 'https://github.com/GoyacJ/octopus/releases/tag/v0.2.4-preview.20',
+            assets: [
+              {
+                name: 'macos-latest.json',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.4-preview.20/macos-latest.json',
+                url: `http://127.0.0.1:${(server.address() as { port: number }).port}/asset/preview-macos-latest.json`,
+              },
+              {
+                name: 'linux-latest.json',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.4-preview.20/linux-latest.json',
+                url: `http://127.0.0.1:${(server.address() as { port: number }).port}/asset/preview-linux-latest.json`,
+              },
+              {
+                name: 'Octopus.app.tar.gz',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.4-preview.20/Octopus.app.tar.gz',
+                url: 'unused',
+              },
+              {
+                name: 'Octopus.AppImage.tar.gz',
+                browser_download_url: 'https://github.com/GoyacJ/octopus/releases/download/v0.2.4-preview.20/Octopus.AppImage.tar.gz',
+                url: 'unused',
+              },
+            ],
+          },
+        ]))
+        return
+      }
+
+      const payload = manifestByPath.get(request.url)
+      if (payload) {
+        response.setHeader('content-type', 'application/json')
+        response.end(JSON.stringify(payload))
+        return
+      }
+
+      response.statusCode = 404
+      response.end('not found')
+    })
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()))
+    const closeServer = async () => {
+      server.closeAllConnections()
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    }
+
+    const port = (server.address() as { port: number }).port
+
+    try {
+      const { stderr } = await execFileAsync(nodeExecutable, [
+        generateUpdateManifestsScriptPath,
+        '--repo',
+        'GoyacJ/octopus',
+        '--api-base-url',
+        `http://127.0.0.1:${port}`,
+        '--output-dir',
+        outputDir,
+      ], {
+        cwd: repoRoot,
+      })
+
+      expect(stderr).toContain('formal')
+      expect(readFileSync(path.join(outputDir, 'preview', 'latest.json'), 'utf8')).toContain('"channel": "preview"')
+      expect(() => readFileSync(path.join(outputDir, 'formal', 'latest.json'), 'utf8')).toThrow()
+
+      const previewManifest = JSON.parse(readFileSync(path.join(outputDir, 'preview', 'latest.json'), 'utf8')) as {
+        version: string
+        notes: string
+        pub_date: string
+        channel: string
+        notesUrl: string
+        platforms: Record<string, { signature: string, url: string }>
+      }
+
+      expect(previewManifest.version).toBe('0.2.4-preview.20')
+      expect(previewManifest.notes).toBe('Preview release body')
+      expect(previewManifest.pub_date).toBe('2026-04-09T16:40:52Z')
+      expect(previewManifest.channel).toBe('preview')
+      expect(previewManifest.notesUrl).toBe('https://github.com/GoyacJ/octopus/releases/tag/v0.2.4-preview.20')
+      expect(previewManifest.platforms['darwin-aarch64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.4-preview.20/Octopus.app.tar.gz')
+      expect(previewManifest.platforms['linux-x86_64']?.url).toBe('https://github.com/GoyacJ/octopus/releases/download/v0.2.4-preview.20/Octopus.AppImage.tar.gz')
+    } finally {
+      await closeServer()
+    }
+  })
 })

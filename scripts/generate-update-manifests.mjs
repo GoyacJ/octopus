@@ -113,6 +113,21 @@ async function buildChannelManifest(release, channel, token) {
   }
 }
 
+async function writeChannelManifest(outputDir, channel, manifest) {
+  await mkdir(path.join(outputDir, channel), { recursive: true })
+  await writeFile(
+    path.join(outputDir, channel, 'latest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  )
+}
+
+async function generateChannelManifest({ releases, channel, token, outputDir }) {
+  const release = resolveReleaseForChannel(releases, channel)
+  const manifest = await buildChannelManifest(release, channel, token)
+  await writeChannelManifest(outputDir, channel, manifest)
+  return manifest
+}
+
 async function main() {
   const repo = readArgument('--repo') ?? 'GoyacJ/octopus'
   const apiBaseUrl = (readArgument('--api-base-url') ?? 'https://api.github.com').replace(/\/$/, '')
@@ -124,19 +139,24 @@ async function main() {
     throw new Error('GitHub releases response must be an array')
   }
 
-  const formalManifest = await buildChannelManifest(resolveReleaseForChannel(releases, 'formal'), 'formal', token)
-  const previewManifest = await buildChannelManifest(resolveReleaseForChannel(releases, 'preview'), 'preview', token)
+  const channels = ['formal', 'preview']
+  const failures = []
+  let generatedCount = 0
 
-  await mkdir(path.join(outputDir, 'formal'), { recursive: true })
-  await mkdir(path.join(outputDir, 'preview'), { recursive: true })
-  await writeFile(
-    path.join(outputDir, 'formal', 'latest.json'),
-    `${JSON.stringify(formalManifest, null, 2)}\n`,
-  )
-  await writeFile(
-    path.join(outputDir, 'preview', 'latest.json'),
-    `${JSON.stringify(previewManifest, null, 2)}\n`,
-  )
+  for (const channel of channels) {
+    try {
+      await generateChannelManifest({ releases, channel, token, outputDir })
+      generatedCount += 1
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      failures.push(`${channel}: ${message}`)
+      console.warn(`[update-manifests] skipped ${channel}: ${message}`)
+    }
+  }
+
+  if (generatedCount === 0) {
+    throw new Error(`failed to generate updater manifests for all channels: ${failures.join('; ')}`)
+  }
 }
 
 await main()
