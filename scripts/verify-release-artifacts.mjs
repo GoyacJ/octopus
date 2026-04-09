@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { releasePlatformArtifactRules, repoRoot } from './governance-lib.mjs'
+import { getReleasePlatformArtifactRules, repoRoot } from './governance-lib.mjs'
 
 function readArgument(flag) {
   const index = process.argv.indexOf(flag)
@@ -14,6 +14,8 @@ const metadataDir = path.resolve(repoRoot, readArgument('--metadata-dir') ?? pat
 const publishDir = path.resolve(repoRoot, readArgument('--publish-dir') ?? path.join(artifactsDir, 'publish'))
 const notesPath = path.resolve(repoRoot, readArgument('--notes') ?? path.join('tmp', 'release-notes', 'latest.md'))
 const outputPath = path.resolve(repoRoot, readArgument('--checksums') ?? path.join(artifactsDir, 'SHA256SUMS.txt'))
+const channel = readArgument('--channel') ?? 'formal'
+const releasePlatformArtifactRules = getReleasePlatformArtifactRules(channel)
 
 const errors = []
 

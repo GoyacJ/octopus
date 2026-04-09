@@ -291,6 +291,57 @@ describe('release artifact governance scripts', () => {
     ).toThrowError(/missing required release artifact for linux: Debian package \(\.deb\)/i)
   })
 
+  it('allows preview verification to pass without a macOS Intel installer', () => {
+    const artifactsDir = createTempDir('octopus-preview-release-artifacts-')
+    const metadataDir = path.join(artifactsDir, 'metadata')
+    const notesPath = path.join(metadataDir, 'v0.1.0-preview.42.md')
+    const publishDir = path.join(artifactsDir, 'publish')
+    const checksumsPath = path.join(artifactsDir, 'SHA256SUMS.txt')
+
+    writeFile(path.join(publishDir, 'macos', 'Octopus_0.1.0_aarch64.dmg'), 'macos arm64 bundle')
+    writeFile(path.join(publishDir, 'macos', 'Octopus.app.tar.gz'), 'macos updater archive')
+    writeFile(path.join(publishDir, 'macos', 'Octopus.app.tar.gz.sig'), 'macos updater signature')
+    writeFile(path.join(publishDir, 'macos', 'latest.json'), '{"version":"0.1.0-preview.42"}\n')
+    writeFile(path.join(publishDir, 'linux', 'Octopus_0.1.0_amd64.AppImage'), 'linux appimage')
+    writeFile(path.join(publishDir, 'linux', 'octopus_0.1.0_amd64.deb'), 'linux deb')
+    writeFile(path.join(publishDir, 'linux', 'Octopus.AppImage.tar.gz'), 'linux updater archive')
+    writeFile(path.join(publishDir, 'linux', 'Octopus.AppImage.tar.gz.sig'), 'linux updater signature')
+    writeFile(path.join(publishDir, 'linux', 'latest.json'), '{"version":"0.1.0-preview.42"}\n')
+    writeFile(path.join(publishDir, 'windows', 'Octopus_0.1.0_x64-setup.exe'), 'windows x64 setup')
+    writeFile(path.join(publishDir, 'windows', 'Octopus_0.1.0_arm64-setup.exe'), 'windows arm64 setup')
+    writeFile(path.join(publishDir, 'windows', 'Octopus.nsis.zip'), 'windows updater archive')
+    writeFile(path.join(publishDir, 'windows', 'Octopus.nsis.zip.sig'), 'windows updater signature')
+    writeFile(path.join(publishDir, 'windows', 'latest.json'), '{"version":"0.1.0-preview.42"}\n')
+
+    writeFile(path.join(metadataDir, 'VERSION'), '0.1.0\n')
+    writeFile(path.join(metadataDir, 'octopus.openapi.yaml'), 'openapi: 3.1.0\n')
+    writeFile(path.join(metadataDir, 'generated.ts'), 'export {}\n')
+    writeFile(path.join(metadataDir, 'release-notes.json'), '{"title":"Octopus Preview v0.1.0-preview.42","channel":"preview"}\n')
+    writeFile(path.join(metadataDir, 'change-log.json'), '{"releaseTag":"v0.1.0-preview.42"}\n')
+    writeFile(notesPath, '# Octopus Preview v0.1.0-preview.42\n')
+
+    execFileSync(nodeExecutable, [
+      verifyScriptPath,
+      '--channel',
+      'preview',
+      '--artifacts-dir',
+      artifactsDir,
+      '--metadata-dir',
+      metadataDir,
+      '--notes',
+      notesPath,
+      '--checksums',
+      checksumsPath,
+    ], {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    })
+
+    const checksums = readFileSync(checksumsPath, 'utf8')
+    expect(checksums).toContain('publish/macos/Octopus_0.1.0_aarch64.dmg')
+    expect(checksums).not.toContain('publish/macos/Octopus_0.1.0_x64.dmg')
+  })
+
   it('collects publishable bundles and verification writes release checksums for every required platform variant', () => {
     const sourceDir = createTempDir('octopus-release-source-')
     const artifactsDir = createTempDir('octopus-release-output-')

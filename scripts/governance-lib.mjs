@@ -15,7 +15,7 @@ export const openApiSourceEntryPath = path.join(openApiSourceRootPath, 'root.yam
 export const openApiInfoPath = path.join(openApiSourceRootPath, 'info.yaml')
 export const openApiSpecPath = path.join(repoRoot, 'contracts', 'openapi', 'octopus.openapi.yaml')
 export const generatedSchemaPath = path.join(repoRoot, 'packages', 'schema', 'src', 'generated.ts')
-export const releasePlatformArtifactRules = {
+const formalReleasePlatformArtifactRules = {
   macos: {
     artifactExtensions: ['.dmg', '.zip', '.tar.gz', '.sig', '.json'],
     sourcePathHints: ['/dmg/', '/macos/', '/app/'],
@@ -58,6 +58,26 @@ export const releasePlatformArtifactRules = {
       },
     ],
   },
+}
+
+const previewReleasePlatformArtifactRules = {
+  ...formalReleasePlatformArtifactRules,
+  macos: {
+    ...formalReleasePlatformArtifactRules.macos,
+    requiredArtifacts: formalReleasePlatformArtifactRules.macos.requiredArtifacts.filter(
+      ({ label }) => label !== 'Intel installer (.dmg or .zip)',
+    ),
+  },
+}
+
+export const releasePlatformArtifactRules = formalReleasePlatformArtifactRules
+
+export function getReleasePlatformArtifactRules(channel = 'formal') {
+  if (channel === 'preview') {
+    return previewReleasePlatformArtifactRules
+  }
+
+  return formalReleasePlatformArtifactRules
 }
 
 export const mirroredVersionJsonFiles = [

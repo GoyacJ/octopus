@@ -128,6 +128,7 @@ describe('repository governance', () => {
     expect(workflow).toContain('pnpm check:desktop-release')
     expect(workflow).not.toContain('pnpm check:website')
     expect(workflow).toContain('target_commitish: ${{ github.sha }}')
+    expect(workflow).toContain('pnpm release:verify-artifacts --channel preview')
     expect(workflow).toContain('release-artifacts/publish/linux/*')
     expect(workflow).toContain('path: release-artifacts/publish/macos')
     expect(workflow).toContain('path: release-artifacts/publish/linux')

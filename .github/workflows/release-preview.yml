@@ -257,7 +257,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Verify preview release artifacts
-        run: pnpm release:verify-artifacts --artifacts-dir release-artifacts --metadata-dir release-artifacts/metadata --notes release-artifacts/metadata/${{ needs.verify-preview.outputs.preview_tag }}.md --checksums release-artifacts/SHA256SUMS.txt
+        run: pnpm release:verify-artifacts --channel preview --artifacts-dir release-artifacts --metadata-dir release-artifacts/metadata --notes release-artifacts/metadata/${{ needs.verify-preview.outputs.preview_tag }}.md --checksums release-artifacts/SHA256SUMS.txt
 
       - name: Prepare unique updater manifest assets for GitHub release
         shell: bash
