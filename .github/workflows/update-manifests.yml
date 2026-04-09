@@ -51,8 +51,11 @@ jobs:
       - name: Verify generated channel manifests
         shell: bash
         run: |
-          test -f pages-site/updates/formal/latest.json
-          test -f pages-site/updates/preview/latest.json
+          if [[ -f pages-site/updates/formal/latest.json || -f pages-site/updates/preview/latest.json ]]; then
+            exit 0
+          fi
+          echo "No updater manifests were generated for any channel." >&2
+          exit 1
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
