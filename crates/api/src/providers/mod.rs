@@ -9,6 +9,10 @@ use crate::types::{MessageRequest, MessageResponse};
 
 pub mod anthropic;
 pub mod openai_compat;
+pub(crate) mod provider_errors;
+pub(crate) mod request_assembly;
+pub(crate) mod response_normalization;
+pub(crate) mod stream_parsing;
 
 #[allow(dead_code)]
 pub type ProviderFuture<'a, T> = Pin<Box<dyn Future<Output = Result<T, ApiError>> + Send + 'a>>;

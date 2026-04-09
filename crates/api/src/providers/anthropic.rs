@@ -15,16 +15,20 @@ use crate::error::ApiError;
 use crate::http_client::build_http_client_or_default;
 use crate::prompt_cache::{PromptCache, PromptCacheRecord, PromptCacheStats};
 
+use super::provider_errors::{
+    backoff_for_attempt, expect_anthropic_success, read_env_non_empty, request_id_from_headers,
+    DEFAULT_INITIAL_BACKOFF, DEFAULT_MAX_BACKOFF, DEFAULT_MAX_RETRIES,
+};
+use super::request_assembly::{read_base_url_from_env, render_anthropic_request_body};
+use super::response_normalization::attach_request_id_if_missing;
 use super::{anthropic_missing_credentials, preflight_message_request, Provider, ProviderFuture};
 use crate::sse::SseParser;
 use crate::types::{MessageDeltaEvent, MessageRequest, MessageResponse, StreamEvent, Usage};
 
+#[cfg(test)]
+use super::provider_errors::{is_retryable_status, ALT_REQUEST_ID_HEADER, REQUEST_ID_HEADER};
+
 pub const DEFAULT_BASE_URL: &str = "https://api.anthropic.com";
-const REQUEST_ID_HEADER: &str = "request-id";
-const ALT_REQUEST_ID_HEADER: &str = "x-request-id";
-const DEFAULT_INITIAL_BACKOFF: Duration = Duration::from_millis(200);
-const DEFAULT_MAX_BACKOFF: Duration = Duration::from_secs(2);
-const DEFAULT_MAX_RETRIES: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthSource {
@@ -296,13 +300,13 @@ impl AnthropicClient {
 
         let response = self.send_with_retry(&request).await?;
         let request_id = request_id_from_headers(response.headers());
-        let mut response = response
-            .json::<MessageResponse>()
-            .await
-            .map_err(ApiError::from)?;
-        if response.request_id.is_none() {
-            response.request_id = request_id;
-        }
+        let response = attach_request_id_if_missing(
+            response
+                .json::<MessageResponse>()
+                .await
+                .map_err(ApiError::from)?,
+            request_id,
+        );
 
         if let Some(prompt_cache) = &self.prompt_cache {
             let record = prompt_cache.record_response(&request, &response);
@@ -368,7 +372,7 @@ impl AnthropicClient {
             .send()
             .await
             .map_err(ApiError::from)?;
-        let response = expect_success(response).await?;
+        let response = expect_anthropic_success(response).await?;
         response
             .json::<OAuthTokenSet>()
             .await
@@ -388,7 +392,7 @@ impl AnthropicClient {
             .send()
             .await
             .map_err(ApiError::from)?;
-        let response = expect_success(response).await?;
+        let response = expect_anthropic_success(response).await?;
         response
             .json::<OAuthTokenSet>()
             .await
@@ -413,7 +417,7 @@ impl AnthropicClient {
                 );
             }
             match self.send_raw_request(request).await {
-                Ok(response) => match expect_success(response).await {
+                Ok(response) => match expect_anthropic_success(response).await {
                     Ok(response) => {
                         if let Some(session_tracer) = &self.session_tracer {
                             session_tracer.record_http_request_succeeded(
@@ -480,9 +484,11 @@ impl AnthropicClient {
     }
 
     fn render_request_body(&self, request: &MessageRequest) -> Result<Value, ApiError> {
-        let mut request_body = self.request_profile.render_json_body(request)?;
-        strip_unsupported_beta_body_fields(&mut request_body);
-        Ok(request_body)
+        render_anthropic_request_body(|| {
+            self.request_profile
+                .render_json_body(request)
+                .map_err(ApiError::from)
+        })
     }
 
     fn record_request_failure(&self, attempt: u32, error: &ApiError) {
@@ -506,16 +512,7 @@ impl AnthropicClient {
     }
 
     fn backoff_for_attempt(&self, attempt: u32) -> Result<Duration, ApiError> {
-        let Some(multiplier) = 1_u32.checked_shl(attempt.saturating_sub(1)) else {
-            return Err(ApiError::BackoffOverflow {
-                attempt,
-                base_delay: self.initial_backoff,
-            });
-        };
-        Ok(self
-            .initial_backoff
-            .checked_mul(multiplier)
-            .map_or(self.max_backoff, |delay| delay.min(self.max_backoff)))
+        backoff_for_attempt(attempt, self.initial_backoff, self.max_backoff)
     }
 }
 
@@ -672,27 +669,6 @@ fn now_unix_timestamp() -> u64 {
         .map_or(0, |duration| duration.as_secs())
 }
 
-fn read_env_non_empty(key: &str) -> Result<Option<String>, ApiError> {
-    match std::env::var(key) {
-        Ok(value) if !value.is_empty() => Ok(Some(value)),
-        Ok(_) | Err(std::env::VarError::NotPresent) => Ok(super::dotenv_value(key)),
-        Err(error) => Err(ApiError::from(error)),
-    }
-}
-
-fn strip_unsupported_beta_body_fields(body: &mut Value) {
-    if let Some(object) = body.as_object_mut() {
-        object.remove("betas");
-        object.remove("frequency_penalty");
-        object.remove("presence_penalty");
-        if let Some(stop_val) = object.remove("stop") {
-            if stop_val.as_array().is_some_and(|values| !values.is_empty()) {
-                object.insert("stop_sequences".to_string(), stop_val);
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 fn read_api_key() -> Result<String, ApiError> {
     let auth = AuthSource::from_env_or_saved()?;
@@ -711,15 +687,7 @@ fn read_auth_token() -> Option<String> {
 
 #[must_use]
 pub fn read_base_url() -> String {
-    std::env::var("ANTHROPIC_BASE_URL").unwrap_or_else(|_| DEFAULT_BASE_URL.to_string())
-}
-
-fn request_id_from_headers(headers: &reqwest::header::HeaderMap) -> Option<String> {
-    headers
-        .get(REQUEST_ID_HEADER)
-        .or_else(|| headers.get(ALT_REQUEST_ID_HEADER))
-        .and_then(|value| value.to_str().ok())
-        .map(ToOwned::to_owned)
+    read_base_url_from_env("ANTHROPIC_BASE_URL", DEFAULT_BASE_URL)
 }
 
 impl Provider for AnthropicClient {
@@ -811,35 +779,6 @@ impl MessageStream {
     }
 }
 
-async fn expect_success(response: reqwest::Response) -> Result<reqwest::Response, ApiError> {
-    let status = response.status();
-    if status.is_success() {
-        return Ok(response);
-    }
-
-    let request_id = request_id_from_headers(response.headers());
-    let body = response.text().await.unwrap_or_else(|_| String::new());
-    let parsed_error = serde_json::from_str::<AnthropicErrorEnvelope>(&body).ok();
-    let retryable = is_retryable_status(status);
-
-    Err(ApiError::Api {
-        status,
-        error_type: parsed_error
-            .as_ref()
-            .map(|error| error.error.error_type.clone()),
-        message: parsed_error
-            .as_ref()
-            .map(|error| error.error.message.clone()),
-        request_id,
-        body,
-        retryable,
-    })
-}
-
-const fn is_retryable_status(status: reqwest::StatusCode) -> bool {
-    matches!(status.as_u16(), 408 | 409 | 429 | 500 | 502 | 503 | 504)
-}
-
 const SK_ANT_BEARER_HINT: &str = "sk-ant-* keys go in ANTHROPIC_API_KEY (x-api-key header), not ANTHROPIC_AUTH_TOKEN (Bearer header). Move your key to ANTHROPIC_API_KEY.";
 
 fn enrich_bearer_auth_error(error: ApiError, auth: &AuthSource) -> ApiError {
@@ -896,18 +835,6 @@ fn enrich_bearer_auth_error(error: ApiError, auth: &AuthSource) -> ApiError {
         body,
         retryable,
     }
-}
-
-#[derive(Debug, Deserialize)]
-struct AnthropicErrorEnvelope {
-    error: AnthropicErrorBody,
-}
-
-#[derive(Debug, Deserialize)]
-struct AnthropicErrorBody {
-    #[serde(rename = "type")]
-    error_type: String,
-    message: String,
 }
 
 #[cfg(test)]
