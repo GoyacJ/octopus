@@ -1,7 +1,7 @@
 {
   "$schema": "../../../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Octopus",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "identifier": "com.weilaizhihuigu.octopus",
   "build": {
     "frontendDist": "../dist",
@@ -46,7 +46,7 @@
   "plugins": {
     "updater": {
       "endpoints": [],
-      "pubkey": ""
+      "pubkey": "untrusted comment: minisign public key: C3108143D6E398F6\nRWT2mOPWQ4EQwxj1eVzaducrNyDxYBND6fZokzNniYnOMVCXFf7IHyVy\n"
     }
   }
 }

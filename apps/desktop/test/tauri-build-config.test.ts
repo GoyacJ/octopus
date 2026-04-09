@@ -7,6 +7,7 @@ const repoRoot = path.resolve(__dirname, '../../..')
 const tauriConfigPath = path.join(repoRoot, 'apps/desktop/src-tauri/tauri.conf.json')
 const updaterConfigPath = path.join(repoRoot, 'apps/desktop/src-tauri/updater.config.json')
 const packageJsonPath = path.join(repoRoot, 'package.json')
+const minisignPublicKeyPrefix = 'untrusted comment: minisign public key:'
 
 describe('desktop release build configuration', () => {
   it('exposes a dedicated desktop release build script', () => {
@@ -48,7 +49,7 @@ describe('desktop release build configuration', () => {
     expect(mainWindow?.hiddenTitle).toBe(true)
   })
 
-  it('declares a concrete updater plugin config so desktop dev startup does not crash', () => {
+  it('declares a concrete updater plugin config so release packaging can generate updater artifacts', () => {
     const tauriConfig = JSON.parse(readFileSync(tauriConfigPath, 'utf8')) as {
       plugins?: {
         updater?: {
@@ -58,10 +59,9 @@ describe('desktop release build configuration', () => {
       }
     }
 
-    expect(tauriConfig.plugins?.updater).toEqual({
-      endpoints: [],
-      pubkey: '',
-    })
+    expect(tauriConfig.plugins?.updater?.endpoints).toEqual([])
+    expect(tauriConfig.plugins?.updater?.pubkey).toContain(minisignPublicKeyPrefix)
+    expect(tauriConfig.plugins?.updater?.pubkey).toContain('\n')
   })
 
   it('tracks product updater defaults in repo so end users do not need local env configuration', () => {
@@ -75,7 +75,22 @@ describe('desktop release build configuration', () => {
     expect(updaterConfig.formalEndpoint).toBe('https://goyacj.github.io/octopus/updates/formal/latest.json')
     expect(updaterConfig.previewEndpoint).toBe('https://goyacj.github.io/octopus/updates/preview/latest.json')
     expect(updaterConfig.releaseRepo).toBe('GoyacJ/octopus')
-    expect(typeof updaterConfig.pubkey).toBe('string')
-    expect((updaterConfig.pubkey ?? '').trim().length).toBeGreaterThan(0)
+    expect(updaterConfig.pubkey).toContain(minisignPublicKeyPrefix)
+    expect(updaterConfig.pubkey).toContain('\n')
+  })
+
+  it('keeps release-time and runtime updater pubkeys aligned', () => {
+    const tauriConfig = JSON.parse(readFileSync(tauriConfigPath, 'utf8')) as {
+      plugins?: {
+        updater?: {
+          pubkey?: string
+        }
+      }
+    }
+    const updaterConfig = JSON.parse(readFileSync(updaterConfigPath, 'utf8')) as {
+      pubkey?: string
+    }
+
+    expect(tauriConfig.plugins?.updater?.pubkey).toBe(updaterConfig.pubkey)
   })
 })
