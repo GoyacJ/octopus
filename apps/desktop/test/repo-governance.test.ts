@@ -71,6 +71,9 @@ describe('repository governance', () => {
     expect(workflow).toContain('release-artifacts/publish')
     expect(workflow).toContain('release-artifacts/metadata')
     expect(workflow).toContain('release-artifacts/publish/linux/*')
+    expect(workflow).toContain('path: release-artifacts/publish/macos')
+    expect(workflow).toContain('path: release-artifacts/publish/linux')
+    expect(workflow).toContain('path: release-artifacts/publish/windows')
     expectDesktopMatrix(workflow)
   })
 
@@ -95,6 +98,9 @@ describe('repository governance', () => {
     expect(workflow).toContain('pnpm version:check')
     expect(workflow).toContain('target_commitish: ${{ github.sha }}')
     expect(workflow).toContain('release-artifacts/publish/linux/*')
+    expect(workflow).toContain('path: release-artifacts/publish/macos')
+    expect(workflow).toContain('path: release-artifacts/publish/linux')
+    expect(workflow).toContain('path: release-artifacts/publish/windows')
     expectDesktopMatrix(workflow)
   })
 
