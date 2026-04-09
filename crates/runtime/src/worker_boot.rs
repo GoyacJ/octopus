@@ -540,6 +540,18 @@ pub struct WorkerReadySnapshot {
     pub last_error: Option<WorkerFailure>,
 }
 
+#[derive(Serialize)]
+struct StateSnapshot<'a> {
+    worker_id: &'a str,
+    status: WorkerStatus,
+    is_ready: bool,
+    trust_gate_cleared: bool,
+    prompt_in_flight: bool,
+    last_event: Option<&'a WorkerEvent>,
+    updated_at: u64,
+    seconds_since_update: u64,
+}
+
 fn prompt_misdelivery_is_relevant(worker: &Worker) -> bool {
     worker.prompt_in_flight && worker.last_prompt.is_some()
 }
@@ -579,18 +591,6 @@ fn emit_state_file(worker: &Worker) {
     }
     let state_path = state_dir.join("worker-state.json");
     let tmp_path = state_dir.join("worker-state.json.tmp");
-
-    #[derive(Serialize)]
-    struct StateSnapshot<'a> {
-        worker_id: &'a str,
-        status: WorkerStatus,
-        is_ready: bool,
-        trust_gate_cleared: bool,
-        prompt_in_flight: bool,
-        last_event: Option<&'a WorkerEvent>,
-        updated_at: u64,
-        seconds_since_update: u64,
-    }
 
     let now = now_secs();
     let snapshot = StateSnapshot {

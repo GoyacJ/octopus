@@ -100,7 +100,7 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "api"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "reqwest 0.12.28",
  "runtime",
@@ -804,7 +804,7 @@ dependencies = [
 
 [[package]]
 name = "commands"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "plugins",
  "runtime",
@@ -813,7 +813,7 @@ dependencies = [
 
 [[package]]
 name = "compat-harness"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "commands",
  "runtime",
@@ -2772,7 +2772,7 @@ dependencies = [
 
 [[package]]
 name = "mock-anthropic-service"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "api",
  "serde_json",
@@ -3034,7 +3034,7 @@ dependencies = [
 
 [[package]]
 name = "octopus-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3044,7 +3044,7 @@ dependencies = [
 
 [[package]]
 name = "octopus-desktop-backend"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "axum",
  "log",
@@ -3058,7 +3058,7 @@ dependencies = [
 
 [[package]]
 name = "octopus-desktop-shell"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "log",
@@ -3081,7 +3081,7 @@ dependencies = [
 
 [[package]]
 name = "octopus-infra"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -3103,7 +3103,7 @@ dependencies = [
 
 [[package]]
 name = "octopus-platform"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "octopus-core",
@@ -3112,7 +3112,7 @@ dependencies = [
 
 [[package]]
 name = "octopus-runtime-adapter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "api",
  "async-trait",
@@ -3133,7 +3133,7 @@ dependencies = [
 
 [[package]]
 name = "octopus-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-stream",
  "axum",
@@ -3519,7 +3519,7 @@ dependencies = [
 
 [[package]]
 name = "plugins"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4152,7 +4152,7 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "glob",
  "plugins",
@@ -4280,7 +4280,7 @@ checksum = "b39cdef0fa800fc44525c84ccb54a029961a8215f9619753635a9c0d2538d46d"
 
 [[package]]
 name = "rusty-claude-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "api",
  "commands",
@@ -5307,7 +5307,7 @@ dependencies = [
 
 [[package]]
 name = "telemetry"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -5614,7 +5614,7 @@ checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
 name = "tools"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "api",
  "plugins",
