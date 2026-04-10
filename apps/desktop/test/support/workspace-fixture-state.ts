@@ -1,0 +1,1318 @@
+import type {
+  AgentRecord,
+  ArtifactRecord,
+  AutomationRecord,
+  CredentialBinding,
+  KnowledgeRecord,
+  MenuRecord,
+  ModelCatalogSnapshot,
+  PermissionRecord,
+  PetConversationBinding,
+  PetPresenceState,
+  PetProfile,
+  ProjectAgentLinkRecord,
+  ProjectDashboardSnapshot,
+  ProjectRecord,
+  ProjectTeamLinkRecord,
+  RoleRecord,
+  RuntimeEffectiveConfig,
+  SystemBootstrapStatus,
+  TeamRecord,
+  ToolRecord,
+  UserCenterOverviewSnapshot,
+  UserRecordSummary,
+  WorkspaceConnectionRecord,
+  WorkspaceMcpServerDocument,
+  WorkspaceOverviewSnapshot,
+  WorkspaceResourceRecord,
+  WorkspaceSkillDocument,
+  WorkspaceSkillFileDocument,
+  WorkspaceToolCatalogEntry,
+  WorkspaceToolCatalogSnapshot,
+} from '@octopus/schema'
+
+import { clone } from './workspace-fixture-bootstrap'
+import {
+  createManagementCapabilities,
+  createSkillAsset,
+  createSkillFileDocument,
+} from './workspace-fixture-skill-helpers'
+import {
+  createPetPresenceState,
+  createPetProfile,
+  createRuntimeConfigSource,
+} from './workspace-fixture-runtime'
+import type { RuntimeSessionState } from './workspace-fixture-runtime'
+
+export interface FixtureOptions {
+  preloadConversationMessages?: boolean
+  localRuntimeConfigTransform?: (config: RuntimeEffectiveConfig) => RuntimeEffectiveConfig
+  localOwnerReady?: boolean
+  localSetupRequired?: boolean
+  preloadWorkspaceSessions?: boolean
+  localSessionValid?: boolean
+}
+
+export interface WorkspaceFixtureState {
+  systemBootstrap: SystemBootstrapStatus
+  workspace: WorkspaceOverviewSnapshot['workspace']
+  overview: WorkspaceOverviewSnapshot
+  projects: ProjectRecord[]
+  dashboards: Record<string, ProjectDashboardSnapshot>
+  workspaceResources: WorkspaceResourceRecord[]
+  projectResources: Record<string, WorkspaceResourceRecord[]>
+  artifacts: ArtifactRecord[]
+  workspaceKnowledge: KnowledgeRecord[]
+  projectKnowledge: Record<string, KnowledgeRecord[]>
+  agents: AgentRecord[]
+  projectAgentLinks: Record<string, ProjectAgentLinkRecord[]>
+  teams: TeamRecord[]
+  projectTeamLinks: Record<string, ProjectTeamLinkRecord[]>
+  catalog: ModelCatalogSnapshot
+  toolCatalog: WorkspaceToolCatalogSnapshot
+  skillDocuments: Record<string, WorkspaceSkillDocument>
+  skillFiles: Record<string, Record<string, WorkspaceSkillFileDocument>>
+  mcpDocuments: Record<string, WorkspaceMcpServerDocument>
+  tools: ToolRecord[]
+  automations: AutomationRecord[]
+  userCenterOverview: UserCenterOverviewSnapshot
+  users: UserRecordSummary[]
+  userPasswords: Record<string, string>
+  roles: RoleRecord[]
+  permissions: PermissionRecord[]
+  menus: MenuRecord[]
+  runtimeSessions: Map<string, RuntimeSessionState>
+  runtimeWorkspaceConfig: RuntimeEffectiveConfig
+  runtimeProjectConfigs: Record<string, RuntimeEffectiveConfig>
+  runtimeUserConfig: RuntimeEffectiveConfig
+  petProfile: PetProfile
+  workspacePetPresence: PetPresenceState
+  projectPetPresences: Record<string, PetPresenceState>
+  workspacePetBinding?: PetConversationBinding
+  projectPetBindings: Record<string, PetConversationBinding>
+}
+
+const MAIN_WORKSPACE_MENU_IDS = [
+  'menu-workspace-overview',
+  'menu-workspace-projects',
+  'menu-workspace-knowledge',
+  'menu-workspace-resources',
+  'menu-workspace-agents',
+  'menu-workspace-teams',
+  'menu-workspace-models',
+  'menu-workspace-tools',
+  'menu-workspace-automations',
+  'menu-workspace-user-center',
+] as const
+
+export function createWorkspaceFixtureState(
+  connection: WorkspaceConnectionRecord,
+  options: FixtureOptions = {},
+): WorkspaceFixtureState {
+  const local = connection.workspaceId === 'ws-local'
+  const ownerReady = local ? options.localOwnerReady ?? true : true
+  const setupRequired = local ? options.localSetupRequired ?? false : false
+  const workspace = {
+    id: connection.workspaceId,
+    name: local ? 'Local Workspace' : 'Enterprise Workspace',
+    slug: local ? 'local-workspace' : 'enterprise-workspace',
+    deployment: local ? 'local' : 'remote',
+    bootstrapStatus: setupRequired ? 'setup_required' : 'ready',
+    ownerUserId: ownerReady ? 'user-owner' : undefined,
+    host: local ? '127.0.0.1' : 'enterprise.example.test',
+    listenAddress: connection.baseUrl,
+    defaultProjectId: local ? 'proj-redesign' : 'proj-launch',
+  } as const
+
+  const projects: ProjectRecord[] = local
+    ? [
+        {
+          id: 'proj-redesign',
+          workspaceId: workspace.id,
+          name: 'Desktop Redesign',
+          status: 'active',
+          description: 'Real workspace API migration for the desktop surface.',
+          assignments: {
+            models: {
+              configuredModelIds: ['anthropic-primary', 'anthropic-alt'],
+              defaultConfiguredModelId: 'anthropic-primary',
+            },
+            tools: {
+              sourceKeys: ['builtin:bash', 'mcp:ops'],
+            },
+            agents: {
+              agentIds: ['agent-architect'],
+              teamIds: ['team-studio'],
+            },
+          },
+        },
+        {
+          id: 'proj-governance',
+          workspaceId: workspace.id,
+          name: 'Workspace Governance',
+          status: 'active',
+          description: 'RBAC, menu policies, and audit automation.',
+        },
+      ]
+    : [
+        {
+          id: 'proj-launch',
+          workspaceId: workspace.id,
+          name: 'Launch Readiness',
+          status: 'active',
+          description: 'Enterprise launch planning and cutover execution.',
+        },
+      ]
+
+  const recentConversations = local
+    ? [
+        {
+          id: 'conv-redesign',
+          workspaceId: workspace.id,
+          projectId: 'proj-redesign',
+          sessionId: 'rt-conv-redesign',
+          title: 'Conversation Redesign',
+          status: 'completed',
+          updatedAt: 100,
+          lastMessagePreview: 'Runtime-only conversation state is active.',
+        },
+        {
+          id: 'conv-governance',
+          workspaceId: workspace.id,
+          projectId: 'proj-governance',
+          sessionId: 'rt-conv-governance',
+          title: 'Governance Checklist',
+          status: 'draft',
+          updatedAt: 90,
+          lastMessagePreview: 'Define workspace menu policy.',
+        },
+      ]
+    : [
+        {
+          id: 'conv-launch',
+          workspaceId: workspace.id,
+          projectId: 'proj-launch',
+          sessionId: 'rt-conv-launch',
+          title: 'Launch Cutover',
+          status: 'running',
+          updatedAt: 120,
+          lastMessagePreview: 'Cutover checklist is in review.',
+        },
+      ]
+
+  const recentActivity = local
+    ? [
+        { id: 'activity-sync', title: 'Workspace synced', description: 'Bootstrap and projections loaded.', timestamp: 100 },
+        { id: 'activity-runtime', title: 'Runtime event replay', description: 'Recovered session stream after reconnect.', timestamp: 96 },
+      ]
+    : [
+        { id: 'activity-launch', title: 'Launch dashboard refreshed', description: 'Enterprise projection rebuilt.', timestamp: 120 },
+      ]
+
+  const overview: WorkspaceOverviewSnapshot = {
+    workspace,
+    metrics: [
+      { id: 'projects', label: 'Projects', value: String(projects.length), tone: 'accent' },
+      { id: 'conversations', label: 'Conversations', value: String(recentConversations.length), tone: 'info' },
+      { id: 'automations', label: 'Automations', value: local ? '1' : '0', tone: local ? 'success' : 'default' },
+      { id: 'alerts', label: 'Alerts', value: local ? '0' : '1', tone: local ? 'default' : 'warning' },
+    ],
+    projects,
+    recentConversations,
+    recentActivity,
+  }
+
+  const dashboards: Record<string, ProjectDashboardSnapshot> = Object.fromEntries(projects.map(project => [
+    project.id,
+    {
+      project,
+      metrics: [
+        { id: 'sessions', label: 'Sessions', value: String(recentConversations.filter(item => item.projectId === project.id).length), tone: 'accent' },
+        { id: 'resources', label: 'Resources', value: local ? '2' : '1', tone: 'info' },
+      ],
+      recentConversations: recentConversations.filter(item => item.projectId === project.id),
+      recentActivity: recentActivity,
+    },
+  ]))
+
+  const workspaceResources: WorkspaceResourceRecord[] = [
+    {
+      id: `${workspace.id}-res-workspace-1`,
+      workspaceId: workspace.id,
+      kind: 'folder',
+      name: local ? 'Shared Specs' : 'Launch Runbooks',
+      location: local ? '/workspace/specs' : 's3://launch/runbooks',
+      origin: 'source',
+      status: 'healthy',
+      updatedAt: 100,
+      tags: ['docs', 'shared'],
+    },
+  ]
+
+  const projectResources: Record<string, WorkspaceResourceRecord[]> = Object.fromEntries(projects.map(project => [
+    project.id,
+    [
+      {
+        id: `${project.id}-res-1`,
+        workspaceId: workspace.id,
+        projectId: project.id,
+        kind: 'file',
+        name: `${project.name} Brief`,
+        location: `/projects/${project.id}/brief.md`,
+        origin: 'source',
+        status: 'healthy',
+        updatedAt: 101,
+        tags: ['brief'],
+      },
+      {
+        id: `${project.id}-res-2`,
+        workspaceId: workspace.id,
+        projectId: project.id,
+        kind: 'url',
+        name: `${project.name} API`,
+        location: `https://example.test/${project.id}/api`,
+        origin: 'generated',
+        sourceArtifactId: project.id === 'proj-redesign' ? 'artifact-run-conv-redesign' : undefined,
+        status: 'configured',
+        updatedAt: 102,
+        tags: ['api'],
+      },
+    ],
+  ]))
+
+  const artifacts: ArtifactRecord[] = [
+    {
+      id: 'artifact-run-conv-redesign',
+      workspaceId: workspace.id,
+      projectId: 'proj-redesign',
+      title: 'Runtime Delivery Summary',
+      status: 'review',
+      latestVersion: 3,
+      updatedAt: 103,
+      contentType: 'text/markdown',
+    },
+    {
+      id: 'artifact-run-conv-approval',
+      workspaceId: workspace.id,
+      projectId: 'proj-redesign',
+      title: 'Approval Command Output',
+      status: 'draft',
+      latestVersion: 1,
+      updatedAt: 104,
+      contentType: 'text/plain',
+    },
+    {
+      id: 'artifact-1',
+      workspaceId: workspace.id,
+      projectId: 'proj-redesign',
+      title: 'Workspace Protocol Baseline',
+      status: 'approved',
+      latestVersion: 5,
+      updatedAt: 100,
+      contentType: 'text/markdown',
+    },
+  ]
+
+  const workspaceKnowledge: KnowledgeRecord[] = [
+    {
+      id: `${workspace.id}-knowledge-1`,
+      workspaceId: workspace.id,
+      title: local ? 'Workspace Protocol Baseline' : 'Enterprise Release Policy',
+      summary: 'Projection snapshot used by the desktop shell.',
+      kind: 'shared',
+      status: 'shared',
+      sourceType: 'artifact',
+      sourceRef: 'artifact-1',
+      updatedAt: 100,
+    },
+  ]
+
+  const projectKnowledge: Record<string, KnowledgeRecord[]> = Object.fromEntries(projects.map(project => [
+    project.id,
+    [
+      {
+        id: `${project.id}-knowledge-1`,
+        workspaceId: workspace.id,
+        projectId: project.id,
+        title: `${project.name} Notes`,
+        summary: `Knowledge entries scoped to ${project.name}.`,
+        kind: 'shared',
+        status: 'reviewed',
+        sourceType: 'conversation',
+        sourceRef: `conv-${project.id}`,
+        updatedAt: 101,
+      },
+    ],
+  ]))
+
+  const agents: AgentRecord[] = local
+    ? [
+        {
+          id: 'agent-architect',
+          workspaceId: workspace.id,
+          scope: 'workspace',
+          name: 'Architect Agent',
+          avatarPath: 'data/blobs/avatars/agent-architect.png',
+          avatar: 'data:image/png;base64,iVBORw0KGgo=',
+          personality: 'Calm systems thinker',
+          tags: ['architecture', 'platform'],
+          prompt: 'Drive architecture reviews and schema decisions.',
+          builtinToolKeys: ['bash'],
+          skillIds: ['skill-workspace-help'],
+          mcpServerNames: ['ops'],
+          title: 'System architect',
+          description: 'Owns protocol, schema, and platform integration decisions.',
+          status: 'active',
+          updatedAt: 100,
+        },
+        {
+          id: 'agent-coder',
+          workspaceId: workspace.id,
+          scope: 'workspace',
+          name: 'Coder Agent',
+          avatarPath: 'data/blobs/avatars/agent-coder.png',
+          avatar: 'data:image/png;base64,iVBORw0KGgo=',
+          personality: 'Fast implementation closer',
+          tags: ['frontend', 'delivery'],
+          prompt: 'Implement scoped frontend and backend tasks quickly.',
+          builtinToolKeys: ['bash'],
+          skillIds: ['skill-external-checks'],
+          mcpServerNames: [],
+          title: 'Implementation lead',
+          description: 'Delivers frontend and backend implementation changes.',
+          status: 'active',
+          updatedAt: 99,
+        },
+        {
+          id: 'agent-redesign',
+          workspaceId: workspace.id,
+          projectId: 'proj-redesign',
+          scope: 'project',
+          name: 'Redesign Copilot',
+          avatarPath: 'data/blobs/avatars/agent-redesign.png',
+          avatar: 'data:image/png;base64,iVBORw0KGgo=',
+          personality: 'Product-focused collaborator',
+          tags: ['redesign', 'ux'],
+          prompt: 'Track the desktop redesign migration plan and unblock delivery.',
+          builtinToolKeys: ['bash'],
+          skillIds: ['skill-workspace-help'],
+          mcpServerNames: ['ops'],
+          title: 'Project agent',
+          description: 'Tracks the redesign migration work.',
+          status: 'active',
+          updatedAt: 98,
+        },
+      ]
+    : [
+        {
+          id: 'agent-gov',
+          workspaceId: workspace.id,
+          scope: 'workspace',
+          name: 'Governance Agent',
+          avatarPath: 'data/blobs/avatars/agent-gov.png',
+          avatar: 'data:image/png;base64,iVBORw0KGgo=',
+          personality: 'Compliance reviewer',
+          tags: ['governance'],
+          prompt: 'Review launch and compliance readiness.',
+          builtinToolKeys: ['bash'],
+          skillIds: [],
+          mcpServerNames: [],
+          title: 'Compliance lead',
+          description: 'Reviews launch and compliance readiness.',
+          status: 'active',
+          updatedAt: 120,
+        },
+      ]
+
+  const projectAgentLinks: Record<string, ProjectAgentLinkRecord[]> = local
+    ? {
+        'proj-redesign': [
+          {
+            workspaceId: workspace.id,
+            projectId: 'proj-redesign',
+            agentId: 'agent-architect',
+            linkedAt: 97,
+          },
+        ],
+      }
+    : {}
+
+  const teams: TeamRecord[] = local
+    ? [
+        {
+          id: 'team-studio',
+          workspaceId: workspace.id,
+          scope: 'workspace',
+          name: 'Studio Direction Team',
+          avatarPath: 'data/blobs/avatars/team-studio.png',
+          avatar: 'data:image/png;base64,iVBORw0KGgo=',
+          personality: 'Cross-functional design leadership',
+          tags: ['ux', 'direction'],
+          prompt: 'Coordinate shell direction and experience consistency.',
+          builtinToolKeys: ['bash'],
+          skillIds: ['skill-workspace-help'],
+          mcpServerNames: ['ops'],
+          leaderAgentId: 'agent-architect',
+          memberAgentIds: ['agent-architect', 'agent-coder'],
+          description: 'Owns shared UX and shell direction.',
+          status: 'active',
+          updatedAt: 100,
+        },
+        {
+          id: 'team-redesign',
+          workspaceId: workspace.id,
+          projectId: 'proj-redesign',
+          scope: 'project',
+          name: 'Redesign Tiger Team',
+          avatarPath: 'data/blobs/avatars/team-redesign.png',
+          avatar: 'data:image/png;base64,iVBORw0KGgo=',
+          personality: 'Delivery-focused strike team',
+          tags: ['migration', 'desktop'],
+          prompt: 'Execute the desktop redesign migration.',
+          builtinToolKeys: ['bash'],
+          skillIds: ['skill-external-checks'],
+          mcpServerNames: [],
+          leaderAgentId: 'agent-redesign',
+          memberAgentIds: ['agent-redesign'],
+          description: 'Executes the desktop migration.',
+          status: 'active',
+          updatedAt: 99,
+        },
+      ]
+    : [
+        {
+          id: 'team-launch',
+          workspaceId: workspace.id,
+          scope: 'workspace',
+          name: 'Launch Readiness Team',
+          avatarPath: 'data/blobs/avatars/team-launch.png',
+          avatar: 'data:image/png;base64,iVBORw0KGgo=',
+          personality: 'Enterprise rollout coordinators',
+          tags: ['launch', 'operations'],
+          prompt: 'Coordinate enterprise rollout readiness.',
+          builtinToolKeys: ['bash'],
+          skillIds: [],
+          mcpServerNames: [],
+          leaderAgentId: 'agent-gov',
+          memberAgentIds: ['agent-gov'],
+          description: 'Coordinates enterprise rollout.',
+          status: 'active',
+          updatedAt: 120,
+        },
+      ]
+
+  const projectTeamLinks: Record<string, ProjectTeamLinkRecord[]> = local
+    ? {
+        'proj-redesign': [
+          {
+            workspaceId: workspace.id,
+            projectId: 'proj-redesign',
+            teamId: 'team-studio',
+            linkedAt: 96,
+          },
+        ],
+      }
+    : {}
+
+  const credentialBindings: CredentialBinding[] = [
+    {
+      credentialRef: 'env:ANTHROPIC_API_KEY',
+      providerId: 'anthropic',
+      label: 'Anthropic Primary',
+      baseUrl: 'https://api.anthropic.com',
+      status: 'healthy',
+      configured: true,
+      source: 'workspace',
+    },
+    {
+      credentialRef: 'env:OPENAI_API_KEY',
+      providerId: 'openai',
+      label: 'OpenAI Primary',
+      baseUrl: 'https://api.openai.com/v1',
+      status: 'healthy',
+      configured: true,
+      source: 'workspace',
+    },
+  ]
+
+  const catalog: ModelCatalogSnapshot = {
+    providers: [
+      {
+        providerId: 'anthropic',
+        label: 'Anthropic',
+        enabled: true,
+        surfaces: [
+          {
+            surface: 'conversation',
+            protocolFamily: 'anthropic_messages',
+            transport: ['https'],
+            authStrategy: 'x_api_key',
+            baseUrl: 'https://api.anthropic.com',
+            baseUrlPolicy: 'allow_override',
+            enabled: true,
+            capabilities: [
+              { capabilityId: 'streaming', label: 'Streaming' },
+              { capabilityId: 'tool_calling', label: 'Tool Calling' },
+            ],
+          },
+        ],
+        metadata: {},
+      },
+      {
+        providerId: 'openai',
+        label: 'OpenAI',
+        enabled: true,
+        surfaces: [
+          {
+            surface: 'conversation',
+            protocolFamily: 'openai_chat',
+            transport: ['https'],
+            authStrategy: 'bearer',
+            baseUrl: 'https://api.openai.com/v1',
+            baseUrlPolicy: 'allow_override',
+            enabled: true,
+            capabilities: [
+              { capabilityId: 'streaming', label: 'Streaming' },
+              { capabilityId: 'tool_calling', label: 'Tool Calling' },
+            ],
+          },
+        ],
+        metadata: {},
+      },
+    ],
+    models: [
+      {
+        modelId: 'gpt-4o',
+        label: 'GPT-4o',
+        providerId: 'openai',
+        description: 'Balanced model for interactive work.',
+        family: 'gpt-4o',
+        track: 'general',
+        enabled: true,
+        recommendedFor: 'General desktop orchestration',
+        availability: 'healthy',
+        defaultPermission: 'auto',
+        surfaceBindings: [
+          {
+            surface: 'conversation',
+            protocolFamily: 'openai_chat',
+            enabled: true,
+          },
+        ],
+        capabilities: [
+          { capabilityId: 'streaming', label: 'Streaming' },
+          { capabilityId: 'tool_calling', label: 'Tool Calling' },
+        ],
+        metadata: {},
+      },
+      {
+        modelId: 'claude-sonnet-4-5',
+        label: 'Claude Sonnet 4.5',
+        providerId: 'anthropic',
+        description: 'Runtime-heavy work and reasoning.',
+        family: 'claude-sonnet',
+        track: 'default',
+        enabled: true,
+        recommendedFor: 'Runtime sessions',
+        availability: 'configured',
+        defaultPermission: 'readonly',
+        surfaceBindings: [
+          {
+            surface: 'conversation',
+            protocolFamily: 'anthropic_messages',
+            enabled: true,
+          },
+        ],
+        capabilities: [
+          { capabilityId: 'streaming', label: 'Streaming' },
+          { capabilityId: 'tool_calling', label: 'Tool Calling' },
+        ],
+        metadata: {},
+      },
+    ],
+    configuredModels: [
+      {
+        configuredModelId: 'openai-primary',
+        name: 'GPT-4o',
+        providerId: 'openai',
+        modelId: 'gpt-4o',
+        credentialRef: 'env:OPENAI_API_KEY',
+        tokenUsage: {
+          usedTokens: 0,
+          exhausted: false,
+        },
+        enabled: true,
+        source: 'workspace',
+        status: 'configured',
+        configured: true,
+      },
+      {
+        configuredModelId: 'anthropic-primary',
+        name: 'Claude Primary',
+        providerId: 'anthropic',
+        modelId: 'claude-sonnet-4-5',
+        credentialRef: 'env:ANTHROPIC_API_KEY',
+        tokenUsage: {
+          usedTokens: 0,
+          exhausted: false,
+        },
+        enabled: true,
+        source: 'workspace',
+        status: 'configured',
+        configured: true,
+      },
+      {
+        configuredModelId: 'anthropic-alt',
+        name: 'Claude Alt',
+        providerId: 'anthropic',
+        modelId: 'claude-sonnet-4-5',
+        credentialRef: 'env:ANTHROPIC_ALT_API_KEY',
+        tokenUsage: {
+          usedTokens: 0,
+          exhausted: false,
+        },
+        enabled: true,
+        source: 'workspace',
+        status: 'configured',
+        configured: true,
+      },
+    ],
+    credentialBindings,
+    defaultSelections: {
+      conversation: {
+        configuredModelId: 'anthropic-primary',
+        providerId: 'anthropic',
+        modelId: 'claude-sonnet-4-5',
+        surface: 'conversation',
+      },
+    },
+    diagnostics: {
+      warnings: [],
+      errors: [],
+    },
+  }
+
+  const tools: ToolRecord[] = [
+    {
+      id: 'tool-read',
+      workspaceId: workspace.id,
+      kind: 'builtin',
+      name: 'Read',
+      description: 'Read files from the workspace.',
+      status: 'active',
+      permissionMode: 'readonly',
+      updatedAt: 100,
+    },
+    {
+      id: 'tool-terminal',
+      workspaceId: workspace.id,
+      kind: 'builtin',
+      name: 'Terminal',
+      description: 'Execute commands in the workspace terminal.',
+      status: 'active',
+      permissionMode: 'ask',
+      updatedAt: 100,
+    },
+  ]
+
+  const managedHelpSkill = createSkillAsset({
+    id: 'skill-workspace-help',
+    sourceKey: 'skill:data/skills/help/SKILL.md',
+    name: 'help',
+    description: 'Helpful local skill.',
+    displayPath: 'data/skills/help/SKILL.md',
+    workspaceOwned: true,
+    relativePath: 'data/skills/help/SKILL.md',
+    files: {
+      'SKILL.md': createSkillFileDocument(
+        'skill-workspace-help',
+        'skill:data/skills/help/SKILL.md',
+        'data/skills/help',
+        'SKILL.md',
+        {
+          content: [
+            '---',
+            'name: help',
+            'description: Helpful local skill.',
+            '---',
+            '',
+            '# Help',
+            '',
+            'Useful local workspace instructions.',
+          ].join('\n'),
+        },
+      ),
+      'notes/guide.md': createSkillFileDocument(
+        'skill-workspace-help',
+        'skill:data/skills/help/SKILL.md',
+        'data/skills/help',
+        'notes/guide.md',
+        {
+          content: '# Guide\n\nReview the workspace guide before use.',
+        },
+      ),
+      'assets/logo.png': createSkillFileDocument(
+        'skill-workspace-help',
+        'skill:data/skills/help/SKILL.md',
+        'data/skills/help',
+        'assets/logo.png',
+        {
+          isText: false,
+          byteSize: 2048,
+          contentType: 'image/png',
+        },
+      ),
+    },
+  })
+
+  const externalClaudeSkill = createSkillAsset({
+    id: 'skill-external-help',
+    sourceKey: 'skill:.claude/skills/external-help/SKILL.md',
+    name: 'external-help',
+    description: 'Helpful external skill.',
+    displayPath: '.claude/skills/external-help/SKILL.md',
+    workspaceOwned: false,
+    relativePath: '.claude/skills/external-help/SKILL.md',
+    files: {
+      'SKILL.md': createSkillFileDocument(
+        'skill-external-help',
+        'skill:.claude/skills/external-help/SKILL.md',
+        '.claude/skills/external-help',
+        'SKILL.md',
+        {
+          content: [
+            '---',
+            'name: external-help',
+            'description: Helpful external skill.',
+            '---',
+            '',
+            '# External',
+          ].join('\n'),
+          readonly: true,
+        },
+      ),
+      'examples/prompt.txt': createSkillFileDocument(
+        'skill-external-help',
+        'skill:.claude/skills/external-help/SKILL.md',
+        '.claude/skills/external-help',
+        'examples/prompt.txt',
+        {
+          content: 'Use this skill when you need external guidance.',
+          readonly: true,
+          language: 'text',
+        },
+      ),
+    },
+  })
+
+  const externalCodexSkill = createSkillAsset({
+    id: 'skill-external-checks',
+    sourceKey: 'skill:.codex/skills/external-checks/SKILL.md',
+    name: 'external-checks',
+    description: 'Helpful external checks skill.',
+    displayPath: '.codex/skills/external-checks/SKILL.md',
+    workspaceOwned: false,
+    relativePath: '.codex/skills/external-checks/SKILL.md',
+    files: {
+      'SKILL.md': createSkillFileDocument(
+        'skill-external-checks',
+        'skill:.codex/skills/external-checks/SKILL.md',
+        '.codex/skills/external-checks',
+        'SKILL.md',
+        {
+          content: [
+            '---',
+            'name: external-checks',
+            'description: Helpful external checks skill.',
+            '---',
+            '',
+            '# Checks',
+          ].join('\n'),
+          readonly: true,
+        },
+      ),
+      'templates/checklist.md': createSkillFileDocument(
+        'skill-external-checks',
+        'skill:.codex/skills/external-checks/SKILL.md',
+        '.codex/skills/external-checks',
+        'templates/checklist.md',
+        {
+          content: '# Checklist\n\n- Inspect the current workspace state.',
+          readonly: true,
+        },
+      ),
+    },
+  })
+
+  const skillDocuments: Record<string, WorkspaceSkillDocument> = {
+    [managedHelpSkill.document.id]: managedHelpSkill.document,
+    [externalClaudeSkill.document.id]: externalClaudeSkill.document,
+    [externalCodexSkill.document.id]: externalCodexSkill.document,
+  }
+
+  const skillFiles: Record<string, Record<string, WorkspaceSkillFileDocument>> = {
+    [managedHelpSkill.document.id]: managedHelpSkill.files,
+    [externalClaudeSkill.document.id]: externalClaudeSkill.files,
+    [externalCodexSkill.document.id]: externalCodexSkill.files,
+  }
+
+  const mcpDocuments: Record<string, WorkspaceMcpServerDocument> = {
+    ops: {
+      serverName: 'ops',
+      sourceKey: 'mcp:ops',
+      displayPath: 'config/runtime/workspace.json',
+      scope: 'workspace',
+      config: {
+        type: 'http',
+        url: 'https://ops.example.test/mcp',
+      },
+    },
+  }
+
+  const toolCatalog = {
+    entries: [
+      {
+        id: 'builtin-bash',
+        workspaceId: workspace.id,
+        kind: 'builtin',
+        name: 'bash',
+        description: 'Execute a shell command in the current workspace.',
+        availability: 'healthy',
+        requiredPermission: 'danger-full-access',
+        sourceKey: 'builtin:bash',
+        displayPath: 'runtime builtin registry',
+        disabled: false,
+        management: createManagementCapabilities(true, false, false),
+        builtinKey: 'bash',
+      },
+      {
+        id: managedHelpSkill.document.id,
+        workspaceId: workspace.id,
+        kind: 'skill',
+        name: managedHelpSkill.document.name,
+        description: managedHelpSkill.document.description,
+        availability: 'healthy',
+        requiredPermission: null,
+        sourceKey: managedHelpSkill.document.sourceKey,
+        displayPath: managedHelpSkill.document.displayPath,
+        disabled: false,
+        management: createManagementCapabilities(true, true, true),
+        active: true,
+        sourceOrigin: 'skills_dir',
+        workspaceOwned: true,
+        relativePath: managedHelpSkill.document.relativePath,
+      },
+      {
+        id: externalClaudeSkill.document.id,
+        workspaceId: workspace.id,
+        kind: 'skill',
+        name: externalClaudeSkill.document.name,
+        description: externalClaudeSkill.document.description,
+        availability: 'healthy',
+        requiredPermission: null,
+        sourceKey: externalClaudeSkill.document.sourceKey,
+        displayPath: externalClaudeSkill.document.displayPath,
+        disabled: false,
+        management: createManagementCapabilities(true, false, false),
+        active: true,
+        sourceOrigin: 'skills_dir',
+        workspaceOwned: false,
+        relativePath: externalClaudeSkill.document.relativePath,
+      },
+      {
+        id: externalCodexSkill.document.id,
+        workspaceId: workspace.id,
+        kind: 'skill',
+        name: externalCodexSkill.document.name,
+        description: externalCodexSkill.document.description,
+        availability: 'healthy',
+        requiredPermission: null,
+        sourceKey: externalCodexSkill.document.sourceKey,
+        displayPath: externalCodexSkill.document.displayPath,
+        disabled: false,
+        management: createManagementCapabilities(true, false, false),
+        active: true,
+        sourceOrigin: 'skills_dir',
+        workspaceOwned: false,
+        relativePath: externalCodexSkill.document.relativePath,
+      },
+      {
+        id: 'mcp-ops',
+        workspaceId: workspace.id,
+        kind: 'mcp',
+        name: 'ops',
+        description: 'Configured MCP server.',
+        availability: 'attention',
+        requiredPermission: null,
+        sourceKey: 'mcp:ops',
+        displayPath: 'config/runtime/workspace.json',
+        disabled: false,
+        management: createManagementCapabilities(true, true, true),
+        serverName: 'ops',
+        endpoint: 'https://ops.example.test/mcp',
+        toolNames: ['mcp__ops__tail_logs'],
+        statusDetail: 'MCP handshake timed out',
+        scope: 'workspace',
+      },
+    ] satisfies WorkspaceToolCatalogEntry[],
+  }
+
+  const automations: AutomationRecord[] = local
+    ? [
+        {
+          id: 'automation-sync',
+          workspaceId: workspace.id,
+          title: 'Daily Runtime Sync',
+          description: 'Refresh runtime projections every morning.',
+          cadence: 'Every day 09:00',
+          ownerType: 'agent',
+          ownerId: 'agent-architect',
+          status: 'active',
+          nextRunAt: 110,
+          lastRunAt: 90,
+          output: 'Update overview and dashboard projections.',
+        },
+      ]
+    : []
+
+  const users: UserRecordSummary[] = [
+    ...(ownerReady
+      ? [{
+          id: 'user-owner',
+          username: 'owner',
+          displayName: local ? 'Octopus Owner' : 'Enterprise Owner',
+          avatar: 'data:image/png;base64,iVBORw0KGgo=',
+          status: 'active',
+          passwordState: 'set' as const,
+          roleIds: ['role-owner'],
+          scopeProjectIds: [],
+        }]
+      : []),
+    {
+      id: 'user-operator',
+      username: 'operator',
+      displayName: 'Lin Zhou',
+      avatar: 'data:image/png;base64,iVBORw0KGgo=',
+      status: 'active',
+      passwordState: 'set',
+      roleIds: ['role-operator'],
+      scopeProjectIds: projects.map(project => project.id),
+    },
+  ]
+
+  const roles: RoleRecord[] = [
+    {
+      id: 'role-owner',
+      workspaceId: workspace.id,
+      name: 'Owner',
+      code: 'owner',
+      description: 'Full workspace access.',
+      status: 'active',
+      permissionIds: ['perm-manage-users', 'perm-manage-roles', 'perm-manage-tools'],
+      menuIds: [
+        ...MAIN_WORKSPACE_MENU_IDS,
+        'menu-workspace-user-center-profile',
+        'menu-workspace-user-center-pet',
+        'menu-workspace-user-center-users',
+        'menu-workspace-user-center-roles',
+        'menu-workspace-user-center-permissions',
+        'menu-workspace-user-center-menus',
+      ],
+    },
+    {
+      id: 'role-operator',
+      workspaceId: workspace.id,
+      name: 'Operator',
+      code: 'operator',
+      description: 'Daily operations access.',
+      status: 'active',
+      permissionIds: ['perm-manage-tools'],
+      menuIds: [
+        'menu-workspace-overview',
+        'menu-workspace-projects',
+        'menu-workspace-user-center-profile',
+        'menu-workspace-user-center-pet',
+        'menu-workspace-user-center-users',
+      ],
+    },
+  ]
+
+  const permissions: PermissionRecord[] = [
+    {
+      id: 'perm-manage-users',
+      workspaceId: workspace.id,
+      name: 'Manage users',
+      code: 'workspace.users',
+      description: 'Create and update workspace users.',
+      status: 'active',
+      kind: 'atomic',
+      targetType: 'user',
+      targetIds: [],
+      action: 'manage',
+      memberPermissionIds: [],
+    },
+    {
+      id: 'perm-manage-roles',
+      workspaceId: workspace.id,
+      name: 'Manage roles',
+      code: 'workspace.roles',
+      description: 'Create and update roles.',
+      status: 'active',
+      kind: 'atomic',
+      targetType: 'role',
+      targetIds: [],
+      action: 'manage',
+      memberPermissionIds: [],
+    },
+    {
+      id: 'perm-manage-tools',
+      workspaceId: workspace.id,
+      name: 'Manage tools',
+      code: 'workspace.tools',
+      description: 'Create and update tools.',
+      status: 'active',
+      kind: 'atomic',
+      targetType: 'tool',
+      targetIds: [],
+      action: 'manage',
+      memberPermissionIds: [],
+    },
+  ]
+
+  const menus: MenuRecord[] = [
+    {
+      id: 'menu-workspace-user-center-profile',
+      workspaceId: workspace.id,
+      parentId: 'menu-workspace-user-center',
+      source: 'user-center',
+      label: 'Profile',
+      routeName: 'workspace-user-center-profile',
+      status: 'active',
+      order: 120,
+    },
+    {
+      id: 'menu-workspace-user-center-pet',
+      workspaceId: workspace.id,
+      parentId: 'menu-workspace-user-center',
+      source: 'user-center',
+      label: 'Pet',
+      routeName: 'workspace-user-center-pet',
+      status: 'active',
+      order: 125,
+    },
+    {
+      id: 'menu-workspace-user-center-users',
+      workspaceId: workspace.id,
+      parentId: 'menu-workspace-user-center',
+      source: 'user-center',
+      label: 'Users',
+      routeName: 'workspace-user-center-users',
+      status: 'active',
+      order: 130,
+    },
+    {
+      id: 'menu-workspace-user-center-roles',
+      workspaceId: workspace.id,
+      parentId: 'menu-workspace-user-center',
+      source: 'user-center',
+      label: 'Roles',
+      routeName: 'workspace-user-center-roles',
+      status: 'active',
+      order: 140,
+    },
+    {
+      id: 'menu-workspace-user-center-permissions',
+      workspaceId: workspace.id,
+      parentId: 'menu-workspace-user-center',
+      source: 'user-center',
+      label: 'Permissions',
+      routeName: 'workspace-user-center-permissions',
+      status: 'active',
+      order: 150,
+    },
+    {
+      id: 'menu-workspace-user-center-menus',
+      workspaceId: workspace.id,
+      parentId: 'menu-workspace-user-center',
+      source: 'user-center',
+      label: 'Menus',
+      routeName: 'workspace-user-center-menus',
+      status: 'active',
+      order: 160,
+    },
+  ]
+
+  const userCenterOverview: UserCenterOverviewSnapshot = {
+    workspaceId: workspace.id,
+    currentUser: users[0],
+    roleNames: ownerReady ? ['Owner'] : ['Operator'],
+    metrics: [
+      { id: 'users', label: 'Users', value: String(users.length), tone: 'accent' },
+      { id: 'roles', label: 'Roles', value: String(roles.length), tone: 'info' },
+    ],
+    alerts: [],
+    quickLinks: menus.slice(0, 2),
+  }
+
+  const runtimeWorkspaceConfig: RuntimeEffectiveConfig = {
+    effectiveConfig: {
+      model: 'claude-sonnet-4-5',
+      permissions: {
+        defaultMode: 'plan',
+      },
+      toolCatalog: {
+        disabledSourceKeys: [],
+      },
+      mcpServers: {
+        ops: clone(mcpDocuments.ops.config),
+      },
+    },
+    effectiveConfigHash: `${workspace.id}-cfg-hash-1`,
+    sources: [
+      createRuntimeConfigSource('workspace', workspace.id),
+    ],
+    validation: {
+      valid: true,
+      errors: [],
+      warnings: [],
+    },
+    secretReferences: [],
+  }
+
+  const runtimeProjectConfigs = Object.fromEntries(projects.map(project => [
+    project.id,
+    {
+      effectiveConfig: {
+        provider: {
+          defaultModel: 'claude-sonnet-4-5',
+        },
+        ...clone(runtimeWorkspaceConfig.effectiveConfig),
+        approvals: {
+          defaultMode: 'manual',
+        },
+      },
+      effectiveConfigHash: `${workspace.id}-${project.id}-project-cfg-hash-1`,
+      sources: (() => {
+        const projectSource = createRuntimeConfigSource('project', workspace.id, project.id)
+        if (project.id === 'proj-redesign') {
+          projectSource.document = {
+            approvals: {
+              defaultMode: 'manual',
+            },
+            projectSettings: {
+              models: {
+                allowedConfiguredModelIds: ['anthropic-primary'],
+                defaultConfiguredModelId: 'anthropic-primary',
+              },
+              tools: {
+                enabledSourceKeys: ['builtin:bash'],
+                overrides: {
+                  'builtin:bash': {
+                    permissionMode: 'readonly',
+                  },
+                  'mcp:ops': {
+                    permissionMode: 'deny',
+                  },
+                },
+              },
+              agents: {
+                enabledAgentIds: ['agent-architect'],
+                enabledTeamIds: ['team-studio'],
+              },
+            },
+          }
+        }
+
+        return [
+          createRuntimeConfigSource('user', workspace.id, 'user-owner'),
+          createRuntimeConfigSource('workspace', workspace.id),
+          projectSource,
+        ]
+      })(),
+      validation: {
+        valid: true,
+        errors: [],
+        warnings: [],
+      },
+      secretReferences: [],
+    } satisfies RuntimeEffectiveConfig,
+  ]))
+
+  const runtimeUserConfig: RuntimeEffectiveConfig = {
+    effectiveConfig: {
+      provider: {
+        defaultModel: 'claude-sonnet-4-5',
+      },
+      ...clone(runtimeWorkspaceConfig.effectiveConfig),
+    },
+    effectiveConfigHash: `${workspace.id}-user-owner-runtime-cfg-hash-1`,
+    sources: [
+      createRuntimeConfigSource('user', workspace.id, 'user-owner'),
+      createRuntimeConfigSource('workspace', workspace.id),
+    ],
+    validation: {
+      valid: true,
+      errors: [],
+      warnings: [],
+    },
+    secretReferences: [],
+  }
+
+  const petProfile = createPetProfile()
+  const workspacePetPresence = createPetPresenceState(petProfile.id)
+  const projectPetPresences = Object.fromEntries(projects.map(project => [project.id, createPetPresenceState(petProfile.id)]))
+
+  return {
+    systemBootstrap: {
+      workspace,
+      setupRequired,
+      ownerReady,
+      registeredApps: [],
+      protocolVersion: '1.0.0-test',
+      apiBasePath: '/api/v1',
+      transportSecurity: connection.transportSecurity,
+      authMode: 'session-token',
+      capabilities: {
+        runtime: true,
+        approvals: true,
+        polling: true,
+        sse: true,
+      },
+    },
+    workspace,
+    overview,
+    projects,
+    dashboards,
+    workspaceResources,
+    projectResources,
+    artifacts,
+    workspaceKnowledge,
+    projectKnowledge,
+    agents,
+    projectAgentLinks,
+    teams,
+    projectTeamLinks,
+    catalog,
+    toolCatalog,
+    skillDocuments,
+    skillFiles,
+    mcpDocuments,
+    tools,
+    automations,
+    userCenterOverview,
+    users,
+    userPasswords: ownerReady ? { 'user-owner': 'owner-owner', 'user-operator': 'operator-operator' } : { 'user-operator': 'operator-operator' },
+    roles,
+    permissions,
+    menus,
+    runtimeSessions: new Map(),
+    runtimeWorkspaceConfig,
+    runtimeProjectConfigs,
+    runtimeUserConfig,
+    petProfile,
+    workspacePetPresence,
+    projectPetPresences,
+    workspacePetBinding: undefined,
+    projectPetBindings: {},
+  }
+}
