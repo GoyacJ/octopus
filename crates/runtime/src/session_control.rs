@@ -569,14 +569,17 @@ mod tests {
     use crate::session::Session;
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_dir() -> PathBuf {
+        static NEXT_TEMP_DIR_ID: AtomicU64 = AtomicU64::new(0);
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time should be after epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("runtime-session-control-{nanos}"))
+        let unique_id = NEXT_TEMP_DIR_ID.fetch_add(1, Ordering::Relaxed);
+        std::env::temp_dir().join(format!("runtime-session-control-{nanos}-{unique_id}"))
     }
 
     fn persist_session(root: &Path, text: &str) -> Session {
