@@ -3,6 +3,8 @@ import { defineStore } from 'pinia'
 
 import type {
   AgentRecord,
+  ExportWorkspaceAgentBundleInput,
+  ExportWorkspaceAgentBundleResult,
   ImportWorkspaceAgentBundleInput,
   ImportWorkspaceAgentBundlePreviewInput,
   ProjectAgentLinkInput,
@@ -164,16 +166,24 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  async function previewImportBundle(input: ImportWorkspaceAgentBundlePreviewInput) {
+  async function previewImportBundle(input: ImportWorkspaceAgentBundlePreviewInput, projectId?: string) {
     const { client } = ensureWorkspaceClientForConnection()
-    return await client.agents.previewImportBundle(input)
+    return await client.agents.previewImportBundle(input, projectId)
   }
 
-  async function importBundle(input: ImportWorkspaceAgentBundleInput) {
+  async function importBundle(input: ImportWorkspaceAgentBundleInput, projectId?: string) {
     const { client, connectionId } = ensureWorkspaceClientForConnection()
-    const result = await client.agents.importBundle(input)
+    const result = await client.agents.importBundle(input, projectId)
     await load(connectionId)
+    if (projectId) {
+      await loadProjectLinks(projectId, connectionId)
+    }
     return result
+  }
+
+  async function exportBundle(input: ExportWorkspaceAgentBundleInput, projectId?: string): Promise<ExportWorkspaceAgentBundleResult> {
+    const { client } = ensureWorkspaceClientForConnection()
+    return await client.agents.exportBundle(input, projectId)
   }
 
   async function linkProject(input: ProjectAgentLinkInput) {
@@ -219,6 +229,7 @@ export const useAgentStore = defineStore('agent', () => {
     remove,
     previewImportBundle,
     importBundle,
+    exportBundle,
     linkProject,
     unlinkProject,
   }

@@ -1,8 +1,12 @@
 use super::*;
+use std::collections::HashMap;
+
+use octopus_core::WorkspaceToolConsumerSummary;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum SkillDefinitionSource {
     WorkspaceManaged,
+    ProjectManaged,
     ProjectClaw,
     ProjectCodex,
     ProjectClaude,
@@ -17,6 +21,7 @@ impl SkillDefinitionSource {
     pub(super) fn key(self) -> &'static str {
         match self {
             Self::WorkspaceManaged => "workspace-managed",
+            Self::ProjectManaged => "project-managed",
             Self::ProjectClaw => "project-claw",
             Self::ProjectCodex => "project-codex",
             Self::ProjectClaude => "project-claude",
@@ -212,6 +217,24 @@ pub(super) fn discover_skill_roots(cwd: &Path) -> Vec<SkillCatalogRoot> {
     roots
 }
 
+pub(super) fn discover_catalog_skill_roots(
+    paths: &WorkspacePaths,
+    projects: &[ProjectRecord],
+) -> Vec<SkillCatalogRoot> {
+    let mut roots = discover_skill_roots(&paths.root);
+    let mut sorted_projects = projects.to_vec();
+    sorted_projects.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
+    for project in &sorted_projects {
+        push_unique_skill_root(
+            &mut roots,
+            SkillDefinitionSource::ProjectManaged,
+            paths.project_skills_root(&project.id),
+            SkillSourceOrigin::SkillsDir,
+        );
+    }
+    roots
+}
+
 pub(super) fn push_unique_skill_root(
     roots: &mut Vec<SkillCatalogRoot>,
     source: SkillDefinitionSource,
@@ -392,7 +415,13 @@ pub(super) fn load_workspace_runtime_document(
     paths: &WorkspacePaths,
 ) -> Result<serde_json::Map<String, serde_json::Value>, AppError> {
     let workspace_config_path = paths.runtime_config_dir.join("workspace.json");
-    match fs::read_to_string(&workspace_config_path) {
+    load_runtime_document(&workspace_config_path)
+}
+
+pub(super) fn load_runtime_document(
+    path: &Path,
+) -> Result<serde_json::Map<String, serde_json::Value>, AppError> {
+    match fs::read_to_string(path) {
         Ok(raw) => {
             let trimmed = raw.trim();
             if trimmed.is_empty() {
@@ -400,7 +429,10 @@ pub(super) fn load_workspace_runtime_document(
             }
             let parsed: serde_json::Value = serde_json::from_str(trimmed)?;
             parsed.as_object().cloned().ok_or_else(|| {
-                AppError::invalid_input("workspace runtime config must be a JSON object")
+                AppError::invalid_input(format!(
+                    "{} must contain a top-level JSON object",
+                    path.display()
+                ))
             })
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(serde_json::Map::new()),
@@ -527,6 +559,29 @@ pub(super) fn is_workspace_owned_skill(
 ) -> bool {
     relative_path.is_some_and(|value| value.starts_with("data/skills/"))
         && origin == SkillSourceOrigin::SkillsDir
+}
+
+pub(super) fn project_owned_skill_project_id(
+    relative_path: Option<&str>,
+    origin: SkillSourceOrigin,
+) -> Option<String> {
+    if origin != SkillSourceOrigin::SkillsDir {
+        return None;
+    }
+    let relative_path = relative_path?;
+    let mut parts = relative_path.split('/');
+    match (
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+        parts.next(),
+    ) {
+        (Some("data"), Some("projects"), Some(project_id), Some("skills"), Some(_)) => {
+            Some(project_id.to_string())
+        }
+        _ => None,
+    }
 }
 
 pub(super) fn skill_root_path(
@@ -995,6 +1050,216 @@ pub(super) fn mcp_scope_label(_scope: runtime::ConfigSource) -> &'static str {
     "workspace"
 }
 
+fn mcp_source_key(scope: &str, owner_id: Option<&str>, server_name: &str) -> String {
+    match (scope, owner_id) {
+        ("project", Some(project_id)) => format!("mcp:project:{project_id}:{server_name}"),
+        _ => format!("mcp:{server_name}"),
+    }
+}
+
+fn extract_mcp_server_configs(
+    document: &serde_json::Map<String, serde_json::Value>,
+) -> Result<BTreeMap<String, serde_json::Value>, AppError> {
+    let mut servers = BTreeMap::new();
+    for (server_name, value) in document
+        .get("mcpServers")
+        .and_then(|value| value.as_object())
+        .into_iter()
+        .flat_map(|servers| servers.iter())
+    {
+        servers.insert(server_name.clone(), value.clone());
+    }
+    Ok(servers)
+}
+
+fn mcp_endpoint_from_document(config: &serde_json::Value) -> String {
+    let Some(object) = config.as_object() else {
+        return String::new();
+    };
+    match object.get("type").and_then(|value| value.as_str()) {
+        Some("stdio") => {
+            let command = object
+                .get("command")
+                .and_then(|value| value.as_str())
+                .unwrap_or_default();
+            let args = object
+                .get("args")
+                .and_then(|value| value.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(ToOwned::to_owned))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            if args.is_empty() {
+                format!("stdio: {command}")
+            } else {
+                format!("stdio: {command} {}", args.join(" "))
+            }
+        }
+        Some("sdk") => object
+            .get("name")
+            .and_then(|value| value.as_str())
+            .map(|name| format!("sdk: {name}"))
+            .unwrap_or_default(),
+        Some("http") | Some("sse") | Some("ws") | Some("managed_proxy") => object
+            .get("url")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .to_string(),
+        _ => object
+            .get("url")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .to_string(),
+    }
+}
+
+fn tool_consumer_summary(
+    kind: &str,
+    id: &str,
+    name: &str,
+    scope: &str,
+    owner_id: Option<&str>,
+    owner_label: Option<&str>,
+) -> WorkspaceToolConsumerSummary {
+    WorkspaceToolConsumerSummary {
+        kind: kind.into(),
+        id: id.into(),
+        name: name.into(),
+        scope: scope.into(),
+        owner_id: owner_id.map(ToOwned::to_owned),
+        owner_label: owner_label.map(ToOwned::to_owned),
+    }
+}
+
+struct ToolConsumerMaps {
+    builtin: HashMap<String, Vec<WorkspaceToolConsumerSummary>>,
+    skills: HashMap<String, Vec<WorkspaceToolConsumerSummary>>,
+    mcps: HashMap<String, Vec<WorkspaceToolConsumerSummary>>,
+}
+
+fn push_consumer(
+    target: &mut HashMap<String, Vec<WorkspaceToolConsumerSummary>>,
+    key: String,
+    consumer: &WorkspaceToolConsumerSummary,
+) {
+    let entries = target.entry(key).or_default();
+    if !entries.iter().any(|existing| existing.kind == consumer.kind && existing.id == consumer.id) {
+        entries.push(consumer.clone());
+    }
+}
+
+fn clone_non_empty_consumers(
+    value: Option<&Vec<WorkspaceToolConsumerSummary>>,
+) -> Option<Vec<WorkspaceToolConsumerSummary>> {
+    match value {
+        Some(items) if !items.is_empty() => Some(items.clone()),
+        _ => None,
+    }
+}
+
+fn sort_consumers(entries: &mut HashMap<String, Vec<WorkspaceToolConsumerSummary>>) {
+    for consumers in entries.values_mut() {
+        consumers.sort_by(|left, right| {
+            left.kind
+                .cmp(&right.kind)
+                .then_with(|| left.name.to_ascii_lowercase().cmp(&right.name.to_ascii_lowercase()))
+                .then_with(|| left.id.cmp(&right.id))
+        });
+    }
+}
+
+fn build_tool_consumer_maps(
+    agents: &[AgentRecord],
+    teams: &[TeamRecord],
+    project_name_by_id: &HashMap<String, String>,
+    project_mcp_source_keys: &HashMap<(String, String), String>,
+) -> ToolConsumerMaps {
+    let mut builtin = HashMap::<String, Vec<WorkspaceToolConsumerSummary>>::new();
+    let mut skills = HashMap::<String, Vec<WorkspaceToolConsumerSummary>>::new();
+    let mut mcps = HashMap::<String, Vec<WorkspaceToolConsumerSummary>>::new();
+
+    for agent in agents {
+        let project_owner_label = agent
+            .project_id
+            .as_ref()
+            .and_then(|project_id| project_name_by_id.get(project_id))
+            .map(String::as_str);
+        let consumer = tool_consumer_summary(
+            "agent",
+            &agent.id,
+            &agent.name,
+            &agent.scope,
+            agent.project_id.as_deref(),
+            project_owner_label,
+        );
+        for builtin_key in &agent.builtin_tool_keys {
+            push_consumer(&mut builtin, builtin_key.clone(), &consumer);
+        }
+        for skill_id in &agent.skill_ids {
+            push_consumer(&mut skills, skill_id.clone(), &consumer);
+        }
+        for server_name in &agent.mcp_server_names {
+            let key = agent
+                .project_id
+                .as_ref()
+                .and_then(|project_id| {
+                    project_mcp_source_keys
+                        .get(&(project_id.clone(), server_name.clone()))
+                        .cloned()
+                })
+                .unwrap_or_else(|| mcp_source_key("workspace", None, server_name));
+            push_consumer(&mut mcps, key, &consumer);
+        }
+    }
+
+    for team in teams {
+        let project_owner_label = team
+            .project_id
+            .as_ref()
+            .and_then(|project_id| project_name_by_id.get(project_id))
+            .map(String::as_str);
+        let consumer = tool_consumer_summary(
+            "team",
+            &team.id,
+            &team.name,
+            &team.scope,
+            team.project_id.as_deref(),
+            project_owner_label,
+        );
+        for builtin_key in &team.builtin_tool_keys {
+            push_consumer(&mut builtin, builtin_key.clone(), &consumer);
+        }
+        for skill_id in &team.skill_ids {
+            push_consumer(&mut skills, skill_id.clone(), &consumer);
+        }
+        for server_name in &team.mcp_server_names {
+            let key = team
+                .project_id
+                .as_ref()
+                .and_then(|project_id| {
+                    project_mcp_source_keys
+                        .get(&(project_id.clone(), server_name.clone()))
+                        .cloned()
+                })
+                .unwrap_or_else(|| mcp_source_key("workspace", None, server_name));
+            push_consumer(&mut mcps, key, &consumer);
+        }
+    }
+
+    sort_consumers(&mut builtin);
+    sort_consumers(&mut skills);
+    sort_consumers(&mut mcps);
+
+    ToolConsumerMaps {
+        builtin,
+        skills,
+        mcps,
+    }
+}
+
 pub(super) fn mcp_endpoint(config: &runtime::McpServerConfig) -> String {
     match config {
         runtime::McpServerConfig::Stdio(config) => {
@@ -1019,7 +1284,13 @@ impl InfraWorkspaceService {
         skill_id: &str,
     ) -> Result<SkillCatalogEntry, AppError> {
         let workspace_root = self.state.paths.root.clone();
-        load_skills_from_roots(&discover_skill_roots(&workspace_root))?
+        let projects = self
+            .state
+            .projects
+            .lock()
+            .map_err(|_| AppError::runtime("projects mutex poisoned"))?
+            .clone();
+        load_skills_from_roots(&discover_catalog_skill_roots(&self.state.paths, &projects))?
             .into_iter()
             .find(|skill| {
                 catalog_hash_id("skill", &display_path(&skill.path, &workspace_root)) == skill_id
@@ -1159,6 +1430,59 @@ impl InfraWorkspaceService {
         let workspace_root = self.state.paths.root.clone();
         let runtime_document = load_workspace_runtime_document(&self.state.paths)?;
         let disabled_keys = disabled_source_keys(&runtime_document);
+        let projects = self
+            .state
+            .projects
+            .lock()
+            .map_err(|_| AppError::runtime("projects mutex poisoned"))?
+            .clone();
+        let agents = self
+            .state
+            .agents
+            .lock()
+            .map_err(|_| AppError::runtime("agents mutex poisoned"))?
+            .clone();
+        let teams = self
+            .state
+            .teams
+            .lock()
+            .map_err(|_| AppError::runtime("teams mutex poisoned"))?
+            .clone();
+        let project_name_by_id = projects
+            .iter()
+            .map(|project| (project.id.clone(), project.name.clone()))
+            .collect::<HashMap<_, _>>();
+        let project_mcp_configs = projects
+            .iter()
+            .map(|project| {
+                let document = load_runtime_document(
+                    &self
+                        .state
+                        .paths
+                        .runtime_project_config_dir
+                        .join(format!("{}.json", project.id)),
+                )?;
+                let configs = extract_mcp_server_configs(&document)?;
+                Ok::<_, AppError>((project.id.clone(), configs))
+            })
+            .collect::<Result<HashMap<_, _>, _>>()?;
+        let project_mcp_source_keys = project_mcp_configs
+            .iter()
+            .flat_map(|(project_id, configs): (&String, &BTreeMap<String, serde_json::Value>)| {
+                configs.keys().map(move |server_name: &String| {
+                    (
+                        (project_id.clone(), server_name.clone()),
+                        mcp_source_key("project", Some(project_id), server_name),
+                    )
+                })
+            })
+            .collect::<HashMap<_, _>>();
+        let consumer_maps = build_tool_consumer_maps(
+            &agents,
+            &teams,
+            &project_name_by_id,
+            &project_mcp_source_keys,
+        );
         let mut entries = Vec::new();
 
         for spec in tools::mvp_tool_specs() {
@@ -1190,16 +1514,22 @@ impl InfraWorkspaceService {
                 tool_names: None,
                 status_detail: None,
                 scope: None,
+                owner_scope: Some("builtin".into()),
+                owner_id: None,
+                owner_label: Some("Builtin".into()),
+                consumers: clone_non_empty_consumers(consumer_maps.builtin.get(spec.name)),
             });
         }
 
-        for skill in load_skills_from_roots(&discover_skill_roots(&workspace_root))? {
+        for skill in load_skills_from_roots(&discover_catalog_skill_roots(&self.state.paths, &projects))? {
             let is_active = skill.shadowed_by.is_none();
             let source_key = skill_source_key(&skill.path, &workspace_root);
             let relative_path = workspace_relative_path(&skill.path, &workspace_root);
             let workspace_owned = is_workspace_owned_skill(relative_path.as_deref(), skill.origin);
+            let project_owner_id = project_owned_skill_project_id(relative_path.as_deref(), skill.origin);
+            let skill_id = catalog_hash_id("skill", &display_path(&skill.path, &workspace_root));
             entries.push(WorkspaceToolCatalogEntry {
-                id: catalog_hash_id("skill", &display_path(&skill.path, &workspace_root)),
+                id: skill_id.clone(),
                 workspace_id: workspace_id.clone(),
                 name: skill.name.clone(),
                 kind: "skill".into(),
@@ -1229,6 +1559,19 @@ impl InfraWorkspaceService {
                 tool_names: None,
                 status_detail: None,
                 scope: None,
+                owner_scope: if workspace_owned {
+                    Some("workspace".into())
+                } else if project_owner_id.is_some() {
+                    Some("project".into())
+                } else {
+                    None
+                },
+                owner_id: project_owner_id.clone(),
+                owner_label: project_owner_id
+                    .as_ref()
+                    .and_then(|project_id| project_name_by_id.get(project_id))
+                    .map(ToOwned::to_owned),
+                consumers: clone_non_empty_consumers(consumer_maps.skills.get(&skill_id)),
             });
         }
 
@@ -1272,7 +1615,7 @@ impl InfraWorkspaceService {
             } else {
                 "healthy"
             };
-            let source_key = format!("mcp:{server_name}");
+            let source_key = mcp_source_key("workspace", None, server_name);
 
             entries.push(WorkspaceToolCatalogEntry {
                 id: format!("mcp-{server_name}"),
@@ -1301,7 +1644,50 @@ impl InfraWorkspaceService {
                 tool_names: Some(tool_names),
                 status_detail,
                 scope: Some(mcp_scope_label(scoped_config.scope).into()),
+                owner_scope: Some("workspace".into()),
+                owner_id: None,
+                owner_label: Some("Workspace".into()),
+                consumers: clone_non_empty_consumers(consumer_maps.mcps.get(&source_key)),
             });
+        }
+
+        for project in &projects {
+            let project_configs = project_mcp_configs.get(&project.id).cloned().unwrap_or_default();
+            for (server_name, config) in project_configs {
+                let source_key = mcp_source_key("project", Some(&project.id), &server_name);
+                entries.push(WorkspaceToolCatalogEntry {
+                    id: format!("mcp-project-{}-{}", project.id, server_name),
+                    workspace_id: workspace_id.clone(),
+                    name: server_name.clone(),
+                    kind: "mcp".into(),
+                    description: "Configured MCP server.".into(),
+                    required_permission: None,
+                    availability: "configured".into(),
+                    source_key: source_key.clone(),
+                    display_path: format!("config/runtime/projects/{}.json", project.id),
+                    disabled: disabled_keys.contains(&source_key),
+                    management: WorkspaceToolManagementCapabilities {
+                        can_disable: true,
+                        can_edit: false,
+                        can_delete: false,
+                    },
+                    builtin_key: None,
+                    active: None,
+                    shadowed_by: None,
+                    source_origin: None,
+                    workspace_owned: None,
+                    relative_path: None,
+                    server_name: Some(server_name.clone()),
+                    endpoint: Some(mcp_endpoint_from_document(&config)),
+                    tool_names: Some(Vec::new()),
+                    status_detail: None,
+                    scope: Some("project".into()),
+                    owner_scope: Some("project".into()),
+                    owner_id: Some(project.id.clone()),
+                    owner_label: Some(project.name.clone()),
+                    consumers: clone_non_empty_consumers(consumer_maps.mcps.get(&source_key)),
+                });
+            }
         }
 
         entries.sort_by(|left, right| {

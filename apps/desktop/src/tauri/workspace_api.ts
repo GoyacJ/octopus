@@ -3,6 +3,7 @@ import type {
   AutomationRecord,
   ChangeCurrentUserPasswordResponse,
   CredentialBinding,
+  ExportWorkspaceAgentBundleResult,
   ImportWorkspaceAgentBundlePreview,
   ImportWorkspaceAgentBundleResult,
   ModelCatalogSnapshot,
@@ -341,27 +342,83 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
           },
         })
       },
-      async previewImportBundle(input) {
+      async previewImportBundle(input, projectId) {
+        const session = assertWorkspaceRequestReady(context)
+        if (projectId) {
+          return await fetchWorkspaceOpenApi(
+            context.connection,
+            '/api/v1/projects/{projectId}/agents/import-preview',
+            'post',
+            {
+              session,
+              pathParams: {
+                projectId,
+              },
+              body: JSON.stringify(input),
+            },
+          ) as unknown as ImportWorkspaceAgentBundlePreview
+        }
         return await fetchWorkspaceOpenApi(
           context.connection,
           '/api/v1/workspace/agents/import-preview',
           'post',
           {
-            session: assertWorkspaceRequestReady(context),
+            session,
             body: JSON.stringify(input),
           },
         ) as unknown as ImportWorkspaceAgentBundlePreview
       },
-      async importBundle(input) {
+      async importBundle(input, projectId) {
+        const session = assertWorkspaceRequestReady(context)
+        if (projectId) {
+          return await fetchWorkspaceOpenApi(
+            context.connection,
+            '/api/v1/projects/{projectId}/agents/import',
+            'post',
+            {
+              session,
+              pathParams: {
+                projectId,
+              },
+              body: JSON.stringify(input),
+            },
+          ) as unknown as ImportWorkspaceAgentBundleResult
+        }
         return await fetchWorkspaceOpenApi(
           context.connection,
           '/api/v1/workspace/agents/import',
           'post',
           {
-            session: assertWorkspaceRequestReady(context),
+            session,
             body: JSON.stringify(input),
           },
         ) as unknown as ImportWorkspaceAgentBundleResult
+      },
+      async exportBundle(input, projectId) {
+        const session = assertWorkspaceRequestReady(context)
+        if (projectId) {
+          return await fetchWorkspaceOpenApi(
+            context.connection,
+            '/api/v1/projects/{projectId}/agents/export',
+            'post',
+            {
+              session,
+              pathParams: {
+                projectId,
+              },
+              body: JSON.stringify(input),
+            },
+          ) as unknown as ExportWorkspaceAgentBundleResult
+        }
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/agents/export',
+          'post',
+          {
+            session,
+            body: JSON.stringify(input),
+          },
+        ) as unknown as ExportWorkspaceAgentBundleResult
       },
       async listProjectLinks(projectId) {
         return await fetchWorkspaceOpenApi(

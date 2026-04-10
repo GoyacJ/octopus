@@ -1,28 +1,131 @@
 {
   "site": {
     "name": "Octopus",
-    "status": "官网骨架已保留，页面实现已清空"
+    "description": "构建您的高安全私有化数字员工团队。基于信创环境，保障数据主权，赋能个人与企业知识大脑。",
+    "status": "Beta"
+  },
+  "nav": {
+    "product": "产品特性",
+    "scenarios": "应用场景",
+    "download": "下载中心",
+    "about": "关于我们",
+    "bookDemo": "预约演示"
+  },
+  "footer": {
+    "product": "产品",
+    "company": "公司",
+    "support": "支持",
+    "blog": "技术博客",
+    "docs": "帮助文档",
+    "contact": "联系我们",
+    "privacy": "隐私政策",
+    "terms": "服务条款"
   },
   "pages": {
     "home": {
-      "title": "官网重构中",
-      "body": "首页、营销组件、截图叙事与文案结构已全部移除，当前仅保留可继续开发的 Nuxt 骨架。"
+      "title": "您的私有化 AI 数字员工团队",
+      "subtitle": "集结 AI 之力，保障数据主权。在您的信创环境或私有云中，部署专属的数字员工团队与知识大脑。",
+      "cta": {
+        "primary": "立即体验",
+        "secondary": "了解更多"
+      },
+      "features": {
+        "private": {
+          "title": "私有化部署",
+          "desc": "数据不出域，完全掌控 AI 资产。支持离线运行与内网部署。"
+        },
+        "localization": {
+          "title": "全栈信创支持",
+          "desc": "深度适配国内主流信创 CPU、操作系统及数据库环境。"
+        },
+        "team": {
+          "title": "数字员工团队",
+          "desc": "不再是单一 Agent，而是可协作的数字员工团队，并行处理复杂业务。"
+        },
+        "pet": {
+          "title": "专属私人宠物",
+          "desc": "有温度的 AI 交互，专属陪伴与个性化情感互动。"
+        },
+        "knowledge": {
+          "title": "企业知识大脑",
+          "desc": "沉淀企业私有知识体系，实现高效的语义搜索与自动化知识问答。"
+        },
+        "security": {
+          "title": "高级安全防护",
+          "desc": "企业级 RBAC 权限体系，敏感数据脱敏，全链路审计追溯。"
+        }
+      }
     },
     "product": {
-      "title": "Product 占位页",
-      "body": "原有产品叙事内容已清空，后续将在这个路由上重新搭建产品闭环页面。"
+      "title": "硬核 AI 基础设施能力",
+      "body": "从底层的信创适配到上层的 Agent 协作架构，Octopus 为企业提供全栈、安全、高性能的 AI 落地底座。基于沙箱化运行时与统一 MCP 协议，构建真正可交付的数字员工团队。",
+      "features": {
+        "mcp": {
+          "title": "Model Context Protocol (MCP)",
+          "desc": "支持全球统一的工具调用标准。无缝集成 MCP 服务器，让您的数字员工拥有无限扩展的外部工具链（DB、API、文件系统）。"
+        },
+        "sandbox": {
+          "title": "安全隔离沙箱运行时",
+          "desc": "基于 octopus-runtime 的代码执行环境。AI 编写的代码在受限沙箱中运行，确保自动执行逻辑对宿主系统零风险。"
+        },
+        "telemetry": {
+          "title": "全链路全观察性 (Telemetry)",
+          "desc": "内置全链路追踪与日志记录。Agent 的每一次思考、每一次工具调用都可被审计、回溯与实时监控。"
+        },
+        "plugin": {
+          "title": "可插拔插件架构",
+          "desc": "解耦的插件体系支持快速定制。无论是特定业务系统的对接还是自定义能力的注入，均可通过 Bundled Plugins 快速实现。"
+        },
+        "desktop": {
+          "title": "跨平台桌面端 (Tauri)",
+          "desc": "原生级性能表现。支持 macOS, Windows, Linux，深度集成系统通知与快捷键，打造沉浸式的数字宠物交互体验。"
+        },
+        "enterprise": {
+          "title": "企业级 RBAC & 安全治理",
+          "desc": "精细到字段级的权限管控。内置审计日志与敏感数据过滤引擎，满足金融、政务级合规要求。"
+        }
+      }
     },
     "scenarios": {
-      "title": "Scenarios 占位页",
-      "body": "原有场景内容与配图已移除，当前只保留多语言路由与页面骨架。"
+      "title": "广泛的应用场景",
+      "body": "覆盖个人、团队、企业全生命周期，赋能每一个业务环节。"
     },
     "about": {
-      "title": "About 占位页",
-      "body": "品牌故事与原则模块已清空，后续可在此基础上重新组织品牌叙事。"
+      "title": "关于 Octopus",
+      "body": "我们致力于通过开源与私有化技术，让每一个组织都能拥有安全、可控、智能的 AI 基础设施。"
     },
     "bookDemo": {
-      "title": "Book a Demo 占位页",
-      "body": "预约演示页的原始实现已删除，后续可重新接入外部表单或 CRM 入口。"
+      "title": "预约产品演示",
+      "body": "填写下方表单，我们的技术专家将为您提供专属的私有化部署咨询与演示。"
+    },
+    "download": {
+      "title": "下载 Octopus 桌面端",
+      "subtitle": "选择您的操作系统，开启私人数字员工之旅。支持全平台原生性能，深度集成系统能力。",
+      "platforms": {
+        "macos": "macOS",
+        "windows": "Windows",
+        "linux": "Linux"
+      },
+      "hints": {
+        "macos": "支持 Apple Silicon & Intel",
+        "windows": "Windows 10/11 (64-bit)",
+        "linux": "Ubuntu, Fedora, Arch"
+      },
+      "cta": "立即下载",
+      "version": "当前版本: v{version}",
+      "changelog": "查看更新日志",
+      "requirements": "系统要求: macOS 12+, Windows 10+, Ubuntu 20.04+",
+      "support": "安装遇到问题？",
+      "newVersion": "新版本可用！",
+      "experience": {
+        "title": "沉浸式的 Agent 交互体验",
+        "desc": "Octopus 桌面客户端不仅仅是一个浏览器外壳，它与系统底层深度集成。利用 Tauri 的原生能力，提供系统级托盘通知、快捷键唤起、以及更高效的本地沙箱模型调用速度。",
+        "bullets": {
+          "fastBoot": "极速冷启动",
+          "lowMemory": "极低的内存占用",
+          "privacy": "本地隐私隔离层"
+        }
+      }
     }
   }
 }

@@ -22,6 +22,7 @@ pub struct WorkspacePaths {
     pub knowledge_dir: PathBuf,
     pub inbox_dir: PathBuf,
     pub managed_skills_dir: PathBuf,
+    pub project_data_dir: PathBuf,
     pub runtime_sessions_dir: PathBuf,
     pub runtime_events_dir: PathBuf,
     pub runtime_traces_dir: PathBuf,
@@ -48,6 +49,7 @@ impl WorkspacePaths {
         let knowledge_dir = data_dir.join("knowledge");
         let inbox_dir = data_dir.join("inbox");
         let managed_skills_dir = data_dir.join("skills");
+        let project_data_dir = data_dir.join("projects");
         let runtime_sessions_dir = runtime_dir.join("sessions");
         let runtime_events_dir = runtime_dir.join("events");
         let runtime_traces_dir = runtime_dir.join("traces");
@@ -75,6 +77,7 @@ impl WorkspacePaths {
             knowledge_dir,
             inbox_dir,
             managed_skills_dir,
+            project_data_dir,
             runtime_sessions_dir,
             runtime_events_dir,
             runtime_traces_dir,
@@ -102,6 +105,7 @@ impl WorkspacePaths {
             &self.knowledge_dir,
             &self.inbox_dir,
             &self.managed_skills_dir,
+            &self.project_data_dir,
             &self.runtime_sessions_dir,
             &self.runtime_events_dir,
             &self.runtime_traces_dir,
@@ -114,5 +118,13 @@ impl WorkspacePaths {
         }
 
         Ok(())
+    }
+
+    pub fn project_dir(&self, project_id: &str) -> PathBuf {
+        self.project_data_dir.join(project_id)
+    }
+
+    pub fn project_skills_root(&self, project_id: &str) -> PathBuf {
+        self.project_dir(project_id).join("skills")
     }
 }

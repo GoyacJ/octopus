@@ -1,28 +1,104 @@
 {
   "site": {
     "name": "Octopus",
-    "status": "Website scaffold kept, page implementation cleared"
+    "description": "Build your high-security private digital employee team. Based on the localization environment, protect data sovereignty and empower individual and enterprise knowledge brains.",
+    "status": "Beta"
+  },
+  "nav": {
+    "product": "Product",
+    "scenarios": "Scenarios",
+    "about": "About",
+    "bookDemo": "Book a Demo"
+  },
+  "footer": {
+    "product": "Product",
+    "company": "Company",
+    "support": "Support",
+    "blog": "Blog",
+    "docs": "Docs",
+    "contact": "Contact",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service"
   },
   "pages": {
     "home": {
-      "title": "Website Reset In Progress",
-      "body": "The homepage, marketing components, screenshot narrative, and copy structure have been removed. Only the Nuxt scaffold remains."
+      "title": "Your Private AI Digital Employee Team",
+      "subtitle": "Unite the power of AI while protecting data sovereignty. Deploy exclusive digital employee teams and knowledge brains in your localization environment or private cloud.",
+      "cta": {
+        "primary": "Get Started",
+        "secondary": "Learn More"
+      },
+      "features": {
+        "private": {
+          "title": "Private Deployment",
+          "desc": "Data never leaves your domain, giving you complete control over your AI assets. Supports offline operation and intranet deployment."
+        },
+        "localization": {
+          "title": "Full localization Stack",
+          "desc": "Deeply adapted to domestic mainstream localization CPUs, operating systems, and database environments."
+        },
+        "team": {
+          "title": "Digital Employee Team",
+          "desc": "Not just a single agent, but a collaborative digital employee team capable of parallel processing complex tasks."
+        },
+        "pet": {
+          "title": "Exclusive Private Pet",
+          "desc": "Warm AI interaction with exclusive companionship and personalized emotional bonding."
+        },
+        "knowledge": {
+          "title": "Enterprise Knowledge Brain",
+          "desc": "Accumulate private organizational knowledge for efficient semantic search and automated Q&A."
+        },
+        "security": {
+          "title": "Advanced Security",
+          "desc": "Enterprise-grade RBAC, sensitive data masking, and full-link audit traceability."
+        }
+      }
     },
     "product": {
-      "title": "Product Placeholder",
-      "body": "The previous product narrative has been cleared. This route now remains as a clean page shell for the rebuild."
+      "title": "Enterprise Capabilities",
+      "body": "From bottom-level localization adaptation to top-level agent orchestration, Octopus provides full-stack AI implementation for enterprises."
     },
     "scenarios": {
-      "title": "Scenarios Placeholder",
-      "body": "Scenario content and supporting imagery have been removed. Only the bilingual route and minimal page scaffold remain."
+      "title": "Wide Range of Scenarios",
+      "body": "Covering individual, team, and enterprise lifecycles, empowering every business stage."
     },
     "about": {
-      "title": "About Placeholder",
-      "body": "The brand story and principles modules have been cleared so the narrative can be rebuilt from a clean baseline."
+      "title": "About Octopus",
+      "body": "We are dedicated to providing secure, controllable, and intelligent AI infrastructure for every organization through open source and private technologies."
     },
     "bookDemo": {
-      "title": "Book a Demo Placeholder",
-      "body": "The existing booking implementation has been removed. A new external form or CRM entry can be added later."
+      "title": "Book a Product Demo",
+      "body": "Fill out the form below, and our technical experts will provide you with exclusive private deployment consultation and demos."
+    },
+    "download": {
+      "title": "Download Octopus Desktop",
+      "subtitle": "Choose your operating system and start your private digital employee journey. Enjoy native performance and deep system integration.",
+      "platforms": {
+        "macos": "macOS",
+        "windows": "Windows",
+        "linux": "Linux"
+      },
+      "hints": {
+        "macos": "Supports Apple Silicon & Intel",
+        "windows": "Windows 10/11 (64-bit)",
+        "linux": "Ubuntu, Fedora, Arch"
+      },
+      "cta": "Download Now",
+      "version": "Version: v{version}",
+      "changelog": "View Changelog",
+      "requirements": "System Requirements: macOS 12+, Windows 10+, Ubuntu 20.04+",
+      "support": "Need help with installation?",
+      "newVersion": "New Version Available!",
+      "experience": {
+        "title": "Immersive Agent Interaction",
+        "desc": "The Octopus desktop client is more than just a browser shell. It integrates deeply with the system, utilizing Tauri's native power for system-level notifications, shortcuts, and faster local sandbox execution.",
+        "bullets": {
+          "fastBoot": "Instant Boot",
+          "lowMemory": "Minimal Memory Footprint",
+          "privacy": "Local Privacy Sandbox"
+        }
+      }
     }
   }
 }

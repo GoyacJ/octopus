@@ -17,6 +17,7 @@ octopus-platform = { path = "../octopus-platform" }
 runtime = { path = "../runtime" }
 rusqlite.workspace = true
 serde.workspace = true
+serde_yaml = "0.9"
 serde_json.workspace = true
 sha2 = "0.10"
 tokio.workspace = true

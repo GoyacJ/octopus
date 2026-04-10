@@ -12,6 +12,8 @@ import type {
   CreateWorkspaceUserRequest,
   CredentialBinding,
   BindPetConversationInput,
+  ExportWorkspaceAgentBundleInput,
+  ExportWorkspaceAgentBundleResult,
   ImportWorkspaceAgentBundleInput,
   ImportWorkspaceAgentBundlePreview,
   ImportWorkspaceAgentBundlePreviewInput,
@@ -149,10 +151,16 @@ export interface WorkspaceClient {
     delete: (agentId: string) => Promise<void>
     previewImportBundle: (
       input: ImportWorkspaceAgentBundlePreviewInput,
+      projectId?: string,
     ) => Promise<ImportWorkspaceAgentBundlePreview>
     importBundle: (
       input: ImportWorkspaceAgentBundleInput,
+      projectId?: string,
     ) => Promise<ImportWorkspaceAgentBundleResult>
+    exportBundle: (
+      input: ExportWorkspaceAgentBundleInput,
+      projectId?: string,
+    ) => Promise<ExportWorkspaceAgentBundleResult>
     listProjectLinks: (projectId: string) => Promise<ProjectAgentLinkRecord[]>
     linkProject: (input: ProjectAgentLinkInput) => Promise<ProjectAgentLinkRecord>
     unlinkProject: (projectId: string, agentId: string) => Promise<void>

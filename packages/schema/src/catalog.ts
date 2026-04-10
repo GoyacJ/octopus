@@ -245,6 +245,15 @@ export interface WorkspaceToolManagementCapabilities {
   canDelete: boolean
 }
 
+export interface WorkspaceToolConsumerSummary {
+  kind: 'agent' | 'team' | string
+  id: string
+  name: string
+  scope: 'workspace' | 'project' | string
+  ownerId?: string
+  ownerLabel?: string
+}
+
 interface WorkspaceToolCatalogBase {
   id: string
   workspaceId: string
@@ -257,6 +266,10 @@ interface WorkspaceToolCatalogBase {
   displayPath: string
   disabled: boolean
   management: WorkspaceToolManagementCapabilities
+  ownerScope?: 'builtin' | 'workspace' | 'project' | string
+  ownerId?: string
+  ownerLabel?: string
+  consumers?: WorkspaceToolConsumerSummary[]
 }
 
 export interface WorkspaceBuiltinToolCatalogEntry extends WorkspaceToolCatalogBase {

@@ -1,3 +1,4 @@
+mod agent_assets;
 mod agent_import;
 mod artifacts_inbox_knowledge;
 mod auth_users;
@@ -29,8 +30,10 @@ use octopus_core::{
     ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse, ClientAppRecord,
     CopyWorkspaceSkillToManagedInput, CostLedgerEntry, CreateProjectRequest,
     CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput, CreateWorkspaceSkillInput,
-    CreateWorkspaceUserRequest, ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
-    ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
+    CreateWorkspaceUserRequest, ExportWorkspaceAgentBundleInput,
+    ExportWorkspaceAgentBundleResult, ImportWorkspaceAgentBundleInput,
+    ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
+    ImportWorkspaceAgentBundleResult,
     ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, InboxItemRecord,
     KnowledgeEntryRecord, KnowledgeRecord, LoginRequest, LoginResponse, MenuRecord,
     ModelCatalogRecord, PermissionRecord, PetConversationBinding, PetMessage, PetPosition,

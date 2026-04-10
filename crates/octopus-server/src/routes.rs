@@ -94,6 +94,10 @@ pub fn build_router(state: ServerState) -> Router {
             post(import_agent_bundle_route),
         )
         .route(
+            "/api/v1/workspace/agents/export",
+            post(export_agent_bundle_route),
+        )
+        .route(
             "/api/v1/workspace/agents/:agent_id",
             patch(update_agent).delete(delete_agent),
         )
@@ -268,6 +272,18 @@ pub fn build_router(state: ServerState) -> Router {
         .route(
             "/api/v1/projects/:project_id/agent-links",
             get(list_project_agent_links).post(link_project_agent),
+        )
+        .route(
+            "/api/v1/projects/:project_id/agents/import-preview",
+            post(preview_import_project_agent_bundle_route),
+        )
+        .route(
+            "/api/v1/projects/:project_id/agents/import",
+            post(import_project_agent_bundle_route),
+        )
+        .route(
+            "/api/v1/projects/:project_id/agents/export",
+            post(export_project_agent_bundle_route),
         )
         .route(
             "/api/v1/projects/:project_id/agent-links/:agent_id",

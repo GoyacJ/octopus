@@ -4,6 +4,7 @@ use octopus_core::{
     ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse,
     CopyWorkspaceSkillToManagedInput, CreateProjectRequest, CreateWorkspaceResourceFolderInput,
     CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, CreateWorkspaceUserRequest,
+    ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
     ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
     ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
     ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, KnowledgeRecord, MenuRecord,
@@ -119,6 +120,25 @@ pub trait WorkspaceService: Send + Sync {
         &self,
         input: ImportWorkspaceAgentBundleInput,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError>;
+    async fn export_agent_bundle(
+        &self,
+        input: ExportWorkspaceAgentBundleInput,
+    ) -> Result<ExportWorkspaceAgentBundleResult, AppError>;
+    async fn preview_import_project_agent_bundle(
+        &self,
+        project_id: &str,
+        input: ImportWorkspaceAgentBundlePreviewInput,
+    ) -> Result<ImportWorkspaceAgentBundlePreview, AppError>;
+    async fn import_project_agent_bundle(
+        &self,
+        project_id: &str,
+        input: ImportWorkspaceAgentBundleInput,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError>;
+    async fn export_project_agent_bundle(
+        &self,
+        project_id: &str,
+        input: ExportWorkspaceAgentBundleInput,
+    ) -> Result<ExportWorkspaceAgentBundleResult, AppError>;
     async fn list_project_agent_links(
         &self,
         project_id: &str,

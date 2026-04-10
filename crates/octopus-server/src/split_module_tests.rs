@@ -1,7 +1,12 @@
 use super::*;
 use crate::handlers::refresh_browser_host_update_status_with_endpoint;
 
-use std::sync::Arc;
+use std::{
+    collections::hash_map::DefaultHasher,
+    fs,
+    hash::{Hash, Hasher},
+    sync::Arc,
+};
 
 use axum::{
     body::{to_bytes, Body},
@@ -619,6 +624,38 @@ async fn create_project(router: &Router, token: &str, body: Value) -> Response {
         .expect("response")
 }
 
+async fn create_workspace_agent(router: &Router, token: &str, body: Value) -> Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/workspace/agents")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&body).expect("json")))
+                .expect("request"),
+        )
+        .await
+        .expect("response")
+}
+
+async fn create_workspace_team(router: &Router, token: &str, body: Value) -> Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/workspace/teams")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&body).expect("json")))
+                .expect("request"),
+        )
+        .await
+        .expect("response")
+}
+
 async fn update_project(router: &Router, token: &str, project_id: &str, body: Value) -> Response {
     router
         .clone()
@@ -782,6 +819,12 @@ async fn save_project_runtime_config(
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
     decode_json::<RuntimeEffectiveConfig>(response).await
+}
+
+fn expected_catalog_hash_id(prefix: &str, value: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    format!("{prefix}-{:x}", hasher.finish())
 }
 
 async fn submit_turn(
@@ -1628,6 +1671,264 @@ async fn workspace_mcp_routes_create_update_and_delete_servers() {
         .expect("entries")
         .iter()
         .any(|entry| entry["kind"] == "mcp" && entry["serverName"] == "ops"));
+}
+
+#[tokio::test]
+async fn workspace_tool_catalog_includes_project_owned_assets_and_consumers() {
+    let harness = test_harness();
+    let token = register_owner_session(&harness.router, "octopus-desktop")
+        .await
+        .token;
+
+    let created_project = create_project(
+        &harness.router,
+        &token,
+        json!({
+            "name": "Atlas Project",
+            "description": "Project-owned agent assets.",
+        }),
+    )
+    .await;
+    assert_eq!(created_project.status(), StatusCode::OK);
+    let created_project: Value = decode_json(created_project).await;
+    let project_id = created_project["id"]
+        .as_str()
+        .expect("project id")
+        .to_string();
+
+    let workspace_skill_response = create_workspace_skill(
+        &harness.router,
+        &token,
+        json!({
+            "slug": "workspace-managed-skill",
+            "content": "---\nname: Workspace Managed Skill\ndescription: Shared workspace skill.\n---\n\n# Workspace skill\n",
+        }),
+    )
+    .await;
+    assert_eq!(workspace_skill_response.status(), StatusCode::OK);
+    let workspace_skill: Value = decode_json(workspace_skill_response).await;
+    let workspace_skill_id = workspace_skill["id"]
+        .as_str()
+        .expect("workspace skill id")
+        .to_string();
+
+    let project_skill_slug = "project-plan-skill";
+    let project_skill_root = harness
+        .infra
+        .paths
+        .project_skills_root(&project_id)
+        .join(project_skill_slug);
+    fs::create_dir_all(&project_skill_root).expect("create project skill root");
+    fs::write(
+        project_skill_root.join("SKILL.md"),
+        "---\nname: Project Plan Skill\ndescription: Project-scoped planning skill.\n---\n\n# Project plan skill\n",
+    )
+    .expect("write project skill");
+    let project_skill_id = expected_catalog_hash_id(
+        "skill",
+        &format!("data/projects/{project_id}/skills/{project_skill_slug}/SKILL.md"),
+    );
+
+    let workspace_mcp_response = create_workspace_mcp_server(
+        &harness.router,
+        &token,
+        json!({
+            "serverName": "workspace-ops",
+            "config": {
+                "type": "http",
+                "url": "https://workspace.example.test/mcp"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(workspace_mcp_response.status(), StatusCode::OK);
+
+    let _project_runtime = save_project_runtime_config(
+        &harness.router,
+        &token,
+        &project_id,
+        RuntimeConfigPatch {
+            scope: "project".into(),
+            patch: json!({
+                "mcpServers": {
+                    "project-ops": {
+                        "type": "http",
+                        "url": "https://project.example.test/mcp"
+                    }
+                }
+            }),
+        },
+    )
+    .await;
+
+    let workspace_agent_response = create_workspace_agent(
+        &harness.router,
+        &token,
+        json!({
+            "workspaceId": "ws-local",
+            "projectId": Value::Null,
+            "scope": "workspace",
+            "name": "Workspace Analyst",
+            "personality": "Owns workspace-level operations.",
+            "tags": ["ops"],
+            "prompt": "Handle workspace tasks.",
+            "builtinToolKeys": ["bash"],
+            "skillIds": [workspace_skill_id],
+            "mcpServerNames": ["workspace-ops"],
+            "description": "Workspace agent.",
+            "status": "active"
+        }),
+    )
+    .await;
+    assert_eq!(workspace_agent_response.status(), StatusCode::OK);
+    let workspace_agent: Value = decode_json(workspace_agent_response).await;
+    let workspace_agent_id = workspace_agent["id"]
+        .as_str()
+        .expect("workspace agent id")
+        .to_string();
+
+    let workspace_team_response = create_workspace_team(
+        &harness.router,
+        &token,
+        json!({
+            "workspaceId": "ws-local",
+            "projectId": Value::Null,
+            "scope": "workspace",
+            "name": "Workspace Crew",
+            "personality": "Coordinates workspace delivery.",
+            "tags": ["ops"],
+            "prompt": "Coordinate workspace delivery.",
+            "builtinToolKeys": ["bash"],
+            "skillIds": [workspace_skill["id"].as_str().expect("workspace skill id")],
+            "mcpServerNames": ["workspace-ops"],
+            "leaderAgentId": workspace_agent_id,
+            "memberAgentIds": [workspace_agent["id"].as_str().expect("workspace agent id")],
+            "description": "Workspace team.",
+            "status": "active"
+        }),
+    )
+    .await;
+    assert_eq!(workspace_team_response.status(), StatusCode::OK);
+
+    let project_agent_response = create_workspace_agent(
+        &harness.router,
+        &token,
+        json!({
+            "workspaceId": "ws-local",
+            "projectId": project_id,
+            "scope": "project",
+            "name": "Project Planner",
+            "personality": "Owns project planning.",
+            "tags": ["planning"],
+            "prompt": "Plan the project.",
+            "builtinToolKeys": ["bash"],
+            "skillIds": [project_skill_id],
+            "mcpServerNames": ["project-ops"],
+            "description": "Project agent.",
+            "status": "active"
+        }),
+    )
+    .await;
+    assert_eq!(project_agent_response.status(), StatusCode::OK);
+    let project_agent: Value = decode_json(project_agent_response).await;
+
+    let project_team_response = create_workspace_team(
+        &harness.router,
+        &token,
+        json!({
+            "workspaceId": "ws-local",
+            "projectId": project_id,
+            "scope": "project",
+            "name": "Project Delivery",
+            "personality": "Coordinates project delivery.",
+            "tags": ["delivery"],
+            "prompt": "Coordinate project delivery.",
+            "builtinToolKeys": ["bash"],
+            "skillIds": [project_skill_id],
+            "mcpServerNames": ["project-ops"],
+            "leaderAgentId": project_agent["id"].as_str().expect("project agent id"),
+            "memberAgentIds": [project_agent["id"].as_str().expect("project agent id")],
+            "description": "Project team.",
+            "status": "active"
+        }),
+    )
+    .await;
+    assert_eq!(project_team_response.status(), StatusCode::OK);
+
+    let payload = get_tool_catalog(&harness.router, &token).await;
+    let entries = payload["entries"].as_array().expect("entries");
+
+    let builtin = entries
+        .iter()
+        .find(|entry| entry["kind"] == "builtin" && entry["builtinKey"] == "bash")
+        .expect("builtin bash entry");
+    assert_eq!(builtin["ownerScope"], "builtin");
+    assert!(builtin["consumers"].is_array(), "builtin entry must expose consumers");
+    let builtin_consumers = builtin["consumers"].as_array().expect("builtin consumers");
+    assert!(builtin_consumers.iter().any(|consumer| {
+        consumer["kind"] == "agent"
+            && consumer["name"] == "Workspace Analyst"
+            && consumer["scope"] == "workspace"
+    }));
+    assert!(builtin_consumers.iter().any(|consumer| {
+        consumer["kind"] == "team"
+            && consumer["name"] == "Project Delivery"
+            && consumer["scope"] == "project"
+            && consumer["ownerId"] == project_id
+            && consumer["ownerLabel"] == "Atlas Project"
+    }));
+
+    let workspace_skill_entry = entries
+        .iter()
+        .find(|entry| entry["kind"] == "skill" && entry["id"] == workspace_skill["id"])
+        .expect("workspace skill entry");
+    assert_eq!(workspace_skill_entry["ownerScope"], "workspace");
+    assert!(workspace_skill_entry["consumers"].is_array());
+    assert!(workspace_skill_entry["consumers"]
+        .as_array()
+        .expect("workspace skill consumers")
+        .iter()
+        .any(|consumer| consumer["name"] == "Workspace Crew" && consumer["kind"] == "team"));
+
+    let project_skill_entry = entries
+        .iter()
+        .find(|entry| entry["kind"] == "skill" && entry["id"] == project_skill_id)
+        .expect("project skill entry");
+    assert_eq!(project_skill_entry["ownerScope"], "project");
+    assert_eq!(project_skill_entry["ownerId"], project_id);
+    assert_eq!(project_skill_entry["ownerLabel"], "Atlas Project");
+    assert!(project_skill_entry["consumers"].is_array());
+    assert!(project_skill_entry["consumers"]
+        .as_array()
+        .expect("project skill consumers")
+        .iter()
+        .any(|consumer| consumer["name"] == "Project Planner" && consumer["kind"] == "agent"));
+
+    let workspace_mcp_entry = entries
+        .iter()
+        .find(|entry| entry["kind"] == "mcp" && entry["serverName"] == "workspace-ops")
+        .expect("workspace mcp entry");
+    assert_eq!(workspace_mcp_entry["ownerScope"], "workspace");
+    assert!(workspace_mcp_entry["consumers"].is_array());
+    assert!(workspace_mcp_entry["consumers"]
+        .as_array()
+        .expect("workspace mcp consumers")
+        .iter()
+        .any(|consumer| consumer["name"] == "Workspace Analyst"));
+
+    let project_mcp_entry = entries
+        .iter()
+        .find(|entry| entry["kind"] == "mcp" && entry["serverName"] == "project-ops")
+        .expect("project mcp entry");
+    assert_eq!(project_mcp_entry["ownerScope"], "project");
+    assert_eq!(project_mcp_entry["ownerId"], project_id);
+    assert_eq!(project_mcp_entry["ownerLabel"], "Atlas Project");
+    assert!(project_mcp_entry["consumers"].is_array());
+    assert!(project_mcp_entry["consumers"]
+        .as_array()
+        .expect("project mcp consumers")
+        .iter()
+        .any(|consumer| consumer["name"] == "Project Delivery" && consumer["kind"] == "team"));
 }
 
 #[tokio::test]

@@ -213,6 +213,22 @@ pub(crate) fn ensure_import_source_tables(connection: &Connection) -> Result<(),
         )
         .map_err(|error| AppError::database(error.to_string()))?;
 
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS team_import_sources (
+                source_kind TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                source_path TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                team_id TEXT NOT NULL,
+                department TEXT NOT NULL,
+                last_imported_at INTEGER NOT NULL,
+                PRIMARY KEY (source_kind, source_id)
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+
     Ok(())
 }
 
@@ -409,6 +425,7 @@ pub(crate) fn execute_agent_bundle_import(
             department: agent.department.clone(),
             action: result_action.as_str().into(),
             skill_slugs: usable_skill_slugs,
+            mcp_server_names: Vec::new(),
         });
     }
 
@@ -417,6 +434,8 @@ pub(crate) fn execute_agent_bundle_import(
         department_count: plan.departments.len() as u64,
         detected_agent_count: plan.detected_agent_count,
         importable_agent_count: plan.agents.len() as u64,
+        detected_team_count: 0,
+        importable_team_count: 0,
         create_count,
         update_count,
         skip_count,
@@ -425,9 +444,14 @@ pub(crate) fn execute_agent_bundle_import(
             .filter(|issue| issue.severity == ISSUE_ERROR)
             .count() as u64,
         unique_skill_count: skill_results.len() as u64,
+        unique_mcp_count: 0,
+        avatar_count: 0,
         filtered_file_count: plan.filtered_file_count,
         agents: agent_results,
+        teams: Vec::new(),
         skills: skill_results,
+        mcps: Vec::new(),
+        avatars: Vec::new(),
         issues,
     })
 }
@@ -840,8 +864,10 @@ fn plan_to_preview(plan: &BundlePlan) -> ImportWorkspaceAgentBundlePreview {
                 department: agent.department.clone(),
                 action: agent.action.as_str().into(),
                 skill_slugs: agent.skill_slugs.clone(),
+                mcp_server_names: Vec::new(),
             })
             .collect(),
+        teams: Vec::new(),
         skills: plan
             .skills
             .iter()
@@ -857,7 +883,13 @@ fn plan_to_preview(plan: &BundlePlan) -> ImportWorkspaceAgentBundlePreview {
                 agent_names: skill.agent_names.clone(),
             })
             .collect(),
+        mcps: Vec::new(),
+        avatars: Vec::new(),
         issues: plan.issues.clone(),
+        detected_team_count: 0,
+        importable_team_count: 0,
+        unique_mcp_count: 0,
+        avatar_count: 0,
     }
 }
 

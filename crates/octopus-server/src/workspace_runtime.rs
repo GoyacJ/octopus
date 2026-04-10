@@ -1,5 +1,6 @@
 use super::*;
 use crate::dto_mapping::{build_user_center_alerts, metric_record};
+use octopus_core::{ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult};
 
 pub(crate) async fn workspace(
     State(state): State<ServerState>,
@@ -445,6 +446,65 @@ pub(crate) async fn import_agent_bundle_route(
     ensure_authorized_session(&state, &headers, "workspace.write", None).await?;
     Ok(Json(
         state.services.workspace.import_agent_bundle(input).await?,
+    ))
+}
+
+pub(crate) async fn export_agent_bundle_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(input): Json<ExportWorkspaceAgentBundleInput>,
+) -> Result<Json<ExportWorkspaceAgentBundleResult>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.write", None).await?;
+    Ok(Json(
+        state.services.workspace.export_agent_bundle(input).await?,
+    ))
+}
+
+pub(crate) async fn preview_import_project_agent_bundle_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+    Json(input): Json<ImportWorkspaceAgentBundlePreviewInput>,
+) -> Result<Json<ImportWorkspaceAgentBundlePreview>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.read", Some(&project_id)).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .preview_import_project_agent_bundle(&project_id, input)
+            .await?,
+    ))
+}
+
+pub(crate) async fn import_project_agent_bundle_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+    Json(input): Json<ImportWorkspaceAgentBundleInput>,
+) -> Result<Json<ImportWorkspaceAgentBundleResult>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.write", Some(&project_id)).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .import_project_agent_bundle(&project_id, input)
+            .await?,
+    ))
+}
+
+pub(crate) async fn export_project_agent_bundle_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+    Json(input): Json<ExportWorkspaceAgentBundleInput>,
+) -> Result<Json<ExportWorkspaceAgentBundleResult>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.write", Some(&project_id)).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .export_project_agent_bundle(&project_id, input)
+            .await?,
     ))
 }
 

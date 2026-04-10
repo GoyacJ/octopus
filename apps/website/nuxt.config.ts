@@ -1,46 +1,30 @@
-const themeBootScript = `
-(() => {
-  const storageKey = 'octopus-website-theme'
-  const root = document.documentElement
-  const preference = localStorage.getItem(storageKey) || 'system'
-  const resolved = preference === 'system'
-    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    : preference
-  root.dataset.theme = resolved
-  root.style.colorScheme = resolved
-  root.classList.toggle('dark', resolved === 'dark')
-})()
-`.trim()
-
 export default defineNuxtConfig({
+  compatibilityDate: '2026-04-10',
   devtools: { enabled: false },
   ssr: true,
-  modules: ['@nuxtjs/tailwindcss', '@nuxtjs/i18n'],
+  modules: ['@nuxtjs/tailwindcss', '@nuxtjs/i18n', '@nuxtjs/color-mode'],
   css: ['~/assets/css/website.css'],
   build: {
-    transpile: ['@octopus/ui'],
+    transpile: ['@octopus/ui', 'lucide-vue-next'],
+  },
+  colorMode: {
+    classSuffix: '',
+    preference: 'system',
+    fallback: 'light',
   },
   app: {
     head: {
       title: 'Octopus',
       htmlAttrs: {
         lang: 'zh-CN',
-        'data-theme': 'light',
       },
       meta: [
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'theme-color', content: '#fbfaf8' },
+        { name: 'theme-color', content: '#f97316' },
       ],
       link: [
         { rel: 'icon', type: 'image/png', href: '/brand/logo.png' },
         { rel: 'apple-touch-icon', href: '/brand/logo.png' },
-      ],
-      script: [
-        {
-          id: 'octopus-theme-boot',
-          innerHTML: themeBootScript,
-          tagPosition: 'head',
-        },
       ],
     },
   },

@@ -780,10 +780,11 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<ImportWorkspaceAgentBundlePreview, AppError> {
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        agent_import::preview_agent_bundle_import(
+        agent_assets::preview_import(
             &connection,
             &self.state.paths,
             &workspace_id,
+            agent_assets::AssetTargetScope::Workspace,
             input,
         )
     }
@@ -794,19 +795,102 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        let result = agent_import::execute_agent_bundle_import(
+        let result = agent_assets::execute_import(
             &connection,
             &self.state.paths,
             &workspace_id,
+            agent_assets::AssetTargetScope::Workspace,
             input,
         )?;
         let next_agents = load_agents(&connection)?;
+        let next_teams = load_teams(&connection)?;
         *self
             .state
             .agents
             .lock()
             .map_err(|_| AppError::runtime("agents mutex poisoned"))? = next_agents;
+        *self
+            .state
+            .teams
+            .lock()
+            .map_err(|_| AppError::runtime("teams mutex poisoned"))? = next_teams;
         Ok(result)
+    }
+
+    async fn export_agent_bundle(
+        &self,
+        input: ExportWorkspaceAgentBundleInput,
+    ) -> Result<ExportWorkspaceAgentBundleResult, AppError> {
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        agent_assets::export_assets(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            agent_assets::AssetTargetScope::Workspace,
+            input,
+        )
+    }
+
+    async fn preview_import_project_agent_bundle(
+        &self,
+        project_id: &str,
+        input: ImportWorkspaceAgentBundlePreviewInput,
+    ) -> Result<ImportWorkspaceAgentBundlePreview, AppError> {
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        agent_assets::preview_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            agent_assets::AssetTargetScope::Project(project_id),
+            input,
+        )
+    }
+
+    async fn import_project_agent_bundle(
+        &self,
+        project_id: &str,
+        input: ImportWorkspaceAgentBundleInput,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        let result = agent_assets::execute_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            agent_assets::AssetTargetScope::Project(project_id),
+            input,
+        )?;
+        let next_agents = load_agents(&connection)?;
+        let next_teams = load_teams(&connection)?;
+        *self
+            .state
+            .agents
+            .lock()
+            .map_err(|_| AppError::runtime("agents mutex poisoned"))? = next_agents;
+        *self
+            .state
+            .teams
+            .lock()
+            .map_err(|_| AppError::runtime("teams mutex poisoned"))? = next_teams;
+        Ok(result)
+    }
+
+    async fn export_project_agent_bundle(
+        &self,
+        project_id: &str,
+        input: ExportWorkspaceAgentBundleInput,
+    ) -> Result<ExportWorkspaceAgentBundleResult, AppError> {
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        agent_assets::export_assets(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            agent_assets::AssetTargetScope::Project(project_id),
+            input,
+        )
     }
 
     async fn list_project_agent_links(
