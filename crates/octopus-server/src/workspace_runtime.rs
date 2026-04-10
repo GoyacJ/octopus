@@ -1,5 +1,5 @@
 use super::*;
-use crate::dto_mapping::{build_user_center_alerts, metric_record};
+use crate::dto_mapping::{build_permission_center_alerts, metric_record};
 use octopus_core::{ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult};
 
 pub(crate) async fn workspace(
@@ -1046,10 +1046,10 @@ pub(crate) async fn delete_automation(
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub(crate) async fn user_center_overview(
+pub(crate) async fn permission_center_overview(
     State(state): State<ServerState>,
     headers: HeaderMap,
-) -> Result<Json<UserCenterOverviewSnapshot>, ApiError> {
+) -> Result<Json<PermissionCenterOverviewSnapshot>, ApiError> {
     let session = ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
     let users = state.services.workspace.list_users().await?;
     let roles = state.services.workspace.list_roles().await?;
@@ -1073,11 +1073,11 @@ pub(crate) async fn user_center_overview(
         .collect::<Vec<_>>();
     let quick_links = menus
         .iter()
-        .filter(|record| record.source == "user-center" && record.status == "active")
+        .filter(|record| record.source == "permission-center" && record.status == "active")
         .cloned()
         .collect::<Vec<_>>();
 
-    Ok(Json(UserCenterOverviewSnapshot {
+    Ok(Json(PermissionCenterOverviewSnapshot {
         workspace_id: session.workspace_id.clone(),
         current_user,
         role_names,
@@ -1087,7 +1087,7 @@ pub(crate) async fn user_center_overview(
             metric_record("permissions", "Permissions", permissions.len()),
             metric_record("menus", "Menus", menus.len()),
         ],
-        alerts: build_user_center_alerts(&session, &permissions),
+        alerts: build_permission_center_alerts(&session, &permissions),
         quick_links,
     }))
 }

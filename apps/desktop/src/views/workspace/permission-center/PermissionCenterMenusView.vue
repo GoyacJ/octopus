@@ -15,19 +15,19 @@ import {
 
 import { enumLabel } from '@/i18n/copy'
 import { getMenuDefinition } from '@/navigation/menuRegistry'
-import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 import { useWorkspaceStore } from '@/stores/workspace'
-import UserCenterMenuTree from './UserCenterMenuTree.vue'
-import { buildUserCenterMenuTreeSections } from './menu-tree'
+import PermissionCenterMenuTree from './PermissionCenterMenuTree.vue'
+import { buildPermissionCenterMenuTreeSections } from './menu-tree'
 
 const { t, locale } = useI18n()
-const userCenterStore = useUserCenterStore()
+const workspaceAccessStore = useWorkspaceAccessStore()
 const workspaceStore = useWorkspaceStore()
 
 const selectedMenuId = ref('')
 const form = reactive({
   label: '',
-  source: 'user-center',
+  source: 'permission-center',
   routeName: '',
   parentId: '',
   status: 'active',
@@ -38,7 +38,8 @@ const sourceOptions = computed(() => {
   locale.value
   return [
     { value: 'main-sidebar', label: enumLabel('menuSource', 'main-sidebar') },
-    { value: 'user-center', label: enumLabel('menuSource', 'user-center') },
+    { value: 'console', label: enumLabel('menuSource', 'console') },
+    { value: 'permission-center', label: enumLabel('menuSource', 'permission-center') },
   ]
 })
 
@@ -50,22 +51,23 @@ const statusOptions = computed(() => {
   ]
 })
 
-const menuTreeSections = computed(() => buildUserCenterMenuTreeSections(
-  userCenterStore.menus,
+const menuTreeSections = computed(() => buildPermissionCenterMenuTreeSections(
+  workspaceAccessStore.menus,
   {
-    app: t('userCenter.roles.menuGroups.app'),
-    workspace: t('userCenter.roles.menuGroups.workspace'),
-    userCenter: t('userCenter.roles.menuGroups.userCenter'),
-    project: t('userCenter.roles.menuGroups.project'),
+    app: t('permissionCenter.roles.menuGroups.app'),
+    workspace: t('permissionCenter.roles.menuGroups.workspace'),
+    console: t('permissionCenter.roles.menuGroups.console'),
+    permissionCenter: t('permissionCenter.roles.menuGroups.permissionCenter'),
+    project: t('permissionCenter.roles.menuGroups.project'),
   },
   menu => menuLabel(menu.id, menu.label),
 ))
 
 watch(
-  () => userCenterStore.menus.map(menu => menu.id).join('|'),
+  () => workspaceAccessStore.menus.map(menu => menu.id).join('|'),
   () => {
-    if (!selectedMenuId.value || !userCenterStore.menus.some(menu => menu.id === selectedMenuId.value)) {
-      applyMenu(userCenterStore.menus[0]?.id)
+    if (!selectedMenuId.value || !workspaceAccessStore.menus.some(menu => menu.id === selectedMenuId.value)) {
+      applyMenu(workspaceAccessStore.menus[0]?.id)
       return
     }
     applyMenu(selectedMenuId.value)
@@ -74,10 +76,10 @@ watch(
 )
 
 function applyMenu(menuId?: string) {
-  const menu = userCenterStore.menus.find(item => item.id === menuId)
+  const menu = workspaceAccessStore.menus.find(item => item.id === menuId)
   selectedMenuId.value = menu?.id ?? ''
   form.label = menu?.label ?? ''
-  form.source = menu?.source ?? 'user-center'
+  form.source = menu?.source ?? 'permission-center'
   form.routeName = menu?.routeName ?? ''
   form.parentId = menu?.parentId ?? ''
   form.status = menu?.status ?? 'active'
@@ -101,9 +103,9 @@ async function saveMenu() {
   }
 
   if (selectedMenuId.value) {
-    await userCenterStore.updateMenu(selectedMenuId.value, record)
+    await workspaceAccessStore.updateMenu(selectedMenuId.value, record)
   } else {
-    const created = await userCenterStore.createMenu(record)
+    const created = await workspaceAccessStore.createMenu(record)
     selectedMenuId.value = created.id
   }
 }
@@ -115,7 +117,7 @@ function menuLabel(menuId: string, fallback: string) {
 </script>
 
 <template>
-  <div data-testid="user-center-menus-shell">
+  <div data-testid="permission-center-menus-shell">
     <UiListDetailShell>
       <template #list>
         <section class="space-y-3">
@@ -123,7 +125,7 @@ function menuLabel(menuId: string, fallback: string) {
             <div class="text-sm font-semibold text-text-primary">{{ menuLabel(selectedMenuId, form.label || t('common.na')) }}</div>
             <div class="mt-1 text-xs text-text-secondary">{{ t('common.status') }}</div>
           </UiPanelFrame>
-          <UserCenterMenuTree
+          <PermissionCenterMenuTree
             selection-mode="single"
             test-id-prefix="menus-tree"
             :sections="menuTreeSections"
@@ -135,22 +137,22 @@ function menuLabel(menuId: string, fallback: string) {
 
       <UiInspectorPanel :title="menuLabel(selectedMenuId, form.label || t('common.na'))">
         <div class="space-y-4">
-          <UiField :label="t('userCenter.menus.fields.label')">
+          <UiField :label="t('permissionCenter.menus.fields.label')">
             <UiInput v-model="form.label" data-testid="menus-label-input" />
           </UiField>
-          <UiField :label="t('userCenter.menus.fields.source')">
+          <UiField :label="t('permissionCenter.menus.fields.source')">
             <UiSelect v-model="form.source" :options="sourceOptions" />
           </UiField>
-          <UiField :label="t('userCenter.menus.fields.routeName')">
+          <UiField :label="t('permissionCenter.menus.fields.routeName')">
             <UiInput v-model="form.routeName" />
           </UiField>
-          <UiField :label="t('userCenter.menus.fields.parentId')">
+          <UiField :label="t('permissionCenter.menus.fields.parentId')">
             <UiInput v-model="form.parentId" />
           </UiField>
           <UiField :label="t('common.status')">
             <UiSelect v-model="form.status" :options="statusOptions" />
           </UiField>
-          <UiField :label="t('userCenter.menus.fields.order')">
+          <UiField :label="t('permissionCenter.menus.fields.order')">
             <UiInput v-model="form.order" />
           </UiField>
           <UiButton @click="saveMenu">{{ t('common.save') }}</UiButton>

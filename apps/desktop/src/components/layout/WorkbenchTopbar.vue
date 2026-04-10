@@ -11,7 +11,7 @@ import { resolveWorkspaceLabel } from '@/composables/workspace-label'
 import { getAncestorMenuIds, getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
 import { useNotificationStore } from '@/stores/notifications'
 import { useShellStore } from '@/stores/shell'
-import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
@@ -20,7 +20,7 @@ const router = useRouter()
 const notifications = useNotificationStore()
 const shell = useShellStore()
 const workspaceStore = useWorkspaceStore()
-const userCenterStore = useUserCenterStore()
+const workspaceAccessStore = useWorkspaceAccessStore()
 
 const themeMenuOpen = ref(false)
 const localeMenuOpen = ref(false)
@@ -77,8 +77,8 @@ const breadcrumbItems = computed(() => {
   return items
 })
 
-const currentUser = computed(() => userCenterStore.currentUser)
-const currentRoleLabel = computed(() => userCenterStore.currentRoleNames[0] ?? t('topbar.profileRole'))
+const currentUser = computed(() => workspaceAccessStore.currentUser)
+const currentRoleLabel = computed(() => workspaceAccessStore.currentRoleNames[0] ?? t('topbar.profileRole'))
 const isSettingsRoute = computed(() => String(route.name ?? '') === 'app-settings')
 
 const themeIcons = {
@@ -126,13 +126,13 @@ async function openSettings() {
   await router.push({ name: 'app-settings' })
 }
 
-async function openUserCenter() {
+async function openPersonalCenter() {
   closeMenus()
   if (!workspaceStore.currentWorkspaceId) {
     return
   }
   await router.push({
-    name: userCenterStore.firstAccessibleUserCenterRouteName ?? 'workspace-user-center',
+    name: 'workspace-personal-center-profile',
     params: { workspaceId: workspaceStore.currentWorkspaceId },
   })
 }
@@ -336,10 +336,10 @@ async function handleNotificationSelect(notification: NotificationRecord) {
               <button
                 type="button"
                 class="flex w-full items-center gap-2 rounded-[var(--radius-xs)] px-2 py-1.5 text-left text-sm text-text-secondary hover:bg-accent"
-                @click="openUserCenter"
+                @click="openPersonalCenter"
               >
                 <UserRound :size="14" />
-                {{ t('sidebar.navigation.userCenter') }}
+                {{ t('sidebar.navigation.personalCenter') }}
               </button>
             </div>
           </div>

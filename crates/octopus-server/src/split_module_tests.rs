@@ -2295,7 +2295,7 @@ async fn host_notification_routes_roundtrip_and_preserve_history() {
                         level: "warning".into(),
                         title: "Profile incomplete".into(),
                         body: "Add your preferred contact details.".into(),
-                        source: "user-center".into(),
+                        source: "personal-center".into(),
                         toast_duration_ms: Some(15_000),
                         route_to: None,
                         action_label: None,

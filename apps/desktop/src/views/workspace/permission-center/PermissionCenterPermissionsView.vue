@@ -29,13 +29,13 @@ import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import { useResourceStore } from '@/stores/resource'
-import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const PAGE_SIZE = 6
 
 const { t, locale } = useI18n()
-const userCenterStore = useUserCenterStore()
+const workspaceAccessStore = useWorkspaceAccessStore()
 const workspaceStore = useWorkspaceStore()
 const resourceStore = useResourceStore()
 const knowledgeStore = useKnowledgeStore()
@@ -94,24 +94,24 @@ const targetTypeOptions = computed(() => {
 })
 
 const metrics = computed(() => [
-  { id: 'total', label: t('userCenter.permissions.metrics.total'), value: String(userCenterStore.permissions.length) },
+  { id: 'total', label: t('permissionCenter.permissions.metrics.total'), value: String(workspaceAccessStore.permissions.length) },
   {
     id: 'disabled',
-    label: t('userCenter.permissions.metrics.disabled'),
-    value: String(userCenterStore.permissions.filter(permission => permission.status === 'disabled').length),
+    label: t('permissionCenter.permissions.metrics.disabled'),
+    value: String(workspaceAccessStore.permissions.filter(permission => permission.status === 'disabled').length),
   },
 ])
 
-const pageCount = computed(() => Math.max(1, Math.ceil(userCenterStore.permissions.length / PAGE_SIZE)))
+const pageCount = computed(() => Math.max(1, Math.ceil(workspaceAccessStore.permissions.length / PAGE_SIZE)))
 const pagedPermissions = computed(() => {
   const start = (currentPage.value - 1) * PAGE_SIZE
-  return userCenterStore.permissions.slice(start, start + PAGE_SIZE)
+  return workspaceAccessStore.permissions.slice(start, start + PAGE_SIZE)
 })
 
 const roleUsageCountByPermissionId = computed(() => new Map(
-  userCenterStore.permissions.map(permission => [
+  workspaceAccessStore.permissions.map(permission => [
     permission.id,
-    userCenterStore.roles.filter(role => role.permissionIds.includes(permission.id)).length,
+    workspaceAccessStore.roles.filter(role => role.permissionIds.includes(permission.id)).length,
   ]),
 ))
 
@@ -124,15 +124,15 @@ const targetOptions = computed(() => {
     case 'project':
       return workspaceStore.projects.map(project => ({ value: project.id, label: project.name }))
     case 'user':
-      return userCenterStore.users.map(user => ({ value: user.id, label: user.displayName || user.username }))
+      return workspaceAccessStore.users.map(user => ({ value: user.id, label: user.displayName || user.username }))
     case 'role':
-      return userCenterStore.roles.map(role => ({ value: role.id, label: role.name }))
+      return workspaceAccessStore.roles.map(role => ({ value: role.id, label: role.name }))
     case 'permission':
-      return userCenterStore.permissions
+      return workspaceAccessStore.permissions
         .filter(permission => permission.id !== selectedPermissionId.value)
         .map(permission => ({ value: permission.id, label: `${permission.name} · ${permission.code}` }))
     case 'menu':
-      return userCenterStore.menus.map(menu => ({ value: menu.id, label: menu.label }))
+      return workspaceAccessStore.menus.map(menu => ({ value: menu.id, label: menu.label }))
     case 'resource':
       return resourceStore.workspaceResources.map(resource => ({ value: resource.id, label: resource.name }))
     case 'agent':
@@ -147,7 +147,7 @@ const targetOptions = computed(() => {
 })
 
 const memberPermissionOptions = computed(() =>
-  userCenterStore.permissions
+  workspaceAccessStore.permissions
     .filter(permission => permission.id !== selectedPermissionId.value)
     .map(permission => ({
       value: permission.id,
@@ -157,13 +157,13 @@ const memberPermissionOptions = computed(() =>
 )
 
 watch(
-  () => userCenterStore.permissions.map(permission => permission.id).join('|'),
+  () => workspaceAccessStore.permissions.map(permission => permission.id).join('|'),
   () => {
     if (currentPage.value > pageCount.value) {
       currentPage.value = pageCount.value
     }
-    if (!selectedPermissionId.value || !userCenterStore.permissions.some(permission => permission.id === selectedPermissionId.value)) {
-      applyPermission(userCenterStore.permissions[0]?.id)
+    if (!selectedPermissionId.value || !workspaceAccessStore.permissions.some(permission => permission.id === selectedPermissionId.value)) {
+      applyPermission(workspaceAccessStore.permissions[0]?.id)
       return
     }
     applyPermission(selectedPermissionId.value)
@@ -200,7 +200,7 @@ function resetFormState() {
 }
 
 function applyPermission(permissionId?: string) {
-  const permission = userCenterStore.permissions.find(item => item.id === permissionId)
+  const permission = workspaceAccessStore.permissions.find(item => item.id === permissionId)
   if (!permission) {
     selectedPermissionId.value = ''
     resetFormState()
@@ -245,16 +245,16 @@ async function savePermission() {
   }
 
   if (selectedPermissionId.value) {
-    const updated = await userCenterStore.updatePermission(selectedPermissionId.value, record)
+    const updated = await workspaceAccessStore.updatePermission(selectedPermissionId.value, record)
     applyPermission(updated.id)
-    saveMessage.value = t('userCenter.permissions.feedback.saved')
+    saveMessage.value = t('permissionCenter.permissions.feedback.saved')
     return
   }
 
-  const created = await userCenterStore.createPermission(record)
+  const created = await workspaceAccessStore.createPermission(record)
   selectedPermissionId.value = created.id
   applyPermission(created.id)
-  saveMessage.value = t('userCenter.permissions.feedback.saved')
+  saveMessage.value = t('permissionCenter.permissions.feedback.saved')
 }
 
 function promptDeletePermission(permissionId: string) {
@@ -266,16 +266,16 @@ async function confirmDeletePermission() {
   if (!pendingDeletePermissionId.value) {
     return
   }
-  await userCenterStore.deletePermission(pendingDeletePermissionId.value)
+  await workspaceAccessStore.deletePermission(pendingDeletePermissionId.value)
   deleteDialogOpen.value = false
   pendingDeletePermissionId.value = ''
-  applyPermission(userCenterStore.permissions[0]?.id)
-  saveMessage.value = t('userCenter.permissions.feedback.deleted')
+  applyPermission(workspaceAccessStore.permissions[0]?.id)
+  saveMessage.value = t('permissionCenter.permissions.feedback.deleted')
 }
 </script>
 
 <template>
-  <div data-testid="user-center-permissions-shell">
+  <div data-testid="permission-center-permissions-shell">
     <UiListDetailShell>
       <template #list>
         <section class="space-y-3">
@@ -286,12 +286,12 @@ async function confirmDeletePermission() {
           <UiPanelFrame
             variant="subtle"
             padding="md"
-            :title="t('userCenter.permissions.listTitle')"
-            :subtitle="t('userCenter.permissions.listSubtitle')"
+            :title="t('permissionCenter.permissions.listTitle')"
+            :subtitle="t('permissionCenter.permissions.listSubtitle')"
           >
             <template #actions>
               <UiButton data-testid="permissions-create-button" @click="createPermissionDraft">
-                {{ t('userCenter.permissions.actions.create') }}
+                {{ t('permissionCenter.permissions.actions.create') }}
               </UiButton>
             </template>
           </UiPanelFrame>
@@ -319,55 +319,55 @@ async function confirmDeletePermission() {
                 :data-testid="`permissions-delete-button-${permission.code}`"
                 @click.stop="promptDeletePermission(permission.id)"
               >
-                {{ t('userCenter.permissions.actions.delete') }}
+                {{ t('permissionCenter.permissions.actions.delete') }}
               </UiButton>
             </template>
             <div class="mt-3 flex flex-wrap gap-2 text-xs text-text-secondary">
-              <span>{{ t('userCenter.permissions.usedByRoles', { count: roleUsageCountByPermissionId.get(permission.id) ?? 0 }) }}</span>
-              <span v-if="permission.kind === 'bundle'">{{ t('userCenter.permissions.bundleMembers', { count: permission.memberPermissionIds.length }) }}</span>
+              <span>{{ t('permissionCenter.permissions.usedByRoles', { count: roleUsageCountByPermissionId.get(permission.id) ?? 0 }) }}</span>
+              <span v-if="permission.kind === 'bundle'">{{ t('permissionCenter.permissions.bundleMembers', { count: permission.memberPermissionIds.length }) }}</span>
             </div>
           </UiRecordCard>
 
           <UiPagination
             v-model:page="currentPage"
             :page-count="pageCount"
-            :summary-label="`${userCenterStore.permissions.length}`"
+            :summary-label="`${workspaceAccessStore.permissions.length}`"
             root-test-id="permissions-list-pagination"
           />
         </section>
       </template>
 
-      <div data-testid="user-center-permissions-inspector">
+      <div data-testid="permission-center-permissions-inspector">
         <UiInspectorPanel
-          :title="selectedPermissionId ? t('userCenter.permissions.listTitle') : t('userCenter.permissions.actions.create')"
-          :subtitle="selectedPermissionId ? form.code : t('userCenter.permissions.listSubtitle')"
+          :title="selectedPermissionId ? t('permissionCenter.permissions.listTitle') : t('permissionCenter.permissions.actions.create')"
+          :subtitle="selectedPermissionId ? form.code : t('permissionCenter.permissions.listSubtitle')"
         >
           <div class="space-y-4">
             <UiStatusCallout v-if="saveMessage" tone="success" :description="saveMessage" />
 
-            <UiField :label="t('userCenter.permissions.fields.name')">
+            <UiField :label="t('permissionCenter.permissions.fields.name')">
               <UiInput v-model="form.name" data-testid="permissions-name-input" />
             </UiField>
-            <UiField :label="t('userCenter.permissions.fields.code')">
+            <UiField :label="t('permissionCenter.permissions.fields.code')">
               <UiInput v-model="form.code" data-testid="permissions-code-input" />
             </UiField>
             <UiField :label="t('common.status')">
               <UiSelect v-model="form.status" :options="statusOptions" data-testid="permissions-status-select" />
             </UiField>
-            <UiField :label="t('userCenter.permissions.fields.kind')">
+            <UiField :label="t('permissionCenter.permissions.fields.kind')">
               <UiSelect v-model="form.kind" :options="kindOptions" data-testid="permissions-kind-select" />
             </UiField>
-            <UiField :label="t('userCenter.permissions.fields.targetType')">
+            <UiField :label="t('permissionCenter.permissions.fields.targetType')">
               <UiSelect v-model="form.targetType" :options="targetTypeOptions" data-testid="permissions-target-type-select" />
             </UiField>
 
-            <UiField v-if="form.kind === 'atomic'" :label="t('userCenter.permissions.fields.action')">
+            <UiField v-if="form.kind === 'atomic'" :label="t('permissionCenter.permissions.fields.action')">
               <UiInput v-model="form.action" data-testid="permissions-action-input" />
             </UiField>
 
             <UiField
               v-if="form.kind === 'atomic' && targetOptions.length"
-              :label="t('userCenter.permissions.fields.targetIds')"
+              :label="t('permissionCenter.permissions.fields.targetIds')"
             >
               <div class="space-y-2">
                 <label
@@ -386,15 +386,15 @@ async function confirmDeletePermission() {
               </div>
             </UiField>
 
-            <UiField v-else-if="form.kind === 'atomic'" :label="t('userCenter.permissions.fields.targetIds')">
+            <UiField v-else-if="form.kind === 'atomic'" :label="t('permissionCenter.permissions.fields.targetIds')">
               <UiPanelFrame variant="subtle" padding="sm">
                 <div class="text-sm text-text-tertiary" data-testid="permissions-targets-empty">
-                  {{ t('userCenter.permissions.emptyTargets') }}
+                  {{ t('permissionCenter.permissions.emptyTargets') }}
                 </div>
               </UiPanelFrame>
             </UiField>
 
-            <UiField v-if="form.kind === 'bundle'" :label="t('userCenter.permissions.fields.memberPermissionIds')">
+            <UiField v-if="form.kind === 'bundle'" :label="t('permissionCenter.permissions.fields.memberPermissionIds')">
               <div class="space-y-2">
                 <label
                   v-for="permission in memberPermissionOptions"
@@ -415,12 +415,12 @@ async function confirmDeletePermission() {
               </div>
             </UiField>
 
-            <UiField :label="t('userCenter.permissions.fields.description')">
+            <UiField :label="t('permissionCenter.permissions.fields.description')">
               <UiTextarea v-model="form.description" :rows="5" data-testid="permissions-description-input" />
             </UiField>
             <div class="flex gap-3">
-              <UiButton data-testid="permissions-save-button" @click="savePermission">{{ t('userCenter.permissions.actions.save') }}</UiButton>
-              <UiButton variant="ghost" @click="selectedPermissionId ? applyPermission(selectedPermissionId) : createPermissionDraft()">{{ t('userCenter.permissions.actions.reset') }}</UiButton>
+              <UiButton data-testid="permissions-save-button" @click="savePermission">{{ t('permissionCenter.permissions.actions.save') }}</UiButton>
+              <UiButton variant="ghost" @click="selectedPermissionId ? applyPermission(selectedPermissionId) : createPermissionDraft()">{{ t('permissionCenter.permissions.actions.reset') }}</UiButton>
             </div>
           </div>
         </UiInspectorPanel>
@@ -430,8 +430,8 @@ async function confirmDeletePermission() {
 
   <UiDialog
     v-model:open="deleteDialogOpen"
-    :title="t('userCenter.permissions.deleteTitle')"
-    :description="t('userCenter.permissions.deleteDescription')"
+    :title="t('permissionCenter.permissions.deleteTitle')"
+    :description="t('permissionCenter.permissions.deleteDescription')"
   >
     <template #footer>
       <UiButton variant="ghost" @click="deleteDialogOpen = false">

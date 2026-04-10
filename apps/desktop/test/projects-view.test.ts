@@ -62,7 +62,7 @@ describe('Workspace project management view', () => {
     window.localStorage.clear()
     installWorkspaceApiFixture()
     document.body.innerHTML = ''
-    await router.push('/workspaces/ws-local/projects')
+    await router.push('/workspaces/ws-local/console/projects')
     await router.isReady()
   })
 

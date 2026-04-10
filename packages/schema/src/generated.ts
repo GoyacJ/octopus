@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: d6e8f193e6097fa5776b7e651c467bf6e637e95112aa2a5d5381f742ec19ca27
+// Source hash: df662ed56b58dedcf6b18d1214875404e91536548ff3cc4134b8a3415055b77c
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "d6e8f193e6097fa5776b7e651c467bf6e637e95112aa2a5d5381f742ec19ca27"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "df662ed56b58dedcf6b18d1214875404e91536548ff3cc4134b8a3415055b77c"
 
 export interface AgentRecord {
   avatar?: string
@@ -463,7 +463,7 @@ export interface MenuRecord {
   workspaceId: string
 }
 
-export type MenuSource = "main-sidebar" | "user-center"
+export type MenuSource = "main-sidebar" | "console" | "permission-center"
 
 export type MenuStatus = "active" | "disabled"
 
@@ -540,6 +540,22 @@ export interface NotificationUnreadSummary {
 }
 
 export type PasswordState = "set" | "reset-required" | "temporary"
+
+export interface PermissionCenterAlertRecord {
+  description: string
+  id: string
+  severity: RiskLevel
+  title: string
+}
+
+export interface PermissionCenterOverviewSnapshot {
+  alerts: PermissionCenterAlertRecord[]
+  currentUser: UserRecordSummary
+  metrics: WorkspaceMetricRecord[]
+  quickLinks: MenuRecord[]
+  roleNames: string[]
+  workspaceId: string
+}
 
 export type PermissionMode = "auto" | "readonly" | "danger-full-access"
 
@@ -1144,22 +1160,6 @@ export interface UpsertWorkspaceMcpServerInput {
   serverName: string
 }
 
-export interface UserCenterAlertRecord {
-  description: string
-  id: string
-  severity: RiskLevel
-  title: string
-}
-
-export interface UserCenterOverviewSnapshot {
-  alerts: UserCenterAlertRecord[]
-  currentUser: UserRecordSummary
-  metrics: WorkspaceMetricRecord[]
-  quickLinks: MenuRecord[]
-  roleNames: string[]
-  workspaceId: string
-}
-
 export interface UserRecordSummary {
   avatar?: string
   displayName: string
@@ -1652,6 +1652,22 @@ export interface OctopusApiPaths {
   "/api/v1/workspace/overview": {
     get: { operationId: "getWorkspaceOverview"; response: WorkspaceOverviewSnapshot; error: ApiErrorEnvelope }
   }
+  "/api/v1/workspace/permission-center/overview": {
+    get: { operationId: "getPermissionCenterOverview"; response: PermissionCenterOverviewSnapshot; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/personal-center/profile": {
+    patch: { operationId: "updateCurrentUserProfile"; response: UserRecordSummary; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/personal-center/profile/password": {
+    post: { operationId: "changeCurrentUserPassword"; response: ChangeCurrentUserPasswordResponse; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/personal-center/profile/runtime-config": {
+    get: { operationId: "getUserRuntimeConfig"; response: RuntimeEffectiveConfig; error: ApiErrorEnvelope }
+    patch: { operationId: "saveUserRuntimeConfig"; response: RuntimeEffectiveConfig; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/personal-center/profile/runtime-config/validate": {
+    post: { operationId: "validateUserRuntimeConfig"; response: RuntimeConfigValidationResult; error: ApiErrorEnvelope }
+  }
   "/api/v1/workspace/pet": {
     get: { operationId: "getWorkspacePetSnapshot"; response: PetWorkspaceSnapshot; error: ApiErrorEnvelope }
   }
@@ -1707,22 +1723,6 @@ export interface OctopusApiPaths {
   "/api/v1/workspace/teams/{teamId}": {
     patch: { operationId: "updateWorkspaceTeam"; response: TeamRecord; error: ApiErrorEnvelope }
     delete: { operationId: "deleteWorkspaceTeam"; response: void; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/user-center/overview": {
-    get: { operationId: "getUserCenterOverview"; response: UserCenterOverviewSnapshot; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/user-center/profile": {
-    patch: { operationId: "updateCurrentUserProfile"; response: UserRecordSummary; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/user-center/profile/password": {
-    post: { operationId: "changeCurrentUserPassword"; response: ChangeCurrentUserPasswordResponse; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/user-center/profile/runtime-config": {
-    get: { operationId: "getUserRuntimeConfig"; response: RuntimeEffectiveConfig; error: ApiErrorEnvelope }
-    patch: { operationId: "saveUserRuntimeConfig"; response: RuntimeEffectiveConfig; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/user-center/profile/runtime-config/validate": {
-    post: { operationId: "validateUserRuntimeConfig"; response: RuntimeConfigValidationResult; error: ApiErrorEnvelope }
   }
 }
 

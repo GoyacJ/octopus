@@ -7,7 +7,12 @@ import type { RouteLocationRaw } from 'vue-router'
 
 import { UiButton, UiDialog, UiInput, UiPanelFrame } from '@octopus/ui'
 
-import { createProjectConversationTarget, createProjectSurfaceTarget, createWorkspaceOverviewTarget } from '@/i18n/navigation'
+import {
+  createProjectConversationTarget,
+  createProjectSurfaceTarget,
+  createWorkspaceConsoleSurfaceTarget,
+  createWorkspaceOverviewTarget,
+} from '@/i18n/navigation'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -82,7 +87,7 @@ const results = computed<SearchResult[]>(() => {
       kind: 'navigation',
       to: projectId
         ? createProjectSurfaceTarget('project-resources', workspaceId, projectId)
-        : { name: 'workspace-resources', params: { workspaceId } },
+        : createWorkspaceConsoleSurfaceTarget('workspace-console-resources', workspaceId),
     },
     {
       id: 'nav-knowledge',
@@ -92,7 +97,7 @@ const results = computed<SearchResult[]>(() => {
       kind: 'navigation',
       to: projectId
         ? createProjectSurfaceTarget('project-knowledge', workspaceId, projectId)
-        : { name: 'workspace-knowledge', params: { workspaceId } },
+        : createWorkspaceConsoleSurfaceTarget('workspace-console-knowledge', workspaceId),
     },
   ]
 

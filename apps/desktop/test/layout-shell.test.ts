@@ -119,13 +119,13 @@ describe('Workbench shell layout', () => {
     expect(breadcrumbText()).toContain('Desktop Redesign')
     expect(breadcrumbText()).toContain(String(i18n.global.t('sidebar.navigation.dashboard')))
 
-    await router.push('/workspaces/ws-local/projects')
-    await waitFor(() => router.currentRoute.value.name === 'workspace-projects')
+    await router.push('/workspaces/ws-local/console/projects')
+    await waitFor(() => router.currentRoute.value.name === 'workspace-console-projects')
 
     expect(breadcrumbText()).toContain('Octopus')
     expect(breadcrumbText()).toContain(localWorkspaceLabel)
     expect(breadcrumbText()).not.toContain('Desktop Redesign')
-    expect(breadcrumbText()).toContain(String(i18n.global.t('sidebar.navigation.projects')))
+    expect(breadcrumbText()).toContain(String(i18n.global.t('sidebar.navigation.console')))
 
     await router.push('/settings')
     await waitFor(() => router.currentRoute.value.name === 'app-settings')
@@ -428,14 +428,14 @@ describe('Workbench shell layout', () => {
 
     expect(document.body.querySelector('[data-testid="sidebar-workspace-menu-list"]')).not.toBeNull()
     expect(document.body.querySelector('[data-testid="sidebar-workspace-navigation-menu"]')).not.toBeNull()
-    expect(document.body.querySelector('[data-testid="sidebar-workspace-nav-workspace-projects"]')).not.toBeNull()
+    expect(document.body.querySelector('[data-testid="sidebar-workspace-nav-workspace-console"]')).not.toBeNull()
     expect(document.body.querySelector('[data-testid="sidebar-connect-workspace-trigger"]')).not.toBeNull()
     expect(document.body.textContent).toContain(String(i18n.global.t('sidebar.workspaceMenu.title')))
 
     mounted.destroy()
   })
 
-  it('navigates to the project management workspace page from the footer workspace menu', async () => {
+  it('navigates to the console workspace page from the footer workspace menu', async () => {
     await router.push('/workspaces/ws-local/overview?project=proj-redesign')
     await router.isReady()
 
@@ -443,14 +443,14 @@ describe('Workbench shell layout', () => {
     await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]') !== null)
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="sidebar-workspace-menu-trigger"]')?.click()
-    await waitFor(() => document.body.querySelector('[data-testid="sidebar-workspace-nav-workspace-projects"]') !== null)
+    await waitFor(() => document.body.querySelector('[data-testid="sidebar-workspace-nav-workspace-console"]') !== null)
 
     document.body
-      .querySelector<HTMLAnchorElement>('[data-testid="sidebar-workspace-nav-workspace-projects"]')
+      .querySelector<HTMLAnchorElement>('[data-testid="sidebar-workspace-nav-workspace-console"]')
       ?.click()
 
-    await waitFor(() => router.currentRoute.value.name === 'workspace-projects')
-    expect(router.currentRoute.value.name).toBe('workspace-projects')
+    await waitFor(() => router.currentRoute.value.name === 'workspace-console')
+    expect(router.currentRoute.value.name).toBe('workspace-console')
 
     mounted.destroy()
   })

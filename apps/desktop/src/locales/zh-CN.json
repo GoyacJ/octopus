@@ -204,13 +204,10 @@
       "title": "工作区导航",
       "items": {
         "dashboard": "概览",
-        "knowledge": "知识库",
-        "resources": "资源库",
-        "agents": "数字员工中心",
-        "models": "模型配置",
-        "tools": "工具集成",
+        "console": "控制台",
         "automations": "自动化",
-        "userCenter": "用户中心",
+        "permissionCenter": "权限中心",
+        "personalCenter": "个人中心",
         "conversations": "最近会话",
         "trace": "最近追踪"
       }
@@ -221,18 +218,18 @@
     "projectTree": {
       "title": "项目",
       "caption": "当前工作区范围",
-    "create": "新增项目",
-    "remove": "删除项目",
-    "removeConfirm": "确认删除该项目及其所有会话吗？",
-    "dialogTitle": "创建项目",
-    "dialogDescription": "输入项目名称后，在当前工作区内创建一个新的项目。",
-    "inputPlaceholder": "请输入项目名称",
-    "deleteDialog": {
-      "title": "删除项目",
-      "description": "确认删除“{name}”？当前版本会将该项目从侧边栏移除。",
-      "confirm": "确认删除"
-    }
-  },
+      "create": "新增项目",
+      "remove": "删除项目",
+      "removeConfirm": "确认删除该项目及其所有会话吗？",
+      "dialogTitle": "创建项目",
+      "dialogDescription": "输入项目名称后，在当前工作区内创建一个新的项目。",
+      "inputPlaceholder": "请输入项目名称",
+      "deleteDialog": {
+        "title": "删除项目",
+        "description": "确认删除“{name}”？当前版本会将该项目从侧边栏移除。",
+        "confirm": "确认删除"
+      }
+    },
     "projectModules": {
       "console": "控制台",
       "conversations": "会话"
@@ -253,8 +250,10 @@
       "tools": "工具",
       "settings": "设置",
       "automations": "自动化",
-      "userCenter": "用户中心",
-      "connections": "连接"
+      "connections": "连接",
+      "console": "控制台",
+      "permissionCenter": "权限中心",
+      "personalCenter": "个人中心"
     },
     "scope": {
       "title": "当前范围",
@@ -417,13 +416,15 @@
       "title": "最近会话"
     },
     "activity": {
-      "title": "项目动态"
+      "title": "最新项目动态"
     },
     "empty": {
       "conversationsTitle": "暂无项目会话",
       "conversationsDescription": "项目运行态会话启动后，这里会展示最近会话。",
       "activityTitle": "暂无项目动态",
-      "activityDescription": "项目产生运行或变更后，这里会展示对应动态。"
+      "activityDescription": "当前项目还没有任何操作日志。",
+      "rankingTitle": "暂无会话排行",
+      "rankingDescription": "没有足够的数据进行排行。"
     },
     "info": {
       "title": "项目详情",
@@ -476,17 +477,6 @@
       "modelCalls": "模型调用",
       "tokens": "Token 消耗",
       "activity": "活动数"
-    },
-    "activity": {
-      "title": "最新项目动态"
-    },
-    "empty": {
-      "conversationsTitle": "暂无项目会话",
-      "conversationsDescription": "项目运行态会话启动后，这里会展示最近会话。",
-      "activityTitle": "暂无项目动态",
-      "activityDescription": "当前项目还没有任何操作日志。",
-      "rankingTitle": "暂无会话排行",
-      "rankingDescription": "没有足够的数据进行排行。"
     }
   },
   "projectRuntime": {
@@ -579,7 +569,7 @@
       "description": "通过用户的项目作用域关系，维护当前项目的成员名单。",
       "saveError": "保存项目成员失败。",
       "emptyTitle": "当前工作区还没有可分配成员",
-      "emptyDescription": "请先在用户中心创建用户，再把用户加入当前项目。"
+      "emptyDescription": "请先在权限中心创建用户，再把用户加入当前项目。"
     },
     "summary": {
       "title": "项目概览",
@@ -1014,27 +1004,27 @@
     }
   },
   "tools": {
-  "header": {
-    "eyebrow": "运行时工具",
-    "title": "工具集成",
-    "subtitle": "基于 runtime 真源管理内置工具、工作区技能和 MCP 服务。"
-  },
-  "actions": {
-    "disable": "停用",
-    "enable": "启用",
-    "newSkill": "新建 Skill",
-    "newMcp": "新建 MCP",
-    "importSkill": "导入 Skill",
-    "importArchive": "上传 ZIP",
-    "importFolder": "上传文件夹",
-    "copyToManaged": "复制为本应用 Skill",
-    "selectForCopy": "加入批量复制",
-    "skillSlugPrompt": "请输入 Skill 标识"
-  },
-  "tabs": {
-    "builtin": "内置工具",
-    "skill": "技能目录",
-    "mcp": "MCP"
+    "header": {
+      "eyebrow": "运行时工具",
+      "title": "工具集成",
+      "subtitle": "基于 runtime 真源管理内置工具、工作区技能和 MCP 服务。"
+    },
+    "actions": {
+      "disable": "停用",
+      "enable": "启用",
+      "newSkill": "新建 Skill",
+      "newMcp": "新建 MCP",
+      "importSkill": "导入 Skill",
+      "importArchive": "上传 ZIP",
+      "importFolder": "上传文件夹",
+      "copyToManaged": "复制为本应用 Skill",
+      "selectForCopy": "加入批量复制",
+      "skillSlugPrompt": "请输入 Skill 标识"
+    },
+    "tabs": {
+      "builtin": "内置工具",
+      "skill": "技能目录",
+      "mcp": "MCP"
     },
     "empty": {
       "title": "当前分组暂无条目",
@@ -1047,74 +1037,74 @@
     "search": {
       "placeholder": "搜索名称、路径、端点或状态…"
     },
-  "summary": {
-    "results": "当前显示 {count} 条 / 本分组共 {total} 条"
-  },
-  "fields": {
-    "permissionMode": "权限模式"
-  },
-  "detail": {
+    "summary": {
+      "results": "当前显示 {count} 条 / 本分组共 {total} 条"
+    },
+    "fields": {
+      "permissionMode": "权限模式"
+    },
+    "detail": {
       "title": "详情",
       "sourcePath": "来源路径",
       "sourceKey": "来源键",
-    "requiredPermission": "所需权限",
-    "disabled": "已停用",
-    "builtinKey": "内置键",
-    "activeState": "状态",
-    "shadowedBy": "被覆盖来源",
-    "sourceOrigin": "发现来源",
-    "relativePath": "相对路径",
-    "workspaceOwned": "归属",
-    "workspaceOwnedYes": "工作区管理",
-    "workspaceOwnedNo": "外部来源",
-    "serverName": "服务名",
-    "endpoint": "端点",
-    "toolNames": "已发现工具",
-    "scope": "配置范围",
-    "statusDetail": "状态说明"
-  },
-  "editor": {
-    "loading": "正在加载 runtime 文档…",
-    "loadingFile": "正在加载 Skill 文件…",
-    "unknownError": "加载工具详情失败。",
-    "jsonObjectRequired": "MCP 配置必须是 JSON 对象。",
-    "skillSlugRequired": "无法生成有效的 Skill 名称。",
-    "skillNameRequired": "请输入 Skill 名称。",
-    "skillImportRequired": "请至少选择一个 Skill 来源。",
-    "skillCopyDuplicate": "复制目标名称存在重复，请调整后重试。",
-    "skillImportDuplicate": "所选来源中存在重复的 Skill 名称，请调整后重试。",
-    "skillCreateDescription": "在 data/skills/<slug>/ 下创建一个本应用自有 skill。",
-    "mcpCreateDescription": "在工作区 runtime 配置里创建一个 MCP server 条目。",
-    "copySkillDescription": "将使用当前 Skill 名称创建本应用副本。",
-    "importSkillDescription": "选择 ZIP 或文件夹后，将默认使用文件名或文件夹名导入。",
-    "importArchiveDescription": "将默认使用 ZIP 文件名导入。",
-    "importFolderDescription": "将默认使用文件夹名导入。",
-    "skillSlug": "Skill 标识",
-    "skillName": "Skill 名称",
-    "skillContent": "SKILL.md",
-    "mcpServerName": "服务名",
-    "mcpConfig": "服务配置",
-    "skillTree": "目录结构",
-    "selectedImportSource": "已选择来源",
-    "selectedFile": "当前文件",
-    "fileKind": "文件类型",
-    "fileLanguage": "语言",
-    "fileSize": "大小",
-    "noSkillFiles": "当前 skill 目录下没有可展示的文件。",
-    "noSkillFileSelectedTitle": "选择一个文件",
-    "noSkillFileSelectedDescription": "从左侧目录树中选择一个 skill 文件。",
-    "textFile": "文本文件",
-    "binaryFile": "二进制文件",
-    "binaryReadonly": "二进制文件仅展示元数据，暂不支持页面内编辑。"
-  },
-  "states": {
-    "active": "生效中",
-    "shadowed": "已被覆盖",
-    "managed": "本应用",
-    "disabled": "已停用",
-    "readonly": "只读",
-    "external": "外部来源"
-  },
+      "requiredPermission": "所需权限",
+      "disabled": "已停用",
+      "builtinKey": "内置键",
+      "activeState": "状态",
+      "shadowedBy": "被覆盖来源",
+      "sourceOrigin": "发现来源",
+      "relativePath": "相对路径",
+      "workspaceOwned": "归属",
+      "workspaceOwnedYes": "工作区管理",
+      "workspaceOwnedNo": "外部来源",
+      "serverName": "服务名",
+      "endpoint": "端点",
+      "toolNames": "已发现工具",
+      "scope": "配置范围",
+      "statusDetail": "状态说明"
+    },
+    "editor": {
+      "loading": "正在加载 runtime 文档…",
+      "loadingFile": "正在加载 Skill 文件…",
+      "unknownError": "加载工具详情失败。",
+      "jsonObjectRequired": "MCP 配置必须是 JSON 对象。",
+      "skillSlugRequired": "无法生成有效的 Skill 名称。",
+      "skillNameRequired": "请输入 Skill 名称。",
+      "skillImportRequired": "请至少选择一个 Skill 来源。",
+      "skillCopyDuplicate": "复制目标名称存在重复，请调整后重试。",
+      "skillImportDuplicate": "所选来源中存在重复的 Skill 名称，请调整后重试。",
+      "skillCreateDescription": "在 data/skills/<slug>/ 下创建一个本应用自有 skill。",
+      "mcpCreateDescription": "在工作区 runtime 配置里创建一个 MCP server 条目。",
+      "copySkillDescription": "将使用当前 Skill 名称创建本应用副本。",
+      "importSkillDescription": "选择 ZIP 或文件夹后，将默认使用文件名或文件夹名导入。",
+      "importArchiveDescription": "将默认使用 ZIP 文件名导入。",
+      "importFolderDescription": "将默认使用文件夹名导入。",
+      "skillSlug": "Skill 标识",
+      "skillName": "Skill 名称",
+      "skillContent": "SKILL.md",
+      "mcpServerName": "服务名",
+      "mcpConfig": "服务配置",
+      "skillTree": "目录结构",
+      "selectedImportSource": "已选择来源",
+      "selectedFile": "当前文件",
+      "fileKind": "文件类型",
+      "fileLanguage": "语言",
+      "fileSize": "大小",
+      "noSkillFiles": "当前 skill 目录下没有可展示的文件。",
+      "noSkillFileSelectedTitle": "选择一个文件",
+      "noSkillFileSelectedDescription": "从左侧目录树中选择一个 skill 文件。",
+      "textFile": "文本文件",
+      "binaryFile": "二进制文件",
+      "binaryReadonly": "二进制文件仅展示元数据，暂不支持页面内编辑。"
+    },
+    "states": {
+      "active": "生效中",
+      "shadowed": "已被覆盖",
+      "managed": "本应用",
+      "disabled": "已停用",
+      "readonly": "只读",
+      "external": "外部来源"
+    },
     "sourceOrigins": {
       "skills_dir": "技能目录",
       "legacy_commands_dir": "旧版 /commands"
@@ -1316,403 +1306,6 @@
     "empty": {
       "title": "暂无连接",
       "description": "当前还没有可用的工作区连接。"
-    }
-  },
-  "userCenter": {
-    "header": {
-      "eyebrow": "用户中心",
-      "title": "权限管理",
-      "subtitle": "管理工作区级的角色、权限分配与导航控制。",
-      "heroTitle": "统一的身份与能力治理看板",
-      "heroSubtitle": "清晰展现成员与权限的边界，保障工作区安全合规。"
-    },
-    "common": {
-      "noRoles": "暂无角色",
-      "active": "正常",
-      "disabled": "停用",
-      "status": "状态"
-    },
-    "nav": {
-      "title": "管理菜单",
-      "profile": "基本资料",
-      "pet": "宠物",
-      "users": "成员管理",
-      "roles": "角色管理",
-      "permissions": "权限管理",
-      "menus": "导航管理"
-    },
-    "filters": {
-      "status": "状态筛选",
-      "scope": "范围筛选",
-      "allStatuses": "全部状态",
-      "allScopes": "全部范围"
-    },
-    "gender": {
-      "unknown": "未知",
-      "male": "男",
-      "female": "女"
-    },
-    "scope": {
-      "allProjects": "全部项目",
-      "selectedProjects": "指定项目"
-    },
-    "risk": {
-      "broadMenuAccess": "广泛菜单访问"
-    },
-    "profile": {
-      "usernameLabel": "用户名",
-      "nicknameLabel": "昵称",
-      "phoneLabel": "手机号",
-      "emailLabel": "邮箱",
-      "genderLabel": "性别",
-      "roleLabel": "角色",
-      "securityTitle": "账号安全",
-      "resetPassword": "重置密码",
-      "passwordLabel": "密码状态",
-      "passwordUpdatedAtLabel": "密码更新时间",
-      "passwordResetRequired": "需要重置密码",
-      "passwordTemporary": "临时密码",
-      "permissionTitle": "有效权限",
-      "permissionSubtitle": "按目标类型查看当前账号可执行的能力范围。",
-      "permissionCountLabel": "{count} 项权限",
-      "emptyPermissionTitle": "暂无权限",
-      "emptyPermissionDescription": "当前账号还没有绑定任何有效权限。",
-      "timelineTitle": "最近活动",
-      "timelineSubtitle": "展示当前账号在工作区内的关键操作轨迹。",
-      "emptyTimelineTitle": "暂无活动记录",
-      "emptyTimelineDescription": "当前账号还没有可展示的最近活动。",
-      "metrics": {
-        "permissionCount": "原子权限",
-        "menuCount": "导航节点",
-        "roleCount": "承载角色",
-        "permissionHelper": "当前账号继承到的权限总量。",
-        "menuHelper": "当前账号可见的导航节点数量。",
-        "roleHelper": "当前账号归属的角色数量。"
-      },
-      "emptyTitle": "暂无当前用户",
-      "emptyDescription": "当前工作区连接尚未返回用户资料。",
-      "access": {
-        "title": "访问概览",
-        "description": "查看当前账号继承到的角色、权限与可见菜单。",
-        "roles": "当前角色",
-        "rolesDescription": "当前登录账号直接绑定的角色。",
-        "permissions": "当前权限",
-        "permissionsDescription": "基于当前角色聚合得到的有效权限。",
-        "menus": "当前菜单",
-        "menusDescription": "当前账号可见的用户中心菜单。",
-        "openRoles": "查看角色",
-        "openPermissions": "查看权限",
-        "openMenus": "查看菜单",
-        "emptyRoles": "暂无角色",
-        "emptyPermissions": "暂无权限",
-        "emptyMenus": "暂无菜单"
-      },
-      "edit": {
-        "title": "编辑个人资料",
-        "description": "维护当前登录用户的基础资料。本期支持昵称、用户名和头像上传。",
-        "fields": {
-          "displayName": "昵称",
-          "username": "用户名",
-          "avatar": "头像"
-        },
-        "hints": {
-          "avatar": "支持从本地选择 PNG、JPEG、WEBP 图片；清空后会回退到首字母头像。",
-          "avatarCurrent": "当前头像",
-          "avatarPendingEmpty": "未选择新的头像文件"
-        },
-        "actions": {
-          "pickAvatar": "选择头像",
-          "clearAvatar": "清空头像",
-          "save": "保存",
-          "reset": "重置"
-        }
-      },
-      "password": {
-        "title": "修改密码",
-        "description": "输入当前密码并设置新的登录密码。修改成功后会立即更新密码状态。",
-        "fields": {
-          "currentPassword": "当前密码",
-          "newPassword": "新密码",
-          "confirmPassword": "确认新密码"
-        },
-        "hints": {
-          "newPassword": "新密码长度至少 8 位，且不能与当前密码相同。"
-        },
-        "actions": {
-          "submit": "更新密码"
-        }
-      },
-      "feedback": {
-        "profileSaved": "个人资料已保存。",
-        "passwordUpdated": "密码已更新。"
-      },
-      "validation": {
-        "displayNameRequired": "请输入昵称。",
-        "usernameRequired": "请输入用户名。",
-        "currentPasswordRequired": "请输入当前密码。",
-        "newPasswordRequired": "请输入新密码。",
-        "newPasswordMinLength": "新密码长度至少 8 位。",
-        "confirmPasswordRequired": "请再次输入新密码。",
-        "passwordMismatch": "两次输入的新密码不一致。",
-        "passwordUnchanged": "新密码不能与当前密码相同。"
-      },
-      "runtime": {
-        "title": "运行配置",
-        "description": "编辑当前工作区下只对你自己生效的 runtime override。",
-        "effectiveTitle": "Effective 预览",
-        "effectiveDescription": "预览对当前用户新建 session 生效的 runtime 配置。"
-      }
-    },
-    "pet": {
-      "title": "宠物",
-      "description": "配置小章在当前工作区下的个人偏好，例如默认模型与权限模式。",
-      "emptyTitle": "暂无宠物配置",
-      "emptyDescription": "当前工作区还没有可编辑的用户会话上下文。",
-      "fields": {
-        "name": "宠物名称",
-        "model": "默认模型",
-        "greeting": "问候语",
-        "summary": "角色摘要",
-        "permissionMode": "权限模式",
-        "source": "配置来源"
-      },
-      "hints": {
-        "model": "控制宠物聊天默认使用的 configured model。",
-        "permissionMode": "控制宠物会话默认请求的执行权限。"
-      },
-      "actions": {
-        "save": "保存宠物配置",
-        "reset": "重置"
-      },
-      "permissionModes": {
-        "readOnly": "只读",
-        "workspaceWrite": "工作区可写",
-        "dangerFullAccess": "危险全权限"
-      },
-      "visibility": {
-        "visible": "已显示",
-        "hidden": "已隐藏"
-      },
-      "preview": {
-        "selectedModel": "当前模型",
-        "greeting": "问候语",
-        "summary": "角色摘要"
-      },
-      "runtime": {
-        "title": "宠物运行预览",
-        "description": "保存后会写入当前用户 runtime override 中的 pet 配置段。"
-      }
-    },
-    "users": {
-      "title": "成员管理",
-      "subtitle": "维护工作区成员账号、角色绑定与项目范围。",
-      "create": "添加成员",
-      "createTitle": "创建成员",
-      "editTitle": "编辑成员",
-      "deleteTitle": "删除成员",
-      "deleteDescription": "删除后将移除该成员的工作区访问权限，此操作不可撤销。",
-      "formSubtitle": "编辑成员的基础资料、角色授权与访问范围。",
-      "searchPlaceholder": "搜索成员、账号或邮箱…",
-      "currentSessionUser": "当前会话用户",
-      "effectivePermissions": "有效权限 {count}",
-      "effectiveMenus": "可见菜单 {count}",
-      "switchCurrentUser": "切换为当前会话用户",
-      "disable": "停用成员",
-      "enable": "启用成员",
-      "roleBindingTitle": "角色绑定",
-      "scopeTitle": "项目范围",
-      "actions": {
-        "create": "新建成员",
-        "delete": "删除成员",
-        "pickAvatar": "选择头像",
-        "clearAvatar": "清空头像",
-        "save": "保存成员",
-        "reset": "重置"
-      },
-      "fields": {
-        "username": "用户名",
-        "nickname": "昵称",
-        "role": "角色",
-        "scopeProjects": "项目范围",
-        "avatar": "头像",
-        "password": "密码",
-        "roleIds": "角色 ID",
-        "scopeProjectIds": "项目范围 ID"
-      },
-      "avatar": {
-        "description": "可上传头像，或使用默认首字母头像。",
-        "actions": {
-          "useDefault": "使用默认头像"
-        },
-        "pendingEmpty": "未选择新的头像文件",
-        "current": "当前头像"
-      },
-      "password": {
-        "description": "可保留现有密码、恢复默认密码，或设置一个新的成员密码。",
-        "actions": {
-          "useDefault": "使用默认密码",
-          "custom": "自定义密码"
-        },
-        "fields": {
-          "password": "新密码",
-          "confirmPassword": "确认新密码"
-        }
-      },
-      "metrics": {
-        "total": "成员总数",
-        "activeHelper": "其中 {count} 个为启用状态",
-        "disabled": "已停用成员",
-        "scopeHelper": "其中 {count} 个为指定项目范围",
-        "unassigned": "未分配角色",
-        "unassignedHelper": "建议尽快补齐角色绑定，避免权限漂移。"
-      },
-      "feedback": {
-        "saved": "成员信息已保存。",
-        "deleted": "成员已删除。"
-      }
-    },
-    "roles": {
-      "title": "角色定义",
-      "create": "新增角色",
-      "createTitle": "创建角色",
-      "editTitle": "编辑角色",
-      "deleteTitle": "删除角色",
-      "deleteDescription": "删除后会同步移除成员绑定的该角色，此操作不可撤销。",
-      "listTitle": "角色列表",
-      "listSubtitle": "集中维护工作区内的职责分工与授权模板。",
-      "formSubtitle": "编辑角色说明，并绑定权限与菜单访问范围。",
-      "nameLabel": "角色名称",
-      "codeLabel": "角色标识",
-      "descriptionLabel": "职能描述",
-      "permissionBindingTitle": "权限绑定",
-      "menuBindingTitle": "菜单绑定",
-      "menuHint": "只勾选该角色应该看到的导航入口。",
-      "actions": {
-        "create": "新建角色",
-        "delete": "删除角色",
-        "save": "保存角色",
-        "reset": "重置"
-      },
-      "fields": {
-        "name": "角色名称",
-        "code": "角色标识",
-        "permissions": "权限",
-        "menus": "菜单",
-        "permissionIds": "权限 ID",
-        "menuIds": "菜单 ID",
-        "description": "角色说明"
-      },
-      "menuGroups": {
-        "app": "应用",
-        "workspace": "工作区",
-        "userCenter": "用户中心",
-        "project": "项目"
-      },
-      "feedback": {
-        "saved": "角色信息已保存。",
-        "deleted": "角色已删除。"
-      },
-      "metrics": {
-        "total": "角色总数",
-        "disabled": "已停用角色",
-        "disabledHelper": "其中 {count} 个角色当前停用。",
-        "orphan": "空角色",
-        "orphanHelper": "当前没有成员绑定的角色数量。",
-        "broadAccess": "高覆盖访问",
-        "broadAccessHelper": "拥有广泛菜单访问的角色数量。"
-      }
-    },
-    "permissions": {
-      "title": "权限管理",
-      "subtitle": "管理原子权限与权限包，并绑定目标范围。",
-      "listTitle": "权限列表",
-      "listSubtitle": "查看工作区内所有权限定义、状态与风险提示。",
-      "create": "新增权限",
-      "createTitle": "创建权限",
-      "editTitle": "编辑权限",
-      "formSubtitle": "编辑权限元信息、目标对象与组合关系。",
-      "atomicTab": "原子权限",
-      "bundleTab": "权限包",
-      "nameLabel": "权限名称",
-      "codeLabel": "权限标识",
-      "descriptionLabel": "权限描述",
-      "kindLabel": "权限类型",
-      "targetTypeTitle": "目标类型",
-      "targetBindingTitle": "目标绑定",
-      "actionTitle": "动作标识",
-      "bundleComposeTitle": "权限包组合",
-      "bundleMembers": "包含 {count} 个成员权限",
-      "usedByRoles": "被 {count} 个角色使用",
-      "disable": "停用",
-      "enable": "启用",
-      "delete": "删除",
-      "deleteTitle": "删除权限",
-      "deleteDescription": "删除后会同步移除角色中绑定的该权限，此操作不可撤销。",
-      "emptyTargets": "当前目标类型暂无可选对象。",
-      "actions": {
-        "create": "新建权限",
-        "delete": "删除权限",
-        "save": "保存权限",
-        "reset": "重置"
-      },
-      "fields": {
-        "name": "权限名称",
-        "code": "权限标识",
-        "kind": "权限类型",
-        "targetType": "目标类型",
-        "action": "动作标识",
-        "targetIds": "目标 ID",
-        "memberPermissionIds": "成员权限 ID",
-        "description": "权限描述"
-      },
-      "feedback": {
-        "saved": "权限信息已保存。",
-        "deleted": "权限已删除。"
-      },
-      "metrics": {
-        "total": "权限总数",
-        "bundleHelper": "其中 {count} 个为权限包。",
-        "disabled": "已停用权限",
-        "disabledHelper": "当前不可用但仍保留定义的权限数量。",
-        "risky": "风险权限",
-        "riskyHelper": "需要额外审计关注的权限数量。"
-      }
-    },
-    "menus": {
-      "title": "导航管理",
-      "subtitle": "统一维护菜单标签、顺序、可见性与角色使用情况。",
-      "editTitle": "编辑菜单",
-      "formSubtitle": "调整当前菜单节点的展示文案与状态。",
-      "nonNavigable": "非导航节点",
-      "roleUsage": "被 {count} 个角色使用",
-      "rootNode": "根节点",
-      "labelLabel": "菜单名称",
-      "orderLabel": "排序权重",
-      "parentHint": "父级关系由注册中心控制，此处仅展示当前归属。",
-      "toggleStatus": "切换状态",
-      "fields": {
-        "label": "菜单名称",
-        "source": "来源",
-        "routeName": "路由名称",
-        "parentId": "父级菜单 ID",
-        "order": "排序权重"
-      },
-      "metrics": {
-        "total": "菜单总数",
-        "userCenterHelper": "其中 {count} 个来自用户中心配置。",
-        "disabled": "已停用菜单",
-        "disabledHelper": "这些菜单当前不会出现在导航中。",
-        "unused": "未被角色使用",
-        "unusedHelper": "这些菜单暂未分配给任何角色。"
-      }
-    },
-    "recentConversations": {
-      "title": "最近会话",
-      "emptyState": "全局最近会话功能开发中"
-    },
-    "todos": {
-      "title": "待办事项",
-      "emptyState": "全局待办事项功能开发中"
     }
   },
   "agents": {
@@ -1966,12 +1559,437 @@
     },
     "menuSource": {
       "main-sidebar": "主侧边栏",
-      "user-center": "用户中心"
+      "console": "控制台",
+      "permission-center": "权限中心"
     },
     "teamMode": {
       "leadered": "主导式",
       "hybrid": "混合式",
       "mesh": "网格式"
+    }
+  },
+  "permissionCenter": {
+    "header": {
+      "eyebrow": "权限中心",
+      "title": "权限中心",
+      "subtitle": "管理工作区级的角色、权限分配与导航控制。",
+      "heroTitle": "统一的身份与能力治理看板",
+      "heroSubtitle": "清晰展现成员与权限的边界，保障工作区安全合规。"
+    },
+    "common": {
+      "noRoles": "暂无角色",
+      "active": "正常",
+      "disabled": "停用",
+      "status": "状态"
+    },
+    "nav": {
+      "title": "管理菜单",
+      "users": "成员管理",
+      "roles": "角色管理",
+      "permissions": "权限管理",
+      "menus": "导航管理"
+    },
+    "filters": {
+      "status": "状态筛选",
+      "scope": "范围筛选",
+      "allStatuses": "全部状态",
+      "allScopes": "全部范围"
+    },
+    "gender": {
+      "unknown": "未知",
+      "male": "男",
+      "female": "女"
+    },
+    "scope": {
+      "allProjects": "全部项目",
+      "selectedProjects": "指定项目"
+    },
+    "risk": {
+      "broadMenuAccess": "广泛菜单访问"
+    },
+    "users": {
+      "title": "成员管理",
+      "subtitle": "维护工作区成员账号、角色绑定与项目范围。",
+      "create": "添加成员",
+      "createTitle": "创建成员",
+      "editTitle": "编辑成员",
+      "deleteTitle": "删除成员",
+      "deleteDescription": "删除后将移除该成员的工作区访问权限，此操作不可撤销。",
+      "formSubtitle": "编辑成员的基础资料、角色授权与访问范围。",
+      "searchPlaceholder": "搜索成员、账号或邮箱…",
+      "currentSessionUser": "当前会话用户",
+      "effectivePermissions": "有效权限 {count}",
+      "effectiveMenus": "可见菜单 {count}",
+      "switchCurrentUser": "切换为当前会话用户",
+      "disable": "停用成员",
+      "enable": "启用成员",
+      "roleBindingTitle": "角色绑定",
+      "scopeTitle": "项目范围",
+      "actions": {
+        "create": "新建成员",
+        "delete": "删除成员",
+        "pickAvatar": "选择头像",
+        "clearAvatar": "清空头像",
+        "save": "保存成员",
+        "reset": "重置"
+      },
+      "fields": {
+        "username": "用户名",
+        "nickname": "昵称",
+        "role": "角色",
+        "scopeProjects": "项目范围",
+        "avatar": "头像",
+        "password": "密码",
+        "roleIds": "角色 ID",
+        "scopeProjectIds": "项目范围 ID"
+      },
+      "avatar": {
+        "description": "可上传头像，或使用默认首字母头像。",
+        "actions": {
+          "useDefault": "使用默认头像"
+        },
+        "pendingEmpty": "未选择新的头像文件",
+        "current": "当前头像"
+      },
+      "password": {
+        "description": "可保留现有密码、恢复默认密码，或设置一个新的成员密码。",
+        "actions": {
+          "useDefault": "使用默认密码",
+          "custom": "自定义密码"
+        },
+        "fields": {
+          "password": "新密码",
+          "confirmPassword": "确认新密码"
+        }
+      },
+      "metrics": {
+        "total": "成员总数",
+        "activeHelper": "其中 {count} 个为启用状态",
+        "disabled": "已停用成员",
+        "scopeHelper": "其中 {count} 个为指定项目范围",
+        "unassigned": "未分配角色",
+        "unassignedHelper": "建议尽快补齐角色绑定，避免权限漂移。"
+      },
+      "feedback": {
+        "saved": "成员信息已保存。",
+        "deleted": "成员已删除。"
+      }
+    },
+    "roles": {
+      "title": "角色定义",
+      "create": "新增角色",
+      "createTitle": "创建角色",
+      "editTitle": "编辑角色",
+      "deleteTitle": "删除角色",
+      "deleteDescription": "删除后会同步移除成员绑定的该角色，此操作不可撤销。",
+      "listTitle": "角色列表",
+      "listSubtitle": "集中维护工作区内的职责分工与授权模板。",
+      "formSubtitle": "编辑角色说明，并绑定权限与菜单访问范围。",
+      "nameLabel": "角色名称",
+      "codeLabel": "角色标识",
+      "descriptionLabel": "职能描述",
+      "permissionBindingTitle": "权限绑定",
+      "menuBindingTitle": "菜单绑定",
+      "menuHint": "只勾选该角色应该看到的导航入口。",
+      "actions": {
+        "create": "新建角色",
+        "delete": "删除角色",
+        "save": "保存角色",
+        "reset": "重置"
+      },
+      "fields": {
+        "name": "角色名称",
+        "code": "角色标识",
+        "permissions": "权限",
+        "menus": "菜单",
+        "permissionIds": "权限 ID",
+        "menuIds": "菜单 ID",
+        "description": "角色说明"
+      },
+      "menuGroups": {
+        "app": "应用",
+        "workspace": "工作区",
+        "console": "控制台",
+        "permissionCenter": "权限中心",
+        "project": "项目"
+      },
+      "feedback": {
+        "saved": "角色信息已保存。",
+        "deleted": "角色已删除。"
+      },
+      "metrics": {
+        "total": "角色总数",
+        "disabled": "已停用角色",
+        "disabledHelper": "其中 {count} 个角色当前停用。",
+        "orphan": "空角色",
+        "orphanHelper": "当前没有成员绑定的角色数量。",
+        "broadAccess": "高覆盖访问",
+        "broadAccessHelper": "拥有广泛菜单访问的角色数量。"
+      }
+    },
+    "permissions": {
+      "title": "权限管理",
+      "subtitle": "管理原子权限与权限包，并绑定目标范围。",
+      "listTitle": "权限列表",
+      "listSubtitle": "查看工作区内所有权限定义、状态与风险提示。",
+      "create": "新增权限",
+      "createTitle": "创建权限",
+      "editTitle": "编辑权限",
+      "formSubtitle": "编辑权限元信息、目标对象与组合关系。",
+      "atomicTab": "原子权限",
+      "bundleTab": "权限包",
+      "nameLabel": "权限名称",
+      "codeLabel": "权限标识",
+      "descriptionLabel": "权限描述",
+      "kindLabel": "权限类型",
+      "targetTypeTitle": "目标类型",
+      "targetBindingTitle": "目标绑定",
+      "actionTitle": "动作标识",
+      "bundleComposeTitle": "权限包组合",
+      "bundleMembers": "包含 {count} 个成员权限",
+      "usedByRoles": "被 {count} 个角色使用",
+      "disable": "停用",
+      "enable": "启用",
+      "delete": "删除",
+      "deleteTitle": "删除权限",
+      "deleteDescription": "删除后会同步移除角色中绑定的该权限，此操作不可撤销。",
+      "emptyTargets": "当前目标类型暂无可选对象。",
+      "actions": {
+        "create": "新建权限",
+        "delete": "删除权限",
+        "save": "保存权限",
+        "reset": "重置"
+      },
+      "fields": {
+        "name": "权限名称",
+        "code": "权限标识",
+        "kind": "权限类型",
+        "targetType": "目标类型",
+        "action": "动作标识",
+        "targetIds": "目标 ID",
+        "memberPermissionIds": "成员权限 ID",
+        "description": "权限描述"
+      },
+      "feedback": {
+        "saved": "权限信息已保存。",
+        "deleted": "权限已删除。"
+      },
+      "metrics": {
+        "total": "权限总数",
+        "bundleHelper": "其中 {count} 个为权限包。",
+        "disabled": "已停用权限",
+        "disabledHelper": "当前不可用但仍保留定义的权限数量。",
+        "risky": "风险权限",
+        "riskyHelper": "需要额外审计关注的权限数量。"
+      }
+    },
+    "menus": {
+      "title": "导航管理",
+      "subtitle": "统一维护菜单标签、顺序、可见性与角色使用情况。",
+      "editTitle": "编辑菜单",
+      "formSubtitle": "调整当前菜单节点的展示文案与状态。",
+      "nonNavigable": "非导航节点",
+      "roleUsage": "被 {count} 个角色使用",
+      "rootNode": "根节点",
+      "labelLabel": "菜单名称",
+      "orderLabel": "排序权重",
+      "parentHint": "父级关系由注册中心控制，此处仅展示当前归属。",
+      "toggleStatus": "切换状态",
+      "fields": {
+        "label": "菜单名称",
+        "source": "来源",
+        "routeName": "路由名称",
+        "parentId": "父级菜单 ID",
+        "order": "排序权重"
+      },
+      "metrics": {
+        "total": "菜单总数",
+        "consoleHelper": "其中 {count} 个来自控制台与权限中心配置。",
+        "disabled": "已停用菜单",
+        "disabledHelper": "这些菜单当前不会出现在导航中。",
+        "unused": "未被角色使用",
+        "unusedHelper": "这些菜单暂未分配给任何角色。"
+      }
+    }
+  },
+  "personalCenter": {
+    "header": {
+      "eyebrow": "个人中心",
+      "title": "个人中心",
+      "subtitle": "维护当前账号的资料、密码与宠物偏好。"
+    },
+    "nav": {
+      "profile": "基本资料",
+      "pet": "宠物"
+    },
+    "profile": {
+      "usernameLabel": "用户名",
+      "nicknameLabel": "昵称",
+      "phoneLabel": "手机号",
+      "emailLabel": "邮箱",
+      "genderLabel": "性别",
+      "roleLabel": "角色",
+      "securityTitle": "账号安全",
+      "resetPassword": "重置密码",
+      "passwordLabel": "密码状态",
+      "passwordUpdatedAtLabel": "密码更新时间",
+      "passwordResetRequired": "需要重置密码",
+      "passwordTemporary": "临时密码",
+      "permissionTitle": "有效权限",
+      "permissionSubtitle": "按目标类型查看当前账号可执行的能力范围。",
+      "permissionCountLabel": "{count} 项权限",
+      "emptyPermissionTitle": "暂无权限",
+      "emptyPermissionDescription": "当前账号还没有绑定任何有效权限。",
+      "timelineTitle": "最近活动",
+      "timelineSubtitle": "展示当前账号在工作区内的关键操作轨迹。",
+      "emptyTimelineTitle": "暂无活动记录",
+      "emptyTimelineDescription": "当前账号还没有可展示的最近活动。",
+      "metrics": {
+        "permissionCount": "原子权限",
+        "menuCount": "导航节点",
+        "roleCount": "承载角色",
+        "permissionHelper": "当前账号继承到的权限总量。",
+        "menuHelper": "当前账号可见的导航节点数量。",
+        "roleHelper": "当前账号归属的角色数量。"
+      },
+      "emptyTitle": "暂无当前用户",
+      "emptyDescription": "当前工作区连接尚未返回用户资料。",
+      "access": {
+        "title": "访问概览",
+        "description": "查看当前账号继承到的角色、权限与可见菜单。",
+        "roles": "当前角色",
+        "rolesDescription": "当前登录账号直接绑定的角色。",
+        "permissions": "当前权限",
+        "permissionsDescription": "基于当前角色聚合得到的有效权限。",
+        "menus": "当前菜单",
+        "menusDescription": "当前账号可见的工作区导航。",
+        "openRoles": "查看角色",
+        "openPermissions": "查看权限",
+        "openMenus": "查看菜单",
+        "emptyRoles": "暂无角色",
+        "emptyPermissions": "暂无权限",
+        "emptyMenus": "暂无菜单"
+      },
+      "edit": {
+        "title": "编辑个人资料",
+        "description": "维护当前登录用户的基础资料。本期支持昵称、用户名和头像上传。",
+        "fields": {
+          "displayName": "昵称",
+          "username": "用户名",
+          "avatar": "头像"
+        },
+        "hints": {
+          "avatar": "支持从本地选择 PNG、JPEG、WEBP 图片；清空后会回退到首字母头像。",
+          "avatarCurrent": "当前头像",
+          "avatarPendingEmpty": "未选择新的头像文件"
+        },
+        "actions": {
+          "pickAvatar": "选择头像",
+          "clearAvatar": "清空头像",
+          "save": "保存",
+          "reset": "重置"
+        }
+      },
+      "password": {
+        "title": "修改密码",
+        "description": "输入当前密码并设置新的登录密码。修改成功后会立即更新密码状态。",
+        "fields": {
+          "currentPassword": "当前密码",
+          "newPassword": "新密码",
+          "confirmPassword": "确认新密码"
+        },
+        "hints": {
+          "newPassword": "新密码长度至少 8 位，且不能与当前密码相同。"
+        },
+        "actions": {
+          "submit": "更新密码"
+        }
+      },
+      "feedback": {
+        "profileSaved": "个人资料已保存。",
+        "passwordUpdated": "密码已更新。"
+      },
+      "validation": {
+        "displayNameRequired": "请输入昵称。",
+        "usernameRequired": "请输入用户名。",
+        "currentPasswordRequired": "请输入当前密码。",
+        "newPasswordRequired": "请输入新密码。",
+        "newPasswordMinLength": "新密码长度至少 8 位。",
+        "confirmPasswordRequired": "请再次输入新密码。",
+        "passwordMismatch": "两次输入的新密码不一致。",
+        "passwordUnchanged": "新密码不能与当前密码相同。"
+      },
+      "runtime": {
+        "title": "运行配置",
+        "description": "编辑当前工作区下只对你自己生效的 runtime override。",
+        "effectiveTitle": "Effective 预览",
+        "effectiveDescription": "预览对当前用户新建 session 生效的 runtime 配置。"
+      }
+    },
+    "pet": {
+      "title": "宠物",
+      "description": "配置小章在当前工作区下的个人偏好，例如默认模型与权限模式。",
+      "emptyTitle": "暂无宠物配置",
+      "emptyDescription": "当前工作区还没有可编辑的用户会话上下文。",
+      "fields": {
+        "name": "宠物名称",
+        "model": "默认模型",
+        "greeting": "问候语",
+        "summary": "角色摘要",
+        "permissionMode": "权限模式",
+        "source": "配置来源"
+      },
+      "hints": {
+        "model": "控制宠物聊天默认使用的 configured model。",
+        "permissionMode": "控制宠物会话默认请求的执行权限。"
+      },
+      "actions": {
+        "save": "保存宠物配置",
+        "reset": "重置"
+      },
+      "permissionModes": {
+        "readOnly": "只读",
+        "workspaceWrite": "工作区可写",
+        "dangerFullAccess": "危险全权限"
+      },
+      "visibility": {
+        "visible": "已显示",
+        "hidden": "已隐藏"
+      },
+      "preview": {
+        "selectedModel": "当前模型",
+        "greeting": "问候语",
+        "summary": "角色摘要"
+      },
+      "runtime": {
+        "title": "宠物运行预览",
+        "description": "保存后会写入当前用户 runtime override 中的 pet 配置段。"
+      }
+    }
+  },
+  "console": {
+    "header": {
+      "eyebrow": "工作区",
+      "title": "控制台",
+      "description": "统一进入项目管理、知识、资源、数字员工、模型与工具。"
+    },
+    "sections": {
+      "workspace": {
+        "title": "工作区业务",
+        "subtitle": "按当前工作区权限进入各项业务能力。"
+      }
+    },
+    "cards": {
+      "projects": "维护项目与工作区分配。",
+      "knowledge": "查看与维护工作区知识资产。",
+      "resources": "统一管理资源目录与内容入口。",
+      "agents": "进入数字员工与团队编排。",
+      "models": "维护模型目录与凭据配置。",
+      "tools": "维护工具、技能与 MCP 集成。"
+    },
+    "empty": {
+      "title": "暂无可进入的业务入口",
+      "description": "当前账号还没有可用的控制台菜单。"
     }
   }
 }

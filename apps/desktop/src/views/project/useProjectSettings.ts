@@ -14,7 +14,7 @@ import type {
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
 import { useTeamStore } from '@/stores/team'
-import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 export type ProjectSettingsTab = 'basics' | 'models' | 'tools' | 'agents' | 'users'
@@ -35,7 +35,7 @@ export function useProjectSettings() {
   const agentStore = useAgentStore()
   const catalogStore = useCatalogStore()
   const teamStore = useTeamStore()
-  const userCenterStore = useUserCenterStore()
+  const workspaceAccessStore = useWorkspaceAccessStore()
 
   const activeTab = ref<ProjectSettingsTab>('basics')
   const loadingDependencies = ref(false)
@@ -103,7 +103,7 @@ export function useProjectSettings() {
     return teamStore.workspaceTeams.filter(team => assignedIds.includes(team.id))
   })
   const workspaceUsers = computed(() =>
-    [...userCenterStore.users].sort((left, right) =>
+    [...workspaceAccessStore.users].sort((left, right) =>
       (left.displayName || left.username).localeCompare(right.displayName || right.username),
     ),
   )
@@ -213,7 +213,7 @@ export function useProjectSettings() {
           agentStore.load(nextConnectionId),
           catalogStore.load(nextConnectionId),
           teamStore.load(nextConnectionId),
-          userCenterStore.load(nextConnectionId),
+          workspaceAccessStore.load(nextConnectionId),
         ])
       } finally {
         loadingDependencies.value = false
@@ -497,7 +497,7 @@ export function useProjectSettings() {
     savingUsers.value = true
 
     try {
-      await userCenterStore.setProjectMembers(project.value.id, selectedMemberUserIds.value)
+      await workspaceAccessStore.setProjectMembers(project.value.id, selectedMemberUserIds.value)
     } catch (cause) {
       usersError.value = cause instanceof Error ? cause.message : t('projectSettings.users.saveError')
     } finally {

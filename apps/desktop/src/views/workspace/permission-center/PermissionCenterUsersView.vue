@@ -25,14 +25,14 @@ import {
 } from '@octopus/ui'
 
 import { enumLabel } from '@/i18n/copy'
-import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 import { useWorkspaceStore } from '@/stores/workspace'
 import * as tauriClient from '@/tauri/client'
 
 const PAGE_SIZE = 6
 
 const { t, locale } = useI18n()
-const userCenterStore = useUserCenterStore()
+const workspaceAccessStore = useWorkspaceAccessStore()
 const workspaceStore = useWorkspaceStore()
 
 const selectedUserId = ref('')
@@ -65,8 +65,8 @@ const statusOptions = computed(() => {
 const roleOptions = computed(() => {
   locale.value
   return [
-    { value: '', label: t('userCenter.users.metrics.unassigned') },
-    ...userCenterStore.roles.map(role => ({
+    { value: '', label: t('permissionCenter.users.metrics.unassigned') },
+    ...workspaceAccessStore.roles.map(role => ({
       value: role.id,
       label: role.name,
     })),
@@ -76,16 +76,16 @@ const roleOptions = computed(() => {
 const projectOptions = computed(() => workspaceStore.projects.filter(project => project.status === 'active'))
 
 const metrics = computed(() => [
-  { id: 'total', label: t('userCenter.users.metrics.total'), value: String(userCenterStore.users.length) },
-  { id: 'disabled', label: t('userCenter.users.metrics.disabled'), value: String(userCenterStore.users.filter(user => user.status === 'disabled').length) },
+  { id: 'total', label: t('permissionCenter.users.metrics.total'), value: String(workspaceAccessStore.users.length) },
+  { id: 'disabled', label: t('permissionCenter.users.metrics.disabled'), value: String(workspaceAccessStore.users.filter(user => user.status === 'disabled').length) },
 ])
 
-const pageCount = computed(() => Math.max(1, Math.ceil(userCenterStore.users.length / PAGE_SIZE)))
+const pageCount = computed(() => Math.max(1, Math.ceil(workspaceAccessStore.users.length / PAGE_SIZE)))
 const pagedUsers = computed(() => {
   const start = (currentPage.value - 1) * PAGE_SIZE
-  return userCenterStore.users.slice(start, start + PAGE_SIZE)
+  return workspaceAccessStore.users.slice(start, start + PAGE_SIZE)
 })
-const selectedUser = computed(() => userCenterStore.users.find(user => user.id === selectedUserId.value) ?? null)
+const selectedUser = computed(() => workspaceAccessStore.users.find(user => user.id === selectedUserId.value) ?? null)
 const avatarPreview = computed(() => {
   if (avatarMode.value === 'upload' && pendingAvatarUpload.value) {
     return `data:${pendingAvatarUpload.value.contentType};base64,${pendingAvatarUpload.value.dataBase64}`
@@ -101,23 +101,23 @@ const avatarFileLabel = computed(() => {
     return pendingAvatarFileName.value
   }
   if (avatarMode.value === 'upload' && !pendingAvatarUpload.value) {
-    return t('userCenter.users.avatar.pendingEmpty')
+    return t('permissionCenter.users.avatar.pendingEmpty')
   }
   if (avatarMode.value === 'keep' && selectedUser.value?.avatar) {
-    return t('userCenter.users.avatar.current')
+    return t('permissionCenter.users.avatar.current')
   }
-  return t('userCenter.users.avatar.pendingEmpty')
+  return t('permissionCenter.users.avatar.pendingEmpty')
 })
-const isCurrentUserSelected = computed(() => selectedUser.value?.id === userCenterStore.currentUser?.id)
+const isCurrentUserSelected = computed(() => selectedUser.value?.id === workspaceAccessStore.currentUser?.id)
 
 watch(
-  () => userCenterStore.users.map(user => user.id).join('|'),
+  () => workspaceAccessStore.users.map(user => user.id).join('|'),
   () => {
     if (currentPage.value > pageCount.value) {
       currentPage.value = pageCount.value
     }
-    if (!selectedUserId.value || !userCenterStore.users.some(user => user.id === selectedUserId.value)) {
-      applyUser(userCenterStore.users[0]?.id)
+    if (!selectedUserId.value || !workspaceAccessStore.users.some(user => user.id === selectedUserId.value)) {
+      applyUser(workspaceAccessStore.users[0]?.id)
       return
     }
     applyUser(selectedUserId.value)
@@ -141,7 +141,7 @@ function resetFormState() {
 
 function applyUser(userId?: string) {
   saveMessage.value = ''
-  const user = userCenterStore.users.find(item => item.id === userId)
+  const user = workspaceAccessStore.users.find(item => item.id === userId)
   if (!user) {
     selectedUserId.value = ''
     resetFormState()
@@ -199,8 +199,8 @@ async function saveUser() {
       confirmPassword: passwordMode.value === 'custom' ? form.confirmPassword : undefined,
       resetPasswordToDefault: passwordMode.value === 'default' ? true : undefined,
     }
-    const updated = await userCenterStore.updateUser(selectedUserId.value, request)
-    saveMessage.value = t('userCenter.users.feedback.saved')
+    const updated = await workspaceAccessStore.updateUser(selectedUserId.value, request)
+    saveMessage.value = t('permissionCenter.users.feedback.saved')
     applyUser(updated.id)
     return
   }
@@ -213,8 +213,8 @@ async function saveUser() {
     confirmPassword: passwordMode.value === 'custom' ? form.confirmPassword : undefined,
     useDefaultPassword: passwordMode.value !== 'custom' ? true : undefined,
   }
-  const created = await userCenterStore.createUser(request)
-  saveMessage.value = t('userCenter.users.feedback.saved')
+  const created = await workspaceAccessStore.createUser(request)
+  saveMessage.value = t('permissionCenter.users.feedback.saved')
   selectedUserId.value = created.id
   applyUser(created.id)
 }
@@ -228,16 +228,16 @@ async function confirmDeleteUser() {
   if (!pendingDeleteUserId.value) {
     return
   }
-  await userCenterStore.deleteUser(pendingDeleteUserId.value)
+  await workspaceAccessStore.deleteUser(pendingDeleteUserId.value)
   deleteDialogOpen.value = false
   pendingDeleteUserId.value = ''
-  saveMessage.value = t('userCenter.users.feedback.deleted')
-  applyUser(userCenterStore.users[0]?.id)
+  saveMessage.value = t('permissionCenter.users.feedback.deleted')
+  applyUser(workspaceAccessStore.users[0]?.id)
 }
 </script>
 
 <template>
-  <div data-testid="user-center-users-shell">
+  <div data-testid="permission-center-users-shell">
     <UiListDetailShell>
       <template #list>
         <section class="space-y-3">
@@ -245,10 +245,10 @@ async function confirmDeleteUser() {
         <UiMetricCard v-for="metric in metrics" :key="metric.id" :label="metric.label" :value="metric.value" />
       </div>
 
-          <UiPanelFrame variant="subtle" padding="md" :title="t('userCenter.users.title')" :subtitle="t('userCenter.users.subtitle')">
+          <UiPanelFrame variant="subtle" padding="md" :title="t('permissionCenter.users.title')" :subtitle="t('permissionCenter.users.subtitle')">
             <template #actions>
               <UiButton data-testid="users-create-button" @click="createUserDraft">
-                {{ t('userCenter.users.actions.create') }}
+                {{ t('permissionCenter.users.actions.create') }}
               </UiButton>
             </template>
           </UiPanelFrame>
@@ -272,13 +272,13 @@ async function confirmDeleteUser() {
           <UiBadge :label="enumLabel('recordStatus', user.status)" subtle />
           <UiBadge :label="enumLabel('passwordState', user.passwordState)" subtle />
           <UiButton
-            v-if="user.id !== userCenterStore.currentUser?.id"
+            v-if="user.id !== workspaceAccessStore.currentUser?.id"
             variant="destructive"
             size="sm"
             :data-testid="`users-delete-button-${user.username}`"
             @click.stop="promptDeleteUser(user.id)"
           >
-            {{ t('userCenter.users.actions.delete') }}
+            {{ t('permissionCenter.users.actions.delete') }}
           </UiButton>
         </template>
       </UiRecordCard>
@@ -286,20 +286,20 @@ async function confirmDeleteUser() {
       <UiPagination
         v-model:page="currentPage"
         :page-count="pageCount"
-        :summary-label="`${userCenterStore.users.length}`"
+        :summary-label="`${workspaceAccessStore.users.length}`"
         root-test-id="users-list-pagination"
       />
         </section>
       </template>
 
       <template #default>
-        <div data-testid="user-center-users-inspector">
-          <UiInspectorPanel :title="selectedUserId ? t('userCenter.users.editTitle') : t('userCenter.users.createTitle')">
+        <div data-testid="permission-center-users-inspector">
+          <UiInspectorPanel :title="selectedUserId ? t('permissionCenter.users.editTitle') : t('permissionCenter.users.createTitle')">
             <div class="space-y-4">
 
       <UiStatusCallout v-if="saveMessage" tone="success" :description="saveMessage" />
 
-      <UiField :label="t('userCenter.users.fields.avatar')" :hint="t('userCenter.users.avatar.description')">
+      <UiField :label="t('permissionCenter.users.fields.avatar')" :hint="t('permissionCenter.users.avatar.description')">
         <div class="space-y-3">
           <div class="flex items-center gap-3">
             <div class="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border border-border/60 bg-accent text-sm font-semibold uppercase text-text-secondary">
@@ -310,13 +310,13 @@ async function confirmDeleteUser() {
           </div>
           <div class="flex flex-wrap gap-2">
             <UiButton variant="ghost" data-testid="users-avatar-pick-button" @click="pickAvatar">
-              {{ t('userCenter.users.actions.pickAvatar') }}
+              {{ t('permissionCenter.users.actions.pickAvatar') }}
             </UiButton>
             <UiButton
               variant="ghost"
               @click="avatarMode = 'default'; pendingAvatarUpload = null; pendingAvatarFileName = ''"
             >
-              {{ t('userCenter.users.actions.clearAvatar') }}
+              {{ t('permissionCenter.users.actions.clearAvatar') }}
             </UiButton>
           </div>
           <UiCheckbox
@@ -324,24 +324,24 @@ async function confirmDeleteUser() {
             data-testid="users-avatar-mode-default"
             @update:model-value="avatarMode = $event ? 'default' : (selectedUser?.avatar ? 'keep' : 'upload')"
           >
-            {{ t('userCenter.users.avatar.actions.useDefault') }}
+            {{ t('permissionCenter.users.avatar.actions.useDefault') }}
           </UiCheckbox>
         </div>
       </UiField>
 
-      <UiField :label="t('userCenter.users.fields.username')">
+      <UiField :label="t('permissionCenter.users.fields.username')">
         <UiInput v-model="form.username" data-testid="users-username-input" />
       </UiField>
-      <UiField :label="t('userCenter.users.fields.nickname')">
+      <UiField :label="t('permissionCenter.users.fields.nickname')">
         <UiInput v-model="form.displayName" data-testid="users-display-name-input" />
       </UiField>
       <UiField :label="t('common.status')">
         <UiSelect v-model="form.status" :options="statusOptions" />
       </UiField>
-      <UiField :label="t('userCenter.users.fields.role')">
+      <UiField :label="t('permissionCenter.users.fields.role')">
         <UiSelect v-model="form.roleId" :options="roleOptions" data-testid="users-role-select" />
       </UiField>
-      <UiField :label="t('userCenter.users.fields.scopeProjects')">
+      <UiField :label="t('permissionCenter.users.fields.scopeProjects')">
         <div class="space-y-2">
           <UiCheckbox
             v-for="project in projectOptions"
@@ -355,36 +355,36 @@ async function confirmDeleteUser() {
         </div>
       </UiField>
 
-      <UiField :label="t('userCenter.users.fields.password')" :hint="t('userCenter.users.password.description')">
+      <UiField :label="t('permissionCenter.users.fields.password')" :hint="t('permissionCenter.users.password.description')">
         <div class="space-y-3">
           <UiCheckbox
             :model-value="passwordMode === 'default'"
             data-testid="users-password-mode-default"
             @update:model-value="passwordMode = $event ? 'default' : 'keep'"
           >
-            {{ t('userCenter.users.password.actions.useDefault') }}
+            {{ t('permissionCenter.users.password.actions.useDefault') }}
           </UiCheckbox>
           <UiCheckbox
             :model-value="passwordMode === 'custom'"
             data-testid="users-password-mode-custom"
             @update:model-value="passwordMode = $event ? 'custom' : (selectedUserId ? 'keep' : 'default')"
           >
-            {{ t('userCenter.users.password.actions.custom') }}
+            {{ t('permissionCenter.users.password.actions.custom') }}
           </UiCheckbox>
           <div v-if="passwordMode === 'custom'" class="space-y-3">
-            <UiInput v-model="form.password" type="password" :placeholder="t('userCenter.users.password.fields.password')" data-testid="users-password-input" />
-            <UiInput v-model="form.confirmPassword" type="password" :placeholder="t('userCenter.users.password.fields.confirmPassword')" data-testid="users-password-confirm-input" />
+            <UiInput v-model="form.password" type="password" :placeholder="t('permissionCenter.users.password.fields.password')" data-testid="users-password-input" />
+            <UiInput v-model="form.confirmPassword" type="password" :placeholder="t('permissionCenter.users.password.fields.confirmPassword')" data-testid="users-password-confirm-input" />
           </div>
         </div>
       </UiField>
 
       <div class="flex gap-3">
-        <UiButton data-testid="users-save-button" @click="saveUser">{{ t('userCenter.users.actions.save') }}</UiButton>
-        <UiButton variant="ghost" @click="selectedUserId ? applyUser(selectedUserId) : createUserDraft()">{{ t('userCenter.users.actions.reset') }}</UiButton>
+        <UiButton data-testid="users-save-button" @click="saveUser">{{ t('permissionCenter.users.actions.save') }}</UiButton>
+        <UiButton variant="ghost" @click="selectedUserId ? applyUser(selectedUserId) : createUserDraft()">{{ t('permissionCenter.users.actions.reset') }}</UiButton>
       </div>
 
       <div v-if="isCurrentUserSelected" class="text-xs text-text-secondary">
-        {{ t('userCenter.users.currentSessionUser') }}
+        {{ t('permissionCenter.users.currentSessionUser') }}
       </div>
             </div>
           </UiInspectorPanel>
@@ -395,8 +395,8 @@ async function confirmDeleteUser() {
 
   <UiDialog
     v-model:open="deleteDialogOpen"
-    :title="t('userCenter.users.deleteTitle')"
-    :description="t('userCenter.users.deleteDescription')"
+    :title="t('permissionCenter.users.deleteTitle')"
+    :description="t('permissionCenter.users.deleteDescription')"
   >
     <template #footer>
       <UiButton variant="ghost" @click="deleteDialogOpen = false">

@@ -9,9 +9,25 @@ export function createWorkspaceOverviewTarget(workspaceId: string, projectId?: s
   } as const
 }
 
-export function createWorkspaceProjectsTarget(workspaceId: string) {
+export function createWorkspaceConsoleTarget(workspaceId: string) {
   return {
-    name: 'workspace-projects',
+    name: 'workspace-console',
+    params: { workspaceId },
+  } as const
+}
+
+export function createWorkspaceConsoleSurfaceTarget(
+  routeName:
+    | 'workspace-console-projects'
+    | 'workspace-console-knowledge'
+    | 'workspace-console-resources'
+    | 'workspace-console-agents'
+    | 'workspace-console-models'
+    | 'workspace-console-tools',
+  workspaceId: string,
+) {
+  return {
+    name: routeName,
     params: { workspaceId },
   } as const
 }

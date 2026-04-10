@@ -179,23 +179,23 @@ pub fn build_router(state: ServerState) -> Router {
             patch(update_automation).delete(delete_automation),
         )
         .route(
-            "/api/v1/workspace/user-center/overview",
-            get(user_center_overview),
+            "/api/v1/workspace/permission-center/overview",
+            get(permission_center_overview),
         )
         .route(
-            "/api/v1/workspace/user-center/profile/runtime-config",
+            "/api/v1/workspace/personal-center/profile/runtime-config",
             get(get_user_runtime_config_route).patch(save_user_runtime_config_route),
         )
         .route(
-            "/api/v1/workspace/user-center/profile/runtime-config/validate",
+            "/api/v1/workspace/personal-center/profile/runtime-config/validate",
             post(validate_user_runtime_config_route),
         )
         .route(
-            "/api/v1/workspace/user-center/profile",
+            "/api/v1/workspace/personal-center/profile",
             patch(update_current_user_profile_route),
         )
         .route(
-            "/api/v1/workspace/user-center/profile/password",
+            "/api/v1/workspace/personal-center/profile/password",
             post(change_current_user_password_route),
         )
         .route(

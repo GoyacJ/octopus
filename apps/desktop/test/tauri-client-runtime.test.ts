@@ -435,7 +435,7 @@ describe('runtime client transport', () => {
     await workspaceClient.runtime.getUserConfig()
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://127.0.0.1:43127/api/v1/workspace/user-center/profile/runtime-config',
+      'http://127.0.0.1:43127/api/v1/workspace/personal-center/profile/runtime-config',
       expect.objectContaining({
         method: 'GET',
         headers: expect.any(Headers),

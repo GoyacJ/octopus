@@ -102,7 +102,7 @@ export interface MenuNode {
   order: number
 }
 
-export interface UserCenterMetric {
+export interface PermissionCenterMetric {
   id: string
   label: string
   value: string
@@ -110,7 +110,7 @@ export interface UserCenterMetric {
   tone?: 'default' | 'success' | 'warning' | 'error' | 'info'
 }
 
-export interface UserCenterAlert {
+export interface PermissionCenterAlert {
   id: string
   title: string
   description: string
@@ -120,19 +120,19 @@ export interface UserCenterAlert {
   entityId?: string
 }
 
-export interface UserCenterQuickLink {
+export interface PermissionCenterQuickLink {
   id: string
   label: string
   helper: string
   routeName: string
 }
 
-export interface UserCenterOverview {
+export interface PermissionCenterOverview {
   workspaceId: string
   currentUserId: string
-  metrics: UserCenterMetric[]
-  alerts: UserCenterAlert[]
-  quickLinks: UserCenterQuickLink[]
+  metrics: PermissionCenterMetric[]
+  alerts: PermissionCenterAlert[]
+  quickLinks: PermissionCenterQuickLink[]
 }
 
 export interface UserPermissionGroupSummary {
@@ -146,7 +146,7 @@ export interface UserPermissionGroupSummary {
   }>
 }
 
-export interface UserCenterProfileSnapshot {
+export interface PersonalCenterProfileSnapshot {
   userId: string
   roleNames: string[]
   scopeSummary: string
@@ -161,7 +161,7 @@ export interface UserCenterProfileSnapshot {
   }>
 }
 
-export interface UserCenterUserListItem {
+export interface PermissionCenterUserListItem {
   id: string
   nickname: string
   username: string
@@ -178,7 +178,7 @@ export interface UserCenterUserListItem {
   lastActivityAt?: number
 }
 
-export interface UserCenterRoleListItem {
+export interface PermissionCenterRoleListItem {
   id: string
   name: string
   code: string
@@ -190,7 +190,7 @@ export interface UserCenterRoleListItem {
   riskFlags: string[]
 }
 
-export interface UserCenterPermissionListItem {
+export interface PermissionCenterPermissionListItem {
   id: string
   name: string
   code: string
@@ -204,7 +204,7 @@ export interface UserCenterPermissionListItem {
   riskFlags: string[]
 }
 
-export interface UserCenterMenuTreeItem {
+export interface PermissionCenterMenuTreeItem {
   id: string
   label: string
   routeName?: string

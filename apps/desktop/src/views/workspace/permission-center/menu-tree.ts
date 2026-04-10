@@ -29,11 +29,12 @@ export interface MenuTreeSection {
 export interface MenuTreeGroupLabels {
   app: string
   workspace: string
-  userCenter: string
+  console: string
+  permissionCenter: string
   project: string
 }
 
-export function buildUserCenterMenuTreeSections(
+export function buildPermissionCenterMenuTreeSections(
   menus: MenuRecord[],
   groupLabels: MenuTreeGroupLabels,
   resolveMenuLabel: (menu: MenuRecord) => string,
@@ -41,15 +42,22 @@ export function buildUserCenterMenuTreeSections(
   const appItems: MenuTreeLeaf[] = []
   const workspaceItems: MenuTreeLeaf[] = []
   const projectItems: MenuTreeLeaf[] = []
-  const userCenterChildren: MenuTreeLeaf[] = []
-  let userCenterRoot: MenuTreeLeaf | undefined
+  const consoleChildren: MenuTreeLeaf[] = []
+  const permissionCenterChildren: MenuTreeLeaf[] = []
+  let consoleRoot: MenuTreeLeaf | undefined
+  let permissionCenterRoot: MenuTreeLeaf | undefined
 
   for (const menu of menus) {
     const definition = getMenuDefinition(menu.id)
     const leaf = buildMenuTreeLeaf(menu, resolveMenuLabel)
 
-    if (menu.id === 'menu-workspace-user-center') {
-      userCenterRoot = leaf
+    if (menu.id === 'menu-workspace-console') {
+      consoleRoot = leaf
+      continue
+    }
+
+    if (menu.id === 'menu-workspace-permission-center') {
+      permissionCenterRoot = leaf
       continue
     }
 
@@ -63,8 +71,13 @@ export function buildUserCenterMenuTreeSections(
       continue
     }
 
-    if (definition?.section === 'user-center' || menu.parentId === 'menu-workspace-user-center') {
-      userCenterChildren.push(leaf)
+    if (definition?.section === 'console' || menu.parentId === 'menu-workspace-console') {
+      consoleChildren.push(leaf)
+      continue
+    }
+
+    if (definition?.section === 'permission-center' || menu.parentId === 'menu-workspace-permission-center') {
+      permissionCenterChildren.push(leaf)
       continue
     }
 
@@ -72,14 +85,26 @@ export function buildUserCenterMenuTreeSections(
   }
 
   const workspaceTreeItems: Array<MenuTreeLeaf | MenuTreeBranch> = [...workspaceItems]
-  if (userCenterRoot || userCenterChildren.length) {
+
+  if (consoleRoot || consoleChildren.length) {
     workspaceTreeItems.push({
       kind: 'group',
-      id: 'user-center',
-      label: groupLabels.userCenter,
-      order: userCenterRoot?.order ?? Math.min(...userCenterChildren.map(item => item.order)),
-      rootMenu: userCenterRoot,
-      children: sortMenuTreeLeaves(userCenterChildren),
+      id: 'console',
+      label: groupLabels.console,
+      order: consoleRoot?.order ?? Math.min(...consoleChildren.map(item => item.order)),
+      rootMenu: consoleRoot,
+      children: sortMenuTreeLeaves(consoleChildren),
+    })
+  }
+
+  if (permissionCenterRoot || permissionCenterChildren.length) {
+    workspaceTreeItems.push({
+      kind: 'group',
+      id: 'permission-center',
+      label: groupLabels.permissionCenter,
+      order: permissionCenterRoot?.order ?? Math.min(...permissionCenterChildren.map(item => item.order)),
+      rootMenu: permissionCenterRoot,
+      children: sortMenuTreeLeaves(permissionCenterChildren),
     })
   }
 

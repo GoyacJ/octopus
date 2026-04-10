@@ -2120,6 +2120,125 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/workspace/permission-center/overview:
+    get:
+      operationId: getPermissionCenterOverview
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PermissionCenterOverviewSnapshot"
+          description: Permission center overview payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/personal-center/profile:
+    patch:
+      operationId: updateCurrentUserProfile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCurrentUserProfileRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserRecordSummary"
+          description: Updated current personal profile payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/personal-center/profile/password:
+    post:
+      operationId: changeCurrentUserPassword
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeCurrentUserPasswordRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChangeCurrentUserPasswordResponse"
+          description: Updated current personal password payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/personal-center/profile/runtime-config:
+    get:
+      operationId: getUserRuntimeConfig
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeEffectiveConfig"
+          description: Personal effective runtime configuration payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    patch:
+      operationId: saveUserRuntimeConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfigPatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeEffectiveConfig"
+          description: Saved personal effective runtime configuration payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/personal-center/profile/runtime-config/validate:
+    post:
+      operationId: validateUserRuntimeConfig
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeConfigPatch"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeConfigValidationResult"
+          description: Personal runtime configuration validation payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/workspace/pet:
     get:
       operationId: getWorkspacePetSnapshot
@@ -2661,125 +2780,6 @@ paths:
       responses:
         "204":
           description: Workspace team deleted.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/user-center/overview:
-    get:
-      operationId: getUserCenterOverview
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserCenterOverviewSnapshot"
-          description: User center overview payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/user-center/profile:
-    patch:
-      operationId: updateCurrentUserProfile
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateCurrentUserProfileRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserRecordSummary"
-          description: Updated current user profile payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/user-center/profile/password:
-    post:
-      operationId: changeCurrentUserPassword
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ChangeCurrentUserPasswordRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ChangeCurrentUserPasswordResponse"
-          description: Updated current user password payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/user-center/profile/runtime-config:
-    get:
-      operationId: getUserRuntimeConfig
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RuntimeEffectiveConfig"
-          description: User effective runtime configuration payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-    patch:
-      operationId: saveUserRuntimeConfig
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RuntimeConfigPatch"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RuntimeEffectiveConfig"
-          description: Saved user effective runtime configuration payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/user-center/profile/runtime-config/validate:
-    post:
-      operationId: validateUserRuntimeConfig
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RuntimeConfigPatch"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RuntimeConfigValidationResult"
-          description: User runtime configuration validation payload.
         default:
           content:
             application/json:
@@ -3999,7 +3999,8 @@ components:
     MenuSource:
       enum:
         - main-sidebar
-        - user-center
+        - console
+        - permission-center
       type: string
     MenuStatus:
       enum:
@@ -4202,6 +4203,54 @@ components:
         - reset-required
         - temporary
       type: string
+    PermissionCenterAlertRecord:
+      additionalProperties: false
+      properties:
+        description:
+          type: string
+        id:
+          type: string
+        severity:
+          $ref: "#/components/schemas/RiskLevel"
+        title:
+          type: string
+      required:
+        - id
+        - title
+        - description
+        - severity
+      type: object
+    PermissionCenterOverviewSnapshot:
+      additionalProperties: false
+      properties:
+        alerts:
+          items:
+            $ref: "#/components/schemas/PermissionCenterAlertRecord"
+          type: array
+        currentUser:
+          $ref: "#/components/schemas/UserRecordSummary"
+        metrics:
+          items:
+            $ref: "#/components/schemas/WorkspaceMetricRecord"
+          type: array
+        quickLinks:
+          items:
+            $ref: "#/components/schemas/MenuRecord"
+          type: array
+        roleNames:
+          items:
+            type: string
+          type: array
+        workspaceId:
+          type: string
+      required:
+        - workspaceId
+        - currentUser
+        - roleNames
+        - metrics
+        - alerts
+        - quickLinks
+      type: object
     PermissionMode:
       enum:
         - auto
@@ -5845,54 +5894,6 @@ components:
       required:
         - serverName
         - config
-      type: object
-    UserCenterAlertRecord:
-      additionalProperties: false
-      properties:
-        description:
-          type: string
-        id:
-          type: string
-        severity:
-          $ref: "#/components/schemas/RiskLevel"
-        title:
-          type: string
-      required:
-        - id
-        - title
-        - description
-        - severity
-      type: object
-    UserCenterOverviewSnapshot:
-      additionalProperties: false
-      properties:
-        alerts:
-          items:
-            $ref: "#/components/schemas/UserCenterAlertRecord"
-          type: array
-        currentUser:
-          $ref: "#/components/schemas/UserRecordSummary"
-        metrics:
-          items:
-            $ref: "#/components/schemas/WorkspaceMetricRecord"
-          type: array
-        quickLinks:
-          items:
-            $ref: "#/components/schemas/MenuRecord"
-          type: array
-        roleNames:
-          items:
-            type: string
-          type: array
-        workspaceId:
-          type: string
-      required:
-        - workspaceId
-        - currentUser
-        - roleNames
-        - metrics
-        - alerts
-        - quickLinks
       type: object
     UserRecordSummary:
       additionalProperties: false
