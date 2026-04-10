@@ -522,6 +522,7 @@ TeamRecord:
         kind:
           enum:
             - workspace-link
+            - builtin-template
           type: string
         sourceId:
           type: string

@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 195ebeef684d1c2402c3bf5e60d393fc40a3f4f003c6d45f2ae6f4e00b5a0cd1
+// Source hash: 0a4e697b95af90c519773b3cf4b3886b7a97a7b10fff8d3100df319a9d42d5e1
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "195ebeef684d1c2402c3bf5e60d393fc40a3f4f003c6d45f2ae6f4e00b5a0cd1"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "0a4e697b95af90c519773b3cf4b3886b7a97a7b10fff8d3100df319a9d42d5e1"
 
 export interface AgentRecord {
   avatar?: string
@@ -13,7 +13,7 @@ export interface AgentRecord {
   description: string
   id: string
   integrationSource?: {
-  kind: "workspace-link"
+  kind: "workspace-link" | "builtin-template"
   sourceId: string
 }
   mcpServerNames: string[]
@@ -386,7 +386,7 @@ export interface ImportedTeamPreviewItem {
 
 export interface ImportIssue {
   message: string
-  scope: "bundle" | "agent" | "skill"
+  scope: "bundle" | "agent" | "team" | "skill" | "mcp" | "avatar"
   severity: "warning" | "error"
   sourceId?: string
 }
@@ -396,6 +396,7 @@ export interface ImportWorkspaceAgentBundleInput {
 }
 
 export interface ImportWorkspaceAgentBundlePreview {
+  agentCount: number
   agents: ImportedAgentPreviewItem[]
   avatarCount: number
   avatars: ImportedAvatarPreviewItem[]
@@ -409,9 +410,12 @@ export interface ImportWorkspaceAgentBundlePreview {
   importableAgentCount: number
   importableTeamCount: number
   issues: ImportIssue[]
+  mcpCount: number
   mcps: ImportedMcpPreviewItem[]
+  skillCount: number
   skills: ImportedSkillPreviewItem[]
   skipCount: number
+  teamCount: number
   teams: ImportedTeamPreviewItem[]
   uniqueMcpCount: number
   uniqueSkillCount: number
@@ -423,6 +427,7 @@ export interface ImportWorkspaceAgentBundlePreviewInput {
 }
 
 export interface ImportWorkspaceAgentBundleResult {
+  agentCount: number
   agents: ImportedAgentPreviewItem[]
   avatarCount: number
   avatars: ImportedAvatarPreviewItem[]
@@ -436,9 +441,12 @@ export interface ImportWorkspaceAgentBundleResult {
   importableAgentCount: number
   importableTeamCount: number
   issues: ImportIssue[]
+  mcpCount: number
   mcps: ImportedMcpPreviewItem[]
+  skillCount: number
   skills: ImportedSkillPreviewItem[]
   skipCount: number
+  teamCount: number
   teams: ImportedTeamPreviewItem[]
   uniqueMcpCount: number
   uniqueSkillCount: number
@@ -1094,7 +1102,7 @@ export interface TeamRecord {
   description: string
   id: string
   integrationSource?: {
-  kind: "workspace-link"
+  kind: "workspace-link" | "builtin-template"
   sourceId: string
 }
   leaderAgentId?: string
@@ -1294,7 +1302,7 @@ export interface WorkspaceFileUploadPayload {
 export interface WorkspaceMcpServerDocument {
   config: Record<string, unknown>
   displayPath: string
-  scope: "workspace" | "project" | "user"
+  scope: "builtin" | "workspace" | "project" | "user"
   serverName: string
   sourceKey: string
 }
@@ -1310,7 +1318,7 @@ export interface WorkspaceMcpToolCatalogEntry {
   management: WorkspaceToolManagementCapabilities
   name: string
   requiredPermission?: "readonly" | "workspace-write" | "danger-full-access" | "null"
-  scope: "workspace" | "project" | "user"
+  scope: "builtin" | "workspace" | "project" | "user"
   serverName: string
   sourceKey: string
   statusDetail?: string
@@ -1551,6 +1559,9 @@ export interface OctopusApiPaths {
   "/api/v1/projects/{projectId}/agent-links/{agentId}": {
     delete: { operationId: "deleteProjectAgentLink"; response: void; error: ApiErrorEnvelope }
   }
+  "/api/v1/projects/{projectId}/agents/{agentId}/copy-to-project": {
+    post: { operationId: "copyProjectAgentToProject"; response: ImportWorkspaceAgentBundleResult; error: ApiErrorEnvelope }
+  }
   "/api/v1/projects/{projectId}/agents/export": {
     post: { operationId: "exportProjectAgentBundle"; response: ExportWorkspaceAgentBundleResult; error: ApiErrorEnvelope }
   }
@@ -1599,6 +1610,9 @@ export interface OctopusApiPaths {
   }
   "/api/v1/projects/{projectId}/team-links/{teamId}": {
     delete: { operationId: "deleteProjectTeamLink"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/teams/{teamId}/copy-to-project": {
+    post: { operationId: "copyProjectTeamToProject"; response: ImportWorkspaceAgentBundleResult; error: ApiErrorEnvelope }
   }
   "/api/v1/runtime/bootstrap": {
     get: { operationId: "getRuntimeBootstrap"; response: RuntimeBootstrap; error: ApiErrorEnvelope }
@@ -1649,6 +1663,9 @@ export interface OctopusApiPaths {
     patch: { operationId: "updateWorkspaceAgent"; response: AgentRecord; error: ApiErrorEnvelope }
     delete: { operationId: "deleteWorkspaceAgent"; response: void; error: ApiErrorEnvelope }
   }
+  "/api/v1/workspace/agents/{agentId}/copy-to-workspace": {
+    post: { operationId: "copyWorkspaceAgentToWorkspace"; response: ImportWorkspaceAgentBundleResult; error: ApiErrorEnvelope }
+  }
   "/api/v1/workspace/agents/export": {
     post: { operationId: "exportWorkspaceAgentBundle"; response: ExportWorkspaceAgentBundleResult; error: ApiErrorEnvelope }
   }
@@ -1673,6 +1690,9 @@ export interface OctopusApiPaths {
     get: { operationId: "getWorkspaceMcpServer"; response: WorkspaceMcpServerDocument; error: ApiErrorEnvelope }
     patch: { operationId: "updateWorkspaceMcpServer"; response: WorkspaceMcpServerDocument; error: ApiErrorEnvelope }
     delete: { operationId: "deleteWorkspaceMcpServer"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/catalog/mcp-servers/{serverName}/copy-to-managed": {
+    post: { operationId: "copyWorkspaceMcpServerToManaged"; response: WorkspaceMcpServerDocument; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/catalog/models": {
     get: { operationId: "getWorkspaceCatalogModels"; response: ModelCatalogSnapshot; error: ApiErrorEnvelope }
@@ -1795,6 +1815,9 @@ export interface OctopusApiPaths {
   "/api/v1/workspace/teams/{teamId}": {
     patch: { operationId: "updateWorkspaceTeam"; response: TeamRecord; error: ApiErrorEnvelope }
     delete: { operationId: "deleteWorkspaceTeam"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/teams/{teamId}/copy-to-workspace": {
+    post: { operationId: "copyWorkspaceTeamToWorkspace"; response: ImportWorkspaceAgentBundleResult; error: ApiErrorEnvelope }
   }
 }
 

@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import type {
   AgentRecord,
   AvatarUploadPayload,
+  ExportWorkspaceAgentBundleInput,
   ImportWorkspaceAgentBundlePreview,
   ImportWorkspaceAgentBundleResult,
   TeamRecord,
@@ -17,6 +18,7 @@ import type {
 import { usePagination } from '@/composables/usePagination'
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
+import { useNotificationStore } from '@/stores/notifications'
 import { useShellStore } from '@/stores/shell'
 import { useTeamStore } from '@/stores/team'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -25,6 +27,7 @@ import * as tauriClient from '@/tauri/client'
 export type CenterScope = 'workspace' | 'project'
 export type CenterTab = 'agent' | 'team' | 'builtin' | 'skill' | 'mcp'
 export type ViewMode = 'list' | 'card'
+export type AgentBundleTransferFormat = 'folder' | 'zip'
 
 export interface SelectOption {
   value: string
@@ -69,6 +72,7 @@ export function useAgentCenter(scope: CenterScope) {
   const agentStore = useAgentStore()
   const teamStore = useTeamStore()
   const catalogStore = useCatalogStore()
+  const notificationStore = useNotificationStore()
 
   const activeTab = ref<CenterTab>('agent')
   const agentViewMode = ref<ViewMode>('card')
@@ -89,11 +93,16 @@ export function useAgentCenter(scope: CenterScope) {
   const deleteConfirmOpen = ref(false)
   const itemToDelete = ref<{ id: string, name: string, type: 'agent' | 'team' } | null>(null)
   const agentImportDialogOpen = ref(false)
+  const agentImportSource = ref<AgentBundleTransferFormat>('folder')
   const agentImportFiles = ref<WorkspaceDirectoryUploadEntry[]>([])
   const agentImportPreview = ref<ImportWorkspaceAgentBundlePreview | null>(null)
   const agentImportResult = ref<ImportWorkspaceAgentBundleResult | null>(null)
   const agentImportError = ref('')
   const agentImportLoading = ref(false)
+  const agentExportLoading = ref(false)
+  const teamExportLoading = ref(false)
+  const selectedAgentIds = ref<string[]>([])
+  const selectedTeamIds = ref<string[]>([])
 
   const agentForm = reactive<AgentFormState>({
     name: '',
@@ -122,14 +131,46 @@ export function useAgentCenter(scope: CenterScope) {
   })
 
   const isProjectScope = computed(() => scope === 'project')
+  const isBuiltinTemplateRecord = (record: Pick<AgentRecord | TeamRecord, 'integrationSource'>) =>
+    record.integrationSource?.kind === 'builtin-template'
+  const isWorkspaceLinkedRecord = (record: Pick<AgentRecord | TeamRecord, 'integrationSource'>) =>
+    record.integrationSource?.kind === 'workspace-link'
   const projectId = computed(() =>
     typeof route.params.projectId === 'string' ? route.params.projectId : workspaceStore.currentProjectId || '',
   )
   const currentProject = computed(() =>
     workspaceStore.projects.find(project => project.id === projectId.value) ?? null,
   )
-  const currentAgents = computed(() => isProjectScope.value ? agentStore.projectAgents : agentStore.workspaceAgents)
-  const currentTeams = computed(() => isProjectScope.value ? teamStore.projectTeams : teamStore.workspaceTeams)
+  const builtinTemplateAgents = computed(() =>
+    agentStore.workspaceAgents.filter(agent => isBuiltinTemplateRecord(agent)),
+  )
+  const builtinTemplateTeams = computed(() =>
+    teamStore.workspaceTeams.filter(team => isBuiltinTemplateRecord(team)),
+  )
+  const currentAgents = computed(() => {
+    if (!isProjectScope.value) {
+      return agentStore.workspaceAgents
+    }
+    const merged = [...agentStore.projectAgents, ...builtinTemplateAgents.value]
+    return merged.filter((record, index) => merged.findIndex(item => item.id === record.id) === index)
+  })
+  const currentTeams = computed(() => {
+    if (!isProjectScope.value) {
+      return teamStore.workspaceTeams
+    }
+    const merged = [...teamStore.projectTeams, ...builtinTemplateTeams.value]
+    return merged.filter((record, index) => merged.findIndex(item => item.id === record.id) === index)
+  })
+  const effectiveProjectAgents = computed(() =>
+    isProjectScope.value
+      ? currentAgents.value.filter(agent => !isBuiltinTemplateRecord(agent))
+      : currentAgents.value,
+  )
+  const effectiveProjectTeams = computed(() =>
+    isProjectScope.value
+      ? currentTeams.value.filter(team => !isBuiltinTemplateRecord(team))
+      : currentTeams.value,
+  )
   const pageTitle = computed(() =>
     isProjectScope.value ? (currentProject.value?.name ?? t('sidebar.navigation.agents')) : t('sidebar.navigation.agents'),
   )
@@ -224,20 +265,29 @@ export function useAgentCenter(scope: CenterScope) {
         return
       }
 
-      const tasks: Promise<unknown>[] = [
-        agentStore.load(connectionId),
-        teamStore.load(connectionId),
-        catalogStore.load(connectionId),
-      ]
-      if (isProjectScope.value && nextProjectId) {
-        tasks.push(
-          agentStore.loadProjectLinks(nextProjectId, connectionId),
-          teamStore.loadProjectLinks(nextProjectId, connectionId),
-        )
-      }
-      await Promise.all(tasks)
+      await reloadCenterData(connectionId, nextProjectId)
     },
     { immediate: true },
+  )
+
+  watch(
+    () => currentAgents.value.map(agent => agent.id).join('|'),
+    () => {
+      const validIds = new Set(currentAgents.value
+        .filter(agent => !isBuiltinTemplateRecord(agent))
+        .map(agent => agent.id))
+      selectedAgentIds.value = selectedAgentIds.value.filter(id => validIds.has(id))
+    },
+  )
+
+  watch(
+    () => currentTeams.value.map(team => team.id).join('|'),
+    () => {
+      const validIds = new Set(currentTeams.value
+        .filter(team => !isBuiltinTemplateRecord(team))
+        .map(team => team.id))
+      selectedTeamIds.value = selectedTeamIds.value.filter(id => validIds.has(id))
+    },
   )
 
   function catalogLabels(values: string[], options: SelectOption[]) {
@@ -269,18 +319,79 @@ export function useAgentCenter(scope: CenterScope) {
 
   const filteredAgents = computed(() => currentAgents.value.filter(agent => matchesQuery(agent, agentQuery.value)))
   const filteredTeams = computed(() => currentTeams.value.filter(team => matchesQuery(team, teamQuery.value)))
+  const selectedAgents = computed(() =>
+    currentAgents.value.filter(agent => selectedAgentIds.value.includes(agent.id)),
+  )
+  const selectedTeams = computed(() =>
+    currentTeams.value.filter(team => selectedTeamIds.value.includes(team.id)),
+  )
   const activeResourceKind = computed<WorkspaceToolCatalogEntry['kind'] | null>(() =>
     activeTab.value === 'builtin' || activeTab.value === 'skill' || activeTab.value === 'mcp'
       ? activeTab.value
       : null,
   )
+  const effectiveBuiltinToolKeys = computed(() => {
+    const targetAgents = effectiveProjectAgents.value
+    const targetTeams = effectiveProjectTeams.value
+    return new Set([
+      ...targetAgents.flatMap(agent => agent.builtinToolKeys),
+      ...targetTeams.flatMap(team => team.builtinToolKeys),
+    ])
+  })
+  const effectiveSkillIds = computed(() => {
+    const targetAgents = effectiveProjectAgents.value
+    const targetTeams = effectiveProjectTeams.value
+    return new Set([
+      ...targetAgents.flatMap(agent => agent.skillIds),
+      ...targetTeams.flatMap(team => team.skillIds),
+    ])
+  })
+  const effectiveMcpServerNames = computed(() => {
+    const targetAgents = effectiveProjectAgents.value
+    const targetTeams = effectiveProjectTeams.value
+    return new Set([
+      ...targetAgents.flatMap(agent => agent.mcpServerNames),
+      ...targetTeams.flatMap(team => team.mcpServerNames),
+    ])
+  })
+  const effectiveResourceConsumerIds = computed(() =>
+    new Set([
+      ...effectiveProjectAgents.value.map(agent => agent.id),
+      ...effectiveProjectTeams.value.map(team => team.id),
+    ]),
+  )
+  const resourceCatalogEntries = computed(() => {
+    const projectOwnerId = projectId.value
+    return catalogStore.toolCatalogEntries
+      .filter((entry) => {
+        if (!isProjectScope.value) {
+          return true
+        }
+
+        if (entry.kind === 'builtin') {
+          return entry.builtinKey ? effectiveBuiltinToolKeys.value.has(entry.builtinKey) : false
+        }
+        if (entry.kind === 'skill') {
+          return effectiveSkillIds.value.has(entry.id)
+            || (entry.ownerScope === 'project' && entry.ownerId === projectOwnerId)
+        }
+        return (entry.serverName ? effectiveMcpServerNames.value.has(entry.serverName) : false)
+          || (entry.ownerScope === 'project' && entry.ownerId === projectOwnerId)
+      })
+      .map((entry) => ({
+        ...entry,
+        consumers: isProjectScope.value
+          ? entry.consumers?.filter(consumer => effectiveResourceConsumerIds.value.has(consumer.id))
+          : entry.consumers,
+      }))
+  })
   const filteredResourceEntries = computed(() => {
     const kind = activeResourceKind.value
     if (!kind) {
       return [] as WorkspaceToolCatalogEntry[]
     }
     const query = resourceQuery.value.trim().toLowerCase()
-    return catalogStore.toolCatalogEntries.filter((entry) => {
+    return resourceCatalogEntries.value.filter((entry) => {
       if (entry.kind !== kind) {
         return false
       }
@@ -300,6 +411,7 @@ export function useAgentCenter(scope: CenterScope) {
         entry.kind === 'skill' ? entry.relativePath ?? '' : '',
         entry.kind === 'skill' ? entry.shadowedBy ?? '' : '',
         entry.kind === 'builtin' ? entry.builtinKey : '',
+        entry.ownerScope ?? '',
       ].join(' ').toLowerCase()
       return haystack.includes(query)
     })
@@ -320,6 +432,18 @@ export function useAgentCenter(scope: CenterScope) {
   const pagedAgents = computed(() => agentPagination.pagedItems.value)
   const pagedTeams = computed(() => teamPagination.pagedItems.value)
   const pagedResources = computed(() => resourcePagination.pagedItems.value)
+  const allPagedAgentsSelected = computed(() =>
+    pagedAgents.value.some(agent => !isBuiltinTemplateRecord(agent))
+      && pagedAgents.value
+        .filter(agent => !isBuiltinTemplateRecord(agent))
+        .every(agent => selectedAgentIds.value.includes(agent.id)),
+  )
+  const allPagedTeamsSelected = computed(() =>
+    pagedTeams.value.some(team => !isBuiltinTemplateRecord(team))
+      && pagedTeams.value
+        .filter(team => !isBuiltinTemplateRecord(team))
+        .every(team => selectedTeamIds.value.includes(team.id)),
+  )
   const agentTotal = computed(() => agentPagination.totalItems.value)
   const teamTotal = computed(() => teamPagination.totalItems.value)
   const resourceTotal = computed(() => resourcePagination.totalItems.value)
@@ -368,11 +492,23 @@ export function useAgentCenter(scope: CenterScope) {
   }
 
   function agentBadgeLabel(agent: AgentRecord) {
-    return agent.integrationSource ? 'Workspace Link' : agent.status
+    if (agent.integrationSource?.kind === 'builtin-template') {
+      return '内置模板'
+    }
+    if (agent.integrationSource?.kind === 'workspace-link') {
+      return '工作区接入'
+    }
+    return agent.status
   }
 
   function teamOriginLabel(team: TeamRecord) {
-    return team.integrationSource ? 'Workspace Link' : undefined
+    if (team.integrationSource?.kind === 'builtin-template') {
+      return '内置模板'
+    }
+    if (team.integrationSource?.kind === 'workspace-link') {
+      return '工作区接入'
+    }
+    return undefined
   }
 
   function setTab(nextTab: string) {
@@ -418,19 +554,31 @@ export function useAgentCenter(scope: CenterScope) {
     removeTeamAvatar.value = false
   }
 
+  async function reloadCenterData(connectionId = shell.activeWorkspaceConnectionId, nextProjectId = projectId.value) {
+    if (!connectionId) {
+      return
+    }
+
+    const tasks: Promise<unknown>[] = [
+      agentStore.load(connectionId),
+      teamStore.load(connectionId),
+      catalogStore.load(connectionId),
+    ]
+    if (isProjectScope.value && nextProjectId) {
+      tasks.push(
+        agentStore.loadProjectLinks(nextProjectId, connectionId),
+        teamStore.loadProjectLinks(nextProjectId, connectionId),
+      )
+    }
+    await Promise.all(tasks)
+  }
+
   function openCreateAgent() {
     resetAgentForm()
     agentDialogOpen.value = true
   }
 
-  async function openAgentImportDialog() {
-    agentImportError.value = ''
-    agentImportResult.value = null
-    const files = await tauriClient.pickAgentBundleFolder()
-    if (!files?.length) {
-      return
-    }
-
+  async function previewAgentImportFiles(files: WorkspaceDirectoryUploadEntry[]) {
     agentImportLoading.value = true
     try {
       const preview = await agentStore.previewImportBundle(
@@ -450,6 +598,19 @@ export function useAgentCenter(scope: CenterScope) {
     }
   }
 
+  async function openAgentImportDialog(source: AgentBundleTransferFormat = 'folder') {
+    agentImportError.value = ''
+    agentImportResult.value = null
+    agentImportSource.value = source
+    const files = source === 'zip'
+      ? await tauriClient.pickAgentBundleArchive()
+      : await tauriClient.pickAgentBundleFolder()
+    if (!files?.length) {
+      return
+    }
+    await previewAgentImportFiles(files)
+  }
+
   async function confirmAgentImport() {
     if (!agentImportFiles.value.length) {
       return
@@ -463,7 +624,7 @@ export function useAgentCenter(scope: CenterScope) {
         isProjectScope.value ? projectId.value : undefined,
       )
       agentImportResult.value = result
-      await catalogStore.load()
+      await reloadCenterData()
     } catch (error) {
       agentImportError.value = error instanceof Error ? error.message : 'Failed to import agent bundle'
     } finally {
@@ -481,10 +642,178 @@ export function useAgentCenter(scope: CenterScope) {
     agentImportPreview.value = null
     agentImportResult.value = null
     agentImportError.value = ''
+    agentImportSource.value = 'folder'
+  }
+
+  function toggleAllPagedAgents(nextSelected: boolean) {
+    const next = new Set(selectedAgentIds.value)
+    for (const agent of pagedAgents.value) {
+      if (isBuiltinTemplateRecord(agent)) {
+        continue
+      }
+      if (nextSelected) {
+        next.add(agent.id)
+      } else {
+        next.delete(agent.id)
+      }
+    }
+    selectedAgentIds.value = Array.from(next)
+  }
+
+  function toggleAllPagedTeams(nextSelected: boolean) {
+    const next = new Set(selectedTeamIds.value)
+    for (const team of pagedTeams.value) {
+      if (isBuiltinTemplateRecord(team)) {
+        continue
+      }
+      if (nextSelected) {
+        next.add(team.id)
+      } else {
+        next.delete(team.id)
+      }
+    }
+    selectedTeamIds.value = Array.from(next)
+  }
+
+  function exportSummaryLabel(agentCount: number, teamCount: number) {
+    const parts: string[] = []
+    if (agentCount > 0) {
+      parts.push(`${agentCount} 个数字员工`)
+    }
+    if (teamCount > 0) {
+      parts.push(`${teamCount} 个数字团队`)
+    }
+    return parts.join('、') || '资源包'
+  }
+
+  async function notifyTransfer(level: 'success' | 'error', title: string, body: string) {
+    await notificationStore.notify({
+      scopeKind: 'workspace',
+      scopeOwnerId: workspaceStore.currentWorkspaceId || undefined,
+      level,
+      title,
+      body,
+      source: 'agent-center',
+    })
+  }
+
+  async function exportBundle(
+    input: ExportWorkspaceAgentBundleInput,
+    format: AgentBundleTransferFormat,
+    target: 'agent' | 'team',
+  ) {
+    const loadingRef = target === 'agent' ? agentExportLoading : teamExportLoading
+    loadingRef.value = true
+
+    try {
+      const payload = await agentStore.exportBundle(
+        input,
+        isProjectScope.value ? projectId.value : undefined,
+      )
+      await tauriClient.saveAgentBundleExport(payload, format)
+      await notifyTransfer(
+        'success',
+        '导出完成',
+        `已导出 ${exportSummaryLabel(payload.agentCount, payload.teamCount)}，格式为 ${format.toUpperCase()}.`,
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to export agent bundle'
+      await notifyTransfer('error', '导出失败', message)
+    } finally {
+      loadingRef.value = false
+    }
+  }
+
+  async function exportAgentRecord(record: AgentRecord, format: AgentBundleTransferFormat) {
+    if (isBuiltinTemplateRecord(record)) {
+      return
+    }
+    await exportBundle(
+      {
+        mode: 'single',
+        agentIds: [record.id],
+        teamIds: [],
+      },
+      format,
+      'agent',
+    )
+  }
+
+  async function exportSelectedAgents(format: AgentBundleTransferFormat) {
+    const agentIds = currentAgents.value
+      .filter(agent => selectedAgentIds.value.includes(agent.id) && !isBuiltinTemplateRecord(agent))
+      .map(agent => agent.id)
+    const teamIds = currentTeams.value
+      .filter(team => selectedTeamIds.value.includes(team.id) && !isBuiltinTemplateRecord(team))
+      .map(team => team.id)
+    if (!agentIds.length && !teamIds.length) {
+      return
+    }
+    await exportBundle(
+      {
+        mode: 'batch',
+        agentIds,
+        teamIds,
+      },
+      format,
+      'agent',
+    )
+  }
+
+  async function exportTeamRecord(record: TeamRecord, format: AgentBundleTransferFormat) {
+    if (isBuiltinTemplateRecord(record)) {
+      return
+    }
+    await exportBundle(
+      {
+        mode: 'single',
+        agentIds: [],
+        teamIds: [record.id],
+      },
+      format,
+      'team',
+    )
+  }
+
+  async function exportSelectedTeams(format: AgentBundleTransferFormat) {
+    const agentIds = currentAgents.value
+      .filter(agent => selectedAgentIds.value.includes(agent.id) && !isBuiltinTemplateRecord(agent))
+      .map(agent => agent.id)
+    const teamIds = currentTeams.value
+      .filter(team => selectedTeamIds.value.includes(team.id) && !isBuiltinTemplateRecord(team))
+      .map(team => team.id)
+    if (!agentIds.length && !teamIds.length) {
+      return
+    }
+    await exportBundle(
+      {
+        mode: 'batch',
+        agentIds,
+        teamIds,
+      },
+      format,
+      'team',
+    )
+  }
+
+  async function copyAgentTemplate(record: AgentRecord) {
+    const result = isProjectScope.value && projectId.value
+      ? await agentStore.copyToProject(projectId.value, record.id)
+      : await agentStore.copyToWorkspace(record.id)
+    await reloadCenterData()
+    await notifyTransfer(
+      'success',
+      '复制完成',
+      `已复制 ${exportSummaryLabel(result.agentCount, result.teamCount)}。`,
+    )
   }
 
   function openEditAgent(record: AgentRecord) {
-    if (record.integrationSource && isProjectScope.value) {
+    if (record.integrationSource?.kind === 'builtin-template') {
+      void copyAgentTemplate(record)
+      return
+    }
+    if (record.integrationSource?.kind === 'workspace-link' && isProjectScope.value) {
       void router.push({
         name: 'workspace-console-agents',
         params: { workspaceId: workspaceStore.currentWorkspaceId },
@@ -501,8 +830,24 @@ export function useAgentCenter(scope: CenterScope) {
     teamDialogOpen.value = true
   }
 
+  async function copyTeamTemplate(record: TeamRecord) {
+    const result = isProjectScope.value && projectId.value
+      ? await teamStore.copyToProject(projectId.value, record.id)
+      : await teamStore.copyToWorkspace(record.id)
+    await reloadCenterData()
+    await notifyTransfer(
+      'success',
+      '复制完成',
+      `已复制 ${exportSummaryLabel(result.agentCount, result.teamCount)}。`,
+    )
+  }
+
   function openEditTeam(record: TeamRecord) {
-    if (record.integrationSource && isProjectScope.value) {
+    if (record.integrationSource?.kind === 'builtin-template') {
+      void copyTeamTemplate(record)
+      return
+    }
+    if (record.integrationSource?.kind === 'workspace-link' && isProjectScope.value) {
       void router.push({
         name: 'workspace-console-agents',
         params: { workspaceId: workspaceStore.currentWorkspaceId },
@@ -649,15 +994,17 @@ export function useAgentCenter(scope: CenterScope) {
 
     const { id, type } = itemToDelete.value
     if (type === 'agent') {
+      selectedAgentIds.value = selectedAgentIds.value.filter(selectedId => selectedId !== id)
       const record = currentAgents.value.find(a => a.id === id)
-      if (record?.integrationSource && isProjectScope.value && projectId.value) {
+      if (record?.integrationSource?.kind === 'workspace-link' && isProjectScope.value && projectId.value) {
         await agentStore.unlinkProject(projectId.value, id)
       } else {
         await agentStore.remove(id)
       }
     } else {
+      selectedTeamIds.value = selectedTeamIds.value.filter(selectedId => selectedId !== id)
       const record = currentTeams.value.find(team => team.id === id)
-      if (record?.integrationSource && isProjectScope.value && projectId.value) {
+      if (record?.integrationSource?.kind === 'workspace-link' && isProjectScope.value && projectId.value) {
         await teamStore.unlinkProject(projectId.value, id)
       } else {
         await teamStore.remove(id)
@@ -693,6 +1040,8 @@ export function useAgentCenter(scope: CenterScope) {
     agentImportResult,
     agentImportError,
     agentImportLoading,
+    agentExportLoading,
+    teamExportLoading,
     agentForm,
     teamForm,
     isProjectScope,
@@ -727,6 +1076,12 @@ export function useAgentCenter(scope: CenterScope) {
     teamPagination,
     resourcePagination,
     centerStats,
+    selectedAgentIds,
+    selectedTeamIds,
+    selectedAgents,
+    selectedTeams,
+    allPagedAgentsSelected,
+    allPagedTeamsSelected,
     initials,
     agentBadgeLabel,
     teamOriginLabel,
@@ -735,6 +1090,12 @@ export function useAgentCenter(scope: CenterScope) {
     openAgentImportDialog,
     confirmAgentImport,
     handleAgentImportDialogOpen,
+    toggleAllPagedAgents,
+    toggleAllPagedTeams,
+    exportAgentRecord,
+    exportSelectedAgents,
+    exportTeamRecord,
+    exportSelectedTeams,
     openEditAgent,
     openCreateTeam,
     openEditTeam,

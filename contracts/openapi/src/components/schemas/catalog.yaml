@@ -19,6 +19,7 @@ AgentRecord:
         kind:
           enum:
             - workspace-link
+            - builtin-template
           type: string
         sourceId:
           type: string
@@ -185,7 +186,10 @@ ImportIssue:
       enum:
         - bundle
         - agent
+        - team
         - skill
+        - mcp
+        - avatar
       type: string
     severity:
       enum:
@@ -238,6 +242,10 @@ ImportWorkspaceAgentBundlePreview:
       type: integer
     filteredFileCount:
       type: integer
+    agentCount:
+      type: integer
+    teamCount:
+      type: integer
     importableAgentCount:
       type: integer
     importableTeamCount:
@@ -256,10 +264,14 @@ ImportWorkspaceAgentBundlePreview:
       type: array
     skipCount:
       type: integer
+    skillCount:
+      type: integer
     teams:
       items:
         $ref: "#/components/schemas/ImportedTeamPreviewItem"
       type: array
+    mcpCount:
+      type: integer
     uniqueMcpCount:
       type: integer
     uniqueSkillCount:
@@ -277,8 +289,12 @@ ImportWorkspaceAgentBundlePreview:
     - updateCount
     - skipCount
     - failureCount
+    - agentCount
+    - teamCount
     - uniqueSkillCount
     - uniqueMcpCount
+    - skillCount
+    - mcpCount
     - avatarCount
     - filteredFileCount
     - agents
@@ -327,6 +343,10 @@ ImportWorkspaceAgentBundleResult:
       type: integer
     filteredFileCount:
       type: integer
+    agentCount:
+      type: integer
+    teamCount:
+      type: integer
     importableAgentCount:
       type: integer
     importableTeamCount:
@@ -345,10 +365,14 @@ ImportWorkspaceAgentBundleResult:
       type: array
     skipCount:
       type: integer
+    skillCount:
+      type: integer
     teams:
       items:
         $ref: "#/components/schemas/ImportedTeamPreviewItem"
       type: array
+    mcpCount:
+      type: integer
     uniqueMcpCount:
       type: integer
     uniqueSkillCount:
@@ -366,8 +390,12 @@ ImportWorkspaceAgentBundleResult:
     - updateCount
     - skipCount
     - failureCount
+    - agentCount
+    - teamCount
     - uniqueSkillCount
     - uniqueMcpCount
+    - skillCount
+    - mcpCount
     - avatarCount
     - filteredFileCount
     - agents
@@ -841,6 +869,7 @@ WorkspaceMcpServerDocument:
       type: string
     scope:
       enum:
+        - builtin
         - workspace
         - project
         - user
@@ -888,6 +917,7 @@ WorkspaceMcpToolCatalogEntry:
       type: string
     scope:
       enum:
+        - builtin
         - workspace
         - project
         - user

@@ -1,4 +1,5 @@
 mod agent_assets;
+#[allow(dead_code)]
 mod agent_seed;
 mod artifacts_inbox_knowledge;
 mod auth_users;
@@ -15,7 +16,6 @@ mod agent_import;
 mod split_module_tests;
 
 use std::{
-    collections::BTreeMap,
     env,
     ffi::OsStr,
     fs,

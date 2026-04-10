@@ -14,6 +14,7 @@ import { useAgentCenter } from './useAgentCenter'
 
 const props = defineProps<{
   scope: 'workspace' | 'project'
+  embedded?: boolean
 }>()
 
 const {
@@ -34,6 +35,8 @@ const {
   agentImportResult,
   agentImportError,
   agentImportLoading,
+  agentExportLoading,
+  teamExportLoading,
   agentForm,
   teamForm,
   isProjectScope,
@@ -65,11 +68,21 @@ const {
   teamPagination,
   resourcePagination,
   centerStats,
+  selectedAgentIds,
+  selectedTeamIds,
+  allPagedAgentsSelected,
+  allPagedTeamsSelected,
   setTab,
   openCreateAgent,
   openAgentImportDialog,
   confirmAgentImport,
   handleAgentImportDialogOpen,
+  toggleAllPagedAgents,
+  toggleAllPagedTeams,
+  exportAgentRecord,
+  exportSelectedAgents,
+  exportTeamRecord,
+  exportSelectedTeams,
   openEditAgent,
   openCreateTeam,
   openEditTeam,
@@ -90,8 +103,15 @@ const {
 </script>
 
 <template>
-  <UiPageShell width="wide" test-id="agent-center-view">
+  <component
+    :is="props.embedded ? 'div' : UiPageShell"
+    :width="props.embedded ? undefined : 'wide'"
+    :test-id="props.embedded ? undefined : 'agent-center-view'"
+    :data-testid="props.embedded ? 'agent-center-embedded' : undefined"
+    class="space-y-6"
+  >
     <UiPageHeader
+      v-if="!props.embedded"
       eyebrow="Agent Center"
       :title="pageTitle"
       :description="pageDescription"
@@ -117,11 +137,18 @@ const {
       :paged-agents="pagedAgents"
       :is-project-scope="isProjectScope"
       :import-loading="agentImportLoading && !agentImportDialogOpen"
+      :export-loading="agentExportLoading"
+      :selected-agent-ids="selectedAgentIds"
+      :all-paged-selected="allPagedAgentsSelected"
       @update:query="agentQuery = $event"
       @update:view-mode="agentViewMode = $event"
       @update:page="agentPagination.setPage"
+      @update:selected-agent-ids="selectedAgentIds = $event"
       @create-agent="openCreateAgent"
       @open-import-dialog="openAgentImportDialog"
+      @toggle-all-paged="toggleAllPagedAgents"
+      @export-selected="exportSelectedAgents"
+      @export-agent="exportAgentRecord"
       @open-agent="openEditAgent"
       @remove-agent="removeAgent"
     />
@@ -135,10 +162,20 @@ const {
       :page-count="teamPageCount"
       :paged-teams="pagedTeams"
       :current-agents="currentAgents"
+      :is-project-scope="isProjectScope"
+      :import-loading="agentImportLoading && !agentImportDialogOpen"
+      :export-loading="teamExportLoading"
+      :selected-team-ids="selectedTeamIds"
+      :all-paged-selected="allPagedTeamsSelected"
       @update:query="teamQuery = $event"
       @update:view-mode="teamViewMode = $event"
       @update:page="teamPagination.setPage"
+      @update:selected-team-ids="selectedTeamIds = $event"
       @create-team="openCreateTeam"
+      @open-import-dialog="openAgentImportDialog"
+      @toggle-all-paged="toggleAllPagedTeams"
+      @export-selected="exportSelectedTeams"
+      @export-team="exportTeamRecord"
       @open-team="openEditTeam"
       @remove-team="removeTeam"
     />
@@ -217,5 +254,5 @@ const {
       @update:open="handleAgentImportDialogOpen"
       @confirm="confirmAgentImport"
     />
-  </UiPageShell>
+  </component>
 </template>

@@ -591,6 +591,27 @@ async fn delete_workspace_mcp_server(router: &Router, token: &str, server_name: 
         .expect("response")
 }
 
+async fn copy_workspace_mcp_server_to_managed(
+    router: &Router,
+    token: &str,
+    server_name: &str,
+) -> Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "/api/v1/workspace/catalog/mcp-servers/{server_name}/copy-to-managed"
+                ))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response")
+}
+
 async fn get_model_catalog(router: &Router, token: &str) -> Value {
     let response = router
         .clone()
@@ -640,6 +661,66 @@ async fn create_workspace_agent(router: &Router, token: &str, body: Value) -> Re
         .expect("response")
 }
 
+async fn list_workspace_agents(router: &Router, token: &str) -> Value {
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/workspace/agents")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    decode_json::<Value>(response).await
+}
+
+async fn copy_workspace_agent_from_builtin(
+    router: &Router,
+    token: &str,
+    agent_id: &str,
+) -> Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "/api/v1/workspace/agents/{agent_id}/copy-to-workspace"
+                ))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response")
+}
+
+async fn copy_project_agent_from_builtin(
+    router: &Router,
+    token: &str,
+    project_id: &str,
+    agent_id: &str,
+) -> Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "/api/v1/projects/{project_id}/agents/{agent_id}/copy-to-project"
+                ))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response")
+}
+
 async fn create_workspace_team(router: &Router, token: &str, body: Value) -> Response {
     router
         .clone()
@@ -647,6 +728,129 @@ async fn create_workspace_team(router: &Router, token: &str, body: Value) -> Res
             Request::builder()
                 .method(Method::POST)
                 .uri("/api/v1/workspace/teams")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&body).expect("json")))
+                .expect("request"),
+        )
+        .await
+        .expect("response")
+}
+
+async fn list_workspace_teams(router: &Router, token: &str) -> Value {
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/workspace/teams")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    decode_json::<Value>(response).await
+}
+
+async fn copy_workspace_team_from_builtin(
+    router: &Router,
+    token: &str,
+    team_id: &str,
+) -> Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "/api/v1/workspace/teams/{team_id}/copy-to-workspace"
+                ))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response")
+}
+
+async fn copy_project_team_from_builtin(
+    router: &Router,
+    token: &str,
+    project_id: &str,
+    team_id: &str,
+) -> Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!(
+                    "/api/v1/projects/{project_id}/teams/{team_id}/copy-to-project"
+                ))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response")
+}
+
+async fn create_project_agent_link(
+    router: &Router,
+    token: &str,
+    project_id: &str,
+    body: Value,
+) -> Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/projects/{project_id}/agent-links"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&body).expect("json")))
+                .expect("request"),
+        )
+        .await
+        .expect("response")
+}
+
+async fn export_project_agent_bundle(
+    router: &Router,
+    token: &str,
+    project_id: &str,
+    body: Value,
+) -> Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/projects/{project_id}/agents/export"))
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::to_vec(&body).expect("json")))
+                .expect("request"),
+        )
+        .await
+        .expect("response")
+}
+
+async fn import_project_agent_bundle(
+    router: &Router,
+    token: &str,
+    project_id: &str,
+    body: Value,
+) -> Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/projects/{project_id}/agents/import"))
                 .header(header::AUTHORIZATION, format!("Bearer {token}"))
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(serde_json::to_vec(&body).expect("json")))
@@ -1573,6 +1777,244 @@ async fn workspace_skill_routes_copy_external_skill_to_managed_root() {
 }
 
 #[tokio::test]
+async fn workspace_tool_catalog_surfaces_builtin_skills_as_readonly_and_copyable() {
+    let harness = test_harness();
+    let token = register_owner_session(&harness.router, "octopus-desktop")
+        .await
+        .token;
+
+    let payload = get_tool_catalog(&harness.router, &token).await;
+    let builtin_skill_id = expected_catalog_hash_id(
+        "skill",
+        "builtin-assets/skills/financial-calculator/SKILL.md",
+    );
+    let builtin_skill_entry = payload["entries"]
+        .as_array()
+        .expect("entries")
+        .iter()
+        .find(|entry| entry["kind"] == "skill" && entry["id"] == builtin_skill_id)
+        .cloned()
+        .expect("builtin financial calculator skill entry");
+
+    assert_eq!(builtin_skill_entry["name"], "financial-calculator");
+    assert_eq!(builtin_skill_entry["ownerScope"], "builtin");
+    assert_eq!(builtin_skill_entry["ownerLabel"], "Builtin");
+    assert_eq!(builtin_skill_entry["management"]["canEdit"], Value::Bool(false));
+    assert_eq!(
+        builtin_skill_entry["management"]["canDelete"],
+        Value::Bool(false)
+    );
+
+    let get_response = get_workspace_skill(&harness.router, &token, &builtin_skill_id).await;
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let document: Value = decode_json(get_response).await;
+    assert_eq!(document["workspaceOwned"], Value::Bool(false));
+    assert_eq!(
+        document["displayPath"],
+        Value::String("builtin-assets/skills/financial-calculator/SKILL.md".into())
+    );
+
+    let file_response = get_workspace_skill_file(
+        &harness.router,
+        &token,
+        &builtin_skill_id,
+        "scripts/calculate.py",
+    )
+    .await;
+    assert_eq!(file_response.status(), StatusCode::OK);
+    let file_document: Value = decode_json(file_response).await;
+    assert_eq!(file_document["readonly"], Value::Bool(true));
+    assert!(file_document["content"]
+        .as_str()
+        .expect("builtin skill file content")
+        .contains("def "));
+
+    let copy_response = copy_workspace_skill_to_managed(
+        &harness.router,
+        &token,
+        &builtin_skill_id,
+        json!({ "slug": "financial-calculator-copy" }),
+    )
+    .await;
+    assert_eq!(copy_response.status(), StatusCode::OK);
+    let copied: Value = decode_json(copy_response).await;
+    assert_eq!(copied["workspaceOwned"], Value::Bool(true));
+    assert_eq!(
+        copied["relativePath"],
+        Value::String("data/skills/financial-calculator-copy/SKILL.md".into())
+    );
+    assert!(harness
+        .infra
+        .paths
+        .root
+        .join("data/skills/financial-calculator-copy/scripts/calculate.py")
+        .exists());
+}
+
+#[tokio::test]
+async fn workspace_agent_and_team_lists_include_builtin_templates() {
+    let harness = test_harness();
+    let token = register_owner_session(&harness.router, "octopus-desktop")
+        .await
+        .token;
+
+    let agents = list_workspace_agents(&harness.router, &token).await;
+    let builtin_agent = agents
+        .as_array()
+        .expect("agents")
+        .iter()
+        .find(|entry| {
+            entry["name"] == "财务分析师"
+                && entry["integrationSource"]["kind"] == "builtin-template"
+        })
+        .cloned()
+        .expect("builtin agent template");
+    assert_eq!(
+        builtin_agent["integrationSource"]["sourceId"],
+        Value::String("财务分析师".into())
+    );
+    assert_eq!(builtin_agent["projectId"], Value::Null);
+
+    let teams = list_workspace_teams(&harness.router, &token).await;
+    let builtin_team = teams
+        .as_array()
+        .expect("teams")
+        .iter()
+        .find(|entry| {
+            entry["name"] == "财务部" && entry["integrationSource"]["kind"] == "builtin-template"
+        })
+        .cloned()
+        .expect("builtin team template");
+    assert_eq!(
+        builtin_team["integrationSource"]["sourceId"],
+        Value::String("财务部".into())
+    );
+    assert_eq!(builtin_team["projectId"], Value::Null);
+}
+
+#[tokio::test]
+async fn workspace_builtin_agent_copy_imports_workspace_assets() {
+    let harness = test_harness();
+    let token = register_owner_session(&harness.router, "octopus-desktop")
+        .await
+        .token;
+
+    let agents = list_workspace_agents(&harness.router, &token).await;
+    let builtin_agent_id = agents
+        .as_array()
+        .expect("agents")
+        .iter()
+        .find(|entry| {
+            entry["name"] == "财务分析师"
+                && entry["integrationSource"]["kind"] == "builtin-template"
+        })
+        .and_then(|entry| entry["id"].as_str())
+        .expect("builtin agent id")
+        .to_string();
+
+    let response =
+        copy_workspace_agent_from_builtin(&harness.router, &token, &builtin_agent_id).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let copied_result: Value = decode_json(response).await;
+    assert_eq!(copied_result["agentCount"], Value::from(1));
+    assert_eq!(copied_result["teamCount"], Value::from(0));
+    assert!(copied_result["skillCount"].as_u64().unwrap_or(0) >= 1);
+    assert!(copied_result["mcpCount"].as_u64().unwrap_or(0) >= 1);
+
+    let agents = list_workspace_agents(&harness.router, &token).await;
+    assert!(agents
+        .as_array()
+        .expect("agents")
+        .iter()
+        .any(|entry| entry["name"] == "财务分析师" && entry.get("integrationSource").is_none()));
+
+    assert!(harness
+        .infra
+        .paths
+        .root
+        .join("data/skills/financial-calculator/SKILL.md")
+        .exists());
+
+    let workspace_runtime_path = harness
+        .infra
+        .paths
+        .root
+        .join("config/runtime/workspace.json");
+    let workspace_runtime = fs::read_to_string(workspace_runtime_path).expect("workspace runtime");
+    assert!(workspace_runtime.contains("\"finance-data\""));
+}
+
+#[tokio::test]
+async fn project_builtin_team_copy_imports_project_scoped_assets() {
+    let harness = test_harness();
+    let token = register_owner_session(&harness.router, "octopus-desktop")
+        .await
+        .token;
+
+    let created_project = create_project(
+        &harness.router,
+        &token,
+        json!({
+            "name": "Builtin Asset Project",
+            "description": "Copies builtin templates into the project scope.",
+        }),
+    )
+    .await;
+    assert_eq!(created_project.status(), StatusCode::OK);
+    let created_project: Value = decode_json(created_project).await;
+    let project_id = created_project["id"]
+        .as_str()
+        .expect("project id")
+        .to_string();
+
+    let teams = list_workspace_teams(&harness.router, &token).await;
+    let builtin_team_id = teams
+        .as_array()
+        .expect("teams")
+        .iter()
+        .find(|entry| {
+            entry["name"] == "财务部" && entry["integrationSource"]["kind"] == "builtin-template"
+        })
+        .and_then(|entry| entry["id"].as_str())
+        .expect("builtin team id")
+        .to_string();
+
+    let response =
+        copy_project_team_from_builtin(&harness.router, &token, &project_id, &builtin_team_id)
+            .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let copied_result: Value = decode_json(response).await;
+    assert_eq!(copied_result["teamCount"], Value::from(1));
+    assert!(copied_result["agentCount"].as_u64().unwrap_or(0) >= 2);
+    assert!(copied_result["skillCount"].as_u64().unwrap_or(0) >= 1);
+    assert!(copied_result["mcpCount"].as_u64().unwrap_or(0) >= 1);
+
+    let teams = list_workspace_teams(&harness.router, &token).await;
+    assert!(teams.as_array().expect("teams").iter().any(|entry| {
+        entry["name"] == "财务部"
+            && entry["projectId"] == Value::String(project_id.clone())
+            && entry.get("integrationSource").is_none()
+    }));
+
+    assert!(harness
+        .infra
+        .paths
+        .root
+        .join(format!("data/projects/{project_id}/skills/financial-calculator/SKILL.md"))
+        .exists());
+
+    let project_runtime = fs::read_to_string(
+        harness
+            .infra
+            .paths
+            .root
+            .join(format!("config/runtime/projects/{project_id}.json")),
+    )
+    .expect("project runtime");
+    assert!(project_runtime.contains("\"finance-data\""));
+}
+
+#[tokio::test]
 async fn workspace_skill_routes_import_folder_into_managed_root() {
     let harness = test_harness();
     let token = register_owner_session(&harness.router, "octopus-desktop")
@@ -1671,6 +2113,59 @@ async fn workspace_mcp_routes_create_update_and_delete_servers() {
         .expect("entries")
         .iter()
         .any(|entry| entry["kind"] == "mcp" && entry["serverName"] == "ops"));
+}
+
+#[tokio::test]
+async fn workspace_tool_catalog_surfaces_builtin_mcp_and_supports_copy_to_managed() {
+    let harness = test_harness();
+    let token = register_owner_session(&harness.router, "octopus-desktop")
+        .await
+        .token;
+
+    let payload = get_tool_catalog(&harness.router, &token).await;
+    let builtin_mcp = payload["entries"]
+        .as_array()
+        .expect("entries")
+        .iter()
+        .find(|entry| entry["kind"] == "mcp" && entry["serverName"] == "finance-data")
+        .cloned()
+        .expect("builtin finance-data mcp entry");
+    assert_eq!(builtin_mcp["ownerScope"], "builtin");
+    assert_eq!(builtin_mcp["scope"], "builtin");
+    assert_eq!(builtin_mcp["management"]["canEdit"], Value::Bool(false));
+    assert_eq!(builtin_mcp["management"]["canDelete"], Value::Bool(false));
+
+    let get_response = get_workspace_mcp_server(&harness.router, &token, "finance-data").await;
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let document: Value = decode_json(get_response).await;
+    assert_eq!(document["scope"], "builtin");
+    assert_eq!(document["serverName"], "finance-data");
+
+    let copy_response =
+        copy_workspace_mcp_server_to_managed(&harness.router, &token, "finance-data").await;
+    assert_eq!(copy_response.status(), StatusCode::OK);
+    let copied: Value = decode_json(copy_response).await;
+    assert_eq!(copied["scope"], "workspace");
+    assert_eq!(copied["serverName"], "finance-data");
+
+    let workspace_runtime_path = harness
+        .infra
+        .paths
+        .root
+        .join("config/runtime/workspace.json");
+    let workspace_runtime = fs::read_to_string(workspace_runtime_path).expect("workspace runtime");
+    assert!(workspace_runtime.contains("\"finance-data\""));
+
+    let payload = get_tool_catalog(&harness.router, &token).await;
+    let managed_mcp = payload["entries"]
+        .as_array()
+        .expect("entries")
+        .iter()
+        .find(|entry| entry["kind"] == "mcp" && entry["serverName"] == "finance-data")
+        .cloned()
+        .expect("managed finance-data mcp entry");
+    assert_eq!(managed_mcp["ownerScope"], "workspace");
+    assert_eq!(managed_mcp["scope"], "workspace");
 }
 
 #[tokio::test]
@@ -1929,6 +2424,144 @@ async fn workspace_tool_catalog_includes_project_owned_assets_and_consumers() {
         .expect("project mcp consumers")
         .iter()
         .any(|consumer| consumer["name"] == "Project Delivery" && consumer["kind"] == "team"));
+}
+
+#[tokio::test]
+async fn project_export_route_materializes_linked_workspace_builtin_dependencies_and_roundtrips() {
+    let harness = test_harness();
+    let token = register_owner_session(&harness.router, "octopus-desktop")
+        .await
+        .token;
+
+    let source_project_response = create_project(
+        &harness.router,
+        &token,
+        json!({
+            "name": "Source Export Project",
+            "description": "Exports linked workspace assets.",
+        }),
+    )
+    .await;
+    assert_eq!(source_project_response.status(), StatusCode::OK);
+    let source_project: Value = decode_json(source_project_response).await;
+    let source_project_id = source_project["id"]
+        .as_str()
+        .expect("source project id")
+        .to_string();
+
+    let target_project_response = create_project(
+        &harness.router,
+        &token,
+        json!({
+            "name": "Imported Export Project",
+            "description": "Imports exported linked workspace assets.",
+        }),
+    )
+    .await;
+    assert_eq!(target_project_response.status(), StatusCode::OK);
+    let target_project: Value = decode_json(target_project_response).await;
+    let target_project_id = target_project["id"]
+        .as_str()
+        .expect("target project id")
+        .to_string();
+
+    let tool_catalog = get_tool_catalog(&harness.router, &token).await;
+    let builtin_skill_id = tool_catalog["entries"]
+        .as_array()
+        .expect("catalog entries")
+        .iter()
+        .find(|entry| entry["kind"] == "skill" && entry["name"] == "financial-calculator")
+        .and_then(|entry| entry["id"].as_str())
+        .expect("builtin skill id")
+        .to_string();
+
+    let workspace_agent_response = create_workspace_agent(
+        &harness.router,
+        &token,
+        json!({
+            "workspaceId": "ws-local",
+            "projectId": Value::Null,
+            "scope": "workspace",
+            "name": "Linked Finance Agent",
+            "personality": "Exports workspace-linked builtin dependencies.",
+            "tags": ["finance", "linked"],
+            "prompt": "Handle linked finance requests.",
+            "builtinToolKeys": ["bash"],
+            "skillIds": [builtin_skill_id],
+            "mcpServerNames": ["finance-data"],
+            "description": "Workspace linked finance agent.",
+            "status": "active"
+        }),
+    )
+    .await;
+    assert_eq!(workspace_agent_response.status(), StatusCode::OK);
+    let workspace_agent: Value = decode_json(workspace_agent_response).await;
+    let workspace_agent_id = workspace_agent["id"]
+        .as_str()
+        .expect("workspace agent id")
+        .to_string();
+
+    let link_response = create_project_agent_link(
+        &harness.router,
+        &token,
+        &source_project_id,
+        json!({
+            "projectId": source_project_id,
+            "agentId": workspace_agent_id,
+        }),
+    )
+    .await;
+    assert_eq!(link_response.status(), StatusCode::OK);
+
+    let export_response = export_project_agent_bundle(
+        &harness.router,
+        &token,
+        &source_project_id,
+        json!({
+            "mode": "single",
+            "agentIds": [workspace_agent_id],
+            "teamIds": [],
+        }),
+    )
+    .await;
+    assert_eq!(export_response.status(), StatusCode::OK);
+    let exported: Value = decode_json(export_response).await;
+    let exported_files = exported["files"].as_array().expect("exported files");
+
+    assert_eq!(exported["rootDirName"], "Linked Finance Agent");
+    assert!(exported_files.iter().any(|file| {
+        file["relativePath"] == Value::String("Linked Finance Agent/.octopus/manifest.json".into())
+    }));
+    assert!(exported_files.iter().any(|file| {
+        file["relativePath"]
+            == Value::String("Linked Finance Agent/skills/financial-calculator/SKILL.md".into())
+    }));
+    assert!(exported_files.iter().any(|file| {
+        file["relativePath"]
+            == Value::String("Linked Finance Agent/mcps/finance-data.json".into())
+    }));
+    assert!(exported_files.iter().any(|file| {
+        file["relativePath"]
+            .as_str()
+            .is_some_and(|path| path.starts_with("Linked Finance Agent/") && path.ends_with(".png"))
+    }));
+
+    let import_response = import_project_agent_bundle(
+        &harness.router,
+        &token,
+        &target_project_id,
+        json!({
+            "files": exported_files,
+        }),
+    )
+    .await;
+    assert_eq!(import_response.status(), StatusCode::OK);
+    let imported: Value = decode_json(import_response).await;
+    assert_eq!(imported["failureCount"], Value::from(0));
+    assert_eq!(imported["agentCount"], Value::from(1));
+    assert_eq!(imported["teamCount"], Value::from(0));
+    assert_eq!(imported["skillCount"], Value::from(1));
+    assert_eq!(imported["mcpCount"], Value::from(1));
 }
 
 #[tokio::test]

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { LayoutGrid, List, Trash2, UsersRound } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { ChevronDown, Download, LayoutGrid, List, Trash2, Upload, UsersRound } from 'lucide-vue-next'
 
 import type { AgentRecord, TeamRecord } from '@octopus/schema'
-import { UiBadge, UiButton, UiEmptyState, UiInput, UiPagination, UiRecordCard, UiToolbarRow } from '@octopus/ui'
+import { UiBadge, UiButton, UiCheckbox, UiDropdownMenu, UiEmptyState, UiInput, UiPagination, UiRecordCard, UiToolbarRow } from '@octopus/ui'
 
-import type { ViewMode } from './useAgentCenter'
+import type { AgentBundleTransferFormat, ViewMode } from './useAgentCenter'
 import TeamUnitCard from './TeamUnitCard.vue'
 
 const props = defineProps<{
@@ -16,13 +16,23 @@ const props = defineProps<{
   pageCount: number
   pagedTeams: TeamRecord[]
   currentAgents: AgentRecord[]
+  isProjectScope: boolean
+  importLoading: boolean
+  exportLoading: boolean
+  selectedTeamIds: string[]
+  allPagedSelected: boolean
 }>()
 
 const emit = defineEmits<{
   'update:query': [value: string]
   'update:viewMode': [value: ViewMode]
   'update:page': [value: number]
+  'update:selectedTeamIds': [value: string[]]
   'create-team': []
+  'open-import-dialog': [format: AgentBundleTransferFormat]
+  'toggle-all-paged': [value: boolean]
+  'export-selected': [format: AgentBundleTransferFormat]
+  'export-team': [team: TeamRecord, format: AgentBundleTransferFormat]
   'open-team': [team: TeamRecord]
   'remove-team': [team: TeamRecord]
 }>()
@@ -33,7 +43,28 @@ const queryModel = computed({
 })
 
 function teamOriginLabel(team: TeamRecord) {
-  return team.integrationSource ? 'Workspace Link' : undefined
+  if (team.integrationSource?.kind === 'builtin-template') {
+    return '内置模板'
+  }
+  if (team.integrationSource?.kind === 'workspace-link') {
+    return '工作区接入'
+  }
+  return undefined
+}
+
+function isBuiltinTemplateTeam(team: TeamRecord) {
+  return team.integrationSource?.kind === 'builtin-template'
+}
+
+function isWorkspaceLinkedTeam(team: TeamRecord) {
+  return team.integrationSource?.kind === 'workspace-link'
+}
+
+function openLabel(team: TeamRecord) {
+  if (isBuiltinTemplateTeam(team)) {
+    return props.isProjectScope ? '复制到项目' : '复制到工作区'
+  }
+  return isWorkspaceLinkedTeam(team) ? '查看' : '编辑'
 }
 
 function resolveAgentName(agentId?: string) {
@@ -41,6 +72,48 @@ function resolveAgentName(agentId?: string) {
     return '未设置负责人'
   }
   return props.currentAgents.find(agent => agent.id === agentId)?.name ?? agentId
+}
+
+const importMenuItems = [
+  { key: 'import-folder', label: '导入文件夹' },
+  { key: 'import-zip', label: '导入 ZIP' },
+]
+
+const exportMenuItems = computed(() => [
+  { key: 'export-folder', label: '导出为文件夹', disabled: props.selectedTeamIds.length === 0 },
+  { key: 'export-zip', label: '导出为 ZIP', disabled: props.selectedTeamIds.length === 0 },
+])
+
+const rowExportMenuItems = [
+  { key: 'export-folder', label: '导出为文件夹' },
+  { key: 'export-zip', label: '导出为 ZIP' },
+]
+
+const importMenuOpen = ref(false)
+const exportMenuOpen = ref(false)
+
+function handleImportSelect(key: string) {
+  importMenuOpen.value = false
+  emit('open-import-dialog', key === 'import-zip' ? 'zip' : 'folder')
+}
+
+function handleExportSelected(key: string) {
+  exportMenuOpen.value = false
+  emit('export-selected', key === 'export-zip' ? 'zip' : 'folder')
+}
+
+function handleExportTeam(team: TeamRecord, key: string) {
+  emit('export-team', team, key === 'export-zip' ? 'zip' : 'folder')
+}
+
+function updateSelectedTeams(teamId: string, nextSelected: boolean) {
+  const next = new Set(props.selectedTeamIds)
+  if (nextSelected) {
+    next.add(teamId)
+  } else {
+    next.delete(teamId)
+  }
+  emit('update:selectedTeamIds', Array.from(next))
 }
 </script>
 
@@ -50,7 +123,7 @@ function resolveAgentName(agentId?: string) {
       <template #search>
         <UiInput
           v-model="queryModel"
-          placeholder="搜索团队名称、摘要或成员"
+          placeholder="搜索数字团队名称、摘要或成员"
           class="max-w-md"
         />
       </template>
@@ -75,9 +148,52 @@ function resolveAgentName(agentId?: string) {
         </UiButton>
       </template>
       <template #actions>
-        <UiButton size="sm" @click="emit('create-team')">
-          新建数字团队
-        </UiButton>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <span class="text-[12px] text-text-tertiary">
+            已选 {{ selectedTeamIds.length }} / {{ total }}
+          </span>
+          <UiButton size="sm" @click="emit('create-team')">
+            新建数字团队
+          </UiButton>
+          <UiDropdownMenu :open="importMenuOpen" :items="importMenuItems" @update:open="importMenuOpen = $event" @select="handleImportSelect">
+            <template #trigger>
+              <UiButton
+                variant="outline"
+                size="sm"
+              :loading="importLoading"
+              loading-label="Previewing"
+              data-testid="agent-center-import-teams-trigger"
+            >
+                <Upload :size="14" />
+                导入
+                <ChevronDown :size="14" />
+              </UiButton>
+            </template>
+          </UiDropdownMenu>
+          <UiDropdownMenu :open="exportMenuOpen" :items="exportMenuItems" @update:open="exportMenuOpen = $event" @select="handleExportSelected">
+            <template #trigger>
+              <UiButton
+                variant="outline"
+                size="sm"
+              :disabled="selectedTeamIds.length === 0"
+              :loading="exportLoading"
+              loading-label="Exporting"
+              data-testid="agent-center-export-teams-trigger"
+            >
+                <Download :size="14" />
+                批量导出
+                <ChevronDown :size="14" />
+              </UiButton>
+            </template>
+          </UiDropdownMenu>
+        </div>
+      </template>
+      <template #filters>
+        <UiCheckbox
+          :model-value="allPagedSelected"
+          label="全选当前页"
+          @update:model-value="emit('toggle-all-paged', Boolean($event))"
+        />
       </template>
     </UiToolbarRow>
 
@@ -87,18 +203,25 @@ function resolveAgentName(agentId?: string) {
           v-if="viewMode === 'card'"
           :id="team.id"
           :name="team.name"
-          :title="team.personality || 'Team'"
+          :title="team.personality || 'Digital Team'"
           :description="team.description"
           :lead-label="resolveAgentName(team.leaderAgentId)"
           :members="team.memberAgentIds.map(resolveAgentName)"
           :workflow="team.tags.slice(0, 3)"
           :recent-outcome="team.prompt || team.description"
           :origin-label="teamOriginLabel(team)"
-          :open-label="team.integrationSource ? '查看' : '编辑'"
-          :remove-label="team.integrationSource ? '移除接入' : '删除'"
+          :open-label="openLabel(team)"
+          :remove-label="isWorkspaceLinkedTeam(team) ? '移除接入' : '删除'"
           :open-test-id="`agent-center-open-team-${team.id}`"
           :remove-test-id="`agent-center-remove-team-${team.id}`"
+          :selected="selectedTeamIds.includes(team.id)"
+          :selection-test-id="`agent-center-select-team-${team.id}`"
+          :selectable="!isBuiltinTemplateTeam(team)"
+          :exportable="!isBuiltinTemplateTeam(team)"
+          :removable="!isBuiltinTemplateTeam(team)"
           @open="emit('open-team', team)"
+          @update:selected="updateSelectedTeams(team.id, $event)"
+          @export="handleExportTeam(team, $event)"
           @remove="emit('remove-team', team)"
         />
 
@@ -120,12 +243,12 @@ function resolveAgentName(agentId?: string) {
                 class="size-2 rounded-full"
                 :class="team.status === 'active' ? 'bg-status-success' : 'bg-text-tertiary'"
               />
-              <UiBadge v-if="team.integrationSource" label="Workspace" subtle />
+              <UiBadge v-if="teamOriginLabel(team)" :label="teamOriginLabel(team) ?? ''" subtle />
             </div>
           </template>
           <div class="flex w-full items-center gap-8 overflow-hidden">
             <div class="flex min-w-0 flex-[2] flex-col gap-0.5">
-              <span class="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary">{{ team.personality || '数字员工团队' }}</span>
+              <span class="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary">{{ team.personality || '数字团队' }}</span>
               <p class="truncate text-sm text-text-secondary">
                 {{ team.description }}
               </p>
@@ -149,11 +272,32 @@ function resolveAgentName(agentId?: string) {
             </div>
           </div>
           <template #actions>
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1" @click.stop @keydown.stop>
+              <UiCheckbox
+                v-if="!isBuiltinTemplateTeam(team)"
+                :model-value="selectedTeamIds"
+                :value="team.id"
+                :data-testid="`agent-center-select-team-${team.id}`"
+                @update:model-value="emit('update:selectedTeamIds', $event as string[])"
+              />
               <UiButton size="sm" variant="ghost" class="h-8 px-3 text-[11px] font-semibold" @click.stop="emit('open-team', team)">
-                配置
+                {{ openLabel(team) }}
               </UiButton>
+              <UiDropdownMenu v-if="!isBuiltinTemplateTeam(team)" :items="rowExportMenuItems" @select="handleExportTeam(team, $event)">
+                <template #trigger>
+                  <UiButton
+                    size="sm"
+                    variant="ghost"
+                    class="h-8 px-3 text-[11px] font-semibold"
+                    :aria-label="`导出 ${team.name}`"
+                  >
+                    导出
+                    <ChevronDown :size="12" />
+                  </UiButton>
+                </template>
+              </UiDropdownMenu>
               <UiButton
+                v-if="!isBuiltinTemplateTeam(team)"
                 variant="ghost"
                 size="icon"
                 class="size-8 rounded-full text-text-tertiary/40 hover:bg-error/10 hover:text-error"

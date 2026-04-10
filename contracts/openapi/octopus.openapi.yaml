@@ -655,6 +655,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/projects/{projectId}/agents/{agentId}/copy-to-project:
+    post:
+      operationId: copyProjectAgentToProject
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportWorkspaceAgentBundleResult"
+          description: Builtin agent template copied into project scope.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/projects/{projectId}/agents/export:
     post:
       operationId: exportProjectAgentBundle
@@ -1150,6 +1177,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/projects/{projectId}/teams/{teamId}/copy-to-project:
+    post:
+      operationId: copyProjectTeamToProject
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: teamId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportWorkspaceAgentBundleResult"
+          description: Builtin team template copied into project scope.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/runtime/bootstrap:
     get:
       operationId: getRuntimeBootstrap
@@ -1557,6 +1611,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/workspace/agents/{agentId}/copy-to-workspace:
+    post:
+      operationId: copyWorkspaceAgentToWorkspace
+      parameters:
+        - in: path
+          name: agentId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportWorkspaceAgentBundleResult"
+          description: Builtin workspace agent template copied into workspace scope.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/workspace/agents/export:
     post:
       operationId: exportWorkspaceAgentBundle
@@ -1789,6 +1865,28 @@ paths:
       responses:
         "204":
           description: Workspace MCP server deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/catalog/mcp-servers/{serverName}/copy-to-managed:
+    post:
+      operationId: copyWorkspaceMcpServerToManaged
+      parameters:
+        - in: path
+          name: serverName
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceMcpServerDocument"
+          description: Builtin MCP server copied into workspace managed runtime config.
         default:
           content:
             application/json:
@@ -2892,6 +2990,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/workspace/teams/{teamId}/copy-to-workspace:
+    post:
+      operationId: copyWorkspaceTeamToWorkspace
+      parameters:
+        - in: path
+          name: teamId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportWorkspaceAgentBundleResult"
+          description: Builtin workspace team template copied into workspace scope.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
 components:
   schemas:
     AgentRecord:
@@ -2915,6 +3035,7 @@ components:
             kind:
               enum:
                 - workspace-link
+                - builtin-template
               type: string
             sourceId:
               type: string
@@ -3909,7 +4030,10 @@ components:
           enum:
             - bundle
             - agent
+            - team
             - skill
+            - mcp
+            - avatar
           type: string
         severity:
           enum:
@@ -3936,6 +4060,8 @@ components:
     ImportWorkspaceAgentBundlePreview:
       additionalProperties: false
       properties:
+        agentCount:
+          type: integer
         agents:
           items:
             $ref: "#/components/schemas/ImportedAgentPreviewItem"
@@ -3970,15 +4096,21 @@ components:
           items:
             $ref: "#/components/schemas/ImportIssue"
           type: array
+        mcpCount:
+          type: integer
         mcps:
           items:
             $ref: "#/components/schemas/ImportedMcpPreviewItem"
           type: array
+        skillCount:
+          type: integer
         skills:
           items:
             $ref: "#/components/schemas/ImportedSkillPreviewItem"
           type: array
         skipCount:
+          type: integer
+        teamCount:
           type: integer
         teams:
           items:
@@ -4001,8 +4133,12 @@ components:
         - updateCount
         - skipCount
         - failureCount
+        - agentCount
+        - teamCount
         - uniqueSkillCount
         - uniqueMcpCount
+        - skillCount
+        - mcpCount
         - avatarCount
         - filteredFileCount
         - agents
@@ -4025,6 +4161,8 @@ components:
     ImportWorkspaceAgentBundleResult:
       additionalProperties: false
       properties:
+        agentCount:
+          type: integer
         agents:
           items:
             $ref: "#/components/schemas/ImportedAgentPreviewItem"
@@ -4059,15 +4197,21 @@ components:
           items:
             $ref: "#/components/schemas/ImportIssue"
           type: array
+        mcpCount:
+          type: integer
         mcps:
           items:
             $ref: "#/components/schemas/ImportedMcpPreviewItem"
           type: array
+        skillCount:
+          type: integer
         skills:
           items:
             $ref: "#/components/schemas/ImportedSkillPreviewItem"
           type: array
         skipCount:
+          type: integer
+        teamCount:
           type: integer
         teams:
           items:
@@ -4090,8 +4234,12 @@ components:
         - updateCount
         - skipCount
         - failureCount
+        - agentCount
+        - teamCount
         - uniqueSkillCount
         - uniqueMcpCount
+        - skillCount
+        - mcpCount
         - avatarCount
         - filteredFileCount
         - agents
@@ -5845,6 +5993,7 @@ components:
             kind:
               enum:
                 - workspace-link
+                - builtin-template
               type: string
             sourceId:
               type: string
@@ -6401,6 +6550,7 @@ components:
           type: string
         scope:
           enum:
+            - builtin
             - workspace
             - project
             - user
@@ -6448,6 +6598,7 @@ components:
           type: string
         scope:
           enum:
+            - builtin
             - workspace
             - project
             - user

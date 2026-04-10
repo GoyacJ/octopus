@@ -18,6 +18,15 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+
+function ownerScopeLabel(ownerScope: WorkspaceToolCatalogEntry['ownerScope']) {
+  if (!ownerScope) {
+    return t('common.na')
+  }
+  const translationKey = `tools.ownerScopes.${ownerScope}`
+  const translated = t(translationKey)
+  return translated === translationKey ? ownerScope : translated
+}
 </script>
 
 <template>
@@ -26,14 +35,14 @@ const { t } = useI18n()
       <template #search>
         <UiInput
           :model-value="query"
-          placeholder="搜索名称、使用者或来源"
+          :placeholder="t('tools.search.placeholder')"
           class="max-w-md"
           @update:model-value="emit('update:query', String($event))"
         />
       </template>
       <template #actions>
         <span class="text-[12px] text-text-tertiary">
-          {{ `共 ${total} 项` }}
+          {{ t('tools.summary.results', { count: total, total }) }}
         </span>
       </template>
     </UiToolbarRow>
@@ -50,6 +59,7 @@ const { t } = useI18n()
         </template>
 
         <template #badges>
+          <UiBadge v-if="entry.ownerScope" :label="ownerScopeLabel(entry.ownerScope)" subtle />
           <UiBadge v-if="entry.ownerLabel" :label="entry.ownerLabel" subtle />
           <UiBadge v-if="entry.disabled" :label="t('tools.states.disabled')" tone="warning" />
           <UiBadge v-if="entry.kind === 'mcp' && entry.toolNames.length" :label="`${entry.toolNames.length} tools`" subtle />
@@ -58,6 +68,13 @@ const { t } = useI18n()
         <div class="space-y-2">
           <p class="break-all text-[12px] text-text-secondary">
             {{ entry.displayPath }}
+          </p>
+          <p v-if="entry.ownerScope || entry.ownerLabel" class="text-[11px] text-text-tertiary">
+            {{ t('tools.detail.source') }}:
+            {{ entry.ownerScope ? ownerScopeLabel(entry.ownerScope) : t('common.na') }}
+            <template v-if="entry.ownerLabel">
+              · {{ entry.ownerLabel }}
+            </template>
           </p>
           <div v-if="entry.consumers?.length" class="flex flex-wrap gap-1.5">
             <UiBadge
@@ -73,15 +90,15 @@ const { t } = useI18n()
 
     <UiEmptyState
       v-else
-      title="暂无资源"
-      description="当前分组下没有可展示的资源。"
+      :title="t('tools.empty.title')"
+      :description="t('tools.empty.description')"
     />
 
     <UiPagination
       v-if="pageCount > 1"
       :page="page"
       :page-count="pageCount"
-      :meta-label="`共 ${total} 项`"
+      :meta-label="t('tools.summary.results', { count: total, total })"
       @update:page="emit('update:page', $event)"
     />
   </section>

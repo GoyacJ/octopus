@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Trash2 } from 'lucide-vue-next'
+import { ChevronDown, Trash2 } from 'lucide-vue-next'
 import { computed } from 'vue'
-import { UiBadge, UiButton } from '@octopus/ui'
+import { UiBadge, UiButton, UiCheckbox, UiDropdownMenu } from '@octopus/ui'
 
 const props = defineProps<{
   id: string
@@ -19,16 +19,28 @@ const props = defineProps<{
   removeLabel?: string
   openTestId?: string
   removeTestId?: string
+  selected?: boolean
+  selectionTestId?: string
+  selectable?: boolean
+  exportable?: boolean
+  removable?: boolean
 }>()
 
 const emit = defineEmits<{
   open: [id: string]
   remove: [id: string]
+  export: [format: 'folder' | 'zip']
+  'update:selected': [value: boolean]
 }>()
 
 const statusBadgeTone = computed(() =>
   props.statusTone === 'success' ? 'success' : props.statusTone === 'warning' ? 'warning' : 'default',
 )
+
+const exportMenuItems = [
+  { key: 'export-folder', label: '导出为文件夹' },
+  { key: 'export-zip', label: '导出为 ZIP' },
+]
 
 function openCard() {
   emit('open', props.id)
@@ -60,6 +72,14 @@ function openCard() {
           <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-tertiary">
             {{ props.role || 'Agent' }}
           </p>
+        </div>
+
+        <div v-if="props.selectable !== false" class="shrink-0" @click.stop @keydown.stop>
+          <UiCheckbox
+            :model-value="Boolean(props.selected)"
+            :data-testid="props.selectionTestId"
+            @update:model-value="emit('update:selected', Boolean($event))"
+          />
         </div>
       </div>
 
@@ -99,17 +119,34 @@ function openCard() {
         >
           {{ props.openLabel || '打开' }}
         </UiButton>
-        <UiButton
-          variant="ghost"
-          size="icon"
-          class="size-8 text-text-tertiary hover:text-status-error"
-          :aria-label="props.removeLabel || '删除'"
-          :data-testid="props.removeTestId"
-          @click.stop="emit('remove', props.id)"
-        >
-          <Trash2 :size="14" />
-          <span class="sr-only">{{ props.removeLabel || '删除' }}</span>
-        </UiButton>
+        <div class="flex items-center gap-1">
+          <UiDropdownMenu v-if="props.exportable !== false" :items="exportMenuItems" @select="emit('export', $event === 'export-zip' ? 'zip' : 'folder')">
+            <template #trigger>
+              <UiButton
+                variant="ghost"
+                size="sm"
+                class="h-8 px-3 text-[12px]"
+                :aria-label="`导出 ${props.name}`"
+                @click.stop
+              >
+                导出
+                <ChevronDown :size="12" />
+              </UiButton>
+            </template>
+          </UiDropdownMenu>
+          <UiButton
+            v-if="props.removable !== false"
+            variant="ghost"
+            size="icon"
+            class="size-8 text-text-tertiary hover:text-status-error"
+            :aria-label="props.removeLabel || '删除'"
+            :data-testid="props.removeTestId"
+            @click.stop="emit('remove', props.id)"
+          >
+            <Trash2 :size="14" />
+            <span class="sr-only">{{ props.removeLabel || '删除' }}</span>
+          </UiButton>
+        </div>
       </div>
     </div>
   </div>

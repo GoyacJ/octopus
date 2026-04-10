@@ -342,6 +342,33 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
           },
         })
       },
+      async copyToWorkspace(agentId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/agents/{agentId}/copy-to-workspace',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              agentId,
+            },
+          },
+        ) as unknown as ImportWorkspaceAgentBundleResult
+      },
+      async copyToProject(projectId, agentId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/agents/{agentId}/copy-to-project',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+              agentId,
+            },
+          },
+        ) as unknown as ImportWorkspaceAgentBundleResult
+      },
       async previewImportBundle(input, projectId) {
         const session = assertWorkspaceRequestReady(context)
         if (projectId) {
@@ -490,6 +517,33 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
             teamId,
           },
         })
+      },
+      async copyToWorkspace(teamId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/teams/{teamId}/copy-to-workspace',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              teamId,
+            },
+          },
+        ) as unknown as ImportWorkspaceAgentBundleResult
+      },
+      async copyToProject(projectId, teamId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/teams/{teamId}/copy-to-project',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+              teamId,
+            },
+          },
+        ) as unknown as ImportWorkspaceAgentBundleResult
       },
       async listProjectLinks(projectId) {
         return await fetchWorkspaceOpenApi(
@@ -646,6 +700,19 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
             serverName,
           },
         }) as unknown as WorkspaceMcpServerDocument
+      },
+      async copyMcpServerToManaged(serverName) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/catalog/mcp-servers/{serverName}/copy-to-managed',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              serverName,
+            },
+          },
+        ) as unknown as WorkspaceMcpServerDocument
       },
       async createMcpServer(input) {
         return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/mcp-servers', 'post', {

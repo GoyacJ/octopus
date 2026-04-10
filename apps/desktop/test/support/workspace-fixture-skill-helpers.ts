@@ -114,6 +114,7 @@ export function createSkillDocument(
   workspaceOwned: boolean,
   files: Record<string, WorkspaceSkillFileDocument>,
   relativePath?: string,
+  sourceOrigin = 'skills_dir',
 ): WorkspaceSkillDocument {
   const rootPath = displayPath.replace(/\/SKILL\.md$/, '')
   const content = files['SKILL.md']?.content ?? ''
@@ -126,7 +127,7 @@ export function createSkillDocument(
     displayPath,
     rootPath,
     tree: createSkillTree(Object.keys(files)),
-    sourceOrigin: 'skills_dir',
+    sourceOrigin,
     workspaceOwned,
     relativePath,
   }
@@ -213,6 +214,7 @@ export function createSkillAsset(input: {
   workspaceOwned: boolean
   files: Record<string, WorkspaceSkillFileDocument>
   relativePath?: string
+  sourceOrigin?: string
 }): { document: WorkspaceSkillDocument, files: Record<string, WorkspaceSkillFileDocument> } {
   const document = createSkillDocument(
     input.id,
@@ -223,6 +225,7 @@ export function createSkillAsset(input: {
     input.workspaceOwned,
     input.files,
     input.relativePath,
+    input.sourceOrigin,
   )
   return {
     document,

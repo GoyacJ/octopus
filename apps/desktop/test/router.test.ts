@@ -67,6 +67,35 @@ describe('desktop router contract', () => {
     expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
   })
 
+  it('redirects the console root to the first authorized child route', async () => {
+    const shell = useShellStore()
+    const workspaceAccessStore = useWorkspaceAccessStore()
+    await shell.bootstrap('ws-local', 'proj-redesign')
+    await workspaceAccessStore.load()
+
+    await router.push('/workspaces/ws-local/console')
+
+    expect(router.currentRoute.value.name).toBe('workspace-console-projects')
+  })
+
+  it('redirects unauthorized console routes back to workspace overview', async () => {
+    const shell = useShellStore()
+    const workspaceAccessStore = useWorkspaceAccessStore()
+    await shell.bootstrap('ws-local', 'proj-redesign')
+    await workspaceAccessStore.load()
+
+    const ownerRole = workspaceAccessStore.roles.find(role => role.id === 'role-owner')
+    if (!ownerRole) {
+      throw new Error('Expected owner role in fixture')
+    }
+    ownerRole.menuIds = ownerRole.menuIds.filter(menuId => !menuId.startsWith('menu-workspace-console'))
+
+    await router.push('/workspaces/ws-local/console/projects')
+
+    expect(router.currentRoute.value.name).toBe('workspace-overview')
+    expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
+  })
+
   it('keeps project settings on the dedicated project route', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/settings')
 

@@ -19,7 +19,6 @@ const props = withDefaults(defineProps<{
   items: UiMenuItem[]
   align?: 'start' | 'end'
 }>(), {
-  open: false,
   align: 'end',
 })
 

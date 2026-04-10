@@ -216,6 +216,26 @@ describe('Workbench shell layout', () => {
     }
   })
 
+  it('uses the logo-inspired accent treatment for the footer workspace trigger icon', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    try {
+      await waitFor(() => mounted.container.querySelector('[data-testid="sidebar-workspace-menu-trigger"]') !== null)
+
+      const triggerIcon = mounted.container.querySelector<HTMLElement>('[data-testid="sidebar-workspace-menu-trigger-icon"]')
+      const trigger = mounted.container.querySelector<HTMLElement>('[data-testid="sidebar-workspace-menu-trigger"]')
+
+      expect(trigger).not.toBeNull()
+      expect(trigger?.className).toContain('workspace-menu-trigger')
+      expect(triggerIcon).not.toBeNull()
+      expect(triggerIcon?.className).toContain('workspace-menu-trigger__icon')
+    } finally {
+      mounted.destroy()
+    }
+  })
+
   it('does not blank on the root entry route before any explicit navigation', async () => {
     await router.push('/')
     await router.isReady()
@@ -435,7 +455,7 @@ describe('Workbench shell layout', () => {
     mounted.destroy()
   })
 
-  it('navigates to the console workspace page from the footer workspace menu', async () => {
+  it('navigates to the first console workspace surface from the footer workspace menu', async () => {
     await router.push('/workspaces/ws-local/overview?project=proj-redesign')
     await router.isReady()
 
@@ -449,8 +469,8 @@ describe('Workbench shell layout', () => {
       .querySelector<HTMLAnchorElement>('[data-testid="sidebar-workspace-nav-workspace-console"]')
       ?.click()
 
-    await waitFor(() => router.currentRoute.value.name === 'workspace-console')
-    expect(router.currentRoute.value.name).toBe('workspace-console')
+    await waitFor(() => router.currentRoute.value.name === 'workspace-console-projects')
+    expect(router.currentRoute.value.name).toBe('workspace-console-projects')
 
     mounted.destroy()
   })

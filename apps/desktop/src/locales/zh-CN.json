@@ -1017,7 +1017,7 @@
       "importSkill": "导入 Skill",
       "importArchive": "上传 ZIP",
       "importFolder": "上传文件夹",
-      "copyToManaged": "复制为本应用 Skill",
+      "copyToManaged": "复制到托管资源",
       "selectForCopy": "加入批量复制",
       "skillSlugPrompt": "请输入 Skill 标识"
     },
@@ -1047,6 +1047,7 @@
       "title": "详情",
       "sourcePath": "来源路径",
       "sourceKey": "来源键",
+      "source": "来源",
       "requiredPermission": "所需权限",
       "disabled": "已停用",
       "builtinKey": "内置键",
@@ -1061,7 +1062,8 @@
       "endpoint": "端点",
       "toolNames": "已发现工具",
       "scope": "配置范围",
-      "statusDetail": "状态说明"
+      "statusDetail": "状态说明",
+      "consumers": "使用者"
     },
     "editor": {
       "loading": "正在加载 runtime 文档…",
@@ -1106,8 +1108,14 @@
       "external": "外部来源"
     },
     "sourceOrigins": {
+      "builtin_bundle": "内置资源包",
       "skills_dir": "技能",
       "legacy_commands_dir": "旧版 /commands"
+    },
+    "ownerScopes": {
+      "builtin": "内置",
+      "workspace": "工作区",
+      "project": "项目"
     },
     "requiredPermissions": {
       "readonly": "只读",
@@ -1311,9 +1319,9 @@
   "agents": {
     "header": {
       "eyebrow": "数字员工中心",
-      "title": "数字员工与团队",
-      "subtitleProject": "管理当前项目的数字员工与团队协作。",
-      "subtitleWorkspace": "管理您的工作区级数字员工与团队配置。"
+      "title": "数字员工与数字团队",
+      "subtitleProject": "管理当前项目的数字员工与数字团队协作。",
+      "subtitleWorkspace": "管理您的工作区级数字员工与数字团队配置。"
     },
     "workspace": {
       "descriptionAgent": "管理可被多个项目复用的工作区级数字员工。"
@@ -1344,7 +1352,7 @@
       "edit": "编辑数字员工",
       "new": "新建",
       "addAgent": "新建数字员工",
-      "addTeam": "新建团队",
+      "addTeam": "新建数字团队",
       "filter": "筛选",
       "sort": "排序",
       "searchPlaceholder": "搜索名称、角色或描述…"

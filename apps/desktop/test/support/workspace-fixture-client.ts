@@ -407,6 +407,86 @@ export function createWorkspaceClientFixture(
     }
   }
 
+  const copyBuiltinAgentTemplate = (agentId: string, projectId?: string) => {
+    const source = workspaceState.agents.find(record => record.id === agentId)
+    if (!source?.integrationSource || source.integrationSource.kind !== 'builtin-template') {
+      throw new WorkspaceApiError({
+        message: 'builtin agent template not found',
+        status: 404,
+        requestId: 'req-builtin-agent-template-not-found',
+        retryable: false,
+        code: 'NOT_FOUND',
+      })
+    }
+
+    const copiedId = projectId
+      ? `agent-project-${source.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-copy`
+      : `agent-workspace-${source.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-copy`
+    const copied = normalizeAgentRecord(
+      {
+        workspaceId: workspaceState.workspace.id,
+        projectId,
+        scope: projectId ? 'project' : 'workspace',
+        name: source.name,
+        avatar: undefined,
+        removeAvatar: false,
+        personality: source.personality,
+        tags: clone(source.tags),
+        prompt: source.prompt,
+        builtinToolKeys: clone(source.builtinToolKeys),
+        skillIds: clone(source.skillIds),
+        mcpServerNames: clone(source.mcpServerNames),
+        description: source.description,
+        status: source.status,
+      },
+      undefined,
+      copiedId,
+    )
+    workspaceState.agents = [...workspaceState.agents.filter(record => record.id !== copiedId), copied]
+    return copied
+  }
+
+  const copyBuiltinTeamTemplate = (teamId: string, projectId?: string) => {
+    const source = workspaceState.teams.find(record => record.id === teamId)
+    if (!source?.integrationSource || source.integrationSource.kind !== 'builtin-template') {
+      throw new WorkspaceApiError({
+        message: 'builtin team template not found',
+        status: 404,
+        requestId: 'req-builtin-team-template-not-found',
+        retryable: false,
+        code: 'NOT_FOUND',
+      })
+    }
+
+    const copiedId = projectId
+      ? `team-project-${source.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-copy`
+      : `team-workspace-${source.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-copy`
+    const copied = normalizeTeamRecord(
+      {
+        workspaceId: workspaceState.workspace.id,
+        projectId,
+        scope: projectId ? 'project' : 'workspace',
+        name: source.name,
+        avatar: undefined,
+        removeAvatar: false,
+        personality: source.personality,
+        tags: clone(source.tags),
+        prompt: source.prompt,
+        builtinToolKeys: clone(source.builtinToolKeys),
+        skillIds: clone(source.skillIds),
+        mcpServerNames: clone(source.mcpServerNames),
+        leaderAgentId: source.leaderAgentId,
+        memberAgentIds: clone(source.memberAgentIds),
+        description: source.description,
+        status: source.status,
+      },
+      undefined,
+      copiedId,
+    )
+    workspaceState.teams = [...workspaceState.teams.filter(record => record.id !== copiedId), copied]
+    return copied
+  }
+
   return {
     system: {
       async bootstrap() {
@@ -634,6 +714,14 @@ export function createWorkspaceClientFixture(
       async list() {
         return clone(workspaceState.agents)
       },
+      async copyToWorkspace(agentId) {
+        copyBuiltinAgentTemplate(agentId)
+        return clone(buildAgentBundlePreview({ files: [] }, undefined)) as ImportWorkspaceAgentBundleResult
+      },
+      async copyToProject(projectId, agentId) {
+        copyBuiltinAgentTemplate(agentId, projectId)
+        return clone(buildAgentBundlePreview({ files: [] }, projectId)) as ImportWorkspaceAgentBundleResult
+      },
       async previewImportBundle(input, projectId) {
         return clone(buildAgentBundlePreview(input, projectId))
       },
@@ -732,6 +820,14 @@ export function createWorkspaceClientFixture(
     teams: {
       async list() {
         return clone(workspaceState.teams)
+      },
+      async copyToWorkspace(teamId) {
+        copyBuiltinTeamTemplate(teamId)
+        return clone(buildAgentBundlePreview({ files: [] }, undefined)) as ImportWorkspaceAgentBundleResult
+      },
+      async copyToProject(projectId, teamId) {
+        copyBuiltinTeamTemplate(teamId, projectId)
+        return clone(buildAgentBundlePreview({ files: [] }, projectId)) as ImportWorkspaceAgentBundleResult
       },
       async create(input) {
         const id = `team-${Date.now()}`
@@ -988,6 +1084,40 @@ export function createWorkspaceClientFixture(
             code: 'NOT_FOUND',
           })
         }
+        return clone(document)
+      },
+      async copyMcpServerToManaged(serverName: string) {
+        const current = workspaceState.mcpDocuments[serverName]
+        if (!current || current.scope !== 'builtin') {
+          throw new WorkspaceApiError({
+            message: 'builtin MCP server not found',
+            status: 404,
+            requestId: 'req-builtin-mcp-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+
+        const document: WorkspaceMcpServerDocument = {
+          ...current,
+          displayPath: 'config/runtime/workspace.json',
+          scope: 'workspace',
+        }
+        workspaceState.mcpDocuments = {
+          ...workspaceState.mcpDocuments,
+          [serverName]: document,
+        }
+        replaceToolCatalogEntry(createMcpCatalogEntry(workspaceState.workspace.id, document, false, {
+          ownerScope: 'workspace',
+          ownerId: workspaceState.workspace.id,
+          ownerLabel: workspaceState.workspace.name,
+          consumers: findToolCatalogEntry(current.sourceKey)?.consumers,
+          toolNames: findToolCatalogEntry(current.sourceKey)?.kind === 'mcp'
+            ? findToolCatalogEntry(current.sourceKey)?.toolNames
+            : [],
+          description: 'Configured MCP server.',
+        }))
+        syncManagedToolConfig()
         return clone(document)
       },
       async createMcpServer(input) {

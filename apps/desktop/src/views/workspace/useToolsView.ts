@@ -162,6 +162,8 @@ export function useToolsView() {
         entry.description,
         entry.displayPath,
         entry.sourceKey,
+        entry.ownerLabel ?? '',
+        ...(entry.consumers?.map(consumer => consumer.name) ?? []),
         entry.kind,
         entry.availability,
         entry.requiredPermission ?? '',
@@ -175,6 +177,7 @@ export function useToolsView() {
         entry.kind === 'mcp' ? entry.toolNames.join(' ') : '',
         entry.kind === 'mcp' ? entry.statusDetail ?? '' : '',
         entry.kind === 'mcp' ? entry.scope : '',
+        entry.ownerScope ?? '',
       ]
         .join(' ')
         .toLowerCase()
@@ -219,6 +222,9 @@ export function useToolsView() {
   )
   const canCopySkillToManaged = computed(() =>
     Boolean(selectedSkillEntry.value && !selectedSkillEntry.value.workspaceOwned),
+  )
+  const canCopyMcpToManaged = computed(() =>
+    Boolean(selectedMcpEntry.value && selectedMcpEntry.value.scope === 'builtin'),
   )
   const canCopySelectedSkillsToManaged = computed(() => selectedExternalSkillEntries.value.length > 0)
   const pendingSkillActionTitle = computed(() =>
@@ -433,6 +439,15 @@ export function useToolsView() {
     return t(`tools.requiredPermissions.${permission}`)
   }
 
+  function ownerScopeLabel(ownerScope: WorkspaceToolCatalogEntry['ownerScope']) {
+    if (!ownerScope) {
+      return t('common.na')
+    }
+    const translationKey = `tools.ownerScopes.${ownerScope}`
+    const translated = t(translationKey)
+    return translated === translationKey ? ownerScope : translated
+  }
+
   function sourceOriginLabel(entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) {
     return t(`tools.sourceOrigins.${entry.sourceOrigin}`)
   }
@@ -619,6 +634,24 @@ export function useToolsView() {
     }
 
     openSkillCopyDialog([selectedSkillEntry.value])
+  }
+
+  async function copySelectedMcpToManaged() {
+    if (!selectedMcpEntry.value || selectedMcpEntry.value.scope !== 'builtin') {
+      return
+    }
+
+    panelError.value = ''
+    submitting.value = true
+    try {
+      const document = await catalogStore.copyMcpServerToManaged(selectedMcpEntry.value.serverName)
+      selectedEntryId.value = catalogStore.toolCatalogEntries
+        .find(entry => entry.kind === 'mcp' && entry.serverName === document.serverName)?.id ?? ''
+    } catch (error) {
+      panelError.value = toErrorMessage(error)
+    } finally {
+      submitting.value = false
+    }
   }
 
   function copySelectedSkillsToManaged() {
@@ -836,6 +869,7 @@ export function useToolsView() {
     selectedSkillTreeRows,
     canSaveSkillFile,
     canCopySkillToManaged,
+    canCopyMcpToManaged,
     canCopySelectedSkillsToManaged,
     pendingSkillActionTitle,
     pendingSkillActionDescription,
@@ -846,6 +880,7 @@ export function useToolsView() {
     kindLabel,
     availabilityLabel,
     permissionLabel,
+    ownerScopeLabel,
     sourceOriginLabel,
     skillStateLabel,
     fileTypeLabel,
@@ -860,6 +895,7 @@ export function useToolsView() {
     importArchiveSkill,
     importFolderSkill,
     copySelectedSkillToManaged,
+    copySelectedMcpToManaged,
     copySelectedSkillsToManaged,
     selectEntry,
     listPagination,

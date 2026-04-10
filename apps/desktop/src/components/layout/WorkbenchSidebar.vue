@@ -516,10 +516,13 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
           <button
             type="button"
             data-testid="sidebar-workspace-menu-trigger"
-            class="group flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-l)] border border-transparent p-2 text-left transition-colors hover:border-border hover:bg-accent"
-            :class="{ 'border-border bg-accent shadow-xs': workspaceMenuOpen }"
+            class="workspace-menu-trigger group flex min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-l)] border border-transparent p-2 text-left transition-colors"
+            :class="{ 'workspace-menu-trigger--open shadow-xs': workspaceMenuOpen }"
           >
-            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-m)] bg-accent text-primary shadow-xs">
+            <div
+              data-testid="sidebar-workspace-menu-trigger-icon"
+              class="workspace-menu-trigger__icon flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-m)] shadow-xs"
+            >
               <LayoutDashboard :size="18" />
             </div>
             <div class="flex min-w-0 flex-1 flex-col">
@@ -647,3 +650,16 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
     </UiDialog>
   </aside>
 </template>
+
+<style scoped>
+.workspace-menu-trigger:hover,
+.workspace-menu-trigger--open {
+  border-color: color-mix(in srgb, var(--color-status-warning) 28%, var(--border));
+  background: color-mix(in srgb, var(--color-status-warning) 10%, var(--bg-surface));
+}
+
+.workspace-menu-trigger__icon {
+  background: color-mix(in srgb, var(--color-status-warning) 18%, var(--bg-surface));
+  color: var(--color-status-warning);
+}
+</style>

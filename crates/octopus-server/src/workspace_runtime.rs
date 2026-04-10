@@ -449,6 +449,21 @@ pub(crate) async fn import_agent_bundle_route(
     ))
 }
 
+pub(crate) async fn copy_workspace_agent_from_builtin_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(agent_id): Path<String>,
+) -> Result<Json<ImportWorkspaceAgentBundleResult>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.write", None).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .copy_workspace_agent_from_builtin(&agent_id)
+            .await?,
+    ))
+}
+
 pub(crate) async fn export_agent_bundle_route(
     State(state): State<ServerState>,
     headers: HeaderMap,
@@ -488,6 +503,21 @@ pub(crate) async fn import_project_agent_bundle_route(
             .services
             .workspace
             .import_project_agent_bundle(&project_id, input)
+            .await?,
+    ))
+}
+
+pub(crate) async fn copy_project_agent_from_builtin_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((project_id, agent_id)): Path<(String, String)>,
+) -> Result<Json<ImportWorkspaceAgentBundleResult>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.write", Some(&project_id)).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .copy_project_agent_from_builtin(&project_id, &agent_id)
             .await?,
     ))
 }
@@ -593,6 +623,36 @@ pub(crate) async fn delete_team(
     ensure_authorized_session(&state, &headers, "workspace.read", None).await?;
     state.services.workspace.delete_team(&team_id).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub(crate) async fn copy_workspace_team_from_builtin_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(team_id): Path<String>,
+) -> Result<Json<ImportWorkspaceAgentBundleResult>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.write", None).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .copy_workspace_team_from_builtin(&team_id)
+            .await?,
+    ))
+}
+
+pub(crate) async fn copy_project_team_from_builtin_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((project_id, team_id)): Path<(String, String)>,
+) -> Result<Json<ImportWorkspaceAgentBundleResult>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.write", Some(&project_id)).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .copy_project_team_from_builtin(&project_id, &team_id)
+            .await?,
+    ))
 }
 
 pub(crate) async fn list_project_agent_links(
@@ -940,6 +1000,21 @@ pub(crate) async fn delete_workspace_mcp_server_route(
         .delete_workspace_mcp_server(&server_name)
         .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub(crate) async fn copy_workspace_mcp_server_to_managed_route(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(server_name): Path<String>,
+) -> Result<Json<WorkspaceMcpServerDocument>, ApiError> {
+    ensure_authorized_session(&state, &headers, "workspace.write", None).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .copy_workspace_mcp_server_to_managed(&server_name)
+            .await?,
+    ))
 }
 
 pub(crate) async fn list_tools(

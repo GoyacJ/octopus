@@ -447,6 +447,10 @@ pub(crate) fn execute_agent_bundle_import(
             .count() as u64,
         unique_skill_count: skill_results.len() as u64,
         unique_mcp_count: 0,
+        agent_count: agent_results.len() as u64,
+        team_count: 0,
+        skill_count: skill_results.len() as u64,
+        mcp_count: 0,
         avatar_count: 0,
         filtered_file_count: plan.filtered_file_count,
         agents: agent_results,
@@ -834,6 +838,8 @@ fn plan_to_preview(plan: &BundlePlan) -> ImportWorkspaceAgentBundlePreview {
         department_count: plan.departments.len() as u64,
         detected_agent_count: plan.detected_agent_count,
         importable_agent_count: plan.agents.len() as u64,
+        detected_team_count: 0,
+        importable_team_count: 0,
         create_count: plan
             .agents
             .iter()
@@ -855,6 +861,12 @@ fn plan_to_preview(plan: &BundlePlan) -> ImportWorkspaceAgentBundlePreview {
             .filter(|issue| issue.severity == ISSUE_ERROR)
             .count() as u64,
         unique_skill_count: plan.skills.len() as u64,
+        unique_mcp_count: 0,
+        agent_count: plan.agents.len() as u64,
+        team_count: 0,
+        skill_count: plan.skills.len() as u64,
+        mcp_count: 0,
+        avatar_count: 0,
         filtered_file_count: plan.filtered_file_count,
         agents: plan
             .agents
@@ -888,10 +900,6 @@ fn plan_to_preview(plan: &BundlePlan) -> ImportWorkspaceAgentBundlePreview {
         mcps: Vec::new(),
         avatars: Vec::new(),
         issues: plan.issues.clone(),
-        detected_team_count: 0,
-        importable_team_count: 0,
-        unique_mcp_count: 0,
-        avatar_count: 0,
     }
 }
 

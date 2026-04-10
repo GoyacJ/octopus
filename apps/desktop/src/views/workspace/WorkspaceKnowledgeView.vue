@@ -17,6 +17,12 @@ import { formatDateTime } from '@/i18n/copy'
 import { useKnowledgeStore } from '@/stores/knowledge'
 import { useShellStore } from '@/stores/shell'
 
+const props = withDefaults(defineProps<{
+  embedded?: boolean
+}>(), {
+  embedded: false,
+})
+
 const { t } = useI18n()
 const knowledgeStore = useKnowledgeStore()
 const shell = useShellStore()
@@ -50,8 +56,15 @@ const entries = computed(() => {
 </script>
 
 <template>
-  <UiPageShell width="standard" test-id="workspace-knowledge-view">
+  <component
+    :is="props.embedded ? 'div' : UiPageShell"
+    :width="props.embedded ? undefined : 'standard'"
+    :test-id="props.embedded ? undefined : 'workspace-knowledge-view'"
+    :data-testid="props.embedded ? 'workspace-knowledge-embedded' : undefined"
+    class="space-y-6"
+  >
     <UiPageHeader
+      v-if="!props.embedded"
       :eyebrow="t('knowledge.header.workspaceEyebrow')"
       :title="t('sidebar.navigation.knowledge')"
       :description="t('knowledge.header.workspaceSubtitle')"
@@ -64,6 +77,14 @@ const entries = computed(() => {
         />
       </template>
     </UiPageHeader>
+
+    <div v-else class="flex justify-end">
+      <UiInput
+        v-model="searchQuery"
+        :placeholder="t('knowledge.filters.searchPlaceholder')"
+        class="w-full md:w-[320px]"
+      />
+    </div>
 
     <UiStatusCallout
       v-if="knowledgeStore.error"
@@ -99,5 +120,5 @@ const entries = computed(() => {
         :description="t('knowledge.empty.workspaceDescription')"
       />
     </UiPanelFrame>
-  </UiPageShell>
+  </component>
 </template>

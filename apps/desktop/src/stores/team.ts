@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import type {
+  ImportWorkspaceAgentBundleResult,
   ProjectTeamLinkInput,
   ProjectTeamLinkRecord,
   TeamRecord,
@@ -190,6 +191,23 @@ export const useTeamStore = defineStore('team', () => {
     }
   }
 
+  async function copyToWorkspace(teamId: string): Promise<ImportWorkspaceAgentBundleResult> {
+    const { client, connectionId } = ensureWorkspaceClientForConnection()
+    const result = await client.teams.copyToWorkspace(teamId)
+    await load(connectionId)
+    return result
+  }
+
+  async function copyToProject(projectId: string, teamId: string): Promise<ImportWorkspaceAgentBundleResult> {
+    const { client, connectionId } = ensureWorkspaceClientForConnection()
+    const result = await client.teams.copyToProject(projectId, teamId)
+    await Promise.all([
+      load(connectionId),
+      loadProjectLinks(projectId, connectionId),
+    ])
+    return result
+  }
+
   return {
     teams,
     workspaceTeams,
@@ -205,5 +223,7 @@ export const useTeamStore = defineStore('team', () => {
     remove,
     linkProject,
     unlinkProject,
+    copyToWorkspace,
+    copyToProject,
   }
 })

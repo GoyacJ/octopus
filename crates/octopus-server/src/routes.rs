@@ -101,10 +101,18 @@ pub fn build_router(state: ServerState) -> Router {
             "/api/v1/workspace/agents/:agent_id",
             patch(update_agent).delete(delete_agent),
         )
+        .route(
+            "/api/v1/workspace/agents/:agent_id/copy-to-workspace",
+            post(copy_workspace_agent_from_builtin_route),
+        )
         .route("/api/v1/workspace/teams", get(list_teams).post(create_team))
         .route(
             "/api/v1/workspace/teams/:team_id",
             patch(update_team).delete(delete_team),
+        )
+        .route(
+            "/api/v1/workspace/teams/:team_id/copy-to-workspace",
+            post(copy_workspace_team_from_builtin_route),
         )
         .route(
             "/api/v1/workspace/catalog/models",
@@ -161,6 +169,10 @@ pub fn build_router(state: ServerState) -> Router {
             get(get_workspace_mcp_server_route)
                 .patch(update_workspace_mcp_server_route)
                 .delete(delete_workspace_mcp_server_route),
+        )
+        .route(
+            "/api/v1/workspace/catalog/mcp-servers/:server_name/copy-to-managed",
+            post(copy_workspace_mcp_server_to_managed_route),
         )
         .route(
             "/api/v1/workspace/catalog/tools",
@@ -286,12 +298,20 @@ pub fn build_router(state: ServerState) -> Router {
             post(export_project_agent_bundle_route),
         )
         .route(
+            "/api/v1/projects/:project_id/agents/:agent_id/copy-to-project",
+            post(copy_project_agent_from_builtin_route),
+        )
+        .route(
             "/api/v1/projects/:project_id/agent-links/:agent_id",
             delete(unlink_project_agent),
         )
         .route(
             "/api/v1/projects/:project_id/team-links",
             get(list_project_team_links).post(link_project_team),
+        )
+        .route(
+            "/api/v1/projects/:project_id/teams/:team_id/copy-to-project",
+            post(copy_project_team_from_builtin_route),
         )
         .route(
             "/api/v1/projects/:project_id/team-links/:team_id",

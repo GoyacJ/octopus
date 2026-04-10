@@ -27,6 +27,12 @@ import { useShellStore } from '@/stores/shell'
 import { useTeamStore } from '@/stores/team'
 import { useWorkspaceStore } from '@/stores/workspace'
 
+const props = withDefaults(defineProps<{
+  embedded?: boolean
+}>(), {
+  embedded: false,
+})
+
 const { t } = useI18n()
 const agentStore = useAgentStore()
 const catalogStore = useCatalogStore()
@@ -229,8 +235,16 @@ function statusLabel(status: ProjectRecord['status']) {
 </script>
 
 <template>
-  <UiPageShell v-if="viewReady" width="standard" test-id="workspace-projects-view">
+  <component
+    :is="props.embedded ? 'div' : UiPageShell"
+    v-if="viewReady"
+    :width="props.embedded ? undefined : 'standard'"
+    :test-id="props.embedded ? undefined : 'workspace-projects-view'"
+    :data-testid="props.embedded ? 'workspace-projects-embedded' : undefined"
+    class="space-y-6"
+  >
     <UiPageHeader
+      v-if="!props.embedded"
       :eyebrow="t('projects.header.eyebrow')"
       :title="t('sidebar.navigation.projects')"
       :description="errorMessage || t('projects.header.subtitle')"
@@ -241,6 +255,12 @@ function statusLabel(status: ProjectRecord['status']) {
         </UiButton>
       </template>
     </UiPageHeader>
+
+    <div v-else class="flex justify-end">
+      <UiButton data-testid="projects-create-header-button" @click="applyProject()">
+        {{ t('projects.actions.create') }}
+      </UiButton>
+    </div>
 
     <section class="space-y-4">
       <div class="grid gap-3 md:grid-cols-3">
@@ -475,5 +495,5 @@ function statusLabel(status: ProjectRecord['status']) {
         </div>
       </UiInspectorPanel>
     </UiListDetailShell>
-  </UiPageShell>
+  </component>
 </template>

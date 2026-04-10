@@ -61,6 +61,12 @@ function decodeBase64(value: string): Uint8Array {
   return bytes
 }
 
+function copyBytesToArrayBuffer(bytes: Uint8Array<ArrayBufferLike>): ArrayBuffer {
+  const buffer = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(buffer).set(bytes)
+  return buffer
+}
+
 function contentTypeFromPath(fileName: string) {
   const lower = fileName.toLowerCase()
   if (lower.endsWith('.md')) {
@@ -115,7 +121,7 @@ async function unzipBrowserArchive(file: File): Promise<WorkspaceDirectoryUpload
       .filter(item => !item.dir && !item.name.startsWith('__MACOSX/'))
       .map(async (item) => {
         const bytes = await item.async('uint8array')
-        const blob = new Blob([bytes], { type: contentTypeFromPath(item.name) })
+        const blob = new Blob([copyBytesToArrayBuffer(bytes)], { type: contentTypeFromPath(item.name) })
         const payload = await readBrowserFile(new File([blob], item.name.split('/').pop() ?? item.name, {
           type: blob.type,
         }))

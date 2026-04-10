@@ -89,7 +89,7 @@ export interface AgentRecord {
 export type TeamRecord = OpenApiTeamRecord
 
 export interface WorkspaceLinkIntegrationSource {
-  kind: 'workspace-link'
+  kind: 'workspace-link' | 'builtin-template'
   sourceId: string
 }
 

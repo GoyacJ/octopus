@@ -644,12 +644,16 @@ impl WorkspaceService for InfraWorkspaceService {
     }
 
     async fn list_agents(&self) -> Result<Vec<AgentRecord>, AppError> {
-        Ok(self
+        let workspace_id = self.state.workspace_id()?;
+        let mut agents = self
             .state
             .agents
             .lock()
             .map_err(|_| AppError::runtime("agents mutex poisoned"))?
-            .clone())
+            .clone();
+        agents.extend(crate::agent_assets::list_builtin_agent_templates(&workspace_id)?);
+        agents.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
+        Ok(agents)
     }
 
     async fn create_agent(&self, input: UpsertAgentInput) -> Result<AgentRecord, AppError> {
@@ -802,18 +806,26 @@ impl WorkspaceService for InfraWorkspaceService {
             agent_assets::AssetTargetScope::Workspace,
             input,
         )?;
-        let next_agents = load_agents(&connection)?;
-        let next_teams = load_teams(&connection)?;
-        *self
-            .state
-            .agents
-            .lock()
-            .map_err(|_| AppError::runtime("agents mutex poisoned"))? = next_agents;
-        *self
-            .state
-            .teams
-            .lock()
-            .map_err(|_| AppError::runtime("teams mutex poisoned"))? = next_teams;
+        self.refresh_agent_and_team_caches(&connection)?;
+        Ok(result)
+    }
+
+    async fn copy_workspace_agent_from_builtin(
+        &self,
+        agent_id: &str,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
+        let files = crate::agent_assets::extract_builtin_agent_template_files(agent_id)?
+            .ok_or_else(|| AppError::not_found("builtin agent template"))?;
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        let result = agent_assets::execute_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            agent_assets::AssetTargetScope::Workspace,
+            ImportWorkspaceAgentBundleInput { files },
+        )?;
+        self.refresh_agent_and_team_caches(&connection)?;
         Ok(result)
     }
 
@@ -862,18 +874,27 @@ impl WorkspaceService for InfraWorkspaceService {
             agent_assets::AssetTargetScope::Project(project_id),
             input,
         )?;
-        let next_agents = load_agents(&connection)?;
-        let next_teams = load_teams(&connection)?;
-        *self
-            .state
-            .agents
-            .lock()
-            .map_err(|_| AppError::runtime("agents mutex poisoned"))? = next_agents;
-        *self
-            .state
-            .teams
-            .lock()
-            .map_err(|_| AppError::runtime("teams mutex poisoned"))? = next_teams;
+        self.refresh_agent_and_team_caches(&connection)?;
+        Ok(result)
+    }
+
+    async fn copy_project_agent_from_builtin(
+        &self,
+        project_id: &str,
+        agent_id: &str,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
+        let files = crate::agent_assets::extract_builtin_agent_template_files(agent_id)?
+            .ok_or_else(|| AppError::not_found("builtin agent template"))?;
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        let result = agent_assets::execute_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            agent_assets::AssetTargetScope::Project(project_id),
+            ImportWorkspaceAgentBundleInput { files },
+        )?;
+        self.refresh_agent_and_team_caches(&connection)?;
         Ok(result)
     }
 
@@ -952,12 +973,16 @@ impl WorkspaceService for InfraWorkspaceService {
     }
 
     async fn list_teams(&self) -> Result<Vec<TeamRecord>, AppError> {
-        Ok(self
+        let workspace_id = self.state.workspace_id()?;
+        let mut teams = self
             .state
             .teams
             .lock()
             .map_err(|_| AppError::runtime("teams mutex poisoned"))?
-            .clone())
+            .clone();
+        teams.extend(crate::agent_assets::list_builtin_team_templates(&workspace_id)?);
+        teams.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
+        Ok(teams)
     }
 
     async fn create_team(&self, input: UpsertTeamInput) -> Result<TeamRecord, AppError> {
@@ -1040,6 +1065,45 @@ impl WorkspaceService for InfraWorkspaceService {
             self.remove_avatar_file(record.avatar_path.as_deref())?;
         }
         Ok(())
+    }
+
+    async fn copy_workspace_team_from_builtin(
+        &self,
+        team_id: &str,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
+        let files = crate::agent_assets::extract_builtin_team_template_files(team_id)?
+            .ok_or_else(|| AppError::not_found("builtin team template"))?;
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        let result = agent_assets::execute_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            agent_assets::AssetTargetScope::Workspace,
+            ImportWorkspaceAgentBundleInput { files },
+        )?;
+        self.refresh_agent_and_team_caches(&connection)?;
+        Ok(result)
+    }
+
+    async fn copy_project_team_from_builtin(
+        &self,
+        project_id: &str,
+        team_id: &str,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
+        let files = crate::agent_assets::extract_builtin_team_template_files(team_id)?
+            .ok_or_else(|| AppError::not_found("builtin team template"))?;
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        let result = agent_assets::execute_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            agent_assets::AssetTargetScope::Project(project_id),
+            ImportWorkspaceAgentBundleInput { files },
+        )?;
+        self.refresh_agent_and_team_caches(&connection)?;
+        Ok(result)
     }
 
     async fn list_project_team_links(
@@ -1235,6 +1299,9 @@ impl WorkspaceService for InfraWorkspaceService {
         skill_id: &str,
         input: CopyWorkspaceSkillToManagedInput,
     ) -> Result<WorkspaceSkillDocument, AppError> {
+        if let Some(asset) = crate::agent_assets::find_builtin_skill_asset_by_id(skill_id)? {
+            return self.import_skill_files_to_managed_root(&input.slug, asset.files);
+        }
         let entry = self.find_skill_catalog_entry(skill_id)?;
         let source_root = skill_root_path(&entry.path, entry.origin)?;
         let files = match entry.origin {
@@ -1312,6 +1379,30 @@ impl WorkspaceService for InfraWorkspaceService {
         servers.insert(input.server_name.clone(), serde_json::Value::Object(config));
         self.save_workspace_runtime_document(document)?;
         self.load_mcp_server_document(&input.server_name)
+    }
+
+    async fn copy_workspace_mcp_server_to_managed(
+        &self,
+        server_name: &str,
+    ) -> Result<WorkspaceMcpServerDocument, AppError> {
+        let asset = crate::agent_assets::find_builtin_mcp_asset(server_name)?
+            .ok_or_else(|| AppError::not_found("builtin mcp server"))?;
+        let config = asset
+            .config
+            .as_object()
+            .cloned()
+            .ok_or_else(|| AppError::invalid_input("mcp server config must be a JSON object"))?;
+        let mut document = load_workspace_runtime_document(&self.state.paths)?;
+        let servers = ensure_top_level_object(&mut document, "mcpServers")?;
+        if servers.contains_key(server_name) {
+            return Err(AppError::conflict(format!(
+                "mcp server '{}' already exists",
+                server_name
+            )));
+        }
+        servers.insert(server_name.into(), serde_json::Value::Object(config));
+        self.save_workspace_runtime_document(document)?;
+        self.load_mcp_server_document(server_name)
     }
 
     async fn update_workspace_mcp_server(
@@ -2341,5 +2432,23 @@ impl WorkspaceService for InfraWorkspaceService {
             .map_err(|_| AppError::runtime("menus mutex poisoned"))?;
         Self::replace_or_push(&mut menus, record.clone(), |item| item.id == menu_id);
         Ok(record)
+    }
+}
+
+impl InfraWorkspaceService {
+    fn refresh_agent_and_team_caches(&self, connection: &Connection) -> Result<(), AppError> {
+        let next_agents = load_agents(connection)?;
+        let next_teams = load_teams(connection)?;
+        *self
+            .state
+            .agents
+            .lock()
+            .map_err(|_| AppError::runtime("agents mutex poisoned"))? = next_agents;
+        *self
+            .state
+            .teams
+            .lock()
+            .map_err(|_| AppError::runtime("teams mutex poisoned"))? = next_teams;
+        Ok(())
     }
 }

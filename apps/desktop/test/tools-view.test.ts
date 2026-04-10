@@ -132,6 +132,7 @@ describe('Workspace tools view', () => {
     managedCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
 
     await waitForText(mounted.container, 'Local Workspace')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('tools.ownerScopes.workspace')))
     expect(mounted.container.textContent).toContain('Architect Agent')
     expect(mounted.container.textContent).toContain('Studio Direction Team')
 
@@ -213,6 +214,54 @@ describe('Workspace tools view', () => {
     expect(findButton(mounted.container, String(i18n.global.t('common.delete')))).toBeUndefined()
     expect(mounted.container.textContent).toContain('examples/prompt.txt')
     expect(mounted.container.textContent).toContain(String(i18n.global.t('tools.states.readonly')))
+
+    mounted.destroy()
+  })
+
+  it('shows builtin bundle skills as readonly templates and supports copying them to managed skills', async () => {
+    const mounted = mountApp()
+
+    const skillTab = findTabButton(mounted.container, String(i18n.global.t('tools.tabs.skill')))
+    expect(skillTab).toBeDefined()
+    skillTab!.click()
+    await waitForText(mounted.container, 'financial-calculator')
+
+    const builtinCard = mounted.container.querySelector<HTMLElement>('[data-testid="tool-entry-skill-builtin-financial-calculator"]')
+    expect(builtinCard).toBeDefined()
+    builtinCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    await waitForText(mounted.container, 'builtin-assets/skills/financial-calculator/SKILL.md')
+    await waitForText(mounted.container, String(i18n.global.t('tools.sourceOrigins.builtin_bundle')))
+    await waitForText(mounted.container, 'Builtin')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('tools.ownerScopes.builtin')))
+    await waitForText(mounted.container, 'templates/formula.md')
+
+    expect(findButton(mounted.container, String(i18n.global.t('tools.actions.copyToManaged')))).toBeDefined()
+    expect(findButton(mounted.container, String(i18n.global.t('common.save')))).toBeUndefined()
+    expect(findButton(mounted.container, String(i18n.global.t('common.delete')))).toBeUndefined()
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('tools.states.readonly')))
+
+    const copyButton = findButton(mounted.container, String(i18n.global.t('tools.actions.copyToManaged')))
+    expect(copyButton).toBeDefined()
+    copyButton!.click()
+
+    const copyDescription = String(i18n.global.t('tools.editor.copySkillDescription'))
+    await waitForText(document.body, copyDescription)
+    const nameInput = findSkillCopyInput(document.body, 'skill-builtin-financial-calculator')
+    expect(nameInput).not.toBeNull()
+    expect(nameInput?.value).toBe('financial-calculator')
+    nameInput!.value = 'financial-calculator-copy'
+    nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
+
+    const confirmButton = findButton(document.body, String(i18n.global.t('common.confirm')))
+    expect(confirmButton).toBeDefined()
+    confirmButton!.click()
+
+    await waitForTextToDisappear(document.body, copyDescription)
+    await waitForText(mounted.container, 'data/skills/financial-calculator-copy/SKILL.md')
+
+    const copiedCard = mounted.container.querySelector<HTMLElement>('[data-testid="tool-entry-skill-workspace-financial-calculator-copy"]')
+    expect(copiedCard?.textContent).not.toContain(String(i18n.global.t('tools.states.readonly')))
 
     mounted.destroy()
   })
@@ -303,9 +352,19 @@ describe('Workspace tools view', () => {
     await waitForText(mounted.container, 'data/skills/external-help-batch/SKILL.md')
     await waitForText(mounted.container, 'data/skills/external-checks-batch/SKILL.md')
 
+    const searchInput = mounted.container.querySelector<HTMLInputElement>('input')
+    expect(searchInput).not.toBeNull()
+
+    searchInput!.value = 'external-help-batch'
+    searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    await waitForText(mounted.container, 'external-help-batch')
     const copiedHelpCard = mounted.container.querySelector<HTMLElement>('[data-testid="tool-entry-skill-workspace-external-help-batch"]')
-    const copiedChecksCard = mounted.container.querySelector<HTMLElement>('[data-testid="tool-entry-skill-workspace-external-checks-batch"]')
     expect(copiedHelpCard?.textContent).not.toContain(String(i18n.global.t('tools.states.readonly')))
+
+    searchInput!.value = 'external-checks-batch'
+    searchInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    await waitForText(mounted.container, 'external-checks-batch')
+    const copiedChecksCard = mounted.container.querySelector<HTMLElement>('[data-testid="tool-entry-skill-workspace-external-checks-batch"]')
     expect(copiedChecksCard?.textContent).not.toContain(String(i18n.global.t('tools.states.readonly')))
 
     mounted.destroy()
@@ -391,6 +450,39 @@ describe('Workspace tools view', () => {
     await waitForText(mounted.container, 'Desktop Redesign')
     expect(findButton(mounted.container, String(i18n.global.t('common.save')))).toBeUndefined()
     expect(findButton(mounted.container, String(i18n.global.t('common.delete')))).toBeUndefined()
+
+    mounted.destroy()
+  })
+
+  it('shows builtin MCP entries as readonly templates and copies them into managed MCP config', async () => {
+    const mounted = mountApp()
+
+    const mcpTab = findTabButton(mounted.container, String(i18n.global.t('tools.tabs.mcp')))
+    expect(mcpTab).toBeDefined()
+    mcpTab!.click()
+    await waitForText(mounted.container, 'finance-ops')
+
+    const builtinCard = mounted.container.querySelector<HTMLElement>('[data-testid="tool-entry-mcp-finance-ops"]')
+    expect(builtinCard).toBeDefined()
+    builtinCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    await waitForText(mounted.container, 'builtin-assets/mcps/finance-ops.json')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('tools.ownerScopes.builtin')))
+    expect(mounted.container.textContent).toContain('Finance Planner Template')
+    expect(mounted.container.textContent).toContain('Finance Ops Template')
+    expect(findButton(mounted.container, String(i18n.global.t('tools.actions.copyToManaged')))).toBeDefined()
+    expect(findButton(mounted.container, String(i18n.global.t('common.save')))).toBeUndefined()
+    expect(findButton(mounted.container, String(i18n.global.t('common.delete')))).toBeUndefined()
+
+    const copyButton = findButton(mounted.container, String(i18n.global.t('tools.actions.copyToManaged')))
+    expect(copyButton).toBeDefined()
+    copyButton!.click()
+
+    await waitForText(mounted.container, 'config/runtime/workspace.json')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('tools.ownerScopes.workspace')))
+    expect(mounted.container.textContent).toContain('Local Workspace')
+    await waitForText(mounted.container, String(i18n.global.t('common.save')))
+    await waitForText(mounted.container, String(i18n.global.t('common.delete')))
 
     mounted.destroy()
   })

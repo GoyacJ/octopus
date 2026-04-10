@@ -7,6 +7,12 @@ import SkillDetailPanel from './SkillDetailPanel.vue'
 import ToolsCatalogListPanel from './ToolsCatalogListPanel.vue'
 import { useToolsView } from './useToolsView'
 
+const props = withDefaults(defineProps<{
+  embedded?: boolean
+}>(), {
+  embedded: false,
+})
+
 const {
   t,
   catalogStore,
@@ -45,6 +51,7 @@ const {
   selectedSkillTreeRows,
   canSaveSkillFile,
   canCopySkillToManaged,
+  canCopyMcpToManaged,
   canCopySelectedSkillsToManaged,
   pendingSkillActionTitle,
   pendingSkillActionDescription,
@@ -55,6 +62,7 @@ const {
   kindLabel,
   availabilityLabel,
   permissionLabel,
+  ownerScopeLabel,
   skillStateLabel,
   sourceOriginLabel,
   fileTypeLabel,
@@ -69,6 +77,7 @@ const {
   importArchiveSkill,
   importFolderSkill,
   copySelectedSkillToManaged,
+  copySelectedMcpToManaged,
   copySelectedSkillsToManaged,
   selectEntry,
   selectSkillFile,
@@ -78,8 +87,15 @@ const {
 </script>
 
 <template>
-  <UiPageShell width="wide" test-id="workspace-tools-view">
+  <component
+    :is="props.embedded ? 'div' : UiPageShell"
+    :width="props.embedded ? undefined : 'wide'"
+    :test-id="props.embedded ? undefined : 'workspace-tools-view'"
+    :data-testid="props.embedded ? 'workspace-tools-embedded' : undefined"
+    class="space-y-6"
+  >
     <UiPageHeader
+      v-if="!props.embedded"
       :eyebrow="t('tools.header.eyebrow')"
       :title="t('sidebar.navigation.tools')"
       :description="t('tools.header.subtitle')"
@@ -110,6 +126,7 @@ const {
           :availability-label="availabilityLabel"
           :availability-tone="availabilityTone"
           :permission-label="permissionLabel"
+          :owner-scope-label="ownerScopeLabel"
           :skill-state-label="skillStateLabel"
           :source-origin-label="sourceOriginLabel"
           :is-external-skill-entry="isExternalSkillEntry"
@@ -229,6 +246,7 @@ const {
             :toggling="toggling"
             :availability-label="availabilityLabel"
             :availability-tone="availabilityTone"
+            :owner-scope-label="ownerScopeLabel"
             :skill-state-label="skillStateLabel"
             :source-origin-label="sourceOriginLabel"
             :file-type-label="fileTypeLabel"
@@ -250,12 +268,15 @@ const {
             :submitting="submitting"
             :deleting="deleting"
             :toggling="toggling"
+            :can-copy-mcp-to-managed="canCopyMcpToManaged"
             :availability-label="availabilityLabel"
             :availability-tone="availabilityTone"
+            :owner-scope-label="ownerScopeLabel"
             @update:mcp-config-draft="mcpConfigDraft = $event"
             @toggle-disabled="toggleDisabled(selectedMcpEntry, $event)"
             @save="saveCurrent"
             @delete="deleteCurrent"
+            @copy-to-managed="copySelectedMcpToManaged"
           />
 
           <div v-else class="space-y-4">
@@ -295,18 +316,27 @@ const {
                 </div>
               </div>
 
-              <div v-if="selectedEntry.ownerLabel" class="space-y-1">
+              <div v-if="selectedEntry.ownerScope || selectedEntry.ownerLabel" class="space-y-1">
                 <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
-                  {{ t('common.owner') }}
+                  {{ t('tools.detail.source') }}
                 </div>
-                <div class="text-[13px] text-text-primary">
-                  {{ selectedEntry.ownerLabel }}
+                <div class="flex flex-wrap gap-1.5">
+                  <UiBadge
+                    v-if="selectedEntry.ownerScope"
+                    :label="ownerScopeLabel(selectedEntry.ownerScope)"
+                    subtle
+                  />
+                  <UiBadge
+                    v-if="selectedEntry.ownerLabel"
+                    :label="selectedEntry.ownerLabel"
+                    subtle
+                  />
                 </div>
               </div>
 
               <div v-if="selectedEntry.consumers?.length" class="space-y-1">
                 <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
-                  使用者
+                  {{ t('tools.detail.consumers') }}
                 </div>
                 <div class="flex flex-wrap gap-1.5">
                   <UiBadge
@@ -354,11 +384,11 @@ const {
         <UiEmptyState
           v-else
           :title="t('tools.empty.selectionTitle')"
-          :description="t('tools.empty.selectionDescription')"
-        />
-      </UiInspectorPanel>
+        :description="t('tools.empty.selectionDescription')"
+      />
+    </UiInspectorPanel>
     </UiListDetailShell>
-  </UiPageShell>
+  </component>
 
   <SkillActionDialog
     :open="skillActionDialogOpen"

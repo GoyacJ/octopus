@@ -149,6 +149,11 @@ export interface WorkspaceClient {
     create: (input: UpsertAgentInput) => Promise<AgentRecord>
     update: (agentId: string, input: UpsertAgentInput) => Promise<AgentRecord>
     delete: (agentId: string) => Promise<void>
+    copyToWorkspace: (agentId: string) => Promise<ImportWorkspaceAgentBundleResult>
+    copyToProject: (
+      projectId: string,
+      agentId: string,
+    ) => Promise<ImportWorkspaceAgentBundleResult>
     previewImportBundle: (
       input: ImportWorkspaceAgentBundlePreviewInput,
       projectId?: string,
@@ -170,6 +175,11 @@ export interface WorkspaceClient {
     create: (input: UpsertTeamInput) => Promise<TeamRecord>
     update: (teamId: string, input: UpsertTeamInput) => Promise<TeamRecord>
     delete: (teamId: string) => Promise<void>
+    copyToWorkspace: (teamId: string) => Promise<ImportWorkspaceAgentBundleResult>
+    copyToProject: (
+      projectId: string,
+      teamId: string,
+    ) => Promise<ImportWorkspaceAgentBundleResult>
     listProjectLinks: (projectId: string) => Promise<ProjectTeamLinkRecord[]>
     linkProject: (input: ProjectTeamLinkInput) => Promise<ProjectTeamLinkRecord>
     unlinkProject: (projectId: string, teamId: string) => Promise<void>
@@ -196,6 +206,7 @@ export interface WorkspaceClient {
     ) => Promise<WorkspaceSkillDocument>
     deleteSkill: (skillId: string) => Promise<void>
     getMcpServer: (serverName: string) => Promise<WorkspaceMcpServerDocument>
+    copyMcpServerToManaged: (serverName: string) => Promise<WorkspaceMcpServerDocument>
     createMcpServer: (input: UpsertWorkspaceMcpServerInput) => Promise<WorkspaceMcpServerDocument>
     updateMcpServer: (
       serverName: string,

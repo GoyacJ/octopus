@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import JSZip from 'jszip'
 import { describe, expect, it, vi } from 'vitest'
 
 import {
@@ -480,6 +481,65 @@ describe('host client transport', () => {
     }).pickAgentBundleArchive()
 
     expect(invokeSpy).toHaveBeenCalledWith('pick_agent_bundle_archive')
+  })
+
+  it('unpacks browser agent bundle archives into directory entries', async () => {
+    vi.stubEnv('VITE_HOST_RUNTIME', 'browser')
+    vi.stubEnv('VITE_HOST_API_BASE_URL', 'http://127.0.0.1:43127')
+    vi.stubEnv('VITE_HOST_AUTH_TOKEN', 'browser-host-token')
+    delete (window as typeof window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__
+
+    const archive = new JSZip()
+    archive.file('finance-bundle/avatars/octopus.png', Uint8Array.of(137, 80, 78, 71))
+    archive.file('__MACOSX/ignored.txt', 'ignore me')
+
+    const zipBlob = await archive.generateAsync({ type: 'blob' })
+    const zipFile = new File([zipBlob], 'finance-bundle.zip', { type: 'application/zip' })
+    const originalCreateElement = document.createElement.bind(document)
+
+    vi.spyOn(document, 'createElement').mockImplementation(((tagName: string, options?: ElementCreationOptions) => {
+      const element = originalCreateElement(tagName, options)
+      if (tagName !== 'input') {
+        return element
+      }
+
+      const input = element as HTMLInputElement
+      const files = Object.assign([zipFile], {
+        item: (index: number) => [zipFile][index] ?? null,
+      }) as unknown as FileList
+
+      Object.defineProperty(input, 'files', {
+        configurable: true,
+        get: () => files,
+      })
+      input.click = () => {
+        input.dispatchEvent(new Event('change'))
+      }
+
+      return input
+    }) as typeof document.createElement)
+
+    const client = await loadClientModule()
+    const entries = await (client as typeof client & {
+      pickAgentBundleArchive: () => Promise<unknown>
+    }).pickAgentBundleArchive() as Array<{
+      fileName: string
+      relativePath: string
+      contentType: string
+      byteSize: number
+      dataBase64: string
+    }> | null
+
+    expect(entries).toEqual([
+      expect.objectContaining({
+        fileName: 'octopus.png',
+        relativePath: 'avatars/octopus.png',
+        contentType: 'image/png',
+        byteSize: 4,
+        dataBase64: 'iVBORw==',
+      }),
+    ])
+    expect(invokeSpy).not.toHaveBeenCalled()
   })
 
   it('bridges agent bundle export saving for folders and zip archives', async () => {

@@ -32,6 +32,7 @@ const props = defineProps<{
   toggling: boolean
   availabilityLabel: (availability: WorkspaceToolCatalogEntry['availability']) => string
   availabilityTone: (availability: WorkspaceToolCatalogEntry['availability']) => 'default' | 'success' | 'warning'
+  ownerScopeLabel: (ownerScope: WorkspaceToolCatalogEntry['ownerScope']) => string
   skillStateLabel: (entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) => string
   sourceOriginLabel: (entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) => string
   fileTypeLabel: (file: WorkspaceSkillFileDocument | null) => string
@@ -90,12 +91,21 @@ const { t } = useI18n()
         </div>
       </div>
 
-      <div v-if="entry.ownerLabel" class="space-y-1">
+      <div v-if="entry.ownerScope || entry.ownerLabel" class="space-y-1">
         <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
-          {{ t('common.owner') }}
+          {{ t('tools.detail.source') }}
         </div>
-        <div class="text-[13px] text-text-primary">
-          {{ entry.ownerLabel }}
+        <div class="flex flex-wrap gap-1.5">
+          <UiBadge
+            v-if="entry.ownerScope"
+            :label="ownerScopeLabel(entry.ownerScope)"
+            subtle
+          />
+          <UiBadge
+            v-if="entry.ownerLabel"
+            :label="entry.ownerLabel"
+            subtle
+          />
         </div>
       </div>
 
@@ -151,7 +161,7 @@ const { t } = useI18n()
 
       <div v-if="entry.consumers?.length" class="space-y-1">
         <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
-          使用者
+          {{ t('tools.detail.consumers') }}
         </div>
         <div class="flex flex-wrap gap-1.5">
           <UiBadge

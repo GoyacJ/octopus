@@ -418,6 +418,28 @@ export function createWorkspaceFixtureState(
           status: 'active',
           updatedAt: 98,
         },
+        {
+          id: 'agent-template-finance',
+          workspaceId: workspace.id,
+          scope: 'workspace',
+          name: 'Finance Planner Template',
+          avatarPath: 'builtin-assets/avatars/finance-planner.png',
+          avatar: 'data:image/png;base64,iVBORw0KGgo=',
+          personality: 'Deterministic finance specialist',
+          tags: ['finance', 'analysis'],
+          prompt: 'Create stable finance execution plans.',
+          builtinToolKeys: ['bash'],
+          skillIds: ['skill-builtin-financial-calculator'],
+          mcpServerNames: ['finance-ops'],
+          title: 'Builtin finance template',
+          description: 'Readonly builtin template for finance workflows.',
+          status: 'active',
+          updatedAt: 97,
+          integrationSource: {
+            kind: 'builtin-template',
+            sourceId: 'builtin-agent-finance',
+          },
+        },
       ]
     : [
         {
@@ -493,6 +515,29 @@ export function createWorkspaceFixtureState(
           description: 'Executes the desktop migration.',
           status: 'active',
           updatedAt: 99,
+        },
+        {
+          id: 'team-template-finance',
+          workspaceId: workspace.id,
+          scope: 'workspace',
+          name: 'Finance Ops Template',
+          avatarPath: 'builtin-assets/avatars/finance-ops.png',
+          avatar: 'data:image/png;base64,iVBORw0KGgo=',
+          personality: 'Builtin finance delivery pod',
+          tags: ['finance', 'ops'],
+          prompt: 'Coordinate finance operations and execution.',
+          builtinToolKeys: ['bash'],
+          skillIds: ['skill-builtin-financial-calculator'],
+          mcpServerNames: ['finance-ops'],
+          leaderAgentId: 'agent-template-finance',
+          memberAgentIds: ['agent-template-finance'],
+          description: 'Readonly builtin team template for finance operations.',
+          status: 'active',
+          updatedAt: 98,
+          integrationSource: {
+            kind: 'builtin-template',
+            sourceId: 'builtin-team-finance',
+          },
         },
       ]
     : [
@@ -860,6 +905,45 @@ export function createWorkspaceFixtureState(
     },
   })
 
+  const builtinFinancialCalculatorSkill = createSkillAsset({
+    id: 'skill-builtin-financial-calculator',
+    sourceKey: 'skill:builtin-assets/skills/financial-calculator/SKILL.md',
+    name: 'financial-calculator',
+    description: 'Builtin calculator skill bundle.',
+    displayPath: 'builtin-assets/skills/financial-calculator/SKILL.md',
+    workspaceOwned: false,
+    sourceOrigin: 'builtin_bundle',
+    files: {
+      'SKILL.md': createSkillFileDocument(
+        'skill-builtin-financial-calculator',
+        'skill:builtin-assets/skills/financial-calculator/SKILL.md',
+        'builtin-assets/skills/financial-calculator',
+        'SKILL.md',
+        {
+          content: [
+            '---',
+            'name: financial-calculator',
+            'description: Builtin calculator skill bundle.',
+            '---',
+            '',
+            '# Financial Calculator',
+          ].join('\n'),
+          readonly: true,
+        },
+      ),
+      'templates/formula.md': createSkillFileDocument(
+        'skill-builtin-financial-calculator',
+        'skill:builtin-assets/skills/financial-calculator/SKILL.md',
+        'builtin-assets/skills/financial-calculator',
+        'templates/formula.md',
+        {
+          content: '# Formula\n\n- gross_margin = revenue - cost',
+          readonly: true,
+        },
+      ),
+    },
+  })
+
   const projectRedesignSkill = createSkillAsset({
     id: 'skill-project-redesign-review',
     sourceKey: 'skill:data/projects/proj-redesign/skills/redesign-review/SKILL.md',
@@ -905,6 +989,7 @@ export function createWorkspaceFixtureState(
     [managedHelpSkill.document.id]: managedHelpSkill.document,
     [externalClaudeSkill.document.id]: externalClaudeSkill.document,
     [externalCodexSkill.document.id]: externalCodexSkill.document,
+    [builtinFinancialCalculatorSkill.document.id]: builtinFinancialCalculatorSkill.document,
     [projectRedesignSkill.document.id]: projectRedesignSkill.document,
   }
 
@@ -912,6 +997,7 @@ export function createWorkspaceFixtureState(
     [managedHelpSkill.document.id]: managedHelpSkill.files,
     [externalClaudeSkill.document.id]: externalClaudeSkill.files,
     [externalCodexSkill.document.id]: externalCodexSkill.files,
+    [builtinFinancialCalculatorSkill.document.id]: builtinFinancialCalculatorSkill.files,
     [projectRedesignSkill.document.id]: projectRedesignSkill.files,
   }
 
@@ -934,6 +1020,16 @@ export function createWorkspaceFixtureState(
       config: {
         type: 'stdio',
         command: 'octopus-redesign-mcp',
+      },
+    },
+    'finance-ops': {
+      serverName: 'finance-ops',
+      sourceKey: 'mcp:finance-ops',
+      displayPath: 'builtin-assets/mcps/finance-ops.json',
+      scope: 'builtin',
+      config: {
+        type: 'http',
+        url: 'https://finance.example.test/mcp',
       },
     },
   }
@@ -1109,6 +1205,11 @@ export function createWorkspaceFixtureState(
         ownerLabel: 'External Skill Source',
         consumers: [workspaceConsumers.coder],
       }),
+      createSkillCatalogEntry(workspace.id, builtinFinancialCalculatorSkill.document, false, {
+        ownerScope: 'builtin',
+        ownerLabel: 'Builtin',
+        consumers: [workspaceConsumers.architect],
+      }),
       createSkillCatalogEntry(workspace.id, projectRedesignSkill.document, false, {
         management: createManagementCapabilities(false, false, false),
         ownerScope: 'project',
@@ -1135,6 +1236,28 @@ export function createWorkspaceFixtureState(
         consumers: [projectConsumers.redesignAgent, projectConsumers.redesignTeam],
         toolNames: ['mcp__redesign_ops__capture_snapshot'],
         description: 'Project-scoped MCP server.',
+      }),
+      createMcpCatalogEntry(workspace.id, mcpDocuments['finance-ops'], false, {
+        management: createManagementCapabilities(true, false, false),
+        ownerScope: 'builtin',
+        ownerLabel: 'Builtin',
+        consumers: [
+          workspaceConsumers.architect,
+          {
+            kind: 'agent',
+            id: 'agent-template-finance',
+            name: 'Finance Planner Template',
+            scope: 'workspace',
+          },
+          {
+            kind: 'team',
+            id: 'team-template-finance',
+            name: 'Finance Ops Template',
+            scope: 'workspace',
+          },
+        ],
+        toolNames: ['mcp__finance_ops__run_report'],
+        description: 'Builtin finance MCP server.',
       }),
     ] satisfies WorkspaceToolCatalogEntry[],
   }

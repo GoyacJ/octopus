@@ -303,6 +303,20 @@ export function createCatalogActions(context: CatalogActionContext) {
     return document
   }
 
+  async function copyMcpServerToManaged(serverName: string) {
+    const { client, connectionId } = ensureWorkspaceClientForConnection()
+    const document = await client.catalog.copyMcpServerToManaged(serverName)
+    context.mcpDocumentsByConnection.value = {
+      ...context.mcpDocumentsByConnection.value,
+      [connectionId]: {
+        ...(context.mcpDocumentsByConnection.value[connectionId] ?? {}),
+        [document.serverName]: document,
+      },
+    }
+    await refreshToolCatalog(connectionId)
+    return document
+  }
+
   async function updateMcpServer(serverName: string, input: UpsertWorkspaceMcpServerInput) {
     const { client, connectionId } = ensureWorkspaceClientForConnection()
     const document = await client.catalog.updateMcpServer(serverName, input)
@@ -374,6 +388,7 @@ export function createCatalogActions(context: CatalogActionContext) {
     deleteSkill,
     getMcpServerDocument,
     createMcpServer,
+    copyMcpServerToManaged,
     updateMcpServer,
     deleteMcpServer,
     createTool,

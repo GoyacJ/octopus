@@ -104,23 +104,6 @@
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
 /api/v1/workspace/agents/{agentId}:
-  delete:
-    operationId: deleteWorkspaceAgent
-    parameters:
-      - in: path
-        name: agentId
-        required: true
-        schema:
-          type: string
-    responses:
-      "204":
-        description: Workspace agent deleted.
-      default:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApiErrorEnvelope"
-        description: API error envelope.
   patch:
     operationId: updateWorkspaceAgent
     parameters:
@@ -142,6 +125,45 @@
             schema:
               $ref: "#/components/schemas/AgentRecord"
         description: Updated workspace agent payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteWorkspaceAgent
+    parameters:
+      - in: path
+        name: agentId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace agent deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/agents/{agentId}/copy-to-workspace:
+  post:
+    operationId: copyWorkspaceAgentToWorkspace
+    parameters:
+      - in: path
+        name: agentId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportWorkspaceAgentBundleResult"
+        description: Builtin workspace agent template copied into workspace scope.
       default:
         content:
           application/json:
@@ -255,23 +277,6 @@
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
 /api/v1/workspace/catalog/mcp-servers/{serverName}:
-  delete:
-    operationId: deleteWorkspaceMcpServer
-    parameters:
-      - in: path
-        name: serverName
-        required: true
-        schema:
-          type: string
-    responses:
-      "204":
-        description: Workspace MCP server deleted.
-      default:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApiErrorEnvelope"
-        description: API error envelope.
   get:
     operationId: getWorkspaceMcpServer
     parameters:
@@ -314,6 +319,45 @@
             schema:
               $ref: "#/components/schemas/WorkspaceMcpServerDocument"
         description: Updated workspace MCP server payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteWorkspaceMcpServer
+    parameters:
+      - in: path
+        name: serverName
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Workspace MCP server deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/catalog/mcp-servers/{serverName}/copy-to-managed:
+  post:
+    operationId: copyWorkspaceMcpServerToManaged
+    parameters:
+      - in: path
+        name: serverName
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceMcpServerDocument"
+        description: Builtin MCP server copied into workspace managed runtime config.
       default:
         content:
           application/json:

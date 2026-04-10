@@ -8,6 +8,12 @@ import ModelDetailsDialog from './ModelDetailsDialog.vue'
 import ModelsTablePanel from './ModelsTablePanel.vue'
 import { useModelsDraft } from './useModelsDraft'
 
+const props = withDefaults(defineProps<{
+  embedded?: boolean
+}>(), {
+  embedded: false,
+})
+
 const {
   t,
   runtime,
@@ -57,8 +63,15 @@ const {
 </script>
 
 <template>
-  <UiPageShell width="wide" test-id="workspace-models-view">
+  <component
+    :is="props.embedded ? 'div' : UiPageShell"
+    :width="props.embedded ? undefined : 'wide'"
+    :test-id="props.embedded ? undefined : 'workspace-models-view'"
+    :data-testid="props.embedded ? 'workspace-models-embedded' : undefined"
+    class="space-y-6"
+  >
     <UiPageHeader
+      v-if="!props.embedded"
       :eyebrow="t('models.header.eyebrow')"
       :title="t('models.header.title')"
       :description="t('models.header.subtitle')"
@@ -70,6 +83,13 @@ const {
         </UiButton>
       </template>
     </UiPageHeader>
+
+    <div v-else class="flex justify-end">
+      <UiButton data-testid="models-create-button" size="sm" @click="openCreateDialog">
+        <Plus :size="14" />
+        {{ t('models.actions.create') }}
+      </UiButton>
+    </div>
 
     <ModelsTablePanel
       :paged-rows="pagedRows"
@@ -147,5 +167,5 @@ const {
       @update:create-enabled="createEnabled = $event"
       @submit="createConfiguredModel"
     />
-  </UiPageShell>
+  </component>
 </template>

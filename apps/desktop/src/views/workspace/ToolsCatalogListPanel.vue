@@ -34,6 +34,7 @@ defineProps<{
   availabilityLabel: (availability: WorkspaceToolCatalogEntry['availability']) => string
   availabilityTone: (availability: WorkspaceToolCatalogEntry['availability']) => 'default' | 'success' | 'warning'
   permissionLabel: (permission: WorkspaceToolCatalogEntry['requiredPermission']) => string
+  ownerScopeLabel: (ownerScope: WorkspaceToolCatalogEntry['ownerScope']) => string
   skillStateLabel: (entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) => string
   sourceOriginLabel: (entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) => string
   isExternalSkillEntry: (entry: WorkspaceToolCatalogEntry) => boolean
@@ -139,17 +140,13 @@ const { t } = useI18n()
           <UiBadge v-if="entry.kind === 'skill' && !entry.workspaceOwned" :label="t('tools.states.readonly')" subtle />
           <UiBadge v-if="entry.kind === 'skill' && !entry.workspaceOwned" :label="t('tools.states.external')" subtle />
           <UiBadge v-if="entry.kind === 'mcp' && entry.toolNames.length" :label="`${entry.toolNames.length} tools`" subtle />
+          <UiBadge v-if="entry.ownerScope" :label="ownerScopeLabel(entry.ownerScope)" subtle />
+          <UiBadge v-if="entry.ownerLabel" :label="entry.ownerLabel" subtle />
         </template>
 
         <div class="space-y-1">
           <p class="line-clamp-1 text-[12px] text-text-secondary">
             {{ entry.displayPath }}
-          </p>
-          <p
-            v-if="entry.ownerLabel"
-            class="text-[11px] text-text-tertiary"
-          >
-            {{ entry.ownerLabel }}
           </p>
           <p
             v-if="entry.kind === 'mcp' && entry.endpoint"
@@ -162,6 +159,16 @@ const { t } = useI18n()
             class="line-clamp-1 text-[11px] text-text-tertiary"
           >
             {{ t('tools.detail.shadowedBy') }}: {{ entry.shadowedBy }}
+          </p>
+          <p
+            v-if="entry.ownerScope || entry.ownerLabel"
+            class="text-[11px] text-text-tertiary"
+          >
+            {{ t('tools.detail.source') }}:
+            {{ entry.ownerScope ? ownerScopeLabel(entry.ownerScope) : t('common.na') }}
+            <template v-if="entry.ownerLabel">
+              · {{ entry.ownerLabel }}
+            </template>
           </p>
           <div
             v-if="entry.consumers?.length"

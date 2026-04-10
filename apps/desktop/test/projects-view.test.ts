@@ -7,6 +7,8 @@ import { createApp, nextTick } from 'vue'
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import ProjectsView from '@/views/workspace/ProjectsView.vue'
+import { useShellStore } from '@/stores/shell'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
@@ -45,6 +47,30 @@ function mountApp() {
   }
 }
 
+async function mountProjectsView(props?: Record<string, unknown>) {
+  const pinia = createPinia()
+  setActivePinia(pinia)
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+
+  const app = createApp(ProjectsView, props)
+  app.use(pinia)
+  app.use(i18n)
+  app.mount(container)
+
+  const shellStore = useShellStore()
+  await shellStore.bootstrap('ws-local', 'proj-redesign')
+  await nextTick()
+
+  return {
+    container,
+    destroy() {
+      app.unmount()
+      container.remove()
+    },
+  }
+}
+
 async function waitFor(predicate: () => boolean, timeoutMs = 2000) {
   const startedAt = Date.now()
   while (!predicate()) {
@@ -69,9 +95,10 @@ describe('Workspace project management view', () => {
   it('renders the project management view from workspace project data', async () => {
     const mounted = mountApp()
 
-    await waitFor(() => mounted.container.querySelector('[data-testid="workspace-projects-view"]') !== null)
+    await waitFor(() => mounted.container.querySelector('[data-testid="workspace-projects-embedded"]') !== null)
 
-    expect(mounted.container.querySelector('[data-testid="workspace-projects-view"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="workspace-console-view"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="workspace-projects-embedded"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Desktop Redesign')
     expect(mounted.container.textContent).toContain('Workspace Governance')
     expect(mounted.container.querySelector('[data-testid="projects-name-input"]')).not.toBeNull()
@@ -80,6 +107,18 @@ describe('Workspace project management view', () => {
     expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.tools.groups.builtin')))
     expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.tools.groups.skill')))
     expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.tools.groups.mcp')))
+
+    mounted.destroy()
+  })
+
+  it('supports an embedded mode without rendering the standalone page shell', async () => {
+    const mounted = await mountProjectsView({ embedded: true })
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="workspace-projects-embedded"]') !== null)
+
+    expect(mounted.container.querySelector('[data-testid="workspace-projects-embedded"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="workspace-projects-view"]')).toBeNull()
+    expect(mounted.container.textContent).toContain('Desktop Redesign')
 
     mounted.destroy()
   })

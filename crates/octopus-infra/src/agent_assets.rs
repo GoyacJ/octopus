@@ -54,6 +54,12 @@ static DEFAULT_EMPLOYEE_AVATARS: Dir<'_> =
     include_dir!("$CARGO_MANIFEST_DIR/../../packages/assets/header/employee");
 static DEFAULT_LEADER_AVATARS: Dir<'_> =
     include_dir!("$CARGO_MANIFEST_DIR/../../packages/assets/header/leader");
+static BUILTIN_BUNDLE_ASSET_DIR: Dir<'_> =
+    include_dir!("$CARGO_MANIFEST_DIR/seed/builtin-assets/bundle");
+static BUILTIN_MCP_ASSET_DIR: Dir<'_> =
+    include_dir!("$CARGO_MANIFEST_DIR/seed/builtin-assets/mcps");
+
+pub(crate) const BUILTIN_SKILL_DISPLAY_ROOT: &str = "builtin-assets/skills";
 
 #[derive(Debug, Clone)]
 pub(crate) enum AssetTargetScope<'a> {
@@ -108,6 +114,24 @@ impl AssetTargetScope<'_> {
 struct BundleFile {
     relative_path: String,
     bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BuiltinSkillAsset {
+    pub(crate) slug: String,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) display_path: String,
+    pub(crate) root_display_path: String,
+    pub(crate) source_ids: Vec<String>,
+    pub(crate) files: Vec<(String, Vec<u8>)>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BuiltinMcpAsset {
+    pub(crate) server_name: String,
+    pub(crate) display_path: String,
+    pub(crate) config: JsonValue,
 }
 
 #[derive(Debug, Clone)]
@@ -633,6 +657,10 @@ pub(crate) fn execute_import(
             .count() as u64,
         unique_skill_count: skill_results.len() as u64,
         unique_mcp_count: mcp_results.len() as u64,
+        agent_count: agent_results.len() as u64,
+        team_count: team_results.len() as u64,
+        skill_count: skill_results.len() as u64,
+        mcp_count: mcp_results.len() as u64,
         avatar_count: avatar_results.len() as u64,
         filtered_file_count: plan.filtered_file_count,
         agents: agent_results,
@@ -707,6 +735,7 @@ struct ExportContext {
     agents: Vec<AgentRecord>,
     teams: Vec<TeamRecord>,
     skill_paths: HashMap<String, PathBuf>,
+    builtin_skill_assets: HashMap<String, BuiltinSkillAsset>,
     mcp_configs: HashMap<String, JsonValue>,
     avatar_payloads: HashMap<String, (String, String, Vec<u8>)>,
     issues: Vec<ImportIssue>,
@@ -1259,6 +1288,339 @@ fn parse_bundle_files(
         mcps,
         avatars,
     })
+}
+
+pub(crate) fn list_builtin_skill_assets() -> Result<Vec<BuiltinSkillAsset>, AppError> {
+    let parsed = parse_builtin_bundle()?;
+
+    let mut unique_skills =
+        BTreeMap::<(String, String), (String, String, Vec<String>, Vec<(String, Vec<u8>)>)>::new();
+    for source in parsed.skills {
+        let description = source
+            .files
+            .iter()
+            .find(|(path, _)| path == SKILL_FRONTMATTER_FILE)
+            .and_then(|(_, bytes)| String::from_utf8(bytes.clone()).ok())
+            .and_then(|content| parse_frontmatter(&content).ok())
+            .and_then(|(frontmatter, _)| yaml_string(&frontmatter, "description"))
+            .unwrap_or_default();
+        unique_skills
+            .entry((source.canonical_slug.clone(), source.content_hash.clone()))
+            .or_insert_with(|| {
+                (
+                    source.name.clone(),
+                    description,
+                    Vec::new(),
+                    source.files.clone(),
+                )
+            })
+            .2
+            .push(source.source_id.clone());
+    }
+
+    let mut assigned_hash_by_slug = BTreeMap::<String, String>::new();
+    let mut assets = Vec::new();
+    for ((canonical_slug, content_hash), (name, description, mut source_ids, files)) in unique_skills
+    {
+        let slug = match assigned_hash_by_slug.get(&canonical_slug) {
+            Some(existing_hash) if existing_hash != &content_hash => {
+                format!("{canonical_slug}-{}", short_hash(&content_hash))
+            }
+            _ => canonical_slug,
+        };
+        assigned_hash_by_slug.insert(slug.clone(), content_hash);
+        source_ids.sort();
+        source_ids.dedup();
+        assets.push(BuiltinSkillAsset {
+            slug: slug.clone(),
+            name,
+            description,
+            display_path: format!("{BUILTIN_SKILL_DISPLAY_ROOT}/{slug}/{SKILL_FRONTMATTER_FILE}"),
+            root_display_path: format!("{BUILTIN_SKILL_DISPLAY_ROOT}/{slug}"),
+            source_ids,
+            files,
+        });
+    }
+    assets.sort_by(|left, right| left.name.cmp(&right.name).then(left.slug.cmp(&right.slug)));
+    Ok(assets)
+}
+
+pub(crate) fn find_builtin_skill_asset_by_id(
+    skill_id: &str,
+) -> Result<Option<BuiltinSkillAsset>, AppError> {
+    Ok(list_builtin_skill_assets()?
+        .into_iter()
+        .find(|asset| catalog_hash_id("skill", &asset.display_path) == skill_id))
+}
+
+pub(crate) fn list_builtin_agent_templates(
+    workspace_id: &str,
+) -> Result<Vec<AgentRecord>, AppError> {
+    let parsed = parse_builtin_bundle()?;
+    let skill_id_by_source = builtin_skill_id_by_source_id()?;
+    let mcp_name_by_source = parsed
+        .mcps
+        .iter()
+        .map(|mcp| (mcp.source_id.clone(), mcp.server_name.clone()))
+        .collect::<HashMap<_, _>>();
+
+    let mut records = parsed
+        .agents
+        .into_iter()
+        .filter(|agent| agent.team_name.is_none())
+        .map(|agent| AgentRecord {
+            id: catalog_hash_id("builtin-agent", &agent.source_id),
+            workspace_id: workspace_id.to_string(),
+            project_id: None,
+            scope: "workspace".into(),
+            name: agent.name.clone(),
+            avatar_path: None,
+            avatar: avatar_data_url(&agent.avatar),
+            personality: agent.personality.clone(),
+            tags: agent.tags.clone(),
+            prompt: agent.prompt.clone(),
+            builtin_tool_keys: agent.builtin_tool_keys.clone(),
+            skill_ids: agent
+                .skill_source_ids
+                .iter()
+                .filter_map(|source_id| skill_id_by_source.get(source_id))
+                .cloned()
+                .collect(),
+            mcp_server_names: agent
+                .mcp_source_ids
+                .iter()
+                .filter_map(|source_id| mcp_name_by_source.get(source_id))
+                .cloned()
+                .collect(),
+            integration_source: Some(octopus_core::WorkspaceLinkIntegrationSource {
+                kind: "builtin-template".into(),
+                source_id: agent.source_id,
+            }),
+            description: agent.description,
+            status: "active".into(),
+            updated_at: 0,
+        })
+        .collect::<Vec<_>>();
+    records.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
+    Ok(records)
+}
+
+pub(crate) fn list_builtin_team_templates(workspace_id: &str) -> Result<Vec<TeamRecord>, AppError> {
+    let parsed = parse_builtin_bundle()?;
+    let skill_id_by_source = builtin_skill_id_by_source_id()?;
+    let mcp_name_by_source = parsed
+        .mcps
+        .iter()
+        .map(|mcp| (mcp.source_id.clone(), mcp.server_name.clone()))
+        .collect::<HashMap<_, _>>();
+
+    let mut records = parsed
+        .teams
+        .into_iter()
+        .map(|team| TeamRecord {
+            id: catalog_hash_id("builtin-team", &team.source_id),
+            workspace_id: workspace_id.to_string(),
+            project_id: None,
+            scope: "workspace".into(),
+            name: team.name.clone(),
+            avatar_path: None,
+            avatar: avatar_data_url(&team.avatar),
+            personality: team.personality.clone(),
+            tags: team.tags.clone(),
+            prompt: team.prompt.clone(),
+            builtin_tool_keys: team.builtin_tool_keys.clone(),
+            skill_ids: team
+                .skill_source_ids
+                .iter()
+                .filter_map(|source_id| skill_id_by_source.get(source_id))
+                .cloned()
+                .collect(),
+            mcp_server_names: team
+                .mcp_source_ids
+                .iter()
+                .filter_map(|source_id| mcp_name_by_source.get(source_id))
+                .cloned()
+                .collect(),
+            leader_agent_id: None,
+            member_agent_ids: Vec::new(),
+            integration_source: Some(octopus_core::WorkspaceLinkIntegrationSource {
+                kind: "builtin-template".into(),
+                source_id: team.source_id,
+            }),
+            description: team.description,
+            status: "active".into(),
+            updated_at: 0,
+        })
+        .collect::<Vec<_>>();
+    records.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
+    Ok(records)
+}
+
+pub(crate) fn extract_builtin_agent_template_files(
+    agent_id: &str,
+) -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, AppError> {
+    let parsed = parse_builtin_bundle()?;
+    let Some(agent) = parsed
+        .agents
+        .iter()
+        .find(|agent| {
+            agent.team_name.is_none() && catalog_hash_id("builtin-agent", &agent.source_id) == agent_id
+        })
+    else {
+        return Ok(None);
+    };
+    Ok(Some(encode_builtin_bundle_entries(&agent.source_id)?))
+}
+
+pub(crate) fn extract_builtin_team_template_files(
+    team_id: &str,
+) -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, AppError> {
+    let parsed = parse_builtin_bundle()?;
+    let Some(team) = parsed
+        .teams
+        .iter()
+        .find(|team| catalog_hash_id("builtin-team", &team.source_id) == team_id)
+    else {
+        return Ok(None);
+    };
+    Ok(Some(encode_builtin_bundle_entries(&team.source_id)?))
+}
+
+pub(crate) fn list_builtin_mcp_assets() -> Result<Vec<BuiltinMcpAsset>, AppError> {
+    let mut assets = embedded_bundle_files(&BUILTIN_MCP_ASSET_DIR)?
+        .into_iter()
+        .filter(|file| file.relative_path.ends_with(".json"))
+        .map(|file| {
+            let server_name = Path::new(&file.relative_path)
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .ok_or_else(|| AppError::invalid_input("invalid builtin MCP file name"))?
+                .to_string();
+            let config = serde_json::from_slice::<JsonValue>(&file.bytes)?;
+            if !config.is_object() {
+                return Err(AppError::invalid_input(
+                    "builtin MCP config must be a JSON object",
+                ));
+            }
+            Ok(BuiltinMcpAsset {
+                server_name: server_name.clone(),
+                display_path: format!("builtin-assets/mcps/{}.json", server_name),
+                config,
+            })
+        })
+        .collect::<Result<Vec<_>, AppError>>()?;
+    assets.sort_by(|left, right| left.server_name.cmp(&right.server_name));
+    Ok(assets)
+}
+
+pub(crate) fn find_builtin_mcp_asset(
+    server_name: &str,
+) -> Result<Option<BuiltinMcpAsset>, AppError> {
+    Ok(list_builtin_mcp_assets()?
+        .into_iter()
+        .find(|asset| asset.server_name == server_name))
+}
+
+fn parse_builtin_bundle() -> Result<ParsedBundle, AppError> {
+    let bundle_files = embedded_bundle_files(&BUILTIN_BUNDLE_ASSET_DIR)?;
+    let mut issues = Vec::new();
+    let parsed = parse_bundle_files(&bundle_files, &AssetTargetScope::Workspace, &mut issues)?;
+    if let Some(issue) = issues.iter().find(|issue| issue.severity == ISSUE_ERROR) {
+        return Err(AppError::invalid_input(format!(
+            "invalid builtin asset bundle: {}",
+            issue.message
+        )));
+    }
+    Ok(parsed)
+}
+
+fn builtin_skill_id_by_source_id() -> Result<HashMap<String, String>, AppError> {
+    let mut map = HashMap::new();
+    for asset in list_builtin_skill_assets()? {
+        let skill_id = catalog_hash_id("skill", &asset.display_path);
+        for source_id in asset.source_ids {
+            map.insert(source_id, skill_id.clone());
+        }
+    }
+    Ok(map)
+}
+
+fn avatar_data_url(avatar: &ParsedAssetAvatar) -> Option<String> {
+    Some(format!(
+        "data:{};base64,{}",
+        avatar.content_type,
+        BASE64_STANDARD.encode(&avatar.bytes)
+    ))
+}
+
+fn encode_builtin_bundle_entries(
+    root_dir: &str,
+) -> Result<Vec<WorkspaceDirectoryUploadEntry>, AppError> {
+    let prefix = format!("{root_dir}/");
+    let mut files = embedded_bundle_files(&BUILTIN_BUNDLE_ASSET_DIR)?
+        .into_iter()
+        .filter(|file| file.relative_path == root_dir || file.relative_path.starts_with(&prefix))
+        .map(|file| {
+            encode_file(
+                &file.relative_path,
+                content_type_for_export(&file.relative_path),
+                file.bytes,
+            )
+        })
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    if files.is_empty() {
+        return Err(AppError::not_found("builtin template bundle"));
+    }
+    Ok(files)
+}
+
+fn embedded_bundle_files(dir: &Dir<'_>) -> Result<Vec<BundleFile>, AppError> {
+    let mut files = Vec::new();
+    collect_embedded_bundle_files(dir, "", &mut files)?;
+    files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+    Ok(files)
+}
+
+fn collect_embedded_bundle_files(
+    dir: &Dir<'_>,
+    prefix: &str,
+    files: &mut Vec<BundleFile>,
+) -> Result<(), AppError> {
+    for entry in dir.entries() {
+        match entry {
+            DirEntry::Dir(child) => {
+                let name = child
+                    .path()
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .ok_or_else(|| AppError::invalid_input("invalid builtin asset directory"))?;
+                let next_prefix = if prefix.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{prefix}/{name}")
+                };
+                collect_embedded_bundle_files(child, &next_prefix, files)?;
+            }
+            DirEntry::File(file) => {
+                let name = file
+                    .path()
+                    .file_name()
+                    .and_then(|value| value.to_str())
+                    .ok_or_else(|| AppError::invalid_input("invalid builtin asset file"))?;
+                let relative_path = if prefix.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{prefix}/{name}")
+                };
+                files.push(BundleFile {
+                    relative_path,
+                    bytes: file.contents().to_vec(),
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 fn parse_agent_dir(
@@ -2597,6 +2959,10 @@ fn plan_to_preview(plan: &BundlePlan) -> ImportWorkspaceAgentBundlePreview {
             .count() as u64,
         unique_skill_count: plan.skills.len() as u64,
         unique_mcp_count: plan.mcps.len() as u64,
+        agent_count: plan.agents.len() as u64,
+        team_count: plan.teams.len() as u64,
+        skill_count: plan.skills.len() as u64,
+        mcp_count: plan.mcps.len() as u64,
         avatar_count: plan.avatars.len() as u64,
         filtered_file_count: plan.filtered_file_count,
         agents: plan
@@ -2926,19 +3292,29 @@ fn export_owner_skill_and_mcp_files<T: ExportOwner>(
     files: &mut Vec<WorkspaceDirectoryUploadEntry>,
 ) -> Result<(), AppError> {
     for skill_id in owner.skill_ids() {
-        let Some(skill_root) = context.skill_paths.get(skill_id) else {
+        if let Some(skill_root) = context.skill_paths.get(skill_id) {
+            let skill_dir_name = skill_root
+                .file_name()
+                .and_then(|value| value.to_str())
+                .unwrap_or("skill");
+            for (relative_path, bytes) in read_directory_files(skill_root)? {
+                files.push(encode_file(
+                    &format!("{owner_dir}/skills/{skill_dir_name}/{relative_path}"),
+                    content_type_for_export(&relative_path),
+                    bytes,
+                ));
+            }
             continue;
-        };
-        let skill_dir_name = skill_root
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or("skill");
-        for (relative_path, bytes) in read_directory_files(skill_root)? {
-            files.push(encode_file(
-                &format!("{owner_dir}/skills/{skill_dir_name}/{relative_path}"),
-                content_type_for_export(&relative_path),
-                bytes,
-            ));
+        }
+
+        if let Some(asset) = context.builtin_skill_assets.get(skill_id) {
+            for (relative_path, bytes) in &asset.files {
+                files.push(encode_file(
+                    &format!("{owner_dir}/skills/{}/{relative_path}", asset.slug),
+                    content_type_for_export(relative_path),
+                    bytes.clone(),
+                ));
+            }
         }
     }
 
@@ -3004,51 +3380,42 @@ fn build_export_context(
         }
         AssetTargetScope::Project(project_id) => {
             let project_id = project_id.to_string();
+            let linked_agent_ids = load_project_linked_ids(
+                connection,
+                "SELECT agent_id FROM project_agent_links WHERE project_id = ?1",
+                project_id.as_str(),
+            )?;
+            let linked_team_ids = load_project_linked_ids(
+                connection,
+                "SELECT team_id FROM project_team_links WHERE project_id = ?1",
+                project_id.as_str(),
+            )?;
+
             teams.extend(load_teams(connection)?.into_iter().filter(|team| {
-                (team.project_id.as_deref() == Some(project_id.as_str())
-                    || input.team_ids.iter().any(|id| id == &team.id))
-                    && input.team_ids.iter().any(|id| id == &team.id)
+                input.team_ids.iter().any(|id| id == &team.id)
+                    && (team.project_id.as_deref() == Some(project_id.as_str())
+                        || linked_team_ids.contains(&team.id))
             }));
             agents.extend(load_agents(connection)?.into_iter().filter(|agent| {
-                (agent.project_id.as_deref() == Some(project_id.as_str())
-                    || input.agent_ids.iter().any(|id| id == &agent.id))
-                    && input.agent_ids.iter().any(|id| id == &agent.id)
+                input.agent_ids.iter().any(|id| id == &agent.id)
+                    && (agent.project_id.as_deref() == Some(project_id.as_str())
+                        || linked_agent_ids.contains(&agent.id))
             }));
             if input.mode == "batch" && input.team_ids.is_empty() && input.agent_ids.is_empty() {
                 teams = load_teams(connection)?
                     .into_iter()
-                    .filter(|team| team.project_id.as_deref() == Some(project_id.as_str()))
+                    .filter(|team| {
+                        team.project_id.as_deref() == Some(project_id.as_str())
+                            || linked_team_ids.contains(&team.id)
+                    })
                     .collect();
                 agents = load_agents(connection)?
                     .into_iter()
-                    .filter(|agent| agent.project_id.as_deref() == Some(project_id.as_str()))
+                    .filter(|agent| {
+                        agent.project_id.as_deref() == Some(project_id.as_str())
+                            || linked_agent_ids.contains(&agent.id)
+                    })
                     .collect();
-                let mut stmt = connection
-                    .prepare("SELECT agent_id FROM project_agent_links WHERE project_id = ?1")
-                    .map_err(|error| AppError::database(error.to_string()))?;
-                let linked_agent_ids = stmt
-                    .query_map(params![project_id.as_str()], |row| row.get::<_, String>(0))
-                    .map_err(|error| AppError::database(error.to_string()))?
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|error| AppError::database(error.to_string()))?;
-                let mut stmt = connection
-                    .prepare("SELECT team_id FROM project_team_links WHERE project_id = ?1")
-                    .map_err(|error| AppError::database(error.to_string()))?;
-                let linked_team_ids = stmt
-                    .query_map(params![project_id.as_str()], |row| row.get::<_, String>(0))
-                    .map_err(|error| AppError::database(error.to_string()))?
-                    .collect::<Result<Vec<_>, _>>()
-                    .map_err(|error| AppError::database(error.to_string()))?;
-                for agent in load_agents(connection)? {
-                    if linked_agent_ids.iter().any(|id| id == &agent.id) {
-                        agents.push(agent);
-                    }
-                }
-                for team in load_teams(connection)? {
-                    if linked_team_ids.iter().any(|id| id == &team.id) {
-                        teams.push(team);
-                    }
-                }
             }
         }
     }
@@ -3073,6 +3440,7 @@ fn build_export_context(
     }
 
     let skill_paths = resolve_skill_paths(paths, &agents, &teams)?;
+    let builtin_skill_assets = resolve_builtin_skill_assets(&agents, &teams)?;
     let mcp_configs = resolve_mcp_configs(paths, &target, &agents, &teams)?;
     let avatar_payloads = resolve_avatar_payloads(paths, &target, &agents, &teams)?;
     let root_dir_name = if input.mode == "single"
@@ -3094,10 +3462,28 @@ fn build_export_context(
         agents,
         teams,
         skill_paths,
+        builtin_skill_assets,
         mcp_configs,
         avatar_payloads,
         issues: Vec::new(),
     })
+}
+
+fn load_project_linked_ids(
+    connection: &Connection,
+    statement: &str,
+    project_id: &str,
+) -> Result<BTreeSet<String>, AppError> {
+    let mut stmt = connection
+        .prepare(statement)
+        .map_err(|error| AppError::database(error.to_string()))?;
+    let rows = stmt
+        .query_map(params![project_id], |row| row.get::<_, String>(0))
+        .map_err(|error| AppError::database(error.to_string()))?;
+    let ids = rows
+        .collect::<Result<BTreeSet<_>, _>>()
+        .map_err(|error| AppError::database(error.to_string()))?;
+    Ok(ids)
 }
 
 fn resolve_skill_paths(
@@ -3142,6 +3528,25 @@ fn resolve_skill_paths(
     Ok(resolved)
 }
 
+fn resolve_builtin_skill_assets(
+    agents: &[AgentRecord],
+    teams: &[TeamRecord],
+) -> Result<HashMap<String, BuiltinSkillAsset>, AppError> {
+    let referenced_ids = agents
+        .iter()
+        .flat_map(|agent| agent.skill_ids.iter())
+        .chain(teams.iter().flat_map(|team| team.skill_ids.iter()))
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let mut resolved = HashMap::new();
+    for skill_id in referenced_ids {
+        if let Some(asset) = find_builtin_skill_asset_by_id(&skill_id)? {
+            resolved.insert(skill_id, asset);
+        }
+    }
+    Ok(resolved)
+}
+
 fn resolve_mcp_configs(
     paths: &WorkspacePaths,
     target: &AssetTargetScope<'_>,
@@ -3157,6 +3562,10 @@ fn resolve_mcp_configs(
     {
         if let Some(config) = configs.get(server_name) {
             resolved.insert(server_name.clone(), config.clone());
+            continue;
+        }
+        if let Some(asset) = find_builtin_mcp_asset(server_name)? {
+            resolved.insert(server_name.clone(), asset.config);
         }
     }
     Ok(resolved)
@@ -3495,5 +3904,161 @@ mod tests {
         assert!(exported.files.iter().any(|file| {
             file.relative_path == "agent-bundle/项目财务分析师/skills/project-skill/SKILL.md"
         }));
+    }
+
+    #[test]
+    fn export_project_bundle_materializes_linked_workspace_builtin_dependencies() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = WorkspacePaths::new(temp.path());
+        paths.ensure_layout().expect("layout");
+        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        ensure_test_tables(&connection);
+
+        let builtin_skill = list_builtin_skill_assets()
+            .expect("builtin skills")
+            .into_iter()
+            .find(|asset| asset.slug == "financial-calculator")
+            .expect("financial-calculator builtin skill");
+        let builtin_skill_id = catalog_hash_id("skill", &builtin_skill.display_path);
+        let builtin_mcp = find_builtin_mcp_asset("finance-data")
+            .expect("builtin mcp lookup")
+            .expect("finance-data builtin mcp");
+
+        let agent_id = "agent-linked-workspace";
+        let record = AgentRecord {
+            id: agent_id.into(),
+            workspace_id: "ws-local".into(),
+            project_id: None,
+            scope: "workspace".into(),
+            name: "财务联动员工".into(),
+            avatar_path: None,
+            avatar: None,
+            personality: "处理项目联动财务任务".into(),
+            tags: vec!["财务".into()],
+            prompt: "# 角色定义\n处理项目财务联动\n".into(),
+            builtin_tool_keys: vec!["bash".into()],
+            skill_ids: vec![builtin_skill_id],
+            mcp_server_names: vec![builtin_mcp.server_name.clone()],
+            integration_source: None,
+            description: "工作区级财务员工".into(),
+            status: "active".into(),
+            updated_at: timestamp_now(),
+        };
+        write_agent_record(&connection, &record, false).expect("write workspace agent");
+        connection
+            .execute(
+                "INSERT INTO project_agent_links (workspace_id, project_id, agent_id, linked_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params!["ws-local", "proj-finance", agent_id, timestamp_now() as i64],
+            )
+            .expect("insert project agent link");
+
+        let exported = export_assets(
+            &connection,
+            &paths,
+            "ws-local",
+            AssetTargetScope::Project("proj-finance"),
+            ExportWorkspaceAgentBundleInput {
+                mode: "single".into(),
+                agent_ids: vec![agent_id.into()],
+                team_ids: Vec::new(),
+            },
+        )
+        .expect("export");
+
+        assert_eq!(exported.root_dir_name, "财务联动员工");
+        assert!(exported
+            .files
+            .iter()
+            .any(|file| file.relative_path == "财务联动员工/.octopus/manifest.json"));
+        assert!(exported.files.iter().any(|file| {
+            file.relative_path == "财务联动员工/skills/financial-calculator/SKILL.md"
+        }));
+        assert!(exported.files.iter().any(|file| {
+            file.relative_path == "财务联动员工/mcps/finance-data.json"
+        }));
+        assert!(exported.files.iter().any(|file| {
+            file.relative_path.starts_with("财务联动员工/")
+                && (file.relative_path.ends_with(".png")
+                    || file.relative_path.ends_with(".jpg")
+                    || file.relative_path.ends_with(".jpeg")
+                    || file.relative_path.ends_with(".webp"))
+        }));
+    }
+
+    #[test]
+    fn export_project_bundle_roundtrips_via_project_import() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = WorkspacePaths::new(temp.path());
+        paths.ensure_layout().expect("layout");
+        let connection = Connection::open(paths.db_path.clone()).expect("db");
+        ensure_test_tables(&connection);
+
+        let builtin_skill = list_builtin_skill_assets()
+            .expect("builtin skills")
+            .into_iter()
+            .find(|asset| asset.slug == "financial-calculator")
+            .expect("financial-calculator builtin skill");
+        let builtin_skill_id = catalog_hash_id("skill", &builtin_skill.display_path);
+
+        let agent_id = "agent-linked-roundtrip";
+        let record = AgentRecord {
+            id: agent_id.into(),
+            workspace_id: "ws-local".into(),
+            project_id: None,
+            scope: "workspace".into(),
+            name: "导出回导员工".into(),
+            avatar_path: None,
+            avatar: None,
+            personality: "负责导出回导验证".into(),
+            tags: vec!["回归".into()],
+            prompt: "# 角色定义\n导出后重新导入\n".into(),
+            builtin_tool_keys: vec!["bash".into()],
+            skill_ids: vec![builtin_skill_id],
+            mcp_server_names: vec!["finance-data".into()],
+            integration_source: None,
+            description: "验证项目导出闭包".into(),
+            status: "active".into(),
+            updated_at: timestamp_now(),
+        };
+        write_agent_record(&connection, &record, false).expect("write workspace agent");
+        connection
+            .execute(
+                "INSERT INTO project_agent_links (workspace_id, project_id, agent_id, linked_at)
+                 VALUES (?1, ?2, ?3, ?4)",
+                params!["ws-local", "proj-export", agent_id, timestamp_now() as i64],
+            )
+            .expect("insert project agent link");
+
+        let exported = export_assets(
+            &connection,
+            &paths,
+            "ws-local",
+            AssetTargetScope::Project("proj-export"),
+            ExportWorkspaceAgentBundleInput {
+                mode: "single".into(),
+                agent_ids: vec![agent_id.into()],
+                team_ids: Vec::new(),
+            },
+        )
+        .expect("export");
+
+        let imported = execute_import(
+            &connection,
+            &paths,
+            "ws-local",
+            AssetTargetScope::Project("proj-import"),
+            ImportWorkspaceAgentBundleInput {
+                files: exported.files,
+            },
+        )
+        .expect("import");
+
+        assert_eq!(imported.failure_count, 0);
+        assert_eq!(imported.agent_count, 1);
+        assert_eq!(imported.team_count, 0);
+        assert_eq!(imported.skill_count, 1);
+        assert_eq!(imported.mcp_count, 1);
+        assert_eq!(imported.avatar_count, 1);
     }
 }

@@ -539,56 +539,8 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
         }
     }
 
-    let agents_exist: Option<String> = connection
-        .query_row("SELECT id FROM agents LIMIT 1", [], |row| row.get(0))
-        .optional()
-        .map_err(|error| AppError::database(error.to_string()))?;
-    if agents_exist.is_none() {
-        let workspace_has_managed_skills = agent_seed::workspace_has_managed_skills(paths)?;
-        let seeded_agent_ids = if workspace_has_managed_skills {
-            Vec::new()
-        } else {
-            agent_seed::seed_bundled_agent_bundle(&connection, paths, DEFAULT_WORKSPACE_ID)?
-        };
-
-        if seeded_agent_ids.is_empty() && !workspace_has_managed_skills {
-            for record in default_agent_records() {
-                connection
-                    .execute(
-                        "INSERT INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-                        params![
-                            record.id,
-                            record.workspace_id,
-                            record.project_id,
-                            record.scope,
-                            record.name,
-                            record.avatar_path,
-                            record.personality,
-                            serde_json::to_string(&record.tags)?,
-                            record.prompt,
-                            serde_json::to_string(&record.builtin_tool_keys)?,
-                            serde_json::to_string(&record.skill_ids)?,
-                            serde_json::to_string(&record.mcp_server_names)?,
-                            record.description,
-                            record.status,
-                            record.updated_at as i64,
-                        ],
-                    )
-                    .map_err(|error| AppError::database(error.to_string()))?;
-            }
-        }
-    }
-
-    let teams_exist: Option<String> = connection
-        .query_row("SELECT id FROM teams LIMIT 1", [], |row| row.get(0))
-        .optional()
-        .map_err(|error| AppError::database(error.to_string()))?;
-    if teams_exist.is_none() {
-        for record in default_team_records() {
-            write_team_record(&connection, &record, false)?;
-        }
-    }
+    // Builtin agent/team assets are now exposed as readonly templates and are no longer
+    // materialized into editable workspace records during bootstrap.
 
     let models_exist: Option<String> = connection
         .query_row("SELECT id FROM model_catalog LIMIT 1", [], |row| row.get(0))
@@ -665,34 +617,8 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
         }
     }
 
-    let automations_exist: Option<String> = connection
-        .query_row("SELECT id FROM automations LIMIT 1", [], |row| row.get(0))
-        .optional()
-        .map_err(|error| AppError::database(error.to_string()))?;
-    if automations_exist.is_none() {
-        for record in default_automation_records() {
-            connection
-                .execute(
-                    "INSERT INTO automations (id, workspace_id, project_id, title, description, cadence, owner_type, owner_id, status, next_run_at, last_run_at, output)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
-                    params![
-                        record.id,
-                        record.workspace_id,
-                        record.project_id,
-                        record.title,
-                        record.description,
-                        record.cadence,
-                        record.owner_type,
-                        record.owner_id,
-                        record.status,
-                        record.next_run_at.map(|value| value as i64),
-                        record.last_run_at.map(|value| value as i64),
-                        record.output,
-                    ],
-                )
-                .map_err(|error| AppError::database(error.to_string()))?;
-        }
-    }
+    // Default automations are not seeded because builtin actors are no longer written into
+    // workspace/project tables at initialization time.
 
     let roles_exist: Option<String> = connection
         .query_row("SELECT id FROM roles LIMIT 1", [], |row| row.get(0))
@@ -2027,6 +1953,7 @@ pub(super) fn default_knowledge_records() -> Vec<KnowledgeRecord> {
     ]
 }
 
+#[allow(dead_code)]
 pub(super) fn default_agent_records() -> Vec<AgentRecord> {
     let now = timestamp_now();
     vec![
@@ -2071,6 +1998,7 @@ pub(super) fn default_agent_records() -> Vec<AgentRecord> {
     ]
 }
 
+#[allow(dead_code)]
 pub(super) fn default_team_records() -> Vec<TeamRecord> {
     let now = timestamp_now();
     vec![TeamRecord {
@@ -2168,6 +2096,7 @@ pub(super) fn default_tool_records() -> Vec<ToolRecord> {
     ]
 }
 
+#[allow(dead_code)]
 pub(super) fn default_automation_records() -> Vec<AutomationRecord> {
     let now = timestamp_now();
     vec![AutomationRecord {

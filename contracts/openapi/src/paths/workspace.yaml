@@ -595,6 +595,28 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/workspace/teams/{teamId}/copy-to-workspace:
+  post:
+    operationId: copyWorkspaceTeamToWorkspace
+    parameters:
+      - in: path
+        name: teamId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportWorkspaceAgentBundleResult"
+        description: Builtin workspace team template copied into workspace scope.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/workspace/permission-center/overview:
   get:
     operationId: getPermissionCenterOverview

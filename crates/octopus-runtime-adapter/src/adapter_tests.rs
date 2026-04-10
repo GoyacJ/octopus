@@ -917,16 +917,75 @@ async fn resolve_approval_reuses_selected_team_prompt_for_execution() {
     let connection = Connection::open(&infra.paths.db_path).expect("db");
     connection
             .execute(
-                "UPDATE teams SET personality = ?2, prompt = ?3, leader_agent_id = ?4, member_agent_ids = ?5 WHERE id = ?1",
+                "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
                 params![
-                    "team-workspace-core",
-                    "Cross-functional design review board",
-                    "Debate options, then return a single aligned answer.",
                     "agent-orchestrator",
-                    serde_json::to_string(&vec!["agent-orchestrator", "agent-project-delivery"]).expect("member ids"),
+                    octopus_core::DEFAULT_WORKSPACE_ID,
+                    Option::<String>::None,
+                    "workspace",
+                    "Orchestrator Agent",
+                    Option::<String>::None,
+                    "Systems thinker",
+                    serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                    "Coordinate the team response.",
+                    serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    "Leads team execution.",
+                    "active",
+                    timestamp_now() as i64,
                 ],
             )
-            .expect("update team prompt");
+            .expect("upsert orchestrator agent");
+    connection
+            .execute(
+                "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![
+                    "agent-project-delivery",
+                    octopus_core::DEFAULT_WORKSPACE_ID,
+                    Option::<String>::None,
+                    "workspace",
+                    "Project Delivery Agent",
+                    Option::<String>::None,
+                    "Structured and pragmatic",
+                    serde_json::to_string(&vec!["delivery"]).expect("tags"),
+                    "Keep project execution on track.",
+                    serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    "Supports cross-functional delivery.",
+                    "active",
+                    timestamp_now() as i64,
+                ],
+            )
+            .expect("upsert delivery agent");
+    connection
+            .execute(
+                "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, leader_agent_id, member_agent_ids, description, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                params![
+                    "team-workspace-core",
+                    octopus_core::DEFAULT_WORKSPACE_ID,
+                    Option::<String>::None,
+                    "workspace",
+                    "Workspace Core",
+                    Option::<String>::None,
+                    "Cross-functional design review board",
+                    serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                    "Debate options, then return a single aligned answer.",
+                    serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                    serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    "agent-orchestrator",
+                    serde_json::to_string(&vec!["agent-orchestrator", "agent-project-delivery"]).expect("member ids"),
+                    "Core workspace decision board.",
+                    "active",
+                    timestamp_now() as i64,
+                ],
+            )
+            .expect("upsert workspace core team");
     drop(connection);
 
     let adapter = RuntimeAdapter::new_with_executor(

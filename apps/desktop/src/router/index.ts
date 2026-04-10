@@ -88,14 +88,31 @@ function resolvePermissionCenterEntry(workspaceId: string) {
 
 function resolveConsoleFallback(workspaceId: string) {
   const workspaceAccessStore = resolveWorkspaceAccessStore()
-  if (workspaceAccessStore?.firstAccessibleConsoleRouteName) {
+  const routeName = workspaceAccessStore?.firstAccessibleConsoleRouteName
+  if (routeName) {
     return {
-      name: 'workspace-console',
+      name: routeName,
       params: { workspaceId },
     } as const
   }
 
-  return resolveWorkspaceOverviewTarget(workspaceId)
+  const accessLoaded = Boolean(
+    workspaceAccessStore
+    && (
+      workspaceAccessStore.menus.length
+      || workspaceAccessStore.roles.length
+      || workspaceAccessStore.currentUser
+    ),
+  )
+
+  if (accessLoaded) {
+    return resolveWorkspaceOverviewTarget(workspaceId)
+  }
+
+  return {
+    name: 'workspace-console-projects',
+    params: { workspaceId },
+  } as const
 }
 
 export const router = createRouter({
@@ -132,36 +149,49 @@ export const router = createRouter({
       path: '/workspaces/:workspaceId/console',
       name: 'workspace-console',
       component: WorkspaceConsoleView,
-    },
-    {
-      path: '/workspaces/:workspaceId/console/projects',
-      name: 'workspace-console-projects',
-      component: ProjectsView,
-    },
-    {
-      path: '/workspaces/:workspaceId/console/knowledge',
-      name: 'workspace-console-knowledge',
-      component: WorkspaceKnowledgeView,
-    },
-    {
-      path: '/workspaces/:workspaceId/console/resources',
-      name: 'workspace-console-resources',
-      component: WorkspaceResourcesView,
-    },
-    {
-      path: '/workspaces/:workspaceId/console/agents',
-      name: 'workspace-console-agents',
-      component: WorkspaceAgentsView,
-    },
-    {
-      path: '/workspaces/:workspaceId/console/models',
-      name: 'workspace-console-models',
-      component: ModelsView,
-    },
-    {
-      path: '/workspaces/:workspaceId/console/tools',
-      name: 'workspace-console-tools',
-      component: ToolsView,
+      redirect: (to) => resolveConsoleFallback(
+        typeof to.params.workspaceId === 'string' && to.params.workspaceId
+          ? to.params.workspaceId
+          : resolveWorkspaceId(),
+      ),
+      children: [
+        {
+          path: 'projects',
+          name: 'workspace-console-projects',
+          component: ProjectsView,
+          props: { embedded: true },
+        },
+        {
+          path: 'knowledge',
+          name: 'workspace-console-knowledge',
+          component: WorkspaceKnowledgeView,
+          props: { embedded: true },
+        },
+        {
+          path: 'resources',
+          name: 'workspace-console-resources',
+          component: WorkspaceResourcesView,
+          props: { embedded: true },
+        },
+        {
+          path: 'agents',
+          name: 'workspace-console-agents',
+          component: WorkspaceAgentsView,
+          props: { embedded: true },
+        },
+        {
+          path: 'models',
+          name: 'workspace-console-models',
+          component: ModelsView,
+          props: { embedded: true },
+        },
+        {
+          path: 'tools',
+          name: 'workspace-console-tools',
+          component: ToolsView,
+          props: { embedded: true },
+        },
+      ],
     },
     {
       path: '/workspaces/:workspaceId/projects',

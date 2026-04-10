@@ -62,6 +62,11 @@ describe('desktop i18n smoke coverage', () => {
     expect(translate('permissionCenter.roles.menuGroups.workspace')).toBe('工作区')
     expect(translate('permissionCenter.roles.menuGroups.project')).toBe('项目')
     expect(translate('console.header.title')).toBe('控制台')
+    expect(translate('tools.actions.copyToManaged')).toBe('复制到托管资源')
+    expect(translate('tools.detail.consumers')).toBe('使用者')
+    expect(translate('tools.ownerScopes.builtin')).toBe('内置')
+    expect(translate('tools.ownerScopes.workspace')).toBe('工作区')
+    expect(translate('tools.ownerScopes.project')).toBe('项目')
 
     i18n.global.locale.value = 'en-US'
 
@@ -114,5 +119,10 @@ describe('desktop i18n smoke coverage', () => {
     expect(translate('permissionCenter.roles.menuGroups.workspace')).toBe('Workspace')
     expect(translate('permissionCenter.roles.menuGroups.project')).toBe('Project')
     expect(translate('console.header.title')).toBe('Console')
+    expect(translate('tools.actions.copyToManaged')).toBe('Copy to Managed')
+    expect(translate('tools.detail.consumers')).toBe('Consumers')
+    expect(translate('tools.ownerScopes.builtin')).toBe('Built-in')
+    expect(translate('tools.ownerScopes.workspace')).toBe('Workspace')
+    expect(translate('tools.ownerScopes.project')).toBe('Project')
   })
 })

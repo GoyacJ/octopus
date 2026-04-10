@@ -206,11 +206,12 @@ describe('workspace access centers', () => {
     mounted.destroy()
   })
 
-  it('renders the workspace console hub with consolidated business entries', async () => {
+  it('renders the workspace console as a tabbed shell with the first business surface active', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/console')
 
     await waitForSelector(mounted.container, '[data-testid="workspace-console-view"]')
-    await waitForSelector(mounted.container, '[data-testid="workspace-console-nav"]')
+    await waitForSelector(mounted.container, '[data-testid="workspace-console-tabs"]')
+    await waitForText(mounted.container, '项目管理')
 
     expect(mounted.container.textContent).toContain('控制台')
     expect(mounted.container.textContent).toContain('项目管理')
@@ -219,8 +220,7 @@ describe('workspace access centers', () => {
     expect(mounted.container.textContent).toContain('数字员工')
     expect(mounted.container.textContent).toContain('模型')
     expect(mounted.container.textContent).toContain('工具')
-    expect(mounted.container.querySelector('[data-testid="ui-nav-card-action-menu-workspace-console-projects"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="ui-nav-card-action-menu-workspace-console-tools"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="workspace-console-nav"]')).toBeNull()
 
     mounted.destroy()
   })

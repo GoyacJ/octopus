@@ -17,6 +17,12 @@ import { formatDateTime } from '@/i18n/copy'
 import { useResourceStore } from '@/stores/resource'
 import { useShellStore } from '@/stores/shell'
 
+const props = withDefaults(defineProps<{
+  embedded?: boolean
+}>(), {
+  embedded: false,
+})
+
 const { t } = useI18n()
 const resourceStore = useResourceStore()
 const shell = useShellStore()
@@ -51,8 +57,15 @@ const filteredResources = computed(() => {
 </script>
 
 <template>
-  <UiPageShell width="standard" test-id="workspace-resources-view">
+  <component
+    :is="props.embedded ? 'div' : UiPageShell"
+    :width="props.embedded ? undefined : 'standard'"
+    :test-id="props.embedded ? undefined : 'workspace-resources-view'"
+    :data-testid="props.embedded ? 'workspace-resources-embedded' : undefined"
+    class="space-y-6"
+  >
     <UiPageHeader
+      v-if="!props.embedded"
       :eyebrow="t('resources.header.eyebrow')"
       :title="t('sidebar.navigation.resources')"
       :description="t('resources.header.subtitle')"
@@ -65,6 +78,14 @@ const filteredResources = computed(() => {
         />
       </template>
     </UiPageHeader>
+
+    <div v-else class="flex justify-end">
+      <UiInput
+        v-model="searchQuery"
+        :placeholder="t('resources.filters.searchPlaceholder')"
+        class="w-full md:w-[320px]"
+      />
+    </div>
 
     <UiStatusCallout
       v-if="resourceStore.error"
@@ -98,5 +119,5 @@ const filteredResources = computed(() => {
         :description="t('resources.empty.description')"
       />
     </UiPanelFrame>
-  </UiPageShell>
+  </component>
 </template>

@@ -32,7 +32,7 @@ const emit = defineEmits<{
 
 const tabs = [
   { value: 'agent', label: '员工' },
-  { value: 'team', label: '团队' },
+  { value: 'team', label: '数字团队' },
 ]
 
 function handleTabChange(value: string) {

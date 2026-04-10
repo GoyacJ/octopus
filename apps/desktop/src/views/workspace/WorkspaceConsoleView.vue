@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRoute, useRouter } from 'vue-router'
-import { Bot, Cpu, FolderKanban, FolderOpen, LibraryBig, Wrench } from 'lucide-vue-next'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 
-import { UiEmptyState, UiNavCardList, UiPageHeader, UiPageShell, UiPanelFrame } from '@octopus/ui'
+import { UiPageHeader, UiPageShell, UiPanelFrame, UiTabs } from '@octopus/ui'
 
-import { getMenuDefinition } from '@/navigation/menuRegistry'
+import { getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
 import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 import { useWorkspaceStore } from '@/stores/workspace'
 
@@ -16,51 +15,50 @@ const router = useRouter()
 const workspaceStore = useWorkspaceStore()
 const workspaceAccessStore = useWorkspaceAccessStore()
 
-const iconMap = {
-  'menu-workspace-console-projects': FolderKanban,
-  'menu-workspace-console-knowledge': LibraryBig,
-  'menu-workspace-console-resources': FolderOpen,
-  'menu-workspace-console-agents': Bot,
-  'menu-workspace-console-models': Cpu,
-  'menu-workspace-console-tools': Wrench,
-} as const
+const activeTab = ref('')
+const currentMenuId = computed(() => getRouteMenuId(typeof route.name === 'string' ? route.name : undefined))
 
-const helperKeyMap = {
-  'menu-workspace-console-projects': 'console.cards.projects',
-  'menu-workspace-console-knowledge': 'console.cards.knowledge',
-  'menu-workspace-console-resources': 'console.cards.resources',
-  'menu-workspace-console-agents': 'console.cards.agents',
-  'menu-workspace-console-models': 'console.cards.models',
-  'menu-workspace-console-tools': 'console.cards.tools',
-} as const
+watch(
+  () => [route.name, workspaceStore.currentWorkspaceId, workspaceAccessStore.availableConsoleMenus.map(menu => menu.id).join('|')],
+  () => {
+    if (route.name === 'workspace-console') {
+      const firstRouteName = workspaceAccessStore.firstAccessibleConsoleRouteName
+      if (firstRouteName) {
+        const menuId = getRouteMenuId(firstRouteName)
+        if (menuId) {
+          activeTab.value = menuId
+          void router.replace({
+            name: firstRouteName,
+            params: { workspaceId: workspaceStore.currentWorkspaceId },
+          })
+        }
+      }
+      return
+    }
 
-const menuIds = Object.keys(iconMap) as Array<keyof typeof iconMap>
+    activeTab.value = currentMenuId.value ?? ''
+  },
+  { immediate: true },
+)
 
-const items = computed(() => {
-  const availableIds = workspaceAccessStore.availableConsoleMenus.length
-    ? new Set(workspaceAccessStore.availableConsoleMenus.map(menu => menu.id))
-    : new Set(menuIds)
-
-  return menuIds
-    .filter(menuId => availableIds.has(menuId))
-    .flatMap((menuId) => {
-      const definition = getMenuDefinition(menuId)
+const tabs = computed(() =>
+  workspaceAccessStore.availableConsoleMenus
+    .flatMap((menu) => {
+      const definition = getMenuDefinition(menu.id)
       if (!definition?.routeName) {
         return []
       }
 
       return [{
-        id: menuId,
+        value: menu.id,
         label: t(definition.labelKey),
-        helper: t(helperKeyMap[menuId]),
-        icon: iconMap[menuId],
-        active: route.name === definition.routeName,
       }]
-    })
-})
+    }),
+)
 
-function handleSelect(menuId: string) {
-  const definition = getMenuDefinition(menuId)
+function handleTabChange(menuId: string) {
+  const entry = workspaceAccessStore.availableConsoleMenus.find(menu => menu.id === menuId)
+  const definition = entry ? getMenuDefinition(entry.id) : undefined
   if (!definition?.routeName) {
     return
   }
@@ -73,30 +71,24 @@ function handleSelect(menuId: string) {
 </script>
 
 <template>
-  <UiPageShell width="standard" test-id="workspace-console-view">
+  <UiPageShell width="wide" test-id="workspace-console-view" class="h-full">
     <UiPageHeader
       :eyebrow="t('console.header.eyebrow')"
       :title="t('console.header.title')"
       :description="t('console.header.description')"
     />
 
-    <UiPanelFrame
-      variant="panel"
-      padding="md"
-      :title="t('console.sections.workspace.title')"
-      :subtitle="t('console.sections.workspace.subtitle')"
-    >
-      <UiNavCardList
-        v-if="items.length"
-        :items="items"
-        test-id="workspace-console-nav"
-        @select="handleSelect"
-      />
-      <UiEmptyState
-        v-else
-        :title="t('console.empty.title')"
-        :description="t('console.empty.description')"
+    <UiPanelFrame variant="subtle" padding="sm">
+      <UiTabs
+        v-model="activeTab"
+        :tabs="tabs"
+        data-testid="workspace-console-tabs"
+        @update:model-value="handleTabChange"
       />
     </UiPanelFrame>
+
+    <main class="min-h-0 flex-1 overflow-y-auto pb-8">
+      <RouterView />
+    </main>
   </UiPageShell>
 </template>

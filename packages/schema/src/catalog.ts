@@ -292,7 +292,7 @@ export interface WorkspaceMcpToolCatalogEntry extends WorkspaceToolCatalogBase {
   endpoint: string
   toolNames: string[]
   statusDetail?: string
-  scope: 'workspace' | 'project' | 'user'
+  scope: 'workspace' | 'project' | 'user' | 'builtin'
 }
 
 export type WorkspaceToolCatalogEntry =
@@ -400,7 +400,7 @@ export interface WorkspaceMcpServerDocument {
   serverName: string
   sourceKey: string
   displayPath: string
-  scope: 'workspace' | 'project' | 'user'
+  scope: 'workspace' | 'project' | 'user' | 'builtin'
   config: Record<string, JsonValue>
 }
 

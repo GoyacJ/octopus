@@ -1017,7 +1017,7 @@
       "importSkill": "Import Skill",
       "importArchive": "Upload ZIP",
       "importFolder": "Upload Folder",
-      "copyToManaged": "Copy To Managed Skill",
+      "copyToManaged": "Copy to Managed",
       "selectForCopy": "Add to batch copy",
       "skillSlugPrompt": "Enter a skill slug"
     },
@@ -1047,6 +1047,7 @@
       "title": "Details",
       "sourcePath": "Source path",
       "sourceKey": "Source key",
+      "source": "Source",
       "requiredPermission": "Required permission",
       "disabled": "Disabled",
       "builtinKey": "Builtin key",
@@ -1061,7 +1062,8 @@
       "endpoint": "Endpoint",
       "toolNames": "Discovered tools",
       "scope": "Config scope",
-      "statusDetail": "Status detail"
+      "statusDetail": "Status detail",
+      "consumers": "Consumers"
     },
     "editor": {
       "loading": "Loading runtime document…",
@@ -1106,8 +1108,14 @@
       "external": "External"
     },
     "sourceOrigins": {
+      "builtin_bundle": "Builtin bundle",
       "skills_dir": "Skills",
       "legacy_commands_dir": "Legacy /commands"
+    },
+    "ownerScopes": {
+      "builtin": "Built-in",
+      "workspace": "Workspace",
+      "project": "Project"
     },
     "requiredPermissions": {
       "readonly": "Read-only",
@@ -1311,9 +1319,9 @@
   "agents": {
     "header": {
       "eyebrow": "Agent Center",
-      "title": "Agents & Teams",
-      "subtitleProject": "Manage agents and team collaboration for this project.",
-      "subtitleWorkspace": "Manage your workspace-level agents and team configurations."
+      "title": "Agents & Digital Teams",
+      "subtitleProject": "Manage agents and digital team collaboration for this project.",
+      "subtitleWorkspace": "Manage your workspace-level agents and digital team configurations."
     },
     "workspace": {
       "descriptionAgent": "Manage reusable workspace agents available across projects."
@@ -1344,7 +1352,7 @@
       "edit": "Edit agent",
       "new": "New",
       "addAgent": "New Agent",
-      "addTeam": "New Team",
+      "addTeam": "New Digital Team",
       "filter": "Filter",
       "sort": "Sort",
       "searchPlaceholder": "Search by name, role or description…"

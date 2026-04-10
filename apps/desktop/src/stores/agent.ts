@@ -6,6 +6,7 @@ import type {
   ExportWorkspaceAgentBundleInput,
   ExportWorkspaceAgentBundleResult,
   ImportWorkspaceAgentBundleInput,
+  ImportWorkspaceAgentBundleResult,
   ImportWorkspaceAgentBundlePreviewInput,
   ProjectAgentLinkInput,
   ProjectAgentLinkRecord,
@@ -214,6 +215,23 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  async function copyToWorkspace(agentId: string): Promise<ImportWorkspaceAgentBundleResult> {
+    const { client, connectionId } = ensureWorkspaceClientForConnection()
+    const result = await client.agents.copyToWorkspace(agentId)
+    await load(connectionId)
+    return result
+  }
+
+  async function copyToProject(projectId: string, agentId: string): Promise<ImportWorkspaceAgentBundleResult> {
+    const { client, connectionId } = ensureWorkspaceClientForConnection()
+    const result = await client.agents.copyToProject(projectId, agentId)
+    await Promise.all([
+      load(connectionId),
+      loadProjectLinks(projectId, connectionId),
+    ])
+    return result
+  }
+
   return {
     agents,
     workspaceAgents,
@@ -232,5 +250,7 @@ export const useAgentStore = defineStore('agent', () => {
     exportBundle,
     linkProject,
     unlinkProject,
+    copyToWorkspace,
+    copyToProject,
   }
 })

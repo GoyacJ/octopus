@@ -1,7 +1,15 @@
 use super::*;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use octopus_core::WorkspaceToolConsumerSummary;
+
+use crate::agent_assets::{
+    find_builtin_mcp_asset, find_builtin_skill_asset_by_id, list_builtin_agent_templates,
+    list_builtin_mcp_assets, list_builtin_skill_assets, list_builtin_team_templates,
+    BuiltinSkillAsset,
+};
+
+const BUILTIN_SKILL_SOURCE_ORIGIN: &str = "builtin_bundle";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum SkillDefinitionSource {
@@ -981,6 +989,150 @@ pub(super) fn skill_document_from_path(
     })
 }
 
+fn builtin_skill_source_key(asset: &BuiltinSkillAsset) -> String {
+    format!("skill:{}", asset.display_path)
+}
+
+fn builtin_skill_document(asset: &BuiltinSkillAsset) -> Result<WorkspaceSkillDocument, AppError> {
+    let content = asset
+        .files
+        .iter()
+        .find(|(path, _)| path == "SKILL.md")
+        .ok_or_else(|| AppError::not_found("workspace skill"))?
+        .1
+        .clone();
+    let content =
+        String::from_utf8(content).map_err(|error| AppError::invalid_input(error.to_string()))?;
+
+    Ok(WorkspaceSkillDocument {
+        id: catalog_hash_id("skill", &asset.display_path),
+        source_key: builtin_skill_source_key(asset),
+        name: asset.name.clone(),
+        description: asset.description.clone(),
+        content,
+        display_path: asset.display_path.clone(),
+        root_path: asset.root_display_path.clone(),
+        tree: build_embedded_skill_tree(&asset.files),
+        source_origin: BUILTIN_SKILL_SOURCE_ORIGIN.into(),
+        workspace_owned: false,
+        relative_path: None,
+    })
+}
+
+fn builtin_skill_tree_document(
+    asset: &BuiltinSkillAsset,
+) -> Result<WorkspaceSkillTreeDocument, AppError> {
+    Ok(WorkspaceSkillTreeDocument {
+        skill_id: catalog_hash_id("skill", &asset.display_path),
+        source_key: builtin_skill_source_key(asset),
+        display_path: asset.display_path.clone(),
+        root_path: asset.root_display_path.clone(),
+        tree: build_embedded_skill_tree(&asset.files),
+    })
+}
+
+fn builtin_skill_file_document(
+    asset: &BuiltinSkillAsset,
+    relative_path: &str,
+) -> Result<WorkspaceSkillFileDocument, AppError> {
+    let relative_path = validate_skill_file_relative_path(relative_path)?;
+    let (_, bytes) = asset
+        .files
+        .iter()
+        .find(|(path, _)| path == &relative_path)
+        .ok_or_else(|| AppError::not_found("workspace skill file"))?;
+    let is_text = std::str::from_utf8(bytes).is_ok() && !bytes.contains(&0);
+    let content = if is_text {
+        Some(
+            String::from_utf8(bytes.clone())
+                .map_err(|error| AppError::invalid_input(error.to_string()))?,
+        )
+    } else {
+        None
+    };
+    let synthetic_path = Path::new(&relative_path);
+
+    Ok(WorkspaceSkillFileDocument {
+        skill_id: catalog_hash_id("skill", &asset.display_path),
+        source_key: builtin_skill_source_key(asset),
+        path: relative_path.clone(),
+        display_path: format!("{}/{}", asset.root_display_path, relative_path),
+        byte_size: bytes.len() as u64,
+        is_text,
+        content,
+        content_type: content_type_for_skill_file(synthetic_path, is_text),
+        language: language_for_skill_file(synthetic_path),
+        readonly: true,
+    })
+}
+
+#[derive(Default)]
+struct EmbeddedSkillTreeDir {
+    dirs: BTreeMap<String, EmbeddedSkillTreeDir>,
+    files: BTreeMap<String, (u64, bool)>,
+}
+
+fn build_embedded_skill_tree(files: &[(String, Vec<u8>)]) -> Vec<WorkspaceSkillTreeNode> {
+    let mut root = EmbeddedSkillTreeDir::default();
+    for (path, bytes) in files {
+        insert_embedded_skill_file(&mut root, path, bytes);
+    }
+    embedded_skill_children("", &root)
+}
+
+fn insert_embedded_skill_file(root: &mut EmbeddedSkillTreeDir, path: &str, bytes: &[u8]) {
+    let mut parts = path.split('/').peekable();
+    let mut current = root;
+    while let Some(part) = parts.next() {
+        if parts.peek().is_some() {
+            current = current.dirs.entry(part.to_string()).or_default();
+        } else {
+            let is_text = std::str::from_utf8(bytes).is_ok() && !bytes.contains(&0);
+            current
+                .files
+                .insert(part.to_string(), (bytes.len() as u64, is_text));
+        }
+    }
+}
+
+fn embedded_skill_children(
+    parent_path: &str,
+    node: &EmbeddedSkillTreeDir,
+) -> Vec<WorkspaceSkillTreeNode> {
+    let mut children = Vec::new();
+    for (name, child) in &node.dirs {
+        let path = if parent_path.is_empty() {
+            name.clone()
+        } else {
+            format!("{parent_path}/{name}")
+        };
+        children.push(WorkspaceSkillTreeNode {
+            path: path.clone(),
+            name: name.clone(),
+            kind: "directory".into(),
+            children: Some(embedded_skill_children(&path, child)),
+            byte_size: None,
+            is_text: None,
+        });
+    }
+    for (name, (byte_size, is_text)) in &node.files {
+        let path = if parent_path.is_empty() {
+            name.clone()
+        } else {
+            format!("{parent_path}/{name}")
+        };
+        children.push(WorkspaceSkillTreeNode {
+            path,
+            name: name.clone(),
+            kind: "file".into(),
+            children: None,
+            byte_size: Some(*byte_size),
+            is_text: Some(*is_text),
+        });
+    }
+    children
+}
+
 pub(super) fn rewrite_skill_frontmatter_name(
     path: &Path,
     skill_name: &str,
@@ -1309,6 +1461,9 @@ impl InfraWorkspaceService {
         &self,
         skill_id: &str,
     ) -> Result<WorkspaceSkillDocument, AppError> {
+        if let Some(asset) = find_builtin_skill_asset_by_id(skill_id)? {
+            return builtin_skill_document(&asset);
+        }
         let entry = self.find_skill_catalog_entry(skill_id)?;
         skill_document_from_path(&self.state.paths.root, &entry.path, entry.origin)
     }
@@ -1317,6 +1472,9 @@ impl InfraWorkspaceService {
         &self,
         skill_id: &str,
     ) -> Result<WorkspaceSkillTreeDocument, AppError> {
+        if let Some(asset) = find_builtin_skill_asset_by_id(skill_id)? {
+            return builtin_skill_tree_document(&asset);
+        }
         let entry = self.find_skill_catalog_entry(skill_id)?;
         skill_tree_document_from_path(
             &self.state.paths.root,
@@ -1332,6 +1490,9 @@ impl InfraWorkspaceService {
         skill_id: &str,
         relative_path: &str,
     ) -> Result<WorkspaceSkillFileDocument, AppError> {
+        if let Some(asset) = find_builtin_skill_asset_by_id(skill_id)? {
+            return builtin_skill_file_document(&asset, relative_path);
+        }
         let entry = self.find_skill_catalog_entry(skill_id)?;
         let source_key = skill_source_key(&entry.path, &self.state.paths.root);
         let relative = workspace_relative_path(&entry.path, &self.state.paths.root);
@@ -1356,6 +1517,11 @@ impl InfraWorkspaceService {
         &self,
         skill_id: &str,
     ) -> Result<SkillCatalogEntry, AppError> {
+        if find_builtin_skill_asset_by_id(skill_id)?.is_some() {
+            return Err(AppError::invalid_input(
+                "only workspace-owned managed skills can be edited or deleted",
+            ));
+        }
         let entry = self.find_skill_catalog_entry(skill_id)?;
         let relative = workspace_relative_path(&entry.path, &self.state.paths.root);
         if !is_workspace_owned_skill(relative.as_deref(), entry.origin) {
@@ -1402,22 +1568,34 @@ impl InfraWorkspaceService {
         server_name: &str,
     ) -> Result<WorkspaceMcpServerDocument, AppError> {
         let document = load_workspace_runtime_document(&self.state.paths)?;
-        let config = document
+        if let Some(config) = document
             .get("mcpServers")
             .and_then(|value| value.as_object())
             .and_then(|servers| servers.get(server_name))
             .cloned()
-            .ok_or_else(|| AppError::not_found("workspace mcp server"))?;
-        let config = config
-            .as_object()
-            .cloned()
-            .ok_or_else(|| AppError::invalid_input("mcp server config must be a JSON object"))?;
+        {
+            let config = config.as_object().cloned().ok_or_else(|| {
+                AppError::invalid_input("mcp server config must be a JSON object")
+            })?;
+            return Ok(WorkspaceMcpServerDocument {
+                server_name: server_name.into(),
+                source_key: format!("mcp:{server_name}"),
+                display_path: "config/runtime/workspace.json".into(),
+                scope: "workspace".into(),
+                config: serde_json::Value::Object(config),
+            });
+        }
 
+        let asset = find_builtin_mcp_asset(server_name)?
+            .ok_or_else(|| AppError::not_found("workspace mcp server"))?;
+        let config = asset.config.as_object().cloned().ok_or_else(|| {
+            AppError::invalid_input("mcp server config must be a JSON object")
+        })?;
         Ok(WorkspaceMcpServerDocument {
             server_name: server_name.into(),
             source_key: format!("mcp:{server_name}"),
-            display_path: "config/runtime/workspace.json".into(),
-            scope: "workspace".into(),
+            display_path: asset.display_path,
+            scope: "builtin".into(),
             config: serde_json::Value::Object(config),
         })
     }
@@ -1455,6 +1633,10 @@ impl InfraWorkspaceService {
             .lock()
             .map_err(|_| AppError::runtime("teams mutex poisoned"))?
             .clone();
+        let mut consumer_agents = agents.clone();
+        consumer_agents.extend(list_builtin_agent_templates(&workspace_id)?);
+        let mut consumer_teams = teams.clone();
+        consumer_teams.extend(list_builtin_team_templates(&workspace_id)?);
         let project_name_by_id = projects
             .iter()
             .map(|project| (project.id.clone(), project.name.clone()))
@@ -1487,8 +1669,8 @@ impl InfraWorkspaceService {
             )
             .collect::<HashMap<_, _>>();
         let consumer_maps = build_tool_consumer_maps(
-            &agents,
-            &teams,
+            &consumer_agents,
+            &consumer_teams,
             &project_name_by_id,
             &project_mcp_source_keys,
         );
@@ -1587,6 +1769,43 @@ impl InfraWorkspaceService {
             });
         }
 
+        for skill in list_builtin_skill_assets()? {
+            let skill_id = catalog_hash_id("skill", &skill.display_path);
+            let source_key = builtin_skill_source_key(&skill);
+            entries.push(WorkspaceToolCatalogEntry {
+                id: skill_id.clone(),
+                workspace_id: workspace_id.clone(),
+                name: skill.name.clone(),
+                kind: "skill".into(),
+                description: skill.description.clone(),
+                required_permission: None,
+                availability: "healthy".into(),
+                source_key: source_key.clone(),
+                display_path: skill.display_path.clone(),
+                disabled: disabled_keys.contains(&source_key),
+                management: WorkspaceToolManagementCapabilities {
+                    can_disable: true,
+                    can_edit: false,
+                    can_delete: false,
+                },
+                builtin_key: None,
+                active: Some(true),
+                shadowed_by: None,
+                source_origin: Some(BUILTIN_SKILL_SOURCE_ORIGIN.into()),
+                workspace_owned: Some(false),
+                relative_path: None,
+                server_name: None,
+                endpoint: None,
+                tool_names: None,
+                status_detail: None,
+                scope: None,
+                owner_scope: Some("builtin".into()),
+                owner_id: None,
+                owner_label: Some("Builtin".into()),
+                consumers: clone_non_empty_consumers(consumer_maps.skills.get(&skill_id)),
+            });
+        }
+
         let runtime_config = load_workspace_runtime_config(&self.state.paths)?;
         let mut manager = runtime::McpServerManager::from_runtime_config(&runtime_config);
         let discovery_report = manager.discover_tools_best_effort().await;
@@ -1660,6 +1879,55 @@ impl InfraWorkspaceService {
                 owner_id: None,
                 owner_label: Some("Workspace".into()),
                 consumers: clone_non_empty_consumers(consumer_maps.mcps.get(&source_key)),
+            });
+        }
+
+        let managed_workspace_servers = runtime_config
+            .mcp()
+            .servers()
+            .keys()
+            .cloned()
+            .collect::<std::collections::HashSet<_>>();
+
+        for asset in list_builtin_mcp_assets()? {
+            if managed_workspace_servers.contains(&asset.server_name) {
+                continue;
+            }
+            entries.push(WorkspaceToolCatalogEntry {
+                id: format!("mcp-builtin-{}", asset.server_name),
+                workspace_id: workspace_id.clone(),
+                name: asset.server_name.clone(),
+                kind: "mcp".into(),
+                description: "Builtin MCP server template.".into(),
+                required_permission: None,
+                availability: "configured".into(),
+                source_key: format!("mcp:{}", asset.server_name),
+                display_path: asset.display_path.clone(),
+                disabled: disabled_keys.contains(&format!("mcp:{}", asset.server_name)),
+                management: WorkspaceToolManagementCapabilities {
+                    can_disable: true,
+                    can_edit: false,
+                    can_delete: false,
+                },
+                builtin_key: None,
+                active: None,
+                shadowed_by: None,
+                source_origin: None,
+                workspace_owned: None,
+                relative_path: None,
+                server_name: Some(asset.server_name.clone()),
+                endpoint: Some(mcp_endpoint_from_document(&asset.config)),
+                tool_names: Some(Vec::new()),
+                status_detail: None,
+                scope: Some("builtin".into()),
+                owner_scope: Some("builtin".into()),
+                owner_id: None,
+                owner_label: Some("Builtin".into()),
+                consumers: clone_non_empty_consumers(
+                    consumer_maps
+                        .mcps
+                        .get(&format!("mcp:{}", asset.server_name)),
+                ),
             });
         }
 

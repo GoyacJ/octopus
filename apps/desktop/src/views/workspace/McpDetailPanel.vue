@@ -21,8 +21,10 @@ const props = defineProps<{
   submitting: boolean
   deleting: boolean
   toggling: boolean
+  canCopyMcpToManaged: boolean
   availabilityLabel: (availability: WorkspaceToolCatalogEntry['availability']) => string
   availabilityTone: (availability: WorkspaceToolCatalogEntry['availability']) => 'default' | 'success' | 'warning'
+  ownerScopeLabel: (ownerScope: WorkspaceToolCatalogEntry['ownerScope']) => string
 }>()
 
 const emit = defineEmits<{
@@ -30,6 +32,7 @@ const emit = defineEmits<{
   toggleDisabled: [disabled: boolean]
   save: []
   delete: []
+  copyToManaged: []
 }>()
 
 const { t } = useI18n()
@@ -73,12 +76,21 @@ const { t } = useI18n()
         </div>
       </div>
 
-      <div v-if="entry.ownerLabel" class="space-y-1">
+      <div v-if="entry.ownerScope || entry.ownerLabel" class="space-y-1">
         <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
-          {{ t('common.owner') }}
+          {{ t('tools.detail.source') }}
         </div>
-        <div class="text-[13px] text-text-primary">
-          {{ entry.ownerLabel }}
+        <div class="flex flex-wrap gap-1.5">
+          <UiBadge
+            v-if="entry.ownerScope"
+            :label="ownerScopeLabel(entry.ownerScope)"
+            subtle
+          />
+          <UiBadge
+            v-if="entry.ownerLabel"
+            :label="entry.ownerLabel"
+            subtle
+          />
         </div>
       </div>
 
@@ -146,7 +158,7 @@ const { t } = useI18n()
 
     <div v-if="entry.consumers?.length" class="space-y-1">
       <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
-        使用者
+        {{ t('tools.detail.consumers') }}
       </div>
       <div class="flex flex-wrap gap-1.5">
         <UiBadge
@@ -189,7 +201,10 @@ const { t } = useI18n()
 
     <UiStatusCallout v-if="panelError" tone="error" :description="panelError" />
 
-    <div v-if="entry.management.canEdit || entry.management.canDelete" class="flex gap-2">
+    <div v-if="canCopyMcpToManaged || entry.management.canEdit || entry.management.canDelete" class="flex gap-2">
+      <UiButton v-if="canCopyMcpToManaged" :loading="submitting" @click="emit('copyToManaged')">
+        {{ t('tools.actions.copyToManaged') }}
+      </UiButton>
       <UiButton v-if="entry.management.canEdit" :loading="submitting" @click="emit('save')">
         {{ t('common.save') }}
       </UiButton>

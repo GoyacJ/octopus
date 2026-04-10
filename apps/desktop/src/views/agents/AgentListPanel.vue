@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { LayoutGrid, List, Trash2 } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { ChevronDown, Download, LayoutGrid, List, Trash2, Upload } from 'lucide-vue-next'
 
 import type { AgentRecord } from '@octopus/schema'
-import { UiBadge, UiButton, UiEmptyState, UiInput, UiPagination, UiRecordCard, UiToolbarRow } from '@octopus/ui'
+import { UiBadge, UiButton, UiCheckbox, UiDropdownMenu, UiEmptyState, UiInput, UiPagination, UiRecordCard, UiToolbarRow } from '@octopus/ui'
 
-import type { ViewMode } from './useAgentCenter'
+import type { AgentBundleTransferFormat, ViewMode } from './useAgentCenter'
 import AgentEmployeeCard from './AgentEmployeeCard.vue'
 
 const props = defineProps<{
@@ -17,14 +17,21 @@ const props = defineProps<{
   pagedAgents: AgentRecord[]
   isProjectScope: boolean
   importLoading: boolean
+  exportLoading: boolean
+  selectedAgentIds: string[]
+  allPagedSelected: boolean
 }>()
 
 const emit = defineEmits<{
   'update:query': [value: string]
   'update:viewMode': [value: ViewMode]
   'update:page': [value: number]
+  'update:selectedAgentIds': [value: string[]]
   'create-agent': []
-  'open-import-dialog': []
+  'open-import-dialog': [format: AgentBundleTransferFormat]
+  'toggle-all-paged': [value: boolean]
+  'export-selected': [format: AgentBundleTransferFormat]
+  'export-agent': [agent: AgentRecord, format: AgentBundleTransferFormat]
   'open-agent': [agent: AgentRecord]
   'remove-agent': [agent: AgentRecord]
 }>()
@@ -45,7 +52,77 @@ function initials(name: string) {
 }
 
 function agentBadgeLabel(agent: AgentRecord) {
-  return agent.integrationSource ? 'Workspace Link' : agent.status
+  if (agent.integrationSource?.kind === 'builtin-template') {
+    return '内置模板'
+  }
+  if (agent.integrationSource?.kind === 'workspace-link') {
+    return '工作区接入'
+  }
+  return agent.status
+}
+
+function isBuiltinTemplateAgent(agent: AgentRecord) {
+  return agent.integrationSource?.kind === 'builtin-template'
+}
+
+function isWorkspaceLinkedAgent(agent: AgentRecord) {
+  return agent.integrationSource?.kind === 'workspace-link'
+}
+
+function openLabel(agent: AgentRecord) {
+  if (isBuiltinTemplateAgent(agent)) {
+    return props.isProjectScope ? '复制到项目' : '复制到工作区'
+  }
+  return isWorkspaceLinkedAgent(agent) ? '查看' : '编辑'
+}
+
+function originLabel(agent: AgentRecord) {
+  if (isBuiltinTemplateAgent(agent)) {
+    return '内置模板'
+  }
+  return isWorkspaceLinkedAgent(agent) ? '工作区' : undefined
+}
+
+const importMenuItems = [
+  { key: 'import-folder', label: '导入文件夹' },
+  { key: 'import-zip', label: '导入 ZIP' },
+]
+
+const exportMenuItems = computed(() => [
+  { key: 'export-folder', label: '导出为文件夹', disabled: props.selectedAgentIds.length === 0 },
+  { key: 'export-zip', label: '导出为 ZIP', disabled: props.selectedAgentIds.length === 0 },
+])
+
+const rowExportMenuItems = [
+  { key: 'export-folder', label: '导出为文件夹' },
+  { key: 'export-zip', label: '导出为 ZIP' },
+]
+
+const importMenuOpen = ref(false)
+const exportMenuOpen = ref(false)
+
+function handleImportSelect(key: string) {
+  importMenuOpen.value = false
+  emit('open-import-dialog', key === 'import-zip' ? 'zip' : 'folder')
+}
+
+function handleExportSelected(key: string) {
+  exportMenuOpen.value = false
+  emit('export-selected', key === 'export-zip' ? 'zip' : 'folder')
+}
+
+function handleExportAgent(agent: AgentRecord, key: string) {
+  emit('export-agent', agent, key === 'export-zip' ? 'zip' : 'folder')
+}
+
+function updateSelectedAgents(agentId: string, nextSelected: boolean) {
+  const next = new Set(props.selectedAgentIds)
+  if (nextSelected) {
+    next.add(agentId)
+  } else {
+    next.delete(agentId)
+  }
+  emit('update:selectedAgentIds', Array.from(next))
 }
 </script>
 
@@ -80,18 +157,52 @@ function agentBadgeLabel(agent: AgentRecord) {
         </UiButton>
       </template>
       <template #actions>
-        <UiButton size="sm" @click="emit('create-agent')">
-          新建员工
-        </UiButton>
-        <UiButton
-          variant="outline"
-          size="sm"
-          :loading="importLoading"
-          loading-label="Previewing"
-          @click="emit('open-import-dialog')"
-        >
-          导入员工
-        </UiButton>
+        <div class="flex flex-wrap items-center justify-end gap-2">
+          <span class="text-[12px] text-text-tertiary">
+            已选 {{ selectedAgentIds.length }} / {{ total }}
+          </span>
+          <UiButton size="sm" @click="emit('create-agent')">
+            新建数字员工
+          </UiButton>
+          <UiDropdownMenu :open="importMenuOpen" :items="importMenuItems" @update:open="importMenuOpen = $event" @select="handleImportSelect">
+            <template #trigger>
+              <UiButton
+                variant="outline"
+                size="sm"
+              :loading="importLoading"
+              loading-label="Previewing"
+              data-testid="agent-center-import-agents-trigger"
+            >
+                <Upload :size="14" />
+                导入
+                <ChevronDown :size="14" />
+              </UiButton>
+            </template>
+          </UiDropdownMenu>
+          <UiDropdownMenu :open="exportMenuOpen" :items="exportMenuItems" @update:open="exportMenuOpen = $event" @select="handleExportSelected">
+            <template #trigger>
+              <UiButton
+                variant="outline"
+                size="sm"
+              :disabled="selectedAgentIds.length === 0"
+              :loading="exportLoading"
+              loading-label="Exporting"
+              data-testid="agent-center-export-agents-trigger"
+            >
+                <Download :size="14" />
+                批量导出
+                <ChevronDown :size="14" />
+              </UiButton>
+            </template>
+          </UiDropdownMenu>
+        </div>
+      </template>
+      <template #filters>
+        <UiCheckbox
+          :model-value="allPagedSelected"
+          label="全选当前页"
+          @update:model-value="emit('toggle-all-paged', Boolean($event))"
+        />
       </template>
     </UiToolbarRow>
 
@@ -112,12 +223,19 @@ function agentBadgeLabel(agent: AgentRecord) {
             { label: 'Tools', value: String(agent.builtinToolKeys.length) },
             { label: 'Skills', value: String(agent.skillIds.length) },
           ]"
-          :origin-label="agent.integrationSource ? 'Workspace' : undefined"
-          :open-label="agent.integrationSource ? '查看' : '编辑'"
-          :remove-label="agent.integrationSource ? '移除接入' : '删除'"
+          :origin-label="originLabel(agent)"
+          :open-label="openLabel(agent)"
+          :remove-label="isWorkspaceLinkedAgent(agent) ? '移除接入' : '删除'"
           :open-test-id="`agent-center-open-agent-${agent.id}`"
           :remove-test-id="`agent-center-remove-agent-${agent.id}`"
+          :selected="selectedAgentIds.includes(agent.id)"
+          :selection-test-id="`agent-center-select-agent-${agent.id}`"
+          :selectable="!isBuiltinTemplateAgent(agent)"
+          :exportable="!isBuiltinTemplateAgent(agent)"
+          :removable="!isBuiltinTemplateAgent(agent)"
           @open="emit('open-agent', agent)"
+          @update:selected="updateSelectedAgents(agent.id, $event)"
+          @export="handleExportAgent(agent, $event)"
           @remove="emit('remove-agent', agent)"
         />
 
@@ -140,7 +258,7 @@ function agentBadgeLabel(agent: AgentRecord) {
                 class="size-2 rounded-full"
                 :class="agent.status === 'active' ? 'bg-status-success' : 'bg-text-tertiary'"
               />
-              <UiBadge v-if="agent.integrationSource" label="Workspace" subtle />
+              <UiBadge v-if="originLabel(agent)" :label="originLabel(agent) ?? ''" subtle />
             </div>
           </template>
           <div class="flex w-full items-center gap-8 overflow-hidden">
@@ -167,11 +285,32 @@ function agentBadgeLabel(agent: AgentRecord) {
             </div>
           </div>
           <template #actions>
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1" @click.stop @keydown.stop>
+              <UiCheckbox
+                v-if="!isBuiltinTemplateAgent(agent)"
+                :model-value="selectedAgentIds"
+                :value="agent.id"
+                :data-testid="`agent-center-select-agent-${agent.id}`"
+                @update:model-value="emit('update:selectedAgentIds', $event as string[])"
+              />
               <UiButton size="sm" variant="ghost" class="h-8 px-3 text-[11px] font-semibold" @click.stop="emit('open-agent', agent)">
-                配置
+                {{ openLabel(agent) }}
               </UiButton>
+              <UiDropdownMenu v-if="!isBuiltinTemplateAgent(agent)" :items="rowExportMenuItems" @select="handleExportAgent(agent, $event)">
+                <template #trigger>
+                  <UiButton
+                    size="sm"
+                    variant="ghost"
+                    class="h-8 px-3 text-[11px] font-semibold"
+                    :aria-label="`导出 ${agent.name}`"
+                  >
+                    导出
+                    <ChevronDown :size="12" />
+                  </UiButton>
+                </template>
+              </UiDropdownMenu>
               <UiButton
+                v-if="!isBuiltinTemplateAgent(agent)"
                 variant="ghost"
                 size="icon"
                 class="size-8 rounded-full text-text-tertiary/40 hover:bg-error/10 hover:text-error"

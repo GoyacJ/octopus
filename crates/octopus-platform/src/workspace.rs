@@ -120,6 +120,10 @@ pub trait WorkspaceService: Send + Sync {
         &self,
         input: ImportWorkspaceAgentBundleInput,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError>;
+    async fn copy_workspace_agent_from_builtin(
+        &self,
+        agent_id: &str,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError>;
     async fn export_agent_bundle(
         &self,
         input: ExportWorkspaceAgentBundleInput,
@@ -133,6 +137,11 @@ pub trait WorkspaceService: Send + Sync {
         &self,
         project_id: &str,
         input: ImportWorkspaceAgentBundleInput,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError>;
+    async fn copy_project_agent_from_builtin(
+        &self,
+        project_id: &str,
+        agent_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError>;
     async fn export_project_agent_bundle(
         &self,
@@ -156,6 +165,15 @@ pub trait WorkspaceService: Send + Sync {
         input: UpsertTeamInput,
     ) -> Result<TeamRecord, AppError>;
     async fn delete_team(&self, team_id: &str) -> Result<(), AppError>;
+    async fn copy_workspace_team_from_builtin(
+        &self,
+        team_id: &str,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError>;
+    async fn copy_project_team_from_builtin(
+        &self,
+        project_id: &str,
+        team_id: &str,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError>;
     async fn list_project_team_links(
         &self,
         project_id: &str,
@@ -219,6 +237,10 @@ pub trait WorkspaceService: Send + Sync {
     async fn create_workspace_mcp_server(
         &self,
         input: UpsertWorkspaceMcpServerInput,
+    ) -> Result<WorkspaceMcpServerDocument, AppError>;
+    async fn copy_workspace_mcp_server_to_managed(
+        &self,
+        server_name: &str,
     ) -> Result<WorkspaceMcpServerDocument, AppError>;
     async fn update_workspace_mcp_server(
         &self,
