@@ -1320,7 +1320,8 @@ pub(crate) fn list_builtin_skill_assets() -> Result<Vec<BuiltinSkillAsset>, AppE
 
     let mut assigned_hash_by_slug = BTreeMap::<String, String>::new();
     let mut assets = Vec::new();
-    for ((canonical_slug, content_hash), (name, description, mut source_ids, files)) in unique_skills
+    for ((canonical_slug, content_hash), (name, description, mut source_ids, files)) in
+        unique_skills
     {
         let slug = match assigned_hash_by_slug.get(&canonical_slug) {
             Some(existing_hash) if existing_hash != &content_hash => {
@@ -1460,13 +1461,9 @@ pub(crate) fn extract_builtin_agent_template_files(
     agent_id: &str,
 ) -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, AppError> {
     let parsed = parse_builtin_bundle()?;
-    let Some(agent) = parsed
-        .agents
-        .iter()
-        .find(|agent| {
-            agent.team_name.is_none() && catalog_hash_id("builtin-agent", &agent.source_id) == agent_id
-        })
-    else {
+    let Some(agent) = parsed.agents.iter().find(|agent| {
+        agent.team_name.is_none() && catalog_hash_id("builtin-agent", &agent.source_id) == agent_id
+    }) else {
         return Ok(None);
     };
     Ok(Some(encode_builtin_bundle_entries(&agent.source_id)?))
@@ -3974,9 +3971,10 @@ mod tests {
         assert!(exported.files.iter().any(|file| {
             file.relative_path == "财务联动员工/skills/financial-calculator/SKILL.md"
         }));
-        assert!(exported.files.iter().any(|file| {
-            file.relative_path == "财务联动员工/mcps/finance-data.json"
-        }));
+        assert!(exported
+            .files
+            .iter()
+            .any(|file| { file.relative_path == "财务联动员工/mcps/finance-data.json" }));
         assert!(exported.files.iter().any(|file| {
             file.relative_path.starts_with("财务联动员工/")
                 && (file.relative_path.ends_with(".png")

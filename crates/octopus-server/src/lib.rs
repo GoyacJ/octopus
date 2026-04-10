@@ -42,9 +42,10 @@ use octopus_core::{
     ImportWorkspaceAgentBundleResult, ImportWorkspaceSkillArchiveInput,
     ImportWorkspaceSkillFolderInput, KnowledgeRecord, LoginRequest, MenuRecord,
     ModelCatalogSnapshot, NotificationFilter, NotificationListResponse, NotificationRecord,
-    NotificationUnreadSummary, PermissionRecord, PetConversationBinding, PetPresenceState,
-    PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectDashboardSnapshot,
-    ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord, ProviderCredentialRecord,
+    NotificationUnreadSummary, PermissionCenterAlertRecord, PermissionCenterOverviewSnapshot,
+    PermissionRecord, PetConversationBinding, PetPresenceState, PetWorkspaceSnapshot,
+    ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectDashboardSnapshot, ProjectRecord,
+    ProjectTeamLinkInput, ProjectTeamLinkRecord, ProviderCredentialRecord,
     RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse, ResolveRuntimeApprovalInput,
     RoleRecord, RuntimeConfigPatch, RuntimeConfigValidationResult,
     RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
@@ -52,10 +53,10 @@ use octopus_core::{
     TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
     UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput,
     UpdateWorkspaceUserRequest, UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput,
-    PermissionCenterAlertRecord, PermissionCenterOverviewSnapshot, UserRecordSummary, WorkspaceActivityRecord,
-    WorkspaceMcpServerDocument, WorkspaceMetricRecord, WorkspaceOverviewSnapshot,
-    WorkspaceResourceRecord, WorkspaceSkillDocument, WorkspaceSkillFileDocument,
-    WorkspaceSkillTreeDocument, WorkspaceToolCatalogSnapshot, WorkspaceToolDisablePatch,
+    UserRecordSummary, WorkspaceActivityRecord, WorkspaceMcpServerDocument, WorkspaceMetricRecord,
+    WorkspaceOverviewSnapshot, WorkspaceResourceRecord, WorkspaceSkillDocument,
+    WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceToolCatalogSnapshot,
+    WorkspaceToolDisablePatch,
 };
 use octopus_platform::PlatformServices;
 use reqwest::Client;

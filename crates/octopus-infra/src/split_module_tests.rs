@@ -3,8 +3,8 @@ use rusqlite::Connection;
 
 #[test]
 fn split_modules_expose_workspace_bootstrap_api() {
-  let temp = tempfile::tempdir().expect("tempdir");
-  let paths = workspace_paths::WorkspacePaths::new(temp.path());
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = workspace_paths::WorkspacePaths::new(temp.path());
     assert_eq!(paths.db_path, temp.path().join("data/main.db"));
 
     let initialized = bootstrap::initialize_workspace(temp.path()).expect("workspace initialized");
@@ -31,10 +31,8 @@ fn workspace_bootstrap_does_not_seed_editable_agents_teams_or_automations() {
     assert_eq!(agent_count, 0);
     assert_eq!(team_count, 0);
     assert_eq!(automation_count, 0);
-    assert!(
-        std::fs::read_dir(&initialized.managed_skills_dir)
-            .expect("managed skills dir")
-            .next()
-            .is_none()
-    );
+    assert!(std::fs::read_dir(&initialized.managed_skills_dir)
+        .expect("managed skills dir")
+        .next()
+        .is_none());
 }

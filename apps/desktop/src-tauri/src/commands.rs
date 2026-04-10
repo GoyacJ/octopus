@@ -7,10 +7,10 @@ use std::{
 use base64::{engine::general_purpose::STANDARD, Engine as _};
 use octopus_core::{
     AvatarUploadPayload, ConnectionProfile, CreateHostWorkspaceConnectionInput,
-    CreateNotificationInput, DesktopBackendConnection, ExportWorkspaceAgentBundleResult,
-    HostState, HostUpdateStatus, HostWorkspaceConnectionRecord, NotificationFilter,
-    NotificationListResponse, NotificationRecord, NotificationUnreadSummary, ShellPreferences,
-    WorkspaceDirectoryUploadEntry, WorkspaceFileUploadPayload,
+    CreateNotificationInput, DesktopBackendConnection, ExportWorkspaceAgentBundleResult, HostState,
+    HostUpdateStatus, HostWorkspaceConnectionRecord, NotificationFilter, NotificationListResponse,
+    NotificationRecord, NotificationUnreadSummary, ShellPreferences, WorkspaceDirectoryUploadEntry,
+    WorkspaceFileUploadPayload,
 };
 use rfd::FileDialog;
 use tauri::{AppHandle, State};
@@ -294,7 +294,10 @@ fn trim_single_root_directory(
         return entries;
     }
 
-    let root_prefix = format!("{}/", top_level_names.into_iter().next().unwrap_or_default());
+    let root_prefix = format!(
+        "{}/",
+        top_level_names.into_iter().next().unwrap_or_default()
+    );
     entries
         .into_iter()
         .map(|mut entry| {
@@ -396,7 +399,8 @@ fn read_archive_entries(path: &Path) -> Result<Vec<WorkspaceDirectoryUploadEntry
         }
 
         let mut content = Vec::new();
-        item.read_to_end(&mut content).map_err(|error| error.to_string())?;
+        item.read_to_end(&mut content)
+            .map_err(|error| error.to_string())?;
         let file_name = enclosed
             .file_name()
             .and_then(|name| name.to_str())
@@ -440,13 +444,16 @@ fn write_bundle_entries(
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
-        fs::write(&destination, decode_directory_entry(entry)?).map_err(|error| error.to_string())?;
+        fs::write(&destination, decode_directory_entry(entry)?)
+            .map_err(|error| error.to_string())?;
     }
     Ok(())
 }
 
 #[tauri::command]
-pub fn save_agent_bundle_folder(export_payload: ExportWorkspaceAgentBundleResult) -> Result<(), String> {
+pub fn save_agent_bundle_folder(
+    export_payload: ExportWorkspaceAgentBundleResult,
+) -> Result<(), String> {
     let Some(root) = FileDialog::new().pick_folder() else {
         return Ok(());
     };
@@ -476,7 +483,9 @@ fn build_bundle_archive_bytes(
 }
 
 #[tauri::command]
-pub fn save_agent_bundle_zip(export_payload: ExportWorkspaceAgentBundleResult) -> Result<(), String> {
+pub fn save_agent_bundle_zip(
+    export_payload: ExportWorkspaceAgentBundleResult,
+) -> Result<(), String> {
     let suggested_name = format!("{}.zip", export_payload.root_dir_name);
     let Some(path) = FileDialog::new().set_file_name(&suggested_name).save_file() else {
         return Ok(());

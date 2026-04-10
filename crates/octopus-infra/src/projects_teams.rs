@@ -651,7 +651,9 @@ impl WorkspaceService for InfraWorkspaceService {
             .lock()
             .map_err(|_| AppError::runtime("agents mutex poisoned"))?
             .clone();
-        agents.extend(crate::agent_assets::list_builtin_agent_templates(&workspace_id)?);
+        agents.extend(crate::agent_assets::list_builtin_agent_templates(
+            &workspace_id,
+        )?);
         agents.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
         Ok(agents)
     }
@@ -980,7 +982,9 @@ impl WorkspaceService for InfraWorkspaceService {
             .lock()
             .map_err(|_| AppError::runtime("teams mutex poisoned"))?
             .clone();
-        teams.extend(crate::agent_assets::list_builtin_team_templates(&workspace_id)?);
+        teams.extend(crate::agent_assets::list_builtin_team_templates(
+            &workspace_id,
+        )?);
         teams.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
         Ok(teams)
     }
@@ -1387,11 +1391,10 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<WorkspaceMcpServerDocument, AppError> {
         let asset = crate::agent_assets::find_builtin_mcp_asset(server_name)?
             .ok_or_else(|| AppError::not_found("builtin mcp server"))?;
-        let config = asset
-            .config
-            .as_object()
-            .cloned()
-            .ok_or_else(|| AppError::invalid_input("mcp server config must be a JSON object"))?;
+        let config =
+            asset.config.as_object().cloned().ok_or_else(|| {
+                AppError::invalid_input("mcp server config must be a JSON object")
+            })?;
         let mut document = load_workspace_runtime_document(&self.state.paths)?;
         let servers = ensure_top_level_object(&mut document, "mcpServers")?;
         if servers.contains_key(server_name) {

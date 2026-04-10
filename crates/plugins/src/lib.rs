@@ -1,3 +1,5 @@
+#![allow(clippy::wildcard_imports)]
+
 mod discovery;
 mod hook_dispatch;
 mod hooks;

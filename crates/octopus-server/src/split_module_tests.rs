@@ -699,28 +699,6 @@ async fn copy_workspace_agent_from_builtin(
         .expect("response")
 }
 
-async fn copy_project_agent_from_builtin(
-    router: &Router,
-    token: &str,
-    project_id: &str,
-    agent_id: &str,
-) -> Response {
-    router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri(format!(
-                    "/api/v1/projects/{project_id}/agents/{agent_id}/copy-to-project"
-                ))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("response")
-}
-
 async fn create_workspace_team(router: &Router, token: &str, body: Value) -> Response {
     router
         .clone()
@@ -752,27 +730,6 @@ async fn list_workspace_teams(router: &Router, token: &str) -> Value {
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
     decode_json::<Value>(response).await
-}
-
-async fn copy_workspace_team_from_builtin(
-    router: &Router,
-    token: &str,
-    team_id: &str,
-) -> Response {
-    router
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri(format!(
-                    "/api/v1/workspace/teams/{team_id}/copy-to-workspace"
-                ))
-                .header(header::AUTHORIZATION, format!("Bearer {token}"))
-                .body(Body::empty())
-                .expect("request"),
-        )
-        .await
-        .expect("response")
 }
 
 async fn copy_project_team_from_builtin(
@@ -1799,7 +1756,10 @@ async fn workspace_tool_catalog_surfaces_builtin_skills_as_readonly_and_copyable
     assert_eq!(builtin_skill_entry["name"], "financial-calculator");
     assert_eq!(builtin_skill_entry["ownerScope"], "builtin");
     assert_eq!(builtin_skill_entry["ownerLabel"], "Builtin");
-    assert_eq!(builtin_skill_entry["management"]["canEdit"], Value::Bool(false));
+    assert_eq!(
+        builtin_skill_entry["management"]["canEdit"],
+        Value::Bool(false)
+    );
     assert_eq!(
         builtin_skill_entry["management"]["canDelete"],
         Value::Bool(false)
@@ -2000,7 +1960,9 @@ async fn project_builtin_team_copy_imports_project_scoped_assets() {
         .infra
         .paths
         .root
-        .join(format!("data/projects/{project_id}/skills/financial-calculator/SKILL.md"))
+        .join(format!(
+            "data/projects/{project_id}/skills/financial-calculator/SKILL.md"
+        ))
         .exists());
 
     let project_runtime = fs::read_to_string(
@@ -2358,7 +2320,10 @@ async fn workspace_tool_catalog_includes_project_owned_assets_and_consumers() {
         .find(|entry| entry["kind"] == "builtin" && entry["builtinKey"] == "bash")
         .expect("builtin bash entry");
     assert_eq!(builtin["ownerScope"], "builtin");
-    assert!(builtin["consumers"].is_array(), "builtin entry must expose consumers");
+    assert!(
+        builtin["consumers"].is_array(),
+        "builtin entry must expose consumers"
+    );
     let builtin_consumers = builtin["consumers"].as_array().expect("builtin consumers");
     assert!(builtin_consumers.iter().any(|consumer| {
         consumer["kind"] == "agent"
@@ -2537,8 +2502,7 @@ async fn project_export_route_materializes_linked_workspace_builtin_dependencies
             == Value::String("Linked Finance Agent/skills/financial-calculator/SKILL.md".into())
     }));
     assert!(exported_files.iter().any(|file| {
-        file["relativePath"]
-            == Value::String("Linked Finance Agent/mcps/finance-data.json".into())
+        file["relativePath"] == Value::String("Linked Finance Agent/mcps/finance-data.json".into())
     }));
     assert!(exported_files.iter().any(|file| {
         file["relativePath"]

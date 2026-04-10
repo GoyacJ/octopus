@@ -1588,9 +1588,10 @@ impl InfraWorkspaceService {
 
         let asset = find_builtin_mcp_asset(server_name)?
             .ok_or_else(|| AppError::not_found("workspace mcp server"))?;
-        let config = asset.config.as_object().cloned().ok_or_else(|| {
-            AppError::invalid_input("mcp server config must be a JSON object")
-        })?;
+        let config =
+            asset.config.as_object().cloned().ok_or_else(|| {
+                AppError::invalid_input("mcp server config must be a JSON object")
+            })?;
         Ok(WorkspaceMcpServerDocument {
             server_name: server_name.into(),
             source_key: format!("mcp:{server_name}"),
