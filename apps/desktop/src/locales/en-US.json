@@ -1106,7 +1106,7 @@
       "external": "External"
     },
     "sourceOrigins": {
-      "skills_dir": "Skills directory",
+      "skills_dir": "Skills",
       "legacy_commands_dir": "Legacy /commands"
     },
     "requiredPermissions": {
@@ -1334,7 +1334,10 @@
     },
     "tabs": {
       "agents": "Agents",
-      "teams": "Teams"
+      "teams": "Digital Teams",
+      "builtin": "Built-in",
+      "skill": "Skills",
+      "mcp": "MCP"
     },
     "actions": {
       "create": "Create agent",

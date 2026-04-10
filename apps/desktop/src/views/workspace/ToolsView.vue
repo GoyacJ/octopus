@@ -34,6 +34,10 @@ const {
   tabs,
   activeTabCount,
   filteredEntries,
+  pagedEntries,
+  listPage,
+  listPageCount,
+  listPagination,
   selectedEntry,
   selectedSkillEntry,
   selectedMcpEntry,
@@ -93,8 +97,11 @@ const {
           :active-tab="activeTab"
           :tabs="tabs"
           :search-query="searchQuery"
+          :paged-entries="pagedEntries"
           :filtered-entries="filteredEntries"
           :active-tab-count="activeTabCount"
+          :page="listPage"
+          :page-count="listPageCount"
           :selected-entry-id="draftMode === 'none' ? (selectedEntry?.id ?? '') : ''"
           :selected-external-skill-ids="selectedExternalSkillIds"
           :can-copy-selected-skills-to-managed="canCopySelectedSkillsToManaged"
@@ -108,6 +115,7 @@ const {
           :is-external-skill-entry="isExternalSkillEntry"
           @update:active-tab="activeTab = $event"
           @update:search-query="searchQuery = $event"
+          @update:page="listPagination.setPage"
           @update:selected-external-skill-ids="selectedExternalSkillIds = $event"
           @select-entry="selectEntry"
           @begin-new-skill="beginNewSkill"
@@ -284,6 +292,29 @@ const {
                 </div>
                 <div class="break-all font-mono text-[12px] text-text-secondary">
                   {{ selectedEntry.sourceKey }}
+                </div>
+              </div>
+
+              <div v-if="selectedEntry.ownerLabel" class="space-y-1">
+                <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+                  {{ t('common.owner') }}
+                </div>
+                <div class="text-[13px] text-text-primary">
+                  {{ selectedEntry.ownerLabel }}
+                </div>
+              </div>
+
+              <div v-if="selectedEntry.consumers?.length" class="space-y-1">
+                <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+                  使用者
+                </div>
+                <div class="flex flex-wrap gap-1.5">
+                  <UiBadge
+                    v-for="consumer in selectedEntry.consumers"
+                    :key="`${selectedEntry.id}-${consumer.kind}-${consumer.id}`"
+                    :label="consumer.name"
+                    subtle
+                  />
                 </div>
               </div>
 

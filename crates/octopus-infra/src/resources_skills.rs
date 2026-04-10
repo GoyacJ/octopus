@@ -1146,7 +1146,10 @@ fn push_consumer(
     consumer: &WorkspaceToolConsumerSummary,
 ) {
     let entries = target.entry(key).or_default();
-    if !entries.iter().any(|existing| existing.kind == consumer.kind && existing.id == consumer.id) {
+    if !entries
+        .iter()
+        .any(|existing| existing.kind == consumer.kind && existing.id == consumer.id)
+    {
         entries.push(consumer.clone());
     }
 }
@@ -1165,7 +1168,11 @@ fn sort_consumers(entries: &mut HashMap<String, Vec<WorkspaceToolConsumerSummary
         consumers.sort_by(|left, right| {
             left.kind
                 .cmp(&right.kind)
-                .then_with(|| left.name.to_ascii_lowercase().cmp(&right.name.to_ascii_lowercase()))
+                .then_with(|| {
+                    left.name
+                        .to_ascii_lowercase()
+                        .cmp(&right.name.to_ascii_lowercase())
+                })
                 .then_with(|| left.id.cmp(&right.id))
         });
     }
@@ -1468,14 +1475,16 @@ impl InfraWorkspaceService {
             .collect::<Result<HashMap<_, _>, _>>()?;
         let project_mcp_source_keys = project_mcp_configs
             .iter()
-            .flat_map(|(project_id, configs): (&String, &BTreeMap<String, serde_json::Value>)| {
-                configs.keys().map(move |server_name: &String| {
-                    (
-                        (project_id.clone(), server_name.clone()),
-                        mcp_source_key("project", Some(project_id), server_name),
-                    )
-                })
-            })
+            .flat_map(
+                |(project_id, configs): (&String, &BTreeMap<String, serde_json::Value>)| {
+                    configs.keys().map(move |server_name: &String| {
+                        (
+                            (project_id.clone(), server_name.clone()),
+                            mcp_source_key("project", Some(project_id), server_name),
+                        )
+                    })
+                },
+            )
             .collect::<HashMap<_, _>>();
         let consumer_maps = build_tool_consumer_maps(
             &agents,
@@ -1521,12 +1530,15 @@ impl InfraWorkspaceService {
             });
         }
 
-        for skill in load_skills_from_roots(&discover_catalog_skill_roots(&self.state.paths, &projects))? {
+        for skill in
+            load_skills_from_roots(&discover_catalog_skill_roots(&self.state.paths, &projects))?
+        {
             let is_active = skill.shadowed_by.is_none();
             let source_key = skill_source_key(&skill.path, &workspace_root);
             let relative_path = workspace_relative_path(&skill.path, &workspace_root);
             let workspace_owned = is_workspace_owned_skill(relative_path.as_deref(), skill.origin);
-            let project_owner_id = project_owned_skill_project_id(relative_path.as_deref(), skill.origin);
+            let project_owner_id =
+                project_owned_skill_project_id(relative_path.as_deref(), skill.origin);
             let skill_id = catalog_hash_id("skill", &display_path(&skill.path, &workspace_root));
             entries.push(WorkspaceToolCatalogEntry {
                 id: skill_id.clone(),
@@ -1652,7 +1664,10 @@ impl InfraWorkspaceService {
         }
 
         for project in &projects {
-            let project_configs = project_mcp_configs.get(&project.id).cloned().unwrap_or_default();
+            let project_configs = project_mcp_configs
+                .get(&project.id)
+                .cloned()
+                .unwrap_or_default();
             for (server_name, config) in project_configs {
                 let source_key = mcp_source_key("project", Some(&project.id), &server_name);
                 entries.push(WorkspaceToolCatalogEntry {

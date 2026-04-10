@@ -73,6 +73,15 @@ const { t } = useI18n()
         </div>
       </div>
 
+      <div v-if="entry.ownerLabel" class="space-y-1">
+        <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+          {{ t('common.owner') }}
+        </div>
+        <div class="text-[13px] text-text-primary">
+          {{ entry.ownerLabel }}
+        </div>
+      </div>
+
       <div class="space-y-1">
         <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
           {{ t('tools.detail.disabled') }}
@@ -135,6 +144,20 @@ const { t } = useI18n()
       </div>
     </div>
 
+    <div v-if="entry.consumers?.length" class="space-y-1">
+      <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+        使用者
+      </div>
+      <div class="flex flex-wrap gap-1.5">
+        <UiBadge
+          v-for="consumer in entry.consumers"
+          :key="`${entry.id}-${consumer.kind}-${consumer.id}`"
+          :label="consumer.name"
+          subtle
+        />
+      </div>
+    </div>
+
     <div v-if="entry.statusDetail" class="space-y-1">
       <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
         {{ t('tools.detail.statusDetail') }}
@@ -157,6 +180,7 @@ const { t } = useI18n()
         <UiCodeEditor
           language="json"
           theme="octopus"
+          :readonly="!entry.management.canEdit"
           :model-value="mcpConfigDraft"
           @update:model-value="emit('update:mcpConfigDraft', $event)"
         />
@@ -165,11 +189,12 @@ const { t } = useI18n()
 
     <UiStatusCallout v-if="panelError" tone="error" :description="panelError" />
 
-    <div class="flex gap-2">
-      <UiButton :loading="submitting" @click="emit('save')">
+    <div v-if="entry.management.canEdit || entry.management.canDelete" class="flex gap-2">
+      <UiButton v-if="entry.management.canEdit" :loading="submitting" @click="emit('save')">
         {{ t('common.save') }}
       </UiButton>
       <UiButton
+        v-if="entry.management.canDelete"
         variant="ghost"
         :loading="deleting"
         @click="emit('delete')"

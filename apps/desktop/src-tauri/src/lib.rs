@@ -61,9 +61,12 @@ pub fn run() {
             commands::healthcheck,
             commands::restart_desktop_backend,
             commands::pick_avatar_image,
+            commands::pick_agent_bundle_archive,
             commands::pick_agent_bundle_folder,
             commands::pick_skill_archive,
             commands::pick_skill_folder,
+            commands::save_agent_bundle_folder,
+            commands::save_agent_bundle_zip,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

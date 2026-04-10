@@ -14,6 +14,7 @@ import type {
   WorkspaceToolKind,
 } from '@octopus/schema'
 
+import { usePagination } from '@/composables/usePagination'
 import { useCatalogStore } from '@/stores/catalog'
 import { useShellStore } from '@/stores/shell'
 import { pickSkillArchive, pickSkillFolder } from '@/tauri/client'
@@ -181,6 +182,13 @@ export function useToolsView() {
       return haystack.includes(query)
     })
   })
+  const listPagination = usePagination(filteredEntries, {
+    pageSize: 6,
+    resetOn: [activeTab, searchQuery],
+  })
+  const pagedEntries = computed(() => listPagination.pagedItems.value)
+  const listPage = computed(() => listPagination.currentPage.value)
+  const listPageCount = computed(() => listPagination.pageCount.value)
 
   const selectedEntry = computed(() =>
     filteredEntries.value.find(entry => entry.id === selectedEntryId.value) ?? filteredEntries.value[0] ?? null,
@@ -333,13 +341,19 @@ export function useToolsView() {
           return
         }
 
-        const document = await catalogStore.getMcpServerDocument(entry.serverName)
-        if (cancelled) {
+        if (entry.management.canEdit) {
+          const document = await catalogStore.getMcpServerDocument(entry.serverName)
+          if (cancelled) {
+            return
+          }
+          currentMcpDocument.value = document
+          mcpServerNameDraft.value = document.serverName
+          mcpConfigDraft.value = JSON.stringify(document.config, null, 2)
           return
         }
-        currentMcpDocument.value = document
-        mcpServerNameDraft.value = document.serverName
-        mcpConfigDraft.value = JSON.stringify(document.config, null, 2)
+
+        mcpServerNameDraft.value = entry.serverName
+        mcpConfigDraft.value = ''
       } catch (error) {
         if (!cancelled) {
           panelError.value = toErrorMessage(error)
@@ -811,6 +825,9 @@ export function useToolsView() {
     activeTabEntries,
     activeTabCount,
     filteredEntries,
+    pagedEntries,
+    listPage,
+    listPageCount,
     selectedEntry,
     selectedSkillEntry,
     selectedMcpEntry,
@@ -845,6 +862,7 @@ export function useToolsView() {
     copySelectedSkillToManaged,
     copySelectedSkillsToManaged,
     selectEntry,
+    listPagination,
     selectSkillFile,
     submitPendingSkillAction,
     suggestSlug,

@@ -4,6 +4,7 @@ import type {
   AvatarUploadPayload,
   CreateNotificationInput,
   CreateHostWorkspaceConnectionInput,
+  ExportWorkspaceAgentBundleResult,
   HealthcheckStatus,
   HostBackendConnection,
   HostState,
@@ -133,6 +134,21 @@ async function pickAgentBundleFolder(): Promise<WorkspaceDirectoryUploadEntry[] 
   return await invoke<WorkspaceDirectoryUploadEntry[] | null>('pick_agent_bundle_folder')
 }
 
+async function pickAgentBundleArchive(): Promise<WorkspaceDirectoryUploadEntry[] | null> {
+  assertTauriHostAvailable()
+  return await invoke<WorkspaceDirectoryUploadEntry[] | null>('pick_agent_bundle_archive')
+}
+
+async function saveAgentBundleExport(
+  exportPayload: ExportWorkspaceAgentBundleResult,
+  format: 'folder' | 'zip',
+): Promise<void> {
+  assertTauriHostAvailable()
+  await invoke(format === 'folder' ? 'save_agent_bundle_folder' : 'save_agent_bundle_zip', {
+    exportPayload,
+  })
+}
+
 async function listWorkspaceConnections(): Promise<HostWorkspaceConnectionRecord[]> {
   assertTauriHostAvailable()
   return await invoke<HostWorkspaceConnectionRecord[]>('list_workspace_connections')
@@ -201,9 +217,11 @@ export const tauriShellClient = {
   restartDesktopBackend,
   resolveDesktopBackendConnection,
   pickAvatarImage,
+  pickAgentBundleArchive,
   pickSkillArchive,
   pickSkillFolder,
   pickAgentBundleFolder,
+  saveAgentBundleExport,
   listWorkspaceConnections,
   createWorkspaceConnection,
   deleteWorkspaceConnection,

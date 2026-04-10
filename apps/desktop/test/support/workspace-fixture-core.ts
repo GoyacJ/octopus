@@ -176,8 +176,11 @@ export function installWorkspaceApiFixture(options: FixtureOptions = {}): void {
   vi.spyOn(tauriClient, 'healthcheck').mockResolvedValue({
     backend: { state: 'ready', transport: 'http' },
   })
+  vi.spyOn(tauriClient, 'pickAgentBundleArchive').mockResolvedValue(null)
+  vi.spyOn(tauriClient, 'pickAgentBundleFolder').mockResolvedValue(null)
   vi.spyOn(tauriClient, 'pickSkillArchive').mockResolvedValue(null)
   vi.spyOn(tauriClient, 'pickSkillFolder').mockResolvedValue(null)
+  vi.spyOn(tauriClient, 'saveAgentBundleExport').mockResolvedValue()
   vi.spyOn(tauriClient, 'listNotifications').mockResolvedValue({
     notifications: [],
     unread: {

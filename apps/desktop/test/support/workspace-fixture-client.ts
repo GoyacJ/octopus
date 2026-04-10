@@ -4,6 +4,12 @@ import type {
   ChangeCurrentUserPasswordResponse,
   CopyWorkspaceSkillToManagedInput,
   CreateWorkspaceSkillInput,
+  ExportWorkspaceAgentBundleInput,
+  ExportWorkspaceAgentBundleResult,
+  ImportWorkspaceAgentBundleInput,
+  ImportWorkspaceAgentBundlePreview,
+  ImportWorkspaceAgentBundlePreviewInput,
+  ImportWorkspaceAgentBundleResult,
   PetConversationBinding,
   ProjectAgentLinkRecord,
   ProjectTeamLinkRecord,
@@ -32,6 +38,7 @@ import type {
   WorkspaceSkillFileDocument,
   WorkspaceToolCatalogEntry,
   WorkspaceToolDisablePatch,
+  WorkspaceDirectoryUploadEntry,
 } from '@octopus/schema'
 import { resolveRuntimePermissionMode } from '@octopus/schema'
 
@@ -276,6 +283,130 @@ export function createWorkspaceClientFixture(
     return document
   }
 
+  const normalizeImportedDirectoryEntries = (files: WorkspaceDirectoryUploadEntry[]) =>
+    files.map(file => ({
+      ...file,
+      relativePath: file.relativePath.replace(/^\/+/, ''),
+    }))
+
+  const buildAgentBundlePreview = (
+    input: ImportWorkspaceAgentBundlePreviewInput | ImportWorkspaceAgentBundleInput,
+    targetProjectId?: string,
+  ): ImportWorkspaceAgentBundlePreview => {
+    const files = normalizeImportedDirectoryEntries(input.files)
+    const projectScoped = Boolean(targetProjectId)
+    return {
+      departments: ['Imported Bundle'],
+      departmentCount: 1,
+      detectedAgentCount: 1,
+      importableAgentCount: 1,
+      detectedTeamCount: 1,
+      importableTeamCount: 1,
+      createCount: 2,
+      updateCount: 0,
+      skipCount: 0,
+      failureCount: 0,
+      uniqueSkillCount: 1,
+      uniqueMcpCount: 1,
+      avatarCount: 2,
+      filteredFileCount: files.length,
+      agents: [
+        {
+          sourceId: projectScoped ? 'imported-project-agent' : 'imported-workspace-agent',
+          name: projectScoped ? 'Imported Project Agent' : 'Imported Workspace Agent',
+          department: 'Imported Bundle',
+          action: 'create',
+          skillSlugs: ['imported-skill'],
+          mcpServerNames: ['imported-mcp'],
+        },
+      ],
+      teams: [
+        {
+          sourceId: projectScoped ? 'imported-project-team' : 'imported-workspace-team',
+          name: projectScoped ? 'Imported Project Team' : 'Imported Workspace Team',
+          action: 'create',
+          leaderName: projectScoped ? 'Imported Project Agent' : 'Imported Workspace Agent',
+          memberNames: [projectScoped ? 'Imported Project Agent' : 'Imported Workspace Agent'],
+          agentSourceIds: [projectScoped ? 'imported-project-agent' : 'imported-workspace-agent'],
+        },
+      ],
+      skills: [
+        {
+          slug: 'imported-skill',
+          skillId: 'skill-imported-skill',
+          name: 'imported-skill',
+          action: 'create',
+          contentHash: 'hash-imported-skill',
+          fileCount: Math.max(1, files.length),
+          sourceIds: [projectScoped ? 'imported-project-agent' : 'imported-workspace-agent'],
+          departments: ['Imported Bundle'],
+          agentNames: [projectScoped ? 'Imported Project Agent' : 'Imported Workspace Agent'],
+        },
+      ],
+      mcps: [
+        {
+          serverName: 'imported-mcp',
+          action: 'create',
+          contentHash: 'hash-imported-mcp',
+          sourceIds: [projectScoped ? 'imported-project-agent' : 'imported-workspace-agent'],
+          consumerNames: [projectScoped ? 'Imported Project Agent' : 'Imported Workspace Agent'],
+          referencedOnly: false,
+        },
+      ],
+      avatars: [
+        {
+          sourceId: projectScoped ? 'imported-project-agent' : 'imported-workspace-agent',
+          ownerKind: 'agent',
+          ownerName: projectScoped ? 'Imported Project Agent' : 'Imported Workspace Agent',
+          fileName: 'avatar.png',
+          generated: false,
+        },
+        {
+          sourceId: projectScoped ? 'imported-project-team' : 'imported-workspace-team',
+          ownerKind: 'team',
+          ownerName: projectScoped ? 'Imported Project Team' : 'Imported Workspace Team',
+          fileName: 'team-avatar.png',
+          generated: true,
+        },
+      ],
+      issues: [],
+    }
+  }
+
+  const buildAgentBundleExport = (
+    input: ExportWorkspaceAgentBundleInput,
+  ): ExportWorkspaceAgentBundleResult => {
+    const rootDirName = input.mode === 'single' ? 'agent-bundle-single' : 'agent-bundle-batch'
+    const files = [
+      ...input.agentIds.map((agentId, index) => ({
+        fileName: `${agentId}.md`,
+        contentType: 'text/markdown',
+        byteSize: 64,
+        dataBase64: btoa(`# ${agentId}\n`),
+        relativePath: `${rootDirName}/agents/${index + 1}-${agentId}/${agentId}.md`,
+      })),
+      ...input.teamIds.map((teamId, index) => ({
+        fileName: `${teamId}.md`,
+        contentType: 'text/markdown',
+        byteSize: 64,
+        dataBase64: btoa(`# ${teamId}\n`),
+        relativePath: `${rootDirName}/teams/${index + 1}-${teamId}/${teamId}.md`,
+      })),
+    ]
+
+    return {
+      rootDirName,
+      fileCount: files.length,
+      agentCount: input.agentIds.length,
+      teamCount: input.teamIds.length,
+      skillCount: Math.max(0, input.agentIds.length + input.teamIds.length),
+      mcpCount: input.agentIds.length ? 1 : 0,
+      avatarCount: input.agentIds.length + input.teamIds.length,
+      files,
+      issues: [],
+    }
+  }
+
   return {
     system: {
       async bootstrap() {
@@ -502,6 +633,59 @@ export function createWorkspaceClientFixture(
     agents: {
       async list() {
         return clone(workspaceState.agents)
+      },
+      async previewImportBundle(input, projectId) {
+        return clone(buildAgentBundlePreview(input, projectId))
+      },
+      async importBundle(input, projectId) {
+        const preview = buildAgentBundlePreview(input, projectId)
+        const importedAgentId = projectId ? 'agent-imported-project' : 'agent-imported-workspace'
+        const importedTeamId = projectId ? 'team-imported-project' : 'team-imported-workspace'
+        const importedAgent = normalizeAgentRecord(
+          {
+            workspaceId: workspaceState.workspace.id,
+            projectId,
+            scope: projectId ? 'project' : 'workspace',
+            name: projectId ? 'Imported Project Agent' : 'Imported Workspace Agent',
+            builtinToolKeys: ['bash'],
+            skillIds: [],
+            mcpServerNames: [],
+            description: 'Imported from an agent bundle.',
+            personality: 'Imported fixture persona',
+            tags: ['imported'],
+            prompt: 'Imported fixture prompt',
+            status: 'active',
+          },
+          undefined,
+          importedAgentId,
+        )
+        const importedTeam = normalizeTeamRecord(
+          {
+            workspaceId: workspaceState.workspace.id,
+            projectId,
+            scope: projectId ? 'project' : 'workspace',
+            name: projectId ? 'Imported Project Team' : 'Imported Workspace Team',
+            builtinToolKeys: ['bash'],
+            skillIds: [],
+            mcpServerNames: [],
+            leaderAgentId: importedAgentId,
+            memberAgentIds: [importedAgentId],
+            description: 'Imported from an agent bundle.',
+            personality: 'Imported fixture team',
+            tags: ['imported'],
+            prompt: 'Imported fixture prompt',
+            status: 'active',
+          },
+          undefined,
+          importedTeamId,
+        )
+
+        workspaceState.agents = [...workspaceState.agents, importedAgent]
+        workspaceState.teams = [...workspaceState.teams, importedTeam]
+        return clone(preview) as ImportWorkspaceAgentBundleResult
+      },
+      async exportBundle(input) {
+        return clone(buildAgentBundleExport(input))
       },
       async create(input) {
         const id = `agent-${Date.now()}`

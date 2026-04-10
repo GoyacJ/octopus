@@ -470,4 +470,50 @@ describe('host client transport', () => {
       expect.objectContaining({ method: 'DELETE', headers: expect.any(Headers) }),
     )
   })
+
+  it('bridges agent bundle archive picking through the Tauri shell bridge', async () => {
+    invokeSpy.mockResolvedValue(null)
+
+    const client = await loadClientModule()
+    await (client as typeof client & {
+      pickAgentBundleArchive: () => Promise<unknown>
+    }).pickAgentBundleArchive()
+
+    expect(invokeSpy).toHaveBeenCalledWith('pick_agent_bundle_archive')
+  })
+
+  it('bridges agent bundle export saving for folders and zip archives', async () => {
+    invokeSpy.mockResolvedValue(undefined)
+
+    const client = await loadClientModule()
+    const payload = {
+      rootDirName: 'finance-bundle',
+      fileCount: 1,
+      agentCount: 1,
+      teamCount: 0,
+      skillCount: 1,
+      mcpCount: 0,
+      avatarCount: 1,
+      files: [
+        {
+          fileName: 'Analyst.md',
+          contentType: 'text/markdown',
+          byteSize: 24,
+          dataBase64: 'IyBBbmFseXN0Cg==',
+          relativePath: 'finance-bundle/Analyst/Analyst.md',
+        },
+      ],
+      issues: [],
+    }
+
+    await (client as typeof client & {
+      saveAgentBundleExport: (result: typeof payload, format: 'folder' | 'zip') => Promise<void>
+    }).saveAgentBundleExport(payload, 'folder')
+    expect(invokeSpy).toHaveBeenCalledWith('save_agent_bundle_folder', { exportPayload: payload })
+
+    await (client as typeof client & {
+      saveAgentBundleExport: (result: typeof payload, format: 'folder' | 'zip') => Promise<void>
+    }).saveAgentBundleExport(payload, 'zip')
+    expect(invokeSpy).toHaveBeenCalledWith('save_agent_bundle_zip', { exportPayload: payload })
+  })
 })

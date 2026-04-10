@@ -4,6 +4,7 @@ import type {
   WorkspaceMcpServerDocument,
   WorkspaceSkillDocument,
   WorkspaceSkillFileDocument,
+  WorkspaceToolConsumerSummary,
   WorkspaceSkillTreeNode,
   WorkspaceToolCatalogEntry,
 } from '@octopus/schema'
@@ -341,6 +342,13 @@ export function createSkillCatalogEntry(
   workspaceId: string,
   document: WorkspaceSkillDocument,
   disabled = false,
+  options: {
+    management?: ReturnType<typeof createManagementCapabilities>
+    ownerScope?: 'builtin' | 'workspace' | 'project' | string
+    ownerId?: string
+    ownerLabel?: string
+    consumers?: WorkspaceToolConsumerSummary[]
+  } = {},
 ): WorkspaceToolCatalogEntry {
   return {
     id: document.id,
@@ -353,11 +361,15 @@ export function createSkillCatalogEntry(
     sourceKey: document.sourceKey,
     displayPath: document.displayPath,
     disabled,
-    management: createManagementCapabilities(true, document.workspaceOwned, document.workspaceOwned),
+    management: options.management ?? createManagementCapabilities(true, document.workspaceOwned, document.workspaceOwned),
     active: true,
     sourceOrigin: document.sourceOrigin,
     workspaceOwned: document.workspaceOwned,
     relativePath: document.relativePath,
+    ownerScope: options.ownerScope,
+    ownerId: options.ownerId,
+    ownerLabel: options.ownerLabel,
+    consumers: options.consumers,
   }
 }
 
@@ -365,22 +377,37 @@ export function createMcpCatalogEntry(
   workspaceId: string,
   document: WorkspaceMcpServerDocument,
   disabled = false,
+  options: {
+    management?: ReturnType<typeof createManagementCapabilities>
+    ownerScope?: 'builtin' | 'workspace' | 'project' | string
+    ownerId?: string
+    ownerLabel?: string
+    consumers?: WorkspaceToolConsumerSummary[]
+    toolNames?: string[]
+    statusDetail?: string
+    description?: string
+  } = {},
 ): WorkspaceToolCatalogEntry {
   return {
     id: `mcp-${document.serverName}`,
     workspaceId,
     kind: 'mcp',
     name: document.serverName,
-    description: 'Configured MCP server.',
+    description: options.description ?? 'Configured MCP server.',
     availability: 'configured',
     requiredPermission: null,
     sourceKey: document.sourceKey,
     displayPath: document.displayPath,
     disabled,
-    management: createManagementCapabilities(true, true, true),
+    management: options.management ?? createManagementCapabilities(true, true, true),
     serverName: document.serverName,
     endpoint: mcpEndpointFromConfig(document.config),
-    toolNames: [],
+    toolNames: options.toolNames ?? [],
     scope: document.scope,
+    statusDetail: options.statusDetail,
+    ownerScope: options.ownerScope,
+    ownerId: options.ownerId,
+    ownerLabel: options.ownerLabel,
+    consumers: options.consumers,
   }
 }

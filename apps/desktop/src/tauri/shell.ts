@@ -2,6 +2,7 @@ import type {
   AvatarUploadPayload,
   CreateNotificationInput,
   CreateHostWorkspaceConnectionInput,
+  ExportWorkspaceAgentBundleResult,
   HealthcheckStatus,
   HostBackendConnection,
   HostState,
@@ -95,6 +96,17 @@ export async function pickAgentBundleFolder(): Promise<WorkspaceDirectoryUploadE
   return await resolveShellClient().pickAgentBundleFolder()
 }
 
+export async function pickAgentBundleArchive(): Promise<WorkspaceDirectoryUploadEntry[] | null> {
+  return await resolveShellClient().pickAgentBundleArchive()
+}
+
+export async function saveAgentBundleExport(
+  exportPayload: ExportWorkspaceAgentBundleResult,
+  format: 'folder' | 'zip',
+): Promise<void> {
+  await resolveShellClient().saveAgentBundleExport(exportPayload, format)
+}
+
 export async function listWorkspaceConnections(): Promise<HostWorkspaceConnectionRecord[]> {
   return await resolveShellClient().listWorkspaceConnections()
 }
@@ -153,9 +165,11 @@ export const hostClient = {
   restartDesktopBackend,
   resolveDesktopBackendConnection: resolveDesktopBackendConnectionForHost,
   pickAvatarImage,
+  pickAgentBundleArchive,
   pickAgentBundleFolder,
   pickSkillArchive,
   pickSkillFolder,
+  saveAgentBundleExport,
   listWorkspaceConnections,
   createWorkspaceConnection,
   deleteWorkspaceConnection,

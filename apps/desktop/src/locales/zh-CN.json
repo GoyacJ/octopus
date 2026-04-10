@@ -1023,7 +1023,7 @@
     },
     "tabs": {
       "builtin": "内置工具",
-      "skill": "技能目录",
+      "skill": "技能",
       "mcp": "MCP"
     },
     "empty": {
@@ -1106,7 +1106,7 @@
       "external": "外部来源"
     },
     "sourceOrigins": {
-      "skills_dir": "技能目录",
+      "skills_dir": "技能",
       "legacy_commands_dir": "旧版 /commands"
     },
     "requiredPermissions": {
@@ -1334,7 +1334,10 @@
     },
     "tabs": {
       "agents": "数字员工",
-      "teams": "团队"
+      "teams": "数字团队",
+      "builtin": "内置工具",
+      "skill": "技能",
+      "mcp": "MCP"
     },
     "actions": {
       "create": "创建数字员工",

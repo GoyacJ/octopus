@@ -104,6 +104,7 @@ describe('Workspace tools view', () => {
 
     const skillTab = findTabButton(mounted.container, String(i18n.global.t('tools.tabs.skill')))
     expect(skillTab).toBeDefined()
+    expect(skillTab?.textContent).toContain('技能')
     skillTab!.click()
     await waitForText(mounted.container, 'help')
 
@@ -114,6 +115,40 @@ describe('Workspace tools view', () => {
 
     expect(mounted.container.textContent).toContain('ops')
     expect(mounted.container.textContent).toContain('MCP handshake timed out')
+
+    mounted.destroy()
+  })
+
+  it('renders owner and consumer metadata for skill catalog entries', async () => {
+    const mounted = mountApp()
+
+    const skillTab = findTabButton(mounted.container, String(i18n.global.t('tools.tabs.skill')))
+    expect(skillTab).toBeDefined()
+    skillTab!.click()
+    await waitForText(mounted.container, 'help')
+
+    const managedCard = mounted.container.querySelector<HTMLElement>('[data-testid="tool-entry-skill-workspace-help"]')
+    expect(managedCard).toBeDefined()
+    managedCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    await waitForText(mounted.container, 'Local Workspace')
+    expect(mounted.container.textContent).toContain('Architect Agent')
+    expect(mounted.container.textContent).toContain('Studio Direction Team')
+
+    mounted.destroy()
+  })
+
+  it('paginates the left tool catalog list after filtering', async () => {
+    const mounted = mountApp()
+
+    await waitForText(mounted.container, 'bash')
+    expect(mounted.container.textContent).not.toContain('image_query')
+
+    const nextButton = findButton(mounted.container, 'Next')
+    expect(nextButton).toBeDefined()
+    nextButton!.click()
+
+    await waitForText(mounted.container, 'image_query')
 
     mounted.destroy()
   })
@@ -337,6 +372,25 @@ describe('Workspace tools view', () => {
     const settingsLink = Array.from(mounted.container.querySelectorAll<HTMLAnchorElement>('a'))
       .find(link => link.getAttribute('href') === '/settings')
     expect(settingsLink).toBeUndefined()
+
+    mounted.destroy()
+  })
+
+  it('shows project-owned MCP entries as read-only in the workspace catalog', async () => {
+    const mounted = mountApp()
+
+    const mcpTab = findTabButton(mounted.container, String(i18n.global.t('tools.tabs.mcp')))
+    expect(mcpTab).toBeDefined()
+    mcpTab!.click()
+    await waitForText(mounted.container, 'redesign-ops')
+
+    const projectOwnedCard = mounted.container.querySelector<HTMLElement>('[data-testid="tool-entry-mcp-redesign-ops"]')
+    expect(projectOwnedCard).toBeDefined()
+    projectOwnedCard?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    await waitForText(mounted.container, 'Desktop Redesign')
+    expect(findButton(mounted.container, String(i18n.global.t('common.save')))).toBeUndefined()
+    expect(findButton(mounted.container, String(i18n.global.t('common.delete')))).toBeUndefined()
 
     mounted.destroy()
   })

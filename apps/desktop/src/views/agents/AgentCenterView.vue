@@ -6,6 +6,7 @@ import { UiButton, UiDialog, UiPageHeader, UiPageShell, UiSurface, UiTabs } from
 import AgentBundleImportDialog from './AgentBundleImportDialog.vue'
 import AgentEditorDialog from './AgentEditorDialog.vue'
 import AgentListPanel from './AgentListPanel.vue'
+import AgentResourceCatalogPanel from './AgentResourceCatalogPanel.vue'
 import AgentsStatsStrip from './AgentsStatsStrip.vue'
 import TeamEditorDialog from './TeamEditorDialog.vue'
 import TeamListPanel from './TeamListPanel.vue'
@@ -23,6 +24,7 @@ const {
   teamViewMode,
   agentQuery,
   teamQuery,
+  resourceQuery,
   agentDialogOpen,
   teamDialogOpen,
   deleteConfirmOpen,
@@ -49,14 +51,19 @@ const {
   tabs,
   pagedAgents,
   pagedTeams,
+  pagedResources,
   agentTotal,
   teamTotal,
+  resourceTotal,
   agentPage,
   teamPage,
+  resourcePage,
   agentPageCount,
   teamPageCount,
+  resourcePageCount,
   agentPagination,
   teamPagination,
+  resourcePagination,
   centerStats,
   setTab,
   openCreateAgent,
@@ -134,6 +141,17 @@ const {
       @create-team="openCreateTeam"
       @open-team="openEditTeam"
       @remove-team="removeTeam"
+    />
+
+    <AgentResourceCatalogPanel
+      v-show="activeTab === 'builtin' || activeTab === 'skill' || activeTab === 'mcp'"
+      :query="resourceQuery"
+      :total="resourceTotal"
+      :page="resourcePage"
+      :page-count="resourcePageCount"
+      :paged-entries="pagedResources"
+      @update:query="resourceQuery = $event"
+      @update:page="resourcePagination.setPage"
     />
 
     <AgentEditorDialog

@@ -8,9 +8,10 @@ import type {
   ImportWorkspaceAgentBundlePreview,
   ImportWorkspaceAgentBundleResult,
   TeamRecord,
-  WorkspaceDirectoryUploadEntry,
   UpsertAgentInput,
   UpsertTeamInput,
+  WorkspaceDirectoryUploadEntry,
+  WorkspaceToolCatalogEntry,
 } from '@octopus/schema'
 
 import { usePagination } from '@/composables/usePagination'
@@ -22,7 +23,7 @@ import { useWorkspaceStore } from '@/stores/workspace'
 import * as tauriClient from '@/tauri/client'
 
 export type CenterScope = 'workspace' | 'project'
-export type CenterTab = 'agent' | 'team'
+export type CenterTab = 'agent' | 'team' | 'builtin' | 'skill' | 'mcp'
 export type ViewMode = 'list' | 'card'
 
 export interface SelectOption {
@@ -74,6 +75,7 @@ export function useAgentCenter(scope: CenterScope) {
   const teamViewMode = ref<ViewMode>('card')
   const agentQuery = ref('')
   const teamQuery = ref('')
+  const resourceQuery = ref('')
 
   const agentDialogOpen = ref(false)
   const teamDialogOpen = ref(false)
@@ -196,31 +198,44 @@ export function useAgentCenter(scope: CenterScope) {
         keywords: [agent.personality, ...agent.tags],
       })),
   )
+  const tabValues: CenterTab[] = ['agent', 'team', 'builtin', 'skill', 'mcp']
   const tabs = computed(() => ([
     { value: 'agent', label: t('agents.tabs.agents') },
     { value: 'team', label: t('agents.tabs.teams') },
+    { value: 'builtin', label: t('tools.tabs.builtin') },
+    { value: 'skill', label: t('tools.tabs.skill') },
+    { value: 'mcp', label: t('tools.tabs.mcp') },
   ]))
 
   watch(
     () => route.query.tab,
     (value) => {
-      activeTab.value = value === 'team' ? 'team' : 'agent'
+      activeTab.value = typeof value === 'string' && tabValues.includes(value as CenterTab)
+        ? value as CenterTab
+        : 'agent'
     },
     { immediate: true },
   )
 
   watch(
     () => [shell.activeWorkspaceConnectionId, projectId.value],
-    async ([connectionId]) => {
+    async ([connectionId, nextProjectId]) => {
       if (!connectionId) {
         return
       }
 
-      await Promise.all([
+      const tasks: Promise<unknown>[] = [
         agentStore.load(connectionId),
         teamStore.load(connectionId),
         catalogStore.load(connectionId),
-      ])
+      ]
+      if (isProjectScope.value && nextProjectId) {
+        tasks.push(
+          agentStore.loadProjectLinks(nextProjectId, connectionId),
+          teamStore.loadProjectLinks(nextProjectId, connectionId),
+        )
+      }
+      await Promise.all(tasks)
     },
     { immediate: true },
   )
@@ -254,6 +269,41 @@ export function useAgentCenter(scope: CenterScope) {
 
   const filteredAgents = computed(() => currentAgents.value.filter(agent => matchesQuery(agent, agentQuery.value)))
   const filteredTeams = computed(() => currentTeams.value.filter(team => matchesQuery(team, teamQuery.value)))
+  const activeResourceKind = computed<WorkspaceToolCatalogEntry['kind'] | null>(() =>
+    activeTab.value === 'builtin' || activeTab.value === 'skill' || activeTab.value === 'mcp'
+      ? activeTab.value
+      : null,
+  )
+  const filteredResourceEntries = computed(() => {
+    const kind = activeResourceKind.value
+    if (!kind) {
+      return [] as WorkspaceToolCatalogEntry[]
+    }
+    const query = resourceQuery.value.trim().toLowerCase()
+    return catalogStore.toolCatalogEntries.filter((entry) => {
+      if (entry.kind !== kind) {
+        return false
+      }
+      if (!query) {
+        return true
+      }
+      const haystack = [
+        entry.name,
+        entry.description,
+        entry.displayPath,
+        entry.sourceKey,
+        entry.ownerLabel ?? '',
+        ...(entry.consumers?.map(consumer => consumer.name) ?? []),
+        entry.kind === 'mcp' ? entry.serverName : '',
+        entry.kind === 'mcp' ? entry.endpoint : '',
+        entry.kind === 'mcp' ? entry.toolNames.join(' ') : '',
+        entry.kind === 'skill' ? entry.relativePath ?? '' : '',
+        entry.kind === 'skill' ? entry.shadowedBy ?? '' : '',
+        entry.kind === 'builtin' ? entry.builtinKey : '',
+      ].join(' ').toLowerCase()
+      return haystack.includes(query)
+    })
+  })
 
   const agentPagination = usePagination(filteredAgents, {
     pageSize: 6,
@@ -263,14 +313,22 @@ export function useAgentCenter(scope: CenterScope) {
     pageSize: 6,
     resetOn: [teamQuery, () => scope, projectId],
   })
+  const resourcePagination = usePagination(filteredResourceEntries, {
+    pageSize: 6,
+    resetOn: [resourceQuery, activeResourceKind, () => scope, projectId],
+  })
   const pagedAgents = computed(() => agentPagination.pagedItems.value)
   const pagedTeams = computed(() => teamPagination.pagedItems.value)
+  const pagedResources = computed(() => resourcePagination.pagedItems.value)
   const agentTotal = computed(() => agentPagination.totalItems.value)
   const teamTotal = computed(() => teamPagination.totalItems.value)
+  const resourceTotal = computed(() => resourcePagination.totalItems.value)
   const agentPage = computed(() => agentPagination.currentPage.value)
   const teamPage = computed(() => teamPagination.currentPage.value)
+  const resourcePage = computed(() => resourcePagination.currentPage.value)
   const agentPageCount = computed(() => agentPagination.pageCount.value)
   const teamPageCount = computed(() => teamPagination.pageCount.value)
+  const resourcePageCount = computed(() => resourcePagination.pageCount.value)
 
   const centerStats = computed(() => [
     {
@@ -280,7 +338,7 @@ export function useAgentCenter(scope: CenterScope) {
       tone: 'success' as const,
     },
     {
-      label: '协作团队',
+      label: '数字团队',
       value: String(currentTeams.value.length),
       helper: '已组建的数字员工团队',
       tone: 'info' as const,
@@ -318,7 +376,7 @@ export function useAgentCenter(scope: CenterScope) {
   }
 
   function setTab(nextTab: string) {
-    const value = nextTab === 'team' ? 'team' : 'agent'
+    const value = tabValues.includes(nextTab as CenterTab) ? nextTab as CenterTab : 'agent'
     activeTab.value = value
     void router.replace({
       query: {
@@ -375,7 +433,10 @@ export function useAgentCenter(scope: CenterScope) {
 
     agentImportLoading.value = true
     try {
-      const preview = await agentStore.previewImportBundle({ files })
+      const preview = await agentStore.previewImportBundle(
+        { files },
+        isProjectScope.value ? projectId.value : undefined,
+      )
       agentImportFiles.value = files
       agentImportPreview.value = preview
       agentImportDialogOpen.value = true
@@ -397,7 +458,10 @@ export function useAgentCenter(scope: CenterScope) {
     agentImportLoading.value = true
     agentImportError.value = ''
     try {
-      const result = await agentStore.importBundle({ files: agentImportFiles.value })
+      const result = await agentStore.importBundle(
+        { files: agentImportFiles.value },
+        isProjectScope.value ? projectId.value : undefined,
+      )
       agentImportResult.value = result
       await catalogStore.load()
     } catch (error) {
@@ -592,7 +656,12 @@ export function useAgentCenter(scope: CenterScope) {
         await agentStore.remove(id)
       }
     } else {
-      await teamStore.remove(id)
+      const record = currentTeams.value.find(team => team.id === id)
+      if (record?.integrationSource && isProjectScope.value && projectId.value) {
+        await teamStore.unlinkProject(projectId.value, id)
+      } else {
+        await teamStore.remove(id)
+      }
     }
 
     deleteConfirmOpen.value = false
@@ -612,6 +681,7 @@ export function useAgentCenter(scope: CenterScope) {
     teamViewMode,
     agentQuery,
     teamQuery,
+    resourceQuery,
     agentDialogOpen,
     teamDialogOpen,
     editingAgentId,
@@ -643,14 +713,19 @@ export function useAgentCenter(scope: CenterScope) {
     tabs,
     pagedAgents,
     pagedTeams,
+    pagedResources,
     agentTotal,
     teamTotal,
+    resourceTotal,
     agentPage,
     teamPage,
+    resourcePage,
     agentPageCount,
     teamPageCount,
+    resourcePageCount,
     agentPagination,
     teamPagination,
+    resourcePagination,
     centerStats,
     initials,
     agentBadgeLabel,

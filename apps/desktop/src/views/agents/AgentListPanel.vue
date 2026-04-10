@@ -84,7 +84,6 @@ function agentBadgeLabel(agent: AgentRecord) {
           新建员工
         </UiButton>
         <UiButton
-          v-if="!isProjectScope"
           variant="outline"
           size="sm"
           :loading="importLoading"

@@ -47,16 +47,16 @@ function initials(name: string) {
 <template>
   <UiDialog
     v-model:open="openModel"
-    title="团队配置"
-    description="配置团队负责人、核心成员以及协作背景。"
+    title="数字团队配置"
+    description="配置数字团队负责人、核心成员以及协作背景。"
     content-class="max-w-3xl"
     body-class="max-h-[75vh] overflow-y-auto pr-1"
     content-test-id="agent-center-team-dialog"
   >
     <div class="flex flex-col gap-8 py-2">
-      <UiSurface variant="subtle" padding="md" title="基础信息" subtitle="设置团队名称、头像和运行状态。" class="space-y-4">
+      <UiSurface variant="subtle" padding="md" title="基础信息" subtitle="设置数字团队名称、头像和运行状态。" class="space-y-4">
         <div class="grid gap-4 md:grid-cols-2">
-          <UiField label="团队名称">
+          <UiField label="数字团队名称">
             <UiInput v-model="form.name" placeholder="例如: 核心研发组" />
           </UiField>
           <UiField label="状态">
@@ -83,7 +83,7 @@ function initials(name: string) {
         </div>
       </UiSurface>
 
-      <UiSurface variant="subtle" padding="md" title="编组管理" subtitle="指定团队负责人 (Leader) 并选择参与协作的成员。" class="space-y-4">
+      <UiSurface variant="subtle" padding="md" title="编组管理" subtitle="指定数字团队负责人 (Leader) 并选择参与协作的成员。" class="space-y-4">
         <div class="grid gap-4 md:grid-cols-2">
           <UiField label="负责人 (Leader)">
             <UiCombobox
@@ -147,7 +147,7 @@ function initials(name: string) {
 
       <UiSurface variant="subtle" padding="md" title="协作上下文" subtitle="定义团队的工作流程标签、协作摘要及核心指令。" class="space-y-4">
         <div class="grid gap-4">
-          <UiField label="团队摘要">
+          <UiField label="数字团队摘要">
             <UiTextarea v-model="form.description" :rows="2" placeholder="简述团队的主要工作职责和产出目标..." />
           </UiField>
           <UiField label="协作提示词 (Team Prompt)">
@@ -175,7 +175,7 @@ function initials(name: string) {
     </div>
     <template #footer>
       <div class="flex w-full items-center justify-between">
-        <span class="text-xs text-text-tertiary">团队更改将应用于所有成员的协作上下文</span>
+        <span class="text-xs text-text-tertiary">数字团队更改将应用于所有成员的协作上下文</span>
         <div class="flex items-center gap-2">
           <UiButton variant="ghost" @click="emit('update:open', false)">取消</UiButton>
           <UiButton class="px-6" @click="emit('save')">保存配置</UiButton>

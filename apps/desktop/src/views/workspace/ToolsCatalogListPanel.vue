@@ -11,6 +11,7 @@ import {
   UiCheckbox,
   UiEmptyState,
   UiInput,
+  UiPagination,
   UiRecordCard,
   UiTabs,
   UiToolbarRow,
@@ -20,8 +21,11 @@ defineProps<{
   activeTab: WorkspaceToolKind
   tabs: Array<{ value: WorkspaceToolKind, label: string }>
   searchQuery: string
+  pagedEntries: WorkspaceToolCatalogEntry[]
   filteredEntries: WorkspaceToolCatalogEntry[]
   activeTabCount: number
+  page: number
+  pageCount: number
   selectedEntryId: string
   selectedExternalSkillIds: string[]
   canCopySelectedSkillsToManaged: boolean
@@ -38,6 +42,7 @@ defineProps<{
 const emit = defineEmits<{
   'update:activeTab': [value: WorkspaceToolKind]
   'update:searchQuery': [value: string]
+  'update:page': [value: number]
   'update:selectedExternalSkillIds': [value: string[]]
   selectEntry: [entryId: string]
   beginNewSkill: []
@@ -112,7 +117,7 @@ const { t } = useI18n()
 
     <section class="space-y-3">
       <UiRecordCard
-        v-for="entry in filteredEntries"
+        v-for="entry in pagedEntries"
         :key="entry.id"
         :title="entry.name"
         :description="entry.description"
@@ -141,6 +146,12 @@ const { t } = useI18n()
             {{ entry.displayPath }}
           </p>
           <p
+            v-if="entry.ownerLabel"
+            class="text-[11px] text-text-tertiary"
+          >
+            {{ entry.ownerLabel }}
+          </p>
+          <p
             v-if="entry.kind === 'mcp' && entry.endpoint"
             class="line-clamp-1 font-mono text-[11px] text-text-tertiary"
           >
@@ -152,6 +163,17 @@ const { t } = useI18n()
           >
             {{ t('tools.detail.shadowedBy') }}: {{ entry.shadowedBy }}
           </p>
+          <div
+            v-if="entry.consumers?.length"
+            class="flex flex-wrap gap-1.5 pt-1"
+          >
+            <UiBadge
+              v-for="consumer in entry.consumers"
+              :key="`${entry.id}-${consumer.kind}-${consumer.id}`"
+              :label="consumer.name"
+              subtle
+            />
+          </div>
         </div>
 
         <template #meta>
@@ -198,6 +220,14 @@ const { t } = useI18n()
         v-if="!filteredEntries.length"
         :title="searchQuery ? t('tools.empty.filteredTitle') : t('tools.empty.title')"
         :description="searchQuery ? t('tools.empty.filteredDescription') : t('tools.empty.description')"
+      />
+
+      <UiPagination
+        v-else-if="pageCount > 1"
+        :page="page"
+        :page-count="pageCount"
+        :meta-label="`共 ${filteredEntries.length} 项`"
+        @update:page="emit('update:page', $event)"
       />
     </section>
   </section>

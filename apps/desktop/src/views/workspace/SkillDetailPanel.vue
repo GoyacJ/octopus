@@ -90,6 +90,15 @@ const { t } = useI18n()
         </div>
       </div>
 
+      <div v-if="entry.ownerLabel" class="space-y-1">
+        <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+          {{ t('common.owner') }}
+        </div>
+        <div class="text-[13px] text-text-primary">
+          {{ entry.ownerLabel }}
+        </div>
+      </div>
+
       <div class="space-y-1">
         <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
           {{ t('tools.detail.disabled') }}
@@ -137,6 +146,20 @@ const { t } = useI18n()
         </div>
         <div class="break-all font-mono text-[12px] text-text-secondary">
           {{ entry.relativePath ?? t('common.na') }}
+        </div>
+      </div>
+
+      <div v-if="entry.consumers?.length" class="space-y-1">
+        <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+          使用者
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          <UiBadge
+            v-for="consumer in entry.consumers"
+            :key="`${entry.id}-${consumer.kind}-${consumer.id}`"
+            :label="consumer.name"
+            subtle
+          />
         </div>
       </div>
     </div>

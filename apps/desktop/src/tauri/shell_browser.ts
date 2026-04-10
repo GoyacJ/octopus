@@ -1,7 +1,10 @@
+import JSZip from 'jszip'
+
 import type {
   AvatarUploadPayload,
   CreateNotificationInput,
   CreateHostWorkspaceConnectionInput,
+  ExportWorkspaceAgentBundleResult,
   HealthcheckStatus,
   HostBackendConnection,
   HostState,
@@ -32,11 +35,138 @@ import {
 } from './shared'
 import { normalizeShellBootstrap } from './workspace_connections'
 
+type BrowserDirectoryHandle = {
+  getDirectoryHandle: (name: string, options?: { create?: boolean }) => Promise<BrowserDirectoryHandle>
+  getFileHandle: (name: string, options?: { create?: boolean }) => Promise<{
+    createWritable: () => Promise<{
+      write: (data: Blob | Uint8Array | string) => Promise<void>
+      close: () => Promise<void>
+    }>
+  }>
+}
+
 function resolveBrowserHostConfig(): { baseUrl: string, authToken: string } {
   return {
     baseUrl: resolveBrowserHostApiBaseUrl(),
     authToken: resolveBrowserHostAuthToken(),
   }
+}
+
+function decodeBase64(value: string): Uint8Array {
+  const decoded = window.atob(value)
+  const bytes = new Uint8Array(decoded.length)
+  for (let index = 0; index < decoded.length; index += 1) {
+    bytes[index] = decoded.charCodeAt(index)
+  }
+  return bytes
+}
+
+function contentTypeFromPath(fileName: string) {
+  const lower = fileName.toLowerCase()
+  if (lower.endsWith('.md')) {
+    return 'text/markdown'
+  }
+  if (lower.endsWith('.json')) {
+    return 'application/json'
+  }
+  if (lower.endsWith('.png')) {
+    return 'image/png'
+  }
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {
+    return 'image/jpeg'
+  }
+  if (lower.endsWith('.webp')) {
+    return 'image/webp'
+  }
+  return 'application/octet-stream'
+}
+
+function trimSingleRootDirectory(entries: WorkspaceDirectoryUploadEntry[]) {
+  const topLevelNames = new Set(
+    entries
+      .map(entry => entry.relativePath.split('/')[0])
+      .filter((value): value is string => Boolean(value)),
+  )
+  const rootPrefix = topLevelNames.size === 1 ? `${[...topLevelNames][0]}/` : ''
+  if (!rootPrefix) {
+    return entries
+  }
+  return entries.map(entry => ({
+    ...entry,
+    relativePath: entry.relativePath.startsWith(rootPrefix)
+      ? entry.relativePath.slice(rootPrefix.length)
+      : entry.relativePath,
+  }))
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = fileName
+  anchor.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+async function unzipBrowserArchive(file: File): Promise<WorkspaceDirectoryUploadEntry[]> {
+  const archive = await JSZip.loadAsync(file)
+  const entries = await Promise.all(
+    Object.values(archive.files)
+      .filter(item => !item.dir && !item.name.startsWith('__MACOSX/'))
+      .map(async (item) => {
+        const bytes = await item.async('uint8array')
+        const blob = new Blob([bytes], { type: contentTypeFromPath(item.name) })
+        const payload = await readBrowserFile(new File([blob], item.name.split('/').pop() ?? item.name, {
+          type: blob.type,
+        }))
+        return {
+          ...payload,
+          fileName: item.name.split('/').pop() ?? payload.fileName,
+          relativePath: item.name.replace(/\\/g, '/'),
+        } satisfies WorkspaceDirectoryUploadEntry
+      }),
+  )
+  return trimSingleRootDirectory(entries)
+}
+
+async function saveBundleFolderInBrowser(
+  exportPayload: ExportWorkspaceAgentBundleResult,
+) {
+  const browserWindow = window as typeof window & {
+    showDirectoryPicker?: () => Promise<BrowserDirectoryHandle>
+  }
+  if (!browserWindow.showDirectoryPicker) {
+    throw new Error('Current browser host does not support folder export')
+  }
+
+  const rootHandle = await browserWindow.showDirectoryPicker()
+  for (const entry of exportPayload.files) {
+    const segments = entry.relativePath.split('/').filter(Boolean)
+    if (!segments.length) {
+      continue
+    }
+
+    let directoryHandle = rootHandle
+    for (const segment of segments.slice(0, -1)) {
+      directoryHandle = await directoryHandle.getDirectoryHandle(segment, { create: true })
+    }
+
+    const fileHandle = await directoryHandle.getFileHandle(segments.at(-1)!, { create: true })
+    const writable = await fileHandle.createWritable()
+    await writable.write(decodeBase64(entry.dataBase64))
+    await writable.close()
+  }
+}
+
+async function saveBundleZipInBrowser(
+  exportPayload: ExportWorkspaceAgentBundleResult,
+) {
+  const archive = new JSZip()
+  for (const entry of exportPayload.files) {
+    archive.file(entry.relativePath, decodeBase64(entry.dataBase64))
+  }
+  const blob = await archive.generateAsync({ type: 'blob' })
+  downloadBlob(blob, `${exportPayload.rootDirName || 'agent-bundle'}.zip`)
 }
 
 async function readBrowserFile(file: File): Promise<WorkspaceFileUploadPayload> {
@@ -254,6 +384,36 @@ async function pickAgentBundleFolder(): Promise<WorkspaceDirectoryUploadEntry[] 
   })
 }
 
+async function pickAgentBundleArchive(): Promise<WorkspaceDirectoryUploadEntry[] | null> {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.zip,application/zip'
+
+  return await new Promise<WorkspaceDirectoryUploadEntry[] | null>((resolve) => {
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0]
+      if (!file) {
+        resolve(null)
+        return
+      }
+
+      resolve(await unzipBrowserArchive(file))
+    }, { once: true })
+    input.click()
+  })
+}
+
+async function saveAgentBundleExport(
+  exportPayload: ExportWorkspaceAgentBundleResult,
+  format: 'folder' | 'zip',
+): Promise<void> {
+  if (format === 'folder') {
+    await saveBundleFolderInBrowser(exportPayload)
+    return
+  }
+  await saveBundleZipInBrowser(exportPayload)
+}
+
 async function listWorkspaceConnections(): Promise<HostWorkspaceConnectionRecord[]> {
   const { baseUrl, authToken } = resolveBrowserHostConfig()
   return await fetchHostOpenApi(baseUrl, authToken, '/api/v1/host/workspace-connections', 'get')
@@ -364,7 +524,9 @@ export const browserShellClient = {
   pickAvatarImage,
   pickSkillArchive,
   pickSkillFolder,
+  pickAgentBundleArchive,
   pickAgentBundleFolder,
+  saveAgentBundleExport,
   listWorkspaceConnections,
   createWorkspaceConnection,
   deleteWorkspaceConnection,

@@ -76,7 +76,7 @@ function resolveAgentName(agentId?: string) {
       </template>
       <template #actions>
         <UiButton size="sm" @click="emit('create-team')">
-          新建团队
+          新建数字团队
         </UiButton>
       </template>
     </UiToolbarRow>
@@ -169,8 +169,8 @@ function resolveAgentName(agentId?: string) {
 
     <UiEmptyState
       v-else
-      title="暂无团队"
-      description="创建工作区或项目团队。"
+      title="暂无数字团队"
+      description="创建工作区或项目数字团队。"
     />
 
     <UiPagination
