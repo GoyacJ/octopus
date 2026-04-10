@@ -17,13 +17,13 @@ const footerLinks = [
     title: 'footer.company',
     links: [
       { name: 'nav.about', to: '/about' },
-      { name: 'footer.blog', to: '#' },
+      { name: 'footer.blog', to: '/blog' },
     ]
   },
   {
     title: 'footer.support',
     links: [
-      { name: 'footer.docs', to: '#' },
+      { name: 'footer.docs', to: '/docs' },
       { name: 'footer.contact', to: '/book-demo' },
     ]
   }
@@ -36,13 +36,13 @@ const footerLinks = [
       <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 mb-12">
         <!-- Logo & Bio -->
         <div class="col-span-2">
-          <NuxtLink to="/" class="flex items-center gap-2 mb-4 group">
-            <div class="w-8 h-8 bg-[var(--website-accent)] rounded-lg flex items-center justify-center transition-transform group-hover:scale-110">
-              <span class="text-white font-bold text-lg">O</span>
+          <NuxtLink to="/" class="flex items-center gap-3 mb-6 group">
+            <div class="w-10 h-10 flex items-center justify-center transition-all duration-500 group-hover:rotate-[15deg] group-hover:scale-110">
+              <img src="/logo.png" alt="Octopus Logo" class="w-full h-full object-contain" />
             </div>
-            <span class="font-bold text-xl tracking-tight">{{ t('site.name') }}</span>
+            <span class="font-bold text-2xl tracking-tighter">{{ t('site.name') }}</span>
           </NuxtLink>
-          <p class="text-[var(--website-text-muted)] text-sm max-w-xs leading-relaxed">
+          <p class="text-[var(--website-text-muted)] text-sm max-w-xs leading-relaxed font-medium">
             {{ t('site.description') }}
           </p>
           <div class="flex gap-4 mt-6">
@@ -78,8 +78,8 @@ const footerLinks = [
           © {{ currentYear }} {{ t('site.name') }}. All rights reserved.
         </p>
         <div class="flex gap-6">
-          <a href="#" class="text-[var(--website-text-muted)] text-xs hover:text-[var(--website-accent)]">{{ t('footer.privacy') }}</a>
-          <a href="#" class="text-[var(--website-text-muted)] text-xs hover:text-[var(--website-accent)]">{{ t('footer.terms') }}</a>
+          <NuxtLink to="/privacy" class="text-[var(--website-text-muted)] text-xs hover:text-[var(--website-accent)]">{{ t('footer.privacy') }}</NuxtLink>
+          <NuxtLink to="/terms" class="text-[var(--website-text-muted)] text-xs hover:text-[var(--website-accent)]">{{ t('footer.terms') }}</NuxtLink>
         </div>
       </div>
     </div>

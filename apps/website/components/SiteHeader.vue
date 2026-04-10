@@ -76,7 +76,7 @@ const toggleMenu = () => {
         </button>
 
         <!-- CTA -->
-        <UiButton to="/book-demo" variant="primary" size="sm" class="hidden sm:inline-flex">
+        <UiButton to="/book-demo" variant="primary" size="sm" class="hidden sm:inline-flex whitespace-nowrap">
           {{ t('nav.bookDemo') }}
         </UiButton>
 
@@ -110,7 +110,7 @@ const toggleMenu = () => {
           >
             {{ t(link.name) }}
           </NuxtLink>
-          <UiButton to="/book-demo" variant="primary" class="mt-4" @click="isMenuOpen = false">
+          <UiButton to="/book-demo" variant="primary" class="mt-4 whitespace-nowrap" @click="isMenuOpen = false">
             {{ t('nav.bookDemo') }}
           </UiButton>
         </nav>

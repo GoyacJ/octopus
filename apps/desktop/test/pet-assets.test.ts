@@ -62,7 +62,7 @@ describe('pet assets', () => {
   it('renders the shared species asset for the current pet', () => {
     const wrapper = mountAvatar(basePetProfile)
 
-    expect(wrapper.get('[data-testid="desktop-pet-image"]').attributes('src')).toContain('/octopus.svg')
+    expect(wrapper.get('[data-testid="desktop-pet-image"]').attributes('src')).toContain('/octopus.png')
   })
 
   it('resolves fallbackAsset through the shared pet asset map before treating it as a raw URL', () => {
@@ -96,6 +96,17 @@ describe('pet assets', () => {
     })
 
     expect(wrapper.get('[data-testid="desktop-pet-trigger"]').classes()).toContain('pet-avatar-button--sidebar')
+  })
+
+  it('uses the enlarged sidebar avatar dimensions for the bottom rail trigger', () => {
+    const componentSource = fs.readFileSync(
+      path.resolve(import.meta.dirname, '../src/components/pet/DesktopPetAvatar.vue'),
+      'utf8',
+    )
+
+    expect(componentSource).toContain('.pet-avatar-button--sidebar {\n  width: 40px;\n  height: 40px;')
+    expect(componentSource).toContain('.pet-avatar-button--sidebar .pet-avatar-stage {\n  width: 36px;\n  height: 36px;')
+    expect(componentSource).toContain('.pet-avatar-button--sidebar .pet-avatar-image {\n  width: 36px;\n  height: 36px;\n  filter: none;')
   })
 
   it('keeps the shared pet assets free of baked background fills', () => {

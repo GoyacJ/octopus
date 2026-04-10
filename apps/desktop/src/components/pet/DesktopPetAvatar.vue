@@ -88,8 +88,8 @@ const resolvedPetAsset = computed(() =>
 }
 
 .pet-avatar-button--sidebar {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
 }
 
 .pet-avatar-button:hover {
@@ -116,8 +116,8 @@ const resolvedPetAsset = computed(() =>
 }
 
 .pet-avatar-button--sidebar .pet-avatar-stage {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
 }
 
 .pet-avatar-stage.is-idle {
@@ -141,8 +141,9 @@ const resolvedPetAsset = computed(() =>
 }
 
 .pet-avatar-button--sidebar .pet-avatar-image {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
+  filter: none;
 }
 
 .pet-unread-dot {

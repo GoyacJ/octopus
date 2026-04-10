@@ -101,7 +101,7 @@ const features: HomeFeature[] = [
           <!-- Main Image with complex effects -->
           <div class="absolute -inset-4 bg-gradient-to-tr from-[var(--website-accent)] to-amber-500 rounded-[3rem] blur-3xl opacity-10 group-hover:opacity-20 transition duration-1000"></div>
           <UiCard variant="glass" padding="none" class="shadow-[0_32px_64px_-16px_rgba(0,0,0,0.2)] relative overflow-hidden rounded-[2.5rem] border border-[var(--website-border-strong)] transform-gpu transition-all duration-700 group-hover:rotate-x-1 group-hover:rotate-y-1">
-            <img src="/images/dashboard.png" alt="Octopus Dashboard" class="w-full h-auto" />
+            <img src="/screenshots/dashboard.png" alt="Octopus Dashboard" class="w-full h-auto" />
             <div class="absolute inset-0 bg-gradient-to-t from-[var(--website-bg)]/30 via-transparent to-transparent pointer-events-none"></div>
           </UiCard>
         </div>
@@ -157,12 +157,12 @@ const features: HomeFeature[] = [
           </div>
           
           <div class="relative z-10 max-w-2xl mx-auto px-6">
-            <h2 class="text-4xl md:text-5xl font-bold mb-6">准备好升级您的企业 AI 基础设施了吗？</h2>
+            <h2 class="text-4xl md:text-5xl font-bold mb-6">{{ t('pages.home.consulting.title') }}</h2>
             <p class="text-white/80 text-lg mb-10 leading-relaxed">
-              立即预约专家演示，了解 Octopus 如何助力您的企业实现安全、可控的 AI 落地。
+              {{ t('pages.home.consulting.body') }}
             </p>
-            <UiButton to="/book-demo" variant="secondary" size="lg" class="bg-white text-[var(--website-accent)] hover:bg-white/90">
-              预约免费演示
+            <UiButton to="/book-demo" variant="secondary" size="lg" class="bg-white text-[var(--website-accent)] hover:bg-white/90 whitespace-nowrap">
+              {{ t('pages.home.consulting.button') }}
             </UiButton>
           </div>
         </UiCard>

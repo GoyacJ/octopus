@@ -7,8 +7,9 @@
   "nav": {
     "product": "Product",
     "scenarios": "Scenarios",
+    "download": "Downloads",
     "about": "About",
-    "bookDemo": "Book a Demo"
+    "bookDemo": "Enterprise Consultation"
   },
   "footer": {
     "product": "Product",
@@ -27,6 +28,11 @@
       "cta": {
         "primary": "Get Started",
         "secondary": "Learn More"
+      },
+      "consulting": {
+        "title": "Ready to bring agents into real work?",
+        "body": "We help teams plan deployment, data boundaries, governance, and workflow integration before production rollout.",
+        "button": "Start Enterprise Consultation"
       },
       "features": {
         "private": {
@@ -56,8 +62,37 @@
       }
     },
     "product": {
-      "title": "Enterprise Capabilities",
-      "body": "From bottom-level localization adaptation to top-level agent orchestration, Octopus provides full-stack AI implementation for enterprises."
+      "title": "Digital Employee Stack",
+      "heroBadge": "Agent Operating System",
+      "heroTitle": "Turn agents into",
+      "heroHighlight": "deliverable digital employees",
+      "body": "Octopus brings models, tools, memory, permissions, and governance into one desktop workbench so agents move beyond demos and become assignable, collaborative, auditable digital employees for real enterprise work.",
+      "features": {
+        "mcp": {
+          "title": "Unified Tool Protocol",
+          "desc": "Connect internal systems, databases, and APIs through MCP so every digital employee has a standard, extensible tool stack."
+        },
+        "sandbox": {
+          "title": "Secure Execution And Built-ins",
+          "desc": "Agents do more than answer questions. Built-in tools and isolated execution let them act within clear authorization boundaries."
+        },
+        "telemetry": {
+          "title": "Visible Process, Traceable Results",
+          "desc": "From conversation context to execution output, critical steps, calls, and artifacts stay observable, replayable, and reviewable."
+        },
+        "plugin": {
+          "title": "Skills And Plugin Extensions",
+          "desc": "Package domain workflows, team SOPs, and custom capabilities into reusable skills and plugins that expand each digital employee role."
+        },
+        "desktop": {
+          "title": "Unified Desktop Workbench",
+          "desc": "Bring conversations, knowledge, resources, digital employees, and governance into one desktop surface for continuous collaboration."
+        },
+        "enterprise": {
+          "title": "Enterprise Governance And RBAC",
+          "desc": "Apply roles, permissions, auditability, and security controls at the system layer so teams can operate confidently in real environments."
+        }
+      }
     },
     "scenarios": {
       "title": "Wide Range of Scenarios",
@@ -68,8 +103,22 @@
       "body": "We are dedicated to providing secure, controllable, and intelligent AI infrastructure for every organization through open source and private technologies."
     },
     "bookDemo": {
-      "title": "Book a Product Demo",
-      "body": "Fill out the form below, and our technical experts will provide you with exclusive private deployment consultation and demos."
+      "badge": "Enterprise Consultation",
+      "title": "Enterprise Consultation",
+      "body": "Share your organization and current requirements. We will respond with consultation tailored to deployment options, governance expectations, and business workflows.",
+      "submit": "Submit Consultation Request",
+      "successTitle": "Consultation request submitted",
+      "successBody": "Thanks for reaching out. Our team will contact you within two business days to confirm your scenario, deployment approach, and governance requirements.",
+      "backHome": "Back to Home",
+      "form": {
+        "nameLabel": "Name",
+        "namePlaceholder": "Your name",
+        "companyLabel": "Company / Organization",
+        "companyPlaceholder": "Company name",
+        "emailLabel": "Work email",
+        "messageLabel": "Requirements",
+        "messagePlaceholder": "Describe your scenario, deployment expectations, integrations, and governance requirements..."
+      }
     },
     "download": {
       "title": "Download Octopus Desktop",

@@ -5,8 +5,7 @@ import {
   Activity, 
   Layers, 
   Monitor, 
-  ShieldAlert,
-  ArrowRight
+  ShieldAlert
 } from 'lucide-vue-next'
 
 const { t } = useI18n()
@@ -16,12 +15,12 @@ useHead({
 })
 
 const capabilities = [
-  { key: 'mcp', icon: Puzzle, img: '/images/mcp.png' },
-  { key: 'sandbox', icon: Terminal, img: '/images/builtin.png' },
-  { key: 'telemetry', icon: Activity, img: '/images/project-setting.png' },
-  { key: 'plugin', icon: Layers, img: '/images/model.png' },
-  { key: 'desktop', icon: Monitor, img: '/images/dashboard.png' },
-  { key: 'enterprise', icon: ShieldAlert, img: '/images/rbac.png' }
+  { key: 'mcp', icon: Puzzle, img: '/screenshots/mcp.png' },
+  { key: 'sandbox', icon: Terminal, img: '/screenshots/builtin.png' },
+  { key: 'telemetry', icon: Activity, img: '/screenshots/conversation.png' },
+  { key: 'plugin', icon: Layers, img: '/screenshots/skill.png' },
+  { key: 'desktop', icon: Monitor, img: '/screenshots/dashboard.png' },
+  { key: 'enterprise', icon: ShieldAlert, img: '/screenshots/rbac.png' }
 ]
 </script>
 
@@ -33,16 +32,16 @@ const capabilities = [
     <!-- Hero Section -->
     <UiSectionHero
       align="split"
-      badge="内核能力 (Octopus Core)"
-      title="硬核 AI"
-      highlight="基础设施"
+      :badge="t('pages.product.heroBadge')"
+      :title="t('pages.product.heroTitle')"
+      :highlight="t('pages.product.heroHighlight')"
       :subtitle="t('pages.product.body')"
     >
       <template #visual>
         <div class="relative group">
           <div class="absolute -inset-4 bg-gradient-to-tr from-orange-600 to-amber-400 rounded-[2rem] blur-2xl opacity-10"></div>
           <UiCard variant="glass" padding="none" class="shadow-2xl border-[var(--website-border-strong)] rounded-3xl overflow-hidden">
-            <img src="/images/mcp.png" alt="Octopus MCP" class="w-full h-auto" />
+            <img src="/screenshots/agent.png" :alt="t('pages.product.title')" class="w-full h-auto" />
           </UiCard>
         </div>
       </template>
@@ -74,9 +73,6 @@ const capabilities = [
                 <p class="text-[var(--website-text-muted)] text-sm leading-relaxed mb-6">
                   {{ t(`pages.product.features.${cap.key}.desc`) }}
                 </p>
-                <div class="mt-auto flex items-center text-xs font-bold text-[var(--website-accent)] opacity-0 group-hover:opacity-100 transition-opacity">
-                  查看详细协议 <ArrowRight class="ml-1 w-3 h-3" />
-                </div>
               </div>
             </UiCard>
           </div>
@@ -92,9 +88,9 @@ const capabilities = [
             <h2 class="text-3xl font-bold mb-8 tracking-tight">可信、可控、可审计</h2>
             <div class="space-y-8">
               <div v-for="i in [
-                { t: '沙箱隔离机制', d: 'AI 生成的每一行脚本均在独立的容器沙箱中运行，无法访问宿主受保护资源。' },
-                { t: '全链路 Telemetry', d: '集成的链路追踪能力，让 Agent 的决策链透明化，轻松回溯任意时刻的推理路径。' },
-                { t: 'RBAC 精细化授权', d: '对接企业级 LDAP/SSO，确保每个数字员工只能在被授权的范围内使用工具。' }
+                { t: '执行边界可控', d: '从工具调用到任务执行，能力边界被清晰约束，数字员工可以真正动手，但不会越权。' },
+                { t: '过程上下文可回放', d: '每一次协作链路、调用记录与结果产物都能被查看、追溯与复盘。' },
+                { t: '治理策略可落地', d: '把权限、角色和审计要求落到系统层，而不是停留在演示级概念。' }
               ]" :key="i.t" class="flex gap-4" v-reveal>
                 <div class="mt-1 w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center text-green-500 shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -108,12 +104,12 @@ const capabilities = [
           </div>
           <div class="relative" v-reveal>
             <UiCard variant="glass" padding="none" class="shadow-2xl rotate-1 group transition-transform hover:rotate-0 border-[var(--website-border-strong)]">
-              <img src="/images/rbac.png" alt="Octopus RBAC" class="rounded-[var(--radius-l)]" />
+              <img src="/screenshots/rbac.png" alt="Octopus RBAC" class="rounded-[var(--radius-l)]" />
               <!-- Badge Decoration -->
               <div class="absolute -bottom-6 -left-6 glass px-6 py-4 rounded-2xl border border-[var(--website-border-strong)] shadow-xl">
                 <div class="flex items-center gap-3">
                   <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
-                  <span class="text-sm font-bold tracking-tight">System Secure</span>
+                  <span class="text-sm font-bold tracking-tight">Governance Ready</span>
                 </div>
               </div>
             </UiCard>
