@@ -81,6 +81,28 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/workspace/agents/export:
+  post:
+    operationId: exportWorkspaceAgentBundle
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ExportWorkspaceAgentBundleInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportWorkspaceAgentBundleResult"
+        description: Workspace agent bundle export payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/workspace/agents/{agentId}:
   delete:
     operationId: deleteWorkspaceAgent

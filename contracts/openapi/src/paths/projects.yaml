@@ -157,6 +157,90 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/projects/{projectId}/agents/import-preview:
+  post:
+    operationId: previewProjectAgentBundleImport
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ImportWorkspaceAgentBundlePreviewInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportWorkspaceAgentBundlePreview"
+        description: Project agent bundle preview payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/agents/import:
+  post:
+    operationId: importProjectAgentBundle
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ImportWorkspaceAgentBundleInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImportWorkspaceAgentBundleResult"
+        description: Project agent bundle import result payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/agents/export:
+  post:
+    operationId: exportProjectAgentBundle
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ExportWorkspaceAgentBundleInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportWorkspaceAgentBundleResult"
+        description: Project agent bundle export payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/projects/{projectId}/dashboard:
   get:
     operationId: getProjectDashboard

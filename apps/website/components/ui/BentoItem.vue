@@ -11,7 +11,7 @@ withDefaults(defineProps<Props>(), {
   variant: 'default'
 })
 
-const colClasses = {
+const colClasses: Record<number, string> = {
   1: 'md:col-span-1',
   2: 'md:col-span-2',
   3: 'md:col-span-3',
@@ -26,7 +26,7 @@ const colClasses = {
   12: 'md:col-span-12',
 }
 
-const rowClasses = {
+const rowClasses: Record<number, string> = {
   1: 'md:row-span-1',
   2: 'md:row-span-2',
   3: 'md:row-span-3',

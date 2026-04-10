@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { Component } from 'vue'
 import { 
   ShieldCheck, 
   Cpu, 
@@ -15,7 +16,17 @@ useHead({
   title: t('pages.home.title')
 })
 
-const features = [
+type FeatureVariant = 'default' | 'soft' | 'outline' | 'glass'
+
+interface HomeFeature {
+  key: string
+  icon: Component
+  cols: number
+  rows: number
+  variant: FeatureVariant
+}
+
+const features: HomeFeature[] = [
   {
     key: 'private',
     icon: ShieldCheck,

@@ -216,6 +216,12 @@ ImportWorkspaceAgentBundlePreview:
       items:
         $ref: "#/components/schemas/ImportedAgentPreviewItem"
       type: array
+    avatars:
+      items:
+        $ref: "#/components/schemas/ImportedAvatarPreviewItem"
+      type: array
+    avatarCount:
+      type: integer
     createCount:
       type: integer
     departmentCount:
@@ -226,21 +232,35 @@ ImportWorkspaceAgentBundlePreview:
       type: array
     detectedAgentCount:
       type: integer
+    detectedTeamCount:
+      type: integer
     failureCount:
       type: integer
     filteredFileCount:
       type: integer
     importableAgentCount:
       type: integer
+    importableTeamCount:
+      type: integer
     issues:
       items:
         $ref: "#/components/schemas/ImportIssue"
+      type: array
+    mcps:
+      items:
+        $ref: "#/components/schemas/ImportedMcpPreviewItem"
       type: array
     skills:
       items:
         $ref: "#/components/schemas/ImportedSkillPreviewItem"
       type: array
     skipCount:
+      type: integer
+    teams:
+      items:
+        $ref: "#/components/schemas/ImportedTeamPreviewItem"
+      type: array
+    uniqueMcpCount:
       type: integer
     uniqueSkillCount:
       type: integer
@@ -251,14 +271,21 @@ ImportWorkspaceAgentBundlePreview:
     - departmentCount
     - detectedAgentCount
     - importableAgentCount
+    - detectedTeamCount
+    - importableTeamCount
     - createCount
     - updateCount
     - skipCount
     - failureCount
     - uniqueSkillCount
+    - uniqueMcpCount
+    - avatarCount
     - filteredFileCount
     - agents
+    - teams
     - skills
+    - mcps
+    - avatars
     - issues
   type: object
 ImportWorkspaceAgentBundlePreviewInput:
@@ -278,6 +305,12 @@ ImportWorkspaceAgentBundleResult:
       items:
         $ref: "#/components/schemas/ImportedAgentPreviewItem"
       type: array
+    avatars:
+      items:
+        $ref: "#/components/schemas/ImportedAvatarPreviewItem"
+      type: array
+    avatarCount:
+      type: integer
     createCount:
       type: integer
     departmentCount:
@@ -288,21 +321,35 @@ ImportWorkspaceAgentBundleResult:
       type: array
     detectedAgentCount:
       type: integer
+    detectedTeamCount:
+      type: integer
     failureCount:
       type: integer
     filteredFileCount:
       type: integer
     importableAgentCount:
       type: integer
+    importableTeamCount:
+      type: integer
     issues:
       items:
         $ref: "#/components/schemas/ImportIssue"
+      type: array
+    mcps:
+      items:
+        $ref: "#/components/schemas/ImportedMcpPreviewItem"
       type: array
     skills:
       items:
         $ref: "#/components/schemas/ImportedSkillPreviewItem"
       type: array
     skipCount:
+      type: integer
+    teams:
+      items:
+        $ref: "#/components/schemas/ImportedTeamPreviewItem"
+      type: array
+    uniqueMcpCount:
       type: integer
     uniqueSkillCount:
       type: integer
@@ -313,14 +360,75 @@ ImportWorkspaceAgentBundleResult:
     - departmentCount
     - detectedAgentCount
     - importableAgentCount
+    - detectedTeamCount
+    - importableTeamCount
     - createCount
     - updateCount
     - skipCount
     - failureCount
     - uniqueSkillCount
+    - uniqueMcpCount
+    - avatarCount
     - filteredFileCount
     - agents
+    - teams
     - skills
+    - mcps
+    - avatars
+    - issues
+  type: object
+ExportWorkspaceAgentBundleInput:
+  additionalProperties: false
+  properties:
+    agentIds:
+      items:
+        type: string
+      type: array
+    mode:
+      type: string
+    teamIds:
+      items:
+        type: string
+      type: array
+  required:
+    - mode
+    - agentIds
+    - teamIds
+  type: object
+ExportWorkspaceAgentBundleResult:
+  additionalProperties: false
+  properties:
+    agentCount:
+      type: integer
+    avatarCount:
+      type: integer
+    fileCount:
+      type: integer
+    files:
+      items:
+        $ref: "#/components/schemas/WorkspaceDirectoryUploadEntry"
+      type: array
+    issues:
+      items:
+        $ref: "#/components/schemas/ImportIssue"
+      type: array
+    mcpCount:
+      type: integer
+    rootDirName:
+      type: string
+    skillCount:
+      type: integer
+    teamCount:
+      type: integer
+  required:
+    - rootDirName
+    - fileCount
+    - agentCount
+    - teamCount
+    - skillCount
+    - mcpCount
+    - avatarCount
+    - files
     - issues
   type: object
 ImportWorkspaceSkillArchiveInput:
@@ -361,6 +469,10 @@ ImportedAgentPreviewItem:
       type: string
     department:
       type: string
+    mcpServerNames:
+      items:
+        type: string
+      type: array
     name:
       type: string
     skillSlugs:
@@ -375,6 +487,58 @@ ImportedAgentPreviewItem:
     - department
     - action
     - skillSlugs
+    - mcpServerNames
+  type: object
+ImportedAvatarPreviewItem:
+  additionalProperties: false
+  properties:
+    fileName:
+      type: string
+    generated:
+      type: boolean
+    ownerKind:
+      type: string
+    ownerName:
+      type: string
+    sourceId:
+      type: string
+  required:
+    - sourceId
+    - ownerKind
+    - ownerName
+    - fileName
+    - generated
+  type: object
+ImportedMcpPreviewItem:
+  additionalProperties: false
+  properties:
+    action:
+      enum:
+        - create
+        - update
+        - skip
+        - failed
+      type: string
+    consumerNames:
+      items:
+        type: string
+      type: array
+    contentHash:
+      type: string
+    referencedOnly:
+      type: boolean
+    serverName:
+      type: string
+    sourceIds:
+      items:
+        type: string
+      type: array
+  required:
+    - serverName
+    - action
+    - sourceIds
+    - consumerNames
+    - referencedOnly
   type: object
 ImportedSkillPreviewItem:
   additionalProperties: false
@@ -418,6 +582,39 @@ ImportedSkillPreviewItem:
     - sourceIds
     - departments
     - agentNames
+  type: object
+ImportedTeamPreviewItem:
+  additionalProperties: false
+  properties:
+    action:
+      enum:
+        - create
+        - update
+        - skip
+        - failed
+      type: string
+    agentSourceIds:
+      items:
+        type: string
+      type: array
+    leaderName:
+      type: string
+    memberNames:
+      items:
+        type: string
+      type: array
+    name:
+      type: string
+    sourceId:
+      type: string
+    teamId:
+      type: string
+  required:
+    - sourceId
+    - name
+    - action
+    - memberNames
+    - agentSourceIds
   type: object
 ModelCatalogSnapshot:
   additionalProperties: false

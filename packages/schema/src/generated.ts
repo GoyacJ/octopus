@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: df662ed56b58dedcf6b18d1214875404e91536548ff3cc4134b8a3415055b77c
+// Source hash: 195ebeef684d1c2402c3bf5e60d393fc40a3f4f003c6d45f2ae6f4e00b5a0cd1
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "df662ed56b58dedcf6b18d1214875404e91536548ff3cc4134b8a3415055b77c"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "195ebeef684d1c2402c3bf5e60d393fc40a3f4f003c6d45f2ae6f4e00b5a0cd1"
 
 export interface AgentRecord {
   avatar?: string
@@ -244,6 +244,24 @@ export interface CredentialBinding {
 
 export type DecisionAction = "approve" | "reject"
 
+export interface ExportWorkspaceAgentBundleInput {
+  agentIds: string[]
+  mode: string
+  teamIds: string[]
+}
+
+export interface ExportWorkspaceAgentBundleResult {
+  agentCount: number
+  avatarCount: number
+  fileCount: number
+  files: WorkspaceDirectoryUploadEntry[]
+  issues: ImportIssue[]
+  mcpCount: number
+  rootDirName: string
+  skillCount: number
+  teamCount: number
+}
+
 export interface HealthcheckBackendStatus {
   state: BackendConnectionState
   transport: BackendTransport
@@ -321,9 +339,27 @@ export interface ImportedAgentPreviewItem {
   action: "create" | "update" | "skip" | "failed"
   agentId?: string
   department: string
+  mcpServerNames: string[]
   name: string
   skillSlugs: string[]
   sourceId: string
+}
+
+export interface ImportedAvatarPreviewItem {
+  fileName: string
+  generated: boolean
+  ownerKind: string
+  ownerName: string
+  sourceId: string
+}
+
+export interface ImportedMcpPreviewItem {
+  action: "create" | "update" | "skip" | "failed"
+  consumerNames: string[]
+  contentHash?: string
+  referencedOnly: boolean
+  serverName: string
+  sourceIds: string[]
 }
 
 export interface ImportedSkillPreviewItem {
@@ -336,6 +372,16 @@ export interface ImportedSkillPreviewItem {
   skillId: string
   slug: string
   sourceIds: string[]
+}
+
+export interface ImportedTeamPreviewItem {
+  action: "create" | "update" | "skip" | "failed"
+  agentSourceIds: string[]
+  leaderName?: string
+  memberNames: string[]
+  name: string
+  sourceId: string
+  teamId?: string
 }
 
 export interface ImportIssue {
@@ -351,16 +397,23 @@ export interface ImportWorkspaceAgentBundleInput {
 
 export interface ImportWorkspaceAgentBundlePreview {
   agents: ImportedAgentPreviewItem[]
+  avatarCount: number
+  avatars: ImportedAvatarPreviewItem[]
   createCount: number
   departmentCount: number
   departments: string[]
   detectedAgentCount: number
+  detectedTeamCount: number
   failureCount: number
   filteredFileCount: number
   importableAgentCount: number
+  importableTeamCount: number
   issues: ImportIssue[]
+  mcps: ImportedMcpPreviewItem[]
   skills: ImportedSkillPreviewItem[]
   skipCount: number
+  teams: ImportedTeamPreviewItem[]
+  uniqueMcpCount: number
   uniqueSkillCount: number
   updateCount: number
 }
@@ -371,16 +424,23 @@ export interface ImportWorkspaceAgentBundlePreviewInput {
 
 export interface ImportWorkspaceAgentBundleResult {
   agents: ImportedAgentPreviewItem[]
+  avatarCount: number
+  avatars: ImportedAvatarPreviewItem[]
   createCount: number
   departmentCount: number
   departments: string[]
   detectedAgentCount: number
+  detectedTeamCount: number
   failureCount: number
   filteredFileCount: number
   importableAgentCount: number
+  importableTeamCount: number
   issues: ImportIssue[]
+  mcps: ImportedMcpPreviewItem[]
   skills: ImportedSkillPreviewItem[]
   skipCount: number
+  teams: ImportedTeamPreviewItem[]
+  uniqueMcpCount: number
   uniqueSkillCount: number
   updateCount: number
 }
@@ -1491,6 +1551,15 @@ export interface OctopusApiPaths {
   "/api/v1/projects/{projectId}/agent-links/{agentId}": {
     delete: { operationId: "deleteProjectAgentLink"; response: void; error: ApiErrorEnvelope }
   }
+  "/api/v1/projects/{projectId}/agents/export": {
+    post: { operationId: "exportProjectAgentBundle"; response: ExportWorkspaceAgentBundleResult; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/agents/import": {
+    post: { operationId: "importProjectAgentBundle"; response: ImportWorkspaceAgentBundleResult; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/agents/import-preview": {
+    post: { operationId: "previewProjectAgentBundleImport"; response: ImportWorkspaceAgentBundlePreview; error: ApiErrorEnvelope }
+  }
   "/api/v1/projects/{projectId}/dashboard": {
     get: { operationId: "getProjectDashboard"; response: ProjectDashboardSnapshot; error: ApiErrorEnvelope }
   }
@@ -1579,6 +1648,9 @@ export interface OctopusApiPaths {
   "/api/v1/workspace/agents/{agentId}": {
     patch: { operationId: "updateWorkspaceAgent"; response: AgentRecord; error: ApiErrorEnvelope }
     delete: { operationId: "deleteWorkspaceAgent"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/agents/export": {
+    post: { operationId: "exportWorkspaceAgentBundle"; response: ExportWorkspaceAgentBundleResult; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/agents/import": {
     post: { operationId: "importWorkspaceAgentBundle"; response: ImportWorkspaceAgentBundleResult; error: ApiErrorEnvelope }
