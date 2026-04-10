@@ -17,8 +17,8 @@ import type {
   UpdateWorkspaceUserRequest as OpenApiUpdateWorkspaceUserRequest,
   UpsertTeamInput as OpenApiUpsertTeamInput,
   UpdateWorkspaceResourceInput as OpenApiUpdateWorkspaceResourceInput,
-  UserCenterAlertRecord as OpenApiUserCenterAlertRecord,
-  UserCenterOverviewSnapshot as OpenApiUserCenterOverviewSnapshot,
+  PermissionCenterAlertRecord as OpenApiPermissionCenterAlertRecord,
+  PermissionCenterOverviewSnapshot as OpenApiPermissionCenterOverviewSnapshot,
   UserRecordSummary as OpenApiUserRecordSummary,
   WorkspaceResourceFolderUploadEntry as OpenApiWorkspaceResourceFolderUploadEntry,
   WorkspaceResourceRecord as OpenApiWorkspaceResourceRecord,
@@ -204,6 +204,6 @@ export type PermissionRecord = OpenApiPermissionRecord
 
 export type MenuRecord = OpenApiMenuRecord
 
-export type UserCenterAlertRecord = OpenApiUserCenterAlertRecord
+export type PermissionCenterAlertRecord = OpenApiPermissionCenterAlertRecord
 
-export type UserCenterOverviewSnapshot = OpenApiUserCenterOverviewSnapshot
+export type PermissionCenterOverviewSnapshot = OpenApiPermissionCenterOverviewSnapshot

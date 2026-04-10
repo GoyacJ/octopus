@@ -595,23 +595,23 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
-/api/v1/workspace/user-center/overview:
+/api/v1/workspace/permission-center/overview:
   get:
-    operationId: getUserCenterOverview
+    operationId: getPermissionCenterOverview
     responses:
       "200":
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UserCenterOverviewSnapshot"
-        description: User center overview payload.
+              $ref: "#/components/schemas/PermissionCenterOverviewSnapshot"
+        description: Permission center overview payload.
       default:
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
-/api/v1/workspace/user-center/profile:
+/api/v1/workspace/personal-center/profile:
   patch:
     operationId: updateCurrentUserProfile
     requestBody:
@@ -626,14 +626,14 @@
           application/json:
             schema:
               $ref: "#/components/schemas/UserRecordSummary"
-        description: Updated current user profile payload.
+        description: Updated current personal profile payload.
       default:
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
-/api/v1/workspace/user-center/profile/password:
+/api/v1/workspace/personal-center/profile/password:
   post:
     operationId: changeCurrentUserPassword
     requestBody:
@@ -648,14 +648,14 @@
           application/json:
             schema:
               $ref: "#/components/schemas/ChangeCurrentUserPasswordResponse"
-        description: Updated current user password payload.
+        description: Updated current personal password payload.
       default:
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
-/api/v1/workspace/user-center/profile/runtime-config:
+/api/v1/workspace/personal-center/profile/runtime-config:
   get:
     operationId: getUserRuntimeConfig
     responses:
@@ -664,7 +664,7 @@
           application/json:
             schema:
               $ref: "#/components/schemas/RuntimeEffectiveConfig"
-        description: User effective runtime configuration payload.
+        description: Personal effective runtime configuration payload.
       default:
         content:
           application/json:
@@ -685,14 +685,14 @@
           application/json:
             schema:
               $ref: "#/components/schemas/RuntimeEffectiveConfig"
-        description: Saved user effective runtime configuration payload.
+        description: Saved personal effective runtime configuration payload.
       default:
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
-/api/v1/workspace/user-center/profile/runtime-config/validate:
+/api/v1/workspace/personal-center/profile/runtime-config/validate:
   post:
     operationId: validateUserRuntimeConfig
     requestBody:
@@ -707,7 +707,7 @@
           application/json:
             schema:
               $ref: "#/components/schemas/RuntimeConfigValidationResult"
-        description: User runtime configuration validation payload.
+        description: Personal runtime configuration validation payload.
       default:
         content:
           application/json:

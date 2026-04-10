@@ -687,10 +687,10 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
       },
     },
     rbac: {
-      async getUserCenterOverview() {
+      async getPermissionCenterOverview() {
         return await fetchWorkspaceOpenApi(
           context.connection,
-          '/api/v1/workspace/user-center/overview',
+          '/api/v1/workspace/permission-center/overview',
           'get',
           {
             session: assertWorkspaceRequestReady(context),
@@ -726,13 +726,13 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
         })
       },
       async updateCurrentUserProfile(input) {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/user-center/profile', 'patch', {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/personal-center/profile', 'patch', {
           session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
         })
       },
       async changeCurrentUserPassword(input) {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/user-center/profile/password', 'post', {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/personal-center/profile/password', 'post', {
           session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(input),
         }) as ChangeCurrentUserPasswordResponse

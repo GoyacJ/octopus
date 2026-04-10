@@ -114,7 +114,7 @@ export type RbacRoleStatus = 'active' | 'disabled'
 export type RbacPermissionStatus = 'active' | 'disabled'
 export type RbacPermissionKind = 'atomic' | 'bundle'
 export type RbacPermissionTargetType = 'workspace' | 'project' | 'user' | 'role' | 'permission' | 'menu' | 'resource' | 'agent' | 'knowledge' | 'tool' | 'skill' | 'mcp'
-export type MenuSource = 'main-sidebar' | 'user-center'
+export type MenuSource = 'main-sidebar' | 'console' | 'permission-center'
 export type MenuStatus = 'active' | 'disabled'
 export type InboxItemType =
   | 'execution_approval'

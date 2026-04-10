@@ -6,23 +6,23 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import { UiPageHeader, UiPageShell, UiPanelFrame, UiTabs } from '@octopus/ui'
 
 import { getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
-import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const userCenterStore = useUserCenterStore()
+const workspaceAccessStore = useWorkspaceAccessStore()
 const workspaceStore = useWorkspaceStore()
 
 const activeTab = ref('')
 const currentMenuId = computed(() => getRouteMenuId(typeof route.name === 'string' ? route.name : undefined))
 
 watch(
-  () => [route.name, workspaceStore.currentWorkspaceId, userCenterStore.availableUserCenterMenus.map(menu => menu.id).join('|')],
+  () => [route.name, workspaceStore.currentWorkspaceId, workspaceAccessStore.availablePermissionCenterMenus.map(menu => menu.id).join('|')],
   () => {
-    if (route.name === 'workspace-user-center') {
-      const firstRouteName = userCenterStore.firstAccessibleUserCenterRouteName
+    if (route.name === 'workspace-permission-center') {
+      const firstRouteName = workspaceAccessStore.firstAccessiblePermissionCenterRouteName
       if (firstRouteName) {
         const menuId = getRouteMenuId(firstRouteName)
         if (menuId) {
@@ -42,7 +42,7 @@ watch(
 )
 
 const tabs = computed(() =>
-  userCenterStore.availableUserCenterMenus
+  workspaceAccessStore.availablePermissionCenterMenus
     .flatMap((menu) => {
       const definition = getMenuDefinition(menu.id)
       if (!definition?.routeName) {
@@ -57,7 +57,7 @@ const tabs = computed(() =>
 )
 
 function handleTabChange(menuId: string) {
-  const entry = userCenterStore.availableUserCenterMenus.find(menu => menu.id === menuId)
+  const entry = workspaceAccessStore.availablePermissionCenterMenus.find(menu => menu.id === menuId)
   const definition = entry ? getMenuDefinition(entry.id) : undefined
   if (!definition?.routeName) {
     return
@@ -71,18 +71,18 @@ function handleTabChange(menuId: string) {
 </script>
 
 <template>
-  <UiPageShell width="wide" test-id="user-center-view" class="h-full">
+  <UiPageShell width="wide" test-id="permission-center-view" class="h-full">
     <UiPageHeader
-      :eyebrow="t('userCenter.header.eyebrow')"
-      :title="t('userCenter.header.title')"
-      :description="userCenterStore.currentUser?.displayName ?? t('common.na')"
+      :eyebrow="t('permissionCenter.header.eyebrow')"
+      :title="t('permissionCenter.header.title')"
+      :description="workspaceAccessStore.currentUser?.displayName ?? t('common.na')"
     />
 
     <UiPanelFrame variant="subtle" padding="sm">
       <UiTabs
         v-model="activeTab"
         :tabs="tabs"
-        data-testid="user-center-tabs"
+        data-testid="permission-center-tabs"
         @update:model-value="handleTabChange"
       />
     </UiPanelFrame>

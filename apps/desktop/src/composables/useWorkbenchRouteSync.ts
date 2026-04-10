@@ -2,7 +2,7 @@ import { watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth'
-import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -13,7 +13,7 @@ export function useWorkbenchRouteSync(): void {
   const runtime = useRuntimeStore()
   const shell = useShellStore()
   const workspaceStore = useWorkspaceStore()
-  const userCenterStore = useUserCenterStore()
+  const workspaceAccessStore = useWorkspaceAccessStore()
 
   watch(
     () => [
@@ -47,7 +47,7 @@ export function useWorkbenchRouteSync(): void {
       if (shell.activeWorkspaceConnectionId) {
         if (auth.isReady && auth.isAuthenticated) {
           await workspaceStore.bootstrap(shell.activeWorkspaceConnectionId)
-          await userCenterStore.load(shell.activeWorkspaceConnectionId)
+          await workspaceAccessStore.load(shell.activeWorkspaceConnectionId)
           await runtime.bootstrap()
         }
       }

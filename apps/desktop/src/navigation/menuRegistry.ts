@@ -2,6 +2,7 @@ import type { MenuNode, MenuSource } from '@octopus/schema'
 
 export type MenuIconKey =
   | 'dashboard'
+  | 'console'
   | 'conversations'
   | 'agents'
   | 'resources'
@@ -12,7 +13,7 @@ export type MenuIconKey =
   | 'models'
   | 'tools'
   | 'automations'
-  | 'user-center'
+  | 'permission-center'
   | 'profile'
   | 'pet'
   | 'users'
@@ -24,7 +25,7 @@ export type MenuIconKey =
   | 'teams'
   | 'bell'
 
-export type MenuSection = 'app' | 'project' | 'workspace' | 'user-center'
+export type MenuSection = 'app' | 'project' | 'workspace' | 'console' | 'permission-center'
 
 export interface MenuDefinition {
   id: string
@@ -74,37 +75,23 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     order: 10,
   },
   {
-    id: 'menu-workspace-projects',
+    id: 'menu-workspace-console',
     source: 'main-sidebar',
     section: 'workspace',
-    routeName: 'workspace-projects',
-    routeNames: ['workspace-projects'],
-    defaultLabel: '项目管理',
-    labelKey: 'sidebar.navigation.projects',
-    icon: 'projects',
+    routeName: 'workspace-console',
+    routeNames: [
+      'workspace-console',
+      'workspace-console-projects',
+      'workspace-console-knowledge',
+      'workspace-console-resources',
+      'workspace-console-agents',
+      'workspace-console-models',
+      'workspace-console-tools',
+    ],
+    defaultLabel: '控制台',
+    labelKey: 'sidebar.navigation.console',
+    icon: 'console',
     order: 12,
-  },
-  {
-    id: 'menu-workspace-knowledge',
-    source: 'main-sidebar',
-    section: 'workspace',
-    routeName: 'workspace-knowledge',
-    routeNames: ['workspace-knowledge'],
-    defaultLabel: '知识库',
-    labelKey: 'sidebar.navigation.knowledge',
-    icon: 'knowledge',
-    order: 15,
-  },
-  {
-    id: 'menu-workspace-resources',
-    source: 'main-sidebar',
-    section: 'workspace',
-    routeName: 'workspace-resources',
-    routeNames: ['workspace-resources'],
-    defaultLabel: '资源库',
-    labelKey: 'sidebar.navigation.resources',
-    icon: 'resources',
-    order: 18,
   },
   {
     id: 'menu-project-dashboard',
@@ -138,17 +125,6 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     labelKey: 'sidebar.navigation.agents',
     icon: 'agents',
     order: 40,
-  },
-  {
-    id: 'menu-workspace-agents',
-    source: 'main-sidebar',
-    section: 'workspace',
-    routeName: 'workspace-agents',
-    routeNames: ['workspace-agents'],
-    defaultLabel: '数字员工中心',
-    labelKey: 'sidebar.navigation.agents',
-    icon: 'agents',
-    order: 45,
   },
   {
     id: 'menu-project-resources',
@@ -206,28 +182,6 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     order: 75,
   },
   {
-    id: 'menu-workspace-models',
-    source: 'main-sidebar',
-    section: 'workspace',
-    routeName: 'workspace-models',
-    routeNames: ['workspace-models'],
-    defaultLabel: '模型',
-    labelKey: 'sidebar.navigation.models',
-    icon: 'models',
-    order: 90,
-  },
-  {
-    id: 'menu-workspace-tools',
-    source: 'main-sidebar',
-    section: 'workspace',
-    routeName: 'workspace-tools',
-    routeNames: ['workspace-tools'],
-    defaultLabel: '工具',
-    labelKey: 'sidebar.navigation.tools',
-    icon: 'tools',
-    order: 100,
-  },
-  {
     id: 'menu-workspace-automations',
     source: 'main-sidebar',
     section: 'workspace',
@@ -236,98 +190,144 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     defaultLabel: '自动化',
     labelKey: 'sidebar.navigation.automations',
     icon: 'automations',
+    order: 90,
+  },
+  {
+    id: 'menu-workspace-permission-center',
+    source: 'main-sidebar',
+    section: 'workspace',
+    routeName: 'workspace-permission-center',
+    routeNames: [
+      'workspace-permission-center',
+      'workspace-permission-center-users',
+      'workspace-permission-center-roles',
+      'workspace-permission-center-permissions',
+      'workspace-permission-center-menus',
+    ],
+    defaultLabel: '权限中心',
+    labelKey: 'sidebar.navigation.permissionCenter',
+    icon: 'permission-center',
+    order: 100,
+  },
+  {
+    id: 'menu-workspace-console-projects',
+    parentId: 'menu-workspace-console',
+    source: 'console',
+    section: 'console',
+    routeName: 'workspace-console-projects',
+    routeNames: ['workspace-console-projects'],
+    defaultLabel: '项目管理',
+    labelKey: 'sidebar.navigation.projects',
+    icon: 'projects',
     order: 110,
   },
   {
-    id: 'menu-workspace-user-center',
-    source: 'main-sidebar',
-    section: 'workspace',
-    routeName: 'workspace-user-center',
-    routeNames: [
-      'workspace-user-center',
-      'workspace-user-center-profile',
-      'workspace-user-center-pet',
-      'workspace-user-center-users',
-      'workspace-user-center-roles',
-      'workspace-user-center-permissions',
-      'workspace-user-center-menus',
-    ],
-    defaultLabel: '用户中心',
-    labelKey: 'sidebar.navigation.userCenter',
-    icon: 'user-center',
+    id: 'menu-workspace-console-knowledge',
+    parentId: 'menu-workspace-console',
+    source: 'console',
+    section: 'console',
+    routeName: 'workspace-console-knowledge',
+    routeNames: ['workspace-console-knowledge'],
+    defaultLabel: '知识库',
+    labelKey: 'sidebar.navigation.knowledge',
+    icon: 'knowledge',
     order: 120,
   },
   {
-    id: 'menu-workspace-user-center-profile',
-    parentId: 'menu-workspace-user-center',
-    source: 'user-center',
-    section: 'user-center',
-    routeName: 'workspace-user-center-profile',
-    routeNames: ['workspace-user-center-profile'],
-    defaultLabel: '基本信息',
-    labelKey: 'userCenter.nav.profile',
-    icon: 'profile',
+    id: 'menu-workspace-console-resources',
+    parentId: 'menu-workspace-console',
+    source: 'console',
+    section: 'console',
+    routeName: 'workspace-console-resources',
+    routeNames: ['workspace-console-resources'],
+    defaultLabel: '资源库',
+    labelKey: 'sidebar.navigation.resources',
+    icon: 'resources',
     order: 130,
   },
   {
-    id: 'menu-workspace-user-center-pet',
-    parentId: 'menu-workspace-user-center',
-    source: 'user-center',
-    section: 'user-center',
-    routeName: 'workspace-user-center-pet',
-    routeNames: ['workspace-user-center-pet'],
-    defaultLabel: '宠物',
-    labelKey: 'userCenter.nav.pet',
-    icon: 'pet',
-    order: 135,
-  },
-  {
-    id: 'menu-workspace-user-center-users',
-    parentId: 'menu-workspace-user-center',
-    source: 'user-center',
-    section: 'user-center',
-    routeName: 'workspace-user-center-users',
-    routeNames: ['workspace-user-center-users'],
-    defaultLabel: '用户列表',
-    labelKey: 'userCenter.nav.users',
-    icon: 'users',
+    id: 'menu-workspace-console-agents',
+    parentId: 'menu-workspace-console',
+    source: 'console',
+    section: 'console',
+    routeName: 'workspace-console-agents',
+    routeNames: ['workspace-console-agents'],
+    defaultLabel: '数字员工中心',
+    labelKey: 'sidebar.navigation.agents',
+    icon: 'agents',
     order: 140,
   },
   {
-    id: 'menu-workspace-user-center-roles',
-    parentId: 'menu-workspace-user-center',
-    source: 'user-center',
-    section: 'user-center',
-    routeName: 'workspace-user-center-roles',
-    routeNames: ['workspace-user-center-roles'],
-    defaultLabel: '角色列表',
-    labelKey: 'userCenter.nav.roles',
-    icon: 'roles',
+    id: 'menu-workspace-console-models',
+    parentId: 'menu-workspace-console',
+    source: 'console',
+    section: 'console',
+    routeName: 'workspace-console-models',
+    routeNames: ['workspace-console-models'],
+    defaultLabel: '模型',
+    labelKey: 'sidebar.navigation.models',
+    icon: 'models',
     order: 150,
   },
   {
-    id: 'menu-workspace-user-center-permissions',
-    parentId: 'menu-workspace-user-center',
-    source: 'user-center',
-    section: 'user-center',
-    routeName: 'workspace-user-center-permissions',
-    routeNames: ['workspace-user-center-permissions'],
-    defaultLabel: '权限列表',
-    labelKey: 'userCenter.nav.permissions',
-    icon: 'permissions',
+    id: 'menu-workspace-console-tools',
+    parentId: 'menu-workspace-console',
+    source: 'console',
+    section: 'console',
+    routeName: 'workspace-console-tools',
+    routeNames: ['workspace-console-tools'],
+    defaultLabel: '工具',
+    labelKey: 'sidebar.navigation.tools',
+    icon: 'tools',
     order: 160,
   },
   {
-    id: 'menu-workspace-user-center-menus',
-    parentId: 'menu-workspace-user-center',
-    source: 'user-center',
-    section: 'user-center',
-    routeName: 'workspace-user-center-menus',
-    routeNames: ['workspace-user-center-menus'],
-    defaultLabel: '菜单列表',
-    labelKey: 'userCenter.nav.menus',
-    icon: 'menus',
+    id: 'menu-workspace-permission-center-users',
+    parentId: 'menu-workspace-permission-center',
+    source: 'permission-center',
+    section: 'permission-center',
+    routeName: 'workspace-permission-center-users',
+    routeNames: ['workspace-permission-center-users'],
+    defaultLabel: '成员管理',
+    labelKey: 'permissionCenter.nav.users',
+    icon: 'users',
     order: 170,
+  },
+  {
+    id: 'menu-workspace-permission-center-roles',
+    parentId: 'menu-workspace-permission-center',
+    source: 'permission-center',
+    section: 'permission-center',
+    routeName: 'workspace-permission-center-roles',
+    routeNames: ['workspace-permission-center-roles'],
+    defaultLabel: '角色管理',
+    labelKey: 'permissionCenter.nav.roles',
+    icon: 'roles',
+    order: 180,
+  },
+  {
+    id: 'menu-workspace-permission-center-permissions',
+    parentId: 'menu-workspace-permission-center',
+    source: 'permission-center',
+    section: 'permission-center',
+    routeName: 'workspace-permission-center-permissions',
+    routeNames: ['workspace-permission-center-permissions'],
+    defaultLabel: '权限管理',
+    labelKey: 'permissionCenter.nav.permissions',
+    icon: 'permissions',
+    order: 190,
+  },
+  {
+    id: 'menu-workspace-permission-center-menus',
+    parentId: 'menu-workspace-permission-center',
+    source: 'permission-center',
+    section: 'permission-center',
+    routeName: 'workspace-permission-center-menus',
+    routeNames: ['workspace-permission-center-menus'],
+    defaultLabel: '导航管理',
+    labelKey: 'permissionCenter.nav.menus',
+    icon: 'menus',
+    order: 200,
   },
 ]
 
@@ -337,8 +337,12 @@ export const MAIN_MENU_IDS = MENU_DEFINITIONS
   .filter((item) => item.source === 'main-sidebar' && !item.parentId)
   .map((item) => item.id)
 
-export const USER_CENTER_MENU_IDS = MENU_DEFINITIONS
-  .filter((item) => item.section === 'user-center')
+export const CONSOLE_MENU_IDS = MENU_DEFINITIONS
+  .filter((item) => item.section === 'console')
+  .map((item) => item.id)
+
+export const PERMISSION_CENTER_MENU_IDS = MENU_DEFINITIONS
+  .filter((item) => item.section === 'permission-center')
   .map((item) => item.id)
 
 export function getMenuDefinition(menuId: string): MenuDefinition | undefined {

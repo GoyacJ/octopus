@@ -393,7 +393,7 @@ describe('workspace client transport', () => {
     )
   })
 
-  it('updates the current user profile through the workspace user center profile endpoint', async () => {
+  it('updates the current user profile through the workspace personal center profile endpoint', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -431,7 +431,7 @@ describe('workspace client transport', () => {
     })
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://127.0.0.1:43127/api/v1/workspace/user-center/profile',
+      'http://127.0.0.1:43127/api/v1/workspace/personal-center/profile',
       expect.objectContaining({
         method: 'PATCH',
         headers: expect.any(Headers),
@@ -439,7 +439,7 @@ describe('workspace client transport', () => {
     )
   })
 
-  it('changes the current user password through the workspace user center profile password endpoint', async () => {
+  it('changes the current user password through the workspace personal center profile password endpoint', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -464,7 +464,7 @@ describe('workspace client transport', () => {
     })
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://127.0.0.1:43127/api/v1/workspace/user-center/profile/password',
+      'http://127.0.0.1:43127/api/v1/workspace/personal-center/profile/password',
       expect.objectContaining({
         method: 'POST',
         headers: expect.any(Headers),

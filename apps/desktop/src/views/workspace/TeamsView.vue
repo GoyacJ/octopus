@@ -7,7 +7,7 @@ const router = useRouter()
 
 onMounted(() => {
   void router.replace({
-    name: 'workspace-agents',
+    name: 'workspace-console-agents',
     params: {
       workspaceId: route.params.workspaceId,
     },

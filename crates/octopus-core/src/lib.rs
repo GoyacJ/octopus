@@ -1378,7 +1378,7 @@ pub struct MenuRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct UserCenterAlertRecord {
+pub struct PermissionCenterAlertRecord {
     pub id: String,
     pub title: String,
     pub description: String,
@@ -1387,12 +1387,12 @@ pub struct UserCenterAlertRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct UserCenterOverviewSnapshot {
+pub struct PermissionCenterOverviewSnapshot {
     pub workspace_id: String,
     pub current_user: UserRecordSummary,
     pub role_names: Vec<String>,
     pub metrics: Vec<WorkspaceMetricRecord>,
-    pub alerts: Vec<UserCenterAlertRecord>,
+    pub alerts: Vec<PermissionCenterAlertRecord>,
     pub quick_links: Vec<MenuRecord>,
 }
 

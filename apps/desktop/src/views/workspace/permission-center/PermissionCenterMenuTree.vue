@@ -2,6 +2,8 @@
 import { computed, ref, watch } from 'vue'
 import { Check, ChevronRight } from 'lucide-vue-next'
 
+import { UiButton } from '@octopus/ui'
+
 import type { MenuTreeBranch, MenuTreeLeaf, MenuTreeSection } from './menu-tree'
 import { isMenuTreeGroup } from './menu-tree'
 
@@ -161,10 +163,11 @@ function syncOpenValues(
       :data-testid="`${props.testIdPrefix}-group-${section.id}`"
       class="rounded-[var(--radius-l)] bg-subtle/60 px-2 py-1.5"
     >
-      <button
-        type="button"
+      <UiButton
+        variant="ghost"
+        size="sm"
         :data-testid="`ui-accordion-trigger-${sectionValue(section.id)}`"
-        class="group flex w-full items-center gap-2 rounded-[var(--radius-m)] px-2 py-1 text-left text-sm font-semibold uppercase tracking-[0.24em] text-text-tertiary transition-colors hover:bg-surface hover:text-text-secondary"
+        class="group flex h-auto w-full justify-start gap-2 rounded-[var(--radius-m)] px-2 py-1 text-left text-sm font-semibold uppercase tracking-[0.24em] text-text-tertiary hover:bg-surface hover:text-text-secondary"
         @click="toggleSection(section.id)"
       >
         <ChevronRight
@@ -173,7 +176,7 @@ function syncOpenValues(
           :class="isSectionOpen(section.id) ? 'rotate-90' : ''"
         />
         <span>{{ section.label }}</span>
-      </button>
+      </UiButton>
 
       <div v-if="isSectionOpen(section.id)" class="mt-1 space-y-1 px-1 pb-1">
         <template v-for="entry in section.items" :key="entry.id">
@@ -182,10 +185,11 @@ function syncOpenValues(
             :data-testid="`${props.testIdPrefix}-group-${entry.id}`"
             class="rounded-[var(--radius-m)] bg-surface/80 px-2 py-1.5"
           >
-            <button
-              type="button"
+            <UiButton
+              variant="ghost"
+              size="sm"
               :data-testid="`ui-accordion-trigger-${branchValue(entry.id)}`"
-              class="group flex w-full items-center gap-2 rounded-[var(--radius-s)] px-2 py-1 text-left text-sm font-semibold uppercase tracking-[0.2em] text-text-secondary transition-colors hover:bg-accent/30 hover:text-text-primary"
+              class="group flex h-auto w-full justify-start gap-2 rounded-[var(--radius-s)] px-2 py-1 text-left text-sm font-semibold uppercase tracking-[0.2em] text-text-secondary hover:bg-accent/30 hover:text-text-primary"
               @click="toggleBranch(entry.id)"
             >
               <ChevronRight
@@ -194,15 +198,16 @@ function syncOpenValues(
                 :class="isBranchOpen(entry.id) ? 'rotate-90' : ''"
               />
               <span>{{ entry.label }}</span>
-            </button>
+            </UiButton>
 
             <div v-if="isBranchOpen(entry.id)" class="mt-1 space-y-1 pl-4">
               <template v-if="entry.rootMenu">
-                <button
+                <UiButton
                   v-if="props.selectionMode === 'multiple'"
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   :data-testid="leafTestId(entry.rootMenu.id)"
-                  class="flex w-full min-w-0 items-start gap-2 rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+                  class="flex h-auto w-full min-w-0 justify-start gap-2 rounded-[var(--radius-m)] border px-2 py-2 text-left"
                   :class="selectableLeafClass(isLeafChecked(entry.rootMenu.id))"
                   @click="toggleLeafSelection(entry.rootMenu.id)"
                 >
@@ -216,12 +221,13 @@ function syncOpenValues(
                     <span class="font-medium text-text-primary">{{ entry.rootMenu.label }}</span>
                     <span class="text-xs text-text-tertiary">{{ entry.rootMenu.secondary }}</span>
                   </span>
-                </button>
-                <button
+                </UiButton>
+                <UiButton
                   v-else
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   :data-testid="leafTestId(entry.rootMenu.id)"
-                  class="flex w-full min-w-0 items-start rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+                  class="flex h-auto w-full min-w-0 justify-start rounded-[var(--radius-m)] border px-2 py-2 text-left"
                   :class="selectableLeafClass(isLeafActive(entry.rootMenu.id))"
                   @click="handleLeafClick(entry.rootMenu)"
                 >
@@ -229,15 +235,16 @@ function syncOpenValues(
                     <span class="font-medium text-text-primary">{{ entry.rootMenu.label }}</span>
                     <span class="text-xs text-text-tertiary">{{ entry.rootMenu.secondary }}</span>
                   </span>
-                </button>
+                </UiButton>
               </template>
 
               <template v-for="child in entry.children" :key="child.id">
-                <button
+                <UiButton
                   v-if="props.selectionMode === 'multiple'"
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   :data-testid="leafTestId(child.id)"
-                  class="flex w-full min-w-0 items-start gap-2 rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+                  class="flex h-auto w-full min-w-0 justify-start gap-2 rounded-[var(--radius-m)] border px-2 py-2 text-left"
                   :class="selectableLeafClass(isLeafChecked(child.id))"
                   @click="toggleLeafSelection(child.id)"
                 >
@@ -251,12 +258,13 @@ function syncOpenValues(
                     <span class="font-medium text-text-primary">{{ child.label }}</span>
                     <span class="text-xs text-text-tertiary">{{ child.secondary }}</span>
                   </span>
-                </button>
-                <button
+                </UiButton>
+                <UiButton
                   v-else
-                  type="button"
+                  variant="ghost"
+                  size="sm"
                   :data-testid="leafTestId(child.id)"
-                  class="flex w-full min-w-0 items-start rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+                  class="flex h-auto w-full min-w-0 justify-start rounded-[var(--radius-m)] border px-2 py-2 text-left"
                   :class="selectableLeafClass(isLeafActive(child.id))"
                   @click="handleLeafClick(child)"
                 >
@@ -264,16 +272,17 @@ function syncOpenValues(
                     <span class="font-medium text-text-primary">{{ child.label }}</span>
                     <span class="text-xs text-text-tertiary">{{ child.secondary }}</span>
                   </span>
-                </button>
+                </UiButton>
               </template>
             </div>
           </div>
 
-          <button
+          <UiButton
             v-else-if="props.selectionMode === 'multiple'"
-            type="button"
+            variant="ghost"
+            size="sm"
             :data-testid="leafTestId(entry.id)"
-            class="flex w-full min-w-0 items-start gap-2 rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+            class="flex h-auto w-full min-w-0 justify-start gap-2 rounded-[var(--radius-m)] border px-2 py-2 text-left"
             :class="selectableLeafClass(isLeafChecked(entry.id))"
             @click="toggleLeafSelection(entry.id)"
           >
@@ -287,13 +296,14 @@ function syncOpenValues(
               <span class="font-medium text-text-primary">{{ entry.label }}</span>
               <span class="text-xs text-text-tertiary">{{ entry.secondary }}</span>
             </span>
-          </button>
+          </UiButton>
 
-          <button
+          <UiButton
             v-else
-            type="button"
+            variant="ghost"
+            size="sm"
             :data-testid="leafTestId(entry.id)"
-            class="flex w-full min-w-0 items-start rounded-[var(--radius-m)] border px-2 py-2 text-left transition-colors"
+            class="flex h-auto w-full min-w-0 justify-start rounded-[var(--radius-m)] border px-2 py-2 text-left"
             :class="selectableLeafClass(isLeafActive(entry.id))"
             @click="handleLeafClick(entry)"
           >
@@ -301,7 +311,7 @@ function syncOpenValues(
               <span class="font-medium text-text-primary">{{ entry.label }}</span>
               <span class="text-xs text-text-tertiary">{{ entry.secondary }}</span>
             </span>
-          </button>
+          </UiButton>
         </template>
       </div>
     </section>

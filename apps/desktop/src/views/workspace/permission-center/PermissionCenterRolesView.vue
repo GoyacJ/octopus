@@ -23,15 +23,15 @@ import {
 
 import { enumLabel } from '@/i18n/copy'
 import { getMenuDefinition } from '@/navigation/menuRegistry'
-import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 import { useWorkspaceStore } from '@/stores/workspace'
-import UserCenterMenuTree from './UserCenterMenuTree.vue'
-import { buildUserCenterMenuTreeSections } from './menu-tree'
+import PermissionCenterMenuTree from './PermissionCenterMenuTree.vue'
+import { buildPermissionCenterMenuTreeSections } from './menu-tree'
 
 const PAGE_SIZE = 6
 
 const { t, locale } = useI18n()
-const userCenterStore = useUserCenterStore()
+const workspaceAccessStore = useWorkspaceAccessStore()
 const workspaceStore = useWorkspaceStore()
 
 const selectedRoleId = ref('')
@@ -57,36 +57,37 @@ const statusOptions = computed(() => {
 })
 
 const metrics = computed(() => [
-  { id: 'total', label: t('userCenter.roles.metrics.total'), value: String(userCenterStore.roles.length) },
-  { id: 'disabled', label: t('userCenter.roles.metrics.disabled'), value: String(userCenterStore.roles.filter(role => role.status === 'disabled').length) },
+  { id: 'total', label: t('permissionCenter.roles.metrics.total'), value: String(workspaceAccessStore.roles.length) },
+  { id: 'disabled', label: t('permissionCenter.roles.metrics.disabled'), value: String(workspaceAccessStore.roles.filter(role => role.status === 'disabled').length) },
 ])
 
-const permissionOptions = computed(() => userCenterStore.permissions)
-const menuOptions = computed(() => userCenterStore.menus.filter(menu => menu.status === 'active'))
-const menuTreeSections = computed(() => buildUserCenterMenuTreeSections(
+const permissionOptions = computed(() => workspaceAccessStore.permissions)
+const menuOptions = computed(() => workspaceAccessStore.menus.filter(menu => menu.status === 'active'))
+const menuTreeSections = computed(() => buildPermissionCenterMenuTreeSections(
   menuOptions.value,
   {
-    app: t('userCenter.roles.menuGroups.app'),
-    workspace: t('userCenter.roles.menuGroups.workspace'),
-    userCenter: t('userCenter.roles.menuGroups.userCenter'),
-    project: t('userCenter.roles.menuGroups.project'),
+    app: t('permissionCenter.roles.menuGroups.app'),
+    workspace: t('permissionCenter.roles.menuGroups.workspace'),
+    console: t('permissionCenter.roles.menuGroups.console'),
+    permissionCenter: t('permissionCenter.roles.menuGroups.permissionCenter'),
+    project: t('permissionCenter.roles.menuGroups.project'),
   },
   menu => menuLabel(menu.id, menu.label),
 ))
-const pageCount = computed(() => Math.max(1, Math.ceil(userCenterStore.roles.length / PAGE_SIZE)))
+const pageCount = computed(() => Math.max(1, Math.ceil(workspaceAccessStore.roles.length / PAGE_SIZE)))
 const pagedRoles = computed(() => {
   const start = (currentPage.value - 1) * PAGE_SIZE
-  return userCenterStore.roles.slice(start, start + PAGE_SIZE)
+  return workspaceAccessStore.roles.slice(start, start + PAGE_SIZE)
 })
 
 watch(
-  () => userCenterStore.roles.map(role => role.id).join('|'),
+  () => workspaceAccessStore.roles.map(role => role.id).join('|'),
   () => {
     if (currentPage.value > pageCount.value) {
       currentPage.value = pageCount.value
     }
-    if (!selectedRoleId.value || !userCenterStore.roles.some(role => role.id === selectedRoleId.value)) {
-      applyRole(userCenterStore.roles[0]?.id)
+    if (!selectedRoleId.value || !workspaceAccessStore.roles.some(role => role.id === selectedRoleId.value)) {
+      applyRole(workspaceAccessStore.roles[0]?.id)
       return
     }
     applyRole(selectedRoleId.value)
@@ -104,7 +105,7 @@ function resetFormState() {
 }
 
 function applyRole(roleId?: string) {
-  const role = userCenterStore.roles.find(item => item.id === roleId)
+  const role = workspaceAccessStore.roles.find(item => item.id === roleId)
   if (!role) {
     selectedRoleId.value = ''
     resetFormState()
@@ -142,16 +143,16 @@ async function saveRole() {
   }
 
   if (selectedRoleId.value) {
-    const updated = await userCenterStore.updateRole(selectedRoleId.value, record)
+    const updated = await workspaceAccessStore.updateRole(selectedRoleId.value, record)
     applyRole(updated.id)
-    saveMessage.value = t('userCenter.roles.feedback.saved')
+    saveMessage.value = t('permissionCenter.roles.feedback.saved')
     return
   }
 
-  const created = await userCenterStore.createRole(record)
+  const created = await workspaceAccessStore.createRole(record)
   selectedRoleId.value = created.id
   applyRole(created.id)
-  saveMessage.value = t('userCenter.roles.feedback.saved')
+  saveMessage.value = t('permissionCenter.roles.feedback.saved')
 }
 
 function promptDeleteRole(roleId: string) {
@@ -163,11 +164,11 @@ async function confirmDeleteRole() {
   if (!pendingDeleteRoleId.value) {
     return
   }
-  await userCenterStore.deleteRole(pendingDeleteRoleId.value)
+  await workspaceAccessStore.deleteRole(pendingDeleteRoleId.value)
   deleteDialogOpen.value = false
   pendingDeleteRoleId.value = ''
-  applyRole(userCenterStore.roles[0]?.id)
-  saveMessage.value = t('userCenter.roles.feedback.deleted')
+  applyRole(workspaceAccessStore.roles[0]?.id)
+  saveMessage.value = t('permissionCenter.roles.feedback.deleted')
 }
 
 function menuLabel(menuId: string, fallback: string) {
@@ -177,7 +178,7 @@ function menuLabel(menuId: string, fallback: string) {
 </script>
 
 <template>
-  <div data-testid="user-center-roles-shell">
+  <div data-testid="permission-center-roles-shell">
     <UiListDetailShell>
       <template #list>
         <section class="space-y-3">
@@ -188,12 +189,12 @@ function menuLabel(menuId: string, fallback: string) {
           <UiPanelFrame
             variant="subtle"
             padding="md"
-            :title="t('userCenter.roles.title')"
-            :subtitle="t('userCenter.roles.listSubtitle')"
+            :title="t('permissionCenter.roles.title')"
+            :subtitle="t('permissionCenter.roles.listSubtitle')"
           >
             <template #actions>
               <UiButton data-testid="roles-create-button" @click="createRoleDraft">
-                {{ t('userCenter.roles.actions.create') }}
+                {{ t('permissionCenter.roles.actions.create') }}
               </UiButton>
             </template>
           </UiPanelFrame>
@@ -216,7 +217,7 @@ function menuLabel(menuId: string, fallback: string) {
                 :data-testid="`roles-delete-button-${role.code}`"
                 @click.stop="promptDeleteRole(role.id)"
               >
-                {{ t('userCenter.roles.actions.delete') }}
+                {{ t('permissionCenter.roles.actions.delete') }}
               </UiButton>
             </template>
           </UiRecordCard>
@@ -224,30 +225,30 @@ function menuLabel(menuId: string, fallback: string) {
           <UiPagination
             v-model:page="currentPage"
             :page-count="pageCount"
-            :summary-label="`${userCenterStore.roles.length}`"
+            :summary-label="`${workspaceAccessStore.roles.length}`"
             root-test-id="roles-list-pagination"
           />
         </section>
       </template>
 
-      <div data-testid="user-center-roles-inspector">
+      <div data-testid="permission-center-roles-inspector">
         <UiInspectorPanel
-          :title="selectedRoleId ? t('userCenter.roles.title') : t('userCenter.roles.actions.create')"
-          :subtitle="selectedRoleId ? form.code : t('userCenter.roles.listSubtitle')"
+          :title="selectedRoleId ? t('permissionCenter.roles.title') : t('permissionCenter.roles.actions.create')"
+          :subtitle="selectedRoleId ? form.code : t('permissionCenter.roles.listSubtitle')"
         >
           <div class="space-y-4">
             <UiStatusCallout v-if="saveMessage" tone="success" :description="saveMessage" />
 
-            <UiField :label="t('userCenter.roles.fields.name')">
+            <UiField :label="t('permissionCenter.roles.fields.name')">
               <UiInput v-model="form.name" data-testid="roles-name-input" />
             </UiField>
-            <UiField :label="t('userCenter.roles.fields.code')">
+            <UiField :label="t('permissionCenter.roles.fields.code')">
               <UiInput v-model="form.code" data-testid="roles-code-input" />
             </UiField>
             <UiField :label="t('common.status')">
               <UiSelect v-model="form.status" :options="statusOptions" />
             </UiField>
-            <UiField :label="t('userCenter.roles.fields.permissions')">
+            <UiField :label="t('permissionCenter.roles.fields.permissions')">
               <div class="space-y-2">
                 <label
                   v-for="permission in permissionOptions"
@@ -268,20 +269,20 @@ function menuLabel(menuId: string, fallback: string) {
                 </label>
               </div>
             </UiField>
-            <UiField :label="t('userCenter.roles.fields.menus')" :hint="t('userCenter.roles.menuHint')">
-              <UserCenterMenuTree
+            <UiField :label="t('permissionCenter.roles.fields.menus')" :hint="t('permissionCenter.roles.menuHint')">
+              <PermissionCenterMenuTree
                 v-model="form.menuIds"
                 selection-mode="multiple"
                 test-id-prefix="roles-menu"
                 :sections="menuTreeSections"
               />
             </UiField>
-            <UiField :label="t('userCenter.roles.fields.description')">
+            <UiField :label="t('permissionCenter.roles.fields.description')">
               <UiTextarea v-model="form.description" :rows="5" />
             </UiField>
             <div class="flex gap-3">
-              <UiButton data-testid="roles-save-button" @click="saveRole">{{ t('userCenter.roles.actions.save') }}</UiButton>
-              <UiButton variant="ghost" @click="selectedRoleId ? applyRole(selectedRoleId) : createRoleDraft()">{{ t('userCenter.roles.actions.reset') }}</UiButton>
+              <UiButton data-testid="roles-save-button" @click="saveRole">{{ t('permissionCenter.roles.actions.save') }}</UiButton>
+              <UiButton variant="ghost" @click="selectedRoleId ? applyRole(selectedRoleId) : createRoleDraft()">{{ t('permissionCenter.roles.actions.reset') }}</UiButton>
             </div>
           </div>
         </UiInspectorPanel>
@@ -291,8 +292,8 @@ function menuLabel(menuId: string, fallback: string) {
 
   <UiDialog
     v-model:open="deleteDialogOpen"
-    :title="t('userCenter.roles.deleteTitle')"
-    :description="t('userCenter.roles.deleteDescription')"
+    :title="t('permissionCenter.roles.deleteTitle')"
+    :description="t('permissionCenter.roles.deleteDescription')"
   >
     <template #footer>
       <UiButton variant="ghost" @click="deleteDialogOpen = false">

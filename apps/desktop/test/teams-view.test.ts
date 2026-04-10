@@ -61,7 +61,7 @@ describe('Teams route compatibility', () => {
     vi.restoreAllMocks()
     window.localStorage.clear()
     installWorkspaceApiFixture()
-    await router.push('/workspaces/ws-local/teams')
+    await router.push('/workspaces/ws-local/console/agents?tab=team')
     await router.isReady()
     document.body.innerHTML = ''
   })
@@ -71,7 +71,7 @@ describe('Teams route compatibility', () => {
 
     await waitForText(mounted.container, 'Studio Direction Team')
 
-    expect(router.currentRoute.value.name).toBe('workspace-agents')
+    expect(router.currentRoute.value.name).toBe('workspace-console-agents')
     expect(router.currentRoute.value.query.tab).toBe('team')
     expect(mounted.container.textContent).toContain('Studio Direction Team')
 

@@ -61,7 +61,7 @@ import type {
   UpsertAgentInput,
   UpsertTeamInput,
   UpsertWorkspaceMcpServerInput,
-  UserCenterOverviewSnapshot,
+  PermissionCenterOverviewSnapshot,
   UserRecordSummary,
   WorkspaceConnectionRecord,
   WorkspaceMcpServerDocument,
@@ -208,7 +208,7 @@ export interface WorkspaceClient {
     delete: (automationId: string) => Promise<void>
   }
   rbac: {
-    getUserCenterOverview: () => Promise<UserCenterOverviewSnapshot>
+    getPermissionCenterOverview: () => Promise<PermissionCenterOverviewSnapshot>
     listUsers: () => Promise<UserRecordSummary[]>
     createUser: (input: CreateWorkspaceUserRequest) => Promise<UserRecordSummary>
     updateUser: (userId: string, input: UpdateWorkspaceUserRequest) => Promise<UserRecordSummary>

@@ -323,11 +323,11 @@ export function createWorkspaceClientFixture(
           ownerRecord,
           ...workspaceState.users.filter(record => record.id !== ownerId),
         ]
-        workspaceState.userCenterOverview = {
-          ...workspaceState.userCenterOverview,
+        workspaceState.permissionCenterOverview = {
+          ...workspaceState.permissionCenterOverview,
           currentUser: clone(ownerRecord),
           roleNames: ['Owner'],
-          metrics: workspaceState.userCenterOverview.metrics.map(metric =>
+          metrics: workspaceState.permissionCenterOverview.metrics.map(metric =>
             metric.id === 'users'
               ? { ...metric, value: String(workspaceState.users.length) }
               : metric),
@@ -931,8 +931,8 @@ export function createWorkspaceClientFixture(
       },
     },
     rbac: {
-      async getUserCenterOverview() {
-        return clone(workspaceState.userCenterOverview)
+      async getPermissionCenterOverview() {
+        return clone(workspaceState.permissionCenterOverview)
       },
       async listUsers() {
         return clone(workspaceState.users)
@@ -954,6 +954,13 @@ export function createWorkspaceClientFixture(
         workspaceState.userPasswords = {
           ...workspaceState.userPasswords,
           [created.id]: record.useDefaultPassword || !record.password ? 'changeme' : record.password,
+        }
+        workspaceState.permissionCenterOverview = {
+          ...workspaceState.permissionCenterOverview,
+          metrics: workspaceState.permissionCenterOverview.metrics.map(metric =>
+            metric.id === 'users'
+              ? { ...metric, value: String(workspaceState.users.length) }
+              : metric),
         }
         return clone(created)
       },
@@ -998,9 +1005,9 @@ export function createWorkspaceClientFixture(
             [userId]: record.password,
           }
         }
-        if (workspaceState.userCenterOverview.currentUser.id === userId) {
-          workspaceState.userCenterOverview = {
-            ...workspaceState.userCenterOverview,
+        if (workspaceState.permissionCenterOverview.currentUser.id === userId) {
+          workspaceState.permissionCenterOverview = {
+            ...workspaceState.permissionCenterOverview,
             currentUser: clone(updated),
           }
         }
@@ -1011,9 +1018,16 @@ export function createWorkspaceClientFixture(
         const nextPasswords = { ...workspaceState.userPasswords }
         delete nextPasswords[userId]
         workspaceState.userPasswords = nextPasswords
+        workspaceState.permissionCenterOverview = {
+          ...workspaceState.permissionCenterOverview,
+          metrics: workspaceState.permissionCenterOverview.metrics.map(metric =>
+            metric.id === 'users'
+              ? { ...metric, value: String(workspaceState.users.length) }
+              : metric),
+        }
       },
       async updateCurrentUserProfile(input: UpdateCurrentUserProfileRequest) {
-        const currentUserId = workspaceState.userCenterOverview.currentUser.id
+        const currentUserId = workspaceState.permissionCenterOverview.currentUser.id
         const currentUser = workspaceState.users.find(user => user.id === currentUserId)
         if (!currentUser) {
           throw new WorkspaceApiError({
@@ -1036,14 +1050,14 @@ export function createWorkspaceClientFixture(
               : currentUser.avatar,
         }
         workspaceState.users = workspaceState.users.map(user => user.id === currentUserId ? clone(updated) : user)
-        workspaceState.userCenterOverview = {
-          ...workspaceState.userCenterOverview,
+        workspaceState.permissionCenterOverview = {
+          ...workspaceState.permissionCenterOverview,
           currentUser: clone(updated),
         }
         return clone(updated)
       },
       async changeCurrentUserPassword(input: ChangeCurrentUserPasswordRequest): Promise<ChangeCurrentUserPasswordResponse> {
-        const currentUserId = workspaceState.userCenterOverview.currentUser.id
+        const currentUserId = workspaceState.permissionCenterOverview.currentUser.id
         const currentPassword = workspaceState.userPasswords[currentUserId]
         if (!currentPassword) {
           throw new WorkspaceApiError({
@@ -1104,10 +1118,10 @@ export function createWorkspaceClientFixture(
             passwordState: 'set',
           }
         })
-        workspaceState.userCenterOverview = {
-          ...workspaceState.userCenterOverview,
+        workspaceState.permissionCenterOverview = {
+          ...workspaceState.permissionCenterOverview,
           currentUser: {
-            ...workspaceState.userCenterOverview.currentUser,
+            ...workspaceState.permissionCenterOverview.currentUser,
             passwordState: 'set',
           },
         }
@@ -1120,6 +1134,13 @@ export function createWorkspaceClientFixture(
       },
       async createRole(record) {
         workspaceState.roles = [...workspaceState.roles, clone(record)]
+        workspaceState.permissionCenterOverview = {
+          ...workspaceState.permissionCenterOverview,
+          metrics: workspaceState.permissionCenterOverview.metrics.map(metric =>
+            metric.id === 'roles'
+              ? { ...metric, value: String(workspaceState.roles.length) }
+              : metric),
+        }
         return clone(record)
       },
       async updateRole(roleId, record) {
@@ -1132,15 +1153,19 @@ export function createWorkspaceClientFixture(
           ...user,
           roleIds: user.roleIds.filter(id => id !== roleId),
         }))
-        workspaceState.userCenterOverview = {
-          ...workspaceState.userCenterOverview,
+        workspaceState.permissionCenterOverview = {
+          ...workspaceState.permissionCenterOverview,
           currentUser: {
-            ...workspaceState.userCenterOverview.currentUser,
-            roleIds: workspaceState.userCenterOverview.currentUser.roleIds.filter(id => id !== roleId),
+            ...workspaceState.permissionCenterOverview.currentUser,
+            roleIds: workspaceState.permissionCenterOverview.currentUser.roleIds.filter(id => id !== roleId),
           },
-          roleNames: workspaceState.userCenterOverview.roleNames.filter(name =>
+          roleNames: workspaceState.permissionCenterOverview.roleNames.filter(name =>
             workspaceState.roles.some(role => role.name === name),
           ),
+          metrics: workspaceState.permissionCenterOverview.metrics.map(metric =>
+            metric.id === 'roles'
+              ? { ...metric, value: String(workspaceState.roles.length) }
+              : metric),
         }
       },
       async listPermissions() {

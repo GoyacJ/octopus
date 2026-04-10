@@ -28,11 +28,17 @@ import { UiButton, UiDialog, UiField, UiInput, UiPopover, UiStatusCallout, UiTex
 import ConnectWorkspaceDialog from '@/components/layout/ConnectWorkspaceDialog.vue'
 import DesktopPetHost from '@/components/pet/DesktopPetHost.vue'
 import { resolveWorkspaceLabel } from '@/composables/workspace-label'
-import { createProjectConversationTarget, createProjectDashboardTarget, createProjectSurfaceTarget, createWorkspaceOverviewTarget, createWorkspaceProjectsTarget } from '@/i18n/navigation'
+import {
+  createProjectConversationTarget,
+  createProjectDashboardTarget,
+  createProjectSurfaceTarget,
+  createWorkspaceConsoleTarget,
+  createWorkspaceOverviewTarget,
+} from '@/i18n/navigation'
 import { type MenuIconKey } from '@/navigation/menuRegistry'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
-import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const route = useRoute()
@@ -40,7 +46,7 @@ const router = useRouter()
 const { t } = useI18n()
 const shell = useShellStore()
 const workspaceStore = useWorkspaceStore()
-const userCenterStore = useUserCenterStore()
+const workspaceAccessStore = useWorkspaceAccessStore()
 const runtime = useRuntimeStore()
 
 const workspaceMenuOpen = ref(false)
@@ -84,7 +90,8 @@ const iconMap: Record<MenuIconKey, unknown> = {
   models: Cpu,
   tools: Wrench,
   automations: Workflow,
-  'user-center': UserRound,
+  console: LayoutDashboard,
+  'permission-center': UserRound,
   profile: UserRound,
   pet: Bot,
   users: UserRound,
@@ -120,52 +127,20 @@ const workspaceNavigation = computed<NavigationItem[]>(() => {
       to: createWorkspaceOverviewTarget(workspaceId, currentProjectId.value || undefined),
     },
     {
-      id: 'workspace-projects',
-      menuId: 'menu-workspace-projects',
-      label: t('sidebar.navigation.projects'),
-      routeNames: ['workspace-projects'],
-      icon: iconMap.projects,
-      to: createWorkspaceProjectsTarget(workspaceId),
-    },
-    {
-      id: 'workspace-knowledge',
-      menuId: 'menu-workspace-knowledge',
-      label: t('sidebar.navigation.knowledge'),
-      routeNames: ['workspace-knowledge'],
-      icon: iconMap.knowledge,
-      to: { name: 'workspace-knowledge', params: { workspaceId } },
-    },
-    {
-      id: 'workspace-resources',
-      menuId: 'menu-workspace-resources',
-      label: t('sidebar.navigation.resources'),
-      routeNames: ['workspace-resources'],
-      icon: iconMap.resources,
-      to: { name: 'workspace-resources', params: { workspaceId } },
-    },
-    {
-      id: 'workspace-agents',
-      menuId: 'menu-workspace-agents',
-      label: t('sidebar.navigation.agents'),
-      routeNames: ['workspace-agents'],
-      icon: iconMap.agents,
-      to: { name: 'workspace-agents', params: { workspaceId } },
-    },
-    {
-      id: 'workspace-models',
-      menuId: 'menu-workspace-models',
-      label: t('sidebar.navigation.models'),
-      routeNames: ['workspace-models'],
-      icon: iconMap.models,
-      to: { name: 'workspace-models', params: { workspaceId } },
-    },
-    {
-      id: 'workspace-tools',
-      menuId: 'menu-workspace-tools',
-      label: t('sidebar.navigation.tools'),
-      routeNames: ['workspace-tools'],
-      icon: iconMap.tools,
-      to: { name: 'workspace-tools', params: { workspaceId } },
+      id: 'workspace-console',
+      menuId: 'menu-workspace-console',
+      label: t('sidebar.navigation.console'),
+      routeNames: [
+        'workspace-console',
+        'workspace-console-projects',
+        'workspace-console-knowledge',
+        'workspace-console-resources',
+        'workspace-console-agents',
+        'workspace-console-models',
+        'workspace-console-tools',
+      ],
+      icon: iconMap.console,
+      to: createWorkspaceConsoleTarget(workspaceId),
     },
     {
       id: 'workspace-automations',
@@ -176,30 +151,29 @@ const workspaceNavigation = computed<NavigationItem[]>(() => {
       to: { name: 'workspace-automations', params: { workspaceId } },
     },
     {
-      id: 'workspace-user-center',
-      menuId: 'menu-workspace-user-center',
-      label: t('sidebar.navigation.userCenter'),
+      id: 'workspace-permission-center',
+      menuId: 'menu-workspace-permission-center',
+      label: t('sidebar.navigation.permissionCenter'),
       routeNames: [
-        'workspace-user-center',
-        'workspace-user-center-profile',
-        'workspace-user-center-users',
-        'workspace-user-center-roles',
-        'workspace-user-center-permissions',
-        'workspace-user-center-menus',
+        'workspace-permission-center',
+        'workspace-permission-center-users',
+        'workspace-permission-center-roles',
+        'workspace-permission-center-permissions',
+        'workspace-permission-center-menus',
       ],
-      icon: iconMap['user-center'],
+      icon: iconMap['permission-center'],
       to: {
-        name: userCenterStore.firstAccessibleUserCenterRouteName ?? 'workspace-user-center',
+        name: 'workspace-permission-center',
         params: { workspaceId },
       },
     },
   ]
 
-  if (!userCenterStore.currentEffectiveMenuIds.length) {
+  if (!workspaceAccessStore.currentEffectiveMenuIds.length) {
     return items
   }
 
-  return items.filter(item => !item.menuId || userCenterStore.currentEffectiveMenuIds.includes(item.menuId))
+  return items.filter(item => !item.menuId || workspaceAccessStore.currentEffectiveMenuIds.includes(item.menuId))
 })
 
 function projectConversationId(projectId: string) {

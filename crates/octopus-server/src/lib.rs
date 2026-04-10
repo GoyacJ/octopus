@@ -52,7 +52,7 @@ use octopus_core::{
     TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
     UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput,
     UpdateWorkspaceUserRequest, UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput,
-    UserCenterAlertRecord, UserCenterOverviewSnapshot, UserRecordSummary, WorkspaceActivityRecord,
+    PermissionCenterAlertRecord, PermissionCenterOverviewSnapshot, UserRecordSummary, WorkspaceActivityRecord,
     WorkspaceMcpServerDocument, WorkspaceMetricRecord, WorkspaceOverviewSnapshot,
     WorkspaceResourceRecord, WorkspaceSkillDocument, WorkspaceSkillFileDocument,
     WorkspaceSkillTreeDocument, WorkspaceToolCatalogSnapshot, WorkspaceToolDisablePatch,

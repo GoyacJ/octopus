@@ -211,7 +211,8 @@ MenuRecord:
 MenuSource:
   enum:
     - main-sidebar
-    - user-center
+    - console
+    - permission-center
   type: string
 MenuStatus:
   enum:
@@ -710,7 +711,7 @@ UpsertTeamInput:
     - description
     - status
   type: object
-UserCenterAlertRecord:
+PermissionCenterAlertRecord:
   additionalProperties: false
   properties:
     description:
@@ -727,12 +728,12 @@ UserCenterAlertRecord:
     - description
     - severity
   type: object
-UserCenterOverviewSnapshot:
+PermissionCenterOverviewSnapshot:
   additionalProperties: false
   properties:
     alerts:
       items:
-        $ref: "#/components/schemas/UserCenterAlertRecord"
+        $ref: "#/components/schemas/PermissionCenterAlertRecord"
       type: array
     currentUser:
       $ref: "#/components/schemas/UserRecordSummary"

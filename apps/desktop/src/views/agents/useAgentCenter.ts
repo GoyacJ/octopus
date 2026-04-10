@@ -422,7 +422,7 @@ export function useAgentCenter(scope: CenterScope) {
   function openEditAgent(record: AgentRecord) {
     if (record.integrationSource && isProjectScope.value) {
       void router.push({
-        name: 'workspace-agents',
+        name: 'workspace-console-agents',
         params: { workspaceId: workspaceStore.currentWorkspaceId },
         query: { tab: 'agent' },
       })
@@ -440,7 +440,7 @@ export function useAgentCenter(scope: CenterScope) {
   function openEditTeam(record: TeamRecord) {
     if (record.integrationSource && isProjectScope.value) {
       void router.push({
-        name: 'workspace-agents',
+        name: 'workspace-console-agents',
         params: { workspaceId: workspaceStore.currentWorkspaceId },
         query: { tab: 'team' },
       })

@@ -12,7 +12,7 @@ import type {
   RuntimeEffectiveConfig,
   UpdateCurrentUserProfileRequest,
   UpdateWorkspaceUserRequest,
-  UserCenterOverviewSnapshot,
+  PermissionCenterOverviewSnapshot,
   UserRecordSummary,
 } from '@octopus/schema'
 
@@ -51,8 +51,8 @@ function permissionMatches(
   return permission.status === 'active'
 }
 
-export const useUserCenterStore = defineStore('user-center', () => {
-  const overviews = ref<Record<string, UserCenterOverviewSnapshot>>({})
+export const useWorkspaceAccessStore = defineStore('workspace-access', () => {
+  const overviews = ref<Record<string, PermissionCenterOverviewSnapshot>>({})
   const usersByConnection = ref<Record<string, UserRecordSummary[]>>({})
   const rolesByConnection = ref<Record<string, RoleRecord[]>>({})
   const permissionsByConnection = ref<Record<string, PermissionRecord[]>>({})
@@ -108,11 +108,18 @@ export const useUserCenterStore = defineStore('user-center', () => {
       .filter(menu => currentEffectiveMenuIds.value.includes(menu.id))
       .sort((left, right) => left.order - right.order),
   )
-  const availableUserCenterMenus = computed(() =>
-    currentEffectiveMenus.value.filter(menu => menu.source === 'user-center'),
+  const availablePermissionCenterMenus = computed(() =>
+    currentEffectiveMenus.value.filter(menu => menu.source === 'permission-center'),
   )
-  const firstAccessibleUserCenterRouteName = computed(() => {
-    const firstMenu = availableUserCenterMenus.value.find(menu => menu.routeName && getMenuDefinition(menu.id)?.routeName)
+  const availableConsoleMenus = computed(() =>
+    currentEffectiveMenus.value.filter(menu => menu.source === 'console'),
+  )
+  const firstAccessiblePermissionCenterRouteName = computed(() => {
+    const firstMenu = availablePermissionCenterMenus.value.find(menu => menu.routeName && getMenuDefinition(menu.id)?.routeName)
+    return firstMenu?.routeName ?? null
+  })
+  const firstAccessibleConsoleRouteName = computed(() => {
+    const firstMenu = availableConsoleMenus.value.find(menu => menu.routeName && getMenuDefinition(menu.id)?.routeName)
     return firstMenu?.routeName ?? null
   })
   const error = computed(() => errors.value[activeConnectionId.value] ?? '')
@@ -194,7 +201,7 @@ export const useUserCenterStore = defineStore('user-center', () => {
     requestTokens.value[connectionId] = token
     try {
       const [nextOverview, nextUsers, nextRoles, nextPermissions, nextMenus] = await Promise.all([
-        client.rbac.getUserCenterOverview(),
+        client.rbac.getPermissionCenterOverview(),
         client.rbac.listUsers(),
         client.rbac.listRoles(),
         client.rbac.listPermissions(),
@@ -227,7 +234,7 @@ export const useUserCenterStore = defineStore('user-center', () => {
       if (requestTokens.value[connectionId] === token) {
         errors.value = {
           ...errors.value,
-          [connectionId]: cause instanceof Error ? cause.message : 'Failed to load user center',
+          [connectionId]: cause instanceof Error ? cause.message : 'Failed to load workspace access data',
         }
       }
     }
@@ -616,8 +623,10 @@ export const useUserCenterStore = defineStore('user-center', () => {
     currentPermissionRecords,
     currentEffectiveMenuIds,
     currentEffectiveMenus,
-    availableUserCenterMenus,
-    firstAccessibleUserCenterRouteName,
+    availablePermissionCenterMenus,
+    availableConsoleMenus,
+    firstAccessiblePermissionCenterRouteName,
+    firstAccessibleConsoleRouteName,
     error,
     runtimeConfig,
     runtimeDraft,

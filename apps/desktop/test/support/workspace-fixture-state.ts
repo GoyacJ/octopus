@@ -19,7 +19,7 @@ import type {
   SystemBootstrapStatus,
   TeamRecord,
   ToolRecord,
-  UserCenterOverviewSnapshot,
+  PermissionCenterOverviewSnapshot,
   UserRecordSummary,
   WorkspaceConnectionRecord,
   WorkspaceMcpServerDocument,
@@ -30,6 +30,8 @@ import type {
   WorkspaceToolCatalogEntry,
   WorkspaceToolCatalogSnapshot,
 } from '@octopus/schema'
+
+import { buildWorkspaceMenuNodes } from '@/navigation/menuRegistry'
 
 import { clone } from './workspace-fixture-bootstrap'
 import {
@@ -75,7 +77,7 @@ export interface WorkspaceFixtureState {
   mcpDocuments: Record<string, WorkspaceMcpServerDocument>
   tools: ToolRecord[]
   automations: AutomationRecord[]
-  userCenterOverview: UserCenterOverviewSnapshot
+  permissionCenterOverview: PermissionCenterOverviewSnapshot
   users: UserRecordSummary[]
   userPasswords: Record<string, string>
   roles: RoleRecord[]
@@ -92,17 +94,29 @@ export interface WorkspaceFixtureState {
   projectPetBindings: Record<string, PetConversationBinding>
 }
 
-const MAIN_WORKSPACE_MENU_IDS = [
+const RBAC_MENU_IDS = [
   'menu-workspace-overview',
-  'menu-workspace-projects',
-  'menu-workspace-knowledge',
-  'menu-workspace-resources',
-  'menu-workspace-agents',
-  'menu-workspace-teams',
-  'menu-workspace-models',
-  'menu-workspace-tools',
+  'menu-workspace-console',
+  'menu-workspace-console-projects',
+  'menu-workspace-console-knowledge',
+  'menu-workspace-console-resources',
+  'menu-workspace-console-agents',
+  'menu-workspace-console-models',
+  'menu-workspace-console-tools',
   'menu-workspace-automations',
-  'menu-workspace-user-center',
+  'menu-workspace-permission-center',
+  'menu-workspace-permission-center-users',
+  'menu-workspace-permission-center-roles',
+  'menu-workspace-permission-center-permissions',
+  'menu-workspace-permission-center-menus',
+] as const
+
+const OPERATOR_MENU_IDS = [
+  'menu-workspace-overview',
+  'menu-workspace-console',
+  'menu-workspace-console-projects',
+  'menu-workspace-permission-center',
+  'menu-workspace-permission-center-users',
 ] as const
 
 export function createWorkspaceFixtureState(
@@ -1000,6 +1014,9 @@ export function createWorkspaceFixtureState(
     },
   ]
 
+  const menus: MenuRecord[] = buildWorkspaceMenuNodes(workspace.id)
+    .filter(menu => RBAC_MENU_IDS.includes(menu.id as (typeof RBAC_MENU_IDS)[number]))
+
   const roles: RoleRecord[] = [
     {
       id: 'role-owner',
@@ -1009,15 +1026,7 @@ export function createWorkspaceFixtureState(
       description: 'Full workspace access.',
       status: 'active',
       permissionIds: ['perm-manage-users', 'perm-manage-roles', 'perm-manage-tools'],
-      menuIds: [
-        ...MAIN_WORKSPACE_MENU_IDS,
-        'menu-workspace-user-center-profile',
-        'menu-workspace-user-center-pet',
-        'menu-workspace-user-center-users',
-        'menu-workspace-user-center-roles',
-        'menu-workspace-user-center-permissions',
-        'menu-workspace-user-center-menus',
-      ],
+      menuIds: menus.map(menu => menu.id),
     },
     {
       id: 'role-operator',
@@ -1027,13 +1036,7 @@ export function createWorkspaceFixtureState(
       description: 'Daily operations access.',
       status: 'active',
       permissionIds: ['perm-manage-tools'],
-      menuIds: [
-        'menu-workspace-overview',
-        'menu-workspace-projects',
-        'menu-workspace-user-center-profile',
-        'menu-workspace-user-center-pet',
-        'menu-workspace-user-center-users',
-      ],
+      menuIds: [...OPERATOR_MENU_IDS],
     },
   ]
 
@@ -1079,79 +1082,18 @@ export function createWorkspaceFixtureState(
     },
   ]
 
-  const menus: MenuRecord[] = [
-    {
-      id: 'menu-workspace-user-center-profile',
-      workspaceId: workspace.id,
-      parentId: 'menu-workspace-user-center',
-      source: 'user-center',
-      label: 'Profile',
-      routeName: 'workspace-user-center-profile',
-      status: 'active',
-      order: 120,
-    },
-    {
-      id: 'menu-workspace-user-center-pet',
-      workspaceId: workspace.id,
-      parentId: 'menu-workspace-user-center',
-      source: 'user-center',
-      label: 'Pet',
-      routeName: 'workspace-user-center-pet',
-      status: 'active',
-      order: 125,
-    },
-    {
-      id: 'menu-workspace-user-center-users',
-      workspaceId: workspace.id,
-      parentId: 'menu-workspace-user-center',
-      source: 'user-center',
-      label: 'Users',
-      routeName: 'workspace-user-center-users',
-      status: 'active',
-      order: 130,
-    },
-    {
-      id: 'menu-workspace-user-center-roles',
-      workspaceId: workspace.id,
-      parentId: 'menu-workspace-user-center',
-      source: 'user-center',
-      label: 'Roles',
-      routeName: 'workspace-user-center-roles',
-      status: 'active',
-      order: 140,
-    },
-    {
-      id: 'menu-workspace-user-center-permissions',
-      workspaceId: workspace.id,
-      parentId: 'menu-workspace-user-center',
-      source: 'user-center',
-      label: 'Permissions',
-      routeName: 'workspace-user-center-permissions',
-      status: 'active',
-      order: 150,
-    },
-    {
-      id: 'menu-workspace-user-center-menus',
-      workspaceId: workspace.id,
-      parentId: 'menu-workspace-user-center',
-      source: 'user-center',
-      label: 'Menus',
-      routeName: 'workspace-user-center-menus',
-      status: 'active',
-      order: 160,
-    },
-  ]
-
-  const userCenterOverview: UserCenterOverviewSnapshot = {
+  const permissionCenterOverview: PermissionCenterOverviewSnapshot = {
     workspaceId: workspace.id,
     currentUser: users[0],
     roleNames: ownerReady ? ['Owner'] : ['Operator'],
     metrics: [
       { id: 'users', label: 'Users', value: String(users.length), tone: 'accent' },
       { id: 'roles', label: 'Roles', value: String(roles.length), tone: 'info' },
+      { id: 'permissions', label: 'Permissions', value: String(permissions.length), tone: 'warning' },
+      { id: 'menus', label: 'Menus', value: String(menus.length), tone: 'default' },
     ],
     alerts: [],
-    quickLinks: menus.slice(0, 2),
+    quickLinks: menus.filter(menu => menu.source === 'permission-center' && menu.status === 'active'),
   }
 
   const runtimeWorkspaceConfig: RuntimeEffectiveConfig = {
@@ -1299,7 +1241,7 @@ export function createWorkspaceFixtureState(
     mcpDocuments,
     tools,
     automations,
-    userCenterOverview,
+    permissionCenterOverview,
     users,
     userPasswords: ownerReady ? { 'user-owner': 'owner-owner', 'user-operator': 'operator-operator' } : { 'user-operator': 'operator-operator' },
     roles,

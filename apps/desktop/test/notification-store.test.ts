@@ -142,7 +142,7 @@ describe('useNotificationStore', () => {
       level: 'success',
       title: 'Profile saved',
       body: 'Profile details were updated.',
-      source: 'user-center',
+      source: 'personal-center',
       toastDurationMs: 30_000,
     }
 

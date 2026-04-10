@@ -60,18 +60,18 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
       })
     },
     async getUserConfig() {
-      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/user-center/profile/runtime-config', 'get', {
+      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/personal-center/profile/runtime-config', 'get', {
         session: assertWorkspaceRequestReady(context),
       })
     },
     async validateUserConfig(patch) {
-      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/user-center/profile/runtime-config/validate', 'post', {
+      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/personal-center/profile/runtime-config/validate', 'post', {
         session: assertWorkspaceRequestReady(context),
         body: JSON.stringify(patch),
       })
     },
     async saveUserConfig(patch) {
-      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/user-center/profile/runtime-config', 'patch', {
+      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/personal-center/profile/runtime-config', 'patch', {
         session: assertWorkspaceRequestReady(context),
         body: JSON.stringify(patch),
       })

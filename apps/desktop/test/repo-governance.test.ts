@@ -294,8 +294,9 @@ describe('repository governance', () => {
     expect(openApiSpec).toContain('/api/v1/runtime/sessions/{sessionId}/events:')
     expect(openApiSpec).toContain('/api/v1/projects/{projectId}/runtime-config:')
     expect(openApiSpec).toContain('/api/v1/projects/{projectId}/runtime-config/validate:')
-    expect(openApiSpec).toContain('/api/v1/workspace/user-center/profile/runtime-config:')
-    expect(openApiSpec).toContain('/api/v1/workspace/user-center/profile/runtime-config/validate:')
+    expect(openApiSpec).toContain('/api/v1/workspace/permission-center/overview:')
+    expect(openApiSpec).toContain('/api/v1/workspace/personal-center/profile/runtime-config:')
+    expect(openApiSpec).toContain('/api/v1/workspace/personal-center/profile/runtime-config/validate:')
 
     expect(generatedSchema).toContain('"/api/v1/workspace/pet": {')
     expect(generatedSchema).toContain('"/api/v1/workspace/agents": {')
@@ -313,8 +314,9 @@ describe('repository governance', () => {
     expect(generatedSchema).toContain('"/api/v1/runtime/sessions/{sessionId}/events": {')
     expect(generatedSchema).toContain('"/api/v1/projects/{projectId}/runtime-config": {')
     expect(generatedSchema).toContain('"/api/v1/projects/{projectId}/runtime-config/validate": {')
-    expect(generatedSchema).toContain('"/api/v1/workspace/user-center/profile/runtime-config": {')
-    expect(generatedSchema).toContain('"/api/v1/workspace/user-center/profile/runtime-config/validate": {')
+    expect(generatedSchema).toContain('"/api/v1/workspace/permission-center/overview": {')
+    expect(generatedSchema).toContain('"/api/v1/workspace/personal-center/profile/runtime-config": {')
+    expect(generatedSchema).toContain('"/api/v1/workspace/personal-center/profile/runtime-config/validate": {')
   })
 
   it('finishes OpenAPI convergence for remaining apps, audit, inbox, and knowledge routes', () => {

@@ -20,7 +20,7 @@ import { useTeamStore } from '@/stores/team'
 import { useResourceStore } from '@/stores/resource'
 import { useArtifactStore } from '@/stores/artifact'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { useUserCenterStore } from '@/stores/user-center'
+import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,7 +33,7 @@ const teamStore = useTeamStore()
 const resourceStore = useResourceStore()
 const artifactStore = useArtifactStore()
 const workspaceStore = useWorkspaceStore()
-const userCenterStore = useUserCenterStore()
+const workspaceAccessStore = useWorkspaceAccessStore()
 
 interface ActorOption {
   value: string
@@ -106,8 +106,8 @@ const actorAvatarMap = computed<Map<string, string>>(() => new Map([
   ...teamStore.workspaceTeams.map(team => [`team:${team.id}`, team.avatar ?? ''] as const),
   ...teamStore.projectTeams.map(team => [`team:${team.id}`, team.avatar ?? ''] as const),
 ]))
-const currentUserAvatar = computed(() => userCenterStore.currentUser?.avatar ?? '')
-const currentUserLabel = computed(() => userCenterStore.currentUser?.displayName || 'You')
+const currentUserAvatar = computed(() => workspaceAccessStore.currentUser?.avatar ?? '')
+const currentUserLabel = computed(() => workspaceAccessStore.currentUser?.displayName || 'You')
 const resourceMap = computed(() => new Map(resourceStore.activeProjectResources.map(resource => [resource.id, resource])))
 const artifactMap = computed(() => new Map(artifactStore.activeProjectArtifacts.map(artifact => [artifact.id, artifact])))
 const permissionOptions = computed(() => [
@@ -151,7 +151,7 @@ async function ensureRuntimeSession() {
     catalogStore.load(),
     agentStore.load(),
     teamStore.load(),
-    userCenterStore.load(),
+    workspaceAccessStore.load(),
     resourceStore.loadProjectResources(projectId.value),
     artifactStore.loadWorkspaceArtifacts(),
     agentStore.loadProjectLinks(projectId.value),
