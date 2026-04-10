@@ -73,26 +73,54 @@
     },
     "download": {
       "title": "Download Octopus Desktop",
-      "subtitle": "Choose your operating system and start your private digital employee journey. Enjoy native performance and deep system integration.",
+      "subtitle": "Choose the currently available build for your platform and review what changed in each version directly on this page.",
       "platforms": {
         "macos": "macOS",
         "windows": "Windows",
         "linux": "Linux"
       },
       "hints": {
-        "macos": "Supports Apple Silicon & Intel",
-        "windows": "Windows 10/11 (64-bit)",
-        "linux": "Ubuntu, Fedora, Arch"
+        "macos": "Apple Silicon first, Intel in earlier builds",
+        "windows": "Windows 10/11 · x64 / ARM64",
+        "linux": "Linux x64 · AppImage / DEB"
       },
       "cta": "Download Now",
-      "version": "Version: v{version}",
-      "changelog": "View Changelog",
-      "requirements": "System Requirements: macOS 12+, Windows 10+, Ubuntu 20.04+",
+      "version": "Latest: {version}",
+      "changelog": "Release Notes",
+      "requirements": "Your first install may require the platform's normal security confirmation or permission flow.",
       "support": "Need help with installation?",
-      "newVersion": "New Version Available!",
+      "loading": "Syncing release data...",
+      "empty": "No downloadable builds found yet.",
+      "failed": "Version data is temporarily unavailable. Try again later or open the full version list directly.",
+      "latestStable": "Latest stable",
+      "latestPreview": "Latest preview",
+      "allReleases": "All releases",
+      "availableTitle": "Available platforms and builds",
+      "availableBody": "Only the stable and preview builds that are currently available for download are shown here.",
+      "historyTitle": "Version history",
+      "historyBody": "Downloadable builds and update details for the 8 most recent releases.",
+      "currentDownload": "Recommended now",
+      "viewVersions": "View available versions",
+      "directDownload": "Direct download",
+      "menuLabel": "Choose build",
+      "releasedOn": "Published: {date}",
+      "notesTitle": "What changed",
+      "notesEmpty": "No additional update details were published for this version.",
+      "channel": {
+        "stable": "Stable",
+        "preview": "Preview"
+      },
+      "architectures": {
+        "appleSilicon": "Apple Silicon",
+        "intel": "Intel",
+        "x64": "x64",
+        "arm64": "ARM64",
+        "appImage": "AppImage",
+        "deb": "DEB"
+      },
       "experience": {
-        "title": "Immersive Agent Interaction",
-        "desc": "The Octopus desktop client is more than just a browser shell. It integrates deeply with the system, utilizing Tauri's native power for system-level notifications, shortcuts, and faster local sandbox execution.",
+        "title": "One desktop workbench for agent collaboration",
+        "desc": "The desktop client keeps conversations, tools, knowledge, and governance in one operational surface so digital employees can keep working across real business flows instead of isolated demos.",
         "bullets": {
           "fastBoot": "Instant Boot",
           "lowMemory": "Minimal Memory Footprint",

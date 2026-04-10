@@ -99,27 +99,55 @@
       "body": "填写下方表单，我们的技术专家将为您提供专属的私有化部署咨询与演示。"
     },
     "download": {
-      "title": "下载 Octopus 桌面端",
-      "subtitle": "选择您的操作系统，开启私人数字员工之旅。支持全平台原生性能，深度集成系统能力。",
+      "title": "下载 Octopus 桌面客户端",
+      "subtitle": "按平台选择当前可用版本下载，并直接查看每个版本的更新内容。",
       "platforms": {
         "macos": "macOS",
         "windows": "Windows",
         "linux": "Linux"
       },
       "hints": {
-        "macos": "支持 Apple Silicon & Intel",
-        "windows": "Windows 10/11 (64-bit)",
-        "linux": "Ubuntu, Fedora, Arch"
+        "macos": "Apple Silicon 为主，历史版本含 Intel",
+        "windows": "Windows 10/11 · x64 / ARM64",
+        "linux": "Linux x64 · AppImage / DEB"
       },
       "cta": "立即下载",
-      "version": "当前版本: v{version}",
-      "changelog": "查看更新日志",
-      "requirements": "系统要求: macOS 12+, Windows 10+, Ubuntu 20.04+",
+      "version": "最新版本：{version}",
+      "changelog": "更新日志",
+      "requirements": "首次安装时，系统可能会提示进行安全确认或权限授权。",
       "support": "安装遇到问题？",
-      "newVersion": "新版本可用！",
+      "loading": "正在同步发布信息...",
+      "empty": "暂未获取到可下载版本",
+      "failed": "暂时无法同步版本信息，请稍后重试或直接查看全部版本。",
+      "latestStable": "最新稳定版",
+      "latestPreview": "最新预览版",
+      "allReleases": "全部版本",
+      "availableTitle": "可用平台与构建",
+      "availableBody": "仅展示当前真实可下载的稳定版与预览版构建。",
+      "historyTitle": "历史版本",
+      "historyBody": "最近 8 个版本的可下载构建与更新内容。",
+      "currentDownload": "当前推荐",
+      "viewVersions": "查看可用版本",
+      "directDownload": "直接下载",
+      "menuLabel": "选择构建",
+      "releasedOn": "发布时间：{date}",
+      "notesTitle": "更新内容",
+      "notesEmpty": "当前版本暂无额外更新说明。",
+      "channel": {
+        "stable": "稳定版",
+        "preview": "预览版"
+      },
+      "architectures": {
+        "appleSilicon": "Apple Silicon",
+        "intel": "Intel",
+        "x64": "x64",
+        "arm64": "ARM64",
+        "appImage": "AppImage",
+        "deb": "DEB"
+      },
       "experience": {
-        "title": "沉浸式的 Agent 交互体验",
-        "desc": "Octopus 桌面客户端不仅仅是一个浏览器外壳，它与系统底层深度集成。利用 Tauri 的原生能力，提供系统级托盘通知、快捷键唤起、以及更高效的本地沙箱模型调用速度。",
+        "title": "同一套桌面工作台，承接 Agent 协作",
+        "desc": "桌面客户端把对话、工具、知识和治理放在同一个运行面板里，让数字员工在真实业务中持续协作，而不是停留在网页演示阶段。",
         "bullets": {
           "fastBoot": "极速冷启动",
           "lowMemory": "极低的内存占用",

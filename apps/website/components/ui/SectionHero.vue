@@ -6,11 +6,13 @@ interface Props {
   subtitle?: string
   align?: 'left' | 'center' | 'split'
   showGlow?: boolean
+  showFloating?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   align: 'split',
-  showGlow: true
+  showGlow: true,
+  showFloating: true
 })
 </script>
 
@@ -48,18 +50,20 @@ const props = withDefaults(defineProps<Props>(), {
 
         <div class="lg:col-span-6 relative w-full" v-reveal>
           <!-- Decorative Floating Elements -->
-          <div class="absolute -top-10 -right-10 w-32 h-32 glass rounded-3xl rotate-12 z-20 hidden md:flex items-center justify-center animate-float shadow-2xl border-[var(--website-border-strong)]">
-            <div class="text-center">
-              <p class="text-[10px] font-bold opacity-50 uppercase tracking-tighter">Security</p>
-              <p class="text-xl font-black text-green-500">100%</p>
+          <template v-if="showFloating">
+            <div class="absolute -top-10 -right-10 w-32 h-32 glass rounded-3xl rotate-12 z-20 hidden md:flex items-center justify-center animate-float shadow-2xl border-[var(--website-border-strong)]">
+              <div class="text-center">
+                <p class="text-[10px] font-bold opacity-50 uppercase tracking-tighter">Security</p>
+                <p class="text-xl font-black text-green-500">100%</p>
+              </div>
             </div>
-          </div>
-          <div class="absolute -bottom-10 -left-10 w-48 h-20 glass rounded-2xl -rotate-6 z-20 hidden md:flex items-center px-6 gap-4 animate-float shadow-2xl border-[var(--website-border-strong)]" style="animation-delay: -2s">
-            <div class="w-8 h-8 rounded-full bg-[var(--website-accent)]/20 flex items-center justify-center">
-              <div class="w-2 h-2 rounded-full bg-[var(--website-accent)] animate-ping"></div>
+            <div class="absolute -bottom-10 -left-10 w-48 h-20 glass rounded-2xl -rotate-6 z-20 hidden md:flex items-center px-6 gap-4 animate-float shadow-2xl border-[var(--website-border-strong)]" style="animation-delay: -2s">
+              <div class="w-8 h-8 rounded-full bg-[var(--website-accent)]/20 flex items-center justify-center">
+                <div class="w-2 h-2 rounded-full bg-[var(--website-accent)] animate-ping"></div>
+              </div>
+              <p class="text-xs font-bold tracking-tight">Agent Syncing...</p>
             </div>
-            <p class="text-xs font-bold tracking-tight">Agent Syncing...</p>
-          </div>
+          </template>
 
           <div class="relative z-10">
             <slot name="visual" />

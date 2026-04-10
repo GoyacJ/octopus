@@ -61,6 +61,9 @@ export default defineNuxtConfig({
     public: {
       demoUrl: process.env.NUXT_PUBLIC_DEMO_URL ?? 'mailto:hello@octopus.run?subject=Book%20an%20Octopus%20demo',
       siteUrl: process.env.NUXT_PUBLIC_SITE_URL ?? 'https://octopus.run',
+      githubRepoOwner: process.env.NUXT_PUBLIC_GITHUB_REPO_OWNER ?? 'GoyacJ',
+      githubRepoName: process.env.NUXT_PUBLIC_GITHUB_REPO_NAME ?? 'octopus',
+      githubApiBase: process.env.NUXT_PUBLIC_GITHUB_API_BASE ?? 'https://api.github.com',
     },
   },
   i18n: {
