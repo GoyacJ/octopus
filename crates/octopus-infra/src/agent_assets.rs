@@ -21,8 +21,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     infra_state::{agent_avatar, load_agents, load_teams, write_team_record},
     resources_skills::{
-        catalog_hash_id,
-        disabled_source_keys, discover_skill_roots, load_skills_from_roots,
+        catalog_hash_id, disabled_source_keys, discover_skill_roots, load_skills_from_roots,
         validate_skill_file_relative_path, validate_skill_slug, write_workspace_runtime_document,
     },
     WorkspacePaths,
@@ -94,7 +93,9 @@ impl AssetTargetScope<'_> {
     fn runtime_document_path(&self, paths: &WorkspacePaths) -> PathBuf {
         match self {
             Self::Workspace => paths.runtime_config_dir.join("workspace.json"),
-            Self::Project(project_id) => paths.runtime_project_config_dir.join(format!("{project_id}.json")),
+            Self::Project(project_id) => paths
+                .runtime_project_config_dir
+                .join(format!("{project_id}.json")),
         }
     }
 
@@ -155,7 +156,6 @@ struct ParsedTeam {
 #[derive(Debug, Clone)]
 struct ParsedSkillSource {
     source_id: String,
-    owner_source_id: String,
     owner_name: String,
     name: String,
     canonical_slug: String,
@@ -166,7 +166,6 @@ struct ParsedSkillSource {
 #[derive(Debug, Clone)]
 struct ParsedMcpSource {
     source_id: String,
-    owner_source_id: String,
     owner_name: String,
     server_name: String,
     content_hash: Option<String>,
@@ -249,9 +248,7 @@ struct PlannedTeam {
     skill_slugs: Vec<String>,
     mcp_server_names: Vec<String>,
     leader_name: Option<String>,
-    leader_agent_id: Option<String>,
     member_names: Vec<String>,
-    member_agent_ids: Vec<String>,
     agent_source_ids: Vec<String>,
     avatar: ParsedAssetAvatar,
 }
@@ -309,7 +306,13 @@ pub(crate) fn execute_import(
     target: AssetTargetScope<'_>,
     input: ImportWorkspaceAgentBundleInput,
 ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-    let plan = build_bundle_plan(connection, paths, workspace_id, target.clone(), &input.files)?;
+    let plan = build_bundle_plan(
+        connection,
+        paths,
+        workspace_id,
+        target.clone(),
+        &input.files,
+    )?;
     let mut issues = plan.issues.clone();
     let now = timestamp_now();
     let source_kind = target.source_kind();
@@ -323,7 +326,8 @@ pub(crate) fn execute_import(
     for skill in &plan.skills {
         let mut action = skill.action;
         if matches!(action, ImportAction::Create | ImportAction::Update) {
-            if let Err(error) = write_managed_skill(&target.skill_root(paths), &skill.slug, &skill.files)
+            if let Err(error) =
+                write_managed_skill(&target.skill_root(paths), &skill.slug, &skill.files)
             {
                 action = ImportAction::Failed;
                 failed_skill_slugs.insert(skill.slug.clone());
@@ -347,7 +351,12 @@ pub(crate) fn execute_import(
                 )?;
             }
         }
-        increment_action_counts(action, &mut total_create, &mut total_update, &mut total_skip);
+        increment_action_counts(
+            action,
+            &mut total_create,
+            &mut total_update,
+            &mut total_skip,
+        );
         skill_results.push(ImportedSkillPreviewItem {
             slug: skill.slug.clone(),
             skill_id: skill.skill_id.clone(),
@@ -362,12 +371,18 @@ pub(crate) fn execute_import(
     }
 
     let existing_mcp_target = load_target_runtime_document(paths, &target)?;
-    let effective_mcp_document = plan_mcp_document_updates(existing_mcp_target, &plan.mcps, &mut issues)?;
+    let effective_mcp_document =
+        plan_mcp_document_updates(existing_mcp_target, &plan.mcps, &mut issues)?;
     write_target_runtime_document(paths, &target, &effective_mcp_document)?;
 
     let mut mcp_results = Vec::new();
     for mcp in &plan.mcps {
-        increment_action_counts(mcp.action, &mut total_create, &mut total_update, &mut total_skip);
+        increment_action_counts(
+            mcp.action,
+            &mut total_create,
+            &mut total_update,
+            &mut total_skip,
+        );
         mcp_results.push(ImportedMcpPreviewItem {
             server_name: mcp.server_name.clone(),
             action: mcp.action.as_str().into(),
@@ -392,13 +407,8 @@ pub(crate) fn execute_import(
             .iter()
             .map(|slug| managed_skill_id(&target, slug))
             .collect::<Vec<_>>();
-        let actual_action = resolve_agent_action(
-            workspace_id,
-            &target,
-            &existing_agents,
-            agent,
-            &skill_ids,
-        )?;
+        let actual_action =
+            resolve_agent_action(workspace_id, &target, &existing_agents, agent, &skill_ids)?;
         let mut result_action = actual_action;
         let agent_id = agent
             .agent_id
@@ -418,7 +428,8 @@ pub(crate) fn execute_import(
             }
         };
 
-        if result_action != ImportAction::Failed && matches!(actual_action, ImportAction::Create | ImportAction::Update)
+        if result_action != ImportAction::Failed
+            && matches!(actual_action, ImportAction::Create | ImportAction::Update)
         {
             let record = build_agent_record(
                 paths,
@@ -435,7 +446,9 @@ pub(crate) fn execute_import(
                 &skill_ids,
                 &agent.mcp_server_names,
             );
-            if let Err(error) = write_agent_record(connection, &record, actual_action == ImportAction::Update) {
+            if let Err(error) =
+                write_agent_record(connection, &record, actual_action == ImportAction::Update)
+            {
                 result_action = ImportAction::Failed;
                 issues.push(issue(
                     ISSUE_ERROR,
@@ -444,13 +457,24 @@ pub(crate) fn execute_import(
                     format!("failed to import agent '{}': {error}", agent.name),
                 ));
             } else {
-                upsert_agent_import_source(connection, &source_kind, &agent.source_id, &agent_id, now)?;
+                upsert_agent_import_source(
+                    connection,
+                    &source_kind,
+                    &agent.source_id,
+                    &agent_id,
+                    now,
+                )?;
             }
         } else if result_action != ImportAction::Failed {
             upsert_agent_import_source(connection, &source_kind, &agent.source_id, &agent_id, now)?;
         }
 
-        increment_action_counts(result_action, &mut total_create, &mut total_update, &mut total_skip);
+        increment_action_counts(
+            result_action,
+            &mut total_create,
+            &mut total_update,
+            &mut total_skip,
+        );
         if result_action != ImportAction::Failed {
             agent_id_by_source.insert(agent.source_id.clone(), agent_id.clone());
         }
@@ -480,19 +504,19 @@ pub(crate) fn execute_import(
             .filter_map(|source_id| agent_id_by_source.get(source_id))
             .cloned()
             .collect::<Vec<_>>();
-        let leader_agent_id = team
-            .leader_name
-            .as_ref()
-            .and_then(|leader_name| {
-                team.agent_source_ids.iter().find_map(|source_id| {
-                    let agent = plan.agents.iter().find(|candidate| &candidate.source_id == source_id)?;
-                    if &agent.name == leader_name {
-                        agent_id_by_source.get(source_id).cloned()
-                    } else {
-                        None
-                    }
-                })
-            });
+        let leader_agent_id = team.leader_name.as_ref().and_then(|leader_name| {
+            team.agent_source_ids.iter().find_map(|source_id| {
+                let agent = plan
+                    .agents
+                    .iter()
+                    .find(|candidate| &candidate.source_id == source_id)?;
+                if &agent.name == leader_name {
+                    agent_id_by_source.get(source_id).cloned()
+                } else {
+                    None
+                }
+            })
+        });
         let actual_action = resolve_team_action(
             workspace_id,
             &target,
@@ -521,7 +545,8 @@ pub(crate) fn execute_import(
             }
         };
 
-        if result_action != ImportAction::Failed && matches!(actual_action, ImportAction::Create | ImportAction::Update)
+        if result_action != ImportAction::Failed
+            && matches!(actual_action, ImportAction::Create | ImportAction::Update)
         {
             let record = build_team_record(
                 paths,
@@ -540,7 +565,9 @@ pub(crate) fn execute_import(
                 leader_agent_id.clone(),
                 member_agent_ids.clone(),
             );
-            if let Err(error) = write_team_record(connection, &record, actual_action == ImportAction::Update) {
+            if let Err(error) =
+                write_team_record(connection, &record, actual_action == ImportAction::Update)
+            {
                 result_action = ImportAction::Failed;
                 issues.push(issue(
                     ISSUE_ERROR,
@@ -549,13 +576,24 @@ pub(crate) fn execute_import(
                     format!("failed to import team '{}': {error}", team.name),
                 ));
             } else {
-                upsert_team_import_source(connection, &source_kind, &team.source_id, &team_id, now)?;
+                upsert_team_import_source(
+                    connection,
+                    &source_kind,
+                    &team.source_id,
+                    &team_id,
+                    now,
+                )?;
             }
         } else if result_action != ImportAction::Failed {
             upsert_team_import_source(connection, &source_kind, &team.source_id, &team_id, now)?;
         }
 
-        increment_action_counts(result_action, &mut total_create, &mut total_update, &mut total_skip);
+        increment_action_counts(
+            result_action,
+            &mut total_create,
+            &mut total_update,
+            &mut total_skip,
+        );
         team_results.push(ImportedTeamPreviewItem {
             source_id: team.source_id.clone(),
             team_id: Some(team_id),
@@ -589,7 +627,10 @@ pub(crate) fn execute_import(
         create_count: total_create,
         update_count: total_update,
         skip_count: total_skip,
-        failure_count: issues.iter().filter(|entry| entry.severity == ISSUE_ERROR).count() as u64,
+        failure_count: issues
+            .iter()
+            .filter(|entry| entry.severity == ISSUE_ERROR)
+            .count() as u64,
         unique_skill_count: skill_results.len() as u64,
         unique_mcp_count: mcp_results.len() as u64,
         avatar_count: avatar_results.len() as u64,
@@ -627,7 +668,13 @@ pub(crate) fn export_assets(
         if team_member_ids.contains(&agent.id) {
             continue;
         }
-        files.extend(export_agent_files(paths, &context, agent, None, &root_dir_name)?);
+        files.extend(export_agent_files(
+            paths,
+            &context,
+            agent,
+            None,
+            &root_dir_name,
+        )?);
     }
 
     files.push(encode_file(
@@ -675,9 +722,12 @@ fn build_bundle_plan(
     let (bundle_files, filtered_file_count, mut issues) = normalize_bundle_files(files)?;
     let bundle_files = strip_optional_bundle_root(bundle_files);
     let parsed = parse_bundle_files(&bundle_files, &target, &mut issues)?;
-    let existing_skill_sources = load_existing_skill_import_sources(connection, &target.source_kind())?;
-    let existing_team_sources = load_existing_team_import_sources(connection, &target.source_kind())?;
-    let existing_agent_sources = load_existing_agent_import_sources(connection, &target.source_kind())?;
+    let existing_skill_sources =
+        load_existing_skill_import_sources(connection, &target.source_kind())?;
+    let existing_team_sources =
+        load_existing_team_import_sources(connection, &target.source_kind())?;
+    let existing_agent_sources =
+        load_existing_agent_import_sources(connection, &target.source_kind())?;
     let existing_managed_skills = load_existing_managed_skills(&target.skill_root(paths))?;
     let existing_target_mcp = load_target_mcp_map(paths, &target)?;
     let existing_effective_mcp = load_effective_mcp_map(paths, &target)?;
@@ -700,7 +750,11 @@ fn build_bundle_plan(
                 files: source.files.clone(),
             });
         entry.source_ids.push(source.source_id.clone());
-        if !entry.consumer_names.iter().any(|name| name == &source.owner_name) {
+        if !entry
+            .consumer_names
+            .iter()
+            .any(|name| name == &source.owner_name)
+        {
             entry.consumer_names.push(source.owner_name.clone());
         }
     }
@@ -777,7 +831,11 @@ fn build_bundle_plan(
             resolved: false,
         });
         entry.source_ids.push(source.source_id.clone());
-        if !entry.consumer_names.iter().any(|name| name == &source.owner_name) {
+        if !entry
+            .consumer_names
+            .iter()
+            .any(|name| name == &source.owner_name)
+        {
             entry.consumer_names.push(source.owner_name.clone());
         }
     }
@@ -828,7 +886,8 @@ fn build_bundle_plan(
 
         if planned.resolved {
             for source_id in &planned.source_ids {
-                resolved_mcp_name_by_source_id.insert(source_id.clone(), planned.server_name.clone());
+                resolved_mcp_name_by_source_id
+                    .insert(source_id.clone(), planned.server_name.clone());
             }
         }
         planned_mcps.push(planned);
@@ -853,8 +912,11 @@ fn build_bundle_plan(
             .get(&parsed_agent.source_id)
             .map(|mapping| mapping.agent_id.clone())
             .or_else(|| {
-                let deterministic = deterministic_asset_id("agent", &target, &parsed_agent.source_id);
-                existing_agents.contains_key(&deterministic).then_some(deterministic)
+                let deterministic =
+                    deterministic_asset_id("agent", &target, &parsed_agent.source_id);
+                existing_agents
+                    .contains_key(&deterministic)
+                    .then_some(deterministic)
             });
         let action = resolve_agent_action(
             workspace_id,
@@ -907,7 +969,8 @@ fn build_bundle_plan(
         .map(|agent| {
             (
                 agent.source_id.clone(),
-                agent.agent_id
+                agent
+                    .agent_id
                     .clone()
                     .unwrap_or_else(|| deterministic_asset_id("agent", &target, &agent.source_id)),
             )
@@ -944,24 +1007,23 @@ fn build_bundle_plan(
             .filter_map(|source_id| agent_id_by_source.get(source_id))
             .cloned()
             .collect::<Vec<_>>();
-        let leader_agent_id = parsed_team
-            .leader_name
-            .as_ref()
-            .and_then(|leader_name| {
-                parsed_team.agent_source_ids.iter().find_map(|source_id| {
-                    if agent_name_by_source.get(source_id) == Some(leader_name) {
-                        agent_id_by_source.get(source_id).cloned()
-                    } else {
-                        None
-                    }
-                })
-            });
+        let leader_agent_id = parsed_team.leader_name.as_ref().and_then(|leader_name| {
+            parsed_team.agent_source_ids.iter().find_map(|source_id| {
+                if agent_name_by_source.get(source_id) == Some(leader_name) {
+                    agent_id_by_source.get(source_id).cloned()
+                } else {
+                    None
+                }
+            })
+        });
         let team_id = existing_team_sources
             .get(&parsed_team.source_id)
             .map(|mapping| mapping.team_id.clone())
             .or_else(|| {
                 let deterministic = deterministic_asset_id("team", &target, &parsed_team.source_id);
-                existing_teams.contains_key(&deterministic).then_some(deterministic)
+                existing_teams
+                    .contains_key(&deterministic)
+                    .then_some(deterministic)
             });
         let action = resolve_team_action(
             workspace_id,
@@ -980,9 +1042,7 @@ fn build_bundle_plan(
                 skill_slugs: skill_slugs.clone(),
                 mcp_server_names: mcp_server_names.clone(),
                 leader_name: parsed_team.leader_name.clone(),
-                leader_agent_id: leader_agent_id.clone(),
                 member_names: member_names.clone(),
-                member_agent_ids: member_agent_ids.clone(),
                 agent_source_ids: parsed_team.agent_source_ids.clone(),
                 avatar: parsed_team.avatar.clone(),
             },
@@ -1006,9 +1066,7 @@ fn build_bundle_plan(
             skill_slugs,
             mcp_server_names,
             leader_name: parsed_team.leader_name.clone(),
-            leader_agent_id,
             member_names,
-            member_agent_ids,
             agent_source_ids: parsed_team.agent_source_ids.clone(),
             avatar: parsed_team.avatar.clone(),
         });
@@ -1058,9 +1116,7 @@ fn parse_bundle_files(
 
     for (root_name, root_files) in grouped {
         let root_md = format!("{root_name}/{root_name}.md");
-        let Some(team_or_agent_file) = root_files
-            .iter()
-            .find(|file| file.relative_path == root_md)
+        let Some(team_or_agent_file) = root_files.iter().find(|file| file.relative_path == root_md)
         else {
             issues.push(issue(
                 ISSUE_WARNING,
@@ -1104,12 +1160,11 @@ fn parse_bundle_files(
             .or_else(|| first_non_empty_paragraph(&body))
             .unwrap_or_else(|| team_name.clone());
         let team_prompt = body.trim().to_string();
-        let team_personality = first_non_empty_paragraph(&body).unwrap_or_else(|| team_name.clone());
+        let team_personality =
+            first_non_empty_paragraph(&body).unwrap_or_else(|| team_name.clone());
         let team_tags = split_tags(yaml_string(&frontmatter, "tag"));
-        let team_builtin_tools = resolve_builtin_tool_keys(
-            yaml_string_list(&frontmatter, "tools"),
-            &builtin_tool_keys,
-        );
+        let team_builtin_tools =
+            resolve_builtin_tool_keys(yaml_string_list(&frontmatter, "tools"), &builtin_tool_keys);
         let team_avatar = resolve_avatar(
             "team",
             &root_name,
@@ -1120,7 +1175,8 @@ fn parse_bundle_files(
             target,
             issues,
         )?;
-        let team_skills = parse_skill_sources(&root_name, &root_name, &team_name, &root_files, issues)?;
+        let team_skills =
+            parse_skill_sources(&root_name, &root_name, &team_name, &root_files, issues)?;
         let team_mcps = parse_mcp_sources(
             &root_name,
             &root_name,
@@ -1135,7 +1191,10 @@ fn parse_bundle_files(
         let mut member_mcp_sources = Vec::new();
         for member_dir in member_dirs.iter().cloned() {
             let member_md = format!("{root_name}/{member_dir}/{member_dir}.md");
-            let Some(member_file) = root_files.iter().find(|file| file.relative_path == member_md) else {
+            let Some(member_file) = root_files
+                .iter()
+                .find(|file| file.relative_path == member_md)
+            else {
                 continue;
             };
             let (agent, mut agent_skills, mut agent_mcps) = parse_agent_dir(
@@ -1291,7 +1350,10 @@ fn parse_skill_sources(
     let mut parsed = Vec::new();
     for (skill_dir, mut skill_files) in grouped {
         skill_files.sort_by(|left, right| left.0.cmp(&right.0));
-        let Some(skill_frontmatter_file) = skill_files.iter().find(|(path, _)| path == SKILL_FRONTMATTER_FILE) else {
+        let Some(skill_frontmatter_file) = skill_files
+            .iter()
+            .find(|(path, _)| path == SKILL_FRONTMATTER_FILE)
+        else {
             issues.push(issue(
                 ISSUE_WARNING,
                 SOURCE_SCOPE_SKILL,
@@ -1307,7 +1369,6 @@ fn parse_skill_sources(
         let source_id = format!("{owner_source_id}/skills/{skill_dir}");
         parsed.push(ParsedSkillSource {
             source_id,
-            owner_source_id: owner_source_id.to_string(),
             owner_name: owner_name.to_string(),
             name: skill_name,
             canonical_slug,
@@ -1363,7 +1424,6 @@ fn parse_mcp_sources(
         seen_names.insert(server_name.clone());
         parsed.push(ParsedMcpSource {
             source_id,
-            owner_source_id: owner_source_id.to_string(),
             owner_name: owner_name.to_string(),
             server_name,
             content_hash: Some(hash_json_value(&config)?),
@@ -1378,7 +1438,6 @@ fn parse_mcp_sources(
         }
         parsed.push(ParsedMcpSource {
             source_id: format!("{owner_source_id}/mcps/{server_name}"),
-            owner_source_id: owner_source_id.to_string(),
             owner_name: owner_name.to_string(),
             server_name,
             content_hash: None,
@@ -1401,7 +1460,10 @@ fn resolve_avatar(
     issues: &mut Vec<ImportIssue>,
 ) -> Result<ParsedAssetAvatar, AppError> {
     let mut candidates = Vec::new();
-    if let Some(avatar_name) = avatar_field.as_ref().filter(|value| !value.trim().is_empty()) {
+    if let Some(avatar_name) = avatar_field
+        .as_ref()
+        .filter(|value| !value.trim().is_empty())
+    {
         let path = format!("{owner_dir}/{}", avatar_name.trim());
         if let Some(file) = files.iter().find(|file| file.relative_path == path) {
             candidates.push((avatar_name.trim().to_string(), file.bytes.clone()));
@@ -1532,7 +1594,10 @@ fn normalize_bundle_files(
                 continue;
             }
         };
-        normalized.push(BundleFile { relative_path, bytes });
+        normalized.push(BundleFile {
+            relative_path,
+            bytes,
+        });
     }
     Ok((normalized, filtered, issues))
 }
@@ -1568,7 +1633,10 @@ fn group_top_level(files: &[BundleFile]) -> BTreeMap<String, Vec<BundleFile>> {
     let mut grouped = BTreeMap::<String, Vec<BundleFile>>::new();
     for file in files {
         if let Some(segment) = file.relative_path.split('/').next() {
-            grouped.entry(segment.to_string()).or_default().push(file.clone());
+            grouped
+                .entry(segment.to_string())
+                .or_default()
+                .push(file.clone());
         }
     }
     grouped
@@ -1576,7 +1644,8 @@ fn group_top_level(files: &[BundleFile]) -> BTreeMap<String, Vec<BundleFile>> {
 
 fn immediate_child_dirs(files: &[BundleFile], root: &str) -> BTreeSet<String> {
     let prefix = format!("{root}/");
-    files.iter()
+    files
+        .iter()
         .filter_map(|file| file.relative_path.strip_prefix(&prefix))
         .filter_map(|suffix| suffix.split('/').next())
         .map(ToOwned::to_owned)
@@ -1629,22 +1698,19 @@ fn is_frontmatter_delimiter(line: &str) -> bool {
     !trimmed.is_empty() && trimmed.len() >= 3 && trimmed.chars().all(|value| value == '-')
 }
 
-fn yaml_string(
-    frontmatter: &BTreeMap<String, serde_yaml::Value>,
-    key: &str,
-) -> Option<String> {
-    frontmatter.get(key).and_then(|value| match value {
-        serde_yaml::Value::String(value) => Some(value.trim().to_string()),
-        serde_yaml::Value::Number(value) => Some(value.to_string()),
-        serde_yaml::Value::Bool(value) => Some(value.to_string()),
-        _ => None,
-    }).filter(|value| !value.is_empty())
+fn yaml_string(frontmatter: &BTreeMap<String, serde_yaml::Value>, key: &str) -> Option<String> {
+    frontmatter
+        .get(key)
+        .and_then(|value| match value {
+            serde_yaml::Value::String(value) => Some(value.trim().to_string()),
+            serde_yaml::Value::Number(value) => Some(value.to_string()),
+            serde_yaml::Value::Bool(value) => Some(value.to_string()),
+            _ => None,
+        })
+        .filter(|value| !value.is_empty())
 }
 
-fn yaml_string_list(
-    frontmatter: &BTreeMap<String, serde_yaml::Value>,
-    key: &str,
-) -> Vec<String> {
+fn yaml_string_list(frontmatter: &BTreeMap<String, serde_yaml::Value>, key: &str) -> Vec<String> {
     match frontmatter.get(key) {
         Some(serde_yaml::Value::Sequence(items)) => items
             .iter()
@@ -1804,15 +1870,13 @@ fn managed_skill_id(target: &AssetTargetScope<'_>, slug: &str) -> String {
 }
 
 fn deterministic_asset_id(prefix: &str, target: &AssetTargetScope<'_>, source_id: &str) -> String {
-    format!("{prefix}-{}", short_hash(&hash_text(&format!("{}:{source_id}", target.scope_label()))))
+    format!(
+        "{prefix}-{}",
+        short_hash(&hash_text(&format!("{}:{source_id}", target.scope_label())))
+    )
 }
 
-fn issue(
-    severity: &str,
-    scope: &str,
-    source_id: Option<String>,
-    message: String,
-) -> ImportIssue {
+fn issue(severity: &str, scope: &str, source_id: Option<String>, message: String) -> ImportIssue {
     ImportIssue {
         severity: severity.into(),
         scope: scope.into(),
@@ -2156,7 +2220,11 @@ fn write_agent_record(
     record: &AgentRecord,
     replace: bool,
 ) -> Result<(), AppError> {
-    let verb = if replace { "INSERT OR REPLACE" } else { "INSERT" };
+    let verb = if replace {
+        "INSERT OR REPLACE"
+    } else {
+        "INSERT"
+    };
     connection
         .execute(
             &format!(
@@ -2203,10 +2271,14 @@ fn load_effective_mcp_map(
     paths: &WorkspacePaths,
     target: &AssetTargetScope<'_>,
 ) -> Result<BTreeMap<String, JsonValue>, AppError> {
-    let mut merged = extract_mcp_map(&read_runtime_document(&paths.runtime_config_dir.join("workspace.json"))?)?;
+    let mut merged = extract_mcp_map(&read_runtime_document(
+        &paths.runtime_config_dir.join("workspace.json"),
+    )?)?;
     if let AssetTargetScope::Project(project_id) = target {
         for (name, config) in extract_mcp_map(&read_runtime_document(
-            &paths.runtime_project_config_dir.join(format!("{project_id}.json")),
+            &paths
+                .runtime_project_config_dir
+                .join(format!("{project_id}.json")),
         )?)? {
             merged.insert(name, config);
         }
@@ -2231,7 +2303,9 @@ fn read_runtime_document(path: &Path) -> Result<JsonMap<String, JsonValue>, AppE
     }
 }
 
-fn extract_mcp_map(document: &JsonMap<String, JsonValue>) -> Result<BTreeMap<String, JsonValue>, AppError> {
+fn extract_mcp_map(
+    document: &JsonMap<String, JsonValue>,
+) -> Result<BTreeMap<String, JsonValue>, AppError> {
     Ok(document
         .get("mcpServers")
         .and_then(|value| value.as_object())
@@ -2268,7 +2342,10 @@ fn plan_mcp_document_updates(
                 ISSUE_WARNING,
                 SOURCE_SCOPE_MCP,
                 mcp.source_ids.first().cloned(),
-                format!("skipped MCP '{}' because config is not an object", mcp.server_name),
+                format!(
+                    "skipped MCP '{}' because config is not an object",
+                    mcp.server_name
+                ),
             ));
             continue;
         }
@@ -2308,7 +2385,10 @@ fn write_target_runtime_document(
         write_workspace_runtime_document(paths, document)?;
         return Ok(());
     }
-    fs::write(path, serde_json::to_vec_pretty(&JsonValue::Object(document.clone()))?)?;
+    fs::write(
+        path,
+        serde_json::to_vec_pretty(&JsonValue::Object(document.clone()))?,
+    )?;
     Ok(())
 }
 
@@ -2360,12 +2440,22 @@ fn upsert_agent_import_source(
     agent_id: &str,
     last_imported_at: u64,
 ) -> Result<(), AppError> {
-    connection.execute(
-        "INSERT OR REPLACE INTO agent_import_sources
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agent_import_sources
          (source_kind, source_id, source_path, content_hash, agent_id, department, last_imported_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![source_kind, source_id, source_id, "", agent_id, "", last_imported_at as i64],
-    ).map_err(|error| AppError::database(error.to_string()))?;
+            params![
+                source_kind,
+                source_id,
+                source_id,
+                "",
+                agent_id,
+                "",
+                last_imported_at as i64
+            ],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
     Ok(())
 }
 
@@ -2376,12 +2466,22 @@ fn upsert_team_import_source(
     team_id: &str,
     last_imported_at: u64,
 ) -> Result<(), AppError> {
-    connection.execute(
-        "INSERT OR REPLACE INTO team_import_sources
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO team_import_sources
          (source_kind, source_id, source_path, content_hash, team_id, department, last_imported_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![source_kind, source_id, source_id, "", team_id, "", last_imported_at as i64],
-    ).map_err(|error| AppError::database(error.to_string()))?;
+            params![
+                source_kind,
+                source_id,
+                source_id,
+                "",
+                team_id,
+                "",
+                last_imported_at as i64
+            ],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
     Ok(())
 }
 
@@ -2472,7 +2572,12 @@ fn plan_to_preview(plan: &BundlePlan) -> ImportWorkspaceAgentBundlePreview {
         .chain(plan.agents.iter().map(|item| item.action))
         .chain(plan.teams.iter().map(|item| item.action))
     {
-        increment_action_counts(action, &mut create_count, &mut update_count, &mut skip_count);
+        increment_action_counts(
+            action,
+            &mut create_count,
+            &mut update_count,
+            &mut skip_count,
+        );
     }
 
     ImportWorkspaceAgentBundlePreview {
@@ -2485,7 +2590,11 @@ fn plan_to_preview(plan: &BundlePlan) -> ImportWorkspaceAgentBundlePreview {
         create_count,
         update_count,
         skip_count,
-        failure_count: plan.issues.iter().filter(|item| item.severity == ISSUE_ERROR).count() as u64,
+        failure_count: plan
+            .issues
+            .iter()
+            .filter(|item| item.severity == ISSUE_ERROR)
+            .count() as u64,
         unique_skill_count: plan.skills.len() as u64,
         unique_mcp_count: plan.mcps.len() as u64,
         avatar_count: plan.avatars.len() as u64,
@@ -2592,7 +2701,11 @@ fn content_type_for_export(path: &str) -> &'static str {
     }
 }
 
-fn encode_file(relative_path: &str, content_type: &str, bytes: Vec<u8>) -> WorkspaceDirectoryUploadEntry {
+fn encode_file(
+    relative_path: &str,
+    content_type: &str,
+    bytes: Vec<u8>,
+) -> WorkspaceDirectoryUploadEntry {
     WorkspaceDirectoryUploadEntry {
         relative_path: relative_path.to_string(),
         file_name: Path::new(relative_path)
@@ -2623,7 +2736,10 @@ fn render_agent_markdown(
         format!("character: {}", yaml_inline_string(&agent.personality)),
         format!("avatar: {}", yaml_inline_string(avatar_file_name)),
         format!("tag: {}", yaml_inline_string(&agent.tags.join("、"))),
-        format!("tools: {}", serde_json::to_string(&tools).unwrap_or_else(|_| "[]".into())),
+        format!(
+            "tools: {}",
+            serde_json::to_string(&tools).unwrap_or_else(|_| "[]".into())
+        ),
         format!(
             "skills: {}",
             serde_json::to_string(exported_skill_slugs).unwrap_or_else(|_| "[]".into())
@@ -2640,7 +2756,12 @@ fn render_agent_markdown(
     .join("\n")
 }
 
-fn render_team_markdown(team: &TeamRecord, avatar_file_name: &str, leader_name: &str, member_names: &[String]) -> String {
+fn render_team_markdown(
+    team: &TeamRecord,
+    avatar_file_name: &str,
+    leader_name: &str,
+    member_names: &[String],
+) -> String {
     [
         "---".into(),
         format!("name: {}", yaml_inline_string(&team.name)),
@@ -2712,9 +2833,20 @@ fn export_team_files(
         let Some(agent) = context.agents.iter().find(|item| &item.id == agent_id) else {
             continue;
         };
-        files.extend(export_agent_files(paths, context, agent, Some(&team_dir_name), root_dir_name)?);
+        files.extend(export_agent_files(
+            paths,
+            context,
+            agent,
+            Some(&team_dir_name),
+            root_dir_name,
+        )?);
     }
-    export_owner_skill_and_mcp_files(context, team, &format!("{root_dir_name}/{team_dir_name}"), &mut files)?;
+    export_owner_skill_and_mcp_files(
+        context,
+        team,
+        &format!("{root_dir_name}/{team_dir_name}"),
+        &mut files,
+    )?;
     Ok(files)
 }
 
@@ -2830,7 +2962,13 @@ fn sanitize_export_dir_name(name: &str) -> String {
     }
     trimmed
         .chars()
-        .map(|character| if matches!(character, '/' | '\\' | ':') { '-' } else { character })
+        .map(|character| {
+            if matches!(character, '/' | '\\' | ':') {
+                '-'
+            } else {
+                character
+            }
+        })
         .collect()
 }
 
@@ -2847,31 +2985,35 @@ fn build_export_context(
     let mut teams = Vec::new();
     match &target {
         AssetTargetScope::Workspace => {
-            teams.extend(all_teams.into_iter().filter(|team| team.project_id.is_none() && input.team_ids.iter().any(|id| id == &team.id)));
-            agents.extend(all_agents.into_iter().filter(|agent| agent.project_id.is_none() && input.agent_ids.iter().any(|id| id == &agent.id)));
+            teams.extend(all_teams.into_iter().filter(|team| {
+                team.project_id.is_none() && input.team_ids.iter().any(|id| id == &team.id)
+            }));
+            agents.extend(all_agents.into_iter().filter(|agent| {
+                agent.project_id.is_none() && input.agent_ids.iter().any(|id| id == &agent.id)
+            }));
             if input.mode == "batch" && input.team_ids.is_empty() && input.agent_ids.is_empty() {
-                teams = load_teams(connection)?.into_iter().filter(|item| item.project_id.is_none()).collect();
-                agents = load_agents(connection)?.into_iter().filter(|item| item.project_id.is_none()).collect();
+                teams = load_teams(connection)?
+                    .into_iter()
+                    .filter(|item| item.project_id.is_none())
+                    .collect();
+                agents = load_agents(connection)?
+                    .into_iter()
+                    .filter(|item| item.project_id.is_none())
+                    .collect();
             }
         }
         AssetTargetScope::Project(project_id) => {
             let project_id = project_id.to_string();
-            teams.extend(
-                load_teams(connection)?
-                    .into_iter()
-                    .filter(|team| {
-                        (team.project_id.as_deref() == Some(project_id.as_str()) || input.team_ids.iter().any(|id| id == &team.id))
-                            && input.team_ids.iter().any(|id| id == &team.id)
-                    }),
-            );
-            agents.extend(
-                load_agents(connection)?
-                    .into_iter()
-                    .filter(|agent| {
-                        (agent.project_id.as_deref() == Some(project_id.as_str()) || input.agent_ids.iter().any(|id| id == &agent.id))
-                            && input.agent_ids.iter().any(|id| id == &agent.id)
-                    }),
-            );
+            teams.extend(load_teams(connection)?.into_iter().filter(|team| {
+                (team.project_id.as_deref() == Some(project_id.as_str())
+                    || input.team_ids.iter().any(|id| id == &team.id))
+                    && input.team_ids.iter().any(|id| id == &team.id)
+            }));
+            agents.extend(load_agents(connection)?.into_iter().filter(|agent| {
+                (agent.project_id.as_deref() == Some(project_id.as_str())
+                    || input.agent_ids.iter().any(|id| id == &agent.id))
+                    && input.agent_ids.iter().any(|id| id == &agent.id)
+            }));
             if input.mode == "batch" && input.team_ids.is_empty() && input.agent_ids.is_empty() {
                 teams = load_teams(connection)?
                     .into_iter()
@@ -2933,7 +3075,12 @@ fn build_export_context(
     let skill_paths = resolve_skill_paths(paths, &agents, &teams)?;
     let mcp_configs = resolve_mcp_configs(paths, &target, &agents, &teams)?;
     let avatar_payloads = resolve_avatar_payloads(paths, &target, &agents, &teams)?;
-    let root_dir_name = if input.mode == "single" && teams.len() == 1 && agents.iter().all(|agent| teams[0].member_agent_ids.contains(&agent.id)) {
+    let root_dir_name = if input.mode == "single"
+        && teams.len() == 1
+        && agents
+            .iter()
+            .all(|agent| teams[0].member_agent_ids.contains(&agent.id))
+    {
         sanitize_export_dir_name(&teams[0].name)
     } else if input.mode == "single" && agents.len() == 1 && teams.is_empty() {
         sanitize_export_dir_name(&agents[0].name)
@@ -3062,7 +3209,11 @@ fn export_avatar_payload(
                 .unwrap_or("avatar.png")
                 .to_string();
             if let Some(content_type) = content_type_for_avatar(&file_name) {
-                return Ok((file_name, content_type.to_string(), fs::read(absolute_path)?));
+                return Ok((
+                    file_name,
+                    content_type.to_string(),
+                    fs::read(absolute_path)?,
+                ));
             }
         }
     }
@@ -3316,7 +3467,10 @@ mod tests {
             tags: vec!["项目".into()],
             prompt: "# 角色定义\n项目财务分析\n".into(),
             builtin_tool_keys: Vec::new(),
-            skill_ids: vec![managed_skill_id(&AssetTargetScope::Project(project_id), skill_slug)],
+            skill_ids: vec![managed_skill_id(
+                &AssetTargetScope::Project(project_id),
+                skill_slug,
+            )],
             mcp_server_names: Vec::new(),
             integration_source: None,
             description: "项目级技能".into(),

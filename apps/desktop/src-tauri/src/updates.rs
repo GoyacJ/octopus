@@ -362,11 +362,29 @@ fn capabilities_for_channel(channel: &str) -> HostUpdateCapabilities {
 }
 
 fn update_runtime_config(channel: &str) -> UpdateRuntimeConfig {
+    update_runtime_config_with(channel, env_var)
+}
+
+fn update_runtime_config_with(
+    channel: &str,
+    env_lookup: impl Fn(&str) -> Option<String>,
+) -> UpdateRuntimeConfig {
+    let built_in = built_in_update_runtime_config(channel);
+    UpdateRuntimeConfig {
+        endpoint: env_lookup(update_endpoint_env(channel)).or(built_in.endpoint),
+        pubkey: env_lookup(UPDATE_PUBKEY_ENV).or(built_in.pubkey),
+    }
+}
+
+fn built_in_update_runtime_config(channel: &str) -> UpdateRuntimeConfig {
+    if cfg!(debug_assertions) {
+        return UpdateRuntimeConfig::default();
+    }
+
     let built_in = load_product_update_config();
     UpdateRuntimeConfig {
-        endpoint: env_var(update_endpoint_env(channel))
-            .or_else(|| built_in.endpoint_for_channel(channel)),
-        pubkey: env_var(UPDATE_PUBKEY_ENV).or_else(|| built_in.pubkey()),
+        endpoint: built_in.endpoint_for_channel(channel),
+        pubkey: built_in.pubkey(),
     }
 }
 
@@ -430,6 +448,50 @@ fn release_summary_from_update(update: &Update, current_channel: &str) -> HostRe
                 "url",
             ],
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_build_disables_built_in_update_endpoints_by_default() {
+        let config = update_runtime_config_with("formal", |_| None);
+        let capabilities = capabilities_for_channel("formal");
+
+        assert!(cfg!(debug_assertions));
+        assert_eq!(config.endpoint, None);
+        assert_eq!(config.pubkey, None);
+        assert!(!capabilities.can_check);
+        assert!(!capabilities.can_download);
+        assert!(!capabilities.can_install);
+    }
+
+    #[test]
+    fn explicit_update_env_overrides_reenable_dev_update_checking() {
+        let config = update_runtime_config_with("preview", |key| match key {
+            UPDATE_ENDPOINT_PREVIEW_ENV => {
+                Some(String::from("https://updates.example.test/latest.json"))
+            }
+            UPDATE_PUBKEY_ENV => Some(String::from("test-pubkey")),
+            _ => None,
+        });
+        let capabilities = HostUpdateCapabilities {
+            can_check: config.endpoint.is_some(),
+            can_download: config.endpoint.is_some() && config.pubkey.is_some(),
+            can_install: config.endpoint.is_some() && config.pubkey.is_some(),
+            supports_channels: true,
+        };
+
+        assert_eq!(
+            config.endpoint.as_deref(),
+            Some("https://updates.example.test/latest.json"),
+        );
+        assert_eq!(config.pubkey.as_deref(), Some("test-pubkey"));
+        assert!(capabilities.can_check);
+        assert!(capabilities.can_download);
+        assert!(capabilities.can_install);
     }
 }
 

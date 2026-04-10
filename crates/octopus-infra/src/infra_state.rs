@@ -447,7 +447,7 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
     ensure_runtime_session_projection_columns(&connection)?;
     ensure_cost_entry_columns(&connection)?;
     ensure_resource_columns(&connection)?;
-    agent_import::ensure_import_source_tables(&connection)?;
+    agent_seed::ensure_import_source_tables(&connection)?;
 
     Ok(())
 }
@@ -544,11 +544,11 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
         .optional()
         .map_err(|error| AppError::database(error.to_string()))?;
     if agents_exist.is_none() {
-        let workspace_has_managed_skills = agent_import::workspace_has_managed_skills(paths)?;
+        let workspace_has_managed_skills = agent_seed::workspace_has_managed_skills(paths)?;
         let seeded_agent_ids = if workspace_has_managed_skills {
             Vec::new()
         } else {
-            agent_import::seed_bundled_agent_bundle(&connection, paths, DEFAULT_WORKSPACE_ID)?
+            agent_seed::seed_bundled_agent_bundle(&connection, paths, DEFAULT_WORKSPACE_ID)?
         };
 
         if seeded_agent_ids.is_empty() && !workspace_has_managed_skills {

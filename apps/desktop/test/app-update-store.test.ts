@@ -77,6 +77,31 @@ describe('app update store', () => {
     expect(store.status?.state).toBe('up_to_date')
   })
 
+  it('skips the startup update check when host capabilities disable checking', async () => {
+    getHostUpdateStatus.mockResolvedValue(createStatus({
+      capabilities: {
+        canCheck: false,
+        canDownload: false,
+        canInstall: false,
+        supportsChannels: true,
+      },
+    }))
+
+    const { useShellStore, useAppUpdateStore } = await loadStores()
+    const shell = useShellStore()
+    shell.applyShellPreferences({
+      ...createDefaultShellPreferences('ws-local', 'proj-redesign'),
+      updateChannel: 'formal',
+    })
+
+    const store = useAppUpdateStore()
+    await store.initialize()
+
+    expect(getHostUpdateStatus).toHaveBeenCalledTimes(1)
+    expect(checkHostUpdate).not.toHaveBeenCalled()
+    expect(store.status?.capabilities.canCheck).toBe(false)
+  })
+
   it('persists channel changes through shell preferences and re-checks updates', async () => {
     getHostUpdateStatus.mockResolvedValue(createStatus())
     checkHostUpdate.mockResolvedValue(createStatus({

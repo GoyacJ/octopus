@@ -214,9 +214,9 @@ fn host_update_status_defaults_to_current_version_and_saved_channel() {
     assert_eq!(default_status.current_version, "0.1.0-test");
     assert_eq!(default_status.current_channel, "formal");
     assert_eq!(default_status.state, "idle");
-    assert!(default_status.capabilities.can_check);
-    assert!(default_status.capabilities.can_download);
-    assert!(default_status.capabilities.can_install);
+    assert!(!default_status.capabilities.can_check);
+    assert!(!default_status.capabilities.can_download);
+    assert!(!default_status.capabilities.can_install);
     assert!(default_status.capabilities.supports_channels);
 
     save_shell_preferences(
@@ -241,6 +241,9 @@ fn host_update_status_defaults_to_current_version_and_saved_channel() {
     assert_eq!(preview_status.current_version, "0.1.0-test");
     assert_eq!(preview_status.current_channel, "preview");
     assert_eq!(preview_status.state, "idle");
+    assert!(!preview_status.capabilities.can_check);
+    assert!(!preview_status.capabilities.can_download);
+    assert!(!preview_status.capabilities.can_install);
 }
 
 #[test]
