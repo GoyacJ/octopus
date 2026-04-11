@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { NotificationRecord } from '@octopus/schema'
 import { CheckCheck } from 'lucide-vue-next'
+
+import { formatDateTime } from '../lib/formatDateTime'
 
 const props = defineProps<{
   notification: NotificationRecord
@@ -19,6 +22,8 @@ function handleSelect() {
 function handleMarkRead() {
   emit('mark-read', props.notification.id)
 }
+
+const timestampLabel = computed(() => formatDateTime(props.notification.createdAt))
 </script>
 
 <template>
@@ -35,12 +40,17 @@ function handleMarkRead() {
       'bg-status-info': props.notification.level === 'info',
     }" />
     <div class="min-w-0 flex-1 space-y-1">
-      <div class="flex items-center gap-2">
-        <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
-          {{ props.scopeLabel }}
-        </span>
-        <span v-if="!props.notification.readAt" class="rounded-full bg-foreground/8 px-2 py-0.5 text-[10px] font-medium text-text-secondary">
-          New
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex min-w-0 items-center gap-2">
+          <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
+            {{ props.scopeLabel }}
+          </span>
+          <span v-if="!props.notification.readAt" class="rounded-full bg-foreground/8 px-2 py-0.5 text-[10px] font-medium text-text-secondary">
+            New
+          </span>
+        </div>
+        <span v-if="timestampLabel" class="shrink-0 text-[11px] font-medium text-text-tertiary">
+          {{ timestampLabel }}
         </span>
       </div>
       <p class="truncate text-sm font-semibold text-text-primary">

@@ -176,6 +176,45 @@ describe('workspace client transport', () => {
     )
   })
 
+  it('calls the workspace inbox endpoint through the workspace client adapter', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ([
+        {
+          id: 'inbox-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          itemType: 'approval',
+          title: 'Need approval',
+          description: 'Runtime needs approval.',
+          status: 'pending',
+          priority: 'high',
+          actionable: true,
+          routeTo: '/workspaces/ws-local/projects/proj-redesign/runtime',
+          actionLabel: 'Review approval',
+          createdAt: 1,
+        },
+      ]),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const session = createWorkspaceSession(connection!)
+    const workspaceClient = client.createWorkspaceClient({ connection: connection!, session })
+
+    const records = await workspaceClient.inbox.list()
+
+    expect(records[0]?.actionable).toBe(true)
+    expect(records[0]?.routeTo).toBe('/workspaces/ws-local/projects/proj-redesign/runtime')
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/inbox',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+  })
+
   it('submits first-owner registration through the public auth endpoint without an existing session', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({

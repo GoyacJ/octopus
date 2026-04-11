@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { NotificationRecord } from '@octopus/schema'
 import { Bell, CheckCircle2, CircleAlert, Info, X } from 'lucide-vue-next'
 
+import { formatDateTime } from '../lib/formatDateTime'
 import UiSurface from './UiSurface.vue'
 
 const props = defineProps<{
@@ -20,6 +22,8 @@ const levelIcons = {
   warning: CircleAlert,
   error: Bell,
 } as const
+
+const timestampLabel = computed(() => formatDateTime(props.notification.createdAt))
 </script>
 
 <template>
@@ -39,9 +43,12 @@ const levelIcons = {
         class="mt-0.5 shrink-0 text-text-secondary"
       />
       <div class="min-w-0 flex-1 space-y-1">
-        <div class="flex items-center gap-2">
+        <div class="flex items-start justify-between gap-3">
           <span class="text-[10px] font-semibold uppercase tracking-[0.18em] text-text-tertiary">
             {{ props.scopeLabel }}
+          </span>
+          <span v-if="timestampLabel" class="shrink-0 text-[11px] font-medium text-text-tertiary">
+            {{ timestampLabel }}
           </span>
         </div>
         <p class="truncate text-sm font-semibold text-text-primary">

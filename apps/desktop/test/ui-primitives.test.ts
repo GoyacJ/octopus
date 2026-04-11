@@ -32,6 +32,7 @@ import {
   UiListRow,
   UiListDetailShell,
   UiListDetailWorkspace,
+  UiMessageCenter,
   UiNotificationCenter,
   UiNotificationRow,
   UiStatusCallout,
@@ -44,7 +45,7 @@ import {
   UiAccordion,
   UiTabs,
 } from '@octopus/ui'
-import type { NotificationRecord } from '@octopus/schema'
+import type { InboxItemRecord, NotificationRecord } from '@octopus/schema'
 
 Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
   configurable: true,
@@ -67,6 +68,33 @@ function createNotification(overrides: Partial<NotificationRecord> = {}): Notifi
     actionLabel: undefined,
     ...overrides,
   }
+}
+
+function createInboxItem(overrides: Partial<InboxItemRecord> = {}): InboxItemRecord {
+  return {
+    id: 'inbox-1',
+    workspaceId: 'ws-local',
+    projectId: 'proj-redesign',
+    itemType: 'approval',
+    title: 'Need approval',
+    description: 'Runtime needs approval.',
+    status: 'pending',
+    priority: 'high',
+    actionable: true,
+    routeTo: '/workspaces/ws-local/projects/proj-redesign/runtime',
+    actionLabel: 'Review approval',
+    createdAt: 1,
+    ...overrides,
+  }
+}
+
+function formatUiTimestamp(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(timestamp))
 }
 
 describe('Shared UI primitives', () => {
@@ -239,6 +267,129 @@ describe('Shared UI primitives', () => {
     await wrapper.get('[data-testid="ui-tabs-trigger-team"]').trigger('click')
 
     expect(wrapper.vm.value).toBe('team')
+  })
+
+  it('renders UiMessageCenter with notification and inbox tabs and emits inbox selection', async () => {
+    const notificationCreatedAt = Date.UTC(2026, 3, 12, 10, 5)
+    const inboxCreatedAt = Date.UTC(2026, 3, 11, 8, 15)
+    const wrapper = mount(UiMessageCenter, {
+      attachTo: document.body,
+      props: {
+        open: true,
+        activeTab: 'notifications',
+        notificationTabLabel: 'Notifications',
+        inboxTabLabel: 'Inbox',
+        notificationTitle: 'Notifications',
+        notificationUnreadLabel: '2 unread',
+        notificationEmptyTitle: 'No notifications',
+        notificationEmptyDescription: 'Everything is up to date.',
+        notificationMarkAllLabel: 'Mark all read',
+        notifications: [
+          createNotification({ createdAt: notificationCreatedAt }),
+          createNotification({ id: 'notif-2', scopeKind: 'workspace', createdAt: notificationCreatedAt + 60_000 }),
+        ],
+        unreadCount: 2,
+        activeFilter: 'all',
+        filterLabels: {
+          all: 'All',
+          app: 'App',
+          workspace: 'Workspace',
+          user: 'User',
+        },
+        scopeLabels: {
+          app: 'App',
+          workspace: 'Workspace',
+          user: 'User',
+        },
+        inboxTitle: 'Inbox',
+        inboxSubtitle: '1 actionable item',
+        inboxLoading: false,
+        inboxError: '',
+        inboxItems: [createInboxItem({ createdAt: inboxCreatedAt })],
+        inboxEmptyTitle: 'No inbox items',
+        inboxEmptyDescription: 'Nothing requires attention.',
+        inboxOpenLabel: 'Open',
+        inboxStatusHeading: 'Status',
+        inboxTypeHeading: 'Type',
+        inboxLoadingLabel: 'Loading inbox…',
+        inboxErrorTitle: 'Inbox unavailable',
+        inboxErrorDescription: 'Try again later.',
+      },
+    })
+
+    expect(document.body.textContent).toContain('Notifications')
+    expect(document.body.textContent).toContain('Inbox')
+    expect(document.body.textContent).toContain(formatUiTimestamp(notificationCreatedAt))
+
+    await wrapper.get('[data-testid="ui-tabs-trigger-inbox"]').trigger('click')
+
+    expect(wrapper.emitted('update:activeTab')).toEqual([['inbox']])
+
+    await wrapper.setProps({ activeTab: 'inbox' })
+
+    expect(document.body.textContent).toContain('Need approval')
+    expect(document.body.textContent).toContain('Review approval')
+    expect(document.body.textContent).toContain(formatUiTimestamp(inboxCreatedAt))
+
+    await wrapper.get('[data-testid="ui-message-center-inbox-action-inbox-1"]').trigger('click')
+
+    expect(wrapper.emitted('select-inbox')).toEqual([[expect.objectContaining({ id: 'inbox-1' })]])
+    wrapper.unmount()
+  })
+
+  it('renders UiMessageCenter inbox loading, error, and empty states', async () => {
+    const wrapper = mount(UiMessageCenter, {
+      attachTo: document.body,
+      props: {
+        open: true,
+        activeTab: 'inbox',
+        notificationTabLabel: 'Notifications',
+        inboxTabLabel: 'Inbox',
+        notificationTitle: 'Notifications',
+        notificationUnreadLabel: '0 unread',
+        notificationEmptyTitle: 'No notifications',
+        notificationEmptyDescription: 'Everything is up to date.',
+        notificationMarkAllLabel: 'Mark all read',
+        notifications: [],
+        unreadCount: 0,
+        activeFilter: 'all',
+        filterLabels: {
+          all: 'All',
+          app: 'App',
+          workspace: 'Workspace',
+          user: 'User',
+        },
+        scopeLabels: {
+          app: 'App',
+          workspace: 'Workspace',
+          user: 'User',
+        },
+        inboxTitle: 'Inbox',
+        inboxSubtitle: '0 actionable items',
+        inboxLoading: true,
+        inboxError: '',
+        inboxItems: [],
+        inboxEmptyTitle: 'No inbox items',
+        inboxEmptyDescription: 'Nothing requires attention.',
+        inboxOpenLabel: 'Open',
+        inboxStatusHeading: 'Status',
+        inboxTypeHeading: 'Type',
+        inboxLoadingLabel: 'Loading inbox…',
+        inboxErrorTitle: 'Inbox unavailable',
+        inboxErrorDescription: 'Try again later.',
+      },
+    })
+
+    expect(document.body.textContent).toContain('Loading inbox…')
+
+    await wrapper.setProps({ inboxLoading: false, inboxError: 'network down' })
+    expect(document.body.textContent).toContain('Inbox unavailable')
+    expect(document.body.textContent).toContain('Try again later.')
+
+    await wrapper.setProps({ inboxError: '' })
+    expect(document.body.textContent).toContain('No inbox items')
+
+    wrapper.unmount()
   })
 
   it('renders UiListDetailWorkspace with toolbar, list, and detail states', () => {
@@ -798,12 +949,14 @@ describe('Shared UI primitives', () => {
   })
 
   it('renders UiNotificationRow and emits read and select actions', async () => {
+    const createdAt = Date.UTC(2026, 3, 12, 10, 5)
     const wrapper = mount(UiNotificationRow, {
       props: {
         notification: createNotification({
           id: 'notif-row',
           scopeKind: 'workspace',
           routeTo: '/workspaces/ws-local/overview',
+          createdAt,
         }),
         scopeLabel: 'Workspace',
       },
@@ -811,6 +964,7 @@ describe('Shared UI primitives', () => {
 
     expect(wrapper.text()).toContain('Saved')
     expect(wrapper.text()).toContain('Workspace')
+    expect(wrapper.text()).toContain(formatUiTimestamp(createdAt))
 
     await wrapper.get('[data-testid="ui-notification-row-mark-read-notif-row"]').trigger('click')
     expect(wrapper.emitted('mark-read')).toEqual([['notif-row']])
@@ -861,10 +1015,12 @@ describe('Shared UI primitives', () => {
   })
 
   it('renders UiToastItem and UiToastViewport with close actions', async () => {
+    const createdAt = Date.UTC(2026, 3, 12, 10, 5)
     const toast = createNotification({
       id: 'notif-toast',
       level: 'success',
       scopeKind: 'app',
+      createdAt,
     })
 
     const item = mount(UiToastItem, {
@@ -876,6 +1032,7 @@ describe('Shared UI primitives', () => {
 
     expect(item.text()).toContain('Saved')
     expect(item.text()).toContain('App')
+    expect(item.text()).toContain(formatUiTimestamp(createdAt))
 
     await item.get('[data-testid="ui-toast-close-notif-toast"]').trigger('click')
     expect(item.emitted('close')).toEqual([['notif-toast']])
@@ -894,6 +1051,7 @@ describe('Shared UI primitives', () => {
 
     expect(viewport.find('[data-testid="ui-toast-viewport"]').exists()).toBe(true)
     expect(viewport.text()).toContain('Saved')
+    expect(viewport.text()).toContain(formatUiTimestamp(createdAt))
 
     await viewport.get('[data-testid="ui-toast-close-notif-toast"]').trigger('click')
     expect(viewport.emitted('close')).toEqual([['notif-toast']])

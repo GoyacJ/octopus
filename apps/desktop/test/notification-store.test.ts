@@ -156,7 +156,43 @@ describe('useNotificationStore', () => {
     expect(store.activeToasts[0]?.id).toBe('notif-created')
   })
 
-  it('marks records read, marks all read by scope, dismisses toasts, and manages panel state', async () => {
+  it('expires active toasts after their visibility window elapses', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-04-12T08:00:00.000Z'))
+
+      listNotificationsMock.mockResolvedValue(createListResponse({
+        notifications: [
+          createRecord({
+            id: 'notif-expiring',
+            toastVisibleUntil: Date.now() + 30_000,
+          }),
+        ],
+        unread: createSummary({
+          total: 1,
+          byScope: {
+            app: 1,
+            workspace: 0,
+            user: 0,
+          },
+        }),
+      }))
+      subscribeToNotificationsMock.mockReturnValue(() => {})
+
+      const store = useNotificationStore()
+      await store.bootstrap()
+
+      expect(store.activeToasts).toHaveLength(1)
+
+      vi.advanceTimersByTime(30_001)
+
+      expect(store.activeToasts).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('marks records read, marks all read by scope, dismisses toasts, and updates filters', async () => {
     const existing = createRecord({
       id: 'notif-a',
       scopeKind: 'app',
@@ -191,9 +227,7 @@ describe('useNotificationStore', () => {
     const store = useNotificationStore()
     await store.bootstrap()
 
-    store.openCenter()
     store.setFilter('app')
-    expect(store.centerOpen).toBe(true)
     expect(store.filterScope).toBe('app')
 
     await store.markRead('notif-a')
@@ -207,9 +241,6 @@ describe('useNotificationStore', () => {
     await store.markAllRead({ scope: 'app' })
     expect(markAllNotificationsReadMock).toHaveBeenCalledWith({ scope: 'app' })
     expect(store.unreadSummary.total).toBe(0)
-
-    store.closeCenter()
-    expect(store.centerOpen).toBe(false)
   })
 
   it('ingests subscribed notifications through the unified event path', async () => {

@@ -31,6 +31,7 @@ import type {
   ImportWorkspaceAgentBundlePreview,
   ImportWorkspaceAgentBundlePreviewInput,
   ImportWorkspaceAgentBundleResult,
+  InboxItemRecord,
   ImportWorkspaceSkillArchiveInput,
   ImportWorkspaceSkillFolderInput,
   KnowledgeRecord,
@@ -160,6 +161,9 @@ export interface WorkspaceClient {
   }
   artifacts: {
     listWorkspace: () => Promise<ArtifactRecord[]>
+  }
+  inbox: {
+    list: () => Promise<InboxItemRecord[]>
   }
   knowledge: {
     listWorkspace: () => Promise<KnowledgeRecord[]>

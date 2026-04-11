@@ -268,6 +268,13 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
         })
       },
     },
+    inbox: {
+      async list() {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/inbox', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        })
+      },
+    },
     knowledge: {
       async listWorkspace() {
         return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/knowledge', 'get', {

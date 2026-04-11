@@ -4,9 +4,10 @@ const props = withDefaults(
     title: string
     description: string
     priorityLabel: string
+    timestampLabel?: string
     statusLabel: string
-    impact: string
-    riskNote: string
+    impact?: string
+    riskNote?: string
     statusHeading?: string
     impactHeading?: string
     riskHeading?: string
@@ -15,79 +16,47 @@ const props = withDefaults(
     statusHeading: 'Status',
     impactHeading: 'Impact',
     riskHeading: 'Risk',
+    impact: '',
+    riskNote: '',
   },
 )
 </script>
 
 <template>
-  <article class="inbox-block">
-    <div class="topline">
-      <strong>{{ props.title }}</strong>
-      <span>{{ props.priorityLabel }}</span>
+  <article class="flex min-w-0 flex-col gap-3 rounded-[var(--radius-l)] border border-border bg-surface p-4">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <strong class="text-sm font-semibold text-text-primary">{{ props.title }}</strong>
+      <div class="flex shrink-0 flex-col items-end gap-1">
+        <span v-if="props.timestampLabel" class="text-[11px] font-medium text-text-tertiary">
+          {{ props.timestampLabel }}
+        </span>
+        <span class="rounded-full bg-accent px-2.5 py-1 text-[11px] font-semibold text-text-secondary">
+          {{ props.priorityLabel }}
+        </span>
+      </div>
     </div>
-    <p>{{ props.description }}</p>
-    <dl>
-      <div>
-        <dt>{{ props.statusHeading }}</dt>
-        <dd>{{ props.statusLabel }}</dd>
+
+    <p class="text-sm leading-6 text-text-secondary">{{ props.description }}</p>
+
+    <dl class="grid gap-3 sm:grid-cols-2">
+      <div class="space-y-1">
+        <dt class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">{{ props.statusHeading }}</dt>
+        <dd class="text-sm leading-6 text-text-secondary">{{ props.statusLabel }}</dd>
       </div>
-      <div>
-        <dt>{{ props.impactHeading }}</dt>
-        <dd>{{ props.impact }}</dd>
+
+      <div v-if="props.impact" class="space-y-1">
+        <dt class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">{{ props.impactHeading }}</dt>
+        <dd class="text-sm leading-6 text-text-secondary">{{ props.impact }}</dd>
       </div>
-      <div>
-        <dt>{{ props.riskHeading }}</dt>
-        <dd>{{ props.riskNote }}</dd>
+
+      <div v-if="props.riskNote" class="space-y-1 sm:col-span-2">
+        <dt class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">{{ props.riskHeading }}</dt>
+        <dd class="text-sm leading-6 text-text-secondary">{{ props.riskNote }}</dd>
       </div>
     </dl>
-    <div class="actions">
+
+    <div v-if="$slots.actions" class="flex flex-wrap gap-2">
       <slot name="actions" />
     </div>
   </article>
 </template>
-
-<style scoped>
-.inbox-block {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-width: 0;
-  padding: 1rem;
-  border-radius: var(--radius-l);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-}
-
-.topline {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-p,
-dd {
-  color: var(--text-secondary);
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-dl {
-  display: grid;
-  gap: 0.65rem;
-}
-
-dt {
-  font-size: 0.76rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-tertiary);
-}
-
-.actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.55rem;
-}
-</style>

@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 565c198945486cfd02b9f066352d12313c38ef0fdbe9662823b7138a6ab11f1b
+// Source hash: 248650492ba57367e5f30a5d9531908b110b9b76392b88e5b5a754ec4128ec26
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "565c198945486cfd02b9f066352d12313c38ef0fdbe9662823b7138a6ab11f1b"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "248650492ba57367e5f30a5d9531908b110b9b76392b88e5b5a754ec4128ec26"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -572,12 +572,15 @@ export interface ImportWorkspaceSkillFolderInput {
 }
 
 export interface InboxItemRecord {
+  actionable: boolean
+  actionLabel?: string
   createdAt: number
   description: string
   id: string
   itemType: string
   priority: string
   projectId?: string
+  routeTo?: string
   status: string
   title: string
   workspaceId: string

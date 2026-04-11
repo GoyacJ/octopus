@@ -61,8 +61,9 @@ export const useNotificationStore = defineStore('notifications', {
     notificationsState: [] as NotificationRecord[],
     unreadSummaryState: createDefaultNotificationUnreadSummary(),
     filterScope: 'all' as NotificationFilterScope,
-    centerOpen: false,
     bootstrapped: false,
+    toastNow: Date.now(),
+    toastExpiryTimer: null as ReturnType<typeof setTimeout> | null,
     unsubscribe: null as null | (() => void),
   }),
   getters: {
@@ -82,21 +83,44 @@ export const useNotificationStore = defineStore('notifications', {
       )
     },
     activeToasts(state): NotificationRecord[] {
-      const now = Date.now()
+      const now = state.toastNow
       return state.notificationsState.filter(notification =>
         typeof notification.toastVisibleUntil === 'number' && notification.toastVisibleUntil > now,
       )
     },
   },
   actions: {
+    syncToastSchedule() {
+      this.toastNow = Date.now()
+
+      if (this.toastExpiryTimer) {
+        clearTimeout(this.toastExpiryTimer)
+        this.toastExpiryTimer = null
+      }
+
+      const nextExpiry = this.notificationsState
+        .map(notification => notification.toastVisibleUntil)
+        .filter((value): value is number => typeof value === 'number' && value > this.toastNow)
+        .sort((left, right) => left - right)[0]
+
+      if (typeof nextExpiry !== 'number') {
+        return
+      }
+
+      this.toastExpiryTimer = setTimeout(() => {
+        this.syncToastSchedule()
+      }, Math.max(nextExpiry - this.toastNow, 0))
+    },
     applyResponse(response: NotificationListResponse) {
       const normalized = normalizeResponse(response)
       this.notificationsState = normalized.notifications
       this.unreadSummaryState = normalized.unread
+      this.syncToastSchedule()
     },
     ingest(notification: NotificationRecord) {
       this.notificationsState = mergeNotification(this.notificationsState, notification)
       this.unreadSummaryState = deriveUnreadSummary(this.notificationsState)
+      this.syncToastSchedule()
     },
     async bootstrap() {
       if (this.bootstrapped) {
@@ -137,17 +161,12 @@ export const useNotificationStore = defineStore('notifications', {
         }
       })
       this.unreadSummaryState = nextSummary
+      this.syncToastSchedule()
     },
     async dismissToast(id: string): Promise<NotificationRecord> {
       const notification = await tauriClient.dismissNotificationToast(id)
       this.ingest(notification)
       return notification
-    },
-    openCenter() {
-      this.centerOpen = true
-    },
-    closeCenter() {
-      this.centerOpen = false
     },
     setFilter(scope: NotificationFilterScope) {
       this.filterScope = scope

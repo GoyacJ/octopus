@@ -96,6 +96,25 @@ describe('Workbench shell layout', () => {
     mounted.destroy()
   })
 
+  it('opens and closes the topbar message center from the notification trigger', async () => {
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="topbar-notification-trigger"]') !== null)
+
+    const trigger = mounted.container.querySelector<HTMLButtonElement>('[data-testid="topbar-notification-trigger"]')
+    expect(document.body.querySelector('[data-testid="ui-message-center"]')).toBeNull()
+
+    trigger?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="ui-message-center"]') !== null)
+
+    trigger?.click()
+    await waitFor(() => document.body.querySelector('[data-testid="ui-message-center"]') === null)
+
+    mounted.destroy()
+  })
+
   it('renders topbar breadcrumbs by route section instead of always showing workspace and project', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/dashboard')
     await router.isReady()

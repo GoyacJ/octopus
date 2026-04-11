@@ -2073,6 +2073,9 @@ pub struct InboxItemRecord {
     pub description: String,
     pub status: String,
     pub priority: String,
+    pub actionable: bool,
+    pub route_to: Option<String>,
+    pub action_label: Option<String>,
     pub created_at: u64,
 }
 

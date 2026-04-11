@@ -185,7 +185,7 @@ mod tests {
         build_infra_bundle, initialize_workspace, CopyWorkspaceSkillToManagedInput, WorkspacePaths,
     };
     use octopus_core::{CreateProjectRequest, UpdateProjectRequest};
-    use octopus_platform::WorkspaceService;
+    use octopus_platform::{InboxService, WorkspaceService};
     use rusqlite::Connection;
 
     #[test]
@@ -508,5 +508,45 @@ default_project_id = "proj-redesign"
         assert_eq!(copied.name, "copied-help");
         assert_eq!(copied.display_path, "data/skills/copied-help/SKILL.md");
         assert!(copied.content.contains("name: copied-help"));
+    }
+
+    #[test]
+    fn inbox_service_preserves_actionable_navigation_metadata() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        bundle
+            .inbox
+            .state
+            .inbox
+            .lock()
+            .expect("inbox lock")
+            .push(octopus_core::InboxItemRecord {
+                id: "inbox-approval".into(),
+                workspace_id: "ws-local".into(),
+                project_id: Some("proj-redesign".into()),
+                item_type: "approval".into(),
+                title: "Runtime approval pending".into(),
+                description: "Runtime command needs approval.".into(),
+                status: "pending".into(),
+                priority: "high".into(),
+                actionable: true,
+                route_to: Some("/workspaces/ws-local/projects/proj-redesign/runtime".into()),
+                action_label: Some("Review approval".into()),
+                created_at: 42,
+            });
+
+        let items = tokio::runtime::Runtime::new()
+            .expect("runtime")
+            .block_on(bundle.inbox.list_inbox())
+            .expect("list inbox");
+
+        assert_eq!(items.len(), 1);
+        assert!(items[0].actionable);
+        assert_eq!(
+            items[0].route_to.as_deref(),
+            Some("/workspaces/ws-local/projects/proj-redesign/runtime")
+        );
+        assert_eq!(items[0].action_label.as_deref(), Some("Review approval"));
     }
 }

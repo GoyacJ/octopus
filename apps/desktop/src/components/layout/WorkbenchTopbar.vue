@@ -2,13 +2,15 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import type { NotificationRecord } from '@octopus/schema'
+import type { InboxItemRecord, NotificationRecord } from '@octopus/schema'
 import { Bell, Check, Menu, Monitor, MoonStar, Search, Settings, SunMedium, UserRound } from 'lucide-vue-next'
 
-import { UiButton, UiNotificationBadge, UiNotificationCenter, UiPopover } from '@octopus/ui'
+import { UiButton, UiMessageCenter, UiNotificationBadge, UiPopover } from '@octopus/ui'
 
 import { resolveWorkspaceLabel } from '@/composables/workspace-label'
 import { getAncestorMenuIds, getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
+import { useInboxStore } from '@/stores/inbox'
+import { useMessageCenterStore } from '@/stores/message-center'
 import { useNotificationStore } from '@/stores/notifications'
 import { useShellStore } from '@/stores/shell'
 import { useUserProfileStore } from '@/stores/user-profile'
@@ -18,6 +20,8 @@ import { useWorkspaceStore } from '@/stores/workspace'
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const inbox = useInboxStore()
+const messageCenter = useMessageCenterStore()
 const notifications = useNotificationStore()
 const shell = useShellStore()
 const userProfileStore = useUserProfileStore()
@@ -91,17 +95,25 @@ const themeIcons = {
 
 const localeOptions = ['zh-CN', 'en-US'] as const
 
-function closeMenus() {
+function closeLegacyMenus() {
   themeMenuOpen.value = false
   localeMenuOpen.value = false
   accountMenuOpen.value = false
-  notifications.closeCenter()
+}
+
+function closeMessageCenter() {
+  messageCenter.closeCenter()
+}
+
+function closeMenus() {
+  closeLegacyMenus()
+  closeMessageCenter()
 }
 
 function handleClickOutside(event: MouseEvent) {
   const target = event.target as HTMLElement
   if (!target.closest('.dropdown-trigger') && !target.closest('.dropdown-menu')) {
-    closeMenus()
+    closeLegacyMenus()
   }
 }
 
@@ -152,24 +164,60 @@ const notificationScopeLabels = computed(() => ({
   user: t('notifications.scopes.user'),
 }))
 
-function toggleNotifications() {
-  if (notifications.centerOpen) {
-    notifications.closeCenter()
+const notificationUnreadLabel = computed(() =>
+  t('notifications.unreadCount', { count: notifications.unreadSummary.total }),
+)
+
+const inboxSubtitle = computed(() =>
+  t('messageCenter.inbox.subtitle', { count: inbox.actionableCount }),
+)
+
+function handleMessageCenterOpenChange(open: boolean) {
+  if (open) {
+    closeLegacyMenus()
+    messageCenter.openCenter()
     return
   }
 
-  themeMenuOpen.value = false
+  messageCenter.closeCenter()
+}
+
+function toggleThemeMenu() {
+  closeMessageCenter()
   localeMenuOpen.value = false
   accountMenuOpen.value = false
-  notifications.openCenter()
+  themeMenuOpen.value = !themeMenuOpen.value
+}
+
+function toggleLocaleMenu() {
+  closeMessageCenter()
+  themeMenuOpen.value = false
+  accountMenuOpen.value = false
+  localeMenuOpen.value = !localeMenuOpen.value
+}
+
+function toggleAccountMenu() {
+  closeMessageCenter()
+  themeMenuOpen.value = false
+  localeMenuOpen.value = false
+  accountMenuOpen.value = !accountMenuOpen.value
 }
 
 async function handleNotificationSelect(notification: NotificationRecord) {
   await notifications.markRead(notification.id)
-  notifications.closeCenter()
+  closeMessageCenter()
   if (notification.routeTo) {
     await router.push(notification.routeTo)
   }
+}
+
+async function handleInboxSelect(item: InboxItemRecord) {
+  if (!item.routeTo) {
+    return
+  }
+
+  closeMessageCenter()
+  await router.push(item.routeTo)
 }
 </script>
 
@@ -216,7 +264,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
       </button>
 
       <div class="relative">
-        <UiButton variant="ghost" size="icon" data-testid="topbar-theme-toggle" class="dropdown-trigger h-8 w-8" @click="themeMenuOpen = !themeMenuOpen">
+        <UiButton variant="ghost" size="icon" data-testid="topbar-theme-toggle" class="dropdown-trigger h-8 w-8" @click="toggleThemeMenu">
           <component :is="themeIcons[shell.preferences.theme]" :size="15" />
         </UiButton>
         <div v-if="themeMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-44 rounded-[var(--radius-l)] border border-border bg-popover p-1 shadow-md">
@@ -237,7 +285,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
       </div>
 
       <div class="relative">
-        <UiButton variant="ghost" size="icon" data-testid="topbar-locale-toggle" class="dropdown-trigger h-8 w-8" @click="localeMenuOpen = !localeMenuOpen">
+        <UiButton variant="ghost" size="icon" data-testid="topbar-locale-toggle" class="dropdown-trigger h-8 w-8" @click="toggleLocaleMenu">
           <span class="text-[11px] font-bold uppercase">{{ shell.preferences.locale === 'zh-CN' ? '中' : 'EN' }}</span>
         </UiButton>
         <div v-if="localeMenuOpen" class="dropdown-menu absolute right-0 top-10 z-40 w-40 rounded-[var(--radius-l)] border border-border bg-popover p-1 shadow-md">
@@ -268,12 +316,12 @@ async function handleNotificationSelect(notification: NotificationRecord) {
       </button>
 
       <UiPopover
-        :open="notifications.centerOpen"
+        :open="messageCenter.open"
         align="end"
         side="bottom"
         root-class="!inline-flex"
         class="border-none bg-transparent p-0 shadow-none"
-        @update:open="($event) => $event ? notifications.openCenter() : notifications.closeCenter()"
+        @update:open="handleMessageCenterOpenChange"
       >
         <template #trigger>
           <button
@@ -281,29 +329,47 @@ async function handleNotificationSelect(notification: NotificationRecord) {
             data-testid="topbar-notification-trigger"
             class="dropdown-trigger relative flex h-8 w-8 items-center justify-center rounded-[var(--radius-xs)] hover:bg-accent"
             :aria-label="t('notifications.triggerAriaLabel')"
-            @click="toggleNotifications"
           >
             <Bell :size="15" class="text-text-secondary" />
             <span class="absolute -right-1 -top-1">
-              <UiNotificationBadge :count="notifications.unreadSummary.total" />
+              <UiNotificationBadge :count="messageCenter.combinedCount" />
             </span>
           </button>
         </template>
-        <UiNotificationCenter
-          :open="notifications.centerOpen"
+        <UiMessageCenter
+          :open="messageCenter.open"
+          :active-tab="messageCenter.activeTab"
+          :notification-tab-label="t('messageCenter.tabs.notifications')"
+          :inbox-tab-label="t('messageCenter.tabs.inbox')"
+          :notification-title="t('notifications.title')"
+          :notification-unread-label="notificationUnreadLabel"
           :notifications="notifications.filteredNotifications"
           :unread-count="notifications.unreadSummary.total"
           :active-filter="notifications.filterScope"
           :filter-labels="notificationFilterLabels"
           :scope-labels="notificationScopeLabels"
-          :title="t('notifications.title')"
-          :empty-title="t('notifications.empty.title')"
-          :empty-description="t('notifications.empty.description')"
-          :mark-all-label="t('notifications.markAllRead')"
+          :notification-empty-title="t('notifications.empty.title')"
+          :notification-empty-description="t('notifications.empty.description')"
+          :notification-mark-all-label="t('notifications.markAllRead')"
+          :inbox-title="t('messageCenter.inbox.title')"
+          :inbox-subtitle="inboxSubtitle"
+          :inbox-loading="inbox.loading"
+          :inbox-error="inbox.error"
+          :inbox-items="inbox.items"
+          :inbox-empty-title="t('messageCenter.inbox.emptyTitle')"
+          :inbox-empty-description="t('messageCenter.inbox.emptyDescription')"
+          :inbox-open-label="t('messageCenter.inbox.openLabel')"
+          :inbox-status-heading="t('messageCenter.inbox.statusHeading')"
+          :inbox-type-heading="t('messageCenter.inbox.typeHeading')"
+          :inbox-loading-label="t('messageCenter.inbox.loadingLabel')"
+          :inbox-error-title="t('messageCenter.inbox.errorTitle')"
+          :inbox-error-description="t('messageCenter.inbox.errorDescription')"
+          @update:active-tab="messageCenter.setActiveTab"
           @update:filter="notifications.setFilter"
           @mark-read="notifications.markRead"
           @mark-all-read="notifications.markAllRead({ scope: notifications.filterScope })"
-          @select="handleNotificationSelect"
+          @select-notification="handleNotificationSelect"
+          @select-inbox="handleInboxSelect"
         />
       </UiPopover>
 
@@ -312,7 +378,7 @@ async function handleNotificationSelect(notification: NotificationRecord) {
           type="button"
           data-testid="topbar-profile-trigger"
           class="dropdown-trigger flex items-center gap-2 rounded-[var(--radius-xs)] px-2 py-1.5 hover:bg-accent"
-          @click="accountMenuOpen = !accountMenuOpen"
+          @click="toggleAccountMenu"
         >
           <div class="flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-primary text-[10px] font-bold text-white uppercase">
             <img v-if="currentUser?.avatar" :src="currentUser.avatar" alt="" class="h-full w-full object-cover">
