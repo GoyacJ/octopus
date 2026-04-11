@@ -37,8 +37,10 @@ function mountApp(pinia = createPinia()) {
   return {
     app,
     container,
-    destroy() {
+    async destroy() {
       app.unmount()
+      await nextTick()
+      await new Promise(resolve => window.setTimeout(resolve, 0))
       container.remove()
     },
   }
@@ -119,6 +121,9 @@ describe('workspace access centers', () => {
     await waitForText(mounted.container, 'Lin Zhou')
 
     expect(mounted.container.querySelector('[data-testid="access-control-users-shell"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="access-control-users-toolbar"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="access-control-user-create-button"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('请选择用户')
     expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-access-control-users"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-access-control-org"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-access-control-roles"]')).not.toBeNull()
@@ -136,7 +141,7 @@ describe('workspace access centers', () => {
     expect(mounted.container.textContent).not.toContain('基本资料')
     expect(mounted.container.textContent).not.toContain('宠物')
 
-    mounted.destroy()
+    await mounted.destroy()
   })
 
   it('renders access control role and policy projections on dedicated routes', async () => {
@@ -145,18 +150,20 @@ describe('workspace access centers', () => {
     await waitForText(mounted.container, 'Owner')
 
     expect(mounted.container.querySelector('[data-testid="access-control-roles-shell"]')).not.toBeNull()
-    expect(mounted.container.textContent).toContain('access.users.read')
-    expect(mounted.container.textContent).toContain('access.roles.manage')
-    expect(mounted.container.textContent).toContain('角色清单')
+    expect(mounted.container.querySelector('[data-testid="access-control-roles-toolbar"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="access-control-role-create-button"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('Owner')
+    expect(mounted.container.textContent).toContain('Operator')
+    expect(mounted.container.textContent).toContain('请选择角色')
 
     await router.push('/workspaces/ws-local/access-control/policies')
     await waitForSelector(mounted.container, '[data-testid="access-control-policies-shell"]')
+    expect(mounted.container.querySelector('[data-testid="access-control-policies-section-tabs"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('权限目录')
     expect(mounted.container.textContent).toContain('tool.mcp.invoke')
-    expect(mounted.container.textContent).toContain('角色绑定')
-    expect(mounted.container.textContent).toContain('当前主体动作矩阵')
+    expect(mounted.container.textContent).toContain('请选择权限')
 
-    mounted.destroy()
+    await mounted.destroy()
   })
 
   it('renders audit logs inside the sessions and audit surface without legacy todo copy', async () => {
@@ -165,10 +172,18 @@ describe('workspace access centers', () => {
     await waitForSelector(mounted.container, '[data-testid="access-control-sessions-shell"]')
 
     expect(mounted.container.textContent).toContain('会话管理')
-    expect(mounted.container.textContent).toContain('审计日志')
+    expect(mounted.container.querySelector('[data-testid="access-control-sessions-toolbar"]')).not.toBeNull()
     expect(mounted.container.textContent).not.toContain('审计日志下一步补齐')
 
-    mounted.destroy()
+    const auditTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-audit"]')
+    if (!(auditTab instanceof HTMLButtonElement)) {
+      throw new Error('Expected audit tab button')
+    }
+    auditTab.click()
+
+    await waitForText(mounted.container, '审计日志')
+
+    await mounted.destroy()
   })
 
   it('renders precise protected tool resource types in the resource authorization view', async () => {
@@ -177,25 +192,34 @@ describe('workspace access centers', () => {
     await waitForSelector(mounted.container, '[data-testid="access-control-resources-shell"]')
     await waitForText(mounted.container, 'tool.skill')
 
+    expect(mounted.container.querySelector('[data-testid="access-control-resources-toolbar"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('tool.builtin')
     expect(mounted.container.textContent).toContain('tool.skill')
     expect(mounted.container.textContent).toContain('tool.mcp')
     expect(mounted.container.textContent).not.toContain('tool / mcp')
 
-    mounted.destroy()
+    await mounted.destroy()
   })
 
-  it('creates a user from the access control users page', async () => {
+  it('creates a user from the access control users page dialog', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/access-control/users')
 
-    await waitForSelector(mounted.container, '[data-testid="access-control-user-form-username"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-user-create-button"]')
 
-    updateInput(await findInput(mounted.container, '[data-testid="access-control-user-form-username"]'), 'new-user')
-    updateInput(await findInput(mounted.container, '[data-testid="access-control-user-form-display-name"]'), 'New User')
-    updateInput(await findInput(mounted.container, '[data-testid="access-control-user-form-password"]'), 'password123')
-    updateInput(await findInput(mounted.container, '[data-testid="access-control-user-form-confirm-password"]'), 'password123')
+    const createButton = mounted.container.querySelector('[data-testid="access-control-user-create-button"]')
+    if (!(createButton instanceof HTMLButtonElement)) {
+      throw new Error('Expected user create button')
+    }
+    createButton.click()
 
-    const saveButton = mounted.container.querySelector('[data-testid="access-control-user-form-save"]')
+    await waitForSelector(document.body, '[data-testid="access-control-user-form-username"]')
+
+    updateInput(await findInput(document.body as unknown as HTMLElement, '[data-testid="access-control-user-form-username"]'), 'new-user')
+    updateInput(await findInput(document.body as unknown as HTMLElement, '[data-testid="access-control-user-form-display-name"]'), 'New User')
+    updateInput(await findInput(document.body as unknown as HTMLElement, '[data-testid="access-control-user-form-password"]'), 'password123')
+    updateInput(await findInput(document.body as unknown as HTMLElement, '[data-testid="access-control-user-form-confirm-password"]'), 'password123')
+
+    const saveButton = document.body.querySelector('[data-testid="access-control-user-form-save"]')
     if (!(saveButton instanceof HTMLButtonElement)) {
       throw new Error('Expected user save button')
     }
@@ -204,7 +228,7 @@ describe('workspace access centers', () => {
     await waitForText(mounted.container, '已保存用户 New User（new-user）')
     expect(mounted.container.textContent).toContain('new-user')
 
-    mounted.destroy()
+    await mounted.destroy()
   })
 
   it('creates a menu policy from the access control menus page', async () => {
@@ -229,8 +253,9 @@ describe('workspace access centers', () => {
     saveButton.click()
 
     await waitForText(mounted.container, '已配置策略')
+    expect(mounted.container.querySelector('[data-testid="access-control-menus-toolbar"]')).not.toBeNull()
 
-    mounted.destroy()
+    await mounted.destroy()
   })
 
   it('renders personal center profile and pet pages on their own route surface', async () => {
@@ -248,7 +273,7 @@ describe('workspace access centers', () => {
     expect(mounted.container.querySelector('[data-testid="profile-access-menus"]')?.textContent).toContain('用户管理')
     expect(mounted.container.querySelector('[data-testid="profile-access-menus"]')?.textContent).not.toContain('基本资料')
 
-    mounted.destroy()
+    await mounted.destroy()
   })
 
   it('persists personal pet settings through the personal center route', async () => {
@@ -284,7 +309,7 @@ describe('workspace access centers', () => {
     expect(mounted.container.textContent).toContain('章鱼助手')
     expect(mounted.container.textContent).toContain('欢迎回来，我已经准备好了。')
 
-    mounted.destroy()
+    await mounted.destroy()
   })
 
   it('renders the workspace console as a tabbed shell with the first business surface active', async () => {
@@ -303,6 +328,6 @@ describe('workspace access centers', () => {
     expect(mounted.container.textContent).toContain('工具')
     expect(mounted.container.querySelector('[data-testid="workspace-console-nav"]')).toBeNull()
 
-    mounted.destroy()
+    await mounted.destroy()
   })
 })

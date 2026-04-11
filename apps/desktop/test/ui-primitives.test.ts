@@ -31,6 +31,7 @@ import {
   UiInspectorPanel,
   UiListRow,
   UiListDetailShell,
+  UiListDetailWorkspace,
   UiNotificationCenter,
   UiNotificationRow,
   UiStatusCallout,
@@ -238,6 +239,28 @@ describe('Shared UI primitives', () => {
     await wrapper.get('[data-testid="ui-tabs-trigger-team"]').trigger('click')
 
     expect(wrapper.vm.value).toBe('team')
+  })
+
+  it('renders UiListDetailWorkspace with toolbar, list, and detail states', () => {
+    const wrapper = mount(UiListDetailWorkspace, {
+      props: {
+        detailTitle: '用户详情',
+        detailSubtitle: '查看并编辑当前用户',
+        emptyDetailTitle: '请选择用户',
+        emptyDetailDescription: '从左侧列表中选择一个用户后即可查看详情。',
+      },
+      slots: {
+        toolbar: '<div data-testid="workspace-toolbar-slot">Toolbar</div>',
+        list: '<div data-testid="workspace-list-slot">List</div>',
+      },
+    })
+
+    expect(wrapper.find('[data-testid="ui-list-detail-workspace"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="ui-list-detail-workspace-toolbar"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="workspace-toolbar-slot"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="workspace-list-slot"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('请选择用户')
+    expect(wrapper.text()).toContain('从左侧列表中选择一个用户后即可查看详情。')
   })
 
   it('renders UiAccordion and updates controlled values', async () => {
