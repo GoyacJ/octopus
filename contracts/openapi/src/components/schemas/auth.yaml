@@ -1,11 +1,104 @@
-LoginRequest:
+CaptchaPolicy:
+  additionalProperties: false
+  properties:
+    required:
+      type: boolean
+    ttlSeconds:
+      type: integer
+  required:
+    - required
+    - ttlSeconds
+  type: object
+EnterprisePrincipal:
+  additionalProperties: false
+  properties:
+    userId:
+      type: string
+    username:
+      type: string
+    displayName:
+      type: string
+    status:
+      type: string
+  required:
+    - userId
+    - username
+    - displayName
+    - status
+  type: object
+EnterpriseSessionSummary:
+  additionalProperties: false
+  properties:
+    sessionId:
+      type: string
+    token:
+      type: string
+    workspaceId:
+      type: string
+    clientAppId:
+      type: string
+    status:
+      type: string
+    createdAt:
+      type: integer
+    expiresAt:
+      type: integer
+    principal:
+      $ref: "#/components/schemas/EnterprisePrincipal"
+  required:
+    - sessionId
+    - token
+    - workspaceId
+    - clientAppId
+    - status
+    - createdAt
+    - principal
+  type: object
+SystemAuthStatus:
+  additionalProperties: false
+  properties:
+    workspace:
+      $ref: "#/components/schemas/WorkspaceSummary"
+    bootstrapAdminRequired:
+      type: boolean
+    ownerReady:
+      type: boolean
+    captcha:
+      $ref: "#/components/schemas/CaptchaPolicy"
+    session:
+      $ref: "#/components/schemas/EnterpriseSessionSummary"
+  required:
+    - workspace
+    - bootstrapAdminRequired
+    - ownerReady
+    - captcha
+  type: object
+CaptchaChallenge:
+  additionalProperties: false
+  properties:
+    challengeId:
+      type: string
+    svgData:
+      type: string
+    expiresAt:
+      type: integer
+  required:
+    - challengeId
+    - svgData
+    - expiresAt
+  type: object
+EnterpriseLoginRequest:
   additionalProperties: false
   properties:
     clientAppId:
       type: string
+    username:
+      type: string
     password:
       type: string
-    username:
+    captchaChallengeId:
+      type: string
+    captchaCode:
       type: string
     workspaceId:
       type: string
@@ -13,32 +106,27 @@ LoginRequest:
     - clientAppId
     - username
     - password
+    - captchaChallengeId
+    - captchaCode
   type: object
-LoginResponse:
+RegisterBootstrapAdminRequest:
   additionalProperties: false
   properties:
-    session:
-      $ref: "#/components/schemas/SessionRecord"
-    workspace:
-      $ref: "#/components/schemas/WorkspaceSummary"
-  required:
-    - session
-    - workspace
-  type: object
-RegisterWorkspaceOwnerRequest:
-  additionalProperties: false
-  properties:
-    avatar:
-      $ref: "#/components/schemas/AvatarUploadPayload"
     clientAppId:
       type: string
-    confirmPassword:
+    username:
       type: string
     displayName:
       type: string
     password:
       type: string
-    username:
+    confirmPassword:
+      type: string
+    avatar:
+      $ref: "#/components/schemas/AvatarUploadPayload"
+    captchaChallengeId:
+      type: string
+    captchaCode:
       type: string
     workspaceId:
       type: string
@@ -49,12 +137,14 @@ RegisterWorkspaceOwnerRequest:
     - password
     - confirmPassword
     - avatar
+    - captchaChallengeId
+    - captchaCode
   type: object
-RegisterWorkspaceOwnerResponse:
+EnterpriseAuthSuccess:
   additionalProperties: false
   properties:
     session:
-      $ref: "#/components/schemas/SessionRecord"
+      $ref: "#/components/schemas/EnterpriseSessionSummary"
     workspace:
       $ref: "#/components/schemas/WorkspaceSummary"
   required:
@@ -72,14 +162,6 @@ SessionRecord:
       type: integer
     id:
       type: string
-    roleIds:
-      items:
-        type: string
-      type: array
-    scopeProjectIds:
-      items:
-        type: string
-      type: array
     status:
       $ref: "#/components/schemas/SessionStatus"
     token:
@@ -96,8 +178,6 @@ SessionRecord:
     - token
     - status
     - createdAt
-    - roleIds
-    - scopeProjectIds
   type: object
 SystemBootstrapStatus:
   additionalProperties: false

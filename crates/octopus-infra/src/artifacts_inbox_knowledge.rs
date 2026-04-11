@@ -278,17 +278,11 @@ mod tests {
             .expect("insert owner user");
         connection
             .execute(
-                "INSERT INTO memberships (workspace_id, user_id, role_ids, scope_mode, scope_project_ids)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                rusqlite::params![
-                    "ws-local",
-                    "user-owner",
-                    "[\"owner\"]",
-                    "all-projects",
-                    "[]",
-                ],
+                "INSERT INTO role_bindings (id, role_id, subject_type, subject_id, effect)
+                 VALUES (?1, ?2, 'user', ?3, 'allow')",
+                rusqlite::params!["binding-user-owner", "owner", "user-owner",],
             )
-            .expect("insert owner membership");
+            .expect("insert owner role binding");
         std::fs::write(
             &paths.workspace_config,
             r#"id = "ws-local"

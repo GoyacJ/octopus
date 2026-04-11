@@ -1,0 +1,686 @@
+AccessUserRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    username:
+      type: string
+    displayName:
+      type: string
+    status:
+      type: string
+    passwordState:
+      type: string
+  required:
+    - id
+    - username
+    - displayName
+    - status
+    - passwordState
+  type: object
+AccessUserUpsertRequest:
+  additionalProperties: false
+  properties:
+    username:
+      type: string
+    displayName:
+      type: string
+    status:
+      type: string
+    password:
+      type: string
+    confirmPassword:
+      type: string
+    resetPassword:
+      type: boolean
+  required:
+    - username
+    - displayName
+    - status
+  type: object
+OrgUnitRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    parentId:
+      type: string
+    code:
+      type: string
+    name:
+      type: string
+    status:
+      type: string
+  required:
+    - id
+    - code
+    - name
+    - status
+  type: object
+OrgUnitUpsertRequest:
+  additionalProperties: false
+  properties:
+    parentId:
+      type: string
+    code:
+      type: string
+    name:
+      type: string
+    status:
+      type: string
+  required:
+    - code
+    - name
+    - status
+  type: object
+PositionRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    code:
+      type: string
+    name:
+      type: string
+    status:
+      type: string
+  required:
+    - id
+    - code
+    - name
+    - status
+  type: object
+PositionUpsertRequest:
+  additionalProperties: false
+  properties:
+    code:
+      type: string
+    name:
+      type: string
+    status:
+      type: string
+  required:
+    - code
+    - name
+    - status
+  type: object
+UserGroupRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    code:
+      type: string
+    name:
+      type: string
+    status:
+      type: string
+  required:
+    - id
+    - code
+    - name
+    - status
+  type: object
+UserGroupUpsertRequest:
+  additionalProperties: false
+  properties:
+    code:
+      type: string
+    name:
+      type: string
+    status:
+      type: string
+  required:
+    - code
+    - name
+    - status
+  type: object
+UserOrgAssignmentRecord:
+  additionalProperties: false
+  properties:
+    userId:
+      type: string
+    orgUnitId:
+      type: string
+    isPrimary:
+      type: boolean
+    positionIds:
+      items:
+        type: string
+      type: array
+    userGroupIds:
+      items:
+        type: string
+      type: array
+  required:
+    - userId
+    - orgUnitId
+    - isPrimary
+    - positionIds
+    - userGroupIds
+  type: object
+UserOrgAssignmentUpsertRequest:
+  additionalProperties: false
+  properties:
+    userId:
+      type: string
+    orgUnitId:
+      type: string
+    isPrimary:
+      type: boolean
+    positionIds:
+      items:
+        type: string
+      type: array
+    userGroupIds:
+      items:
+        type: string
+      type: array
+  required:
+    - userId
+    - orgUnitId
+    - isPrimary
+    - positionIds
+    - userGroupIds
+  type: object
+PermissionDefinition:
+  additionalProperties: false
+  properties:
+    code:
+      type: string
+    name:
+      type: string
+    description:
+      type: string
+    category:
+      type: string
+    resourceType:
+      type: string
+    actions:
+      items:
+        type: string
+      type: array
+  required:
+    - code
+    - name
+    - description
+    - category
+    - resourceType
+    - actions
+  type: object
+AccessRoleRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    code:
+      type: string
+    name:
+      type: string
+    description:
+      type: string
+    status:
+      type: string
+    permissionCodes:
+      items:
+        type: string
+      type: array
+  required:
+    - id
+    - code
+    - name
+    - description
+    - status
+    - permissionCodes
+  type: object
+RoleUpsertRequest:
+  additionalProperties: false
+  properties:
+    code:
+      type: string
+    name:
+      type: string
+    description:
+      type: string
+    status:
+      type: string
+    permissionCodes:
+      items:
+        type: string
+      type: array
+  required:
+    - code
+    - name
+    - description
+    - status
+    - permissionCodes
+  type: object
+RoleBindingRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    roleId:
+      type: string
+    subjectType:
+      type: string
+    subjectId:
+      type: string
+    effect:
+      type: string
+  required:
+    - id
+    - roleId
+    - subjectType
+    - subjectId
+    - effect
+  type: object
+RoleBindingUpsertRequest:
+  additionalProperties: false
+  properties:
+    roleId:
+      type: string
+    subjectType:
+      type: string
+    subjectId:
+      type: string
+    effect:
+      type: string
+  required:
+    - roleId
+    - subjectType
+    - subjectId
+    - effect
+  type: object
+DataPolicyRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    name:
+      type: string
+    subjectType:
+      type: string
+    subjectId:
+      type: string
+    resourceType:
+      type: string
+    scopeType:
+      type: string
+    projectIds:
+      items:
+        type: string
+      type: array
+    tags:
+      items:
+        type: string
+      type: array
+    classifications:
+      items:
+        type: string
+      type: array
+    effect:
+      type: string
+  required:
+    - id
+    - name
+    - subjectType
+    - subjectId
+    - resourceType
+    - scopeType
+    - projectIds
+    - tags
+    - classifications
+    - effect
+  type: object
+DataPolicyUpsertRequest:
+  additionalProperties: false
+  properties:
+    name:
+      type: string
+    subjectType:
+      type: string
+    subjectId:
+      type: string
+    resourceType:
+      type: string
+    scopeType:
+      type: string
+    projectIds:
+      items:
+        type: string
+      type: array
+    tags:
+      items:
+        type: string
+      type: array
+    classifications:
+      items:
+        type: string
+      type: array
+    effect:
+      type: string
+  required:
+    - name
+    - subjectType
+    - subjectId
+    - resourceType
+    - scopeType
+    - projectIds
+    - tags
+    - classifications
+    - effect
+  type: object
+ResourcePolicyRecord:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    subjectType:
+      type: string
+    subjectId:
+      type: string
+    resourceType:
+      type: string
+    resourceId:
+      type: string
+    action:
+      type: string
+    effect:
+      type: string
+  required:
+    - id
+    - subjectType
+    - subjectId
+    - resourceType
+    - resourceId
+    - action
+    - effect
+  type: object
+ResourcePolicyUpsertRequest:
+  additionalProperties: false
+  properties:
+    subjectType:
+      type: string
+    subjectId:
+      type: string
+    resourceType:
+      type: string
+    resourceId:
+      type: string
+    action:
+      type: string
+    effect:
+      type: string
+  required:
+    - subjectType
+    - subjectId
+    - resourceType
+    - resourceId
+    - action
+    - effect
+  type: object
+MenuDefinition:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    parentId:
+      type: string
+    label:
+      type: string
+    routeName:
+      type: string
+    source:
+      type: string
+    status:
+      type: string
+    order:
+      type: integer
+    featureCode:
+      type: string
+  required:
+    - id
+    - label
+    - source
+    - status
+    - order
+    - featureCode
+  type: object
+MenuPolicyRecord:
+  additionalProperties: false
+  properties:
+    menuId:
+      type: string
+    enabled:
+      type: boolean
+    order:
+      type: integer
+    group:
+      type: string
+    visibility:
+      type: string
+  required:
+    - menuId
+    - enabled
+    - order
+    - visibility
+  type: object
+MenuPolicyUpsertRequest:
+  additionalProperties: false
+  properties:
+    enabled:
+      type: boolean
+    order:
+      type: integer
+    group:
+      type: string
+    visibility:
+      type: string
+  required:
+    - enabled
+    - order
+    - visibility
+  type: object
+CreateMenuPolicyRequest:
+  allOf:
+    - $ref: "#/components/schemas/MenuPolicyUpsertRequest"
+    - additionalProperties: false
+      properties:
+        menuId:
+          type: string
+      required:
+        - menuId
+      type: object
+FeatureDefinition:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    code:
+      type: string
+    label:
+      type: string
+    requiredPermissionCodes:
+      items:
+        type: string
+      type: array
+  required:
+    - id
+    - code
+    - label
+    - requiredPermissionCodes
+  type: object
+MenuGateResult:
+  additionalProperties: false
+  properties:
+    menuId:
+      type: string
+    featureCode:
+      type: string
+    allowed:
+      type: boolean
+    reason:
+      type: string
+  required:
+    - menuId
+    - featureCode
+    - allowed
+  type: object
+ResourceActionGrant:
+  additionalProperties: false
+  properties:
+    resourceType:
+      type: string
+    actions:
+      items:
+        type: string
+      type: array
+  required:
+    - resourceType
+    - actions
+  type: object
+AuthorizationSnapshot:
+  additionalProperties: false
+  properties:
+    principal:
+      $ref: "#/components/schemas/AccessUserRecord"
+    effectiveRoleIds:
+      items:
+        type: string
+      type: array
+    effectiveRoles:
+      items:
+        $ref: "#/components/schemas/AccessRoleRecord"
+      type: array
+    effectivePermissionCodes:
+      items:
+        type: string
+      type: array
+    orgAssignments:
+      items:
+        $ref: "#/components/schemas/UserOrgAssignmentRecord"
+      type: array
+    featureCodes:
+      items:
+        type: string
+      type: array
+    visibleMenuIds:
+      items:
+        type: string
+      type: array
+    menuGates:
+      items:
+        $ref: "#/components/schemas/MenuGateResult"
+      type: array
+    resourceActionGrants:
+      items:
+        $ref: "#/components/schemas/ResourceActionGrant"
+      type: array
+  required:
+    - principal
+    - effectiveRoleIds
+    - effectiveRoles
+    - effectivePermissionCodes
+    - orgAssignments
+    - featureCodes
+    - visibleMenuIds
+    - menuGates
+    - resourceActionGrants
+  type: object
+AccessSessionRecord:
+  additionalProperties: false
+  properties:
+    sessionId:
+      type: string
+    userId:
+      type: string
+    username:
+      type: string
+    displayName:
+      type: string
+    clientAppId:
+      type: string
+    status:
+      type: string
+    createdAt:
+      type: integer
+      format: int64
+    expiresAt:
+      type: integer
+      format: int64
+    current:
+      type: boolean
+  required:
+    - sessionId
+    - userId
+    - username
+    - displayName
+    - clientAppId
+    - status
+    - createdAt
+    - current
+  type: object
+ProtectedResourceDescriptor:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    resourceType:
+      type: string
+    resourceSubtype:
+      type: string
+    name:
+      type: string
+    projectId:
+      type: string
+    ownerSubjectType:
+      type: string
+    ownerSubjectId:
+      type: string
+    tags:
+      items:
+        type: string
+      type: array
+    classification:
+      type: string
+  required:
+    - id
+    - resourceType
+    - name
+    - tags
+    - classification
+  type: object
+ProtectedResourceMetadataUpsertRequest:
+  additionalProperties: false
+  properties:
+    resourceSubtype:
+      type: string
+    projectId:
+      type: string
+    tags:
+      items:
+        type: string
+      type: array
+    classification:
+      type: string
+    ownerSubjectType:
+      type: string
+    ownerSubjectId:
+      type: string
+  required:
+    - tags
+    - classification
+  type: object
+AccessAuditListResponse:
+  additionalProperties: false
+  properties:
+    items:
+      items:
+        $ref: "#/components/schemas/AuditRecord"
+      type: array
+    nextCursor:
+      type: string
+  required:
+    - items
+  type: object

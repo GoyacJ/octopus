@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { createApp, nextTick } from 'vue'
+import { vi } from 'vitest'
 
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
@@ -52,6 +53,8 @@ async function flushUi() {
 
 describe('App auth gate', () => {
   beforeEach(async () => {
+    vi.unstubAllEnvs()
+    vi.stubEnv('VITE_HOST_RUNTIME', 'tauri')
     window.localStorage.clear()
     document.body.innerHTML = ''
     await router.push('/workspaces/ws-local/overview?project=proj-redesign')
@@ -87,6 +90,52 @@ describe('App auth gate', () => {
 
     expect(document.body.textContent).toContain(String(i18n.global.t('authGate.login.title')))
     expect(document.body.textContent).toContain(String(i18n.global.t('authGate.fields.password')))
+
+    mounted.destroy()
+  })
+
+  it('redirects browser host to the dedicated login route when no session exists', async () => {
+    vi.stubEnv('VITE_HOST_RUNTIME', 'browser')
+    vi.stubEnv('VITE_HOST_API_BASE_URL', 'http://127.0.0.1:43127')
+    vi.stubEnv('VITE_HOST_AUTH_TOKEN', 'browser-host-token')
+
+    installWorkspaceApiFixture({
+      localOwnerReady: true,
+      localSetupRequired: false,
+      preloadWorkspaceSessions: false,
+    })
+
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    expect(router.currentRoute.value.name).toBe('auth-login')
+    expect(document.body.textContent).toContain(String(i18n.global.t('authGate.login.title')))
+
+    mounted.destroy()
+  })
+
+  it('redirects an authenticated browser host away from the login route', async () => {
+    vi.stubEnv('VITE_HOST_RUNTIME', 'browser')
+    vi.stubEnv('VITE_HOST_API_BASE_URL', 'http://127.0.0.1:43127')
+    vi.stubEnv('VITE_HOST_AUTH_TOKEN', 'browser-host-token')
+
+    installWorkspaceApiFixture({
+      localOwnerReady: true,
+      localSetupRequired: false,
+      preloadWorkspaceSessions: true,
+      localSessionValid: true,
+    })
+
+    await router.push('/login')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await flushUi()
+    await flushUi()
+
+    expect(router.currentRoute.value.name).toBe('workspace-overview')
+    expect(document.body.textContent).not.toContain(String(i18n.global.t('authGate.login.title')))
 
     mounted.destroy()
   })

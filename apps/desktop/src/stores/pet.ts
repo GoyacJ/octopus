@@ -11,7 +11,7 @@ import { useCatalogStore } from '@/stores/catalog'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 import { useTeamStore } from '@/stores/team'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useUserProfileStore } from '@/stores/user-profile'
 import { useWorkspaceStore } from '@/stores/workspace'
 import {
   activeWorkspaceConnectionId,
@@ -81,7 +81,7 @@ export const usePetStore = defineStore('pet', () => {
   const catalog = useCatalogStore()
   const agentStore = useAgentStore()
   const teamStore = useTeamStore()
-  const workspaceAccessStore = useWorkspaceAccessStore()
+  const userProfileStore = useUserProfileStore()
 
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
   const activeProjectId = computed(() => workspaceStore.currentProjectId)
@@ -93,7 +93,7 @@ export const usePetStore = defineStore('pet', () => {
   })
   const snapshot = computed(() => snapshots.value[activeScopeKey.value] ?? defaultSnapshot())
   const petConfig = computed(() => {
-    const effectiveConfig = workspaceAccessStore.runtimeConfig?.effectiveConfig
+    const effectiveConfig = userProfileStore.runtimeConfig?.effectiveConfig
     const value = isObjectRecord(effectiveConfig) ? effectiveConfig.pet : undefined
     return isObjectRecord(value) ? value : null
   })
@@ -382,7 +382,7 @@ export const usePetStore = defineStore('pet', () => {
       await Promise.all([
         loadSnapshot(activeProjectId.value, activeConnectionId.value),
         workspaceStore.loadProjectRuntimeConfig(activeProjectId.value),
-        workspaceAccessStore.loadCurrentUserRuntimeConfig(false, activeConnectionId.value),
+        userProfileStore.loadCurrentUserRuntimeConfig(false, activeConnectionId.value),
         catalog.load(),
         agentStore.load(),
         teamStore.load(),

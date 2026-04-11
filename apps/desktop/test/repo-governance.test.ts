@@ -278,7 +278,15 @@ describe('repository governance', () => {
     expect(openApiSpec).toContain('/api/v1/workspace/agents:')
     expect(openApiSpec).toContain('/api/v1/workspace/automations:')
     expect(openApiSpec).toContain('/api/v1/workspace/teams:')
-    expect(openApiSpec).toContain('/api/v1/workspace/rbac/users:')
+    expect(openApiSpec).not.toContain('/api/v1/auth/login:')
+    expect(openApiSpec).not.toContain('/api/v1/auth/logout:')
+    expect(openApiSpec).not.toContain('/api/v1/auth/register-owner:')
+    expect(openApiSpec).not.toContain('/api/v1/auth/session:')
+    expect(openApiSpec).not.toContain('/api/v1/workspace/rbac/users:')
+    expect(openApiSpec).not.toContain('/api/v1/workspace/rbac/roles:')
+    expect(openApiSpec).not.toContain('/api/v1/workspace/rbac/permissions:')
+    expect(openApiSpec).not.toContain('/api/v1/workspace/rbac/menus:')
+    expect(openApiSpec).not.toContain('/api/v1/workspace/permission-center/overview:')
     expect(openApiSpec).toContain('/api/v1/workspace/catalog/models:')
     expect(openApiSpec).toContain('/api/v1/workspace/catalog/tools:')
     expect(openApiSpec).toContain('/api/v1/workspace/catalog/skills/{skillId}/files/{relativePath}:')
@@ -300,7 +308,6 @@ describe('repository governance', () => {
     expect(openApiSpec).toContain('/api/v1/runtime/sessions/{sessionId}/events:')
     expect(openApiSpec).toContain('/api/v1/projects/{projectId}/runtime-config:')
     expect(openApiSpec).toContain('/api/v1/projects/{projectId}/runtime-config/validate:')
-    expect(openApiSpec).toContain('/api/v1/workspace/permission-center/overview:')
     expect(openApiSpec).toContain('/api/v1/workspace/personal-center/profile/runtime-config:')
     expect(openApiSpec).toContain('/api/v1/workspace/personal-center/profile/runtime-config/validate:')
 
@@ -326,9 +333,21 @@ describe('repository governance', () => {
     expect(generatedSchema).toContain('"/api/v1/runtime/sessions/{sessionId}/events": {')
     expect(generatedSchema).toContain('"/api/v1/projects/{projectId}/runtime-config": {')
     expect(generatedSchema).toContain('"/api/v1/projects/{projectId}/runtime-config/validate": {')
-    expect(generatedSchema).toContain('"/api/v1/workspace/permission-center/overview": {')
+    expect(generatedSchema).not.toContain('"/api/v1/auth/login": {')
+    expect(generatedSchema).not.toContain('"/api/v1/auth/logout": {')
+    expect(generatedSchema).not.toContain('"/api/v1/auth/register-owner": {')
+    expect(generatedSchema).not.toContain('"/api/v1/auth/session": {')
+    expect(generatedSchema).not.toContain('"/api/v1/workspace/rbac/users": {')
+    expect(generatedSchema).not.toContain('"/api/v1/workspace/rbac/roles": {')
+    expect(generatedSchema).not.toContain('"/api/v1/workspace/rbac/permissions": {')
+    expect(generatedSchema).not.toContain('"/api/v1/workspace/rbac/menus": {')
+    expect(generatedSchema).not.toContain('"/api/v1/workspace/permission-center/overview": {')
     expect(generatedSchema).toContain('"/api/v1/workspace/personal-center/profile/runtime-config": {')
     expect(generatedSchema).toContain('"/api/v1/workspace/personal-center/profile/runtime-config/validate": {')
+    expect(generatedSchema).not.toContain('PermissionCenterOverviewSnapshot')
+    expect(generatedSchema).not.toContain('PermissionCenterAlertRecord')
+    expect(generatedSchema).not.toContain('PermissionRecord')
+    expect(generatedSchema).not.toContain('MenuRecord')
   })
 
   it('finishes OpenAPI convergence for remaining apps, audit, inbox, and knowledge routes', () => {
@@ -342,16 +361,45 @@ describe('repository governance', () => {
     ) as { paths?: string[] }
 
     expect(openApiSpec).toContain('/api/v1/apps:')
-    expect(openApiSpec).toContain('/api/v1/audit:')
+    expect(openApiSpec).toContain('/api/v1/access/audit:')
+    expect(openApiSpec).not.toContain('/api/v1/audit:')
     expect(openApiSpec).toContain('/api/v1/inbox:')
     expect(openApiSpec).toContain('/api/v1/knowledge:')
 
     expect(generatedSchema).toContain('"/api/v1/apps": {')
-    expect(generatedSchema).toContain('"/api/v1/audit": {')
+    expect(generatedSchema).toContain('"/api/v1/access/audit": {')
+    expect(generatedSchema).not.toContain('"/api/v1/audit": {')
     expect(generatedSchema).toContain('"/api/v1/inbox": {')
     expect(generatedSchema).toContain('"/api/v1/knowledge": {')
 
     expect(routeAllowlist.paths ?? []).toEqual([])
     expect(adapterAllowlist.paths ?? []).toEqual([])
+  })
+
+  it('ships the enterprise access-control hard cut without migration tooling or migrate-before-startup guidance', () => {
+    const infraIndex = readRepoFile('crates', 'octopus-infra', 'src', 'lib.rs')
+    const infraState = readRepoFile('crates', 'octopus-infra', 'src', 'infra_state.rs')
+    const migrationModulePath = path.join(
+      repoRoot,
+      'crates',
+      'octopus-infra',
+      'src',
+      'legacy_access_control_migration.rs',
+    )
+    const migrationBinaryPath = path.join(
+      repoRoot,
+      'crates',
+      'octopus-infra',
+      'src',
+      'bin',
+      'access_control_hard_cut_migrate.rs',
+    )
+
+    expect(existsSync(migrationModulePath)).toBe(false)
+    expect(existsSync(migrationBinaryPath)).toBe(false)
+    expect(infraIndex).not.toContain('migrate_legacy_access_control')
+    expect(infraIndex).not.toContain('LegacyAccessControlMigrationReport')
+    expect(infraState).not.toContain('legacy access control tables with data detected')
+    expect(infraState).not.toContain('run the offline access-control migrate command')
   })
 })

@@ -141,8 +141,6 @@ describe('useShellStore', () => {
         status: 'active',
         createdAt: 1,
         expiresAt: undefined,
-        roleIds: ['owner'],
-        scopeProjectIds: [],
       },
     })
     store.setWorkspaceSession({
@@ -158,8 +156,6 @@ describe('useShellStore', () => {
         status: 'active',
         createdAt: 2,
         expiresAt: undefined,
-        roleIds: ['owner'],
-        scopeProjectIds: [],
       },
     })
 
@@ -247,8 +243,6 @@ describe('useShellStore', () => {
           status: 'active',
           createdAt: 2,
           expiresAt: undefined,
-          roleIds: ['owner'],
-          scopeProjectIds: [],
         },
       },
     }

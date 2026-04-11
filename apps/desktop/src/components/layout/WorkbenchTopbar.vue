@@ -11,7 +11,8 @@ import { resolveWorkspaceLabel } from '@/composables/workspace-label'
 import { getAncestorMenuIds, getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
 import { useNotificationStore } from '@/stores/notifications'
 import { useShellStore } from '@/stores/shell'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useUserProfileStore } from '@/stores/user-profile'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
@@ -19,8 +20,9 @@ const route = useRoute()
 const router = useRouter()
 const notifications = useNotificationStore()
 const shell = useShellStore()
+const userProfileStore = useUserProfileStore()
+const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 const workspaceStore = useWorkspaceStore()
-const workspaceAccessStore = useWorkspaceAccessStore()
 
 const themeMenuOpen = ref(false)
 const localeMenuOpen = ref(false)
@@ -77,8 +79,8 @@ const breadcrumbItems = computed(() => {
   return items
 })
 
-const currentUser = computed(() => workspaceAccessStore.currentUser)
-const currentRoleLabel = computed(() => workspaceAccessStore.currentRoleNames[0] ?? t('topbar.profileRole'))
+const currentUser = computed(() => userProfileStore.currentUser)
+const currentRoleLabel = computed(() => workspaceAccessControlStore.currentRoleNames[0] ?? t('topbar.profileRole'))
 const isSettingsRoute = computed(() => String(route.name ?? '') === 'app-settings')
 
 const themeIcons = {

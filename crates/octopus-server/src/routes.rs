@@ -56,10 +56,139 @@ pub fn build_router(state: ServerState) -> Router {
         )
         .route("/api/v1/system/health", get(healthcheck))
         .route("/api/v1/system/bootstrap", get(system_bootstrap))
-        .route("/api/v1/auth/login", post(login))
-        .route("/api/v1/auth/register-owner", post(register_owner))
-        .route("/api/v1/auth/logout", post(logout))
-        .route("/api/v1/auth/session", get(current_session))
+        .route("/api/v1/system/auth/status", get(system_auth_status))
+        .route(
+            "/api/v1/system/auth/captcha",
+            post(create_system_auth_captcha),
+        )
+        .route("/api/v1/system/auth/login", post(system_auth_login))
+        .route(
+            "/api/v1/system/auth/bootstrap-admin",
+            post(system_auth_bootstrap_admin),
+        )
+        .route("/api/v1/system/auth/session", get(system_auth_session))
+        .route(
+            "/api/v1/access/authorization/current",
+            get(current_authorization),
+        )
+        .route("/api/v1/access/sessions", get(list_access_sessions))
+        .route("/api/v1/access/audit", get(list_access_audit))
+        .route(
+            "/api/v1/access/sessions/current/revoke",
+            post(revoke_current_access_session),
+        )
+        .route(
+            "/api/v1/access/sessions/:session_id/revoke",
+            post(revoke_access_session),
+        )
+        .route(
+            "/api/v1/access/users/:user_id/sessions/revoke",
+            post(revoke_access_user_sessions),
+        )
+        .route(
+            "/api/v1/access/users",
+            get(list_access_users).post(create_access_user),
+        )
+        .route(
+            "/api/v1/access/users/:user_id",
+            put(update_access_user).delete(delete_access_user),
+        )
+        .route(
+            "/api/v1/access/org/units",
+            get(list_access_org_units).post(create_access_org_unit),
+        )
+        .route(
+            "/api/v1/access/org/units/:org_unit_id",
+            put(update_access_org_unit).delete(delete_access_org_unit),
+        )
+        .route(
+            "/api/v1/access/org/positions",
+            get(list_access_positions).post(create_access_position),
+        )
+        .route(
+            "/api/v1/access/org/positions/:position_id",
+            put(update_access_position).delete(delete_access_position),
+        )
+        .route(
+            "/api/v1/access/org/groups",
+            get(list_access_user_groups).post(create_access_user_group),
+        )
+        .route(
+            "/api/v1/access/org/groups/:group_id",
+            put(update_access_user_group).delete(delete_access_user_group),
+        )
+        .route(
+            "/api/v1/access/org/assignments",
+            get(list_access_user_org_assignments).post(upsert_access_user_org_assignment),
+        )
+        .route(
+            "/api/v1/access/org/assignments/:user_id/:org_unit_id",
+            delete(delete_access_user_org_assignment),
+        )
+        .route(
+            "/api/v1/access/roles",
+            get(list_access_roles).post(create_access_role),
+        )
+        .route(
+            "/api/v1/access/roles/:role_id",
+            put(update_access_role).delete(delete_access_role),
+        )
+        .route(
+            "/api/v1/access/policies/permission-definitions",
+            get(list_access_permission_definitions),
+        )
+        .route(
+            "/api/v1/access/policies/role-bindings",
+            get(list_access_role_bindings).post(create_access_role_binding),
+        )
+        .route(
+            "/api/v1/access/policies/role-bindings/:binding_id",
+            put(update_access_role_binding).delete(delete_access_role_binding),
+        )
+        .route(
+            "/api/v1/access/policies/data-policies",
+            get(list_access_data_policies).post(create_access_data_policy),
+        )
+        .route(
+            "/api/v1/access/policies/data-policies/:policy_id",
+            put(update_access_data_policy).delete(delete_access_data_policy),
+        )
+        .route(
+            "/api/v1/access/policies/resource-policies",
+            get(list_access_resource_policies).post(create_access_resource_policy),
+        )
+        .route(
+            "/api/v1/access/policies/resource-policies/:policy_id",
+            put(update_access_resource_policy).delete(delete_access_resource_policy),
+        )
+        .route(
+            "/api/v1/access/menus/definitions",
+            get(list_access_menu_definitions),
+        )
+        .route(
+            "/api/v1/access/menus/features",
+            get(list_access_feature_definitions),
+        )
+        .route(
+            "/api/v1/access/menus/gates",
+            get(list_access_menu_gate_results),
+        )
+        .route(
+            "/api/v1/access/menus/policies",
+            get(list_access_menu_policies).post(create_access_menu_policy),
+        )
+        .route(
+            "/api/v1/access/menus/policies/:menu_id",
+            put(update_access_menu_policy).delete(delete_access_menu_policy),
+        )
+        .route(
+            "/api/v1/access/protected-resources",
+            get(list_access_protected_resources),
+        )
+        .route(
+            "/api/v1/access/protected-resources/:resource_type/:resource_id",
+            put(upsert_access_protected_resource),
+        )
         .route("/api/v1/apps", get(list_apps).post(register_app))
         .route("/api/v1/workspace", get(workspace))
         .route("/api/v1/workspace/overview", get(workspace_overview))
@@ -191,10 +320,6 @@ pub fn build_router(state: ServerState) -> Router {
             patch(update_automation).delete(delete_automation),
         )
         .route(
-            "/api/v1/workspace/permission-center/overview",
-            get(permission_center_overview),
-        )
-        .route(
             "/api/v1/workspace/personal-center/profile/runtime-config",
             get(get_user_runtime_config_route).patch(save_user_runtime_config_route),
         )
@@ -210,35 +335,6 @@ pub fn build_router(state: ServerState) -> Router {
             "/api/v1/workspace/personal-center/profile/password",
             post(change_current_user_password_route),
         )
-        .route(
-            "/api/v1/workspace/rbac/users",
-            get(list_users).post(create_user),
-        )
-        .route(
-            "/api/v1/workspace/rbac/users/:user_id",
-            patch(update_user).delete(delete_user),
-        )
-        .route(
-            "/api/v1/workspace/rbac/roles",
-            get(list_roles).post(create_role),
-        )
-        .route(
-            "/api/v1/workspace/rbac/roles/:role_id",
-            patch(update_role).delete(delete_role),
-        )
-        .route(
-            "/api/v1/workspace/rbac/permissions",
-            get(list_permissions).post(create_permission),
-        )
-        .route(
-            "/api/v1/workspace/rbac/permissions/:permission_id",
-            patch(update_permission).delete(delete_permission),
-        )
-        .route(
-            "/api/v1/workspace/rbac/menus",
-            get(list_menus).post(create_menu),
-        )
-        .route("/api/v1/workspace/rbac/menus/:menu_id", patch(update_menu))
         .route("/api/v1/projects", get(projects).post(create_project))
         .route("/api/v1/projects/:project_id", patch(update_project))
         .route(
@@ -320,7 +416,6 @@ pub fn build_router(state: ServerState) -> Router {
         .route("/api/v1/inbox", get(inbox))
         .route("/api/v1/artifacts", get(artifacts))
         .route("/api/v1/knowledge", get(knowledge))
-        .route("/api/v1/audit", get(audit))
         .nest("/api/v1/runtime", runtime_routes())
         .layer(cors_layer)
         .with_state(state)

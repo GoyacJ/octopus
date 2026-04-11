@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watch } from 'vue'
-import { RouterView, useRouter } from 'vue-router'
+import { RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
 import type { NotificationRecord } from '@octopus/schema'
@@ -16,16 +16,25 @@ import { useAppUpdateStore } from '@/stores/app-update'
 import { usePetStore } from '@/stores/pet'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
-import { WORKSPACE_AUTH_FAILURE_EVENT, type WorkspaceAuthFailureDetail } from '@/tauri/shared'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
+import {
+  WORKSPACE_AUTH_FAILURE_EVENT,
+  WORKSPACE_AUTHORIZATION_FAILURE_EVENT,
+  type WorkspaceAuthFailureDetail,
+  type WorkspaceAuthorizationFailureDetail,
+} from '@/tauri/shared'
 
 const auth = useAuthStore()
 const notifications = useNotificationStore()
 const appUpdate = useAppUpdateStore()
 const router = useRouter()
+const route = useRoute()
 const shell = useShellStore()
 const runtime = useRuntimeStore()
 const pet = usePetStore()
+const workspaceAccessControl = useWorkspaceAccessControlStore()
 const { t } = useI18n()
+const isBrowserHostRuntime = import.meta.env.VITE_HOST_RUNTIME === 'browser'
 
 useWorkbenchRouteSync()
 
@@ -68,10 +77,18 @@ const showHostUnavailable = computed(() => {
 const hostUnavailableDescription = computed(() =>
   shell.error || t('app.hostUnavailable.description'),
 )
+const isAuthRoute = computed(() => route.name === 'auth-login')
+const shouldShowWorkbenchLayout = computed(() => !isAuthRoute.value)
+const shouldShowAuthDialog = computed(() => !isBrowserHostRuntime && shouldShowWorkbenchLayout.value)
 
 const handleWorkspaceAuthFailure = (event: Event) => {
   const detail = (event as CustomEvent<WorkspaceAuthFailureDetail>).detail
   auth.handleAuthError(detail.workspaceConnectionId, 'session-expired')
+}
+
+const handleWorkspaceAuthorizationFailure = (event: Event) => {
+  const detail = (event as CustomEvent<WorkspaceAuthorizationFailureDetail>).detail
+  void workspaceAccessControl.reloadAll(detail.workspaceConnectionId).catch(() => {})
 }
 
 async function handleNotificationSelect(notification: NotificationRecord) {
@@ -83,11 +100,19 @@ async function handleNotificationSelect(notification: NotificationRecord) {
 
 onMounted(async () => {
   window.addEventListener(WORKSPACE_AUTH_FAILURE_EVENT, handleWorkspaceAuthFailure as EventListener)
+  window.addEventListener(
+    WORKSPACE_AUTHORIZATION_FAILURE_EVENT,
+    handleWorkspaceAuthorizationFailure as EventListener,
+  )
   await bootstrapShell()
 })
 
 onUnmounted(() => {
   window.removeEventListener(WORKSPACE_AUTH_FAILURE_EVENT, handleWorkspaceAuthFailure as EventListener)
+  window.removeEventListener(
+    WORKSPACE_AUTHORIZATION_FAILURE_EVENT,
+    handleWorkspaceAuthorizationFailure as EventListener,
+  )
 })
 
 watch(
@@ -128,6 +153,45 @@ watch(
     }
     runtime.syncWorkspaceScopeFromShell()
   },
+)
+
+watch(
+  () => [isBrowserHostRuntime, shell.loading, auth.isReady, auth.isAuthenticated, route.name, route.fullPath] as const,
+  async ([browserRuntime, shellLoading, authReady, authenticated, routeName, fullPath]) => {
+    if (!browserRuntime || shellLoading || !authReady) {
+      return
+    }
+
+    if (!authenticated && routeName !== 'auth-login') {
+      await router.replace({
+        name: 'auth-login',
+        query: {
+          redirect: fullPath,
+        },
+      })
+      return
+    }
+
+    if (authenticated && routeName === 'auth-login') {
+      const redirect = typeof route.query.redirect === 'string' && route.query.redirect !== '/login'
+        ? route.query.redirect
+        : null
+      if (redirect) {
+        await router.replace(redirect)
+        return
+      }
+
+      const workspaceId = shell.activeWorkspaceConnection?.workspaceId
+        || shell.preferences.defaultWorkspaceId
+        || 'ws-local'
+      await router.replace({
+        name: 'workspace-overview',
+        params: { workspaceId },
+        query: shell.defaultProjectId ? { project: shell.defaultProjectId } : undefined,
+      })
+    }
+  },
+  { immediate: true },
 )
 
 </script>
@@ -172,14 +236,15 @@ watch(
       </div>
     </div>
   </div>
-  <WorkbenchLayout v-else>
+  <WorkbenchLayout v-else-if="shouldShowWorkbenchLayout">
     <RouterView />
-    <AuthGateDialog />
-    <UiToastViewport
-      :notifications="notifications.activeToasts"
-      :scope-labels="notificationScopeLabels"
-      @close="notifications.dismissToast"
-      @select="handleNotificationSelect"
-    />
   </WorkbenchLayout>
+  <RouterView v-else />
+  <AuthGateDialog v-if="shouldShowAuthDialog" />
+  <UiToastViewport
+    :notifications="notifications.activeToasts"
+    :scope-labels="notificationScopeLabels"
+    @close="notifications.dismissToast"
+    @select="handleNotificationSelect"
+  />
 </template>

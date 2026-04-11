@@ -1,0 +1,1070 @@
+/api/v1/access/users:
+  get:
+    operationId: listAccessUsers
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/AccessUserRecord"
+              type: array
+        description: Enterprise access-control user projection.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createAccessUser
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AccessUserUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessUserRecord"
+        description: Created access user projection.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/users/{userId}:
+  put:
+    operationId: updateAccessUser
+    parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/AccessUserUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessUserRecord"
+        description: Updated access user projection.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteAccessUser
+    parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Access user deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/authorization/current:
+  get:
+    operationId: getCurrentAuthorization
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthorizationSnapshot"
+        description: Current authorization snapshot for the authenticated principal.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/sessions:
+  get:
+    operationId: listAccessSessions
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/AccessSessionRecord"
+              type: array
+        description: Enterprise access-control sessions.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/audit:
+  get:
+    operationId: listAccessAudit
+    parameters:
+      - in: query
+        name: actorId
+        schema:
+          type: string
+      - in: query
+        name: action
+        schema:
+          type: string
+      - in: query
+        name: resourceType
+        schema:
+          type: string
+      - in: query
+        name: outcome
+        schema:
+          type: string
+      - in: query
+        name: from
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: to
+        schema:
+          type: integer
+          format: int64
+      - in: query
+        name: cursor
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessAuditListResponse"
+        description: Filtered access audit events.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/sessions/current/revoke:
+  post:
+    operationId: revokeCurrentAccessSession
+    responses:
+      "204":
+        description: Current session revoked.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/sessions/{sessionId}/revoke:
+  post:
+    operationId: revokeAccessSession
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Session revoked.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/users/{userId}/sessions/revoke:
+  post:
+    operationId: revokeAccessUserSessions
+    parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: User sessions revoked.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/org/units:
+  get:
+    operationId: listAccessOrgUnits
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/OrgUnitRecord"
+              type: array
+        description: Organization unit records.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createAccessOrgUnit
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OrgUnitUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrgUnitRecord"
+        description: Created org unit record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/org/units/{orgUnitId}:
+  put:
+    operationId: updateAccessOrgUnit
+    parameters:
+      - in: path
+        name: orgUnitId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OrgUnitUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrgUnitRecord"
+        description: Updated org unit record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteAccessOrgUnit
+    parameters:
+      - in: path
+        name: orgUnitId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Org unit deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/org/positions:
+  get:
+    operationId: listAccessPositions
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/PositionRecord"
+              type: array
+        description: Position records.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createAccessPosition
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PositionUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PositionRecord"
+        description: Created position record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/org/positions/{positionId}:
+  put:
+    operationId: updateAccessPosition
+    parameters:
+      - in: path
+        name: positionId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PositionUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PositionRecord"
+        description: Updated position record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteAccessPosition
+    parameters:
+      - in: path
+        name: positionId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Position deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/org/groups:
+  get:
+    operationId: listAccessUserGroups
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/UserGroupRecord"
+              type: array
+        description: User group records.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createAccessUserGroup
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UserGroupUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserGroupRecord"
+        description: Created user group record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/org/groups/{groupId}:
+  put:
+    operationId: updateAccessUserGroup
+    parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UserGroupUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserGroupRecord"
+        description: Updated user group record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteAccessUserGroup
+    parameters:
+      - in: path
+        name: groupId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: User group deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/org/assignments:
+  get:
+    operationId: listAccessUserOrgAssignments
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/UserOrgAssignmentRecord"
+              type: array
+        description: User organization assignments.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: upsertAccessUserOrgAssignment
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/UserOrgAssignmentUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserOrgAssignmentRecord"
+        description: Upserted user org assignment.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/org/assignments/{userId}/{orgUnitId}:
+  delete:
+    operationId: deleteAccessUserOrgAssignment
+    parameters:
+      - in: path
+        name: userId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: orgUnitId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: User org assignment deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/roles:
+  get:
+    operationId: listAccessRoles
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/AccessRoleRecord"
+              type: array
+        description: Enterprise role records.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createAccessRole
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RoleUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessRoleRecord"
+        description: Created enterprise role record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/roles/{roleId}:
+  put:
+    operationId: updateAccessRole
+    parameters:
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RoleUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessRoleRecord"
+        description: Updated enterprise role record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteAccessRole
+    parameters:
+      - in: path
+        name: roleId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Role deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/policies/permission-definitions:
+  get:
+    operationId: listAccessPermissionDefinitions
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/PermissionDefinition"
+              type: array
+        description: Enterprise permission catalog.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/policies/role-bindings:
+  get:
+    operationId: listAccessRoleBindings
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/RoleBindingRecord"
+              type: array
+        description: Enterprise role binding records.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createAccessRoleBinding
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RoleBindingUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleBindingRecord"
+        description: Created role binding record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/policies/role-bindings/{bindingId}:
+  put:
+    operationId: updateAccessRoleBinding
+    parameters:
+      - in: path
+        name: bindingId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RoleBindingUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleBindingRecord"
+        description: Updated role binding record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteAccessRoleBinding
+    parameters:
+      - in: path
+        name: bindingId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Role binding deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/policies/data-policies:
+  get:
+    operationId: listAccessDataPolicies
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/DataPolicyRecord"
+              type: array
+        description: Enterprise data policy records.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createAccessDataPolicy
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DataPolicyUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataPolicyRecord"
+        description: Created data policy record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/policies/data-policies/{policyId}:
+  put:
+    operationId: updateAccessDataPolicy
+    parameters:
+      - in: path
+        name: policyId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/DataPolicyUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataPolicyRecord"
+        description: Updated data policy record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteAccessDataPolicy
+    parameters:
+      - in: path
+        name: policyId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Data policy deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/policies/resource-policies:
+  get:
+    operationId: listAccessResourcePolicies
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/ResourcePolicyRecord"
+              type: array
+        description: Enterprise resource policy records.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createAccessResourcePolicy
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ResourcePolicyUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResourcePolicyRecord"
+        description: Created resource policy record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/policies/resource-policies/{policyId}:
+  put:
+    operationId: updateAccessResourcePolicy
+    parameters:
+      - in: path
+        name: policyId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ResourcePolicyUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResourcePolicyRecord"
+        description: Updated resource policy record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteAccessResourcePolicy
+    parameters:
+      - in: path
+        name: policyId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Resource policy deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/menus/definitions:
+  get:
+    operationId: listAccessMenuDefinitions
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/MenuDefinition"
+              type: array
+        description: Menu definitions projected for access control.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/menus/features:
+  get:
+    operationId: listAccessFeatureDefinitions
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/FeatureDefinition"
+              type: array
+        description: Feature definitions used for menu gating.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/menus/policies:
+  get:
+    operationId: listAccessMenuPolicies
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/MenuPolicyRecord"
+              type: array
+        description: Effective menu policy records.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createAccessMenuPolicy
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateMenuPolicyRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MenuPolicyRecord"
+        description: Created menu policy record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/menus/policies/{menuId}:
+  put:
+    operationId: updateAccessMenuPolicy
+    parameters:
+      - in: path
+        name: menuId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/MenuPolicyUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MenuPolicyRecord"
+        description: Updated menu policy record.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  delete:
+    operationId: deleteAccessMenuPolicy
+    parameters:
+      - in: path
+        name: menuId
+        required: true
+        schema:
+          type: string
+    responses:
+      "204":
+        description: Menu policy deleted.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/menus/gates:
+  get:
+    operationId: listAccessMenuGateResults
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/MenuGateResult"
+              type: array
+        description: Effective menu gate evaluation results.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/protected-resources:
+  get:
+    operationId: listAccessProtectedResources
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/ProtectedResourceDescriptor"
+              type: array
+        description: Protected resource descriptors across agent/resource/knowledge/tool.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/access/protected-resources/{resourceType}/{resourceId}:
+  put:
+    operationId: upsertAccessProtectedResource
+    parameters:
+      - in: path
+        name: resourceType
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: resourceId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProtectedResourceMetadataUpsertRequest"
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProtectedResourceDescriptor"
+        description: Upserted protected resource descriptor.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.

@@ -5,14 +5,14 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 
 import { UiPageHeader, UiPageShell, UiPanelFrame, UiTabs } from '@octopus/ui'
 
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useUserProfileStore } from '@/stores/user-profile'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const userProfileStore = useUserProfileStore()
 const workspaceStore = useWorkspaceStore()
-const workspaceAccessStore = useWorkspaceAccessStore()
 
 const activeTab = ref('')
 
@@ -48,7 +48,7 @@ function handleTabChange(routeName: string) {
     <UiPageHeader
       :eyebrow="t('personalCenter.header.eyebrow')"
       :title="t('personalCenter.header.title')"
-      :description="workspaceAccessStore.currentUser?.displayName ?? t('common.na')"
+      :description="userProfileStore.currentUser?.displayName ?? t('common.na')"
     />
 
     <UiPanelFrame variant="subtle" padding="sm">

@@ -1,15 +1,21 @@
 import type {
   AvatarUploadPayload as OpenApiAvatarUploadPayload,
-  LoginRequest as OpenApiLoginRequest,
-  LoginResponse as OpenApiLoginResponse,
-  RegisterWorkspaceOwnerRequest as OpenApiRegisterWorkspaceOwnerRequest,
-  RegisterWorkspaceOwnerResponse as OpenApiRegisterWorkspaceOwnerResponse,
+  CaptchaChallenge as OpenApiCaptchaChallenge,
+  EnterpriseAuthSuccess as OpenApiEnterpriseAuthSuccess,
+  EnterpriseLoginRequest as OpenApiEnterpriseLoginRequest,
+  EnterprisePrincipal as OpenApiEnterprisePrincipal,
+  EnterpriseSessionSummary as OpenApiEnterpriseSessionSummary,
+  RegisterBootstrapAdminRequest as OpenApiRegisterBootstrapAdminRequest,
   SessionRecord as OpenApiSessionRecord,
+  SystemAuthStatus as OpenApiSystemAuthStatus,
 } from './generated'
 
-export type LoginRequest = OpenApiLoginRequest
 export type AvatarUploadPayload = OpenApiAvatarUploadPayload
-export type RegisterWorkspaceOwnerRequest = OpenApiRegisterWorkspaceOwnerRequest
+export type CaptchaChallenge = OpenApiCaptchaChallenge
+export type EnterpriseAuthSuccess = OpenApiEnterpriseAuthSuccess
+export type EnterpriseLoginRequest = OpenApiEnterpriseLoginRequest
+export type EnterprisePrincipal = OpenApiEnterprisePrincipal
+export type EnterpriseSessionSummary = OpenApiEnterpriseSessionSummary
+export type RegisterBootstrapAdminRequest = OpenApiRegisterBootstrapAdminRequest
 export type SessionRecord = OpenApiSessionRecord
-export type LoginResponse = OpenApiLoginResponse
-export type RegisterWorkspaceOwnerResponse = OpenApiRegisterWorkspaceOwnerResponse
+export type SystemAuthStatus = OpenApiSystemAuthStatus

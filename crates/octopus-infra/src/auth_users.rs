@@ -1,4 +1,6 @@
 use super::*;
+use std::collections::BTreeSet;
+use octopus_core::{AuthorizationRequest, DataPolicyRecord};
 
 pub(super) fn to_user_summary(paths: &WorkspacePaths, user: &StoredUser) -> UserRecordSummary {
     UserRecordSummary {
@@ -8,8 +10,6 @@ pub(super) fn to_user_summary(paths: &WorkspacePaths, user: &StoredUser) -> User
         avatar: avatar_data_url(paths, user),
         status: user.record.status.clone(),
         password_state: user.record.password_state.clone(),
-        role_ids: user.membership.role_ids.clone(),
-        scope_project_ids: user.membership.scope_project_ids.clone(),
     }
 }
 
@@ -399,63 +399,6 @@ impl InfraWorkspaceService {
             updated_at: Self::now(),
         })
     }
-
-    pub(super) fn validate_workspace_user_identity(
-        &self,
-        username: &str,
-        display_name: &str,
-        exclude_user_id: Option<&str>,
-    ) -> Result<(), AppError> {
-        if username.trim().is_empty() || display_name.trim().is_empty() {
-            return Err(AppError::invalid_input(
-                "username and display name are required",
-            ));
-        }
-
-        let users = self
-            .state
-            .users
-            .lock()
-            .map_err(|_| AppError::runtime("users mutex poisoned"))?;
-        let username_exists = users.iter().any(|user| {
-            if let Some(excluded_id) = exclude_user_id {
-                if user.record.id == excluded_id {
-                    return false;
-                }
-            }
-            user.record.username == username.trim()
-        });
-        if username_exists {
-            return Err(AppError::conflict("username already exists"));
-        }
-        Ok(())
-    }
-
-    pub(super) fn resolve_member_password(
-        &self,
-        password: Option<&str>,
-        confirm_password: Option<&str>,
-        use_default_password: bool,
-    ) -> Result<(String, String), AppError> {
-        if use_default_password || password.is_none() {
-            return Ok((hash_password("changeme"), "reset-required".into()));
-        }
-
-        let password = password.unwrap_or_default();
-        let confirm_password = confirm_password.unwrap_or_default();
-        if password.len() < 8 {
-            return Err(AppError::invalid_input(
-                "password must be at least 8 characters",
-            ));
-        }
-        if password != confirm_password {
-            return Err(AppError::invalid_input(
-                "password confirmation does not match",
-            ));
-        }
-
-        Ok((hash_password(password), "set".into()))
-    }
 }
 
 impl InfraAuthService {
@@ -487,18 +430,7 @@ impl InfraAuthService {
     }
 
     pub(super) fn owner_exists(&self) -> Result<bool, AppError> {
-        Ok(self
-            .state
-            .users
-            .lock()
-            .map_err(|_| AppError::runtime("users mutex poisoned"))?
-            .iter()
-            .any(|user| {
-                user.membership
-                    .role_ids
-                    .iter()
-                    .any(|role_id| role_id == "owner")
-            }))
+        Ok(self.state.workspace_snapshot()?.owner_user_id.is_some())
     }
 
     pub(super) fn persist_session(
@@ -507,6 +439,7 @@ impl InfraAuthService {
         client_app_id: String,
     ) -> Result<SessionRecord, AppError> {
         let workspace = self.workspace_snapshot()?;
+        let connection = self.state.open_db()?;
         let session = SessionRecord {
             id: format!("sess-{}", Uuid::new_v4()),
             workspace_id: workspace.id,
@@ -516,15 +449,12 @@ impl InfraAuthService {
             status: "active".into(),
             created_at: Self::now(),
             expires_at: None,
-            role_ids: user.membership.role_ids.clone(),
-            scope_project_ids: user.membership.scope_project_ids.clone(),
         };
 
-        self.state
-            .open_db()?
+        connection
             .execute(
-                "INSERT INTO sessions (id, workspace_id, user_id, client_app_id, token, status, created_at, expires_at, role_ids, scope_project_ids)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                "INSERT INTO sessions (id, workspace_id, user_id, client_app_id, token, status, created_at, expires_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     session.id,
                     session.workspace_id,
@@ -534,8 +464,6 @@ impl InfraAuthService {
                     session.status,
                     session.created_at as i64,
                     session.expires_at.map(|value| value as i64),
-                    serde_json::to_string(&session.role_ids)?,
-                    serde_json::to_string(&session.scope_project_ids)?,
                 ],
             )
             .map_err(|error| AppError::database(error.to_string()))?;
@@ -616,10 +544,10 @@ impl AuthService for InfraAuthService {
         })
     }
 
-    async fn register_owner(
+    async fn register_bootstrap_admin(
         &self,
-        request: RegisterWorkspaceOwnerRequest,
-    ) -> Result<RegisterWorkspaceOwnerResponse, AppError> {
+        request: RegisterBootstrapAdminRequest,
+    ) -> Result<RegisterBootstrapAdminResponse, AppError> {
         self.ensure_active_client_app(&request.client_app_id)?;
 
         if request.username.trim().is_empty() || request.display_name.trim().is_empty() {
@@ -677,14 +605,6 @@ impl AuthService for InfraAuthService {
             created_at: now,
             updated_at: now,
         };
-        let membership = WorkspaceMembershipRecord {
-            workspace_id: workspace.id.clone(),
-            user_id: user_id.clone(),
-            role_ids: vec!["owner".into()],
-            scope_mode: "all-projects".into(),
-            scope_project_ids: Vec::new(),
-        };
-
         let db = self.state.open_db()?;
         db.execute(
             "INSERT INTO users (id, username, display_name, avatar_path, avatar_content_type, avatar_byte_size, avatar_content_hash, status, password_hash, password_state, created_at, updated_at)
@@ -706,15 +626,27 @@ impl AuthService for InfraAuthService {
         )
         .map_err(|error| AppError::database(error.to_string()))?;
         db.execute(
-            "INSERT INTO memberships (workspace_id, user_id, role_ids, scope_mode, scope_project_ids)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![
-                membership.workspace_id,
-                membership.user_id,
-                serde_json::to_string(&membership.role_ids)?,
-                membership.scope_mode,
-                serde_json::to_string(&membership.scope_project_ids)?,
-            ],
+            "INSERT OR IGNORE INTO org_units (id, parent_id, code, name, status)
+             VALUES ('org-root', NULL, ?1, ?2, 'active')",
+            params![workspace.slug, workspace.name,],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+        db.execute(
+            "INSERT OR IGNORE INTO access_roles (id, code, name, description, status, permission_codes)
+             VALUES ('owner', 'owner', 'Owner', 'Full enterprise workspace access.', 'active', ?1)",
+            params![serde_json::to_string(&default_owner_permission_codes())?],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+        db.execute(
+            "INSERT OR REPLACE INTO user_org_assignments (user_id, org_unit_id, is_primary, position_ids, user_group_ids)
+             VALUES (?1, 'org-root', 1, '[]', '[]')",
+            params![user_id],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+        db.execute(
+            "INSERT OR REPLACE INTO role_bindings (id, role_id, subject_type, subject_id, effect)
+             VALUES (?1, 'owner', 'user', ?2, 'allow')",
+            params![format!("binding-user-{user_id}-owner"), user_id],
         )
         .map_err(|error| AppError::database(error.to_string()))?;
 
@@ -732,7 +664,6 @@ impl AuthService for InfraAuthService {
         let stored_user = StoredUser {
             record: user_record,
             password_hash: hash_password(&request.password),
-            membership,
         };
         self.state
             .users
@@ -742,33 +673,10 @@ impl AuthService for InfraAuthService {
 
         let session = self.persist_session(&stored_user, request.client_app_id)?;
 
-        Ok(RegisterWorkspaceOwnerResponse {
+        Ok(RegisterBootstrapAdminResponse {
             session,
             workspace: self.workspace_snapshot()?,
         })
-    }
-
-    async fn logout(&self, token: &str) -> Result<(), AppError> {
-        self.state
-            .open_db()?
-            .execute(
-                "UPDATE sessions SET status = 'revoked' WHERE token = ?1",
-                params![token],
-            )
-            .map_err(|error| AppError::database(error.to_string()))?;
-
-        if let Some(session) = self
-            .state
-            .sessions
-            .lock()
-            .map_err(|_| AppError::runtime("sessions mutex poisoned"))?
-            .iter_mut()
-            .find(|session| session.token == token)
-        {
-            session.status = "revoked".into();
-        }
-
-        Ok(())
     }
 
     async fn session(&self, token: &str) -> Result<SessionRecord, AppError> {
@@ -786,6 +694,62 @@ impl AuthService for InfraAuthService {
             .iter()
             .find(|session| session.token == token && session.status == "active")
             .cloned())
+    }
+
+    async fn list_sessions(&self) -> Result<Vec<SessionRecord>, AppError> {
+        Ok(self
+            .state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("sessions mutex poisoned"))?
+            .clone())
+    }
+
+    async fn revoke_session(&self, session_id: &str) -> Result<(), AppError> {
+        self.state
+            .open_db()?
+            .execute(
+                "UPDATE sessions SET status = 'revoked' WHERE id = ?1",
+                params![session_id],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+
+        if let Some(session) = self
+            .state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("sessions mutex poisoned"))?
+            .iter_mut()
+            .find(|session| session.id == session_id)
+        {
+            session.status = "revoked".into();
+        }
+
+        Ok(())
+    }
+
+    async fn revoke_user_sessions(&self, user_id: &str) -> Result<(), AppError> {
+        self.state
+            .open_db()?
+            .execute(
+                "UPDATE sessions SET status = 'revoked' WHERE user_id = ?1",
+                params![user_id],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+
+        for session in self
+            .state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("sessions mutex poisoned"))?
+            .iter_mut()
+        {
+            if session.user_id == user_id {
+                session.status = "revoked".into();
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -859,28 +823,433 @@ impl AppRegistryService for InfraAppRegistryService {
 }
 
 #[async_trait]
-impl RbacService for InfraRbacService {
-    async fn authorize(
+impl AuthorizationService for InfraAuthorizationService {
+    async fn authorize_request(
         &self,
         session: &SessionRecord,
-        _capability: &str,
-        project_id: Option<&str>,
+        request: &AuthorizationRequest,
     ) -> Result<AuthorizationDecision, AppError> {
-        if session.role_ids.iter().any(|role| role == "owner") {
+        fn requested_action(capability: &str) -> &str {
+            capability.rsplit('.').next().unwrap_or(capability)
+        }
+
+        fn resource_type_matches(policy_type: &str, request_type: Option<&str>) -> bool {
+            let Some(request_type) = request_type else {
+                return policy_type == "project";
+            };
+            policy_type == request_type || (policy_type == "tool" && request_type.starts_with("tool."))
+        }
+
+        fn resource_policy_action_matches(
+            policy_action: &str,
+            requested_action: &str,
+            capability: &str,
+        ) -> bool {
+            policy_action == "*" || policy_action == requested_action || policy_action == capability
+        }
+
+        let connection = self._state.open_db()?;
+        let org_units = load_org_units(&connection)?;
+        let _assignments =
+            assignments_for_user(&load_user_org_assignments(&connection)?, &session.user_id);
+        let (permission_codes, bindings) =
+            resolve_effective_permission_codes(&connection, &session.user_id)?;
+        let data_policies = resolve_subject_data_policies(&connection, &session.user_id)?;
+        let resource_policies = resolve_subject_resource_policies(&connection, &session.user_id)?;
+
+        if !permission_codes
+            .iter()
+            .any(|code| code == &request.capability)
+        {
             return Ok(AuthorizationDecision {
-                allowed: project_id
-                    .map(|project| {
-                        session.scope_project_ids.is_empty()
-                            || session.scope_project_ids.iter().any(|item| item == project)
-                    })
-                    .unwrap_or(true),
-                reason: None,
+                allowed: false,
+                reason: Some("no matching role permission".into()),
+                matched_role_binding_ids: bindings.into_iter().map(|binding| binding.id).collect(),
+                matched_policy_ids: data_policies
+                    .into_iter()
+                    .map(|policy| policy.id)
+                    .chain(resource_policies.into_iter().map(|policy| policy.id))
+                    .collect(),
             });
         }
 
+        let matched_role_binding_ids = bindings
+            .iter()
+            .map(|binding| binding.id.clone())
+            .collect::<Vec<_>>();
+        let requested_action = requested_action(&request.capability);
+        let request_resource_type = request.resource_type.as_deref();
+        let request_project_id = request.project_id.as_deref();
+        let request_classification = request.classification.as_deref();
+        let request_owner_type = request.owner_subject_type.as_deref();
+        let request_owner_id = request.owner_subject_id.as_deref();
+
+        let owner_org_ancestor_ids = match (request_owner_type, request_owner_id) {
+            (Some("org-unit"), Some(owner_org_unit_id))
+            | (Some("org_unit"), Some(owner_org_unit_id)) => {
+                org_unit_ancestor_ids(&org_units, owner_org_unit_id)
+            }
+            _ => BTreeSet::new(),
+        };
+
+        let data_policy_matches_scope = |policy: &DataPolicyRecord| match policy.scope_type.as_str() {
+            "all" | "all-projects" => true,
+            "selected-projects" => request_project_id
+                .map(|project_id| policy.project_ids.iter().any(|candidate| candidate == project_id))
+                .unwrap_or(false),
+            "org-unit-self" => matches!(
+                (request_owner_type, request_owner_id),
+                (Some("org-unit"), Some(owner_id)) | (Some("org_unit"), Some(owner_id))
+                    if owner_id == policy.subject_id
+            ),
+            "org-unit-subtree" => {
+                matches!(request_owner_type, Some("org-unit") | Some("org_unit"))
+                    && owner_org_ancestor_ids.contains(&policy.subject_id)
+            }
+            "tag-match" => {
+                !policy.tags.is_empty()
+                    && policy
+                        .tags
+                        .iter()
+                        .all(|tag| request.tags.iter().any(|candidate| candidate == tag))
+            }
+            _ => false,
+        };
+
+        let data_policy_matches = |policy: &DataPolicyRecord| {
+            resource_type_matches(&policy.resource_type, request_resource_type)
+                && (policy.classifications.is_empty()
+                    || request_classification
+                        .map(|classification| {
+                            policy
+                                .classifications
+                                .iter()
+                                .any(|candidate| candidate == classification)
+                        })
+                        .unwrap_or(false))
+                && data_policy_matches_scope(policy)
+        };
+
+        let relevant_data_policies = data_policies
+            .iter()
+            .filter(|policy| resource_type_matches(&policy.resource_type, request_resource_type))
+            .collect::<Vec<_>>();
+        let matched_data_policies = relevant_data_policies
+            .iter()
+            .filter(|policy| data_policy_matches(policy))
+            .collect::<Vec<_>>();
+        let mut matched_policy_ids = matched_data_policies
+            .iter()
+            .map(|policy| policy.id.clone())
+            .collect::<Vec<_>>();
+
+        if matched_data_policies
+            .iter()
+            .any(|policy| policy.effect == "deny")
+        {
+            return Ok(AuthorizationDecision {
+                allowed: false,
+                reason: Some("data policy denied".into()),
+                matched_role_binding_ids,
+                matched_policy_ids,
+            });
+        }
+
+        let has_domain_constraints = !relevant_data_policies.is_empty();
+        let has_data_allow = matched_data_policies
+            .iter()
+            .any(|policy| policy.effect == "allow");
+        if has_domain_constraints && !has_data_allow {
+            return Ok(AuthorizationDecision {
+                allowed: false,
+                reason: Some("data policy allow missing".into()),
+                matched_role_binding_ids,
+                matched_policy_ids,
+            });
+        }
+
+        if let (Some(resource_type), Some(resource_id)) = (
+            request.resource_type.as_deref(),
+            request.resource_id.as_deref(),
+        ) {
+            let matching_resource_policies = resource_policies
+                .iter()
+                .filter(|policy| {
+                    policy.resource_type == resource_type
+                        && policy.resource_id == resource_id
+                        && resource_policy_action_matches(
+                            &policy.action,
+                            requested_action,
+                            &request.capability,
+                        )
+                })
+                .collect::<Vec<_>>();
+
+            matched_policy_ids.extend(
+                matching_resource_policies
+                    .iter()
+                    .map(|policy| policy.id.clone()),
+            );
+
+            if matching_resource_policies
+                .iter()
+                .any(|policy| policy.effect == "deny")
+            {
+                return Ok(AuthorizationDecision {
+                    allowed: false,
+                    reason: Some("resource access denied".into()),
+                    matched_role_binding_ids,
+                    matched_policy_ids,
+                });
+            }
+
+            if !matching_resource_policies.is_empty()
+                && !matching_resource_policies
+                    .iter()
+                    .any(|policy| policy.effect == "allow")
+            {
+                return Ok(AuthorizationDecision {
+                    allowed: false,
+                    reason: Some("resource allow missing".into()),
+                    matched_role_binding_ids,
+                    matched_policy_ids,
+                });
+            }
+        }
+
         Ok(AuthorizationDecision {
-            allowed: false,
-            reason: Some("no matching role permission".into()),
+            allowed: true,
+            reason: None,
+            matched_role_binding_ids,
+            matched_policy_ids,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::build_infra_bundle;
+    use octopus_core::{
+        AccessUserUpsertRequest, AuthorizationRequest, AvatarUploadPayload,
+        DataPolicyUpsertRequest, LoginRequest, RegisterBootstrapAdminRequest,
+        ResourcePolicyUpsertRequest, RoleBindingUpsertRequest, RoleUpsertRequest,
+    };
+    use octopus_platform::{AccessControlService, AuthService, AuthorizationService};
+
+    fn avatar_payload() -> AvatarUploadPayload {
+        AvatarUploadPayload {
+            content_type: "image/png".into(),
+            data_base64: "iVBORw0KGgo=".into(),
+            file_name: "avatar.png".into(),
+            byte_size: 8,
+        }
+    }
+
+    fn bootstrap_admin(bundle: &crate::InfraBundle) -> SessionRecord {
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        runtime
+            .block_on(bundle.auth.register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                client_app_id: "octopus-desktop".into(),
+                username: "owner".into(),
+                display_name: "Owner".into(),
+                password: "password123".into(),
+                confirm_password: "password123".into(),
+                avatar: avatar_payload(),
+                workspace_id: Some("ws-local".into()),
+            }))
+            .expect("bootstrap admin")
+            .session
+    }
+
+    fn create_user_session(
+        bundle: &crate::InfraBundle,
+        username: &str,
+        display_name: &str,
+    ) -> SessionRecord {
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        runtime
+            .block_on(async {
+                bundle
+                    .access_control
+                    .create_user(AccessUserUpsertRequest {
+                        username: username.into(),
+                        display_name: display_name.into(),
+                        status: "active".into(),
+                        password: Some("password123".into()),
+                        confirm_password: Some("password123".into()),
+                        reset_password: Some(false),
+                    })
+                    .await
+                    .expect("create user");
+
+                bundle
+                    .auth
+                    .login(LoginRequest {
+                        client_app_id: "octopus-desktop".into(),
+                        username: username.into(),
+                        password: "password123".into(),
+                        workspace_id: Some("ws-local".into()),
+                    })
+                    .await
+                    .expect("login user")
+                    .session
+            })
+    }
+
+    #[test]
+    fn authorization_denies_when_object_has_policies_but_subject_has_no_allow_match() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("bundle");
+        let _owner_session = bootstrap_admin(&bundle);
+        let analyst_session = create_user_session(&bundle, "analyst", "Analyst");
+        let reviewer_session = create_user_session(&bundle, "reviewer", "Reviewer");
+
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        runtime.block_on(async {
+            let role = bundle
+                .access_control
+                .create_role(RoleUpsertRequest {
+                    code: "tool-mcp-operator".into(),
+                    name: "Tool MCP Operator".into(),
+                    description: "Can invoke MCP tools.".into(),
+                    status: "active".into(),
+                    permission_codes: vec!["tool.mcp.invoke".into()],
+                })
+                .await
+                .expect("create role");
+
+            bundle
+                .access_control
+                .create_role_binding(RoleBindingUpsertRequest {
+                    role_id: role.id.clone(),
+                    subject_type: "user".into(),
+                    subject_id: analyst_session.user_id.clone(),
+                    effect: "allow".into(),
+                })
+                .await
+                .expect("bind analyst");
+
+            bundle
+                .access_control
+                .create_role_binding(RoleBindingUpsertRequest {
+                    role_id: role.id,
+                    subject_type: "user".into(),
+                    subject_id: reviewer_session.user_id.clone(),
+                    effect: "allow".into(),
+                })
+                .await
+                .expect("bind reviewer");
+
+            bundle
+                .access_control
+                .create_resource_policy(ResourcePolicyUpsertRequest {
+                    subject_type: "user".into(),
+                    subject_id: reviewer_session.user_id.clone(),
+                    resource_type: "tool.mcp".into(),
+                    resource_id: "mcp-prod".into(),
+                    action: "invoke".into(),
+                    effect: "allow".into(),
+                })
+                .await
+                .expect("resource policy");
+
+            let decision = bundle
+                .authorization
+                .authorize_request(
+                    &analyst_session,
+                    &AuthorizationRequest {
+                        subject_id: analyst_session.user_id.clone(),
+                        capability: "tool.mcp.invoke".into(),
+                        project_id: None,
+                        resource_type: Some("tool.mcp".into()),
+                        resource_id: Some("mcp-prod".into()),
+                        resource_subtype: None,
+                        tags: Vec::new(),
+                        classification: Some("internal".into()),
+                        owner_subject_type: None,
+                        owner_subject_id: None,
+                    },
+                )
+                .await
+                .expect("decision");
+
+            assert!(!decision.allowed, "object-scoped allow list should deny unmatched subject");
+        });
+    }
+
+    #[test]
+    fn authorization_denies_when_tag_scoped_policy_exists_but_request_misses_allow_match() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("bundle");
+        let _owner_session = bootstrap_admin(&bundle);
+        let analyst_session = create_user_session(&bundle, "tag-user", "Tag User");
+
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        runtime.block_on(async {
+            let role = bundle
+                .access_control
+                .create_role(RoleUpsertRequest {
+                    code: "resource-reader".into(),
+                    name: "Resource Reader".into(),
+                    description: "Can view protected resources.".into(),
+                    status: "active".into(),
+                    permission_codes: vec!["resource.view".into()],
+                })
+                .await
+                .expect("create role");
+
+            bundle
+                .access_control
+                .create_role_binding(RoleBindingUpsertRequest {
+                    role_id: role.id,
+                    subject_type: "user".into(),
+                    subject_id: analyst_session.user_id.clone(),
+                    effect: "allow".into(),
+                })
+                .await
+                .expect("bind role");
+
+            bundle
+                .access_control
+                .create_data_policy(DataPolicyUpsertRequest {
+                    name: "confidential resources".into(),
+                    subject_type: "user".into(),
+                    subject_id: analyst_session.user_id.clone(),
+                    resource_type: "resource".into(),
+                    scope_type: "tag-match".into(),
+                    project_ids: Vec::new(),
+                    tags: vec!["confidential".into()],
+                    classifications: Vec::new(),
+                    effect: "allow".into(),
+                })
+                .await
+                .expect("create data policy");
+
+            let decision = bundle
+                .authorization
+                .authorize_request(
+                    &analyst_session,
+                    &AuthorizationRequest {
+                        subject_id: analyst_session.user_id.clone(),
+                        capability: "resource.view".into(),
+                        project_id: Some("proj-alpha".into()),
+                        resource_type: Some("resource".into()),
+                        resource_id: Some("res-1".into()),
+                        resource_subtype: None,
+                        tags: vec!["public".into()],
+                        classification: Some("internal".into()),
+                        owner_subject_type: None,
+                        owner_subject_id: None,
+                    },
+                )
+                .await
+                .expect("decision");
+
+            assert!(
+                !decision.allowed,
+                "resource-scoped data policies should require an allow match when the domain is policy-controlled"
+            );
+        });
     }
 }

@@ -3,9 +3,6 @@ mod handlers;
 mod routes;
 mod workspace_runtime;
 
-#[cfg(test)]
-mod split_module_tests;
-
 use std::{
     collections::HashMap,
     env, fs,
@@ -30,29 +27,36 @@ use octopus_core::{
     default_host_update_status, host_workspace_connection_record_from_profile,
     normalize_connection_base_url, normalize_notification_filter_scope,
     normalize_runtime_permission_mode_label, notification_list_response_from_records,
-    timestamp_now, AgentRecord, ApiErrorDetail, ApiErrorEnvelope, AppError, AutomationRecord,
+    timestamp_now, AccessAuditListResponse, AccessAuditQuery, AccessRoleRecord,
+    AccessSessionRecord, AccessUserRecord, AccessUserUpsertRequest, AgentRecord, ApiErrorDetail,
+    ApiErrorEnvelope, AppError, AuditRecord, AuthorizationRequest, AuthorizationSnapshot,
+    AutomationRecord,
     ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse, ClientAppRecord,
     ConnectionProfile, ConversationRecord, CopyWorkspaceSkillToManagedInput,
-    CreateHostWorkspaceConnectionInput, CreateNotificationInput, CreateProjectRequest,
-    CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput, CreateWorkspaceSkillInput,
-    CreateWorkspaceUserRequest, DesktopBackendConnection, HealthcheckBackendStatus,
-    HealthcheckStatus, HostReleaseSummary, HostState, HostUpdateStatus,
-    HostWorkspaceConnectionRecord, ImportWorkspaceAgentBundleInput,
+    CreateHostWorkspaceConnectionInput, CreateMenuPolicyRequest, CreateNotificationInput,
+    CreateProjectRequest, CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput,
+    CreateWorkspaceSkillInput, DataPolicyRecord, DataPolicyUpsertRequest, DesktopBackendConnection,
+    FeatureDefinition, HealthcheckBackendStatus, HealthcheckStatus, HostReleaseSummary, HostState,
+    HostUpdateStatus, HostWorkspaceConnectionRecord, ImportWorkspaceAgentBundleInput,
     ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
     ImportWorkspaceAgentBundleResult, ImportWorkspaceSkillArchiveInput,
-    ImportWorkspaceSkillFolderInput, KnowledgeRecord, LoginRequest, MenuRecord,
-    ModelCatalogSnapshot, NotificationFilter, NotificationListResponse, NotificationRecord,
-    NotificationUnreadSummary, PermissionCenterAlertRecord, PermissionCenterOverviewSnapshot,
-    PermissionRecord, PetConversationBinding, PetPresenceState, PetWorkspaceSnapshot,
-    ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectDashboardSnapshot, ProjectRecord,
-    ProjectTeamLinkInput, ProjectTeamLinkRecord, ProviderCredentialRecord,
-    RegisterWorkspaceOwnerRequest, RegisterWorkspaceOwnerResponse, ResolveRuntimeApprovalInput,
-    RoleRecord, RuntimeConfigPatch, RuntimeConfigValidationResult,
+    ImportWorkspaceSkillFolderInput, KnowledgeRecord, LoginRequest, MenuDefinition, MenuGateResult,
+    MenuPolicyRecord, MenuPolicyUpsertRequest, ModelCatalogSnapshot, NotificationFilter,
+    NotificationListResponse, NotificationRecord, NotificationUnreadSummary, OrgUnitRecord,
+    OrgUnitUpsertRequest, PermissionDefinition, PetConversationBinding, PetPresenceState,
+    PetWorkspaceSnapshot, PositionRecord, PositionUpsertRequest, ProjectAgentLinkInput,
+    ProjectAgentLinkRecord, ProjectDashboardSnapshot, ProjectRecord, ProjectTeamLinkInput,
+    ProjectTeamLinkRecord, ProtectedResourceDescriptor, ProtectedResourceMetadataUpsertRequest,
+    ProviderCredentialRecord, RegisterBootstrapAdminRequest, ResolveRuntimeApprovalInput,
+    ResourceActionGrant, ResourcePolicyRecord, ResourcePolicyUpsertRequest, RoleBindingRecord,
+    RoleBindingUpsertRequest, RoleUpsertRequest, RuntimeConfigPatch,
+    RuntimeConfigValidationResult,
     RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
     SavePetPresenceInput, SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput,
     TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
     UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput,
-    UpdateWorkspaceUserRequest, UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput,
+    UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput, UserGroupRecord,
+    UserGroupUpsertRequest, UserOrgAssignmentRecord, UserOrgAssignmentUpsertRequest,
     UserRecordSummary, WorkspaceActivityRecord, WorkspaceMcpServerDocument, WorkspaceMetricRecord,
     WorkspaceOverviewSnapshot, WorkspaceResourceRecord, WorkspaceSkillDocument,
     WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceToolCatalogSnapshot,
@@ -71,12 +75,27 @@ pub struct ServerState {
     pub host_auth_token: String,
     pub transport_security: String,
     pub idempotency_cache: Arc<Mutex<HashMap<String, serde_json::Value>>>,
+    pub auth_captcha_challenges: Arc<Mutex<HashMap<String, AuthCaptchaChallenge>>>,
+    pub auth_rate_limits: Arc<Mutex<HashMap<String, AuthRateLimitState>>>,
     pub host_state: HostState,
     pub host_connections: Vec<ConnectionProfile>,
     pub host_preferences_path: PathBuf,
     pub host_workspace_connections_path: PathBuf,
     pub host_default_preferences: ShellPreferences,
     pub backend_connection: DesktopBackendConnection,
+}
+
+#[derive(Clone, Debug)]
+pub struct AuthCaptchaChallenge {
+    challenge_id: String,
+    code: String,
+    expires_at: u64,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct AuthRateLimitState {
+    failed_attempts: Vec<u64>,
+    locked_until: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -139,12 +158,25 @@ impl IntoResponse for ApiError {
             AppError::Auth(message) if message.contains("expired") => {
                 (StatusCode::UNAUTHORIZED, "SESSION_EXPIRED", false)
             }
+            AppError::Auth(message) if message.contains("authorization stale") => {
+                (StatusCode::FORBIDDEN, "AUTHORIZATION_STALE", false)
+            }
             AppError::Auth(message)
                 if message.contains("access denied")
                     || message.contains("no matching role permission")
-                    || message.contains("workspace scope mismatch") =>
+                    || message.contains("workspace scope mismatch")
+                    || message.contains("resource access denied")
+                    || message.contains("data policy denied")
+                    || message.contains("data policy allow missing")
+                    || message.contains("resource allow missing") =>
             {
-                (StatusCode::FORBIDDEN, "FORBIDDEN", false)
+                (StatusCode::FORBIDDEN, "PERMISSION_DENIED", false)
+            }
+            AppError::Auth(message)
+                if message.contains("too many failed attempts")
+                    || message.contains("authentication temporarily locked") =>
+            {
+                (StatusCode::TOO_MANY_REQUESTS, "RATE_LIMITED", false)
             }
             AppError::Auth(_) => (StatusCode::UNAUTHORIZED, "UNAUTHENTICATED", false),
             AppError::NotFound(_) => (StatusCode::NOT_FOUND, "NOT_FOUND", false),
@@ -396,11 +428,78 @@ async fn authorize_session(
     project_id: Option<&str>,
     request_id: &str,
 ) -> Result<(), ApiError> {
+    authorize_request(
+        state,
+        session,
+        &AuthorizationRequest {
+            subject_id: session.user_id.clone(),
+            capability: capability.into(),
+            project_id: project_id.map(str::to_string),
+            resource_type: None,
+            resource_id: None,
+            resource_subtype: None,
+            tags: Vec::new(),
+            classification: None,
+            owner_subject_type: None,
+            owner_subject_id: None,
+        },
+        request_id,
+    )
+    .await
+}
+
+async fn ensure_authorized_request(
+    state: &ServerState,
+    headers: &HeaderMap,
+    authorization_request: &AuthorizationRequest,
+) -> Result<SessionRecord, ApiError> {
+    let request_id = request_id(headers);
+    let session = authenticate_session_with_request_id(state, headers, &request_id).await?;
+    authorize_request(state, &session, authorization_request, &request_id).await?;
+    Ok(session)
+}
+
+async fn authorize_request(
+    state: &ServerState,
+    session: &SessionRecord,
+    authorization_request: &AuthorizationRequest,
+    request_id: &str,
+) -> Result<(), ApiError> {
     let decision = state
         .services
-        .rbac
-        .authorize(session, capability, project_id)
+        .authorization
+        .authorize_request(session, authorization_request)
         .await?;
+    if is_sensitive_capability(&authorization_request.capability) {
+        let resource_type = authorization_request
+            .resource_type
+            .as_deref()
+            .unwrap_or("authorization");
+        let resource = audit_resource_label(
+            resource_type,
+            authorization_request.resource_id.as_deref(),
+        );
+        let outcome = if decision.allowed {
+            "allowed".to_string()
+        } else {
+            format!(
+                "denied:{}",
+                decision
+                    .reason
+                    .clone()
+                    .unwrap_or_else(|| "access denied".into())
+            )
+        };
+        append_session_audit(
+            state,
+            session,
+            &authorization_request.capability,
+            &resource,
+            &outcome,
+            authorization_request.project_id.clone(),
+        )
+        .await?;
+    }
     if !decision.allowed {
         return Err(ApiError::new(
             AppError::auth(decision.reason.unwrap_or_else(|| "access denied".into())),
@@ -476,6 +575,161 @@ fn normalize_project_scope(project_id: &str) -> Option<&str> {
     } else {
         Some(project_id)
     }
+}
+
+const AUTH_RATE_LIMIT_WINDOW_SECONDS: u64 = 10 * 60;
+const AUTH_RATE_LIMIT_MAX_FAILURES: usize = 5;
+const AUTH_RATE_LIMIT_LOCK_SECONDS: u64 = 15 * 60;
+
+async fn workspace_id_for_audit(state: &ServerState) -> Result<String, ApiError> {
+    Ok(state.services.workspace.workspace_summary().await?.id)
+}
+
+fn audit_resource_label(resource_type: &str, resource_id: Option<&str>) -> String {
+    resource_id
+        .map(|id| format!("{resource_type}:{id}"))
+        .unwrap_or_else(|| resource_type.to_string())
+}
+
+async fn append_audit_event(
+    state: &ServerState,
+    workspace_id: &str,
+    project_id: Option<String>,
+    actor_type: &str,
+    actor_id: &str,
+    action: &str,
+    resource: &str,
+    outcome: &str,
+) -> Result<(), ApiError> {
+    state
+        .services
+        .observation
+        .append_audit(AuditRecord {
+            id: format!("audit-{}", Uuid::new_v4()),
+            workspace_id: workspace_id.to_string(),
+            project_id,
+            actor_type: actor_type.to_string(),
+            actor_id: actor_id.to_string(),
+            action: action.to_string(),
+            resource: resource.to_string(),
+            outcome: outcome.to_string(),
+            created_at: timestamp_now(),
+        })
+        .await?;
+    Ok(())
+}
+
+async fn append_session_audit(
+    state: &ServerState,
+    session: &SessionRecord,
+    action: &str,
+    resource: &str,
+    outcome: &str,
+    project_id: Option<String>,
+) -> Result<(), ApiError> {
+    append_audit_event(
+        state,
+        &session.workspace_id,
+        project_id,
+        "user",
+        &session.user_id,
+        action,
+        resource,
+        outcome,
+    )
+    .await
+}
+
+fn auth_source_fingerprint(headers: &HeaderMap) -> String {
+    [
+        "x-forwarded-for",
+        "x-real-ip",
+        "cf-connecting-ip",
+        "user-agent",
+    ]
+    .iter()
+    .find_map(|name| {
+        headers
+            .get(*name)
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty())
+    })
+    .unwrap_or_else(|| "unknown".into())
+}
+
+fn auth_rate_limit_key(workspace_id: &str, username: &str, headers: &HeaderMap) -> String {
+    format!(
+        "{workspace_id}:{}:{}",
+        username.trim().to_lowercase(),
+        auth_source_fingerprint(headers)
+    )
+}
+
+fn check_auth_rate_limit(
+    state: &ServerState,
+    key: &str,
+) -> Result<Option<u64>, ApiError> {
+    let now = timestamp_now();
+    let mut rate_limits = state.auth_rate_limits.lock().map_err(|_| {
+        ApiError::from(AppError::runtime("auth rate-limit mutex poisoned"))
+    })?;
+    let Some(entry) = rate_limits.get_mut(key) else {
+        return Ok(None);
+    };
+    entry.failed_attempts.retain(|attempt| now.saturating_sub(*attempt) <= AUTH_RATE_LIMIT_WINDOW_SECONDS);
+    if let Some(locked_until) = entry.locked_until {
+        if locked_until > now {
+            return Ok(Some(locked_until));
+        }
+        entry.locked_until = None;
+        entry.failed_attempts.clear();
+    }
+    Ok(None)
+}
+
+fn record_auth_failure(
+    state: &ServerState,
+    key: &str,
+) -> Result<Option<u64>, ApiError> {
+    let now = timestamp_now();
+    let mut rate_limits = state.auth_rate_limits.lock().map_err(|_| {
+        ApiError::from(AppError::runtime("auth rate-limit mutex poisoned"))
+    })?;
+    let entry = rate_limits.entry(key.to_string()).or_default();
+    entry.failed_attempts.retain(|attempt| now.saturating_sub(*attempt) <= AUTH_RATE_LIMIT_WINDOW_SECONDS);
+    entry.failed_attempts.push(now);
+    if entry.failed_attempts.len() >= AUTH_RATE_LIMIT_MAX_FAILURES {
+        let locked_until = now + AUTH_RATE_LIMIT_LOCK_SECONDS;
+        entry.locked_until = Some(locked_until);
+        entry.failed_attempts.clear();
+        return Ok(Some(locked_until));
+    }
+    Ok(None)
+}
+
+fn clear_auth_failures(
+    state: &ServerState,
+    key: &str,
+) -> Result<bool, ApiError> {
+    let mut rate_limits = state.auth_rate_limits.lock().map_err(|_| {
+        ApiError::from(AppError::runtime("auth rate-limit mutex poisoned"))
+    })?;
+    Ok(rate_limits.remove(key).is_some())
+}
+
+fn is_sensitive_capability(capability: &str) -> bool {
+    matches!(
+        capability.rsplit('.').next(),
+        Some("run")
+            | Some("invoke")
+            | Some("publish")
+            | Some("delete")
+            | Some("grant")
+            | Some("export")
+            | Some("retrieve")
+            | Some("bind-credential")
+    )
 }
 
 fn extract_bearer(headers: &HeaderMap) -> Option<String> {

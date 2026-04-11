@@ -1,4 +1,5 @@
 import type {
+  AuditRecord,
   BindPetConversationInput,
   ChangeCurrentUserPasswordRequest,
   ChangeCurrentUserPasswordResponse,
@@ -13,8 +14,6 @@ import type {
   PetConversationBinding,
   ProjectAgentLinkRecord,
   ProjectTeamLinkRecord,
-  RegisterWorkspaceOwnerRequest,
-  RegisterWorkspaceOwnerResponse,
   RuntimeApprovalRequest,
   RuntimeBootstrap,
   RuntimeConfigPatch,
@@ -29,16 +28,17 @@ import type {
   UpdateProjectRequest,
   UpdateWorkspaceSkillFileInput,
   UpdateWorkspaceSkillInput,
-  UpdateWorkspaceUserRequest,
   UserRecordSummary,
   WorkspaceConnectionRecord,
   WorkspaceMcpServerDocument,
   WorkspaceSessionTokenEnvelope,
   WorkspaceSkillDocument,
   WorkspaceSkillFileDocument,
+  ProtectedResourceDescriptor,
   WorkspaceToolCatalogEntry,
   WorkspaceToolDisablePatch,
   WorkspaceDirectoryUploadEntry,
+  ProtectedResourceMetadataUpsertRequest,
 } from '@octopus/schema'
 import { resolveRuntimePermissionMode } from '@octopus/schema'
 
@@ -85,6 +85,7 @@ export function createWorkspaceClientFixture(
   connection: WorkspaceConnectionRecord,
   workspaceState: WorkspaceFixtureState,
   options: FixtureOptions = {},
+  session?: WorkspaceSessionTokenEnvelope,
 ): WorkspaceClient {
   const ensureRuntimeState = (sessionId: string): RuntimeSessionState => {
     const state = workspaceState.runtimeSessions.get(sessionId)
@@ -95,12 +96,516 @@ export function createWorkspaceClientFixture(
   }
 
   const defaultSession = clone(WORKSPACE_SESSIONS.find(item => item.workspaceConnectionId === connection.workspaceConnectionId)!)
+  const fixtureSessions = workspaceState.users.map((user, index) => ({
+    sessionId: index === 0 ? defaultSession.session.id : `sess-${connection.workspaceId}-${user.id}`,
+    token: index === 0 ? defaultSession.token : `token-${connection.workspaceId}-${user.id}`,
+    userId: user.id,
+    clientAppId: index === 0 ? defaultSession.session.clientAppId : 'octopus-web',
+    status: 'active' as const,
+    createdAt: defaultSession.session.createdAt + index,
+    expiresAt: defaultSession.session.expiresAt,
+  }))
+
+  let accessUsers = workspaceState.users.map(user => ({
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    status: user.status,
+    passwordState: user.passwordState,
+  }))
+
+  let accessOrgUnits = clone(workspaceState.orgUnits)
+  let accessPositions = clone(workspaceState.positions)
+  let accessUserGroups = clone(workspaceState.userGroups)
+  let accessUserOrgAssignments = clone(workspaceState.userOrgAssignments)
+  let accessRoles = clone(workspaceState.roles)
+  let accessRoleBindings = clone(workspaceState.roleBindings)
+  let accessDataPolicies = clone(workspaceState.dataPolicies).map(policy => ({
+    ...policy,
+    classifications: clone(policy.classifications ?? []),
+  }))
+
+  let accessResourcePolicies: Array<{
+    id: string
+    subjectType: string
+    subjectId: string
+    resourceType: string
+    resourceId: string
+    action: string
+    effect: string
+  }> = []
+
+  let accessMenuPolicies = clone(workspaceState.menuPolicies)
+  const protectedResourceMetadata = new Map<string, ProtectedResourceDescriptor>()
+  const auditRecords: AuditRecord[] = [
+    {
+      id: `audit-${connection.workspaceId}-bootstrap`,
+      workspaceId: connection.workspaceId,
+      actorType: 'user',
+      actorId: 'user-owner',
+      action: 'system.auth.login.success',
+      resource: 'system.auth',
+      outcome: 'success',
+      createdAt: Date.now(),
+    },
+  ]
 
   const buildSession = (userId: string, token = defaultSession.token): WorkspaceSessionTokenEnvelope['session'] => ({
     ...clone(defaultSession.session),
     userId,
     token,
   })
+
+  const buildEnterpriseSession = (userId: string, token = defaultSession.token) => {
+    const session = buildSession(userId, token)
+    const user = workspaceState.users.find(record => record.id === userId)
+      ?? workspaceState.users.find(record => record.id === workspaceState.workspace.ownerUserId)
+      ?? workspaceState.users[0]
+
+    return {
+      sessionId: session.id,
+      token: session.token,
+      workspaceId: session.workspaceId,
+      clientAppId: session.clientAppId,
+      status: session.status,
+      createdAt: session.createdAt,
+      expiresAt: session.expiresAt,
+      principal: {
+        userId: user?.id ?? userId,
+        username: user?.username ?? 'owner',
+        displayName: user?.displayName ?? 'Workspace Owner',
+        status: user?.status ?? 'active',
+      },
+    }
+  }
+
+  const getCurrentUserId = () => workspaceState.currentUserId || defaultSession.session.userId
+  const getCurrentUser = () =>
+    accessUsers.find(user => user.id === getCurrentUserId())
+    ?? accessUsers.find(user => user.id === workspaceState.workspace.ownerUserId)
+    ?? accessUsers[0]
+
+  const getFeatureCode = (menuId: string, routeName?: string) => `feature:${routeName ?? menuId}`
+  const protectedResourceKey = (resourceType: string, resourceId: string) => `${resourceType}:${resourceId}`
+  const preciseToolResourceType = (kind: string) => {
+    switch (kind) {
+      case 'builtin':
+        return 'tool.builtin'
+      case 'mcp':
+        return 'tool.mcp'
+      default:
+        return 'tool.skill'
+    }
+  }
+
+  const appendAudit = (
+    action: string,
+    outcome: string,
+    resource: string,
+    projectId?: string,
+  ) => {
+    auditRecords.unshift({
+      id: `audit-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      workspaceId: connection.workspaceId,
+      actorType: 'user',
+      actorId: getCurrentUserId(),
+      action,
+      resource,
+      outcome,
+      projectId,
+      createdAt: Date.now(),
+    })
+  }
+
+  const getMenuRequiredPermissionCodes = (menuId: string) => {
+    switch (menuId) {
+      case 'menu-workspace-access-control':
+      case 'menu-workspace-access-control-users':
+        return ['access.users.read']
+      case 'menu-workspace-access-control-org':
+        return ['access.org.read']
+      case 'menu-workspace-access-control-roles':
+        return ['access.roles.read']
+      case 'menu-workspace-access-control-policies':
+      case 'menu-workspace-access-control-resources':
+        return ['access.policies.read']
+      case 'menu-workspace-access-control-menus':
+        return ['access.menus.read']
+      case 'menu-workspace-access-control-sessions':
+        return ['access.sessions.read']
+      default:
+        return ['workspace.overview.read']
+    }
+  }
+
+  const getCurrentUserSubjects = (userId: string) => {
+    const assignments = accessUserOrgAssignments.filter(record => record.userId === userId)
+
+    return {
+      userId,
+      orgUnitIds: Array.from(new Set(assignments.map(record => record.orgUnitId))),
+      positionIds: Array.from(new Set(assignments.flatMap(record => record.positionIds))),
+      userGroupIds: Array.from(new Set(assignments.flatMap(record => record.userGroupIds))),
+    }
+  }
+
+  const roleBindingMatchesUser = (
+    binding: {
+      subjectType: string
+      subjectId: string
+    },
+    userId: string,
+  ) => {
+    const subjects = getCurrentUserSubjects(userId)
+    switch (binding.subjectType) {
+      case 'user':
+        return binding.subjectId === subjects.userId
+      case 'org_unit':
+      case 'org-unit':
+        return subjects.orgUnitIds.includes(binding.subjectId)
+      case 'position':
+        return subjects.positionIds.includes(binding.subjectId)
+      case 'user_group':
+      case 'user-group':
+        return subjects.userGroupIds.includes(binding.subjectId)
+      default:
+        return false
+    }
+  }
+
+  const getEffectiveRoleRecords = (userId: string) => {
+    if (!accessUsers.find(record => record.id === userId)) {
+      return []
+    }
+
+    const matchedBindings = accessRoleBindings.filter(binding => roleBindingMatchesUser(binding, userId))
+    const deniedRoleIds = new Set(
+      matchedBindings
+        .filter(binding => binding.effect === 'deny')
+        .map(binding => binding.roleId),
+    )
+    const allowedRoleIds = new Set(
+      matchedBindings
+        .filter(binding => binding.effect !== 'deny')
+        .map(binding => binding.roleId),
+    )
+
+    return accessRoles.filter(role => allowedRoleIds.has(role.id) && !deniedRoleIds.has(role.id))
+  }
+
+  const getEffectivePermissionCodes = (userId: string) => {
+    return Array.from(new Set(getEffectiveRoleRecords(userId).flatMap(role => role.permissionCodes)))
+  }
+
+  const getVisibleMenuIds = (userId: string) => {
+    const featureCodes = new Set(getFeatureCodes(userId))
+
+    return workspaceState.menus
+      .filter((menu) => {
+        const policy = accessMenuPolicies.find(record => record.menuId === menu.id)
+        const enabled = policy?.enabled ?? (menu.status === 'active')
+        const visibility = policy?.visibility ?? 'inherit'
+        const featureAllowed = featureCodes.has(getFeatureCode(menu.id, menu.routeName))
+        if (!enabled || visibility === 'hidden') {
+          return false
+        }
+        if (visibility === 'visible') {
+          return true
+        }
+        return featureAllowed
+      })
+      .map(menu => menu.id)
+  }
+
+  const getFeatureCodes = (userId: string) => {
+    const effectivePermissionCodes = new Set(getEffectivePermissionCodes(userId))
+    return workspaceState.menus
+      .filter(menu => getMenuRequiredPermissionCodes(menu.id).every(code => effectivePermissionCodes.has(code)))
+      .map(menu => getFeatureCode(menu.id, menu.routeName))
+  }
+
+  const buildMenuGateResults = (userId: string) => {
+    const featureCodes = new Set(getFeatureCodes(userId))
+    return workspaceState.menus.map((menu) => {
+      const policy = accessMenuPolicies.find(record => record.menuId === menu.id)
+      const enabled = policy?.enabled ?? (menu.status === 'active')
+      const visibility = policy?.visibility ?? 'inherit'
+      const featureCode = getFeatureCode(menu.id, menu.routeName)
+      const featureAllowed = featureCodes.has(featureCode)
+      const allowed = enabled && (visibility === 'visible' || (visibility !== 'hidden' && featureAllowed))
+
+      return {
+        menuId: menu.id,
+        featureCode,
+        allowed,
+        reason: allowed
+          ? undefined
+          : !enabled
+              ? 'menu disabled by policy'
+              : visibility === 'hidden'
+                  ? 'menu hidden by policy'
+                  : 'required permission missing',
+      }
+    })
+  }
+
+  const buildProtectedResources = () => {
+    const descriptors: ProtectedResourceDescriptor[] = [
+      ...workspaceState.agents.map(agent => ({
+        id: agent.id,
+        resourceType: 'agent',
+        resourceSubtype: agent.scope,
+        name: agent.name,
+        projectId: agent.projectId,
+        ownerSubjectType: undefined,
+        ownerSubjectId: undefined,
+        tags: clone(agent.tags),
+        classification: 'internal',
+      })),
+      ...workspaceState.workspaceResources.map(resource => ({
+        id: resource.id,
+        resourceType: 'resource',
+        resourceSubtype: resource.kind,
+        name: resource.name,
+        projectId: resource.projectId,
+        ownerSubjectType: undefined,
+        ownerSubjectId: undefined,
+        tags: clone(resource.tags),
+        classification: 'internal',
+      })),
+      ...workspaceState.workspaceKnowledge.map(entry => ({
+        id: entry.id,
+        resourceType: 'knowledge',
+        resourceSubtype: entry.sourceType,
+        name: entry.title,
+        projectId: entry.projectId,
+        ownerSubjectType: undefined,
+        ownerSubjectId: undefined,
+        tags: [],
+        classification: 'internal',
+      })),
+      ...workspaceState.tools.map(tool => ({
+        id: tool.id,
+        resourceType: preciseToolResourceType(tool.kind),
+        resourceSubtype: tool.kind,
+        name: tool.name,
+        projectId: undefined,
+        ownerSubjectType: undefined,
+        ownerSubjectId: undefined,
+        tags: [],
+        classification: 'internal',
+      })),
+    ]
+
+    return descriptors.map((descriptor) => {
+      const metadata = protectedResourceMetadata.get(protectedResourceKey(descriptor.resourceType, descriptor.id))
+      if (!metadata) {
+        return descriptor
+      }
+      return {
+        ...descriptor,
+        resourceSubtype: metadata.resourceSubtype ?? descriptor.resourceSubtype,
+        projectId: metadata.projectId ?? descriptor.projectId,
+        ownerSubjectType: metadata.ownerSubjectType ?? descriptor.ownerSubjectType,
+        ownerSubjectId: metadata.ownerSubjectId ?? descriptor.ownerSubjectId,
+        tags: metadata.tags.length ? clone(metadata.tags) : descriptor.tags,
+        classification: metadata.classification || descriptor.classification,
+      }
+    })
+  }
+
+  const buildResourceActionGrants = (permissionCodes: string[]) => {
+    const grants = new Map<string, Set<string>>()
+    const appendGrant = (resourceType: string, actions: string[]) => {
+      const current = grants.get(resourceType) ?? new Set<string>()
+      actions.forEach(action => current.add(action))
+      grants.set(resourceType, current)
+    }
+
+    permissionCodes.forEach((code) => {
+      if (code === 'workspace.overview.read') {
+        appendGrant('workspace', ['overview.read'])
+        return
+      }
+
+      if (code.startsWith('access.')) {
+        const segments = code.split('.')
+        if (segments.length === 3) {
+          appendGrant(`${segments[0]}.${segments[1]}`, [segments[2]])
+        }
+        return
+      }
+
+      if (code.startsWith('tool.')) {
+        const segments = code.split('.')
+        if (segments.length >= 3) {
+          appendGrant(`${segments[0]}.${segments[1]}`, [segments.slice(2).join('.')])
+        }
+        return
+      }
+
+      if (code.startsWith('runtime.config.')) {
+        const segments = code.split('.')
+        if (segments.length >= 4) {
+          appendGrant(segments.slice(0, 3).join('.'), [segments.slice(3).join('.')])
+        }
+        return
+      }
+
+      if (code.startsWith('runtime.')) {
+        const segments = code.split('.')
+        if (segments.length >= 3) {
+          appendGrant(segments.slice(0, 2).join('.'), [segments.slice(2).join('.')])
+        }
+        return
+      }
+
+      if (code.startsWith('provider-credential.')) {
+        const segments = code.split('.')
+        if (segments.length >= 2) {
+          appendGrant('provider-credential', [segments.slice(1).join('.')])
+        }
+        return
+      }
+
+      const [resourceType, ...actions] = code.split('.')
+      if (resourceType && actions.length > 0) {
+        appendGrant(resourceType, [actions.join('.')])
+      }
+    })
+
+    return Array.from(grants.entries()).map(([resourceType, actions]) => ({
+      resourceType,
+      actions: Array.from(actions),
+    }))
+  }
+
+  const buildAuthorizationSnapshot = () => {
+    const user = getCurrentUser()
+    if (!user) {
+      throw new Error('Expected current user in workspace fixture')
+    }
+
+    const effectiveRoles = getEffectiveRoleRecords(user.id)
+    const effectivePermissionCodes = getEffectivePermissionCodes(user.id)
+    const featureCodes = getFeatureCodes(user.id)
+    const menuGates = buildMenuGateResults(user.id)
+    const visibleMenuIds = menuGates.filter(menu => menu.allowed).map(menu => menu.menuId)
+
+    return {
+      principal: clone(user),
+      orgAssignments: accessUserOrgAssignments.filter(assignment => assignment.userId === user.id),
+      effectiveRoleIds: effectiveRoles.map(role => role.id),
+      effectiveRoles: effectiveRoles.map(role => ({
+        id: role.id,
+        code: role.code,
+        name: role.name,
+        description: role.description,
+        status: role.status,
+        permissionCodes: clone(role.permissionCodes),
+      })),
+      effectivePermissionCodes,
+      featureCodes,
+      visibleMenuIds,
+      menuGates,
+      resourceActionGrants: buildResourceActionGrants(effectivePermissionCodes),
+    }
+  }
+
+  const buildAccessSessionRecords = () =>
+    fixtureSessions.map((session) => {
+        const user = accessUsers.find(record => record.id === session.userId)
+        ?? accessUsers.find(record => record.id === workspaceState.workspace.ownerUserId)
+        ?? accessUsers[0]
+
+      return {
+        sessionId: session.sessionId,
+        userId: session.userId,
+        username: user?.username ?? session.userId,
+        displayName: user?.displayName ?? session.userId,
+        clientAppId: session.clientAppId,
+        createdAt: session.createdAt,
+        expiresAt: session.expiresAt,
+        status: session.status,
+        current: session.sessionId === defaultSession.session.id,
+      }
+    })
+
+  const registerBootstrapAdmin = (request: {
+    username: string
+    displayName: string
+    avatar: {
+      contentType: string
+      dataBase64: string
+    }
+  }) => {
+    const ownerId = 'user-owner'
+    const ownerAvatar = `data:${request.avatar.contentType};base64,${request.avatar.dataBase64}`
+    const ownerRecord: UserRecordSummary = {
+      id: ownerId,
+      username: request.username,
+      displayName: request.displayName,
+      avatar: ownerAvatar,
+      status: 'active',
+      passwordState: 'set',
+    }
+
+    workspaceState.workspace = {
+      ...workspaceState.workspace,
+      bootstrapStatus: 'ready',
+      ownerUserId: ownerId,
+    }
+    workspaceState.systemBootstrap = {
+      ...workspaceState.systemBootstrap,
+      workspace: clone(workspaceState.workspace),
+      setupRequired: false,
+      ownerReady: true,
+    }
+    workspaceState.overview = {
+      ...workspaceState.overview,
+      workspace: clone(workspaceState.workspace),
+    }
+    workspaceState.users = [
+      ownerRecord,
+      ...workspaceState.users.filter(record => record.id !== ownerId),
+    ]
+    workspaceState.currentUserId = ownerId
+    accessUsers = [
+      {
+        id: ownerRecord.id,
+        username: ownerRecord.username,
+        displayName: ownerRecord.displayName,
+        status: ownerRecord.status,
+        passwordState: ownerRecord.passwordState,
+      },
+      ...accessUsers.filter(record => record.id !== ownerId),
+    ]
+    accessUserOrgAssignments = [
+      {
+        userId: ownerId,
+        orgUnitId: 'org-root',
+        isPrimary: true,
+        positionIds: [],
+        userGroupIds: [],
+      },
+      ...accessUserOrgAssignments.filter(record => record.userId !== ownerId),
+    ]
+    accessRoleBindings = [
+      {
+        id: 'binding-user-owner-role-owner',
+        roleId: 'role-owner',
+        subjectType: 'user',
+        subjectId: ownerId,
+        effect: 'allow',
+      },
+      ...accessRoleBindings.filter(record => record.subjectId !== ownerId),
+    ]
+
+    return {
+      session: buildEnterpriseSession(ownerId, 'token-owner'),
+      workspace: clone(workspaceState.workspace),
+    }
+  }
 
   const getWorkspaceRuntimeDocument = () => {
     const source = workspaceState.runtimeWorkspaceConfig.sources.find(item => item.scope === 'workspace')
@@ -288,6 +793,59 @@ export function createWorkspaceClientFixture(
       ...file,
       relativePath: file.relativePath.replace(/^\/+/, ''),
     }))
+
+  const activeSessionToken = session?.token ?? ''
+
+  const requireAuthenticatedSession = () => {
+    if (!session?.token) {
+      throw new Error(`Workspace session is unavailable for ${connection.workspaceConnectionId}`)
+    }
+
+    const currentSession = fixtureSessions.find(record => record.token === session.token)
+    if (!currentSession || currentSession.status !== 'active') {
+      throw new WorkspaceApiError({
+        message: `Workspace session expired for ${connection.workspaceConnectionId}`,
+        status: 401,
+        requestId: 'req-fixture-session-expired',
+        retryable: false,
+        code: 'SESSION_EXPIRED',
+      })
+    }
+
+    return currentSession
+  }
+
+  const shouldRequireSession = (domain: string, method: string) => {
+    if (domain === 'system') {
+      return false
+    }
+    if (domain === 'auth') {
+      return method === 'session'
+    }
+    if (domain === 'enterpriseAuth') {
+      return method === 'session'
+    }
+    return true
+  }
+
+  const applySessionGuards = (client: WorkspaceClient): WorkspaceClient => {
+    const wrapped = client as Record<string, any>
+    for (const [domain, api] of Object.entries(wrapped)) {
+      if (!api || typeof api !== 'object') {
+        continue
+      }
+      for (const [method, handler] of Object.entries(api)) {
+        if (typeof handler !== 'function' || !shouldRequireSession(domain, method)) {
+          continue
+        }
+        api[method] = async (...args: unknown[]) => {
+          requireAuthenticatedSession()
+          return await handler(...args)
+        }
+      }
+    }
+    return client
+  }
 
   const buildAgentBundlePreview = (
     input: ImportWorkspaceAgentBundlePreviewInput | ImportWorkspaceAgentBundleInput,
@@ -487,69 +1045,44 @@ export function createWorkspaceClientFixture(
     return copied
   }
 
-  return {
+  const client: WorkspaceClient = {
     system: {
       async bootstrap() {
         return clone(workspaceState.systemBootstrap)
       },
     },
-    auth: {
-      async login() {
-        const user = workspaceState.users.find(record => record.id === workspaceState.workspace.ownerUserId) ?? workspaceState.users[0]
+    enterpriseAuth: {
+      async getStatus() {
         return {
-          session: buildSession(user?.id ?? 'user-owner'),
+          workspace: clone(workspaceState.workspace),
+          bootstrapAdminRequired: !workspaceState.systemBootstrap.ownerReady,
+          ownerReady: workspaceState.systemBootstrap.ownerReady,
+          captcha: {
+            required: true,
+            ttlSeconds: 300,
+          },
+        }
+      },
+      async createCaptcha() {
+        return {
+          challengeId: `captcha-${connection.workspaceId || 'remote'}`,
+          svgData: '<svg data-code="ABCD"></svg>',
+          expiresAt: Date.now() + 60_000,
+        }
+      },
+      async login(request) {
+        const user = workspaceState.users.find(record => record.username === request.username)
+          ?? workspaceState.users.find(record => record.id === workspaceState.workspace.ownerUserId)
+          ?? workspaceState.users[0]
+
+        return {
+          session: buildEnterpriseSession(user?.id ?? 'user-owner'),
           workspace: clone(workspaceState.workspace),
         }
       },
-      async registerOwner(request: RegisterWorkspaceOwnerRequest): Promise<RegisterWorkspaceOwnerResponse> {
-        const ownerId = 'user-owner'
-        const ownerAvatar = `data:${request.avatar.contentType};base64,${request.avatar.dataBase64}`
-        const ownerRecord: UserRecordSummary = {
-          id: ownerId,
-          username: request.username,
-          displayName: request.displayName,
-          avatar: ownerAvatar,
-          status: 'active',
-          passwordState: 'set',
-          roleIds: ['role-owner'],
-          scopeProjectIds: [],
-        }
-
-        workspaceState.workspace = {
-          ...workspaceState.workspace,
-          bootstrapStatus: 'ready',
-          ownerUserId: ownerId,
-        }
-        workspaceState.systemBootstrap = {
-          ...workspaceState.systemBootstrap,
-          workspace: clone(workspaceState.workspace),
-          setupRequired: false,
-          ownerReady: true,
-        }
-        workspaceState.overview = {
-          ...workspaceState.overview,
-          workspace: clone(workspaceState.workspace),
-        }
-        workspaceState.users = [
-          ownerRecord,
-          ...workspaceState.users.filter(record => record.id !== ownerId),
-        ]
-        workspaceState.permissionCenterOverview = {
-          ...workspaceState.permissionCenterOverview,
-          currentUser: clone(ownerRecord),
-          roleNames: ['Owner'],
-          metrics: workspaceState.permissionCenterOverview.metrics.map(metric =>
-            metric.id === 'users'
-              ? { ...metric, value: String(workspaceState.users.length) }
-              : metric),
-        }
-
-        return {
-          session: buildSession(ownerId, 'token-owner'),
-          workspace: clone(workspaceState.workspace),
-        }
+      async bootstrapAdmin(request) {
+        return registerBootstrapAdmin(request)
       },
-      async logout() {},
       async session() {
         if (connection.workspaceId === 'ws-local' && options.localSessionValid === false) {
           throw new WorkspaceApiError({
@@ -562,7 +1095,7 @@ export function createWorkspaceClientFixture(
         }
 
         const user = workspaceState.users.find(record => record.id === workspaceState.workspace.ownerUserId) ?? workspaceState.users[0]
-        return buildSession(user?.id ?? 'user-owner')
+        return buildEnterpriseSession(user?.id ?? 'user-owner')
       },
     },
     workspace: {
@@ -1244,104 +1777,9 @@ export function createWorkspaceClientFixture(
         workspaceState.automations = workspaceState.automations.filter(item => item.id !== automationId)
       },
     },
-    rbac: {
-      async getPermissionCenterOverview() {
-        return clone(workspaceState.permissionCenterOverview)
-      },
-      async listUsers() {
-        return clone(workspaceState.users)
-      },
-      async createUser(record) {
-        const created: UserRecordSummary = {
-          id: `user-${record.username}`,
-          username: record.username,
-          displayName: record.displayName,
-          avatar: record.useDefaultAvatar || !record.avatar
-            ? undefined
-            : `data:${record.avatar.contentType};base64,${record.avatar.dataBase64}`,
-          status: record.status,
-          passwordState: record.useDefaultPassword || !record.password ? 'reset-required' : 'set',
-          roleIds: clone(record.roleIds),
-          scopeProjectIds: clone(record.scopeProjectIds),
-        }
-        workspaceState.users = [...workspaceState.users, clone(created)]
-        workspaceState.userPasswords = {
-          ...workspaceState.userPasswords,
-          [created.id]: record.useDefaultPassword || !record.password ? 'changeme' : record.password,
-        }
-        workspaceState.permissionCenterOverview = {
-          ...workspaceState.permissionCenterOverview,
-          metrics: workspaceState.permissionCenterOverview.metrics.map(metric =>
-            metric.id === 'users'
-              ? { ...metric, value: String(workspaceState.users.length) }
-              : metric),
-        }
-        return clone(created)
-      },
-      async updateUser(userId, record: UpdateWorkspaceUserRequest) {
-        const currentUser = workspaceState.users.find(item => item.id === userId)
-        if (!currentUser) {
-          throw new WorkspaceApiError({
-            message: 'User not found.',
-            status: 404,
-            requestId: 'req-user-not-found',
-            retryable: false,
-            code: 'NOT_FOUND',
-          })
-        }
-        const updated: UserRecordSummary = {
-          ...currentUser,
-          username: record.username,
-          displayName: record.displayName,
-          avatar: record.removeAvatar
-            ? undefined
-            : record.avatar
-              ? `data:${record.avatar.contentType};base64,${record.avatar.dataBase64}`
-              : currentUser.avatar,
-          status: record.status,
-          passwordState: record.resetPasswordToDefault || (!record.password && currentUser.passwordState === 'reset-required')
-            ? 'reset-required'
-            : record.password
-              ? 'set'
-              : currentUser.passwordState,
-          roleIds: clone(record.roleIds),
-          scopeProjectIds: clone(record.scopeProjectIds),
-        }
-        workspaceState.users = workspaceState.users.map(item => item.id === userId ? clone(updated) : item)
-        if (record.resetPasswordToDefault) {
-          workspaceState.userPasswords = {
-            ...workspaceState.userPasswords,
-            [userId]: 'changeme',
-          }
-        } else if (record.password) {
-          workspaceState.userPasswords = {
-            ...workspaceState.userPasswords,
-            [userId]: record.password,
-          }
-        }
-        if (workspaceState.permissionCenterOverview.currentUser.id === userId) {
-          workspaceState.permissionCenterOverview = {
-            ...workspaceState.permissionCenterOverview,
-            currentUser: clone(updated),
-          }
-        }
-        return clone(updated)
-      },
-      async deleteUser(userId) {
-        workspaceState.users = workspaceState.users.filter(item => item.id !== userId)
-        const nextPasswords = { ...workspaceState.userPasswords }
-        delete nextPasswords[userId]
-        workspaceState.userPasswords = nextPasswords
-        workspaceState.permissionCenterOverview = {
-          ...workspaceState.permissionCenterOverview,
-          metrics: workspaceState.permissionCenterOverview.metrics.map(metric =>
-            metric.id === 'users'
-              ? { ...metric, value: String(workspaceState.users.length) }
-              : metric),
-        }
-      },
+    profile: {
       async updateCurrentUserProfile(input: UpdateCurrentUserProfileRequest) {
-        const currentUserId = workspaceState.permissionCenterOverview.currentUser.id
+        const currentUserId = workspaceState.currentUserId
         const currentUser = workspaceState.users.find(user => user.id === currentUserId)
         if (!currentUser) {
           throw new WorkspaceApiError({
@@ -1364,14 +1802,19 @@ export function createWorkspaceClientFixture(
               : currentUser.avatar,
         }
         workspaceState.users = workspaceState.users.map(user => user.id === currentUserId ? clone(updated) : user)
-        workspaceState.permissionCenterOverview = {
-          ...workspaceState.permissionCenterOverview,
-          currentUser: clone(updated),
-        }
+        accessUsers = accessUsers.map(user => user.id === currentUserId
+          ? {
+              ...user,
+              username: updated.username,
+              displayName: updated.displayName,
+              status: updated.status,
+              passwordState: updated.passwordState,
+            }
+          : user)
         return clone(updated)
       },
       async changeCurrentUserPassword(input: ChangeCurrentUserPasswordRequest): Promise<ChangeCurrentUserPasswordResponse> {
-        const currentUserId = workspaceState.permissionCenterOverview.currentUser.id
+        const currentUserId = workspaceState.currentUserId
         const currentPassword = workspaceState.userPasswords[currentUserId]
         if (!currentPassword) {
           throw new WorkspaceApiError({
@@ -1409,112 +1852,490 @@ export function createWorkspaceClientFixture(
             code: 'INVALID_INPUT',
           })
         }
-        if (input.newPassword === input.currentPassword) {
-          throw new WorkspaceApiError({
-            message: 'New password must be different from the current password.',
-            status: 400,
-            requestId: 'req-user-password-same',
-            retryable: false,
-            code: 'INVALID_INPUT',
-          })
-        }
 
         workspaceState.userPasswords = {
           ...workspaceState.userPasswords,
           [currentUserId]: input.newPassword,
         }
-        workspaceState.users = workspaceState.users.map((user) => {
-          if (user.id !== currentUserId) {
-            return user
-          }
-          return {
-            ...user,
+        const currentUser = workspaceState.users.find(user => user.id === currentUserId)
+        if (currentUser) {
+          const updated: UserRecordSummary = {
+            ...currentUser,
             passwordState: 'set',
           }
-        })
-        workspaceState.permissionCenterOverview = {
-          ...workspaceState.permissionCenterOverview,
-          currentUser: {
-            ...workspaceState.permissionCenterOverview.currentUser,
-            passwordState: 'set',
-          },
+          workspaceState.users = workspaceState.users.map(user => user.id === currentUserId ? clone(updated) : user)
+          accessUsers = accessUsers.map(user => user.id === currentUserId
+            ? {
+                ...user,
+                passwordState: 'set',
+              }
+            : user)
         }
         return {
+          success: true,
           passwordState: 'set',
         }
       },
+    },
+    accessControl: {
+      async getCurrentAuthorization() {
+        return buildAuthorizationSnapshot()
+      },
+      async listAudit(query = {}) {
+        const filtered = auditRecords.filter((record) => {
+          if (query.actorId && record.actorId !== query.actorId) {
+            return false
+          }
+          if (query.action && record.action !== query.action) {
+            return false
+          }
+          if (query.resourceType) {
+            const resourceType = record.resource.split(':', 1)[0]
+            if (resourceType !== query.resourceType) {
+              return false
+            }
+          }
+          if (query.outcome && record.outcome !== query.outcome) {
+            return false
+          }
+          if (typeof query.from === 'number' && record.createdAt < query.from) {
+            return false
+          }
+          if (typeof query.to === 'number' && record.createdAt > query.to) {
+            return false
+          }
+          return true
+        })
+        const offset = Number.parseInt(query.cursor ?? '0', 10)
+        const start = Number.isFinite(offset) && offset > 0 ? offset : 0
+        const pageSize = 20
+        const items = filtered.slice(start, start + pageSize)
+        const nextCursor = start + pageSize < filtered.length ? String(start + pageSize) : undefined
+        return {
+          items: clone(items),
+          nextCursor,
+        }
+      },
+      async listSessions() {
+        return buildAccessSessionRecords()
+      },
+      async revokeCurrentSession() {
+        const currentSession = fixtureSessions.find(record => record.token === activeSessionToken)
+        if (!currentSession) {
+          throw new WorkspaceApiError({
+            message: 'session not found',
+            status: 404,
+            requestId: 'req-fixture-current-session-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+
+        currentSession.status = 'revoked'
+        appendAudit(
+          'access.sessions.revoke-current',
+          'success',
+          `access.session:${currentSession.sessionId}`,
+        )
+      },
+      async revokeSession(sessionId) {
+        const session = fixtureSessions.find(record => record.sessionId === sessionId)
+        if (!session) {
+          throw new WorkspaceApiError({
+            message: 'session not found',
+            status: 404,
+            requestId: 'req-fixture-session-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+
+        session.status = 'revoked'
+        appendAudit('access.sessions.revoke', 'success', `access.session:${sessionId}`)
+      },
+      async revokeUserSessions(userId) {
+        fixtureSessions.forEach((session) => {
+          if (session.userId === userId) {
+            session.status = 'revoked'
+          }
+        })
+        appendAudit('access.sessions.revoke-user', 'success', `access.user-sessions:${userId}`)
+      },
+      async listUsers() {
+        return clone(accessUsers)
+      },
+      async createUser(record) {
+        const created = {
+          id: `access-user-${Date.now()}`,
+          username: record.username,
+          displayName: record.displayName,
+          status: record.status,
+          passwordState: record.password ? 'set' : 'reset-required',
+        }
+        accessUsers = [...accessUsers, created]
+        return clone(created)
+      },
+      async updateUser(userId, record) {
+        const current = accessUsers.find(user => user.id === userId)
+        if (!current) {
+          throw new WorkspaceApiError({
+            message: 'access user not found',
+            status: 404,
+            requestId: 'req-access-user-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+        const updated = {
+          ...current,
+          username: record.username,
+          displayName: record.displayName,
+          status: record.status,
+          passwordState: record.resetPassword ? 'reset-required' : (record.password ? 'set' : current.passwordState),
+        }
+        accessUsers = accessUsers.map(user => user.id === userId ? updated : user)
+        return clone(updated)
+      },
+      async deleteUser(userId) {
+        accessUsers = accessUsers.filter(user => user.id !== userId)
+        accessUserOrgAssignments = accessUserOrgAssignments.filter(assignment => assignment.userId !== userId)
+        accessRoleBindings = accessRoleBindings.filter(binding => !(binding.subjectType === 'user' && binding.subjectId === userId))
+        accessDataPolicies = accessDataPolicies.filter(policy => !(policy.subjectType === 'user' && policy.subjectId === userId))
+      },
+      async listOrgUnits() {
+        return clone(accessOrgUnits)
+      },
+      async createOrgUnit(record) {
+        const created = {
+          id: `org-${Date.now()}`,
+          parentId: record.parentId,
+          code: record.code,
+          name: record.name,
+          status: record.status,
+        }
+        accessOrgUnits = [...accessOrgUnits, created]
+        return clone(created)
+      },
+      async updateOrgUnit(orgUnitId, record) {
+        const updated = {
+          id: orgUnitId,
+          parentId: record.parentId,
+          code: record.code,
+          name: record.name,
+          status: record.status,
+        }
+        accessOrgUnits = accessOrgUnits.map(unit => unit.id === orgUnitId ? updated : unit)
+        return clone(updated)
+      },
+      async deleteOrgUnit(orgUnitId) {
+        accessOrgUnits = accessOrgUnits.filter(unit => unit.id !== orgUnitId)
+        accessUserOrgAssignments = accessUserOrgAssignments.filter(assignment => assignment.orgUnitId !== orgUnitId)
+      },
+      async listPositions() {
+        return clone(accessPositions)
+      },
+      async createPosition(record) {
+        const created = {
+          id: `position-${Date.now()}`,
+          code: record.code,
+          name: record.name,
+          status: record.status,
+        }
+        accessPositions = [...accessPositions, created]
+        return clone(created)
+      },
+      async updatePosition(positionId, record) {
+        const updated = {
+          id: positionId,
+          code: record.code,
+          name: record.name,
+          status: record.status,
+        }
+        accessPositions = accessPositions.map(position => position.id === positionId ? updated : position)
+        return clone(updated)
+      },
+      async deletePosition(positionId) {
+        accessPositions = accessPositions.filter(position => position.id !== positionId)
+        accessUserOrgAssignments = accessUserOrgAssignments.map(assignment => ({
+          ...assignment,
+          positionIds: assignment.positionIds.filter(id => id !== positionId),
+        }))
+      },
+      async listUserGroups() {
+        return clone(accessUserGroups)
+      },
+      async createUserGroup(record) {
+        const created = {
+          id: `group-${Date.now()}`,
+          code: record.code,
+          name: record.name,
+          status: record.status,
+        }
+        accessUserGroups = [...accessUserGroups, created]
+        return clone(created)
+      },
+      async updateUserGroup(groupId, record) {
+        const updated = {
+          id: groupId,
+          code: record.code,
+          name: record.name,
+          status: record.status,
+        }
+        accessUserGroups = accessUserGroups.map(group => group.id === groupId ? updated : group)
+        return clone(updated)
+      },
+      async deleteUserGroup(groupId) {
+        accessUserGroups = accessUserGroups.filter(group => group.id !== groupId)
+        accessUserOrgAssignments = accessUserOrgAssignments.map(assignment => ({
+          ...assignment,
+          userGroupIds: assignment.userGroupIds.filter(id => id !== groupId),
+        }))
+      },
+      async listUserOrgAssignments() {
+        return clone(accessUserOrgAssignments)
+      },
+      async upsertUserOrgAssignment(record) {
+        const nextRecord = {
+          userId: record.userId,
+          orgUnitId: record.orgUnitId,
+          isPrimary: record.isPrimary,
+          positionIds: clone(record.positionIds),
+          userGroupIds: clone(record.userGroupIds),
+        }
+        accessUserOrgAssignments = accessUserOrgAssignments
+          .filter(assignment => !(assignment.userId === record.userId && assignment.orgUnitId === record.orgUnitId))
+          .concat(nextRecord)
+        return clone(nextRecord)
+      },
+      async deleteUserOrgAssignment(userId, orgUnitId) {
+        accessUserOrgAssignments = accessUserOrgAssignments.filter(assignment => !(assignment.userId === userId && assignment.orgUnitId === orgUnitId))
+      },
       async listRoles() {
-        return clone(workspaceState.roles)
+        return clone(accessRoles)
       },
       async createRole(record) {
-        workspaceState.roles = [...workspaceState.roles, clone(record)]
-        workspaceState.permissionCenterOverview = {
-          ...workspaceState.permissionCenterOverview,
-          metrics: workspaceState.permissionCenterOverview.metrics.map(metric =>
-            metric.id === 'roles'
-              ? { ...metric, value: String(workspaceState.roles.length) }
-              : metric),
+        const created = {
+          id: `role-${Date.now()}`,
+          code: record.code,
+          name: record.name,
+          description: record.description,
+          status: record.status,
+          permissionCodes: clone(record.permissionCodes),
         }
-        return clone(record)
+        accessRoles = [...accessRoles, created]
+        return clone(created)
       },
       async updateRole(roleId, record) {
-        workspaceState.roles = workspaceState.roles.map(item => item.id === roleId ? clone(record) : item)
-        return clone(record)
+        const updated = {
+          id: roleId,
+          code: record.code,
+          name: record.name,
+          description: record.description,
+          status: record.status,
+          permissionCodes: clone(record.permissionCodes),
+        }
+        accessRoles = accessRoles.map(role => role.id === roleId ? updated : role)
+        return clone(updated)
       },
       async deleteRole(roleId) {
-        workspaceState.roles = workspaceState.roles.filter(item => item.id !== roleId)
-        workspaceState.users = workspaceState.users.map(user => ({
-          ...user,
-          roleIds: user.roleIds.filter(id => id !== roleId),
-        }))
-        workspaceState.permissionCenterOverview = {
-          ...workspaceState.permissionCenterOverview,
-          currentUser: {
-            ...workspaceState.permissionCenterOverview.currentUser,
-            roleIds: workspaceState.permissionCenterOverview.currentUser.roleIds.filter(id => id !== roleId),
-          },
-          roleNames: workspaceState.permissionCenterOverview.roleNames.filter(name =>
-            workspaceState.roles.some(role => role.name === name),
-          ),
-          metrics: workspaceState.permissionCenterOverview.metrics.map(metric =>
-            metric.id === 'roles'
-              ? { ...metric, value: String(workspaceState.roles.length) }
-              : metric),
+        accessRoles = accessRoles.filter(role => role.id !== roleId)
+        accessRoleBindings = accessRoleBindings.filter(binding => binding.roleId !== roleId)
+      },
+      async listPermissionDefinitions() {
+        return clone(workspaceState.permissionDefinitions)
+      },
+      async listRoleBindings() {
+        return clone(accessRoleBindings)
+      },
+      async createRoleBinding(record) {
+        const created = {
+          id: `binding-${Date.now()}`,
+          roleId: record.roleId,
+          subjectType: record.subjectType,
+          subjectId: record.subjectId,
+          effect: record.effect,
         }
+        accessRoleBindings = [...accessRoleBindings, created]
+        appendAudit('access.role-bindings.create', 'success', `access.role-binding:${created.id}`)
+        return clone(created)
       },
-      async listPermissions() {
-        return clone(workspaceState.permissions)
+      async updateRoleBinding(bindingId, record) {
+        const updated = {
+          id: bindingId,
+          roleId: record.roleId,
+          subjectType: record.subjectType,
+          subjectId: record.subjectId,
+          effect: record.effect,
+        }
+        accessRoleBindings = accessRoleBindings.map(binding => binding.id === bindingId ? updated : binding)
+        appendAudit('access.role-bindings.update', 'success', `access.role-binding:${bindingId}`)
+        return clone(updated)
       },
-      async createPermission(record) {
-        workspaceState.permissions = [...workspaceState.permissions, clone(record)]
-        return clone(record)
+      async deleteRoleBinding(bindingId) {
+        accessRoleBindings = accessRoleBindings.filter(binding => binding.id !== bindingId)
+        appendAudit('access.role-bindings.delete', 'success', `access.role-binding:${bindingId}`)
       },
-      async updatePermission(permissionId, record) {
-        workspaceState.permissions = workspaceState.permissions.map(item => item.id === permissionId ? clone(record) : item)
-        return clone(record)
+      async listDataPolicies() {
+        return clone(accessDataPolicies)
       },
-      async deletePermission(permissionId) {
-        workspaceState.permissions = workspaceState.permissions
-          .filter(item => item.id !== permissionId)
-          .map(permission => ({
-            ...permission,
-            memberPermissionIds: permission.memberPermissionIds.filter(id => id !== permissionId),
-          }))
-        workspaceState.roles = workspaceState.roles.map(role => ({
-          ...role,
-          permissionIds: role.permissionIds.filter(id => id !== permissionId),
+      async createDataPolicy(record) {
+        const created = {
+          id: `data-policy-${Date.now()}`,
+          name: record.name,
+          subjectType: record.subjectType,
+          subjectId: record.subjectId,
+          resourceType: record.resourceType,
+          scopeType: record.scopeType,
+          projectIds: clone(record.projectIds),
+          tags: clone(record.tags),
+          classifications: clone(record.classifications ?? []),
+          effect: record.effect,
+        }
+        accessDataPolicies = [...accessDataPolicies, created]
+        appendAudit('access.data-policies.create', 'success', `access.data-policy:${created.id}`)
+        return clone(created)
+      },
+      async updateDataPolicy(policyId, record) {
+        const updated = {
+          id: policyId,
+          name: record.name,
+          subjectType: record.subjectType,
+          subjectId: record.subjectId,
+          resourceType: record.resourceType,
+          scopeType: record.scopeType,
+          projectIds: clone(record.projectIds),
+          tags: clone(record.tags),
+          classifications: clone(record.classifications ?? []),
+          effect: record.effect,
+        }
+        accessDataPolicies = accessDataPolicies.map(policy => policy.id === policyId ? updated : policy)
+        appendAudit('access.data-policies.update', 'success', `access.data-policy:${policyId}`)
+        return clone(updated)
+      },
+      async deleteDataPolicy(policyId) {
+        accessDataPolicies = accessDataPolicies.filter(policy => policy.id !== policyId)
+        appendAudit('access.data-policies.delete', 'success', `access.data-policy:${policyId}`)
+      },
+      async listResourcePolicies() {
+        return clone(accessResourcePolicies)
+      },
+      async createResourcePolicy(record) {
+        const created = {
+          id: `resource-policy-${Date.now()}`,
+          subjectType: record.subjectType,
+          subjectId: record.subjectId,
+          resourceType: record.resourceType,
+          resourceId: record.resourceId,
+          action: record.action,
+          effect: record.effect,
+        }
+        accessResourcePolicies = [...accessResourcePolicies, created]
+        appendAudit('access.resource-policies.create', 'success', `access.resource-policy:${created.id}`)
+        return clone(created)
+      },
+      async updateResourcePolicy(policyId, record) {
+        const updated = {
+          id: policyId,
+          subjectType: record.subjectType,
+          subjectId: record.subjectId,
+          resourceType: record.resourceType,
+          resourceId: record.resourceId,
+          action: record.action,
+          effect: record.effect,
+        }
+        accessResourcePolicies = accessResourcePolicies.map(policy => policy.id === policyId ? updated : policy)
+        appendAudit('access.resource-policies.update', 'success', `access.resource-policy:${policyId}`)
+        return clone(updated)
+      },
+      async deleteResourcePolicy(policyId) {
+        accessResourcePolicies = accessResourcePolicies.filter(policy => policy.id !== policyId)
+        appendAudit('access.resource-policies.delete', 'success', `access.resource-policy:${policyId}`)
+      },
+      async listMenuDefinitions() {
+        return workspaceState.menus.map(menu => ({
+          id: menu.id,
+          parentId: menu.parentId,
+          label: menu.label,
+          routeName: menu.routeName,
+          source: menu.source,
+          status: menu.status,
+          order: menu.order,
+          featureCode: `feature:${menu.routeName ?? menu.id}`,
         }))
       },
-      async listMenus() {
-        return clone(workspaceState.menus)
+      async listFeatureDefinitions() {
+        return workspaceState.menus.map(menu => ({
+          id: getFeatureCode(menu.id, menu.routeName),
+          code: getFeatureCode(menu.id, menu.routeName),
+          label: menu.label,
+          requiredPermissionCodes: getMenuRequiredPermissionCodes(menu.id),
+        }))
       },
-      async createMenu(record) {
-        workspaceState.menus = [...workspaceState.menus, clone(record)]
-        return clone(record)
+      async listMenuGateResults() {
+        const user = getCurrentUser()
+        if (!user) {
+          return []
+        }
+
+        return buildMenuGateResults(user.id)
       },
-      async updateMenu(menuId, record) {
-        workspaceState.menus = workspaceState.menus.map(item => item.id === menuId ? clone(record) : item)
-        return clone(record)
+      async listProtectedResources() {
+        return buildProtectedResources()
+      },
+      async listMenuPolicies() {
+        return clone(accessMenuPolicies)
+      },
+      async createMenuPolicy(record) {
+        const created = {
+          menuId: record.menuId,
+          enabled: record.enabled,
+          order: record.order,
+          group: record.group,
+          visibility: record.visibility,
+        }
+        accessMenuPolicies = accessMenuPolicies.filter(policy => policy.menuId !== record.menuId).concat(created)
+        appendAudit('access.menu-policies.create', 'success', `access.menu-policy:${record.menuId}`)
+        return clone(created)
+      },
+      async updateMenuPolicy(menuId, record) {
+        const updated = {
+          menuId,
+          enabled: record.enabled,
+          order: record.order,
+          group: record.group,
+          visibility: record.visibility,
+        }
+        accessMenuPolicies = accessMenuPolicies.filter(policy => policy.menuId !== menuId).concat(updated)
+        appendAudit('access.menu-policies.update', 'success', `access.menu-policy:${menuId}`)
+        return clone(updated)
+      },
+      async deleteMenuPolicy(menuId) {
+        accessMenuPolicies = accessMenuPolicies.filter(policy => policy.menuId !== menuId)
+        appendAudit('access.menu-policies.delete', 'success', `access.menu-policy:${menuId}`)
+      },
+      async upsertProtectedResource(resourceType, resourceId, input) {
+        const current = buildProtectedResources().find(record => record.resourceType === resourceType && record.id === resourceId)
+        if (!current) {
+          throw new WorkspaceApiError({
+            message: 'protected resource not found',
+            status: 404,
+            requestId: 'req-protected-resource-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+        const updated = {
+          ...current,
+          resourceSubtype: input.resourceSubtype ?? current.resourceSubtype,
+          projectId: input.projectId ?? current.projectId,
+          ownerSubjectType: input.ownerSubjectType ?? current.ownerSubjectType,
+          ownerSubjectId: input.ownerSubjectId ?? current.ownerSubjectId,
+          tags: clone(input.tags ?? current.tags),
+          classification: input.classification ?? current.classification,
+        }
+        protectedResourceMetadata.set(protectedResourceKey(resourceType, resourceId), clone(updated))
+        appendAudit('access.protected-resources.update', 'success', `${resourceType}:${resourceId}`, updated.projectId)
+        return clone(updated)
       },
     },
     runtime: {
@@ -1853,4 +2674,6 @@ export function createWorkspaceClientFixture(
       },
     },
   }
+
+  return applySessionGuards(client)
 }

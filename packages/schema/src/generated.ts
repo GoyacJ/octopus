@@ -1,10 +1,53 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 0a4e697b95af90c519773b3cf4b3886b7a97a7b10fff8d3100df319a9d42d5e1
+// Source hash: 0a81fa8cad1c034b0b80d9ee713dfaa70466802771d31c639d1c1e62166fbd60
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "0a4e697b95af90c519773b3cf4b3886b7a97a7b10fff8d3100df319a9d42d5e1"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "0a81fa8cad1c034b0b80d9ee713dfaa70466802771d31c639d1c1e62166fbd60"
+
+export interface AccessAuditListResponse {
+  items: AuditRecord[]
+  nextCursor?: string
+}
+
+export interface AccessRoleRecord {
+  code: string
+  description: string
+  id: string
+  name: string
+  permissionCodes: string[]
+  status: string
+}
+
+export interface AccessSessionRecord {
+  clientAppId: string
+  createdAt: number
+  current: boolean
+  displayName: string
+  expiresAt?: number
+  sessionId: string
+  status: string
+  userId: string
+  username: string
+}
+
+export interface AccessUserRecord {
+  displayName: string
+  id: string
+  passwordState: string
+  status: string
+  username: string
+}
+
+export interface AccessUserUpsertRequest {
+  confirmPassword?: string
+  displayName: string
+  password?: string
+  resetPassword?: boolean
+  status: string
+  username: string
+}
 
 export interface AgentRecord {
   avatar?: string
@@ -33,7 +76,7 @@ export type AgentScope = "personal" | "workspace" | "project"
 
 export type AgentStatus = "active" | "archived"
 
-export type ApiErrorCode = "UNAUTHENTICATED" | "SESSION_EXPIRED" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "INVALID_INPUT" | "RATE_LIMITED" | "UNAVAILABLE" | "CAPABILITY_UNSUPPORTED" | "INTERNAL_ERROR"
+export type ApiErrorCode = "UNAUTHENTICATED" | "SESSION_EXPIRED" | "PERMISSION_DENIED" | "AUTHORIZATION_STALE" | "FORBIDDEN" | "NOT_FOUND" | "CONFLICT" | "INVALID_INPUT" | "RATE_LIMITED" | "UNAVAILABLE" | "CAPABILITY_UNSUPPORTED" | "INTERNAL_ERROR"
 
 export interface ApiErrorDetailEnvelope {
   code: ApiErrorCode
@@ -75,6 +118,18 @@ export interface AuditRecord {
   workspaceId: string
 }
 
+export interface AuthorizationSnapshot {
+  effectivePermissionCodes: string[]
+  effectiveRoleIds: string[]
+  effectiveRoles: AccessRoleRecord[]
+  featureCodes: string[]
+  menuGates: MenuGateResult[]
+  orgAssignments: UserOrgAssignmentRecord[]
+  principal: AccessUserRecord
+  resourceActionGrants: ResourceActionGrant[]
+  visibleMenuIds: string[]
+}
+
 export interface AutomationRecord {
   cadence: string
   description: string
@@ -112,6 +167,17 @@ export interface BindPetConversationInput {
 export interface CapabilityDescriptor {
   capabilityId: string
   label: string
+}
+
+export interface CaptchaChallenge {
+  challengeId: string
+  expiresAt: number
+  svgData: string
+}
+
+export interface CaptchaPolicy {
+  required: boolean
+  ttlSeconds: number
 }
 
 export interface ChangeCurrentUserPasswordRequest {
@@ -175,6 +241,10 @@ export interface CreateHostWorkspaceConnectionInput {
   workspaceId: string
 }
 
+export type CreateMenuPolicyRequest = MenuPolicyUpsertRequest & {
+  menuId: string
+}
+
 export interface CreateNotificationInput {
   actionLabel?: string
   body?: string
@@ -219,19 +289,6 @@ export interface CreateWorkspaceSkillInput {
   slug: string
 }
 
-export interface CreateWorkspaceUserRequest {
-  avatar?: AvatarUploadPayload
-  confirmPassword?: string
-  displayName: string
-  password?: string
-  roleIds: string[]
-  scopeProjectIds: string[]
-  status: UserStatus
-  useDefaultAvatar?: boolean
-  useDefaultPassword?: boolean
-  username: string
-}
-
 export interface CredentialBinding {
   baseUrl?: string
   configured: boolean
@@ -242,7 +299,64 @@ export interface CredentialBinding {
   status: "healthy" | "error" | "unconfigured" | "configured"
 }
 
+export interface DataPolicyRecord {
+  classifications: string[]
+  effect: string
+  id: string
+  name: string
+  projectIds: string[]
+  resourceType: string
+  scopeType: string
+  subjectId: string
+  subjectType: string
+  tags: string[]
+}
+
+export interface DataPolicyUpsertRequest {
+  classifications: string[]
+  effect: string
+  name: string
+  projectIds: string[]
+  resourceType: string
+  scopeType: string
+  subjectId: string
+  subjectType: string
+  tags: string[]
+}
+
 export type DecisionAction = "approve" | "reject"
+
+export interface EnterpriseAuthSuccess {
+  session: EnterpriseSessionSummary
+  workspace: WorkspaceSummary
+}
+
+export interface EnterpriseLoginRequest {
+  captchaChallengeId: string
+  captchaCode: string
+  clientAppId: string
+  password: string
+  username: string
+  workspaceId?: string
+}
+
+export interface EnterprisePrincipal {
+  displayName: string
+  status: string
+  userId: string
+  username: string
+}
+
+export interface EnterpriseSessionSummary {
+  clientAppId: string
+  createdAt: number
+  expiresAt?: number
+  principal: EnterprisePrincipal
+  sessionId: string
+  status: string
+  token: string
+  workspaceId: string
+}
 
 export interface ExportWorkspaceAgentBundleInput {
   agentIds: string[]
@@ -260,6 +374,13 @@ export interface ExportWorkspaceAgentBundleResult {
   rootDirName: string
   skillCount: number
   teamCount: number
+}
+
+export interface FeatureDefinition {
+  code: string
+  id: string
+  label: string
+  requiredPermissionCodes: string[]
 }
 
 export interface HealthcheckBackendStatus {
@@ -508,30 +629,40 @@ export type KnowledgeStatus = "candidate" | "reviewed" | "shared" | "archived"
 
 export type Locale = "zh-CN" | "en-US"
 
-export interface LoginRequest {
-  clientAppId: string
-  password: string
-  username: string
-  workspaceId?: string
-}
-
-export interface LoginResponse {
-  session: SessionRecord
-  workspace: WorkspaceSummary
-}
-
-export interface MenuRecord {
+export interface MenuDefinition {
+  featureCode: string
   id: string
   label: string
   order: number
   parentId?: string
   routeName?: string
-  source: MenuSource
-  status: MenuStatus
-  workspaceId: string
+  source: string
+  status: string
 }
 
-export type MenuSource = "main-sidebar" | "console" | "permission-center"
+export interface MenuGateResult {
+  allowed: boolean
+  featureCode: string
+  menuId: string
+  reason?: string
+}
+
+export interface MenuPolicyRecord {
+  enabled: boolean
+  group?: string
+  menuId: string
+  order: number
+  visibility: string
+}
+
+export interface MenuPolicyUpsertRequest {
+  enabled: boolean
+  group?: string
+  order: number
+  visibility: string
+}
+
+export type MenuSource = "main-sidebar" | "console" | "access-control"
 
 export type MenuStatus = "active" | "disabled"
 
@@ -607,39 +738,33 @@ export interface NotificationUnreadSummary {
   total: number
 }
 
-export type PasswordState = "set" | "reset-required" | "temporary"
-
-export interface PermissionCenterAlertRecord {
-  description: string
+export interface OrgUnitRecord {
+  code: string
   id: string
-  severity: RiskLevel
-  title: string
+  name: string
+  parentId?: string
+  status: string
 }
 
-export interface PermissionCenterOverviewSnapshot {
-  alerts: PermissionCenterAlertRecord[]
-  currentUser: UserRecordSummary
-  metrics: WorkspaceMetricRecord[]
-  quickLinks: MenuRecord[]
-  roleNames: string[]
-  workspaceId: string
+export interface OrgUnitUpsertRequest {
+  code: string
+  name: string
+  parentId?: string
+  status: string
+}
+
+export type PasswordState = "set" | "reset-required" | "temporary"
+
+export interface PermissionDefinition {
+  actions: string[]
+  category: string
+  code: string
+  description: string
+  name: string
+  resourceType: string
 }
 
 export type PermissionMode = "auto" | "readonly" | "danger-full-access"
-
-export interface PermissionRecord {
-  action?: string
-  code: string
-  description: string
-  id: string
-  kind: RbacPermissionKind
-  memberPermissionIds: string[]
-  name: string
-  status: RbacPermissionStatus
-  targetIds: string[]
-  targetType?: RbacPermissionTargetType
-  workspaceId: string
-}
 
 export type PetChatSender = "user" | "pet"
 
@@ -702,6 +827,19 @@ export interface PetWorkspaceSnapshot {
   messages: PetMessage[]
   presence: PetPresenceState
   profile: PetProfile
+}
+
+export interface PositionRecord {
+  code: string
+  id: string
+  name: string
+  status: string
+}
+
+export interface PositionUpsertRequest {
+  code: string
+  name: string
+  status: string
 }
 
 export interface ProjectAgentAssignments {
@@ -768,6 +906,27 @@ export interface ProjectWorkspaceAssignments {
   tools?: ProjectToolAssignments
 }
 
+export interface ProtectedResourceDescriptor {
+  classification: string
+  id: string
+  name: string
+  ownerSubjectId?: string
+  ownerSubjectType?: string
+  projectId?: string
+  resourceSubtype?: string
+  resourceType: string
+  tags: string[]
+}
+
+export interface ProtectedResourceMetadataUpsertRequest {
+  classification: string
+  ownerSubjectId?: string
+  ownerSubjectType?: string
+  projectId?: string
+  resourceSubtype?: string
+  tags: string[]
+}
+
 export interface ProviderConfig {
   baseUrl?: string
   credentialRef?: string
@@ -777,27 +936,16 @@ export interface ProviderConfig {
   providerId: string
 }
 
-export type RbacPermissionKind = "atomic" | "bundle"
-
-export type RbacPermissionStatus = "active" | "disabled"
-
-export type RbacPermissionTargetType = "workspace" | "project" | "user" | "role" | "permission" | "menu" | "resource" | "agent" | "knowledge" | "tool" | "skill" | "mcp"
-
-export type RbacRoleStatus = "active" | "disabled"
-
-export interface RegisterWorkspaceOwnerRequest {
+export interface RegisterBootstrapAdminRequest {
   avatar: AvatarUploadPayload
+  captchaChallengeId: string
+  captchaCode: string
   clientAppId: string
   confirmPassword: string
   displayName: string
   password: string
   username: string
   workspaceId?: string
-}
-
-export interface RegisterWorkspaceOwnerResponse {
-  session: SessionRecord
-  workspace: WorkspaceSummary
 }
 
 export interface ResolvedExecutionTarget {
@@ -817,17 +965,53 @@ export interface ResolveRuntimeApprovalInput {
   decision: DecisionAction
 }
 
+export interface ResourceActionGrant {
+  actions: string[]
+  resourceType: string
+}
+
+export interface ResourcePolicyRecord {
+  action: string
+  effect: string
+  id: string
+  resourceId: string
+  resourceType: string
+  subjectId: string
+  subjectType: string
+}
+
+export interface ResourcePolicyUpsertRequest {
+  action: string
+  effect: string
+  resourceId: string
+  resourceType: string
+  subjectId: string
+  subjectType: string
+}
+
 export type RiskLevel = "low" | "medium" | "high"
 
-export interface RoleRecord {
+export interface RoleBindingRecord {
+  effect: string
+  id: string
+  roleId: string
+  subjectId: string
+  subjectType: string
+}
+
+export interface RoleBindingUpsertRequest {
+  effect: string
+  roleId: string
+  subjectId: string
+  subjectType: string
+}
+
+export interface RoleUpsertRequest {
   code: string
   description: string
-  id: string
-  menuIds: string[]
   name: string
-  permissionIds: string[]
-  status: RbacRoleStatus
-  workspaceId: string
+  permissionCodes: string[]
+  status: string
 }
 
 export type RunStatus = "idle" | "draft" | "planned" | "running" | "waiting_input" | "waiting_approval" | "blocked" | "paused" | "completed" | "failed" | "terminated"
@@ -1041,8 +1225,6 @@ export interface SessionRecord {
   createdAt: number
   expiresAt?: number
   id: string
-  roleIds: string[]
-  scopeProjectIds: string[]
   status: SessionStatus
   token: string
   userId: string
@@ -1081,6 +1263,14 @@ export interface SubmitRuntimeTurnInput {
   content: string
   modelId?: string
   permissionMode: RuntimePermissionMode
+}
+
+export interface SystemAuthStatus {
+  bootstrapAdminRequired: boolean
+  captcha: CaptchaPolicy
+  ownerReady: boolean
+  session?: EnterpriseSessionSummary
+  workspace: WorkspaceSummary
 }
 
 export interface SystemBootstrapStatus {
@@ -1174,19 +1364,6 @@ export interface UpdateWorkspaceSkillInput {
   content: string
 }
 
-export interface UpdateWorkspaceUserRequest {
-  avatar?: AvatarUploadPayload
-  confirmPassword?: string
-  displayName: string
-  password?: string
-  removeAvatar?: boolean
-  resetPasswordToDefault?: boolean
-  roleIds: string[]
-  scopeProjectIds: string[]
-  status: UserStatus
-  username: string
-}
-
 export interface UpsertAgentInput {
   avatar?: AvatarUploadPayload
   builtinToolKeys: string[]
@@ -1228,13 +1405,40 @@ export interface UpsertWorkspaceMcpServerInput {
   serverName: string
 }
 
+export interface UserGroupRecord {
+  code: string
+  id: string
+  name: string
+  status: string
+}
+
+export interface UserGroupUpsertRequest {
+  code: string
+  name: string
+  status: string
+}
+
+export interface UserOrgAssignmentRecord {
+  isPrimary: boolean
+  orgUnitId: string
+  positionIds: string[]
+  userGroupIds: string[]
+  userId: string
+}
+
+export interface UserOrgAssignmentUpsertRequest {
+  isPrimary: boolean
+  orgUnitId: string
+  positionIds: string[]
+  userGroupIds: string[]
+  userId: string
+}
+
 export interface UserRecordSummary {
   avatar?: string
   displayName: string
   id: string
   passwordState: PasswordState
-  roleIds: string[]
-  scopeProjectIds: string[]
   status: UserStatus
   username: string
 }
@@ -1472,27 +1676,127 @@ export type WorkspaceToolStatus = "active" | "disabled"
 
 
 export interface OctopusApiPaths {
+  "/api/v1/access/audit": {
+    get: { operationId: "listAccessAudit"; response: AccessAuditListResponse; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/authorization/current": {
+    get: { operationId: "getCurrentAuthorization"; response: AuthorizationSnapshot; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/menus/definitions": {
+    get: { operationId: "listAccessMenuDefinitions"; response: MenuDefinition[]; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/menus/features": {
+    get: { operationId: "listAccessFeatureDefinitions"; response: FeatureDefinition[]; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/menus/gates": {
+    get: { operationId: "listAccessMenuGateResults"; response: MenuGateResult[]; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/menus/policies": {
+    get: { operationId: "listAccessMenuPolicies"; response: MenuPolicyRecord[]; error: ApiErrorEnvelope }
+    post: { operationId: "createAccessMenuPolicy"; response: MenuPolicyRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/menus/policies/{menuId}": {
+    put: { operationId: "updateAccessMenuPolicy"; response: MenuPolicyRecord; error: ApiErrorEnvelope }
+    delete: { operationId: "deleteAccessMenuPolicy"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/org/assignments": {
+    get: { operationId: "listAccessUserOrgAssignments"; response: UserOrgAssignmentRecord[]; error: ApiErrorEnvelope }
+    post: { operationId: "upsertAccessUserOrgAssignment"; response: UserOrgAssignmentRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/org/assignments/{userId}/{orgUnitId}": {
+    delete: { operationId: "deleteAccessUserOrgAssignment"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/org/groups": {
+    get: { operationId: "listAccessUserGroups"; response: UserGroupRecord[]; error: ApiErrorEnvelope }
+    post: { operationId: "createAccessUserGroup"; response: UserGroupRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/org/groups/{groupId}": {
+    put: { operationId: "updateAccessUserGroup"; response: UserGroupRecord; error: ApiErrorEnvelope }
+    delete: { operationId: "deleteAccessUserGroup"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/org/positions": {
+    get: { operationId: "listAccessPositions"; response: PositionRecord[]; error: ApiErrorEnvelope }
+    post: { operationId: "createAccessPosition"; response: PositionRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/org/positions/{positionId}": {
+    put: { operationId: "updateAccessPosition"; response: PositionRecord; error: ApiErrorEnvelope }
+    delete: { operationId: "deleteAccessPosition"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/org/units": {
+    get: { operationId: "listAccessOrgUnits"; response: OrgUnitRecord[]; error: ApiErrorEnvelope }
+    post: { operationId: "createAccessOrgUnit"; response: OrgUnitRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/org/units/{orgUnitId}": {
+    put: { operationId: "updateAccessOrgUnit"; response: OrgUnitRecord; error: ApiErrorEnvelope }
+    delete: { operationId: "deleteAccessOrgUnit"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/policies/data-policies": {
+    get: { operationId: "listAccessDataPolicies"; response: DataPolicyRecord[]; error: ApiErrorEnvelope }
+    post: { operationId: "createAccessDataPolicy"; response: DataPolicyRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/policies/data-policies/{policyId}": {
+    put: { operationId: "updateAccessDataPolicy"; response: DataPolicyRecord; error: ApiErrorEnvelope }
+    delete: { operationId: "deleteAccessDataPolicy"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/policies/permission-definitions": {
+    get: { operationId: "listAccessPermissionDefinitions"; response: PermissionDefinition[]; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/policies/resource-policies": {
+    get: { operationId: "listAccessResourcePolicies"; response: ResourcePolicyRecord[]; error: ApiErrorEnvelope }
+    post: { operationId: "createAccessResourcePolicy"; response: ResourcePolicyRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/policies/resource-policies/{policyId}": {
+    put: { operationId: "updateAccessResourcePolicy"; response: ResourcePolicyRecord; error: ApiErrorEnvelope }
+    delete: { operationId: "deleteAccessResourcePolicy"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/policies/role-bindings": {
+    get: { operationId: "listAccessRoleBindings"; response: RoleBindingRecord[]; error: ApiErrorEnvelope }
+    post: { operationId: "createAccessRoleBinding"; response: RoleBindingRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/policies/role-bindings/{bindingId}": {
+    put: { operationId: "updateAccessRoleBinding"; response: RoleBindingRecord; error: ApiErrorEnvelope }
+    delete: { operationId: "deleteAccessRoleBinding"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/protected-resources": {
+    get: { operationId: "listAccessProtectedResources"; response: ProtectedResourceDescriptor[]; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/protected-resources/{resourceType}/{resourceId}": {
+    put: { operationId: "upsertAccessProtectedResource"; response: ProtectedResourceDescriptor; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/roles": {
+    get: { operationId: "listAccessRoles"; response: AccessRoleRecord[]; error: ApiErrorEnvelope }
+    post: { operationId: "createAccessRole"; response: AccessRoleRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/roles/{roleId}": {
+    put: { operationId: "updateAccessRole"; response: AccessRoleRecord; error: ApiErrorEnvelope }
+    delete: { operationId: "deleteAccessRole"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/sessions": {
+    get: { operationId: "listAccessSessions"; response: AccessSessionRecord[]; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/sessions/{sessionId}/revoke": {
+    post: { operationId: "revokeAccessSession"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/sessions/current/revoke": {
+    post: { operationId: "revokeCurrentAccessSession"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/users": {
+    get: { operationId: "listAccessUsers"; response: AccessUserRecord[]; error: ApiErrorEnvelope }
+    post: { operationId: "createAccessUser"; response: AccessUserRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/users/{userId}": {
+    put: { operationId: "updateAccessUser"; response: AccessUserRecord; error: ApiErrorEnvelope }
+    delete: { operationId: "deleteAccessUser"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/access/users/{userId}/sessions/revoke": {
+    post: { operationId: "revokeAccessUserSessions"; response: void; error: ApiErrorEnvelope }
+  }
   "/api/v1/apps": {
     get: { operationId: "listClientApps"; response: ClientAppRecord[]; error: ApiErrorEnvelope }
     post: { operationId: "registerClientApp"; response: ClientAppRecord; error: ApiErrorEnvelope }
   }
   "/api/v1/artifacts": {
     get: { operationId: "listArtifacts"; response: ArtifactRecord[]; error: ApiErrorEnvelope }
-  }
-  "/api/v1/audit": {
-    get: { operationId: "listAuditRecords"; response: AuditRecord[]; error: ApiErrorEnvelope }
-  }
-  "/api/v1/auth/login": {
-    post: { operationId: "login"; response: LoginResponse; error: ApiErrorEnvelope }
-  }
-  "/api/v1/auth/logout": {
-    post: { operationId: "logout"; response: void; error: ApiErrorEnvelope }
-  }
-  "/api/v1/auth/register-owner": {
-    post: { operationId: "registerOwner"; response: RegisterWorkspaceOwnerResponse; error: ApiErrorEnvelope }
-  }
-  "/api/v1/auth/session": {
-    get: { operationId: "getCurrentSession"; response: SessionRecord; error: ApiErrorEnvelope }
   }
   "/api/v1/host/bootstrap": {
     get: { operationId: "getHostBootstrap"; response: ShellBootstrap; error: ApiErrorEnvelope }
@@ -1646,6 +1950,21 @@ export interface OctopusApiPaths {
   "/api/v1/runtime/sessions/{sessionId}/turns": {
     post: { operationId: "submitRuntimeTurn"; response: RuntimeRunSnapshot; error: ApiErrorEnvelope }
   }
+  "/api/v1/system/auth/bootstrap-admin": {
+    post: { operationId: "registerBootstrapAdmin"; response: EnterpriseAuthSuccess; error: ApiErrorEnvelope }
+  }
+  "/api/v1/system/auth/captcha": {
+    post: { operationId: "createSystemAuthCaptcha"; response: CaptchaChallenge; error: ApiErrorEnvelope }
+  }
+  "/api/v1/system/auth/login": {
+    post: { operationId: "systemAuthLogin"; response: EnterpriseAuthSuccess; error: ApiErrorEnvelope }
+  }
+  "/api/v1/system/auth/session": {
+    get: { operationId: "getSystemAuthSession"; response: EnterpriseSessionSummary; error: ApiErrorEnvelope }
+  }
+  "/api/v1/system/auth/status": {
+    get: { operationId: "getSystemAuthStatus"; response: SystemAuthStatus; error: ApiErrorEnvelope }
+  }
   "/api/v1/system/bootstrap": {
     get: { operationId: "getSystemBootstrap"; response: SystemBootstrapStatus; error: ApiErrorEnvelope }
   }
@@ -1744,9 +2063,6 @@ export interface OctopusApiPaths {
   "/api/v1/workspace/overview": {
     get: { operationId: "getWorkspaceOverview"; response: WorkspaceOverviewSnapshot; error: ApiErrorEnvelope }
   }
-  "/api/v1/workspace/permission-center/overview": {
-    get: { operationId: "getPermissionCenterOverview"; response: PermissionCenterOverviewSnapshot; error: ApiErrorEnvelope }
-  }
   "/api/v1/workspace/personal-center/profile": {
     patch: { operationId: "updateCurrentUserProfile"; response: UserRecordSummary; error: ApiErrorEnvelope }
   }
@@ -1768,37 +2084,6 @@ export interface OctopusApiPaths {
   }
   "/api/v1/workspace/pet/presence": {
     patch: { operationId: "saveWorkspacePetPresence"; response: PetPresenceState; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/rbac/menus": {
-    get: { operationId: "listWorkspaceMenus"; response: MenuRecord[]; error: ApiErrorEnvelope }
-    post: { operationId: "createWorkspaceMenu"; response: MenuRecord; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/rbac/menus/{menuId}": {
-    patch: { operationId: "updateWorkspaceMenu"; response: MenuRecord; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/rbac/permissions": {
-    get: { operationId: "listWorkspacePermissions"; response: PermissionRecord[]; error: ApiErrorEnvelope }
-    post: { operationId: "createWorkspacePermission"; response: PermissionRecord; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/rbac/permissions/{permissionId}": {
-    patch: { operationId: "updateWorkspacePermission"; response: PermissionRecord; error: ApiErrorEnvelope }
-    delete: { operationId: "deleteWorkspacePermission"; response: void; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/rbac/roles": {
-    get: { operationId: "listWorkspaceRoles"; response: RoleRecord[]; error: ApiErrorEnvelope }
-    post: { operationId: "createWorkspaceRole"; response: RoleRecord; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/rbac/roles/{roleId}": {
-    patch: { operationId: "updateWorkspaceRole"; response: RoleRecord; error: ApiErrorEnvelope }
-    delete: { operationId: "deleteWorkspaceRole"; response: void; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/rbac/users": {
-    get: { operationId: "listWorkspaceUsers"; response: UserRecordSummary[]; error: ApiErrorEnvelope }
-    post: { operationId: "createWorkspaceUser"; response: UserRecordSummary; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/rbac/users/{userId}": {
-    patch: { operationId: "updateWorkspaceUser"; response: UserRecordSummary; error: ApiErrorEnvelope }
-    delete: { operationId: "deleteWorkspaceUser"; response: void; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/resources": {
     get: { operationId: "listWorkspaceResources"; response: WorkspaceResourceRecord[]; error: ApiErrorEnvelope }

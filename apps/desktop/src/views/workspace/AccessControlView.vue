@@ -6,23 +6,23 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import { UiPageHeader, UiPageShell, UiPanelFrame, UiTabs } from '@octopus/ui'
 
 import { getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const workspaceAccessStore = useWorkspaceAccessStore()
+const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 const workspaceStore = useWorkspaceStore()
 
 const activeTab = ref('')
 const currentMenuId = computed(() => getRouteMenuId(typeof route.name === 'string' ? route.name : undefined))
 
 watch(
-  () => [route.name, workspaceStore.currentWorkspaceId, workspaceAccessStore.availablePermissionCenterMenus.map(menu => menu.id).join('|')],
+  () => [route.name, workspaceStore.currentWorkspaceId, workspaceAccessControlStore.availableAccessControlMenus.map(menu => menu.id).join('|')],
   () => {
-    if (route.name === 'workspace-permission-center') {
-      const firstRouteName = workspaceAccessStore.firstAccessiblePermissionCenterRouteName
+    if (route.name === 'workspace-access-control') {
+      const firstRouteName = workspaceAccessControlStore.firstAccessibleAccessControlRouteName
       if (firstRouteName) {
         const menuId = getRouteMenuId(firstRouteName)
         if (menuId) {
@@ -42,7 +42,7 @@ watch(
 )
 
 const tabs = computed(() =>
-  workspaceAccessStore.availablePermissionCenterMenus
+  workspaceAccessControlStore.availableAccessControlMenus
     .flatMap((menu) => {
       const definition = getMenuDefinition(menu.id)
       if (!definition?.routeName) {
@@ -57,7 +57,7 @@ const tabs = computed(() =>
 )
 
 function handleTabChange(menuId: string) {
-  const entry = workspaceAccessStore.availablePermissionCenterMenus.find(menu => menu.id === menuId)
+  const entry = workspaceAccessControlStore.availableAccessControlMenus.find(menu => menu.id === menuId)
   const definition = entry ? getMenuDefinition(entry.id) : undefined
   if (!definition?.routeName) {
     return
@@ -71,18 +71,18 @@ function handleTabChange(menuId: string) {
 </script>
 
 <template>
-  <UiPageShell width="wide" test-id="permission-center-view" class="h-full">
+  <UiPageShell width="wide" test-id="access-control-view" class="h-full">
     <UiPageHeader
-      :eyebrow="t('permissionCenter.header.eyebrow')"
-      :title="t('permissionCenter.header.title')"
-      :description="workspaceAccessStore.currentUser?.displayName ?? t('common.na')"
+      :eyebrow="t('accessControl.header.eyebrow')"
+      :title="t('accessControl.header.title')"
+      :description="workspaceAccessControlStore.currentUser?.displayName ?? t('common.na')"
     />
 
     <UiPanelFrame variant="subtle" padding="sm">
       <UiTabs
         v-model="activeTab"
         :tabs="tabs"
-        data-testid="permission-center-tabs"
+        data-testid="access-control-tabs"
         @update:model-value="handleTabChange"
       />
     </UiPanelFrame>

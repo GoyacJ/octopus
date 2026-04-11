@@ -3,22 +3,15 @@ import type {
   ChangeCurrentUserPasswordResponse as OpenApiChangeCurrentUserPasswordResponse,
   CreateWorkspaceResourceFolderInput as OpenApiCreateWorkspaceResourceFolderInput,
   CreateWorkspaceResourceInput as OpenApiCreateWorkspaceResourceInput,
-  CreateWorkspaceUserRequest as OpenApiCreateWorkspaceUserRequest,
   ConversationRecord as OpenApiConversationRecord,
   KnowledgeRecord as OpenApiKnowledgeRecord,
-  MenuRecord as OpenApiMenuRecord,
-  PermissionRecord as OpenApiPermissionRecord,
   ProjectTeamLinkInput as OpenApiProjectTeamLinkInput,
   ProjectTeamLinkRecord as OpenApiProjectTeamLinkRecord,
   ProjectDashboardSnapshot as OpenApiProjectDashboardSnapshot,
-  RoleRecord as OpenApiRoleRecord,
   TeamRecord as OpenApiTeamRecord,
   UpdateCurrentUserProfileRequest as OpenApiUpdateCurrentUserProfileRequest,
-  UpdateWorkspaceUserRequest as OpenApiUpdateWorkspaceUserRequest,
   UpsertTeamInput as OpenApiUpsertTeamInput,
   UpdateWorkspaceResourceInput as OpenApiUpdateWorkspaceResourceInput,
-  PermissionCenterAlertRecord as OpenApiPermissionCenterAlertRecord,
-  PermissionCenterOverviewSnapshot as OpenApiPermissionCenterOverviewSnapshot,
   UserRecordSummary as OpenApiUserRecordSummary,
   WorkspaceResourceFolderUploadEntry as OpenApiWorkspaceResourceFolderUploadEntry,
   WorkspaceResourceRecord as OpenApiWorkspaceResourceRecord,
@@ -188,22 +181,8 @@ export interface AutomationRecord {
 
 export type UserRecordSummary = OpenApiUserRecordSummary
 
-export type CreateWorkspaceUserRequest = OpenApiCreateWorkspaceUserRequest
-
-export type UpdateWorkspaceUserRequest = OpenApiUpdateWorkspaceUserRequest
-
 export type UpdateCurrentUserProfileRequest = OpenApiUpdateCurrentUserProfileRequest
 
 export type ChangeCurrentUserPasswordRequest = OpenApiChangeCurrentUserPasswordRequest
 
 export type ChangeCurrentUserPasswordResponse = OpenApiChangeCurrentUserPasswordResponse
-
-export type RoleRecord = OpenApiRoleRecord
-
-export type PermissionRecord = OpenApiPermissionRecord
-
-export type MenuRecord = OpenApiMenuRecord
-
-export type PermissionCenterAlertRecord = OpenApiPermissionCenterAlertRecord
-
-export type PermissionCenterOverviewSnapshot = OpenApiPermissionCenterOverviewSnapshot

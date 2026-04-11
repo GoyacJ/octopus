@@ -37,24 +37,6 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
-/api/v1/audit:
-  get:
-    operationId: listAuditRecords
-    responses:
-      "200":
-        content:
-          application/json:
-            schema:
-              items:
-                $ref: "#/components/schemas/AuditRecord"
-              type: array
-        description: Audit record payload.
-      default:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApiErrorEnvelope"
-        description: API error envelope.
 /api/v1/inbox:
   get:
     operationId: listInboxItems

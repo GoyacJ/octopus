@@ -243,11 +243,16 @@ export function installWorkspaceApiFixture(options: FixtureOptions = {}): void {
     state: 'ready',
     transport: 'http',
   })
-  vi.spyOn(tauriClient, 'createWorkspaceClient').mockImplementation(({ connection }) => {
+  vi.spyOn(tauriClient, 'createWorkspaceClient').mockImplementation(({ connection, session }) => {
     const workspaceState = workspaceStates.get(connection.workspaceConnectionId)
     if (!workspaceState) {
       throw new Error(`Unknown workspace connection ${connection.workspaceConnectionId}`)
     }
-    return createWorkspaceClientFixture(connection, workspaceState, options) as unknown as ReturnType<typeof tauriClient.createWorkspaceClient>
+    return createWorkspaceClientFixture(
+      connection,
+      workspaceState,
+      options,
+      session,
+    ) as unknown as ReturnType<typeof tauriClient.createWorkspaceClient>
   })
 }

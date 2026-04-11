@@ -68,8 +68,6 @@ export function createWorkspaceSession(
       status: 'active',
       createdAt: 1,
       expiresAt: undefined,
-      roleIds: ['owner'],
-      scopeProjectIds: [],
     },
     ...overrides,
   }

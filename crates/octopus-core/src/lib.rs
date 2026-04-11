@@ -343,7 +343,7 @@ pub struct AvatarUploadPayload {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct RegisterWorkspaceOwnerRequest {
+pub struct RegisterBootstrapAdminRequest {
     pub client_app_id: String,
     pub username: String,
     pub display_name: String,
@@ -362,7 +362,7 @@ pub struct LoginResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct RegisterWorkspaceOwnerResponse {
+pub struct RegisterBootstrapAdminResponse {
     pub session: SessionRecord,
     pub workspace: WorkspaceSummary,
 }
@@ -399,16 +399,6 @@ pub struct UserRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct WorkspaceMembershipRecord {
-    pub workspace_id: String,
-    pub user_id: String,
-    pub role_ids: Vec<String>,
-    pub scope_mode: String,
-    pub scope_project_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
 pub struct SessionRecord {
     pub id: String,
     pub workspace_id: String,
@@ -418,8 +408,6 @@ pub struct SessionRecord {
     pub status: String,
     pub created_at: u64,
     pub expires_at: Option<u64>,
-    pub role_ids: Vec<String>,
-    pub scope_project_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1372,38 +1360,6 @@ pub struct UserRecordSummary {
     pub avatar: Option<String>,
     pub status: String,
     pub password_state: String,
-    pub role_ids: Vec<String>,
-    pub scope_project_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateWorkspaceUserRequest {
-    pub username: String,
-    pub display_name: String,
-    pub status: String,
-    pub role_ids: Vec<String>,
-    pub scope_project_ids: Vec<String>,
-    pub avatar: Option<AvatarUploadPayload>,
-    pub use_default_avatar: Option<bool>,
-    pub password: Option<String>,
-    pub confirm_password: Option<String>,
-    pub use_default_password: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateWorkspaceUserRequest {
-    pub username: String,
-    pub display_name: String,
-    pub status: String,
-    pub role_ids: Vec<String>,
-    pub scope_project_ids: Vec<String>,
-    pub avatar: Option<AvatarUploadPayload>,
-    pub remove_avatar: Option<bool>,
-    pub password: Option<String>,
-    pub confirm_password: Option<String>,
-    pub reset_password_to_default: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1431,64 +1387,353 @@ pub struct ChangeCurrentUserPasswordResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct RoleRecord {
+pub struct AccessUserRecord {
     pub id: String,
-    pub workspace_id: String,
-    pub name: String,
-    pub code: String,
-    pub description: String,
+    pub username: String,
+    pub display_name: String,
     pub status: String,
-    pub permission_ids: Vec<String>,
-    pub menu_ids: Vec<String>,
+    pub password_state: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct PermissionRecord {
-    pub id: String,
-    pub workspace_id: String,
-    pub name: String,
-    pub code: String,
-    pub description: String,
+pub struct AccessUserUpsertRequest {
+    pub username: String,
+    pub display_name: String,
     pub status: String,
-    pub kind: String,
-    pub target_type: Option<String>,
-    pub target_ids: Vec<String>,
-    pub action: Option<String>,
-    pub member_permission_ids: Vec<String>,
+    pub password: Option<String>,
+    pub confirm_password: Option<String>,
+    pub reset_password: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct MenuRecord {
+pub struct OrgUnitRecord {
     pub id: String,
-    pub workspace_id: String,
     pub parent_id: Option<String>,
-    pub source: String,
+    pub code: String,
+    pub name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct OrgUnitUpsertRequest {
+    pub parent_id: Option<String>,
+    pub code: String,
+    pub name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PositionRecord {
+    pub id: String,
+    pub code: String,
+    pub name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PositionUpsertRequest {
+    pub code: String,
+    pub name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UserGroupRecord {
+    pub id: String,
+    pub code: String,
+    pub name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UserGroupUpsertRequest {
+    pub code: String,
+    pub name: String,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UserOrgAssignmentRecord {
+    pub user_id: String,
+    pub org_unit_id: String,
+    pub is_primary: bool,
+    pub position_ids: Vec<String>,
+    pub user_group_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UserOrgAssignmentUpsertRequest {
+    pub user_id: String,
+    pub org_unit_id: String,
+    pub is_primary: bool,
+    pub position_ids: Vec<String>,
+    pub user_group_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionDefinition {
+    pub code: String,
+    pub name: String,
+    pub description: String,
+    pub category: String,
+    pub resource_type: String,
+    pub actions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessRoleRecord {
+    pub id: String,
+    pub code: String,
+    pub name: String,
+    pub description: String,
+    pub status: String,
+    pub permission_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RoleUpsertRequest {
+    pub code: String,
+    pub name: String,
+    pub description: String,
+    pub status: String,
+    pub permission_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RoleBindingRecord {
+    pub id: String,
+    pub role_id: String,
+    pub subject_type: String,
+    pub subject_id: String,
+    pub effect: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RoleBindingUpsertRequest {
+    pub role_id: String,
+    pub subject_type: String,
+    pub subject_id: String,
+    pub effect: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DataPolicyRecord {
+    pub id: String,
+    pub name: String,
+    pub subject_type: String,
+    pub subject_id: String,
+    pub resource_type: String,
+    pub scope_type: String,
+    pub project_ids: Vec<String>,
+    pub tags: Vec<String>,
+    pub classifications: Vec<String>,
+    pub effect: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DataPolicyUpsertRequest {
+    pub name: String,
+    pub subject_type: String,
+    pub subject_id: String,
+    pub resource_type: String,
+    pub scope_type: String,
+    pub project_ids: Vec<String>,
+    pub tags: Vec<String>,
+    pub classifications: Vec<String>,
+    pub effect: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourcePolicyRecord {
+    pub id: String,
+    pub subject_type: String,
+    pub subject_id: String,
+    pub resource_type: String,
+    pub resource_id: String,
+    pub action: String,
+    pub effect: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourcePolicyUpsertRequest {
+    pub subject_type: String,
+    pub subject_id: String,
+    pub resource_type: String,
+    pub resource_id: String,
+    pub action: String,
+    pub effect: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MenuDefinition {
+    pub id: String,
+    pub parent_id: Option<String>,
     pub label: String,
     pub route_name: Option<String>,
+    pub source: String,
     pub status: String,
     pub order: i64,
+    pub feature_code: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct PermissionCenterAlertRecord {
+pub struct MenuPolicyRecord {
+    pub menu_id: String,
+    pub enabled: bool,
+    pub order: i64,
+    pub group: Option<String>,
+    pub visibility: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MenuPolicyUpsertRequest {
+    pub enabled: bool,
+    pub order: i64,
+    pub group: Option<String>,
+    pub visibility: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateMenuPolicyRequest {
+    pub menu_id: String,
+    pub enabled: bool,
+    pub order: i64,
+    pub group: Option<String>,
+    pub visibility: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FeatureDefinition {
     pub id: String,
-    pub title: String,
-    pub description: String,
-    pub severity: String,
+    pub code: String,
+    pub label: String,
+    pub required_permission_codes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct PermissionCenterOverviewSnapshot {
-    pub workspace_id: String,
-    pub current_user: UserRecordSummary,
-    pub role_names: Vec<String>,
-    pub metrics: Vec<WorkspaceMetricRecord>,
-    pub alerts: Vec<PermissionCenterAlertRecord>,
-    pub quick_links: Vec<MenuRecord>,
+pub struct MenuGateResult {
+    pub menu_id: String,
+    pub feature_code: String,
+    pub allowed: bool,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceActionGrant {
+    pub resource_type: String,
+    pub actions: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessSessionRecord {
+    pub session_id: String,
+    pub user_id: String,
+    pub username: String,
+    pub display_name: String,
+    pub client_app_id: String,
+    pub status: String,
+    pub created_at: u64,
+    pub expires_at: Option<u64>,
+    pub current: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectedResourceDescriptor {
+    pub id: String,
+    pub resource_type: String,
+    pub resource_subtype: Option<String>,
+    pub name: String,
+    pub project_id: Option<String>,
+    pub tags: Vec<String>,
+    pub classification: String,
+    pub owner_subject_type: Option<String>,
+    pub owner_subject_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectedResourceMetadataUpsertRequest {
+    pub resource_subtype: Option<String>,
+    pub project_id: Option<String>,
+    pub tags: Vec<String>,
+    pub classification: String,
+    pub owner_subject_type: Option<String>,
+    pub owner_subject_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorizationSnapshot {
+    pub principal: AccessUserRecord,
+    pub effective_role_ids: Vec<String>,
+    pub effective_roles: Vec<AccessRoleRecord>,
+    pub effective_permission_codes: Vec<String>,
+    pub org_assignments: Vec<UserOrgAssignmentRecord>,
+    pub feature_codes: Vec<String>,
+    pub visible_menu_ids: Vec<String>,
+    pub menu_gates: Vec<MenuGateResult>,
+    pub resource_action_grants: Vec<ResourceActionGrant>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthorizationRequest {
+    pub subject_id: String,
+    pub capability: String,
+    pub project_id: Option<String>,
+    pub resource_type: Option<String>,
+    pub resource_id: Option<String>,
+    pub resource_subtype: Option<String>,
+    pub tags: Vec<String>,
+    pub classification: Option<String>,
+    pub owner_subject_type: Option<String>,
+    pub owner_subject_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessAuditQuery {
+    pub actor_id: Option<String>,
+    pub action: Option<String>,
+    pub resource_type: Option<String>,
+    pub outcome: Option<String>,
+    pub from: Option<u64>,
+    pub to: Option<u64>,
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AccessAuditListResponse {
+    pub items: Vec<AuditRecord>,
+    pub next_cursor: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1892,6 +2137,8 @@ pub struct SystemBootstrapStatus {
 pub struct AuthorizationDecision {
     pub allowed: bool,
     pub reason: Option<String>,
+    pub matched_role_binding_ids: Vec<String>,
+    pub matched_policy_ids: Vec<String>,
 }
 
 #[allow(clippy::struct_excessive_bools)]

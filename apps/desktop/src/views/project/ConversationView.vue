@@ -19,8 +19,9 @@ import { useShellStore } from '@/stores/shell'
 import { useTeamStore } from '@/stores/team'
 import { useResourceStore } from '@/stores/resource'
 import { useArtifactStore } from '@/stores/artifact'
+import { useUserProfileStore } from '@/stores/user-profile'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
 
 const route = useRoute()
 const router = useRouter()
@@ -32,8 +33,9 @@ const agentStore = useAgentStore()
 const teamStore = useTeamStore()
 const resourceStore = useResourceStore()
 const artifactStore = useArtifactStore()
+const userProfileStore = useUserProfileStore()
+const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 const workspaceStore = useWorkspaceStore()
-const workspaceAccessStore = useWorkspaceAccessStore()
 
 interface ActorOption {
   value: string
@@ -106,8 +108,8 @@ const actorAvatarMap = computed<Map<string, string>>(() => new Map([
   ...teamStore.workspaceTeams.map(team => [`team:${team.id}`, team.avatar ?? ''] as const),
   ...teamStore.projectTeams.map(team => [`team:${team.id}`, team.avatar ?? ''] as const),
 ]))
-const currentUserAvatar = computed(() => workspaceAccessStore.currentUser?.avatar ?? '')
-const currentUserLabel = computed(() => workspaceAccessStore.currentUser?.displayName || 'You')
+const currentUserAvatar = computed(() => userProfileStore.currentUser?.avatar ?? '')
+const currentUserLabel = computed(() => userProfileStore.currentUser?.displayName || 'You')
 const resourceMap = computed(() => new Map(resourceStore.activeProjectResources.map(resource => [resource.id, resource])))
 const artifactMap = computed(() => new Map(artifactStore.activeProjectArtifacts.map(artifact => [artifact.id, artifact])))
 const permissionOptions = computed(() => [
@@ -146,12 +148,14 @@ async function ensureRuntimeSession() {
     return
   }
 
+  await workspaceAccessControlStore.load()
+  await userProfileStore.load()
+
   await Promise.all([
     workspaceStore.loadProjectRuntimeConfig(projectId.value),
     catalogStore.load(),
     agentStore.load(),
     teamStore.load(),
-    workspaceAccessStore.load(),
     resourceStore.loadProjectResources(projectId.value),
     artifactStore.loadWorkspaceArtifacts(),
     agentStore.loadProjectLinks(projectId.value),

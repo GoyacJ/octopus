@@ -1,4 +1,4 @@
-import type { MenuNode, MenuSource } from '@octopus/schema'
+import type { MenuSource } from '@octopus/schema'
 
 export type MenuIconKey =
   | 'dashboard'
@@ -13,19 +13,23 @@ export type MenuIconKey =
   | 'models'
   | 'tools'
   | 'automations'
-  | 'permission-center'
+  | 'access-control'
   | 'profile'
   | 'pet'
   | 'users'
   | 'roles'
   | 'permissions'
   | 'menus'
+  | 'organization'
+  | 'policy'
+  | 'resource-policy'
+  | 'sessions'
   | 'settings'
   | 'connections'
   | 'teams'
   | 'bell'
 
-export type MenuSection = 'app' | 'project' | 'workspace' | 'console' | 'permission-center'
+export type MenuSection = 'app' | 'project' | 'workspace' | 'console' | 'access-control'
 
 export interface MenuDefinition {
   id: string
@@ -37,6 +41,17 @@ export interface MenuDefinition {
   defaultLabel: string
   labelKey: string
   icon: MenuIconKey
+  order: number
+}
+
+export interface WorkspaceMenuNode {
+  id: string
+  workspaceId: string
+  parentId?: string
+  source: MenuSource
+  label: string
+  routeName?: string
+  status: 'active' | 'disabled'
   order: number
 }
 
@@ -193,20 +208,23 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     order: 90,
   },
   {
-    id: 'menu-workspace-permission-center',
+    id: 'menu-workspace-access-control',
     source: 'main-sidebar',
     section: 'workspace',
-    routeName: 'workspace-permission-center',
+    routeName: 'workspace-access-control',
     routeNames: [
-      'workspace-permission-center',
-      'workspace-permission-center-users',
-      'workspace-permission-center-roles',
-      'workspace-permission-center-permissions',
-      'workspace-permission-center-menus',
+      'workspace-access-control',
+      'workspace-access-control-users',
+      'workspace-access-control-org',
+      'workspace-access-control-roles',
+      'workspace-access-control-policies',
+      'workspace-access-control-menus',
+      'workspace-access-control-resources',
+      'workspace-access-control-sessions',
     ],
-    defaultLabel: '权限中心',
-    labelKey: 'sidebar.navigation.permissionCenter',
-    icon: 'permission-center',
+    defaultLabel: '访问控制',
+    labelKey: 'sidebar.navigation.accessControl',
+    icon: 'access-control',
     order: 100,
   },
   {
@@ -282,52 +300,88 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     order: 160,
   },
   {
-    id: 'menu-workspace-permission-center-users',
-    parentId: 'menu-workspace-permission-center',
-    source: 'permission-center',
-    section: 'permission-center',
-    routeName: 'workspace-permission-center-users',
-    routeNames: ['workspace-permission-center-users'],
-    defaultLabel: '成员管理',
-    labelKey: 'permissionCenter.nav.users',
+    id: 'menu-workspace-access-control-users',
+    parentId: 'menu-workspace-access-control',
+    source: 'access-control',
+    section: 'access-control',
+    routeName: 'workspace-access-control-users',
+    routeNames: ['workspace-access-control-users'],
+    defaultLabel: '用户管理',
+    labelKey: 'accessControl.nav.users',
     icon: 'users',
     order: 170,
   },
   {
-    id: 'menu-workspace-permission-center-roles',
-    parentId: 'menu-workspace-permission-center',
-    source: 'permission-center',
-    section: 'permission-center',
-    routeName: 'workspace-permission-center-roles',
-    routeNames: ['workspace-permission-center-roles'],
-    defaultLabel: '角色管理',
-    labelKey: 'permissionCenter.nav.roles',
-    icon: 'roles',
+    id: 'menu-workspace-access-control-org',
+    parentId: 'menu-workspace-access-control',
+    source: 'access-control',
+    section: 'access-control',
+    routeName: 'workspace-access-control-org',
+    routeNames: ['workspace-access-control-org'],
+    defaultLabel: '组织管理',
+    labelKey: 'accessControl.nav.org',
+    icon: 'organization',
     order: 180,
   },
   {
-    id: 'menu-workspace-permission-center-permissions',
-    parentId: 'menu-workspace-permission-center',
-    source: 'permission-center',
-    section: 'permission-center',
-    routeName: 'workspace-permission-center-permissions',
-    routeNames: ['workspace-permission-center-permissions'],
-    defaultLabel: '权限管理',
-    labelKey: 'permissionCenter.nav.permissions',
-    icon: 'permissions',
+    id: 'menu-workspace-access-control-roles',
+    parentId: 'menu-workspace-access-control',
+    source: 'access-control',
+    section: 'access-control',
+    routeName: 'workspace-access-control-roles',
+    routeNames: ['workspace-access-control-roles'],
+    defaultLabel: '角色管理',
+    labelKey: 'accessControl.nav.roles',
+    icon: 'roles',
     order: 190,
   },
   {
-    id: 'menu-workspace-permission-center-menus',
-    parentId: 'menu-workspace-permission-center',
-    source: 'permission-center',
-    section: 'permission-center',
-    routeName: 'workspace-permission-center-menus',
-    routeNames: ['workspace-permission-center-menus'],
-    defaultLabel: '导航管理',
-    labelKey: 'permissionCenter.nav.menus',
-    icon: 'menus',
+    id: 'menu-workspace-access-control-policies',
+    parentId: 'menu-workspace-access-control',
+    source: 'access-control',
+    section: 'access-control',
+    routeName: 'workspace-access-control-policies',
+    routeNames: ['workspace-access-control-policies'],
+    defaultLabel: '权限与策略',
+    labelKey: 'accessControl.nav.policies',
+    icon: 'policy',
     order: 200,
+  },
+  {
+    id: 'menu-workspace-access-control-menus',
+    parentId: 'menu-workspace-access-control',
+    source: 'access-control',
+    section: 'access-control',
+    routeName: 'workspace-access-control-menus',
+    routeNames: ['workspace-access-control-menus'],
+    defaultLabel: '菜单管理',
+    labelKey: 'accessControl.nav.menus',
+    icon: 'menus',
+    order: 210,
+  },
+  {
+    id: 'menu-workspace-access-control-resources',
+    parentId: 'menu-workspace-access-control',
+    source: 'access-control',
+    section: 'access-control',
+    routeName: 'workspace-access-control-resources',
+    routeNames: ['workspace-access-control-resources'],
+    defaultLabel: '资源授权',
+    labelKey: 'accessControl.nav.resources',
+    icon: 'resource-policy',
+    order: 220,
+  },
+  {
+    id: 'menu-workspace-access-control-sessions',
+    parentId: 'menu-workspace-access-control',
+    source: 'access-control',
+    section: 'access-control',
+    routeName: 'workspace-access-control-sessions',
+    routeNames: ['workspace-access-control-sessions'],
+    defaultLabel: '会话与审计',
+    labelKey: 'accessControl.nav.sessions',
+    icon: 'sessions',
+    order: 230,
   },
 ]
 
@@ -341,8 +395,8 @@ export const CONSOLE_MENU_IDS = MENU_DEFINITIONS
   .filter((item) => item.section === 'console')
   .map((item) => item.id)
 
-export const PERMISSION_CENTER_MENU_IDS = MENU_DEFINITIONS
-  .filter((item) => item.section === 'permission-center')
+export const ACCESS_CONTROL_MENU_IDS = MENU_DEFINITIONS
+  .filter((item) => item.section === 'access-control')
   .map((item) => item.id)
 
 export function getMenuDefinition(menuId: string): MenuDefinition | undefined {
@@ -358,7 +412,7 @@ export function getRouteMenuId(routeName?: string | null): string | undefined {
     ?? MENU_DEFINITIONS.find((item) => item.routeNames.includes(routeName))?.id
 }
 
-export function buildWorkspaceMenuNodes(workspaceId: string): MenuNode[] {
+export function buildWorkspaceMenuNodes(workspaceId: string): WorkspaceMenuNode[] {
   return MENU_DEFINITIONS.map((item) => ({
     id: item.id,
     workspaceId,

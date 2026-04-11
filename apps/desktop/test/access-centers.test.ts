@@ -112,42 +112,123 @@ describe('workspace access centers', () => {
     document.body.innerHTML = ''
   })
 
-  it('renders permission center tabs with RBAC pages only', async () => {
-    const mounted = await mountRoutedApp('/workspaces/ws-local/permission-center/users')
+  it('renders access control tabs with enterprise access pages only', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/access-control/users')
 
-    await waitForSelector(mounted.container, '[data-testid="permission-center-tabs"]')
+    await waitForSelector(mounted.container, '[data-testid="access-control-tabs"]')
     await waitForText(mounted.container, 'Lin Zhou')
 
-    expect(mounted.container.querySelector('[data-testid="permission-center-users-shell"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="permission-center-users-inspector"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-permission-center-users"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-permission-center-roles"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-permission-center-permissions"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-permission-center-menus"]')).not.toBeNull()
-    expect(mounted.container.textContent).toContain('成员管理')
+    expect(mounted.container.querySelector('[data-testid="access-control-users-shell"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-access-control-users"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-access-control-org"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-access-control-roles"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-access-control-policies"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-access-control-menus"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-access-control-resources"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-menu-workspace-access-control-sessions"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('用户管理')
+    expect(mounted.container.textContent).toContain('组织管理')
     expect(mounted.container.textContent).toContain('角色管理')
-    expect(mounted.container.textContent).toContain('权限管理')
-    expect(mounted.container.textContent).toContain('导航管理')
+    expect(mounted.container.textContent).toContain('权限与策略')
+    expect(mounted.container.textContent).toContain('菜单管理')
+    expect(mounted.container.textContent).toContain('资源授权')
+    expect(mounted.container.textContent).toContain('会话与审计')
     expect(mounted.container.textContent).not.toContain('基本资料')
     expect(mounted.container.textContent).not.toContain('宠物')
 
     mounted.destroy()
   })
 
-  it('groups console and permission menus inside the permission center role editor', async () => {
-    const mounted = await mountRoutedApp('/workspaces/ws-local/permission-center/roles')
+  it('renders access control role and policy projections on dedicated routes', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/access-control/roles')
 
     await waitForText(mounted.container, 'Owner')
 
-    expect(mounted.container.querySelector('[data-testid="permission-center-roles-shell"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="roles-menu-group-console"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="roles-menu-group-permission-center"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="roles-menu-menu-workspace-console-projects"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="roles-menu-menu-workspace-permission-center-users"]')).not.toBeNull()
-    expect(mounted.container.textContent).toContain('控制台')
-    expect(mounted.container.textContent).toContain('权限中心')
-    expect(mounted.container.textContent).not.toContain('用户中心')
-    expect(mounted.container.querySelector('[data-testid="roles-menu-menu-workspace-personal-center-profile"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="access-control-roles-shell"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('access.users.read')
+    expect(mounted.container.textContent).toContain('access.roles.manage')
+    expect(mounted.container.textContent).toContain('角色清单')
+
+    await router.push('/workspaces/ws-local/access-control/policies')
+    await waitForSelector(mounted.container, '[data-testid="access-control-policies-shell"]')
+    expect(mounted.container.textContent).toContain('权限目录')
+    expect(mounted.container.textContent).toContain('tool.mcp.invoke')
+    expect(mounted.container.textContent).toContain('角色绑定')
+    expect(mounted.container.textContent).toContain('当前主体动作矩阵')
+
+    mounted.destroy()
+  })
+
+  it('renders audit logs inside the sessions and audit surface without legacy todo copy', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/access-control/sessions')
+
+    await waitForSelector(mounted.container, '[data-testid="access-control-sessions-shell"]')
+
+    expect(mounted.container.textContent).toContain('会话管理')
+    expect(mounted.container.textContent).toContain('审计日志')
+    expect(mounted.container.textContent).not.toContain('审计日志下一步补齐')
+
+    mounted.destroy()
+  })
+
+  it('renders precise protected tool resource types in the resource authorization view', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/access-control/resources')
+
+    await waitForSelector(mounted.container, '[data-testid="access-control-resources-shell"]')
+    await waitForText(mounted.container, 'tool.skill')
+
+    expect(mounted.container.textContent).toContain('tool.builtin')
+    expect(mounted.container.textContent).toContain('tool.skill')
+    expect(mounted.container.textContent).toContain('tool.mcp')
+    expect(mounted.container.textContent).not.toContain('tool / mcp')
+
+    mounted.destroy()
+  })
+
+  it('creates a user from the access control users page', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/access-control/users')
+
+    await waitForSelector(mounted.container, '[data-testid="access-control-user-form-username"]')
+
+    updateInput(await findInput(mounted.container, '[data-testid="access-control-user-form-username"]'), 'new-user')
+    updateInput(await findInput(mounted.container, '[data-testid="access-control-user-form-display-name"]'), 'New User')
+    updateInput(await findInput(mounted.container, '[data-testid="access-control-user-form-password"]'), 'password123')
+    updateInput(await findInput(mounted.container, '[data-testid="access-control-user-form-confirm-password"]'), 'password123')
+
+    const saveButton = mounted.container.querySelector('[data-testid="access-control-user-form-save"]')
+    if (!(saveButton instanceof HTMLButtonElement)) {
+      throw new Error('Expected user save button')
+    }
+    saveButton.click()
+
+    await waitForText(mounted.container, '已保存用户 New User（new-user）')
+    expect(mounted.container.textContent).toContain('new-user')
+
+    mounted.destroy()
+  })
+
+  it('creates a menu policy from the access control menus page', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/access-control/menus')
+
+    await waitForSelector(mounted.container, '[data-testid="access-control-menu-select"]')
+
+    const selectButtons = mounted.container.querySelectorAll('[data-testid="access-control-menu-select"]')
+    const firstSelectButton = selectButtons.item(0)
+    if (!(firstSelectButton instanceof HTMLButtonElement)) {
+      throw new Error('Expected menu select button')
+    }
+    firstSelectButton.click()
+
+    updateInput(await findInput(mounted.container, '[data-testid="access-control-menu-order"]'), '400')
+    updateInput(await findInput(mounted.container, '[data-testid="access-control-menu-group"]'), 'workspace')
+
+    const saveButton = mounted.container.querySelector('[data-testid="access-control-menu-save-policy"]')
+    if (!(saveButton instanceof HTMLButtonElement)) {
+      throw new Error('Expected menu policy save button')
+    }
+    saveButton.click()
+
+    await waitForText(mounted.container, '已配置策略')
 
     mounted.destroy()
   })
@@ -164,7 +245,7 @@ describe('workspace access centers', () => {
     expect(mounted.container.querySelector('[data-testid="profile-access-card"]')).not.toBeNull()
     expect(mounted.container.querySelector('[data-testid="profile-access-roles"]')?.textContent).toContain('Owner')
     expect(mounted.container.querySelector('[data-testid="profile-access-menus"]')?.textContent).toContain('项目管理')
-    expect(mounted.container.querySelector('[data-testid="profile-access-menus"]')?.textContent).toContain('成员管理')
+    expect(mounted.container.querySelector('[data-testid="profile-access-menus"]')?.textContent).toContain('用户管理')
     expect(mounted.container.querySelector('[data-testid="profile-access-menus"]')?.textContent).not.toContain('基本资料')
 
     mounted.destroy()

@@ -3,21 +3,20 @@ use octopus_core::{
     AgentRecord, AppError, AutomationRecord, BindPetConversationInput,
     ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse,
     CopyWorkspaceSkillToManagedInput, CreateProjectRequest, CreateWorkspaceResourceFolderInput,
-    CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, CreateWorkspaceUserRequest,
-    ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
-    ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
-    ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
-    ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, KnowledgeRecord, MenuRecord,
-    ModelCatalogRecord, PermissionRecord, PetConversationBinding, PetPresenceState,
-    PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectRecord,
-    ProjectTeamLinkInput, ProjectTeamLinkRecord, ProviderCredentialRecord, RoleRecord,
+    CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, ExportWorkspaceAgentBundleInput,
+    ExportWorkspaceAgentBundleResult, ImportWorkspaceAgentBundleInput,
+    ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
+    ImportWorkspaceAgentBundleResult, ImportWorkspaceSkillArchiveInput,
+    ImportWorkspaceSkillFolderInput, KnowledgeRecord, ModelCatalogRecord, PetConversationBinding,
+    PetPresenceState, PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord,
+    ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord, ProviderCredentialRecord,
     SavePetPresenceInput, SystemBootstrapStatus, TeamRecord, ToolRecord,
     UpdateCurrentUserProfileRequest, UpdateProjectRequest, UpdateWorkspaceResourceInput,
-    UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput, UpdateWorkspaceUserRequest,
-    UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput, UserRecordSummary,
-    WorkspaceMcpServerDocument, WorkspaceResourceRecord, WorkspaceSkillDocument,
-    WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceSummary,
-    WorkspaceToolCatalogSnapshot, WorkspaceToolDisablePatch,
+    UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput, UpsertAgentInput, UpsertTeamInput,
+    UpsertWorkspaceMcpServerInput, UserRecordSummary, WorkspaceMcpServerDocument,
+    WorkspaceResourceRecord, WorkspaceSkillDocument, WorkspaceSkillFileDocument,
+    WorkspaceSkillTreeDocument, WorkspaceSummary, WorkspaceToolCatalogSnapshot,
+    WorkspaceToolDisablePatch,
 };
 
 #[async_trait]
@@ -263,17 +262,6 @@ pub trait WorkspaceService: Send + Sync {
         record: AutomationRecord,
     ) -> Result<AutomationRecord, AppError>;
     async fn delete_automation(&self, automation_id: &str) -> Result<(), AppError>;
-    async fn list_users(&self) -> Result<Vec<UserRecordSummary>, AppError>;
-    async fn create_user(
-        &self,
-        request: CreateWorkspaceUserRequest,
-    ) -> Result<UserRecordSummary, AppError>;
-    async fn update_user(
-        &self,
-        user_id: &str,
-        request: UpdateWorkspaceUserRequest,
-    ) -> Result<UserRecordSummary, AppError>;
-    async fn delete_user(&self, user_id: &str) -> Result<(), AppError>;
     async fn update_current_user_profile(
         &self,
         user_id: &str,
@@ -284,22 +272,4 @@ pub trait WorkspaceService: Send + Sync {
         user_id: &str,
         request: ChangeCurrentUserPasswordRequest,
     ) -> Result<ChangeCurrentUserPasswordResponse, AppError>;
-    async fn list_roles(&self) -> Result<Vec<RoleRecord>, AppError>;
-    async fn create_role(&self, record: RoleRecord) -> Result<RoleRecord, AppError>;
-    async fn update_role(&self, role_id: &str, record: RoleRecord) -> Result<RoleRecord, AppError>;
-    async fn delete_role(&self, role_id: &str) -> Result<(), AppError>;
-    async fn list_permissions(&self) -> Result<Vec<PermissionRecord>, AppError>;
-    async fn create_permission(
-        &self,
-        record: PermissionRecord,
-    ) -> Result<PermissionRecord, AppError>;
-    async fn update_permission(
-        &self,
-        permission_id: &str,
-        record: PermissionRecord,
-    ) -> Result<PermissionRecord, AppError>;
-    async fn delete_permission(&self, permission_id: &str) -> Result<(), AppError>;
-    async fn list_menus(&self) -> Result<Vec<MenuRecord>, AppError>;
-    async fn create_menu(&self, record: MenuRecord) -> Result<MenuRecord, AppError>;
-    async fn update_menu(&self, menu_id: &str, record: MenuRecord) -> Result<MenuRecord, AppError>;
 }

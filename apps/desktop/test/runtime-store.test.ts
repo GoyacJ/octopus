@@ -579,15 +579,15 @@ describe('useRuntimeStore', () => {
     runtime.dispose()
   })
 
-  it('loads runtime config for the settings flow even when the workspace session is missing', async () => {
+  it('surfaces a runtime config error when the workspace session is missing', async () => {
     const { runtime, shell } = await prepareRuntimeStore()
 
     shell.clearWorkspaceSession('conn-local')
 
     await runtime.loadConfig(true)
 
-    expect(runtime.config?.effectiveConfigHash).toContain('cfg-hash')
-    expect(runtime.configError).toBe('')
+    expect(runtime.config).toBeNull()
+    expect(runtime.configError).toMatch(/workspace session/i)
 
     runtime.dispose()
   })

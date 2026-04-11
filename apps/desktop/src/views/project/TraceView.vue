@@ -16,19 +16,20 @@ import {
 
 import { formatDateTime } from '@/i18n/copy'
 import { useRuntimeStore } from '@/stores/runtime'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
 const runtime = useRuntimeStore()
-const workspaceAccessStore = useWorkspaceAccessStore()
+const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 const workspaceStore = useWorkspaceStore()
 
 const traceStatusLabel = computed(() => runtime.activeRunStatusLabel || t('common.na'))
 const resolvedActorLabel = computed(() => runtime.activeRun?.resolvedActorLabel || t('common.na'))
 const canApproveTrace = computed(() =>
-  workspaceAccessStore.hasPermission('trace:approval:approve', 'approve', 'project', workspaceStore.currentProjectId)
-  || !!workspaceAccessStore.currentUser,
+  workspaceAccessControlStore.currentResourceActionGrants.some(grant =>
+    (grant.resourceType === 'runtime.approval' && grant.actions.includes('resolve'))
+    || (grant.resourceType === 'runtime' && grant.actions.includes('approval.resolve'))),
 )
 
 const runtimeTraceTone = computed<'default' | 'success' | 'warning' | 'error' | 'info'>(() => {

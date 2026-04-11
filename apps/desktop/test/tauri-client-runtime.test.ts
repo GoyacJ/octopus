@@ -105,7 +105,7 @@ describe('runtime client transport', () => {
     })
   })
 
-  it('loads runtime config through the workspace API without requiring a workspace session', async () => {
+  it('loads runtime config through the workspace API with the workspace session token', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -142,6 +142,7 @@ describe('runtime client transport', () => {
     const connection = payload.workspaceConnections?.[0]
     const workspaceClient = client.createWorkspaceClient({
       connection: connection!,
+      session: createWorkspaceSession(connection!),
     })
 
     const config = await workspaceClient.runtime.getConfig()
@@ -162,11 +163,11 @@ describe('runtime client transport', () => {
 
     const request = firstRequest()
     const headers = request.headers as Headers
-    expect(headers.get('Authorization')).toBeNull()
+    expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
     expect(headers.get('X-Workspace-Id')).toBe('ws-local')
   })
 
-  it('posts runtime config validation requests to the workspace API without requiring a workspace session', async () => {
+  it('posts runtime config validation requests to the workspace API with the workspace session token', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -183,6 +184,7 @@ describe('runtime client transport', () => {
     const connection = payload.workspaceConnections?.[0]
     const workspaceClient = client.createWorkspaceClient({
       connection: connection!,
+      session: createWorkspaceSession(connection!),
     })
 
     const patch: RuntimeConfigPatch = {
@@ -211,10 +213,10 @@ describe('runtime client transport', () => {
     )
 
     const headers = request.headers as Headers
-    expect(headers.get('Authorization')).toBeNull()
+    expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
   })
 
-  it('posts configured model probe requests to the workspace API without requiring a workspace session', async () => {
+  it('posts configured model probe requests to the workspace API with the workspace session token', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -236,6 +238,7 @@ describe('runtime client transport', () => {
     const connection = payload.workspaceConnections?.[0]
     const workspaceClient = client.createWorkspaceClient({
       connection: connection!,
+      session: createWorkspaceSession(connection!),
     })
 
     const result = await workspaceClient.runtime.validateConfiguredModel({
@@ -261,7 +264,7 @@ describe('runtime client transport', () => {
 
     const request = firstRequest()
     const headers = request.headers as Headers
-    expect(headers.get('Authorization')).toBeNull()
+    expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
     expect(JSON.parse(String(request.body))).toMatchObject({
       scope: 'workspace',
       configuredModelId: 'anthropic-primary',
@@ -275,7 +278,7 @@ describe('runtime client transport', () => {
     })
   })
 
-  it('patches runtime config scopes through the workspace API without requiring a workspace session', async () => {
+  it('patches runtime config scopes through the workspace API with the workspace session token', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -315,6 +318,7 @@ describe('runtime client transport', () => {
     const connection = payload.workspaceConnections?.[0]
     const workspaceClient = client.createWorkspaceClient({
       connection: connection!,
+      session: createWorkspaceSession(connection!),
     })
 
     await workspaceClient.runtime.saveConfig({
@@ -336,7 +340,7 @@ describe('runtime client transport', () => {
 
     const request = firstRequest()
     const headers = request.headers as Headers
-    expect(headers.get('Authorization')).toBeNull()
+    expect(headers.get('Authorization')).toBe('Bearer workspace-session-token')
   })
 
   it('uses authenticated project runtime config endpoints for project-scoped overrides', async () => {

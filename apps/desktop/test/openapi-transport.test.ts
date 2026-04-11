@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type {
+  AccessAuditListResponse,
   AuditRecord,
   ClientAppRecord,
   HealthcheckStatus,
@@ -56,8 +57,7 @@ function createWorkspaceSession(
       token: 'workspace-session-token',
       status: 'active',
       createdAt: 1,
-      roleIds: ['owner'],
-      scopeProjectIds: [],
+      expiresAt: undefined,
     },
   }
 }
@@ -328,7 +328,7 @@ describe('OpenAPI transport helpers', () => {
     expect(payload.effectiveConfigHash).toBe('hash-scope')
   })
 
-  it('resolves generated runtime config validate and probe paths without session headers', async () => {
+  it('resolves generated runtime config validate and probe paths with session headers', async () => {
     fetchSpy
       .mockResolvedValueOnce({
         ok: true,
@@ -355,12 +355,14 @@ describe('OpenAPI transport helpers', () => {
       })
 
     const connection = createWorkspaceConnection()
+    const session = createWorkspaceSession(connection)
 
     await fetchWorkspaceOpenApi(
       connection,
       '/api/v1/runtime/config/validate',
       'post',
       {
+        session,
         body: JSON.stringify({
           scope: 'workspace',
           patch: { locale: 'zh-CN' },
@@ -373,6 +375,7 @@ describe('OpenAPI transport helpers', () => {
       '/api/v1/runtime/config/configured-models/probe',
       'post',
       {
+        session,
         body: JSON.stringify({
           scope: 'workspace',
           configuredModelId: 'anthropic-primary',
@@ -397,6 +400,10 @@ describe('OpenAPI transport helpers', () => {
         headers: expect.any(Headers),
       }),
     )
+    const firstHeaders = fetchSpy.mock.calls[0]?.[1]?.headers as Headers
+    const secondHeaders = fetchSpy.mock.calls[1]?.[1]?.headers as Headers
+    expect(firstHeaders.get('Authorization')).toBe('Bearer workspace-session-token')
+    expect(secondHeaders.get('Authorization')).toBe('Bearer workspace-session-token')
   })
 
   it('resolves generated runtime session and approval paths with path params, query params, and idempotency headers', async () => {
@@ -582,18 +589,21 @@ describe('OpenAPI transport helpers', () => {
       .mockResolvedValueOnce({
         ok: true,
         headers: new Headers({ 'Content-Type': 'application/json' }),
-        json: async (): Promise<AuditRecord[]> => ([
-          {
-            id: 'audit-1',
-            workspaceId: 'ws-local',
-            actorType: 'user',
-            actorId: 'user-owner',
-            action: 'runtime.session.create',
-            resource: 'runtime-session',
-            outcome: 'success',
-            createdAt: 1,
-          },
-        ]),
+        json: async (): Promise<AccessAuditListResponse> => ({
+          items: [
+            {
+              id: 'audit-1',
+              workspaceId: 'ws-local',
+              actorType: 'user',
+              actorId: 'user-owner',
+              action: 'runtime.session.create',
+              resource: 'runtime-session',
+              outcome: 'success',
+              createdAt: 1,
+            } satisfies AuditRecord,
+          ],
+          nextCursor: undefined,
+        }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -648,7 +658,7 @@ describe('OpenAPI transport helpers', () => {
         defaultScopes: ['workspace'],
       }),
     })
-    await fetchWorkspaceOpenApi(connection, '/api/v1/audit', 'get', { session })
+    await fetchWorkspaceOpenApi(connection, '/api/v1/access/audit', 'get', { session })
     await fetchWorkspaceOpenApi(connection, '/api/v1/inbox', 'get', { session })
     await fetchWorkspaceOpenApi(connection, '/api/v1/knowledge', 'get', { session })
 
@@ -664,7 +674,7 @@ describe('OpenAPI transport helpers', () => {
     )
     expect(fetchSpy).toHaveBeenNthCalledWith(
       3,
-      'http://127.0.0.1:43127/api/v1/audit',
+      'http://127.0.0.1:43127/api/v1/access/audit',
       expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
     )
     expect(fetchSpy).toHaveBeenNthCalledWith(
