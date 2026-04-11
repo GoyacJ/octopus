@@ -36,3 +36,53 @@ fn workspace_bootstrap_does_not_seed_editable_agents_teams_or_automations() {
         .next()
         .is_none());
 }
+
+#[test]
+fn workspace_bootstrap_hard_resets_legacy_access_control_tables_with_data() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = workspace_paths::WorkspacePaths::new(temp.path());
+    paths.ensure_layout().expect("layout");
+
+    let connection = Connection::open(&paths.db_path).expect("db");
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE memberships (
+              user_id TEXT NOT NULL,
+              role_ids TEXT NOT NULL,
+              scope_project_ids TEXT NOT NULL
+            );
+            INSERT INTO memberships (user_id, role_ids, scope_project_ids)
+            VALUES ('user-owner', '[\"owner\"]', '[]');
+            ",
+        )
+        .expect("seed legacy memberships");
+
+    bootstrap::initialize_workspace(temp.path()).expect("workspace initialized");
+
+    let connection = Connection::open(&paths.db_path).expect("db");
+
+    let memberships_missing = connection
+        .prepare("SELECT 1 FROM memberships LIMIT 1")
+        .is_err();
+    let roles_missing = connection.prepare("SELECT 1 FROM roles LIMIT 1").is_err();
+    let permissions_missing = connection
+        .prepare("SELECT 1 FROM permissions LIMIT 1")
+        .is_err();
+    let users_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))
+        .expect("users count");
+    let role_bindings_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM role_bindings", [], |row| row.get(0))
+        .expect("role bindings count");
+    let data_policies_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM data_policies", [], |row| row.get(0))
+        .expect("data policies count");
+
+    assert!(memberships_missing);
+    assert!(roles_missing);
+    assert!(permissions_missing);
+    assert_eq!(users_count, 0);
+    assert_eq!(role_bindings_count, 0);
+    assert_eq!(data_policies_count, 0);
+}

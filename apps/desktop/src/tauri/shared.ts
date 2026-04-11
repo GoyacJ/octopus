@@ -1,10 +1,13 @@
 export {
   WORKSPACE_AUTH_FAILURE_EVENT,
+  WORKSPACE_AUTHORIZATION_FAILURE_EVENT,
   WorkspaceApiError,
   decodeApiError,
   isWorkspaceApiError,
   type WorkspaceAuthFailureCode,
   type WorkspaceAuthFailureDetail,
+  type WorkspaceAuthorizationFailureCode,
+  type WorkspaceAuthorizationFailureDetail,
 } from './error_mapping'
 export {
   createHostHeaders,

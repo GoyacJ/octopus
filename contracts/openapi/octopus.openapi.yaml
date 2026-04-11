@@ -6,6 +6,1076 @@ info:
 servers:
   - url: http://127.0.0.1:15421
 paths:
+  /api/v1/access/audit:
+    get:
+      operationId: listAccessAudit
+      parameters:
+        - in: query
+          name: actorId
+          schema:
+            type: string
+        - in: query
+          name: action
+          schema:
+            type: string
+        - in: query
+          name: resourceType
+          schema:
+            type: string
+        - in: query
+          name: outcome
+          schema:
+            type: string
+        - in: query
+          name: from
+          schema:
+            format: int64
+            type: integer
+        - in: query
+          name: to
+          schema:
+            format: int64
+            type: integer
+        - in: query
+          name: cursor
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessAuditListResponse"
+          description: Filtered access audit events.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/authorization/current:
+    get:
+      operationId: getCurrentAuthorization
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizationSnapshot"
+          description: Current authorization snapshot for the authenticated principal.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/menus/definitions:
+    get:
+      operationId: listAccessMenuDefinitions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/MenuDefinition"
+                type: array
+          description: Menu definitions projected for access control.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/menus/features:
+    get:
+      operationId: listAccessFeatureDefinitions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/FeatureDefinition"
+                type: array
+          description: Feature definitions used for menu gating.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/menus/gates:
+    get:
+      operationId: listAccessMenuGateResults
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/MenuGateResult"
+                type: array
+          description: Effective menu gate evaluation results.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/menus/policies:
+    get:
+      operationId: listAccessMenuPolicies
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/MenuPolicyRecord"
+                type: array
+          description: Effective menu policy records.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createAccessMenuPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMenuPolicyRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuPolicyRecord"
+          description: Created menu policy record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/menus/policies/{menuId}:
+    put:
+      operationId: updateAccessMenuPolicy
+      parameters:
+        - in: path
+          name: menuId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MenuPolicyUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MenuPolicyRecord"
+          description: Updated menu policy record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteAccessMenuPolicy
+      parameters:
+        - in: path
+          name: menuId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Menu policy deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/org/assignments:
+    get:
+      operationId: listAccessUserOrgAssignments
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/UserOrgAssignmentRecord"
+                type: array
+          description: User organization assignments.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: upsertAccessUserOrgAssignment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserOrgAssignmentUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserOrgAssignmentRecord"
+          description: Upserted user org assignment.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/org/assignments/{userId}/{orgUnitId}:
+    delete:
+      operationId: deleteAccessUserOrgAssignment
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: orgUnitId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: User org assignment deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/org/groups:
+    get:
+      operationId: listAccessUserGroups
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/UserGroupRecord"
+                type: array
+          description: User group records.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createAccessUserGroup
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserGroupUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserGroupRecord"
+          description: Created user group record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/org/groups/{groupId}:
+    put:
+      operationId: updateAccessUserGroup
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserGroupUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserGroupRecord"
+          description: Updated user group record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteAccessUserGroup
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: User group deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/org/positions:
+    get:
+      operationId: listAccessPositions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/PositionRecord"
+                type: array
+          description: Position records.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createAccessPosition
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PositionUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PositionRecord"
+          description: Created position record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/org/positions/{positionId}:
+    put:
+      operationId: updateAccessPosition
+      parameters:
+        - in: path
+          name: positionId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PositionUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PositionRecord"
+          description: Updated position record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteAccessPosition
+      parameters:
+        - in: path
+          name: positionId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Position deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/org/units:
+    get:
+      operationId: listAccessOrgUnits
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/OrgUnitRecord"
+                type: array
+          description: Organization unit records.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createAccessOrgUnit
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrgUnitUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgUnitRecord"
+          description: Created org unit record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/org/units/{orgUnitId}:
+    put:
+      operationId: updateAccessOrgUnit
+      parameters:
+        - in: path
+          name: orgUnitId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrgUnitUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgUnitRecord"
+          description: Updated org unit record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteAccessOrgUnit
+      parameters:
+        - in: path
+          name: orgUnitId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Org unit deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/policies/data-policies:
+    get:
+      operationId: listAccessDataPolicies
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/DataPolicyRecord"
+                type: array
+          description: Enterprise data policy records.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createAccessDataPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataPolicyUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataPolicyRecord"
+          description: Created data policy record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/policies/data-policies/{policyId}:
+    put:
+      operationId: updateAccessDataPolicy
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataPolicyUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataPolicyRecord"
+          description: Updated data policy record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteAccessDataPolicy
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Data policy deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/policies/permission-definitions:
+    get:
+      operationId: listAccessPermissionDefinitions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/PermissionDefinition"
+                type: array
+          description: Enterprise permission catalog.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/policies/resource-policies:
+    get:
+      operationId: listAccessResourcePolicies
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ResourcePolicyRecord"
+                type: array
+          description: Enterprise resource policy records.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createAccessResourcePolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResourcePolicyUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourcePolicyRecord"
+          description: Created resource policy record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/policies/resource-policies/{policyId}:
+    put:
+      operationId: updateAccessResourcePolicy
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResourcePolicyUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResourcePolicyRecord"
+          description: Updated resource policy record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteAccessResourcePolicy
+      parameters:
+        - in: path
+          name: policyId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Resource policy deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/policies/role-bindings:
+    get:
+      operationId: listAccessRoleBindings
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/RoleBindingRecord"
+                type: array
+          description: Enterprise role binding records.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createAccessRoleBinding
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleBindingUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleBindingRecord"
+          description: Created role binding record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/policies/role-bindings/{bindingId}:
+    put:
+      operationId: updateAccessRoleBinding
+      parameters:
+        - in: path
+          name: bindingId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleBindingUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleBindingRecord"
+          description: Updated role binding record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteAccessRoleBinding
+      parameters:
+        - in: path
+          name: bindingId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Role binding deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/protected-resources:
+    get:
+      operationId: listAccessProtectedResources
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ProtectedResourceDescriptor"
+                type: array
+          description: Protected resource descriptors across agent/resource/knowledge/tool.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/protected-resources/{resourceType}/{resourceId}:
+    put:
+      operationId: upsertAccessProtectedResource
+      parameters:
+        - in: path
+          name: resourceType
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: resourceId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProtectedResourceMetadataUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProtectedResourceDescriptor"
+          description: Upserted protected resource descriptor.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/roles:
+    get:
+      operationId: listAccessRoles
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/AccessRoleRecord"
+                type: array
+          description: Enterprise role records.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createAccessRole
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessRoleRecord"
+          description: Created enterprise role record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/roles/{roleId}:
+    put:
+      operationId: updateAccessRole
+      parameters:
+        - in: path
+          name: roleId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessRoleRecord"
+          description: Updated enterprise role record.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteAccessRole
+      parameters:
+        - in: path
+          name: roleId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Role deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/sessions:
+    get:
+      operationId: listAccessSessions
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/AccessSessionRecord"
+                type: array
+          description: Enterprise access-control sessions.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/sessions/{sessionId}/revoke:
+    post:
+      operationId: revokeAccessSession
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Session revoked.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/sessions/current/revoke:
+    post:
+      operationId: revokeCurrentAccessSession
+      responses:
+        "204":
+          description: Current session revoked.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/users:
+    get:
+      operationId: listAccessUsers
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/AccessUserRecord"
+                type: array
+          description: Enterprise access-control user projection.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createAccessUser
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessUserUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessUserRecord"
+          description: Created access user projection.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/users/{userId}:
+    put:
+      operationId: updateAccessUser
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccessUserUpsertRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccessUserRecord"
+          description: Updated access user projection.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    delete:
+      operationId: deleteAccessUser
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Access user deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/access/users/{userId}/sessions/revoke:
+    post:
+      operationId: revokeAccessUserSessions
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: User sessions revoked.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/apps:
     get:
       operationId: listClientApps
@@ -57,96 +1127,6 @@ paths:
                   $ref: "#/components/schemas/ArtifactRecord"
                 type: array
           description: Artifact list payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/audit:
-    get:
-      operationId: listAuditRecords
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: "#/components/schemas/AuditRecord"
-                type: array
-          description: Audit record payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/auth/login:
-    post:
-      operationId: login
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LoginResponse"
-          description: Workspace login payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/auth/logout:
-    post:
-      operationId: logout
-      responses:
-        "204":
-          description: Logged out.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/auth/register-owner:
-    post:
-      operationId: registerOwner
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RegisterWorkspaceOwnerRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RegisterWorkspaceOwnerResponse"
-          description: Workspace owner registration payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/auth/session:
-    get:
-      operationId: getCurrentSession
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SessionRecord"
-          description: Current workspace session payload.
         default:
           content:
             application/json:
@@ -1479,6 +2459,98 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/system/auth/bootstrap-admin:
+    post:
+      operationId: registerBootstrapAdmin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterBootstrapAdminRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnterpriseAuthSuccess"
+          description: Bootstrap admin registration response.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/system/auth/captcha:
+    post:
+      operationId: createSystemAuthCaptcha
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaptchaChallenge"
+          description: Captcha challenge payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/system/auth/login:
+    post:
+      operationId: systemAuthLogin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnterpriseLoginRequest"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnterpriseAuthSuccess"
+          description: Enterprise login response with session summary.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/system/auth/session:
+    get:
+      operationId: getSystemAuthSession
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnterpriseSessionSummary"
+          description: Current enterprise auth session summary.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/system/auth/status:
+    get:
+      operationId: getSystemAuthStatus
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemAuthStatus"
+          description: Enterprise authentication bootstrap and session state.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/system/bootstrap:
     get:
       operationId: getSystemBootstrap
@@ -2324,22 +3396,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
-  /api/v1/workspace/permission-center/overview:
-    get:
-      operationId: getPermissionCenterOverview
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PermissionCenterOverviewSnapshot"
-          description: Permission center overview payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
   /api/v1/workspace/personal-center/profile:
     patch:
       operationId: updateCurrentUserProfile
@@ -2497,325 +3553,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/PetPresenceState"
           description: Updated workspace pet presence payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/rbac/menus:
-    get:
-      operationId: listWorkspaceMenus
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: "#/components/schemas/MenuRecord"
-                type: array
-          description: Workspace menus payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-    post:
-      operationId: createWorkspaceMenu
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MenuRecord"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MenuRecord"
-          description: Created workspace menu payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/rbac/menus/{menuId}:
-    patch:
-      operationId: updateWorkspaceMenu
-      parameters:
-        - in: path
-          name: menuId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MenuRecord"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MenuRecord"
-          description: Updated workspace menu payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/rbac/permissions:
-    get:
-      operationId: listWorkspacePermissions
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: "#/components/schemas/PermissionRecord"
-                type: array
-          description: Workspace permissions payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-    post:
-      operationId: createWorkspacePermission
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PermissionRecord"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PermissionRecord"
-          description: Created workspace permission payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/rbac/permissions/{permissionId}:
-    patch:
-      operationId: updateWorkspacePermission
-      parameters:
-        - in: path
-          name: permissionId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PermissionRecord"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PermissionRecord"
-          description: Updated workspace permission payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-    delete:
-      operationId: deleteWorkspacePermission
-      parameters:
-        - in: path
-          name: permissionId
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Workspace permission deleted.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/rbac/roles:
-    get:
-      operationId: listWorkspaceRoles
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: "#/components/schemas/RoleRecord"
-                type: array
-          description: Workspace roles payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-    post:
-      operationId: createWorkspaceRole
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RoleRecord"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RoleRecord"
-          description: Created workspace role payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/rbac/roles/{roleId}:
-    patch:
-      operationId: updateWorkspaceRole
-      parameters:
-        - in: path
-          name: roleId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RoleRecord"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RoleRecord"
-          description: Updated workspace role payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-    delete:
-      operationId: deleteWorkspaceRole
-      parameters:
-        - in: path
-          name: roleId
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Workspace role deleted.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/rbac/users:
-    get:
-      operationId: listWorkspaceUsers
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                items:
-                  $ref: "#/components/schemas/UserRecordSummary"
-                type: array
-          description: Workspace users payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-    post:
-      operationId: createWorkspaceUser
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateWorkspaceUserRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserRecordSummary"
-          description: Created workspace user payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-  /api/v1/workspace/rbac/users/{userId}:
-    patch:
-      operationId: updateWorkspaceUser
-      parameters:
-        - in: path
-          name: userId
-          required: true
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateWorkspaceUserRequest"
-        required: true
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/UserRecordSummary"
-          description: Updated workspace user payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
-    delete:
-      operationId: deleteWorkspaceUser
-      parameters:
-        - in: path
-          name: userId
-          required: true
-          schema:
-            type: string
-      responses:
-        "204":
-          description: Workspace user deleted.
         default:
           content:
             application/json:
@@ -3014,6 +3751,116 @@ paths:
           description: API error envelope.
 components:
   schemas:
+    AccessAuditListResponse:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: "#/components/schemas/AuditRecord"
+          type: array
+        nextCursor:
+          type: string
+      required:
+        - items
+      type: object
+    AccessRoleRecord:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        description:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        permissionCodes:
+          items:
+            type: string
+          type: array
+        status:
+          type: string
+      required:
+        - id
+        - code
+        - name
+        - description
+        - status
+        - permissionCodes
+      type: object
+    AccessSessionRecord:
+      additionalProperties: false
+      properties:
+        clientAppId:
+          type: string
+        createdAt:
+          format: int64
+          type: integer
+        current:
+          type: boolean
+        displayName:
+          type: string
+        expiresAt:
+          format: int64
+          type: integer
+        sessionId:
+          type: string
+        status:
+          type: string
+        userId:
+          type: string
+        username:
+          type: string
+      required:
+        - sessionId
+        - userId
+        - username
+        - displayName
+        - clientAppId
+        - status
+        - createdAt
+        - current
+      type: object
+    AccessUserRecord:
+      additionalProperties: false
+      properties:
+        displayName:
+          type: string
+        id:
+          type: string
+        passwordState:
+          type: string
+        status:
+          type: string
+        username:
+          type: string
+      required:
+        - id
+        - username
+        - displayName
+        - status
+        - passwordState
+      type: object
+    AccessUserUpsertRequest:
+      additionalProperties: false
+      properties:
+        confirmPassword:
+          type: string
+        displayName:
+          type: string
+        password:
+          type: string
+        resetPassword:
+          type: boolean
+        status:
+          type: string
+        username:
+          type: string
+      required:
+        - username
+        - displayName
+        - status
+      type: object
     AgentRecord:
       additionalProperties: false
       properties:
@@ -3101,6 +3948,8 @@ components:
       enum:
         - UNAUTHENTICATED
         - SESSION_EXPIRED
+        - PERMISSION_DENIED
+        - AUTHORIZATION_STALE
         - FORBIDDEN
         - NOT_FOUND
         - CONFLICT
@@ -3207,6 +4056,54 @@ components:
         - outcome
         - createdAt
       type: object
+    AuthorizationSnapshot:
+      additionalProperties: false
+      properties:
+        effectivePermissionCodes:
+          items:
+            type: string
+          type: array
+        effectiveRoleIds:
+          items:
+            type: string
+          type: array
+        effectiveRoles:
+          items:
+            $ref: "#/components/schemas/AccessRoleRecord"
+          type: array
+        featureCodes:
+          items:
+            type: string
+          type: array
+        menuGates:
+          items:
+            $ref: "#/components/schemas/MenuGateResult"
+          type: array
+        orgAssignments:
+          items:
+            $ref: "#/components/schemas/UserOrgAssignmentRecord"
+          type: array
+        principal:
+          $ref: "#/components/schemas/AccessUserRecord"
+        resourceActionGrants:
+          items:
+            $ref: "#/components/schemas/ResourceActionGrant"
+          type: array
+        visibleMenuIds:
+          items:
+            type: string
+          type: array
+      required:
+        - principal
+        - effectiveRoleIds
+        - effectiveRoles
+        - effectivePermissionCodes
+        - orgAssignments
+        - featureCodes
+        - visibleMenuIds
+        - menuGates
+        - resourceActionGrants
+      type: object
     AutomationRecord:
       additionalProperties: false
       properties:
@@ -3305,6 +4202,31 @@ components:
       required:
         - capabilityId
         - label
+      type: object
+    CaptchaChallenge:
+      additionalProperties: false
+      properties:
+        challengeId:
+          type: string
+        expiresAt:
+          type: integer
+        svgData:
+          type: string
+      required:
+        - challengeId
+        - svgData
+        - expiresAt
+      type: object
+    CaptchaPolicy:
+      additionalProperties: false
+      properties:
+        required:
+          type: boolean
+        ttlSeconds:
+          type: integer
+      required:
+        - required
+        - ttlSeconds
       type: object
     ChangeCurrentUserPasswordRequest:
       additionalProperties: false
@@ -3463,6 +4385,16 @@ components:
         - transportSecurity
         - authMode
       type: object
+    CreateMenuPolicyRequest:
+      allOf:
+        - $ref: "#/components/schemas/MenuPolicyUpsertRequest"
+        - additionalProperties: false
+          properties:
+            menuId:
+              type: string
+          required:
+            - menuId
+          type: object
     CreateNotificationInput:
       additionalProperties: false
       properties:
@@ -3560,40 +4492,6 @@ components:
         - slug
         - content
       type: object
-    CreateWorkspaceUserRequest:
-      additionalProperties: false
-      properties:
-        avatar:
-          $ref: "#/components/schemas/AvatarUploadPayload"
-        confirmPassword:
-          type: string
-        displayName:
-          type: string
-        password:
-          type: string
-        roleIds:
-          items:
-            type: string
-          type: array
-        scopeProjectIds:
-          items:
-            type: string
-          type: array
-        status:
-          $ref: "#/components/schemas/UserStatus"
-        useDefaultAvatar:
-          type: boolean
-        useDefaultPassword:
-          type: boolean
-        username:
-          type: string
-      required:
-        - username
-        - displayName
-        - status
-        - roleIds
-        - scopeProjectIds
-      type: object
     CredentialBinding:
       additionalProperties: false
       properties:
@@ -3624,11 +4522,168 @@ components:
         - configured
         - source
       type: object
+    DataPolicyRecord:
+      additionalProperties: false
+      properties:
+        classifications:
+          items:
+            type: string
+          type: array
+        effect:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        projectIds:
+          items:
+            type: string
+          type: array
+        resourceType:
+          type: string
+        scopeType:
+          type: string
+        subjectId:
+          type: string
+        subjectType:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+      required:
+        - id
+        - name
+        - subjectType
+        - subjectId
+        - resourceType
+        - scopeType
+        - projectIds
+        - tags
+        - classifications
+        - effect
+      type: object
+    DataPolicyUpsertRequest:
+      additionalProperties: false
+      properties:
+        classifications:
+          items:
+            type: string
+          type: array
+        effect:
+          type: string
+        name:
+          type: string
+        projectIds:
+          items:
+            type: string
+          type: array
+        resourceType:
+          type: string
+        scopeType:
+          type: string
+        subjectId:
+          type: string
+        subjectType:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+      required:
+        - name
+        - subjectType
+        - subjectId
+        - resourceType
+        - scopeType
+        - projectIds
+        - tags
+        - classifications
+        - effect
+      type: object
     DecisionAction:
       enum:
         - approve
         - reject
       type: string
+    EnterpriseAuthSuccess:
+      additionalProperties: false
+      properties:
+        session:
+          $ref: "#/components/schemas/EnterpriseSessionSummary"
+        workspace:
+          $ref: "#/components/schemas/WorkspaceSummary"
+      required:
+        - session
+        - workspace
+      type: object
+    EnterpriseLoginRequest:
+      additionalProperties: false
+      properties:
+        captchaChallengeId:
+          type: string
+        captchaCode:
+          type: string
+        clientAppId:
+          type: string
+        password:
+          type: string
+        username:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - clientAppId
+        - username
+        - password
+        - captchaChallengeId
+        - captchaCode
+      type: object
+    EnterprisePrincipal:
+      additionalProperties: false
+      properties:
+        displayName:
+          type: string
+        status:
+          type: string
+        userId:
+          type: string
+        username:
+          type: string
+      required:
+        - userId
+        - username
+        - displayName
+        - status
+      type: object
+    EnterpriseSessionSummary:
+      additionalProperties: false
+      properties:
+        clientAppId:
+          type: string
+        createdAt:
+          type: integer
+        expiresAt:
+          type: integer
+        principal:
+          $ref: "#/components/schemas/EnterprisePrincipal"
+        sessionId:
+          type: string
+        status:
+          type: string
+        token:
+          type: string
+        workspaceId:
+          type: string
+      required:
+        - sessionId
+        - token
+        - workspaceId
+        - clientAppId
+        - status
+        - createdAt
+        - principal
+      type: object
     ExportWorkspaceAgentBundleInput:
       additionalProperties: false
       properties:
@@ -3682,6 +4737,25 @@ components:
         - avatarCount
         - files
         - issues
+      type: object
+    FeatureDefinition:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        id:
+          type: string
+        label:
+          type: string
+        requiredPermissionCodes:
+          items:
+            type: string
+          type: array
+      required:
+        - id
+        - code
+        - label
+        - requiredPermissionCodes
       type: object
     HealthcheckBackendStatus:
       additionalProperties: false
@@ -4393,36 +5467,11 @@ components:
         - zh-CN
         - en-US
       type: string
-    LoginRequest:
+    MenuDefinition:
       additionalProperties: false
       properties:
-        clientAppId:
+        featureCode:
           type: string
-        password:
-          type: string
-        username:
-          type: string
-        workspaceId:
-          type: string
-      required:
-        - clientAppId
-        - username
-        - password
-      type: object
-    LoginResponse:
-      additionalProperties: false
-      properties:
-        session:
-          $ref: "#/components/schemas/SessionRecord"
-        workspace:
-          $ref: "#/components/schemas/WorkspaceSummary"
-      required:
-        - session
-        - workspace
-      type: object
-    MenuRecord:
-      additionalProperties: false
-      properties:
         id:
           type: string
         label:
@@ -4434,24 +5483,73 @@ components:
         routeName:
           type: string
         source:
-          $ref: "#/components/schemas/MenuSource"
+          type: string
         status:
-          $ref: "#/components/schemas/MenuStatus"
-        workspaceId:
           type: string
       required:
         - id
-        - workspaceId
-        - source
         - label
+        - source
         - status
         - order
+        - featureCode
+      type: object
+    MenuGateResult:
+      additionalProperties: false
+      properties:
+        allowed:
+          type: boolean
+        featureCode:
+          type: string
+        menuId:
+          type: string
+        reason:
+          type: string
+      required:
+        - menuId
+        - featureCode
+        - allowed
+      type: object
+    MenuPolicyRecord:
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        group:
+          type: string
+        menuId:
+          type: string
+        order:
+          type: integer
+        visibility:
+          type: string
+      required:
+        - menuId
+        - enabled
+        - order
+        - visibility
+      type: object
+    MenuPolicyUpsertRequest:
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        group:
+          type: string
+        order:
+          type: integer
+        visibility:
+          type: string
+      required:
+        - enabled
+        - order
+        - visibility
       type: object
     MenuSource:
       enum:
         - main-sidebar
         - console
-        - permission-center
+        - access-control
       type: string
     MenuStatus:
       enum:
@@ -4648,59 +5746,71 @@ components:
         - total
         - byScope
       type: object
+    OrgUnitRecord:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        parentId:
+          type: string
+        status:
+          type: string
+      required:
+        - id
+        - code
+        - name
+        - status
+      type: object
+    OrgUnitUpsertRequest:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        parentId:
+          type: string
+        status:
+          type: string
+      required:
+        - code
+        - name
+        - status
+      type: object
     PasswordState:
       enum:
         - set
         - reset-required
         - temporary
       type: string
-    PermissionCenterAlertRecord:
+    PermissionDefinition:
       additionalProperties: false
       properties:
-        description:
-          type: string
-        id:
-          type: string
-        severity:
-          $ref: "#/components/schemas/RiskLevel"
-        title:
-          type: string
-      required:
-        - id
-        - title
-        - description
-        - severity
-      type: object
-    PermissionCenterOverviewSnapshot:
-      additionalProperties: false
-      properties:
-        alerts:
-          items:
-            $ref: "#/components/schemas/PermissionCenterAlertRecord"
-          type: array
-        currentUser:
-          $ref: "#/components/schemas/UserRecordSummary"
-        metrics:
-          items:
-            $ref: "#/components/schemas/WorkspaceMetricRecord"
-          type: array
-        quickLinks:
-          items:
-            $ref: "#/components/schemas/MenuRecord"
-          type: array
-        roleNames:
+        actions:
           items:
             type: string
           type: array
-        workspaceId:
+        category:
+          type: string
+        code:
+          type: string
+        description:
+          type: string
+        name:
+          type: string
+        resourceType:
           type: string
       required:
-        - workspaceId
-        - currentUser
-        - roleNames
-        - metrics
-        - alerts
-        - quickLinks
+        - code
+        - name
+        - description
+        - category
+        - resourceType
+        - actions
       type: object
     PermissionMode:
       enum:
@@ -4708,46 +5818,6 @@ components:
         - readonly
         - danger-full-access
       type: string
-    PermissionRecord:
-      additionalProperties: false
-      properties:
-        action:
-          type: string
-        code:
-          type: string
-        description:
-          type: string
-        id:
-          type: string
-        kind:
-          $ref: "#/components/schemas/RbacPermissionKind"
-        memberPermissionIds:
-          items:
-            type: string
-          type: array
-        name:
-          type: string
-        status:
-          $ref: "#/components/schemas/RbacPermissionStatus"
-        targetIds:
-          items:
-            type: string
-          type: array
-        targetType:
-          $ref: "#/components/schemas/RbacPermissionTargetType"
-        workspaceId:
-          type: string
-      required:
-        - id
-        - workspaceId
-        - name
-        - code
-        - description
-        - status
-        - kind
-        - targetIds
-        - memberPermissionIds
-      type: object
     PetChatSender:
       enum:
         - user
@@ -4931,6 +6001,37 @@ components:
         - presence
         - messages
       type: object
+    PositionRecord:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+      required:
+        - id
+        - code
+        - name
+        - status
+      type: object
+    PositionUpsertRequest:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+      required:
+        - code
+        - name
+        - status
+      type: object
     ProjectAgentAssignments:
       additionalProperties: false
       properties:
@@ -5095,6 +6196,57 @@ components:
         tools:
           $ref: "#/components/schemas/ProjectToolAssignments"
       type: object
+    ProtectedResourceDescriptor:
+      additionalProperties: false
+      properties:
+        classification:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        ownerSubjectId:
+          type: string
+        ownerSubjectType:
+          type: string
+        projectId:
+          type: string
+        resourceSubtype:
+          type: string
+        resourceType:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+      required:
+        - id
+        - resourceType
+        - name
+        - tags
+        - classification
+      type: object
+    ProtectedResourceMetadataUpsertRequest:
+      additionalProperties: false
+      properties:
+        classification:
+          type: string
+        ownerSubjectId:
+          type: string
+        ownerSubjectType:
+          type: string
+        projectId:
+          type: string
+        resourceSubtype:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+      required:
+        - tags
+        - classification
+      type: object
     ProviderConfig:
       additionalProperties: false
       properties:
@@ -5113,41 +6265,15 @@ components:
       required:
         - providerId
       type: object
-    RbacPermissionKind:
-      enum:
-        - atomic
-        - bundle
-      type: string
-    RbacPermissionStatus:
-      enum:
-        - active
-        - disabled
-      type: string
-    RbacPermissionTargetType:
-      enum:
-        - workspace
-        - project
-        - user
-        - role
-        - permission
-        - menu
-        - resource
-        - agent
-        - knowledge
-        - tool
-        - skill
-        - mcp
-      type: string
-    RbacRoleStatus:
-      enum:
-        - active
-        - disabled
-      type: string
-    RegisterWorkspaceOwnerRequest:
+    RegisterBootstrapAdminRequest:
       additionalProperties: false
       properties:
         avatar:
           $ref: "#/components/schemas/AvatarUploadPayload"
+        captchaChallengeId:
+          type: string
+        captchaCode:
+          type: string
         clientAppId:
           type: string
         confirmPassword:
@@ -5167,17 +6293,8 @@ components:
         - password
         - confirmPassword
         - avatar
-      type: object
-    RegisterWorkspaceOwnerResponse:
-      additionalProperties: false
-      properties:
-        session:
-          $ref: "#/components/schemas/SessionRecord"
-        workspace:
-          $ref: "#/components/schemas/WorkspaceSummary"
-      required:
-        - session
-        - workspace
+        - captchaChallengeId
+        - captchaCode
       type: object
     ResolvedExecutionTarget:
       additionalProperties: false
@@ -5222,44 +6339,132 @@ components:
       required:
         - decision
       type: object
+    ResourceActionGrant:
+      additionalProperties: false
+      properties:
+        actions:
+          items:
+            type: string
+          type: array
+        resourceType:
+          type: string
+      required:
+        - resourceType
+        - actions
+      type: object
+    ResourcePolicyRecord:
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+        effect:
+          type: string
+        id:
+          type: string
+        resourceId:
+          type: string
+        resourceType:
+          type: string
+        subjectId:
+          type: string
+        subjectType:
+          type: string
+      required:
+        - id
+        - subjectType
+        - subjectId
+        - resourceType
+        - resourceId
+        - action
+        - effect
+      type: object
+    ResourcePolicyUpsertRequest:
+      additionalProperties: false
+      properties:
+        action:
+          type: string
+        effect:
+          type: string
+        resourceId:
+          type: string
+        resourceType:
+          type: string
+        subjectId:
+          type: string
+        subjectType:
+          type: string
+      required:
+        - subjectType
+        - subjectId
+        - resourceType
+        - resourceId
+        - action
+        - effect
+      type: object
     RiskLevel:
       enum:
         - low
         - medium
         - high
       type: string
-    RoleRecord:
+    RoleBindingRecord:
+      additionalProperties: false
+      properties:
+        effect:
+          type: string
+        id:
+          type: string
+        roleId:
+          type: string
+        subjectId:
+          type: string
+        subjectType:
+          type: string
+      required:
+        - id
+        - roleId
+        - subjectType
+        - subjectId
+        - effect
+      type: object
+    RoleBindingUpsertRequest:
+      additionalProperties: false
+      properties:
+        effect:
+          type: string
+        roleId:
+          type: string
+        subjectId:
+          type: string
+        subjectType:
+          type: string
+      required:
+        - roleId
+        - subjectType
+        - subjectId
+        - effect
+      type: object
+    RoleUpsertRequest:
       additionalProperties: false
       properties:
         code:
           type: string
         description:
           type: string
-        id:
-          type: string
-        menuIds:
-          items:
-            type: string
-          type: array
         name:
           type: string
-        permissionIds:
+        permissionCodes:
           items:
             type: string
           type: array
         status:
-          $ref: "#/components/schemas/RbacRoleStatus"
-        workspaceId:
           type: string
       required:
-        - id
-        - workspaceId
-        - name
         - code
+        - name
         - description
         - status
-        - permissionIds
-        - menuIds
+        - permissionCodes
       type: object
     RunStatus:
       enum:
@@ -5822,14 +7027,6 @@ components:
           type: integer
         id:
           type: string
-        roleIds:
-          items:
-            type: string
-          type: array
-        scopeProjectIds:
-          items:
-            type: string
-          type: array
         status:
           $ref: "#/components/schemas/SessionStatus"
         token:
@@ -5846,8 +7043,6 @@ components:
         - token
         - status
         - createdAt
-        - roleIds
-        - scopeProjectIds
       type: object
     SessionStatus:
       enum:
@@ -5937,6 +7132,25 @@ components:
       required:
         - content
         - permissionMode
+      type: object
+    SystemAuthStatus:
+      additionalProperties: false
+      properties:
+        bootstrapAdminRequired:
+          type: boolean
+        captcha:
+          $ref: "#/components/schemas/CaptchaPolicy"
+        ownerReady:
+          type: boolean
+        session:
+          $ref: "#/components/schemas/EnterpriseSessionSummary"
+        workspace:
+          $ref: "#/components/schemas/WorkspaceSummary"
+      required:
+        - workspace
+        - bootstrapAdminRequired
+        - ownerReady
+        - captcha
       type: object
     SystemBootstrapStatus:
       additionalProperties: false
@@ -6190,40 +7404,6 @@ components:
       required:
         - content
       type: object
-    UpdateWorkspaceUserRequest:
-      additionalProperties: false
-      properties:
-        avatar:
-          $ref: "#/components/schemas/AvatarUploadPayload"
-        confirmPassword:
-          type: string
-        displayName:
-          type: string
-        password:
-          type: string
-        removeAvatar:
-          type: boolean
-        resetPasswordToDefault:
-          type: boolean
-        roleIds:
-          items:
-            type: string
-          type: array
-        scopeProjectIds:
-          items:
-            type: string
-          type: array
-        status:
-          $ref: "#/components/schemas/UserStatus"
-        username:
-          type: string
-      required:
-        - username
-        - displayName
-        - status
-        - roleIds
-        - scopeProjectIds
-      type: object
     UpsertAgentInput:
       additionalProperties: false
       properties:
@@ -6347,6 +7527,85 @@ components:
         - serverName
         - config
       type: object
+    UserGroupRecord:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+      required:
+        - id
+        - code
+        - name
+        - status
+      type: object
+    UserGroupUpsertRequest:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+      required:
+        - code
+        - name
+        - status
+      type: object
+    UserOrgAssignmentRecord:
+      additionalProperties: false
+      properties:
+        isPrimary:
+          type: boolean
+        orgUnitId:
+          type: string
+        positionIds:
+          items:
+            type: string
+          type: array
+        userGroupIds:
+          items:
+            type: string
+          type: array
+        userId:
+          type: string
+      required:
+        - userId
+        - orgUnitId
+        - isPrimary
+        - positionIds
+        - userGroupIds
+      type: object
+    UserOrgAssignmentUpsertRequest:
+      additionalProperties: false
+      properties:
+        isPrimary:
+          type: boolean
+        orgUnitId:
+          type: string
+        positionIds:
+          items:
+            type: string
+          type: array
+        userGroupIds:
+          items:
+            type: string
+          type: array
+        userId:
+          type: string
+      required:
+        - userId
+        - orgUnitId
+        - isPrimary
+        - positionIds
+        - userGroupIds
+      type: object
     UserRecordSummary:
       additionalProperties: false
       properties:
@@ -6358,14 +7617,6 @@ components:
           type: string
         passwordState:
           $ref: "#/components/schemas/PasswordState"
-        roleIds:
-          items:
-            type: string
-          type: array
-        scopeProjectIds:
-          items:
-            type: string
-          type: array
         status:
           $ref: "#/components/schemas/UserStatus"
         username:
@@ -6376,8 +7627,6 @@ components:
         - displayName
         - status
         - passwordState
-        - roleIds
-        - scopeProjectIds
       type: object
     UserStatus:
       enum:

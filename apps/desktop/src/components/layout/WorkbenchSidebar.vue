@@ -12,9 +12,11 @@ import {
   LayoutDashboard,
   LibraryBig,
   MessageSquareText,
+  Network,
   PanelLeftClose,
   Plus,
   Settings,
+  ShieldCheck,
   Trash2,
   UserRound,
   Users,
@@ -38,7 +40,7 @@ import {
 import { type MenuIconKey } from '@/navigation/menuRegistry'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const route = useRoute()
@@ -46,7 +48,7 @@ const router = useRouter()
 const { t } = useI18n()
 const shell = useShellStore()
 const workspaceStore = useWorkspaceStore()
-const workspaceAccessStore = useWorkspaceAccessStore()
+const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 const runtime = useRuntimeStore()
 
 const workspaceMenuOpen = ref(false)
@@ -91,13 +93,17 @@ const iconMap: Record<MenuIconKey, unknown> = {
   tools: Wrench,
   automations: Workflow,
   console: LayoutDashboard,
-  'permission-center': UserRound,
+  'access-control': ShieldCheck,
   profile: UserRound,
   pet: Bot,
   users: UserRound,
   roles: UserRound,
   permissions: UserRound,
   menus: UserRound,
+  organization: Network,
+  policy: ShieldCheck,
+  'resource-policy': FolderOpen,
+  sessions: Bell,
   settings: Settings,
   connections: Settings, // Fallback if still needed
   teams: Users,
@@ -151,29 +157,32 @@ const workspaceNavigation = computed<NavigationItem[]>(() => {
       to: { name: 'workspace-automations', params: { workspaceId } },
     },
     {
-      id: 'workspace-permission-center',
-      menuId: 'menu-workspace-permission-center',
-      label: t('sidebar.navigation.permissionCenter'),
+      id: 'workspace-access-control',
+      menuId: 'menu-workspace-access-control',
+      label: t('sidebar.navigation.accessControl'),
       routeNames: [
-        'workspace-permission-center',
-        'workspace-permission-center-users',
-        'workspace-permission-center-roles',
-        'workspace-permission-center-permissions',
-        'workspace-permission-center-menus',
+        'workspace-access-control',
+        'workspace-access-control-users',
+        'workspace-access-control-org',
+        'workspace-access-control-roles',
+        'workspace-access-control-policies',
+        'workspace-access-control-menus',
+        'workspace-access-control-resources',
+        'workspace-access-control-sessions',
       ],
-      icon: iconMap['permission-center'],
+      icon: iconMap['access-control'],
       to: {
-        name: 'workspace-permission-center',
+        name: 'workspace-access-control',
         params: { workspaceId },
       },
     },
   ]
 
-  if (!workspaceAccessStore.currentEffectiveMenuIds.length) {
+  if (!workspaceAccessControlStore.currentEffectiveMenuIds.length) {
     return items
   }
 
-  return items.filter(item => !item.menuId || workspaceAccessStore.currentEffectiveMenuIds.includes(item.menuId))
+  return items.filter(item => !item.menuId || workspaceAccessControlStore.currentEffectiveMenuIds.includes(item.menuId))
 })
 
 function projectConversationId(projectId: string) {

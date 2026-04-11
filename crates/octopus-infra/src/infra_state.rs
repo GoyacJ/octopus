@@ -22,7 +22,6 @@ pub(super) struct AppRegistryFile {
 pub(super) struct StoredUser {
     pub(super) record: UserRecord,
     pub(super) password_hash: String,
-    pub(super) membership: WorkspaceMembershipRecord,
 }
 
 #[derive(Debug)]
@@ -43,9 +42,6 @@ pub(super) struct InfraState {
     pub(super) provider_credentials: Mutex<Vec<ProviderCredentialRecord>>,
     pub(super) tools: Mutex<Vec<ToolRecord>>,
     pub(super) automations: Mutex<Vec<AutomationRecord>>,
-    pub(super) roles: Mutex<Vec<RoleRecord>>,
-    pub(super) permissions: Mutex<Vec<PermissionRecord>>,
-    pub(super) menus: Mutex<Vec<MenuRecord>>,
     pub(super) artifacts: Mutex<Vec<ArtifactRecord>>,
     pub(super) inbox: Mutex<Vec<InboxItemRecord>>,
     pub(super) trace_events: Mutex<Vec<TraceEventRecord>>,
@@ -117,6 +113,7 @@ pub(super) fn initialize_app_registry(paths: &WorkspacePaths) -> Result<(), AppE
 pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError> {
     let connection =
         Connection::open(&paths.db_path).map_err(|error| AppError::database(error.to_string()))?;
+    drop_legacy_access_control_tables(&connection)?;
 
     connection
         .execute_batch(
@@ -134,14 +131,6 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               password_state TEXT NOT NULL,
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS memberships (
-              workspace_id TEXT NOT NULL,
-              user_id TEXT NOT NULL,
-              role_ids TEXT NOT NULL,
-              scope_mode TEXT NOT NULL,
-              scope_project_ids TEXT NOT NULL,
-              PRIMARY KEY (workspace_id, user_id)
             );
             CREATE TABLE IF NOT EXISTS client_apps (
               id TEXT PRIMARY KEY,
@@ -162,9 +151,7 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               token TEXT NOT NULL UNIQUE,
               status TEXT NOT NULL,
               created_at INTEGER NOT NULL,
-              expires_at INTEGER,
-              role_ids TEXT NOT NULL,
-              scope_project_ids TEXT NOT NULL
+              expires_at INTEGER
             );
             CREATE TABLE IF NOT EXISTS projects (
               id TEXT PRIMARY KEY,
@@ -291,38 +278,86 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               last_run_at INTEGER,
               output TEXT NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS roles (
+            CREATE TABLE IF NOT EXISTS org_units (
               id TEXT PRIMARY KEY,
-              workspace_id TEXT NOT NULL,
-              name TEXT NOT NULL,
-              code TEXT NOT NULL,
-              description TEXT NOT NULL,
-              status TEXT NOT NULL,
-              permission_ids TEXT NOT NULL,
-              menu_ids TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS permissions (
-              id TEXT PRIMARY KEY,
-              workspace_id TEXT NOT NULL,
-              name TEXT NOT NULL,
-              code TEXT NOT NULL,
-              description TEXT NOT NULL,
-              status TEXT NOT NULL,
-              kind TEXT NOT NULL,
-              target_type TEXT,
-              target_ids TEXT NOT NULL,
-              action TEXT,
-              member_permission_ids TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS menus (
-              id TEXT PRIMARY KEY,
-              workspace_id TEXT NOT NULL,
               parent_id TEXT,
-              source TEXT NOT NULL,
-              label TEXT NOT NULL,
-              route_name TEXT,
+              code TEXT NOT NULL UNIQUE,
+              name TEXT NOT NULL,
+              status TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS positions (
+              id TEXT PRIMARY KEY,
+              code TEXT NOT NULL UNIQUE,
+              name TEXT NOT NULL,
+              status TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS user_groups (
+              id TEXT PRIMARY KEY,
+              code TEXT NOT NULL UNIQUE,
+              name TEXT NOT NULL,
+              status TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS user_org_assignments (
+              user_id TEXT NOT NULL,
+              org_unit_id TEXT NOT NULL,
+              is_primary INTEGER NOT NULL,
+              position_ids TEXT NOT NULL,
+              user_group_ids TEXT NOT NULL,
+              PRIMARY KEY (user_id, org_unit_id)
+            );
+            CREATE TABLE IF NOT EXISTS access_roles (
+              id TEXT PRIMARY KEY,
+              code TEXT NOT NULL UNIQUE,
+              name TEXT NOT NULL,
+              description TEXT NOT NULL,
               status TEXT NOT NULL,
-              order_value INTEGER NOT NULL
+              permission_codes TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS role_bindings (
+              id TEXT PRIMARY KEY,
+              role_id TEXT NOT NULL,
+              subject_type TEXT NOT NULL,
+              subject_id TEXT NOT NULL,
+              effect TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS data_policies (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              subject_type TEXT NOT NULL,
+              subject_id TEXT NOT NULL,
+              resource_type TEXT NOT NULL,
+              scope_type TEXT NOT NULL,
+              project_ids TEXT NOT NULL,
+              tags TEXT NOT NULL,
+              classifications TEXT NOT NULL,
+              effect TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS resource_policies (
+              id TEXT PRIMARY KEY,
+              subject_type TEXT NOT NULL,
+              subject_id TEXT NOT NULL,
+              resource_type TEXT NOT NULL,
+              resource_id TEXT NOT NULL,
+              action_name TEXT NOT NULL,
+              effect TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS menu_policies (
+              menu_id TEXT PRIMARY KEY,
+              enabled INTEGER NOT NULL,
+              order_value INTEGER NOT NULL,
+              group_key TEXT,
+              visibility TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS protected_resources (
+              resource_type TEXT NOT NULL,
+              resource_id TEXT NOT NULL,
+              resource_subtype TEXT,
+              project_id TEXT,
+              tags TEXT NOT NULL,
+              classification TEXT NOT NULL,
+              owner_subject_type TEXT,
+              owner_subject_id TEXT,
+              PRIMARY KEY (resource_type, resource_id)
             );
             CREATE TABLE IF NOT EXISTS audit_records (
               id TEXT PRIMARY KEY,
@@ -455,7 +490,6 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
 pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
     let connection =
         Connection::open(&paths.db_path).map_err(|error| AppError::database(error.to_string()))?;
-    let default_menu_records = default_menu_records();
 
     let project_exists: Option<String> = connection
         .query_row(
@@ -619,109 +653,13 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
 
     // Default automations are not seeded because builtin actors are no longer written into
     // workspace/project tables at initialization time.
-
-    let roles_exist: Option<String> = connection
-        .query_row("SELECT id FROM roles LIMIT 1", [], |row| row.get(0))
-        .optional()
-        .map_err(|error| AppError::database(error.to_string()))?;
-    if roles_exist.is_none() {
-        for record in default_role_records() {
-            connection
-                .execute(
-                    "INSERT INTO roles (id, workspace_id, name, code, description, status, permission_ids, menu_ids)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                    params![
-                        record.id,
-                        record.workspace_id,
-                        record.name,
-                        record.code,
-                        record.description,
-                        record.status,
-                        serde_json::to_string(&record.permission_ids)?,
-                        serde_json::to_string(&record.menu_ids)?,
-                    ],
-                )
-                .map_err(|error| AppError::database(error.to_string()))?;
-        }
-    }
-
-    let permissions_exist: Option<String> = connection
-        .query_row("SELECT id FROM permissions LIMIT 1", [], |row| row.get(0))
-        .optional()
-        .map_err(|error| AppError::database(error.to_string()))?;
-    if permissions_exist.is_none() {
-        for record in default_permission_records() {
-            connection
-                .execute(
-                    "INSERT INTO permissions (id, workspace_id, name, code, description, status, kind, target_type, target_ids, action, member_permission_ids)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
-                    params![
-                        record.id,
-                        record.workspace_id,
-                        record.name,
-                        record.code,
-                        record.description,
-                        record.status,
-                        record.kind,
-                        record.target_type,
-                        serde_json::to_string(&record.target_ids)?,
-                        record.action,
-                        serde_json::to_string(&record.member_permission_ids)?,
-                    ],
-                )
-                .map_err(|error| AppError::database(error.to_string()))?;
-        }
-    }
-
-    for record in &default_menu_records {
-        connection
-            .execute(
-                "INSERT OR IGNORE INTO menus (id, workspace_id, parent_id, source, label, route_name, status, order_value)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![
-                    record.id,
-                    record.workspace_id,
-                    record.parent_id,
-                    record.source,
-                    record.label,
-                    record.route_name,
-                    record.status,
-                    record.order,
-                ],
-            )
-            .map_err(|error| AppError::database(error.to_string()))?;
-    }
-
-    let owner_menu_ids_raw: Option<String> = connection
-        .query_row(
-            "SELECT menu_ids FROM roles WHERE id = 'owner' LIMIT 1",
+    connection
+        .execute(
+            "INSERT OR IGNORE INTO org_units (id, parent_id, code, name, status)
+             VALUES ('org-root', NULL, 'root', 'Root Organization', 'active')",
             [],
-            |row| row.get(0),
         )
-        .optional()
         .map_err(|error| AppError::database(error.to_string()))?;
-    if let Some(owner_menu_ids_raw) = owner_menu_ids_raw {
-        let mut owner_menu_ids: Vec<String> =
-            serde_json::from_str(&owner_menu_ids_raw).unwrap_or_default();
-        let mut changed = false;
-
-        for menu_id in default_menu_records.iter().map(|record| record.id.as_str()) {
-            if owner_menu_ids.iter().any(|existing| existing == menu_id) {
-                continue;
-            }
-            owner_menu_ids.push(menu_id.into());
-            changed = true;
-        }
-
-        if changed {
-            connection
-                .execute(
-                    "UPDATE roles SET menu_ids = ?1 WHERE id = 'owner'",
-                    params![serde_json::to_string(&owner_menu_ids)?],
-                )
-                .map_err(|error| AppError::database(error.to_string()))?;
-        }
-    }
 
     for app in default_client_apps() {
         connection
@@ -1068,10 +1006,9 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
     let owner_user_id = users
         .iter()
         .find(|user| {
-            user.membership
-                .role_ids
-                .iter()
-                .any(|role_id| role_id == "owner")
+            resolve_effective_role_ids(&connection, &user.record.id)
+                .map(|(role_ids, _)| role_ids.iter().any(|role_id| role_id == "owner"))
+                .unwrap_or(false)
         })
         .map(|user| user.record.id.clone());
     let expected_bootstrap_status = if owner_user_id.is_some() {
@@ -1098,9 +1035,6 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
     let provider_credentials = load_provider_credentials(&connection)?;
     let tools = load_tools(&connection)?;
     let automations = load_automations(&connection)?;
-    let roles = load_roles(&connection)?;
-    let permissions = load_permissions(&connection)?;
-    let menus = load_menus(&connection)?;
     let trace_events = load_trace_events(&connection)?;
     let audit_records = load_audit_records(&connection)?;
     let cost_entries = load_cost_entries(&connection)?;
@@ -1127,9 +1061,6 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         provider_credentials: Mutex::new(provider_credentials),
         tools: Mutex::new(tools),
         automations: Mutex::new(automations),
-        roles: Mutex::new(roles),
-        permissions: Mutex::new(permissions),
-        menus: Mutex::new(menus),
         artifacts: Mutex::new(Vec::new()),
         inbox: Mutex::new(Vec::new()),
         trace_events: Mutex::new(trace_events),
@@ -1145,17 +1076,13 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
 pub(super) fn load_users(connection: &Connection) -> Result<Vec<StoredUser>, AppError> {
     let mut stmt = connection
         .prepare(
-            "SELECT u.id, u.username, u.display_name, u.avatar_path, u.avatar_content_type, u.avatar_byte_size, u.avatar_content_hash,
-                    u.status, u.password_hash, u.password_state, u.created_at, u.updated_at,
-                    m.workspace_id, m.role_ids, m.scope_mode, m.scope_project_ids
-             FROM users u
-             LEFT JOIN memberships m ON m.user_id = u.id",
+            "SELECT id, username, display_name, avatar_path, avatar_content_type, avatar_byte_size, avatar_content_hash,
+                    status, password_hash, password_state, created_at, updated_at
+             FROM users",
         )
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
-            let role_ids_raw: String = row.get(13)?;
-            let scope_project_ids_raw: String = row.get(15)?;
             Ok(StoredUser {
                 record: UserRecord {
                     id: row.get(0)?,
@@ -1171,20 +1098,21 @@ pub(super) fn load_users(connection: &Connection) -> Result<Vec<StoredUser>, App
                     updated_at: row.get::<_, i64>(11)? as u64,
                 },
                 password_hash: row.get(8)?,
-                membership: WorkspaceMembershipRecord {
-                    workspace_id: row.get(12)?,
-                    user_id: row.get(0)?,
-                    role_ids: serde_json::from_str(&role_ids_raw).unwrap_or_default(),
-                    scope_mode: row.get(14)?,
-                    scope_project_ids: serde_json::from_str(&scope_project_ids_raw)
-                        .unwrap_or_default(),
-                },
             })
         })
         .map_err(|error| AppError::database(error.to_string()))?;
 
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|error| AppError::database(error.to_string()))
+}
+
+fn drop_legacy_access_control_tables(connection: &Connection) -> Result<(), AppError> {
+    for table in ["memberships", "roles", "permissions", "menus"] {
+        connection
+            .execute(&format!("DROP TABLE IF EXISTS {table}"), [])
+            .map_err(|error| AppError::database(error.to_string()))?;
+    }
+    Ok(())
 }
 
 pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord>, AppError> {
@@ -1702,97 +1630,15 @@ pub(super) fn load_automations(connection: &Connection) -> Result<Vec<Automation
         .map_err(|error| AppError::database(error.to_string()))
 }
 
-pub(super) fn load_roles(connection: &Connection) -> Result<Vec<RoleRecord>, AppError> {
-    let mut stmt = connection
-        .prepare(
-            "SELECT id, workspace_id, name, code, description, status, permission_ids, menu_ids FROM roles",
-        )
-        .map_err(|error| AppError::database(error.to_string()))?;
-    let rows = stmt
-        .query_map([], |row| {
-            let permission_ids_raw: String = row.get(6)?;
-            let menu_ids_raw: String = row.get(7)?;
-            Ok(RoleRecord {
-                id: row.get(0)?,
-                workspace_id: row.get(1)?,
-                name: row.get(2)?,
-                code: row.get(3)?,
-                description: row.get(4)?,
-                status: row.get(5)?,
-                permission_ids: serde_json::from_str(&permission_ids_raw).unwrap_or_default(),
-                menu_ids: serde_json::from_str(&menu_ids_raw).unwrap_or_default(),
-            })
-        })
-        .map_err(|error| AppError::database(error.to_string()))?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|error| AppError::database(error.to_string()))
-}
-
-pub(super) fn load_permissions(connection: &Connection) -> Result<Vec<PermissionRecord>, AppError> {
-    let mut stmt = connection
-        .prepare(
-            "SELECT id, workspace_id, name, code, description, status, kind, target_type, target_ids, action, member_permission_ids FROM permissions",
-        )
-        .map_err(|error| AppError::database(error.to_string()))?;
-    let rows = stmt
-        .query_map([], |row| {
-            let target_ids_raw: String = row.get(8)?;
-            let member_permission_ids_raw: String = row.get(10)?;
-            Ok(PermissionRecord {
-                id: row.get(0)?,
-                workspace_id: row.get(1)?,
-                name: row.get(2)?,
-                code: row.get(3)?,
-                description: row.get(4)?,
-                status: row.get(5)?,
-                kind: row.get(6)?,
-                target_type: row.get(7)?,
-                target_ids: serde_json::from_str(&target_ids_raw).unwrap_or_default(),
-                action: row.get(9)?,
-                member_permission_ids: serde_json::from_str(&member_permission_ids_raw)
-                    .unwrap_or_default(),
-            })
-        })
-        .map_err(|error| AppError::database(error.to_string()))?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|error| AppError::database(error.to_string()))
-}
-
-pub(super) fn load_menus(connection: &Connection) -> Result<Vec<MenuRecord>, AppError> {
-    let mut stmt = connection
-        .prepare(
-            "SELECT id, workspace_id, parent_id, source, label, route_name, status, order_value FROM menus ORDER BY order_value ASC",
-        )
-        .map_err(|error| AppError::database(error.to_string()))?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok(MenuRecord {
-                id: row.get(0)?,
-                workspace_id: row.get(1)?,
-                parent_id: row.get(2)?,
-                source: row.get(3)?,
-                label: row.get(4)?,
-                route_name: row.get(5)?,
-                status: row.get(6)?,
-                order: row.get(7)?,
-            })
-        })
-        .map_err(|error| AppError::database(error.to_string()))?;
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|error| AppError::database(error.to_string()))
-}
-
 pub(super) fn load_sessions(connection: &Connection) -> Result<Vec<SessionRecord>, AppError> {
     let mut stmt = connection
         .prepare(
-            "SELECT id, workspace_id, user_id, client_app_id, token, status, created_at, expires_at, role_ids, scope_project_ids
+            "SELECT id, workspace_id, user_id, client_app_id, token, status, created_at, expires_at
              FROM sessions",
         )
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
-            let role_ids_raw: String = row.get(8)?;
-            let scope_project_ids_raw: String = row.get(9)?;
             Ok(SessionRecord {
                 id: row.get(0)?,
                 workspace_id: row.get(1)?,
@@ -1802,8 +1648,6 @@ pub(super) fn load_sessions(connection: &Connection) -> Result<Vec<SessionRecord
                 status: row.get(5)?,
                 created_at: row.get::<_, i64>(6)? as u64,
                 expires_at: row.get::<_, Option<i64>>(7)?.map(|value| value as u64),
-                role_ids: serde_json::from_str(&role_ids_raw).unwrap_or_default(),
-                scope_project_ids: serde_json::from_str(&scope_project_ids_raw).unwrap_or_default(),
             })
         })
         .map_err(|error| AppError::database(error.to_string()))?;
@@ -2112,201 +1956,6 @@ pub(super) fn default_automation_records() -> Vec<AutomationRecord> {
         next_run_at: Some(now + 86_400_000),
         last_run_at: None,
         output: "Inbox summary".into(),
-    }]
-}
-
-pub(super) fn default_permission_records() -> Vec<PermissionRecord> {
-    vec![
-        PermissionRecord {
-            id: "perm-workspace-read".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            name: "Workspace Read".into(),
-            code: "workspace.read".into(),
-            description: "Read workspace-level resources and projections.".into(),
-            status: "active".into(),
-            kind: "atomic".into(),
-            target_type: Some("workspace".into()),
-            target_ids: vec![DEFAULT_WORKSPACE_ID.into()],
-            action: Some("read".into()),
-            member_permission_ids: Vec::new(),
-        },
-        PermissionRecord {
-            id: "perm-runtime-read".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            name: "Runtime Read".into(),
-            code: "runtime.read".into(),
-            description: "Read runtime sessions and event streams.".into(),
-            status: "active".into(),
-            kind: "atomic".into(),
-            target_type: Some("project".into()),
-            target_ids: vec![DEFAULT_PROJECT_ID.into()],
-            action: Some("read".into()),
-            member_permission_ids: Vec::new(),
-        },
-    ]
-}
-
-pub(super) fn default_menu_records() -> Vec<MenuRecord> {
-    vec![
-        MenuRecord {
-            id: "menu-workspace-overview".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: None,
-            source: "main-sidebar".into(),
-            label: "Overview".into(),
-            route_name: Some("workspace-overview".into()),
-            status: "active".into(),
-            order: 10,
-        },
-        MenuRecord {
-            id: "menu-workspace-console".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: None,
-            source: "main-sidebar".into(),
-            label: "Console".into(),
-            route_name: Some("workspace-console".into()),
-            status: "active".into(),
-            order: 20,
-        },
-        MenuRecord {
-            id: "menu-workspace-console-projects".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: Some("menu-workspace-console".into()),
-            source: "console".into(),
-            label: "Projects".into(),
-            route_name: Some("workspace-console-projects".into()),
-            status: "active".into(),
-            order: 30,
-        },
-        MenuRecord {
-            id: "menu-workspace-console-knowledge".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: Some("menu-workspace-console".into()),
-            source: "console".into(),
-            label: "Knowledge".into(),
-            route_name: Some("workspace-console-knowledge".into()),
-            status: "active".into(),
-            order: 40,
-        },
-        MenuRecord {
-            id: "menu-workspace-console-resources".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: Some("menu-workspace-console".into()),
-            source: "console".into(),
-            label: "Resources".into(),
-            route_name: Some("workspace-console-resources".into()),
-            status: "active".into(),
-            order: 50,
-        },
-        MenuRecord {
-            id: "menu-workspace-console-agents".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: Some("menu-workspace-console".into()),
-            source: "console".into(),
-            label: "Agents".into(),
-            route_name: Some("workspace-console-agents".into()),
-            status: "active".into(),
-            order: 60,
-        },
-        MenuRecord {
-            id: "menu-workspace-console-models".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: Some("menu-workspace-console".into()),
-            source: "console".into(),
-            label: "Models".into(),
-            route_name: Some("workspace-console-models".into()),
-            status: "active".into(),
-            order: 70,
-        },
-        MenuRecord {
-            id: "menu-workspace-console-tools".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: Some("menu-workspace-console".into()),
-            source: "console".into(),
-            label: "Tools".into(),
-            route_name: Some("workspace-console-tools".into()),
-            status: "active".into(),
-            order: 80,
-        },
-        MenuRecord {
-            id: "menu-workspace-automations".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: None,
-            source: "main-sidebar".into(),
-            label: "Automations".into(),
-            route_name: Some("workspace-automations".into()),
-            status: "active".into(),
-            order: 90,
-        },
-        MenuRecord {
-            id: "menu-workspace-permission-center".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: None,
-            source: "main-sidebar".into(),
-            label: "Permission Center".into(),
-            route_name: Some("workspace-permission-center".into()),
-            status: "active".into(),
-            order: 100,
-        },
-        MenuRecord {
-            id: "menu-workspace-permission-center-users".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: Some("menu-workspace-permission-center".into()),
-            source: "permission-center".into(),
-            label: "Users".into(),
-            route_name: Some("workspace-permission-center-users".into()),
-            status: "active".into(),
-            order: 110,
-        },
-        MenuRecord {
-            id: "menu-workspace-permission-center-roles".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: Some("menu-workspace-permission-center".into()),
-            source: "permission-center".into(),
-            label: "Roles".into(),
-            route_name: Some("workspace-permission-center-roles".into()),
-            status: "active".into(),
-            order: 120,
-        },
-        MenuRecord {
-            id: "menu-workspace-permission-center-permissions".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: Some("menu-workspace-permission-center".into()),
-            source: "permission-center".into(),
-            label: "Permissions".into(),
-            route_name: Some("workspace-permission-center-permissions".into()),
-            status: "active".into(),
-            order: 130,
-        },
-        MenuRecord {
-            id: "menu-workspace-permission-center-menus".into(),
-            workspace_id: DEFAULT_WORKSPACE_ID.into(),
-            parent_id: Some("menu-workspace-permission-center".into()),
-            source: "permission-center".into(),
-            label: "Menus".into(),
-            route_name: Some("workspace-permission-center-menus".into()),
-            status: "active".into(),
-            order: 140,
-        },
-    ]
-}
-
-pub(super) fn default_role_records() -> Vec<RoleRecord> {
-    vec![RoleRecord {
-        id: "owner".into(),
-        workspace_id: DEFAULT_WORKSPACE_ID.into(),
-        name: "Owner".into(),
-        code: "owner".into(),
-        description: "Full workspace access.".into(),
-        status: "active".into(),
-        permission_ids: default_permission_records()
-            .into_iter()
-            .map(|record| record.id)
-            .collect(),
-        menu_ids: default_menu_records()
-            .into_iter()
-            .map(|record| record.id)
-            .collect(),
     }]
 }
 

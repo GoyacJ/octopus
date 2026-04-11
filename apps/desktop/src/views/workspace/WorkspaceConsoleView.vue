@@ -6,23 +6,23 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import { UiPageHeader, UiPageShell, UiPanelFrame, UiTabs } from '@octopus/ui'
 
 import { getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const workspaceStore = useWorkspaceStore()
-const workspaceAccessStore = useWorkspaceAccessStore()
+const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 
 const activeTab = ref('')
 const currentMenuId = computed(() => getRouteMenuId(typeof route.name === 'string' ? route.name : undefined))
 
 watch(
-  () => [route.name, workspaceStore.currentWorkspaceId, workspaceAccessStore.availableConsoleMenus.map(menu => menu.id).join('|')],
+  () => [route.name, workspaceStore.currentWorkspaceId, workspaceAccessControlStore.availableConsoleMenus.map(menu => menu.id).join('|')],
   () => {
     if (route.name === 'workspace-console') {
-      const firstRouteName = workspaceAccessStore.firstAccessibleConsoleRouteName
+      const firstRouteName = workspaceAccessControlStore.firstAccessibleConsoleRouteName
       if (firstRouteName) {
         const menuId = getRouteMenuId(firstRouteName)
         if (menuId) {
@@ -42,7 +42,7 @@ watch(
 )
 
 const tabs = computed(() =>
-  workspaceAccessStore.availableConsoleMenus
+  workspaceAccessControlStore.availableConsoleMenus
     .flatMap((menu) => {
       const definition = getMenuDefinition(menu.id)
       if (!definition?.routeName) {
@@ -57,7 +57,7 @@ const tabs = computed(() =>
 )
 
 function handleTabChange(menuId: string) {
-  const entry = workspaceAccessStore.availableConsoleMenus.find(menu => menu.id === menuId)
+  const entry = workspaceAccessControlStore.availableConsoleMenus.find(menu => menu.id === menuId)
   const definition = entry ? getMenuDefinition(entry.id) : undefined
   if (!definition?.routeName) {
     return

@@ -10,6 +10,7 @@ import type {
 } from '@octopus/schema'
 
 import * as tauriClient from '@/tauri/client'
+import { isWorkspaceApiError } from '@/tauri/shared'
 
 import {
   createRuntimeConfigDraftsFromConfig,
@@ -66,6 +67,22 @@ export const runtimeStoreActions = {
     } catch (error) {
       if (this.activeWorkspaceConnectionId === connectionId) {
         this.configError = error instanceof Error ? error.message : 'Failed to load runtime config'
+        if (
+          (isWorkspaceApiError(error)
+            && (
+              error.code === 'UNAUTHENTICATED'
+              || error.code === 'SESSION_EXPIRED'
+              || error.code === 'PERMISSION_DENIED'
+              || error.code === 'AUTHORIZATION_STALE'
+            ))
+          || (error instanceof Error && /workspace session/i.test(error.message))
+        ) {
+          this.config = null
+          this.configDrafts = createRuntimeConfigDraftsFromConfig(null)
+          this.configValidation = createRuntimeConfigValidationState()
+          this.configuredModelProbeResult = null
+          this.saveActiveWorkspaceSnapshot()
+        }
       }
       return null
     } finally {

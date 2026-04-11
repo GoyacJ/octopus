@@ -1,6 +1,15 @@
 import type {
+  AccessAuditListResponse,
+  AccessAuditQuery,
+  AccessSessionRecord,
+  AccessRoleRecord,
+  AccessUserRecord,
+  AccessUserUpsertRequest,
   AgentRecord,
   AutomationRecord,
+  AuthorizationSnapshot,
+  CaptchaChallenge,
+  CreateMenuPolicyRequest,
   ChangeCurrentUserPasswordRequest,
   ChangeCurrentUserPasswordResponse,
   CopyWorkspaceSkillToManagedInput,
@@ -9,8 +18,13 @@ import type {
   CreateWorkspaceResourceFolderInput,
   CreateWorkspaceResourceInput,
   CreateWorkspaceSkillInput,
-  CreateWorkspaceUserRequest,
   CredentialBinding,
+  DataPolicyRecord,
+  DataPolicyUpsertRequest,
+  EnterpriseAuthSuccess,
+  EnterpriseLoginRequest,
+  EnterpriseSessionSummary,
+  FeatureDefinition,
   BindPetConversationInput,
   ExportWorkspaceAgentBundleInput,
   ExportWorkspaceAgentBundleResult,
@@ -21,24 +35,34 @@ import type {
   ImportWorkspaceSkillArchiveInput,
   ImportWorkspaceSkillFolderInput,
   KnowledgeRecord,
-  LoginRequest,
-  LoginResponse,
-  MenuRecord,
+  MenuDefinition,
+  MenuGateResult,
+  MenuPolicyRecord,
+  MenuPolicyUpsertRequest,
   ModelCatalogSnapshot,
-  PermissionRecord,
+  OrgUnitRecord,
+  OrgUnitUpsertRequest,
+  PermissionDefinition,
   PetConversationBinding,
   PetPresenceState,
   PetWorkspaceSnapshot,
+  PositionRecord,
+  PositionUpsertRequest,
+  ProtectedResourceDescriptor,
+  ProtectedResourceMetadataUpsertRequest,
   ProjectAgentLinkInput,
   ProjectAgentLinkRecord,
   ProjectDashboardSnapshot,
   ProjectRecord,
   ProjectTeamLinkInput,
   ProjectTeamLinkRecord,
-  RegisterWorkspaceOwnerRequest,
-  RegisterWorkspaceOwnerResponse,
+  RegisterBootstrapAdminRequest,
   ResolveRuntimeApprovalInput,
-  RoleRecord,
+  ResourcePolicyRecord,
+  ResourcePolicyUpsertRequest,
+  RoleBindingRecord,
+  RoleBindingUpsertRequest,
+  RoleUpsertRequest,
   RuntimeBootstrap,
   RuntimeConfigPatch,
   RuntimeConfigValidationResult,
@@ -52,6 +76,7 @@ import type {
   SavePetPresenceInput,
   SubmitRuntimeTurnInput,
   SystemBootstrapStatus,
+  SystemAuthStatus,
   TeamRecord,
   ToolRecord,
   UpdateCurrentUserProfileRequest,
@@ -59,11 +84,13 @@ import type {
   UpdateWorkspaceResourceInput,
   UpdateWorkspaceSkillFileInput,
   UpdateWorkspaceSkillInput,
-  UpdateWorkspaceUserRequest,
   UpsertAgentInput,
   UpsertTeamInput,
   UpsertWorkspaceMcpServerInput,
-  PermissionCenterOverviewSnapshot,
+  UserGroupRecord,
+  UserGroupUpsertRequest,
+  UserOrgAssignmentRecord,
+  UserOrgAssignmentUpsertRequest,
   UserRecordSummary,
   WorkspaceConnectionRecord,
   WorkspaceMcpServerDocument,
@@ -105,11 +132,12 @@ export interface WorkspaceClient {
   system: {
     bootstrap: () => Promise<SystemBootstrapStatus>
   }
-  auth: {
-    login: (input: LoginRequest) => Promise<LoginResponse>
-    registerOwner: (input: RegisterWorkspaceOwnerRequest) => Promise<RegisterWorkspaceOwnerResponse>
-    logout: () => Promise<void>
-    session: () => Promise<WorkspaceSessionTokenEnvelope['session']>
+  enterpriseAuth: {
+    getStatus: () => Promise<SystemAuthStatus>
+    createCaptcha: () => Promise<CaptchaChallenge>
+    login: (input: EnterpriseLoginRequest) => Promise<EnterpriseAuthSuccess>
+    bootstrapAdmin: (input: RegisterBootstrapAdminRequest) => Promise<EnterpriseAuthSuccess>
+    session: () => Promise<EnterpriseSessionSummary>
   }
   workspace: {
     get: () => Promise<WorkspaceOverviewSnapshot['workspace']>
@@ -226,25 +254,66 @@ export interface WorkspaceClient {
     update: (automationId: string, record: AutomationRecord) => Promise<AutomationRecord>
     delete: (automationId: string) => Promise<void>
   }
-  rbac: {
-    getPermissionCenterOverview: () => Promise<PermissionCenterOverviewSnapshot>
-    listUsers: () => Promise<UserRecordSummary[]>
-    createUser: (input: CreateWorkspaceUserRequest) => Promise<UserRecordSummary>
-    updateUser: (userId: string, input: UpdateWorkspaceUserRequest) => Promise<UserRecordSummary>
-    deleteUser: (userId: string) => Promise<void>
+  profile: {
     updateCurrentUserProfile: (input: UpdateCurrentUserProfileRequest) => Promise<UserRecordSummary>
     changeCurrentUserPassword: (input: ChangeCurrentUserPasswordRequest) => Promise<ChangeCurrentUserPasswordResponse>
-    listRoles: () => Promise<RoleRecord[]>
-    createRole: (record: RoleRecord) => Promise<RoleRecord>
-    updateRole: (roleId: string, record: RoleRecord) => Promise<RoleRecord>
+  }
+  accessControl: {
+    getCurrentAuthorization: () => Promise<AuthorizationSnapshot>
+    listAudit: (query?: AccessAuditQuery) => Promise<AccessAuditListResponse>
+    listSessions: () => Promise<AccessSessionRecord[]>
+    revokeCurrentSession: () => Promise<void>
+    revokeSession: (sessionId: string) => Promise<void>
+    revokeUserSessions: (userId: string) => Promise<void>
+    listUsers: () => Promise<AccessUserRecord[]>
+    createUser: (input: AccessUserUpsertRequest) => Promise<AccessUserRecord>
+    updateUser: (userId: string, input: AccessUserUpsertRequest) => Promise<AccessUserRecord>
+    deleteUser: (userId: string) => Promise<void>
+    listOrgUnits: () => Promise<OrgUnitRecord[]>
+    createOrgUnit: (input: OrgUnitUpsertRequest) => Promise<OrgUnitRecord>
+    updateOrgUnit: (orgUnitId: string, input: OrgUnitUpsertRequest) => Promise<OrgUnitRecord>
+    deleteOrgUnit: (orgUnitId: string) => Promise<void>
+    listPositions: () => Promise<PositionRecord[]>
+    createPosition: (input: PositionUpsertRequest) => Promise<PositionRecord>
+    updatePosition: (positionId: string, input: PositionUpsertRequest) => Promise<PositionRecord>
+    deletePosition: (positionId: string) => Promise<void>
+    listUserGroups: () => Promise<UserGroupRecord[]>
+    createUserGroup: (input: UserGroupUpsertRequest) => Promise<UserGroupRecord>
+    updateUserGroup: (groupId: string, input: UserGroupUpsertRequest) => Promise<UserGroupRecord>
+    deleteUserGroup: (groupId: string) => Promise<void>
+    listUserOrgAssignments: () => Promise<UserOrgAssignmentRecord[]>
+    upsertUserOrgAssignment: (input: UserOrgAssignmentUpsertRequest) => Promise<UserOrgAssignmentRecord>
+    deleteUserOrgAssignment: (userId: string, orgUnitId: string) => Promise<void>
+    listRoles: () => Promise<AccessRoleRecord[]>
+    createRole: (input: RoleUpsertRequest) => Promise<AccessRoleRecord>
+    updateRole: (roleId: string, input: RoleUpsertRequest) => Promise<AccessRoleRecord>
     deleteRole: (roleId: string) => Promise<void>
-    listPermissions: () => Promise<PermissionRecord[]>
-    createPermission: (record: PermissionRecord) => Promise<PermissionRecord>
-    updatePermission: (permissionId: string, record: PermissionRecord) => Promise<PermissionRecord>
-    deletePermission: (permissionId: string) => Promise<void>
-    listMenus: () => Promise<MenuRecord[]>
-    createMenu: (record: MenuRecord) => Promise<MenuRecord>
-    updateMenu: (menuId: string, record: MenuRecord) => Promise<MenuRecord>
+    listPermissionDefinitions: () => Promise<PermissionDefinition[]>
+    listRoleBindings: () => Promise<RoleBindingRecord[]>
+    createRoleBinding: (input: RoleBindingUpsertRequest) => Promise<RoleBindingRecord>
+    updateRoleBinding: (bindingId: string, input: RoleBindingUpsertRequest) => Promise<RoleBindingRecord>
+    deleteRoleBinding: (bindingId: string) => Promise<void>
+    listDataPolicies: () => Promise<DataPolicyRecord[]>
+    createDataPolicy: (input: DataPolicyUpsertRequest) => Promise<DataPolicyRecord>
+    updateDataPolicy: (policyId: string, input: DataPolicyUpsertRequest) => Promise<DataPolicyRecord>
+    deleteDataPolicy: (policyId: string) => Promise<void>
+    listResourcePolicies: () => Promise<ResourcePolicyRecord[]>
+    createResourcePolicy: (input: ResourcePolicyUpsertRequest) => Promise<ResourcePolicyRecord>
+    updateResourcePolicy: (policyId: string, input: ResourcePolicyUpsertRequest) => Promise<ResourcePolicyRecord>
+    deleteResourcePolicy: (policyId: string) => Promise<void>
+    listMenuDefinitions: () => Promise<MenuDefinition[]>
+    listFeatureDefinitions: () => Promise<FeatureDefinition[]>
+    listMenuGateResults: () => Promise<MenuGateResult[]>
+    listMenuPolicies: () => Promise<MenuPolicyRecord[]>
+    createMenuPolicy: (input: CreateMenuPolicyRequest) => Promise<MenuPolicyRecord>
+    updateMenuPolicy: (menuId: string, input: MenuPolicyUpsertRequest) => Promise<MenuPolicyRecord>
+    deleteMenuPolicy: (menuId: string) => Promise<void>
+    listProtectedResources: () => Promise<ProtectedResourceDescriptor[]>
+    upsertProtectedResource: (
+      resourceType: string,
+      resourceId: string,
+      input: ProtectedResourceMetadataUpsertRequest,
+    ) => Promise<ProtectedResourceDescriptor>
   }
   runtime: {
     bootstrap: () => Promise<RuntimeBootstrap>

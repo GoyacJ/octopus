@@ -1,12 +1,21 @@
 import type { ApiErrorCode, ApiErrorEnvelope } from '@octopus/schema'
 
 export const WORKSPACE_AUTH_FAILURE_EVENT = 'octopus:workspace-auth-failure'
+export const WORKSPACE_AUTHORIZATION_FAILURE_EVENT = 'octopus:workspace-authorization-failure'
 
 export type WorkspaceAuthFailureCode = Extract<ApiErrorCode, 'UNAUTHENTICATED' | 'SESSION_EXPIRED'>
+export type WorkspaceAuthorizationFailureCode = Extract<ApiErrorCode, 'PERMISSION_DENIED' | 'AUTHORIZATION_STALE'>
 
 export interface WorkspaceAuthFailureDetail {
   workspaceConnectionId: string
   code: WorkspaceAuthFailureCode
+  status: number
+  requestId: string
+}
+
+export interface WorkspaceAuthorizationFailureDetail {
+  workspaceConnectionId: string
+  code: WorkspaceAuthorizationFailureCode
   status: number
   requestId: string
 }
@@ -40,6 +49,10 @@ function isWorkspaceAuthFailureCode(code?: ApiErrorCode): code is WorkspaceAuthF
   return code === 'UNAUTHENTICATED' || code === 'SESSION_EXPIRED'
 }
 
+function isWorkspaceAuthorizationFailureCode(code?: ApiErrorCode): code is WorkspaceAuthorizationFailureCode {
+  return code === 'PERMISSION_DENIED' || code === 'AUTHORIZATION_STALE'
+}
+
 function dispatchWorkspaceAuthFailure(
   workspaceConnectionId: string,
   error: WorkspaceApiError,
@@ -49,6 +62,24 @@ function dispatchWorkspaceAuthFailure(
   }
 
   window.dispatchEvent(new CustomEvent<WorkspaceAuthFailureDetail>(WORKSPACE_AUTH_FAILURE_EVENT, {
+    detail: {
+      workspaceConnectionId,
+      code: error.code,
+      status: error.status,
+      requestId: error.requestId,
+    },
+  }))
+}
+
+function dispatchWorkspaceAuthorizationFailure(
+  workspaceConnectionId: string,
+  error: WorkspaceApiError,
+): void {
+  if (typeof window === 'undefined' || !isWorkspaceAuthorizationFailureCode(error.code)) {
+    return
+  }
+
+  window.dispatchEvent(new CustomEvent<WorkspaceAuthorizationFailureDetail>(WORKSPACE_AUTHORIZATION_FAILURE_EVENT, {
     detail: {
       workspaceConnectionId,
       code: error.code,
@@ -80,6 +111,7 @@ export async function decodeApiError(
       })
       if (workspaceConnectionId) {
         dispatchWorkspaceAuthFailure(workspaceConnectionId, error)
+        dispatchWorkspaceAuthorizationFailure(workspaceConnectionId, error)
       }
       return error
     }
@@ -94,6 +126,7 @@ export async function decodeApiError(
   })
   if (workspaceConnectionId) {
     dispatchWorkspaceAuthFailure(workspaceConnectionId, error)
+    dispatchWorkspaceAuthorizationFailure(workspaceConnectionId, error)
   }
   return error
 }

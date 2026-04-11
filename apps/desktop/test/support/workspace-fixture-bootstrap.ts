@@ -38,8 +38,6 @@ export const WORKSPACE_SESSIONS: WorkspaceSessionTokenEnvelope[] = WORKSPACE_CON
     status: 'active',
     createdAt: 1,
     expiresAt: undefined,
-    roleIds: ['role-owner'],
-    scopeProjectIds: [],
   },
 }))
 

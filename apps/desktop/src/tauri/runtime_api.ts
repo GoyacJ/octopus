@@ -13,20 +13,25 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
       })
     },
     async getConfig() {
-      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/config', 'get')
+      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/config', 'get', {
+        session: assertWorkspaceRequestReady(context),
+      })
     },
     async validateConfig(patch) {
       return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/config/validate', 'post', {
+        session: assertWorkspaceRequestReady(context),
         body: JSON.stringify(patch),
       })
     },
     async validateConfiguredModel(input) {
       return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/config/configured-models/probe', 'post', {
+        session: assertWorkspaceRequestReady(context),
         body: JSON.stringify(input),
       })
     },
     async saveConfig(patch) {
       return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/config/scopes/{scope}', 'patch', {
+        session: assertWorkspaceRequestReady(context),
         pathParams: {
           scope: 'workspace',
         },

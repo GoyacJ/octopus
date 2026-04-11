@@ -39,9 +39,10 @@ async fn main() -> Result<(), AppError> {
     ));
     let services = PlatformServices {
         workspace: infra.workspace.clone(),
+        access_control: infra.access_control.clone(),
         auth: infra.auth.clone(),
         app_registry: infra.app_registry.clone(),
-        rbac: infra.rbac.clone(),
+        authorization: infra.authorization.clone(),
         runtime_session: runtime.clone(),
         runtime_execution: runtime.clone(),
         runtime_config: runtime.clone(),
@@ -56,6 +57,8 @@ async fn main() -> Result<(), AppError> {
         host_auth_token: args.auth_token.clone(),
         transport_security: "loopback".into(),
         idempotency_cache: Arc::new(Mutex::new(HashMap::new())),
+        auth_captcha_challenges: Arc::new(Mutex::new(HashMap::new())),
+        auth_rate_limits: Arc::new(Mutex::new(HashMap::new())),
         host_state: HostState {
             platform: args.host_platform.clone(),
             mode: args.host_mode.clone(),

@@ -4,9 +4,8 @@ import { describe, expect, it } from 'vitest'
 
 import type {
   ApiErrorEnvelope,
-  AvatarUploadPayload,
   BindPetConversationInput,
-  RegisterWorkspaceOwnerRequest,
+  RegisterBootstrapAdminRequest,
   SavePetPresenceInput,
 } from '@octopus/schema'
 
@@ -191,8 +190,6 @@ describe('workspace client transport', () => {
           token: 'token-owner',
           status: 'active',
           createdAt: 1,
-          roleIds: ['owner'],
-          scopeProjectIds: [],
         },
         workspace: {
           id: 'ws-local',
@@ -215,12 +212,15 @@ describe('workspace client transport', () => {
       connection: connection!,
     })
 
-    const requestBody: RegisterWorkspaceOwnerRequest = {
+    const requestBody: RegisterBootstrapAdminRequest = {
       clientAppId: 'octopus-desktop',
+      captchaChallengeId: 'captcha-1',
+      captchaCode: '1234',
       username: 'owner',
       displayName: 'Workspace Owner',
       password: 'owner-owner',
       confirmPassword: 'owner-owner',
+      workspaceId: 'ws-local',
       avatar: {
         fileName: 'owner-avatar.png',
         contentType: 'image/png',
@@ -229,11 +229,11 @@ describe('workspace client transport', () => {
       },
     }
 
-    const response = await workspaceClient.auth.registerOwner(requestBody)
+    const response = await workspaceClient.enterpriseAuth.bootstrapAdmin(requestBody)
 
     expect(response.session.userId).toBe('user-owner')
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://127.0.0.1:43127/api/v1/auth/register-owner',
+      'http://127.0.0.1:43127/api/v1/system/auth/bootstrap-admin',
       expect.objectContaining({
         method: 'POST',
         headers: expect.any(Headers),
@@ -405,8 +405,6 @@ describe('workspace client transport', () => {
         avatar: 'data:image/png;base64,b3duZXI=',
         status: 'active',
         passwordState: 'set',
-        roleIds: ['role-owner'],
-        scopeProjectIds: [],
       }),
     })
 
@@ -425,7 +423,7 @@ describe('workspace client transport', () => {
       byteSize: 5,
     }
 
-    await workspaceClient.rbac.updateCurrentUserProfile({
+    await workspaceClient.profile.updateCurrentUserProfile({
       displayName: 'Workspace Owner',
       avatar,
     })
@@ -457,7 +455,7 @@ describe('workspace client transport', () => {
       session: createWorkspaceSession(connection!),
     })
 
-    await workspaceClient.rbac.changeCurrentUserPassword({
+    await workspaceClient.profile.changeCurrentUserPassword({
       currentPassword: 'owner-owner',
       newPassword: 'owner-owner-2',
       confirmPassword: 'owner-owner-2',
@@ -479,20 +477,17 @@ describe('workspace client transport', () => {
     }))
   })
 
-  it('creates workspace members through the RBAC users endpoint with avatar and password options', async () => {
+  it('creates access-control users through the enterprise users endpoint', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'Content-Type': 'application/json' }),
       json: async () => ({
-        id: 'user-member-alpha',
+        id: 'access-user-alpha',
         username: 'member-alpha',
         displayName: 'Member Alpha',
-        avatar: undefined,
         status: 'active',
         passwordState: 'reset-required',
-        roleIds: ['role-operator'],
-        scopeProjectIds: ['proj-governance'],
       }),
     })
 
@@ -504,25 +499,16 @@ describe('workspace client transport', () => {
       session: createWorkspaceSession(connection!),
     })
 
-    const avatar: AvatarUploadPayload = {
-      fileName: 'member-alpha.png',
-      contentType: 'image/png',
-      dataBase64: 'YWxwaGE=',
-      byteSize: 5,
-    }
-
-    await workspaceClient.rbac.createUser({
+    await workspaceClient.accessControl.createUser({
       username: 'member-alpha',
       displayName: 'Member Alpha',
       status: 'active',
-      roleIds: ['role-operator'],
-      scopeProjectIds: ['proj-governance'],
-      avatar,
-      useDefaultPassword: true,
+      password: 'member-alpha-temp',
+      confirmPassword: 'member-alpha-temp',
     })
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://127.0.0.1:43127/api/v1/workspace/rbac/users',
+      'http://127.0.0.1:43127/api/v1/access/users',
       expect.objectContaining({
         method: 'POST',
         headers: expect.any(Headers),
@@ -534,27 +520,22 @@ describe('workspace client transport', () => {
       username: 'member-alpha',
       displayName: 'Member Alpha',
       status: 'active',
-      roleIds: ['role-operator'],
-      scopeProjectIds: ['proj-governance'],
-      avatar,
-      useDefaultPassword: true,
+      password: 'member-alpha-temp',
+      confirmPassword: 'member-alpha-temp',
     }))
   })
 
-  it('updates workspace members through the RBAC user detail endpoint with password reset options', async () => {
+  it('updates access-control users through the enterprise user detail endpoint', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
       headers: new Headers({ 'Content-Type': 'application/json' }),
       json: async () => ({
-        id: 'user-member-beta',
+        id: 'access-user-beta',
         username: 'member-beta',
         displayName: 'Member Beta',
-        avatar: 'data:image/png;base64,YmV0YQ==',
         status: 'active',
         passwordState: 'set',
-        roleIds: ['role-owner'],
-        scopeProjectIds: [],
       }),
     })
 
@@ -566,28 +547,17 @@ describe('workspace client transport', () => {
       session: createWorkspaceSession(connection!),
     })
 
-    const avatar: AvatarUploadPayload = {
-      fileName: 'member-beta.png',
-      contentType: 'image/png',
-      dataBase64: 'YmV0YQ==',
-      byteSize: 4,
-    }
-
-    await workspaceClient.rbac.updateUser('user-member-beta', {
+    await workspaceClient.accessControl.updateUser('access-user-beta', {
       username: 'member-beta',
       displayName: 'Member Beta',
       status: 'active',
-      roleIds: ['role-owner'],
-      scopeProjectIds: [],
-      avatar,
-      password: 'member-beta-1',
-      confirmPassword: 'member-beta-1',
+      resetPassword: true,
     })
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://127.0.0.1:43127/api/v1/workspace/rbac/users/user-member-beta',
+      'http://127.0.0.1:43127/api/v1/access/users/access-user-beta',
       expect.objectContaining({
-        method: 'PATCH',
+        method: 'PUT',
         headers: expect.any(Headers),
       }),
     )
@@ -597,15 +567,11 @@ describe('workspace client transport', () => {
       username: 'member-beta',
       displayName: 'Member Beta',
       status: 'active',
-      roleIds: ['role-owner'],
-      scopeProjectIds: [],
-      avatar,
-      password: 'member-beta-1',
-      confirmPassword: 'member-beta-1',
+      resetPassword: true,
     }))
   })
 
-  it('deletes workspace members through the RBAC user detail endpoint', async () => {
+  it('deletes access-control users through the enterprise user detail endpoint', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -622,10 +588,10 @@ describe('workspace client transport', () => {
       session: createWorkspaceSession(connection!),
     })
 
-    await workspaceClient.rbac.deleteUser('user-member-beta')
+    await workspaceClient.accessControl.deleteUser('access-user-beta')
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://127.0.0.1:43127/api/v1/workspace/rbac/users/user-member-beta',
+      'http://127.0.0.1:43127/api/v1/access/users/access-user-beta',
       expect.objectContaining({
         method: 'DELETE',
         headers: expect.any(Headers),
@@ -633,7 +599,7 @@ describe('workspace client transport', () => {
     )
   })
 
-  it('deletes workspace roles through the RBAC role detail endpoint', async () => {
+  it('deletes access-control roles through the enterprise role detail endpoint', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -650,10 +616,10 @@ describe('workspace client transport', () => {
       session: createWorkspaceSession(connection!),
     })
 
-    await workspaceClient.rbac.deleteRole('role-operator')
+    await workspaceClient.accessControl.deleteRole('role-operator')
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://127.0.0.1:43127/api/v1/workspace/rbac/roles/role-operator',
+      'http://127.0.0.1:43127/api/v1/access/roles/role-operator',
       expect.objectContaining({
         method: 'DELETE',
         headers: expect.any(Headers),
@@ -661,7 +627,7 @@ describe('workspace client transport', () => {
     )
   })
 
-  it('deletes workspace permissions through the RBAC permission detail endpoint', async () => {
+  it('deletes enterprise data policies through the access-control policy endpoint', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -678,10 +644,10 @@ describe('workspace client transport', () => {
       session: createWorkspaceSession(connection!),
     })
 
-    await workspaceClient.rbac.deletePermission('perm-manage-tools')
+    await workspaceClient.accessControl.deleteDataPolicy('policy-project-redesign')
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      'http://127.0.0.1:43127/api/v1/workspace/rbac/permissions/perm-manage-tools',
+      'http://127.0.0.1:43127/api/v1/access/policies/data-policies/policy-project-redesign',
       expect.objectContaining({
         method: 'DELETE',
         headers: expect.any(Headers),

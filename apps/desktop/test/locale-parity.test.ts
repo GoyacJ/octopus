@@ -39,7 +39,7 @@ describe('desktop locale registry', () => {
     expect(keys).toContain('connections.product.title')
     expect(keys).toContain('enum.conversationIntent.paused')
     expect(keys).toContain('enum.teamMode.hybrid')
-    expect(keys).toContain('permissionCenter.header.title')
+    expect(keys).toContain('accessControl.header.title')
     expect(keys).toContain('personalCenter.header.title')
     expect(keys).toContain('console.header.title')
     expect(keys).toContain('resources.filters.searchPlaceholder')

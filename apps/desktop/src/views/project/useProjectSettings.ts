@@ -14,7 +14,7 @@ import type {
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
 import { useTeamStore } from '@/stores/team'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 export type ProjectSettingsTab = 'basics' | 'models' | 'tools' | 'agents' | 'users'
@@ -35,7 +35,7 @@ export function useProjectSettings() {
   const agentStore = useAgentStore()
   const catalogStore = useCatalogStore()
   const teamStore = useTeamStore()
-  const workspaceAccessStore = useWorkspaceAccessStore()
+  const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 
   const activeTab = ref<ProjectSettingsTab>('basics')
   const loadingDependencies = ref(false)
@@ -103,7 +103,7 @@ export function useProjectSettings() {
     return teamStore.workspaceTeams.filter(team => assignedIds.includes(team.id))
   })
   const workspaceUsers = computed(() =>
-    [...workspaceAccessStore.users].sort((left, right) =>
+    [...workspaceAccessControlStore.users].sort((left, right) =>
       (left.displayName || left.username).localeCompare(right.displayName || right.username),
     ),
   )
@@ -175,9 +175,15 @@ export function useProjectSettings() {
   )
 
   const currentMemberUserIds = computed(() =>
-    workspaceUsers.value
-      .filter(user => user.scopeProjectIds.includes(projectId.value))
-      .map(user => user.id),
+    workspaceAccessControlStore.dataPolicies
+      .filter(policy =>
+        policy.subjectType === 'user'
+        && policy.resourceType === 'project'
+        && policy.scopeType === 'selected-projects'
+        && policy.effect === 'allow'
+        && policy.projectIds.includes(projectId.value),
+      )
+      .map(policy => policy.subjectId),
   )
 
   const summaryAllowedModels = computed(() =>
@@ -213,7 +219,7 @@ export function useProjectSettings() {
           agentStore.load(nextConnectionId),
           catalogStore.load(nextConnectionId),
           teamStore.load(nextConnectionId),
-          workspaceAccessStore.load(nextConnectionId),
+          workspaceAccessControlStore.load(nextConnectionId),
         ])
       } finally {
         loadingDependencies.value = false
@@ -269,7 +275,7 @@ export function useProjectSettings() {
   )
 
   watch(
-    () => `${projectId.value}|${workspaceUsers.value.map(user => `${user.id}:${user.scopeProjectIds.join(',')}`).join('|')}`,
+    () => `${projectId.value}|${workspaceAccessControlStore.dataPolicies.map(policy => `${policy.id}:${policy.subjectType}:${policy.subjectId}:${policy.projectIds.join(',')}`).join('|')}`,
     () => {
       selectedMemberUserIds.value = [...currentMemberUserIds.value]
       usersError.value = ''
@@ -497,7 +503,7 @@ export function useProjectSettings() {
     savingUsers.value = true
 
     try {
-      await workspaceAccessStore.setProjectMembers(project.value.id, selectedMemberUserIds.value)
+      await workspaceAccessControlStore.setProjectMembers(project.value.id, selectedMemberUserIds.value)
     } catch (cause) {
       usersError.value = cause instanceof Error ? cause.message : t('projectSettings.users.saveError')
     } finally {

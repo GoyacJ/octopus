@@ -19,13 +19,16 @@ pub fn build_infra_bundle(root: impl Into<PathBuf>) -> Result<InfraBundle, AppEr
         workspace: Arc::new(InfraWorkspaceService {
             state: Arc::clone(&state),
         }),
+        access_control: Arc::new(InfraAccessControlService {
+            state: Arc::clone(&state),
+        }),
         auth: Arc::new(InfraAuthService {
             state: Arc::clone(&state),
         }),
         app_registry: Arc::new(InfraAppRegistryService {
             state: Arc::clone(&state),
         }),
-        rbac: Arc::new(InfraRbacService {
+        authorization: Arc::new(InfraAuthorizationService {
             _state: Arc::clone(&state),
         }),
         artifact: Arc::new(InfraArtifactService {

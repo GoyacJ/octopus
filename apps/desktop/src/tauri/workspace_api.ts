@@ -1,15 +1,39 @@
 import type {
+  AccessAuditListResponse,
+  AccessAuditQuery,
+  AccessSessionRecord,
+  AccessRoleRecord,
+  AccessUserRecord,
   AgentRecord,
   AutomationRecord,
+  AuthorizationSnapshot,
+  CaptchaChallenge,
   ChangeCurrentUserPasswordResponse,
   CredentialBinding,
+  DataPolicyRecord,
+  EnterpriseAuthSuccess,
+  EnterpriseSessionSummary,
   ExportWorkspaceAgentBundleResult,
+  FeatureDefinition,
   ImportWorkspaceAgentBundlePreview,
   ImportWorkspaceAgentBundleResult,
+  MenuDefinition,
+  MenuGateResult,
+  MenuPolicyRecord,
   ModelCatalogSnapshot,
+  OrgUnitRecord,
+  PermissionDefinition,
+  PositionRecord,
   ProjectAgentLinkRecord,
   ProjectTeamLinkRecord,
+  ProtectedResourceDescriptor,
+  ProtectedResourceMetadataUpsertRequest,
+  ResourcePolicyRecord,
+  RoleBindingRecord,
+  SystemAuthStatus,
   ToolRecord,
+  UserGroupRecord,
+  UserOrgAssignmentRecord,
   WorkspaceMcpServerDocument,
   WorkspaceSkillDocument,
   WorkspaceSkillFileDocument,
@@ -49,36 +73,54 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
         )
       },
     },
-    auth: {
+    enterpriseAuth: {
+      async getStatus() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/system/auth/status',
+          'get',
+          {
+            session: context.session,
+          },
+        ) as SystemAuthStatus
+      },
+      async createCaptcha() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/system/auth/captcha',
+          'post',
+          {},
+        ) as CaptchaChallenge
+      },
       async login(input) {
         return await fetchWorkspaceOpenApi(
           context.connection,
-          '/api/v1/auth/login',
+          '/api/v1/system/auth/login',
           'post',
           {
             body: JSON.stringify(input),
           },
-        )
+        ) as EnterpriseAuthSuccess
       },
-      async registerOwner(input) {
+      async bootstrapAdmin(input) {
         return await fetchWorkspaceOpenApi(
           context.connection,
-          '/api/v1/auth/register-owner',
+          '/api/v1/system/auth/bootstrap-admin',
           'post',
           {
             body: JSON.stringify(input),
           },
-        )
-      },
-      async logout() {
-        await fetchWorkspaceOpenApi(context.connection, '/api/v1/auth/logout', 'post', {
-          session: assertWorkspaceRequestReady(context),
-        })
+        ) as EnterpriseAuthSuccess
       },
       async session() {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/auth/session', 'get', {
-          session: assertWorkspaceRequestReady(context),
-        })
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/system/auth/session',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as EnterpriseSessionSummary
       },
     },
     workspace: {
@@ -810,45 +852,7 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
         })
       },
     },
-    rbac: {
-      async getPermissionCenterOverview() {
-        return await fetchWorkspaceOpenApi(
-          context.connection,
-          '/api/v1/workspace/permission-center/overview',
-          'get',
-          {
-            session: assertWorkspaceRequestReady(context),
-          },
-        )
-      },
-      async listUsers() {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/users', 'get', {
-          session: assertWorkspaceRequestReady(context),
-        })
-      },
-      async createUser(record) {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/users', 'post', {
-          session: assertWorkspaceRequestReady(context),
-          body: JSON.stringify(record),
-        })
-      },
-      async updateUser(userId, record) {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/users/{userId}', 'patch', {
-          session: assertWorkspaceRequestReady(context),
-          pathParams: {
-            userId,
-          },
-          body: JSON.stringify(record),
-        })
-      },
-      async deleteUser(userId) {
-        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/users/{userId}', 'delete', {
-          session: assertWorkspaceRequestReady(context),
-          pathParams: {
-            userId,
-          },
-        })
-      },
+    profile: {
       async updateCurrentUserProfile(input) {
         return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/personal-center/profile', 'patch', {
           session: assertWorkspaceRequestReady(context),
@@ -861,101 +865,491 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
           body: JSON.stringify(input),
         }) as ChangeCurrentUserPasswordResponse
       },
-      async listRoles() {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/roles', 'get', {
-          session: assertWorkspaceRequestReady(context),
-        })
-      },
-      async createRole(record) {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/roles', 'post', {
-          session: assertWorkspaceRequestReady(context),
-          body: JSON.stringify(record),
-        })
-      },
-      async updateRole(roleId, record) {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/roles/{roleId}', 'patch', {
-          session: assertWorkspaceRequestReady(context),
-          pathParams: {
-            roleId,
-          },
-          body: JSON.stringify(record),
-        })
-      },
-      async deleteRole(roleId) {
-        await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/roles/{roleId}', 'delete', {
-          session: assertWorkspaceRequestReady(context),
-          pathParams: {
-            roleId,
-          },
-        })
-      },
-      async listPermissions() {
+    },
+    accessControl: {
+      async getCurrentAuthorization() {
         return await fetchWorkspaceOpenApi(
           context.connection,
-          '/api/v1/workspace/rbac/permissions',
+          '/api/v1/access/authorization/current',
           'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as AuthorizationSnapshot
+      },
+      async listAudit(query: AccessAuditQuery = {}) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/audit',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            queryParams: query,
+          },
+        ) as AccessAuditListResponse
+      },
+      async listSessions() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/sessions',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as AccessSessionRecord[]
+      },
+      async revokeCurrentSession() {
+        await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/sessions/current/revoke',
+          'post',
           {
             session: assertWorkspaceRequestReady(context),
           },
         )
       },
-      async createPermission(record) {
+      async revokeSession(sessionId) {
+        await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/sessions/{sessionId}/revoke',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              sessionId,
+            },
+          },
+        )
+      },
+      async revokeUserSessions(userId) {
+        await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/users/{userId}/sessions/revoke',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              userId,
+            },
+          },
+        )
+      },
+      async listUsers() {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/users', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        }) as AccessUserRecord[]
+      },
+      async createUser(record) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/users', 'post', {
+          session: assertWorkspaceRequestReady(context),
+          body: JSON.stringify(record),
+        }) as AccessUserRecord
+      },
+      async updateUser(userId, record) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/users/{userId}', 'put', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            userId,
+          },
+          body: JSON.stringify(record),
+        }) as AccessUserRecord
+      },
+      async deleteUser(userId) {
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/users/{userId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            userId,
+          },
+        })
+      },
+      async listOrgUnits() {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/units', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        }) as OrgUnitRecord[]
+      },
+      async createOrgUnit(record) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/units', 'post', {
+          session: assertWorkspaceRequestReady(context),
+          body: JSON.stringify(record),
+        }) as OrgUnitRecord
+      },
+      async updateOrgUnit(orgUnitId, record) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/units/{orgUnitId}', 'put', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            orgUnitId,
+          },
+          body: JSON.stringify(record),
+        }) as OrgUnitRecord
+      },
+      async deleteOrgUnit(orgUnitId) {
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/units/{orgUnitId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            orgUnitId,
+          },
+        })
+      },
+      async listPositions() {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/positions', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        }) as PositionRecord[]
+      },
+      async createPosition(record) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/positions', 'post', {
+          session: assertWorkspaceRequestReady(context),
+          body: JSON.stringify(record),
+        }) as PositionRecord
+      },
+      async updatePosition(positionId, record) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/positions/{positionId}', 'put', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            positionId,
+          },
+          body: JSON.stringify(record),
+        }) as PositionRecord
+      },
+      async deletePosition(positionId) {
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/positions/{positionId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            positionId,
+          },
+        })
+      },
+      async listUserGroups() {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/groups', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        }) as UserGroupRecord[]
+      },
+      async createUserGroup(record) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/groups', 'post', {
+          session: assertWorkspaceRequestReady(context),
+          body: JSON.stringify(record),
+        }) as UserGroupRecord
+      },
+      async updateUserGroup(groupId, record) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/groups/{groupId}', 'put', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            groupId,
+          },
+          body: JSON.stringify(record),
+        }) as UserGroupRecord
+      },
+      async deleteUserGroup(groupId) {
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/groups/{groupId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            groupId,
+          },
+        })
+      },
+      async listUserOrgAssignments() {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/assignments', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        }) as UserOrgAssignmentRecord[]
+      },
+      async upsertUserOrgAssignment(record) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/assignments', 'post', {
+          session: assertWorkspaceRequestReady(context),
+          body: JSON.stringify(record),
+        }) as UserOrgAssignmentRecord
+      },
+      async deleteUserOrgAssignment(userId, orgUnitId) {
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/org/assignments/{userId}/{orgUnitId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            userId,
+            orgUnitId,
+          },
+        })
+      },
+      async listRoles() {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/roles', 'get', {
+          session: assertWorkspaceRequestReady(context),
+        }) as AccessRoleRecord[]
+      },
+      async createRole(record) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/roles', 'post', {
+          session: assertWorkspaceRequestReady(context),
+          body: JSON.stringify(record),
+        }) as AccessRoleRecord
+      },
+      async updateRole(roleId, record) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/roles/{roleId}', 'put', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            roleId,
+          },
+          body: JSON.stringify(record),
+        }) as AccessRoleRecord
+      },
+      async deleteRole(roleId) {
+        await fetchWorkspaceOpenApi(context.connection, '/api/v1/access/roles/{roleId}', 'delete', {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            roleId,
+          },
+        })
+      },
+      async listPermissionDefinitions() {
         return await fetchWorkspaceOpenApi(
           context.connection,
-          '/api/v1/workspace/rbac/permissions',
+          '/api/v1/access/policies/permission-definitions',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as PermissionDefinition[]
+      },
+      async listRoleBindings() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/policies/role-bindings',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as RoleBindingRecord[]
+      },
+      async createRoleBinding(record) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/policies/role-bindings',
           'post',
           {
             session: assertWorkspaceRequestReady(context),
             body: JSON.stringify(record),
           },
-        )
+        ) as RoleBindingRecord
       },
-      async updatePermission(permissionId, record) {
+      async updateRoleBinding(bindingId, record) {
         return await fetchWorkspaceOpenApi(
           context.connection,
-          '/api/v1/workspace/rbac/permissions/{permissionId}',
-          'patch',
+          '/api/v1/access/policies/role-bindings/{bindingId}',
+          'put',
           {
             session: assertWorkspaceRequestReady(context),
             pathParams: {
-              permissionId,
+              bindingId,
             },
             body: JSON.stringify(record),
           },
-        )
+        ) as RoleBindingRecord
       },
-      async deletePermission(permissionId) {
+      async deleteRoleBinding(bindingId) {
         await fetchWorkspaceOpenApi(
           context.connection,
-          '/api/v1/workspace/rbac/permissions/{permissionId}',
+          '/api/v1/access/policies/role-bindings/{bindingId}',
           'delete',
           {
             session: assertWorkspaceRequestReady(context),
             pathParams: {
-              permissionId,
+              bindingId,
             },
           },
         )
       },
-      async listMenus() {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/menus', 'get', {
-          session: assertWorkspaceRequestReady(context),
-        })
-      },
-      async createMenu(record) {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/menus', 'post', {
-          session: assertWorkspaceRequestReady(context),
-          body: JSON.stringify(record),
-        })
-      },
-      async updateMenu(menuId, record) {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/rbac/menus/{menuId}', 'patch', {
-          session: assertWorkspaceRequestReady(context),
-          pathParams: {
-            menuId,
+      async listDataPolicies() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/policies/data-policies',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
           },
-          body: JSON.stringify(record),
-        })
+        ) as DataPolicyRecord[]
+      },
+      async createDataPolicy(record) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/policies/data-policies',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(record),
+          },
+        ) as DataPolicyRecord
+      },
+      async updateDataPolicy(policyId, record) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/policies/data-policies/{policyId}',
+          'put',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              policyId,
+            },
+            body: JSON.stringify(record),
+          },
+        ) as DataPolicyRecord
+      },
+      async deleteDataPolicy(policyId) {
+        await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/policies/data-policies/{policyId}',
+          'delete',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              policyId,
+            },
+          },
+        )
+      },
+      async listResourcePolicies() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/policies/resource-policies',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as ResourcePolicyRecord[]
+      },
+      async createResourcePolicy(record) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/policies/resource-policies',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(record),
+          },
+        ) as ResourcePolicyRecord
+      },
+      async updateResourcePolicy(policyId, record) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/policies/resource-policies/{policyId}',
+          'put',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              policyId,
+            },
+            body: JSON.stringify(record),
+          },
+        ) as ResourcePolicyRecord
+      },
+      async deleteResourcePolicy(policyId) {
+        await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/policies/resource-policies/{policyId}',
+          'delete',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              policyId,
+            },
+          },
+        )
+      },
+      async listMenuDefinitions() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/menus/definitions',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as MenuDefinition[]
+      },
+      async listFeatureDefinitions() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/menus/features',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as FeatureDefinition[]
+      },
+      async listMenuGateResults() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/menus/gates',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as MenuGateResult[]
+      },
+      async listMenuPolicies() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/menus/policies',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as MenuPolicyRecord[]
+      },
+      async createMenuPolicy(record) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/menus/policies',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(record),
+          },
+        ) as MenuPolicyRecord
+      },
+      async updateMenuPolicy(menuId, record) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/menus/policies/{menuId}',
+          'put',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              menuId,
+            },
+            body: JSON.stringify(record),
+          },
+        ) as MenuPolicyRecord
+      },
+      async deleteMenuPolicy(menuId) {
+        await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/menus/policies/{menuId}',
+          'delete',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              menuId,
+            },
+          },
+        )
+      },
+      async listProtectedResources() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/protected-resources',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as ProtectedResourceDescriptor[]
+      },
+      async upsertProtectedResource(resourceType, resourceId, record: ProtectedResourceMetadataUpsertRequest) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/access/protected-resources/{resourceType}/{resourceId}',
+          'put',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              resourceType,
+              resourceId,
+            },
+            body: JSON.stringify(record),
+          },
+        ) as ProtectedResourceDescriptor
       },
     },
   }

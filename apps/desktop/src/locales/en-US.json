@@ -130,18 +130,22 @@
       "avatar": "Avatar",
       "avatarHint": "PNG, JPEG, and WEBP are supported. Avatar is required.",
       "password": "Password",
-      "confirmPassword": "Confirm password"
+      "confirmPassword": "Confirm password",
+      "captcha": "Captcha",
+      "captchaHint": "Enter the captcha challenge code."
     },
     "actions": {
       "login": "Sign in",
       "register": "Register and continue",
-      "pickAvatar": "Choose avatar"
+      "pickAvatar": "Choose avatar",
+      "refreshCaptcha": "Refresh captcha"
     },
     "validation": {
       "usernameRequired": "Enter a username.",
       "displayNameRequired": "Enter a display name.",
       "avatarRequired": "Choose an avatar image.",
       "passwordRequired": "Enter a password.",
+      "captchaRequired": "Enter the captcha code.",
       "passwordMinLength": "Password must be at least 8 characters.",
       "passwordMismatch": "Passwords do not match."
     }
@@ -153,20 +157,24 @@
     "fields": {
       "baseUrl": "Workspace URL",
       "username": "Username",
-      "password": "Password"
+      "password": "Password",
+      "captcha": "Captcha",
+      "captchaHint": "Enter the image captcha before connecting."
     },
     "placeholders": {
       "baseUrl": "https://workspace.example.com"
     },
     "actions": {
       "trigger": "Add or connect workspace",
-      "submit": "Connect and continue"
+      "submit": "Connect and continue",
+      "refreshCaptcha": "Refresh captcha"
     },
     "validation": {
       "baseUrlRequired": "Enter a workspace URL.",
       "baseUrlInvalid": "Enter a valid workspace URL.",
       "usernameRequired": "Enter a username.",
-      "passwordRequired": "Enter a password."
+      "passwordRequired": "Enter a password.",
+      "captchaRequired": "Enter the captcha code."
     }
   },
   "searchOverlay": {
@@ -206,7 +214,7 @@
         "dashboard": "Dashboard",
         "console": "Console",
         "automations": "Automations",
-        "permissionCenter": "Permission Center",
+        "accessControl": "Access Control",
         "personalCenter": "Personal Center",
         "conversations": "Recent Sessions",
         "trace": "Recent Traces"
@@ -252,7 +260,7 @@
       "automations": "Automations",
       "connections": "Connections",
       "console": "Console",
-      "permissionCenter": "Permission Center",
+      "accessControl": "Access Control",
       "personalCenter": "Personal Center"
     },
     "scope": {
@@ -1571,7 +1579,7 @@
     "menuSource": {
       "main-sidebar": "Main Sidebar",
       "console": "Console",
-      "permission-center": "Permission Center"
+      "access-control": "Access Control"
     },
     "teamMode": {
       "leadered": "Leadered",
@@ -1579,248 +1587,19 @@
       "mesh": "Mesh"
     }
   },
-  "permissionCenter": {
+  "accessControl": {
     "header": {
-      "eyebrow": "Permission Center",
-      "title": "Permission Center",
-      "subtitle": "Manage workspace roles, permission assignments, and navigation control.",
-      "heroTitle": "Unified identity and capability governance board",
-      "heroSubtitle": "Clear visibility of member and permission boundaries for compliance."
-    },
-    "common": {
-      "noRoles": "No roles yet",
-      "active": "Healthy",
-      "disabled": "Disabled",
-      "status": "Status"
+      "eyebrow": "Access Control",
+      "title": "Access Control"
     },
     "nav": {
-      "title": "Admin Menu",
-      "users": "Members",
+      "users": "Users",
+      "org": "Organization",
       "roles": "Roles",
-      "permissions": "Permissions",
-      "menus": "Navigation"
-    },
-    "filters": {
-      "status": "Status",
-      "scope": "Scope",
-      "allStatuses": "All statuses",
-      "allScopes": "All scopes"
-    },
-    "gender": {
-      "unknown": "Unknown",
-      "male": "Male",
-      "female": "Female"
-    },
-    "scope": {
-      "allProjects": "All projects",
-      "selectedProjects": "Selected projects"
-    },
-    "risk": {
-      "broadMenuAccess": "Broad menu access"
-    },
-    "users": {
-      "title": "Member Management",
-      "subtitle": "Manage workspace accounts, role bindings, and project scope coverage.",
-      "create": "Add Member",
-      "createTitle": "Create member",
-      "editTitle": "Edit member",
-      "deleteTitle": "Delete member",
-      "deleteDescription": "Deleting a member removes their workspace access and cannot be undone.",
-      "formSubtitle": "Edit member profile data, role bindings, and access scope.",
-      "searchPlaceholder": "Search member, ID, or email…",
-      "currentSessionUser": "Current session user",
-      "effectivePermissions": "{count} effective permissions",
-      "effectiveMenus": "{count} visible menus",
-      "switchCurrentUser": "Switch as current session user",
-      "disable": "Disable member",
-      "enable": "Enable member",
-      "roleBindingTitle": "Role bindings",
-      "scopeTitle": "Project scope",
-      "actions": {
-        "create": "New member",
-        "delete": "Delete member",
-        "pickAvatar": "Choose avatar",
-        "clearAvatar": "Clear avatar",
-        "save": "Save member",
-        "reset": "Reset"
-      },
-      "fields": {
-        "username": "Username",
-        "nickname": "Display name",
-        "role": "Role",
-        "scopeProjects": "Project scope",
-        "avatar": "Avatar",
-        "password": "Password",
-        "roleIds": "Role IDs",
-        "scopeProjectIds": "Project scope IDs"
-      },
-      "avatar": {
-        "description": "Upload an avatar image or keep the default initials avatar.",
-        "actions": {
-          "useDefault": "Use default avatar"
-        },
-        "pendingEmpty": "No new avatar selected",
-        "current": "Current avatar"
-      },
-      "password": {
-        "description": "Keep the current password, restore the default password, or set a new one for the member.",
-        "actions": {
-          "useDefault": "Use default password",
-          "custom": "Custom password"
-        },
-        "fields": {
-          "password": "New password",
-          "confirmPassword": "Confirm password"
-        }
-      },
-      "metrics": {
-        "total": "Total members",
-        "activeHelper": "{count} members are currently active",
-        "disabled": "Disabled members",
-        "scopeHelper": "{count} members are limited to selected projects",
-        "unassigned": "Unassigned roles",
-        "unassignedHelper": "Bind roles to these accounts to avoid permission drift."
-      },
-      "feedback": {
-        "saved": "Member saved.",
-        "deleted": "Member deleted."
-      }
-    },
-    "roles": {
-      "title": "Role Definitions",
-      "create": "Add Role",
-      "createTitle": "Create role",
-      "editTitle": "Edit role",
-      "deleteTitle": "Delete role",
-      "deleteDescription": "Deleting a role also removes that role binding from members. This cannot be undone.",
-      "listTitle": "Role list",
-      "listSubtitle": "Maintain workspace responsibility templates and access bundles.",
-      "formSubtitle": "Edit role metadata and bind permissions and menu visibility.",
-      "nameLabel": "Role Name",
-      "codeLabel": "Role Code",
-      "descriptionLabel": "Functional Description",
-      "permissionBindingTitle": "Permission bindings",
-      "menuBindingTitle": "Menu bindings",
-      "menuHint": "Only select navigation entries this role should be able to see.",
-      "actions": {
-        "create": "New role",
-        "delete": "Delete role",
-        "save": "Save role",
-        "reset": "Reset"
-      },
-      "fields": {
-        "name": "Role name",
-        "code": "Role code",
-        "permissions": "Permissions",
-        "menus": "Menus",
-        "permissionIds": "Permission IDs",
-        "menuIds": "Menu IDs",
-        "description": "Description"
-      },
-      "menuGroups": {
-        "app": "App",
-        "workspace": "Workspace",
-        "console": "Console",
-        "permissionCenter": "Permission Center",
-        "project": "Project"
-      },
-      "feedback": {
-        "saved": "Role saved.",
-        "deleted": "Role deleted."
-      },
-      "metrics": {
-        "total": "Total roles",
-        "disabled": "Disabled roles",
-        "disabledHelper": "{count} roles are currently disabled.",
-        "orphan": "Orphan roles",
-        "orphanHelper": "Roles that are not currently assigned to any members.",
-        "broadAccess": "Broad access roles",
-        "broadAccessHelper": "Roles with broad navigation coverage."
-      }
-    },
-    "permissions": {
-      "title": "Permission Management",
-      "subtitle": "Manage atomic permissions and bundles with explicit target scope.",
-      "listTitle": "Permission list",
-      "listSubtitle": "Inspect all workspace permissions, current status, and risk markers.",
-      "create": "Add Permission",
-      "createTitle": "Create permission",
-      "editTitle": "Edit permission",
-      "formSubtitle": "Edit permission metadata, target bindings, and bundle composition.",
-      "atomicTab": "Atomic",
-      "bundleTab": "Bundle",
-      "nameLabel": "Permission Name",
-      "codeLabel": "Permission Code",
-      "descriptionLabel": "Description",
-      "kindLabel": "Permission Type",
-      "targetTypeTitle": "Target type",
-      "targetBindingTitle": "Target bindings",
-      "actionTitle": "Action",
-      "bundleComposeTitle": "Bundle composition",
-      "bundleMembers": "Contains {count} member permissions",
-      "usedByRoles": "Used by {count} roles",
-      "disable": "Disable",
-      "enable": "Enable",
-      "delete": "Delete",
-      "deleteTitle": "Delete permission",
-      "deleteDescription": "Deleting a permission also removes that binding from roles. This cannot be undone.",
-      "emptyTargets": "No selectable targets are currently available for this target type.",
-      "actions": {
-        "create": "New permission",
-        "delete": "Delete permission",
-        "save": "Save permission",
-        "reset": "Reset"
-      },
-      "fields": {
-        "name": "Permission name",
-        "code": "Permission code",
-        "kind": "Permission type",
-        "targetType": "Target type",
-        "action": "Action",
-        "targetIds": "Target IDs",
-        "memberPermissionIds": "Member permission IDs",
-        "description": "Description"
-      },
-      "feedback": {
-        "saved": "Permission saved.",
-        "deleted": "Permission deleted."
-      },
-      "metrics": {
-        "total": "Total permissions",
-        "bundleHelper": "{count} of them are permission bundles.",
-        "disabled": "Disabled permissions",
-        "disabledHelper": "Permissions retained in the catalog but not currently usable.",
-        "risky": "Risky permissions",
-        "riskyHelper": "Permissions that require extra audit attention."
-      }
-    },
-    "menus": {
-      "title": "Navigation Management",
-      "subtitle": "Maintain menu labels, order, visibility, and role usage from one place.",
-      "editTitle": "Edit menu",
-      "formSubtitle": "Adjust the current menu node's display label and availability.",
-      "nonNavigable": "Non-navigable node",
-      "roleUsage": "Used by {count} roles",
-      "rootNode": "Root node",
-      "labelLabel": "Menu label",
-      "orderLabel": "Sort order",
-      "parentHint": "Parent relationships are controlled by the registry and shown here for reference only.",
-      "toggleStatus": "Toggle status",
-      "fields": {
-        "label": "Menu label",
-        "source": "Source",
-        "routeName": "Route name",
-        "parentId": "Parent menu ID",
-        "order": "Sort order"
-      },
-      "metrics": {
-        "total": "Total menus",
-        "consoleHelper": "{count} menus come from console and permission center configuration.",
-        "disabled": "Disabled menus",
-        "disabledHelper": "These menus are currently hidden from navigation.",
-        "unused": "Unused menus",
-        "unusedHelper": "These menus are not assigned to any roles yet."
-      }
+      "policies": "Permissions & Policies",
+      "menus": "Menus",
+      "resources": "Resource Access",
+      "sessions": "Sessions & Audit"
     }
   },
   "personalCenter": {

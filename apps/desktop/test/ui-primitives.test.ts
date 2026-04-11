@@ -742,7 +742,7 @@ describe('Shared UI primitives', () => {
     const wrapper = mount(UiRecordCard, {
       props: {
         title: 'Workspace Admin',
-        description: 'Can manage all permission-center settings',
+        description: 'Can manage all access-control settings',
         active: true,
         interactive: true,
         layout: 'tile',
@@ -764,7 +764,7 @@ describe('Shared UI primitives', () => {
     expect(wrapper.get('[data-testid="record-card"]').classes()).toContain('is-active')
     expect(wrapper.get('[data-testid="record-card"]').attributes('data-ui-record-layout')).toBe('tile')
     expect(wrapper.text()).toContain('Workspace Admin')
-    expect(wrapper.text()).toContain('Can manage all permission-center settings')
+    expect(wrapper.text()).toContain('Can manage all access-control settings')
     expect(wrapper.find('[data-testid="record-leading"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="record-badge"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="record-metrics"]').exists()).toBe(true)

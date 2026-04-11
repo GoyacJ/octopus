@@ -1,6 +1,7 @@
 import { getActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter, createWebHashHistory } from 'vue-router'
 
+import AuthLoginView from '@/views/auth/AuthLoginView.vue'
 import ConnectionsView from '@/views/app/ConnectionsView.vue'
 import SettingsView from '@/views/app/SettingsView.vue'
 import ConversationView from '@/views/project/ConversationView.vue'
@@ -12,9 +13,9 @@ import ProjectRuntimeConfigView from '@/views/project/ProjectRuntimeConfigView.v
 import ProjectSettingsView from '@/views/project/ProjectSettingsView.vue'
 import TraceView from '@/views/project/TraceView.vue'
 import AutomationsView from '@/views/workspace/AutomationsView.vue'
+import AccessControlView from '@/views/workspace/AccessControlView.vue'
 import ModelsView from '@/views/workspace/ModelsView.vue'
 import PersonalCenterView from '@/views/workspace/PersonalCenterView.vue'
-import PermissionCenterView from '@/views/workspace/PermissionCenterView.vue'
 import ProjectsView from '@/views/workspace/ProjectsView.vue'
 import ToolsView from '@/views/workspace/ToolsView.vue'
 import WorkspaceAgentsView from '@/views/workspace/WorkspaceAgentsView.vue'
@@ -22,16 +23,22 @@ import WorkspaceConsoleView from '@/views/workspace/WorkspaceConsoleView.vue'
 import WorkspaceKnowledgeView from '@/views/workspace/WorkspaceKnowledgeView.vue'
 import WorkspaceOverviewView from '@/views/workspace/WorkspaceOverviewView.vue'
 import WorkspaceResourcesView from '@/views/workspace/WorkspaceResourcesView.vue'
+import AccessControlMenusView from '@/views/workspace/access-control/AccessControlMenusView.vue'
+import AccessControlOrgView from '@/views/workspace/access-control/AccessControlOrgView.vue'
+import AccessControlPoliciesView from '@/views/workspace/access-control/AccessControlPoliciesView.vue'
+import AccessControlResourcesView from '@/views/workspace/access-control/AccessControlResourcesView.vue'
+import AccessControlRolesView from '@/views/workspace/access-control/AccessControlRolesView.vue'
+import AccessControlSessionsView from '@/views/workspace/access-control/AccessControlSessionsView.vue'
+import AccessControlUsersView from '@/views/workspace/access-control/AccessControlUsersView.vue'
 import PersonalCenterPetView from '@/views/workspace/personal-center/PersonalCenterPetView.vue'
 import PersonalCenterProfileView from '@/views/workspace/personal-center/PersonalCenterProfileView.vue'
-import PermissionCenterMenusView from '@/views/workspace/permission-center/PermissionCenterMenusView.vue'
-import PermissionCenterPermissionsView from '@/views/workspace/permission-center/PermissionCenterPermissionsView.vue'
-import PermissionCenterRolesView from '@/views/workspace/permission-center/PermissionCenterRolesView.vue'
-import PermissionCenterUsersView from '@/views/workspace/permission-center/PermissionCenterUsersView.vue'
-import { CONSOLE_MENU_IDS, PERMISSION_CENTER_MENU_IDS, getRouteMenuId } from '@/navigation/menuRegistry'
+import { ACCESS_CONTROL_MENU_IDS, CONSOLE_MENU_IDS, getRouteMenuId } from '@/navigation/menuRegistry'
+import { useAuthStore } from '@/stores/auth'
 import { useShellStore } from '@/stores/shell'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
+
+const isBrowserHostRuntime = import.meta.env.VITE_HOST_RUNTIME === 'browser'
 
 function resolveShellStore() {
   const pinia = getActivePinia()
@@ -43,9 +50,14 @@ function resolveWorkspaceStore() {
   return pinia ? useWorkspaceStore(pinia) : null
 }
 
-function resolveWorkspaceAccessStore() {
+function resolveWorkspaceAccessControlStore() {
   const pinia = getActivePinia()
-  return pinia ? useWorkspaceAccessStore(pinia) : null
+  return pinia ? useWorkspaceAccessControlStore(pinia) : null
+}
+
+function resolveAuthStore() {
+  const pinia = getActivePinia()
+  return pinia ? useAuthStore(pinia) : null
 }
 
 function resolveWorkspaceId(): string {
@@ -73,9 +85,9 @@ function resolveWorkspaceOverviewTarget(workspaceId: string) {
   } as const
 }
 
-function resolvePermissionCenterEntry(workspaceId: string) {
-  const workspaceAccessStore = resolveWorkspaceAccessStore()
-  const routeName = workspaceAccessStore?.firstAccessiblePermissionCenterRouteName
+function resolveAccessControlEntry(workspaceId: string) {
+  const workspaceAccessControlStore = resolveWorkspaceAccessControlStore()
+  const routeName = workspaceAccessControlStore?.firstAccessibleAccessControlRouteName
   if (routeName) {
     return {
       name: routeName,
@@ -87,8 +99,8 @@ function resolvePermissionCenterEntry(workspaceId: string) {
 }
 
 function resolveConsoleFallback(workspaceId: string) {
-  const workspaceAccessStore = resolveWorkspaceAccessStore()
-  const routeName = workspaceAccessStore?.firstAccessibleConsoleRouteName
+  const workspaceAccessControlStore = resolveWorkspaceAccessControlStore()
+  const routeName = workspaceAccessControlStore?.firstAccessibleConsoleRouteName
   if (routeName) {
     return {
       name: routeName,
@@ -97,11 +109,11 @@ function resolveConsoleFallback(workspaceId: string) {
   }
 
   const accessLoaded = Boolean(
-    workspaceAccessStore
+    workspaceAccessControlStore
     && (
-      workspaceAccessStore.menus.length
-      || workspaceAccessStore.roles.length
-      || workspaceAccessStore.currentUser
+      workspaceAccessControlStore.menuDefinitions.length
+      || workspaceAccessControlStore.roles.length
+      || workspaceAccessControlStore.currentUser
     ),
   )
 
@@ -113,6 +125,15 @@ function resolveConsoleFallback(workspaceId: string) {
     name: 'workspace-console-projects',
     params: { workspaceId },
   } as const
+}
+
+function resolveBrowserLoginTarget(redirect?: string | null) {
+  if (redirect && redirect !== '/login') {
+    return redirect
+  }
+
+  const workspaceId = resolveWorkspaceId()
+  return resolveConsoleFallback(workspaceId)
 }
 
 export const router = createRouter({
@@ -128,6 +149,14 @@ export const router = createRouter({
           params: { workspaceId },
           query: projectId ? { project: projectId } : undefined,
         }
+      },
+    },
+    {
+      path: '/login',
+      name: 'auth-login',
+      component: AuthLoginView,
+      meta: {
+        layout: 'auth',
       },
     },
     {
@@ -306,10 +335,10 @@ export const router = createRouter({
       component: SettingsView,
     },
     {
-      path: '/workspaces/:workspaceId/permission-center',
-      name: 'workspace-permission-center',
-      component: PermissionCenterView,
-      redirect: (to) => resolvePermissionCenterEntry(
+      path: '/workspaces/:workspaceId/access-control',
+      name: 'workspace-access-control',
+      component: AccessControlView,
+      redirect: (to) => resolveAccessControlEntry(
         typeof to.params.workspaceId === 'string' && to.params.workspaceId
           ? to.params.workspaceId
           : resolveWorkspaceId(),
@@ -317,23 +346,38 @@ export const router = createRouter({
       children: [
         {
           path: 'users',
-          name: 'workspace-permission-center-users',
-          component: PermissionCenterUsersView,
+          name: 'workspace-access-control-users',
+          component: AccessControlUsersView,
+        },
+        {
+          path: 'org',
+          name: 'workspace-access-control-org',
+          component: AccessControlOrgView,
         },
         {
           path: 'roles',
-          name: 'workspace-permission-center-roles',
-          component: PermissionCenterRolesView,
+          name: 'workspace-access-control-roles',
+          component: AccessControlRolesView,
         },
         {
-          path: 'permissions',
-          name: 'workspace-permission-center-permissions',
-          component: PermissionCenterPermissionsView,
+          path: 'policies',
+          name: 'workspace-access-control-policies',
+          component: AccessControlPoliciesView,
         },
         {
           path: 'menus',
-          name: 'workspace-permission-center-menus',
-          component: PermissionCenterMenusView,
+          name: 'workspace-access-control-menus',
+          component: AccessControlMenusView,
+        },
+        {
+          path: 'resources',
+          name: 'workspace-access-control-resources',
+          component: AccessControlResourcesView,
+        },
+        {
+          path: 'sessions',
+          name: 'workspace-access-control-sessions',
+          component: AccessControlSessionsView,
         },
       ],
     },
@@ -363,7 +407,7 @@ export const router = createRouter({
     {
       path: '/workspaces/:workspaceId/user-center',
       redirect: (to) => ({
-        name: 'workspace-permission-center',
+        name: 'workspace-access-control',
         params: {
           workspaceId: to.params.workspaceId,
         },
@@ -393,7 +437,7 @@ export const router = createRouter({
     {
       path: '/workspaces/:workspaceId/user-center/users',
       redirect: (to) => ({
-        name: 'workspace-permission-center-users',
+        name: 'workspace-access-control-users',
         params: {
           workspaceId: to.params.workspaceId,
         },
@@ -403,7 +447,7 @@ export const router = createRouter({
     {
       path: '/workspaces/:workspaceId/user-center/roles',
       redirect: (to) => ({
-        name: 'workspace-permission-center-roles',
+        name: 'workspace-access-control-roles',
         params: {
           workspaceId: to.params.workspaceId,
         },
@@ -413,7 +457,7 @@ export const router = createRouter({
     {
       path: '/workspaces/:workspaceId/user-center/permissions',
       redirect: (to) => ({
-        name: 'workspace-permission-center-permissions',
+        name: 'workspace-access-control-policies',
         params: {
           workspaceId: to.params.workspaceId,
         },
@@ -423,7 +467,7 @@ export const router = createRouter({
     {
       path: '/workspaces/:workspaceId/user-center/menus',
       redirect: (to) => ({
-        name: 'workspace-permission-center-menus',
+        name: 'workspace-access-control-menus',
         params: {
           workspaceId: to.params.workspaceId,
         },
@@ -456,6 +500,24 @@ export const router = createRouter({
 })
 
 router.beforeEach((to) => {
+  const authStore = resolveAuthStore()
+  if (isBrowserHostRuntime && authStore?.isReady) {
+    if (!authStore.isAuthenticated && to.name !== 'auth-login') {
+      return {
+        name: 'auth-login',
+        query: {
+          redirect: to.fullPath,
+        },
+      }
+    }
+
+    if (authStore.isAuthenticated && to.name === 'auth-login') {
+      return resolveBrowserLoginTarget(
+        typeof to.query.redirect === 'string' ? to.query.redirect : null,
+      )
+    }
+  }
+
   const workspaceId = typeof to.params.workspaceId === 'string' ? to.params.workspaceId : undefined
   const routeMenuId = getRouteMenuId(typeof to.name === 'string' ? to.name : undefined)
 
@@ -463,25 +525,25 @@ router.beforeEach((to) => {
     return true
   }
 
-  const workspaceAccessStore = resolveWorkspaceAccessStore()
-  if (!workspaceAccessStore) {
+  const workspaceAccessControlStore = resolveWorkspaceAccessControlStore()
+  if (!workspaceAccessControlStore) {
     return true
   }
 
-  if (!workspaceAccessStore.menus.length && !workspaceAccessStore.roles.length && !workspaceAccessStore.currentUser) {
+  if (!workspaceAccessControlStore.menuDefinitions.length && !workspaceAccessControlStore.roles.length && !workspaceAccessControlStore.currentUser) {
     return true
   }
 
-  if (PERMISSION_CENTER_MENU_IDS.includes(routeMenuId)) {
-    if (workspaceAccessStore.currentEffectiveMenuIds.includes(routeMenuId)) {
+  if (ACCESS_CONTROL_MENU_IDS.includes(routeMenuId)) {
+    if (workspaceAccessControlStore.currentEffectiveMenuIds.includes(routeMenuId)) {
       return true
     }
 
-    return resolvePermissionCenterEntry(workspaceId)
+    return resolveAccessControlEntry(workspaceId)
   }
 
   if (CONSOLE_MENU_IDS.includes(routeMenuId)) {
-    if (workspaceAccessStore.currentEffectiveMenuIds.includes(routeMenuId)) {
+    if (workspaceAccessControlStore.currentEffectiveMenuIds.includes(routeMenuId)) {
       return true
     }
 

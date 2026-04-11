@@ -1,25 +1,31 @@
 import type {
+  AccessRoleRecord,
   AgentRecord,
   ArtifactRecord,
   AutomationRecord,
   CredentialBinding,
+  DataPolicyRecord,
   KnowledgeRecord,
-  MenuRecord,
+  MenuDefinition,
+  MenuPolicyRecord,
   ModelCatalogSnapshot,
-  PermissionRecord,
+  OrgUnitRecord,
+  PermissionDefinition,
   PetConversationBinding,
   PetPresenceState,
   PetProfile,
+  PositionRecord,
   ProjectAgentLinkRecord,
   ProjectDashboardSnapshot,
   ProjectRecord,
   ProjectTeamLinkRecord,
-  RoleRecord,
+  RoleBindingRecord,
   RuntimeEffectiveConfig,
   SystemBootstrapStatus,
   TeamRecord,
   ToolRecord,
-  PermissionCenterOverviewSnapshot,
+  UserGroupRecord,
+  UserOrgAssignmentRecord,
   UserRecordSummary,
   WorkspaceConnectionRecord,
   WorkspaceMcpServerDocument,
@@ -79,12 +85,19 @@ export interface WorkspaceFixtureState {
   mcpDocuments: Record<string, WorkspaceMcpServerDocument>
   tools: ToolRecord[]
   automations: AutomationRecord[]
-  permissionCenterOverview: PermissionCenterOverviewSnapshot
+  currentUserId: string
   users: UserRecordSummary[]
   userPasswords: Record<string, string>
-  roles: RoleRecord[]
-  permissions: PermissionRecord[]
-  menus: MenuRecord[]
+  orgUnits: OrgUnitRecord[]
+  positions: PositionRecord[]
+  userGroups: UserGroupRecord[]
+  userOrgAssignments: UserOrgAssignmentRecord[]
+  roles: AccessRoleRecord[]
+  permissionDefinitions: PermissionDefinition[]
+  roleBindings: RoleBindingRecord[]
+  dataPolicies: DataPolicyRecord[]
+  menus: MenuDefinition[]
+  menuPolicies: MenuPolicyRecord[]
   runtimeSessions: Map<string, RuntimeSessionState>
   runtimeWorkspaceConfig: RuntimeEffectiveConfig
   runtimeProjectConfigs: Record<string, RuntimeEffectiveConfig>
@@ -106,20 +119,71 @@ const RBAC_MENU_IDS = [
   'menu-workspace-console-models',
   'menu-workspace-console-tools',
   'menu-workspace-automations',
-  'menu-workspace-permission-center',
-  'menu-workspace-permission-center-users',
-  'menu-workspace-permission-center-roles',
-  'menu-workspace-permission-center-permissions',
-  'menu-workspace-permission-center-menus',
+  'menu-workspace-access-control',
+  'menu-workspace-access-control-users',
+  'menu-workspace-access-control-org',
+  'menu-workspace-access-control-roles',
+  'menu-workspace-access-control-policies',
+  'menu-workspace-access-control-menus',
+  'menu-workspace-access-control-resources',
+  'menu-workspace-access-control-sessions',
 ] as const
 
 const OPERATOR_MENU_IDS = [
   'menu-workspace-overview',
   'menu-workspace-console',
   'menu-workspace-console-projects',
-  'menu-workspace-permission-center',
-  'menu-workspace-permission-center-users',
+  'menu-workspace-access-control',
+  'menu-workspace-access-control-users',
 ] as const
+
+function capabilityToResourceType(code: string): string {
+  if (code.startsWith('tool.')) {
+    return code.split('.').slice(0, 2).join('.')
+  }
+
+  if (code.startsWith('runtime.config.')) {
+    return code.split('.').slice(0, 3).join('.')
+  }
+
+  if (code.startsWith('runtime.')) {
+    return code.split('.').slice(0, 2).join('.')
+  }
+
+  if (code.startsWith('provider-credential.')) {
+    return 'provider-credential'
+  }
+
+  const [resourceType] = code.split('.')
+  return resourceType
+}
+
+function capabilityToActions(code: string): string[] {
+  if (code.startsWith('tool.')) {
+    return [code.split('.').slice(2).join('.')]
+  }
+
+  if (code.startsWith('runtime.config.')) {
+    return [code.split('.').slice(3).join('.')]
+  }
+
+  if (code.startsWith('runtime.')) {
+    return [code.split('.').slice(2).join('.')]
+  }
+
+  return [code.split('.').slice(1).join('.')]
+}
+
+function createPermissionDefinition(code: string): PermissionDefinition {
+  return {
+    code,
+    name: code,
+    description: `Capability ${code}`,
+    category: 'atomic',
+    resourceType: capabilityToResourceType(code),
+    actions: capabilityToActions(code),
+  }
+}
 
 export function createWorkspaceFixtureState(
   connection: WorkspaceConnectionRecord,
@@ -774,6 +838,26 @@ export function createWorkspaceFixtureState(
       permissionMode: 'ask',
       updatedAt: 100,
     },
+    {
+      id: 'tool-help-skill',
+      workspaceId: workspace.id,
+      kind: 'skill',
+      name: 'Help Skill',
+      description: 'Workspace-managed skill tool.',
+      status: 'active',
+      permissionMode: 'readonly',
+      updatedAt: 100,
+    },
+    {
+      id: 'tool-ops-mcp',
+      workspaceId: workspace.id,
+      kind: 'mcp',
+      name: 'Ops MCP',
+      description: 'Workspace-managed MCP tool.',
+      status: 'active',
+      permissionMode: 'ask',
+      updatedAt: 100,
+    },
   ]
 
   const managedHelpSkill = createSkillAsset({
@@ -1289,8 +1373,6 @@ export function createWorkspaceFixtureState(
           avatar: 'data:image/png;base64,iVBORw0KGgo=',
           status: 'active',
           passwordState: 'set' as const,
-          roleIds: ['role-owner'],
-          scopeProjectIds: [],
         }]
       : []),
     {
@@ -1300,92 +1382,179 @@ export function createWorkspaceFixtureState(
       avatar: 'data:image/png;base64,iVBORw0KGgo=',
       status: 'active',
       passwordState: 'set',
-      roleIds: ['role-operator'],
-      scopeProjectIds: projects.map(project => project.id),
     },
   ]
 
-  const menus: MenuRecord[] = buildWorkspaceMenuNodes(workspace.id)
-    .filter(menu => RBAC_MENU_IDS.includes(menu.id as (typeof RBAC_MENU_IDS)[number]))
+  const orgUnits: OrgUnitRecord[] = [{
+    id: 'org-root',
+    parentId: undefined,
+    code: 'workspace-root',
+    name: workspace.name,
+    status: 'active',
+  }]
 
-  const roles: RoleRecord[] = [
+  const positions: PositionRecord[] = []
+  const userGroups: UserGroupRecord[] = []
+
+  const userOrgAssignments: UserOrgAssignmentRecord[] = users.map(user => ({
+    userId: user.id,
+    orgUnitId: 'org-root',
+    isPrimary: true,
+    positionIds: [],
+    userGroupIds: [],
+  }))
+
+  const menus: MenuDefinition[] = buildWorkspaceMenuNodes(workspace.id)
+    .filter(menu => RBAC_MENU_IDS.includes(menu.id as (typeof RBAC_MENU_IDS)[number]))
+    .map(menu => ({
+      id: menu.id,
+      parentId: menu.parentId,
+      label: menu.label,
+      routeName: menu.routeName,
+      source: menu.source,
+      status: menu.status,
+      order: menu.order,
+      featureCode: 'feature:' + (menu.routeName ?? menu.id),
+    }))
+
+  const ownerPermissionCodes = [
+    'workspace.overview.read',
+    'project.view',
+    'project.manage',
+    'team.view',
+    'team.manage',
+    'team.import',
+    'access.users.read',
+    'access.users.manage',
+    'access.org.read',
+    'access.org.manage',
+    'access.roles.read',
+    'access.roles.manage',
+    'access.policies.read',
+    'access.policies.manage',
+    'access.menus.read',
+    'access.menus.manage',
+    'access.sessions.read',
+    'access.sessions.manage',
+    'runtime.session.read',
+    'runtime.config.workspace.read',
+    'runtime.config.workspace.manage',
+    'runtime.config.project.read',
+    'runtime.config.project.manage',
+    'runtime.config.user.read',
+    'runtime.config.user.manage',
+    'runtime.approval.resolve',
+    'agent.view',
+    'agent.edit',
+    'agent.import',
+    'agent.export',
+    'agent.delete',
+    'resource.view',
+    'resource.upload',
+    'resource.update',
+    'resource.delete',
+    'knowledge.view',
+    'knowledge.retrieve',
+    'tool.catalog.view',
+    'tool.catalog.manage',
+    'provider-credential.view',
+    'tool.builtin.view',
+    'tool.builtin.invoke',
+    'tool.builtin.configure',
+    'tool.skill.view',
+    'tool.skill.invoke',
+    'tool.skill.configure',
+    'tool.mcp.view',
+    'tool.mcp.invoke',
+    'tool.mcp.configure',
+    'tool.mcp.bind-credential',
+    'automation.view',
+    'automation.manage',
+    'pet.view',
+    'pet.manage',
+    'artifact.view',
+    'inbox.view',
+  ] as const
+
+  const operatorPermissionCodes = [
+    'project.view',
+    'team.view',
+    'access.users.read',
+    'runtime.session.read',
+    'agent.view',
+    'resource.view',
+    'knowledge.view',
+    'tool.catalog.view',
+    'provider-credential.view',
+    'tool.builtin.view',
+    'tool.builtin.invoke',
+    'tool.skill.view',
+    'tool.skill.invoke',
+    'tool.mcp.view',
+    'tool.mcp.invoke',
+    'automation.view',
+    'pet.view',
+    'artifact.view',
+    'inbox.view',
+  ] as const
+
+  const roles: AccessRoleRecord[] = [
     {
       id: 'role-owner',
-      workspaceId: workspace.id,
       name: 'Owner',
       code: 'owner',
       description: 'Full workspace access.',
       status: 'active',
-      permissionIds: ['perm-manage-users', 'perm-manage-roles', 'perm-manage-tools'],
-      menuIds: menus.map(menu => menu.id),
+      permissionCodes: [...ownerPermissionCodes],
     },
     {
       id: 'role-operator',
-      workspaceId: workspace.id,
       name: 'Operator',
       code: 'operator',
       description: 'Daily operations access.',
       status: 'active',
-      permissionIds: ['perm-manage-tools'],
-      menuIds: [...OPERATOR_MENU_IDS],
+      permissionCodes: [...operatorPermissionCodes],
     },
   ]
 
-  const permissions: PermissionRecord[] = [
+  const permissionDefinitions: PermissionDefinition[] = Array.from(new Set([
+    ...ownerPermissionCodes,
+    ...operatorPermissionCodes,
+  ])).map(createPermissionDefinition)
+
+  const roleBindings: RoleBindingRecord[] = [
+    ...(ownerReady
+      ? [{
+          id: 'binding-user-owner-role-owner',
+          roleId: 'role-owner',
+          subjectType: 'user',
+          subjectId: 'user-owner',
+          effect: 'allow',
+        }]
+      : []),
     {
-      id: 'perm-manage-users',
-      workspaceId: workspace.id,
-      name: 'Manage users',
-      code: 'workspace.users',
-      description: 'Create and update workspace users.',
-      status: 'active',
-      kind: 'atomic',
-      targetType: 'user',
-      targetIds: [],
-      action: 'manage',
-      memberPermissionIds: [],
-    },
-    {
-      id: 'perm-manage-roles',
-      workspaceId: workspace.id,
-      name: 'Manage roles',
-      code: 'workspace.roles',
-      description: 'Create and update roles.',
-      status: 'active',
-      kind: 'atomic',
-      targetType: 'role',
-      targetIds: [],
-      action: 'manage',
-      memberPermissionIds: [],
-    },
-    {
-      id: 'perm-manage-tools',
-      workspaceId: workspace.id,
-      name: 'Manage tools',
-      code: 'workspace.tools',
-      description: 'Create and update tools.',
-      status: 'active',
-      kind: 'atomic',
-      targetType: 'tool',
-      targetIds: [],
-      action: 'manage',
-      memberPermissionIds: [],
+      id: 'binding-user-operator-role-operator',
+      roleId: 'role-operator',
+      subjectType: 'user',
+      subjectId: 'user-operator',
+      effect: 'allow',
     },
   ]
 
-  const permissionCenterOverview: PermissionCenterOverviewSnapshot = {
-    workspaceId: workspace.id,
-    currentUser: users[0],
-    roleNames: ownerReady ? ['Owner'] : ['Operator'],
-    metrics: [
-      { id: 'users', label: 'Users', value: String(users.length), tone: 'accent' },
-      { id: 'roles', label: 'Roles', value: String(roles.length), tone: 'info' },
-      { id: 'permissions', label: 'Permissions', value: String(permissions.length), tone: 'warning' },
-      { id: 'menus', label: 'Menus', value: String(menus.length), tone: 'default' },
-    ],
-    alerts: [],
-    quickLinks: menus.filter(menu => menu.source === 'permission-center' && menu.status === 'active'),
-  }
+  const dataPolicies: DataPolicyRecord[] = [{
+    id: 'policy-user-operator-projects',
+    name: 'Operator project access',
+    subjectType: 'user',
+    subjectId: 'user-operator',
+    resourceType: 'project',
+    scopeType: 'selected-projects',
+    projectIds: projects.map(project => project.id),
+    tags: [],
+    classifications: [],
+    effect: 'allow',
+  }]
+
+  const menuPolicies: MenuPolicyRecord[] = []
 
   const runtimeWorkspaceConfig: RuntimeEffectiveConfig = {
     effectiveConfig: {
@@ -1532,12 +1701,19 @@ export function createWorkspaceFixtureState(
     mcpDocuments,
     tools,
     automations,
-    permissionCenterOverview,
+    currentUserId: users[0]?.id ?? '',
     users,
     userPasswords: ownerReady ? { 'user-owner': 'owner-owner', 'user-operator': 'operator-operator' } : { 'user-operator': 'operator-operator' },
+    orgUnits,
+    positions,
+    userGroups,
+    userOrgAssignments,
     roles,
-    permissions,
+    permissionDefinitions,
+    roleBindings,
+    dataPolicies,
     menus,
+    menuPolicies,
     runtimeSessions: new Map(),
     runtimeWorkspaceConfig,
     runtimeProjectConfigs,

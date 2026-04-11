@@ -11,31 +11,40 @@ import type { AvatarUploadPayload } from '@octopus/schema'
 
 import { enumLabel } from '@/i18n/copy'
 import { getMenuDefinition } from '@/navigation/menuRegistry'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useUserProfileStore } from '@/stores/user-profile'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
+import { useWorkspaceStore } from '@/stores/workspace'
 import * as tauriClient from '@/tauri/client'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
-const workspaceAccessStore = useWorkspaceAccessStore()
+const userProfileStore = useUserProfileStore()
+const workspaceAccessControlStore = useWorkspaceAccessControlStore()
+const workspaceStore = useWorkspaceStore()
 
-const currentUser = computed(() => workspaceAccessStore.currentUser)
-const overview = computed(() => workspaceAccessStore.overview)
-const runtimeConfig = computed(() => workspaceAccessStore.runtimeConfig)
+const currentUser = computed(() => userProfileStore.currentUser)
+const runtimeConfig = computed(() => userProfileStore.runtimeConfig)
 const runtimeSource = computed(() => runtimeConfig.value?.sources.filter(source => source.scope === 'user').at(-1))
 const runtimeEffectivePreview = computed(() => JSON.stringify(runtimeConfig.value?.effectiveConfig ?? {}, null, 2))
-const accessRoleNames = computed(() => workspaceAccessStore.currentRoleNames)
-const accessPermissionNames = computed(() => workspaceAccessStore.currentPermissionRecords.map(permission => permission.name))
+const accessRoleNames = computed(() => workspaceAccessControlStore.currentRoleNames)
+const accessPermissionNames = computed(() => {
+  const definitionsByCode = new Map(
+    workspaceAccessControlStore.permissionDefinitions.map(permission => [permission.code, permission.name]),
+  )
+  return (workspaceAccessControlStore.authorization?.effectivePermissionCodes ?? [])
+    .map(code => definitionsByCode.get(code) ?? code)
+})
 const accessMenuLabels = computed(() =>
-  workspaceAccessStore.currentEffectiveMenus.map((menu) => {
+  workspaceAccessControlStore.currentVisibleMenus.map((menu) => {
     const definition = getMenuDefinition(menu.id)
     return definition ? t(definition.labelKey) : menu.label
   }),
 )
 const metrics = computed(() => [
-  { id: 'roles', label: t('personalCenter.profile.metrics.roleCount'), value: String(workspaceAccessStore.currentRoleNames.length) },
-  { id: 'permissions', label: t('personalCenter.profile.metrics.permissionCount'), value: String(workspaceAccessStore.currentPermissionRecords.length) },
-  { id: 'menus', label: t('personalCenter.profile.metrics.menuCount'), value: String(workspaceAccessStore.currentEffectiveMenus.length) },
+  { id: 'roles', label: t('personalCenter.profile.metrics.roleCount'), value: String(workspaceAccessControlStore.currentRoleNames.length) },
+  { id: 'permissions', label: t('personalCenter.profile.metrics.permissionCount'), value: String(accessPermissionNames.value.length) },
+  { id: 'menus', label: t('personalCenter.profile.metrics.menuCount'), value: String(workspaceAccessControlStore.currentVisibleMenus.length) },
 ])
 const profileSuccessMessage = ref('')
 const passwordSuccessMessage = ref('')
@@ -151,7 +160,7 @@ watch(
     if (!userId) {
       return
     }
-    void workspaceAccessStore.loadCurrentUserRuntimeConfig()
+    void userProfileStore.loadCurrentUserRuntimeConfig()
   },
   { immediate: true },
 )
@@ -159,7 +168,7 @@ watch(
 const submitProfile = handleProfileSubmit(async (values) => {
   profileSuccessMessage.value = ''
   try {
-    await workspaceAccessStore.updateCurrentUserProfile({
+    await userProfileStore.updateCurrentUserProfile({
       displayName: values.displayName.trim(),
       username: values.username.trim(),
       avatar: pendingAvatarUpload.value ?? undefined,
@@ -183,7 +192,7 @@ const submitProfile = handleProfileSubmit(async (values) => {
 const submitPassword = handlePasswordSubmit(async (values) => {
   passwordSuccessMessage.value = ''
   try {
-    await workspaceAccessStore.changeCurrentUserPassword({
+    await userProfileStore.changeCurrentUserPassword({
       currentPassword: values.currentPassword,
       newPassword: values.newPassword,
       confirmPassword: values.confirmPassword,
@@ -236,10 +245,10 @@ function clearAvatar() {
   profileSuccessMessage.value = ''
 }
 
-function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'workspace-permission-center-permissions' | 'workspace-permission-center-menus') {
+function navigateToAccessTab(name: 'workspace-access-control-roles' | 'workspace-access-control-policies' | 'workspace-access-control-menus') {
   const workspaceId = typeof route.params.workspaceId === 'string'
     ? route.params.workspaceId
-    : overview.value?.workspaceId
+    : (userProfileStore.workspaceId || workspaceStore.currentWorkspaceId)
   if (!workspaceId) {
     return
   }
@@ -272,16 +281,16 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
       <template #badges>
         <UiBadge :label="enumLabel('recordStatus', currentUser.status)" subtle />
         <UiBadge :label="enumLabel('passwordState', currentUser.passwordState)" subtle />
-        <UiBadge v-for="roleName in workspaceAccessStore.currentRoleNames" :key="roleName" :label="roleName" subtle />
+        <UiBadge v-for="roleName in workspaceAccessControlStore.currentRoleNames" :key="roleName" :label="roleName" subtle />
       </template>
       <template #meta>
-        <span class="text-xs text-text-tertiary">{{ overview?.workspaceId }}</span>
+        <span class="text-xs text-text-tertiary">{{ userProfileStore.workspaceId || workspaceStore.currentWorkspaceId }}</span>
       </template>
     </UiRecordCard>
 
-    <div v-if="overview?.alerts.length" class="space-y-3">
+    <div v-if="userProfileStore.alerts.length" class="space-y-3">
       <UiRecordCard
-        v-for="alert in overview.alerts"
+        v-for="alert in userProfileStore.alerts"
         :key="alert.id"
         :title="alert.title"
         :description="alert.description"
@@ -314,7 +323,7 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
               variant="ghost"
               size="sm"
               data-testid="profile-access-roles-link"
-              @click="navigateToAccessTab('workspace-permission-center-roles')"
+              @click="navigateToAccessTab('workspace-access-control-roles')"
             >
               {{ t('personalCenter.profile.access.openRoles') }}
             </UiButton>
@@ -344,7 +353,7 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
               variant="ghost"
               size="sm"
               data-testid="profile-access-permissions-link"
-              @click="navigateToAccessTab('workspace-permission-center-permissions')"
+              @click="navigateToAccessTab('workspace-access-control-policies')"
             >
               {{ t('personalCenter.profile.access.openPermissions') }}
             </UiButton>
@@ -374,7 +383,7 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
               variant="ghost"
               size="sm"
               data-testid="profile-access-menus-link"
-              @click="navigateToAccessTab('workspace-permission-center-menus')"
+              @click="navigateToAccessTab('workspace-access-control-menus')"
             >
               {{ t('personalCenter.profile.access.openMenus') }}
             </UiButton>
@@ -449,9 +458,9 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
         </div>
 
         <UiStatusCallout
-          v-if="workspaceAccessStore.profileError"
+          v-if="userProfileStore.profileError"
           tone="error"
-          :description="workspaceAccessStore.profileError"
+          :description="userProfileStore.profileError"
         />
         <UiStatusCallout
           v-if="profileSuccessMessage"
@@ -464,7 +473,7 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
             type="button"
             variant="ghost"
             data-testid="profile-reset-button"
-            :disabled="workspaceAccessStore.profileSaving"
+            :disabled="userProfileStore.profileSaving"
             @click="resetProfileValues"
           >
             {{ t('personalCenter.profile.edit.actions.reset') }}
@@ -472,7 +481,7 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
           <UiButton
             data-testid="profile-save-button"
             type="submit"
-            :loading="workspaceAccessStore.profileSaving"
+            :loading="userProfileStore.profileSaving"
           >
             {{ t('personalCenter.profile.edit.actions.save') }}
           </UiButton>
@@ -523,9 +532,9 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
         </div>
 
         <UiStatusCallout
-          v-if="workspaceAccessStore.passwordError"
+          v-if="userProfileStore.passwordError"
           tone="error"
-          :description="workspaceAccessStore.passwordError"
+          :description="userProfileStore.passwordError"
         />
         <UiStatusCallout
           v-if="passwordSuccessMessage"
@@ -537,7 +546,7 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
           <UiButton
             data-testid="profile-password-submit-button"
             type="submit"
-            :loading="workspaceAccessStore.passwordSaving"
+            :loading="userProfileStore.passwordSaving"
           >
             {{ t('personalCenter.profile.password.actions.submit') }}
           </UiButton>
@@ -556,8 +565,8 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
       </template>
       <template #badges>
         <UiBadge
-          :label="workspaceAccessStore.runtimeValidation?.valid ? t('settings.runtime.validation.valid') : t('settings.runtime.validation.idle')"
-          :tone="workspaceAccessStore.runtimeValidation?.valid ? 'success' : 'default'"
+          :label="userProfileStore.runtimeValidation?.valid ? t('settings.runtime.validation.valid') : t('settings.runtime.validation.idle')"
+          :tone="userProfileStore.runtimeValidation?.valid ? 'success' : 'default'"
         />
         <UiBadge
           :label="runtimeSource?.loaded ? t('settings.runtime.sourceStatuses.loaded') : t('settings.runtime.sourceStatuses.missing')"
@@ -569,14 +578,14 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
         <UiCodeEditor
           language="json"
           theme="octopus"
-          :model-value="workspaceAccessStore.runtimeDraft"
-          @update:model-value="workspaceAccessStore.setCurrentUserRuntimeDraft($event)"
+          :model-value="userProfileStore.runtimeDraft"
+          @update:model-value="userProfileStore.setCurrentUserRuntimeDraft($event)"
         />
 
         <UiStatusCallout
-          v-if="workspaceAccessStore.runtimeValidation?.errors.length"
+          v-if="userProfileStore.runtimeValidation?.errors.length"
           tone="error"
-          :description="workspaceAccessStore.runtimeValidation.errors.join(' ')"
+          :description="userProfileStore.runtimeValidation.errors.join(' ')"
         />
       </div>
 
@@ -592,15 +601,15 @@ function navigateToAccessTab(name: 'workspace-permission-center-roles' | 'worksp
         <UiButton
           variant="ghost"
           size="sm"
-          :disabled="workspaceAccessStore.runtimeValidating || workspaceAccessStore.runtimeSaving"
-          @click="workspaceAccessStore.validateCurrentUserRuntimeConfig()"
+          :disabled="userProfileStore.runtimeValidating || userProfileStore.runtimeSaving"
+          @click="userProfileStore.validateCurrentUserRuntimeConfig()"
         >
           {{ t('settings.runtime.actions.validate') }}
         </UiButton>
         <UiButton
           size="sm"
-          :disabled="workspaceAccessStore.runtimeSaving"
-          @click="workspaceAccessStore.saveCurrentUserRuntimeConfig()"
+          :disabled="userProfileStore.runtimeSaving"
+          @click="userProfileStore.saveCurrentUserRuntimeConfig()"
         >
           {{ t('settings.runtime.actions.save') }}
         </UiButton>

@@ -37,26 +37,3 @@ pub(crate) fn metric_record(id: &str, label: &str, value: usize) -> WorkspaceMet
         tone: None,
     }
 }
-pub(crate) fn build_permission_center_alerts(
-    session: &SessionRecord,
-    permissions: &[PermissionRecord],
-) -> Vec<PermissionCenterAlertRecord> {
-    let mut alerts = Vec::new();
-    if session.scope_project_ids.is_empty() {
-        alerts.push(PermissionCenterAlertRecord {
-            id: "alert-workspace-scope".into(),
-            title: "Workspace scope active".into(),
-            description: "Current session can access the full workspace scope.".into(),
-            severity: "low".into(),
-        });
-    }
-    if permissions.is_empty() {
-        alerts.push(PermissionCenterAlertRecord {
-            id: "alert-missing-permissions".into(),
-            title: "RBAC not configured".into(),
-            description: "No permissions are available for the current workspace.".into(),
-            severity: "medium".into(),
-        });
-    }
-    alerts
-}

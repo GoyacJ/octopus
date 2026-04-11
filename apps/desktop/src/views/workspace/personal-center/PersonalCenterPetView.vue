@@ -16,10 +16,10 @@ import {
 
 import { useCatalogStore } from '@/stores/catalog'
 import { usePetStore } from '@/stores/pet'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useUserProfileStore } from '@/stores/user-profile'
 
 const { t } = useI18n()
-const workspaceAccessStore = useWorkspaceAccessStore()
+const userProfileStore = useUserProfileStore()
 const catalogStore = useCatalogStore()
 const petStore = usePetStore()
 
@@ -32,7 +32,7 @@ const form = reactive({
 })
 
 const runtimeSource = computed(() =>
-  workspaceAccessStore.runtimeConfig?.sources.filter(source => source.scope === 'user').at(-1),
+  userProfileStore.runtimeConfig?.sources.filter(source => source.scope === 'user').at(-1),
 )
 const modelOptions = computed(() => catalogStore.configuredModelOptions.map(option => ({
   value: option.value,
@@ -66,7 +66,7 @@ const runtimePreview = computed(() => JSON.stringify({
 }, null, 2))
 
 watch(
-  () => [workspaceAccessStore.runtimeConfig, petStore.profile, petStore.preferredConfiguredModelId, petStore.preferredPermissionMode, modelOptions.value.map(option => option.value).join('|')],
+  () => [userProfileStore.runtimeConfig, petStore.profile, petStore.preferredConfiguredModelId, petStore.preferredPermissionMode, modelOptions.value.map(option => option.value).join('|')],
   () => {
     form.configuredModelId = petStore.preferredConfiguredModelId || modelOptions.value[0]?.value || ''
     form.permissionMode = petStore.preferredPermissionMode
@@ -78,12 +78,12 @@ watch(
 )
 
 watch(
-  () => workspaceAccessStore.currentUser?.id ?? '',
+  () => userProfileStore.currentUser?.id ?? '',
   (userId) => {
     if (!userId) {
       return
     }
-    void workspaceAccessStore.loadCurrentUserRuntimeConfig()
+    void userProfileStore.loadCurrentUserRuntimeConfig()
     void catalogStore.load()
     void petStore.loadSnapshot()
   },
@@ -108,8 +108,8 @@ async function savePetPreferences() {
       summary: form.summary.trim() || petStore.profile.summary,
     },
   }
-  workspaceAccessStore.setCurrentUserRuntimeDraft(JSON.stringify(patch, null, 2))
-  await workspaceAccessStore.saveCurrentUserRuntimeConfig()
+  userProfileStore.setCurrentUserRuntimeDraft(JSON.stringify(patch, null, 2))
+  await userProfileStore.saveCurrentUserRuntimeConfig()
   await petStore.loadSnapshot(undefined, undefined, true)
 }
 </script>
@@ -117,7 +117,7 @@ async function savePetPreferences() {
 <template>
   <div data-testid="personal-center-pet-view" class="space-y-6">
     <UiRecordCard
-      v-if="workspaceAccessStore.currentUser"
+      v-if="userProfileStore.currentUser"
       :title="t('personalCenter.pet.title')"
       :description="t('personalCenter.pet.description')"
       test-id="personal-center-pet-card"
@@ -159,7 +159,7 @@ async function savePetPreferences() {
         <UiButton
           variant="ghost"
           size="sm"
-          :disabled="workspaceAccessStore.runtimeSaving"
+          :disabled="userProfileStore.runtimeSaving"
           data-testid="personal-center-pet-reset"
           @click="resetForm"
         >
@@ -167,8 +167,8 @@ async function savePetPreferences() {
         </UiButton>
         <UiButton
           size="sm"
-          :disabled="workspaceAccessStore.runtimeSaving || !form.configuredModelId"
-          :loading="workspaceAccessStore.runtimeSaving"
+          :disabled="userProfileStore.runtimeSaving || !form.configuredModelId"
+          :loading="userProfileStore.runtimeSaving"
           data-testid="personal-center-pet-save"
           @click="savePetPreferences"
         >
@@ -178,7 +178,7 @@ async function savePetPreferences() {
     </UiRecordCard>
 
     <UiRecordCard
-      v-if="workspaceAccessStore.currentUser"
+      v-if="userProfileStore.currentUser"
       :title="t('personalCenter.pet.runtime.title')"
       :description="t('personalCenter.pet.runtime.description')"
       test-id="personal-center-pet-runtime-preview"
@@ -187,7 +187,7 @@ async function savePetPreferences() {
     </UiRecordCard>
 
     <UiEmptyState
-      v-if="!workspaceAccessStore.currentUser"
+      v-if="!userProfileStore.currentUser"
       :title="t('personalCenter.pet.emptyTitle')"
       :description="t('personalCenter.pet.emptyDescription')"
     />

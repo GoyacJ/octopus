@@ -94,40 +94,6 @@ CreateWorkspaceResourceInput:
     - kind
     - name
   type: object
-CreateWorkspaceUserRequest:
-  additionalProperties: false
-  properties:
-    avatar:
-      $ref: "#/components/schemas/AvatarUploadPayload"
-    confirmPassword:
-      type: string
-    displayName:
-      type: string
-    password:
-      type: string
-    roleIds:
-      items:
-        type: string
-      type: array
-    scopeProjectIds:
-      items:
-        type: string
-      type: array
-    status:
-      $ref: "#/components/schemas/UserStatus"
-    useDefaultAvatar:
-      type: boolean
-    useDefaultPassword:
-      type: boolean
-    username:
-      type: string
-  required:
-    - username
-    - displayName
-    - status
-    - roleIds
-    - scopeProjectIds
-  type: object
 KnowledgeKind:
   enum:
     - private
@@ -181,38 +147,11 @@ KnowledgeStatus:
     - shared
     - archived
   type: string
-MenuRecord:
-  additionalProperties: false
-  properties:
-    id:
-      type: string
-    label:
-      type: string
-    order:
-      type: integer
-    parentId:
-      type: string
-    routeName:
-      type: string
-    source:
-      $ref: "#/components/schemas/MenuSource"
-    status:
-      $ref: "#/components/schemas/MenuStatus"
-    workspaceId:
-      type: string
-  required:
-    - id
-    - workspaceId
-    - source
-    - label
-    - status
-    - order
-  type: object
 MenuSource:
   enum:
     - main-sidebar
     - console
-    - permission-center
+    - access-control
   type: string
 MenuStatus:
   enum:
@@ -225,46 +164,6 @@ PermissionMode:
     - readonly
     - danger-full-access
   type: string
-PermissionRecord:
-  additionalProperties: false
-  properties:
-    action:
-      type: string
-    code:
-      type: string
-    description:
-      type: string
-    id:
-      type: string
-    kind:
-      $ref: "#/components/schemas/RbacPermissionKind"
-    memberPermissionIds:
-      items:
-        type: string
-      type: array
-    name:
-      type: string
-    status:
-      $ref: "#/components/schemas/RbacPermissionStatus"
-    targetIds:
-      items:
-        type: string
-      type: array
-    targetType:
-      $ref: "#/components/schemas/RbacPermissionTargetType"
-    workspaceId:
-      type: string
-  required:
-    - id
-    - workspaceId
-    - name
-    - code
-    - description
-    - status
-    - kind
-    - targetIds
-    - memberPermissionIds
-  type: object
 PetChatSender:
   enum:
     - user
@@ -448,39 +347,6 @@ PetWorkspaceSnapshot:
     - presence
     - messages
   type: object
-RoleRecord:
-  additionalProperties: false
-  properties:
-    code:
-      type: string
-    description:
-      type: string
-    id:
-      type: string
-    menuIds:
-      items:
-        type: string
-      type: array
-    name:
-      type: string
-    permissionIds:
-      items:
-        type: string
-      type: array
-    status:
-      $ref: "#/components/schemas/RbacRoleStatus"
-    workspaceId:
-      type: string
-  required:
-    - id
-    - workspaceId
-    - name
-    - code
-    - description
-    - status
-    - permissionIds
-    - menuIds
-  type: object
 SavePetPresenceInput:
   additionalProperties: false
   properties:
@@ -619,40 +485,6 @@ UpdateWorkspaceResourceInput:
         type: string
       type: array
   type: object
-UpdateWorkspaceUserRequest:
-  additionalProperties: false
-  properties:
-    avatar:
-      $ref: "#/components/schemas/AvatarUploadPayload"
-    confirmPassword:
-      type: string
-    displayName:
-      type: string
-    password:
-      type: string
-    removeAvatar:
-      type: boolean
-    resetPasswordToDefault:
-      type: boolean
-    roleIds:
-      items:
-        type: string
-      type: array
-    scopeProjectIds:
-      items:
-        type: string
-      type: array
-    status:
-      $ref: "#/components/schemas/UserStatus"
-    username:
-      type: string
-  required:
-    - username
-    - displayName
-    - status
-    - roleIds
-    - scopeProjectIds
-  type: object
 UpsertTeamInput:
   additionalProperties: false
   properties:
@@ -712,54 +544,6 @@ UpsertTeamInput:
     - description
     - status
   type: object
-PermissionCenterAlertRecord:
-  additionalProperties: false
-  properties:
-    description:
-      type: string
-    id:
-      type: string
-    severity:
-      $ref: "#/components/schemas/RiskLevel"
-    title:
-      type: string
-  required:
-    - id
-    - title
-    - description
-    - severity
-  type: object
-PermissionCenterOverviewSnapshot:
-  additionalProperties: false
-  properties:
-    alerts:
-      items:
-        $ref: "#/components/schemas/PermissionCenterAlertRecord"
-      type: array
-    currentUser:
-      $ref: "#/components/schemas/UserRecordSummary"
-    metrics:
-      items:
-        $ref: "#/components/schemas/WorkspaceMetricRecord"
-      type: array
-    quickLinks:
-      items:
-        $ref: "#/components/schemas/MenuRecord"
-      type: array
-    roleNames:
-      items:
-        type: string
-      type: array
-    workspaceId:
-      type: string
-  required:
-    - workspaceId
-    - currentUser
-    - roleNames
-    - metrics
-    - alerts
-    - quickLinks
-  type: object
 UserRecordSummary:
   additionalProperties: false
   properties:
@@ -771,14 +555,6 @@ UserRecordSummary:
       type: string
     passwordState:
       $ref: "#/components/schemas/PasswordState"
-    roleIds:
-      items:
-        type: string
-      type: array
-    scopeProjectIds:
-      items:
-        type: string
-      type: array
     status:
       $ref: "#/components/schemas/UserStatus"
     username:
@@ -789,8 +565,6 @@ UserRecordSummary:
     - displayName
     - status
     - passwordState
-    - roleIds
-    - scopeProjectIds
   type: object
 UserStatus:
   enum:

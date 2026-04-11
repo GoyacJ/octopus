@@ -1,75 +1,3 @@
-/api/v1/auth/login:
-  post:
-    operationId: login
-    requestBody:
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/LoginRequest"
-      required: true
-    responses:
-      "200":
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LoginResponse"
-        description: Workspace login payload.
-      default:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApiErrorEnvelope"
-        description: API error envelope.
-/api/v1/auth/logout:
-  post:
-    operationId: logout
-    responses:
-      "204":
-        description: Logged out.
-      default:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApiErrorEnvelope"
-        description: API error envelope.
-/api/v1/auth/register-owner:
-  post:
-    operationId: registerOwner
-    requestBody:
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/RegisterWorkspaceOwnerRequest"
-      required: true
-    responses:
-      "200":
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/RegisterWorkspaceOwnerResponse"
-        description: Workspace owner registration payload.
-      default:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApiErrorEnvelope"
-        description: API error envelope.
-/api/v1/auth/session:
-  get:
-    operationId: getCurrentSession
-    responses:
-      "200":
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SessionRecord"
-        description: Current workspace session payload.
-      default:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApiErrorEnvelope"
-        description: API error envelope.
 /api/v1/system/bootstrap:
   get:
     operationId: getSystemBootstrap
@@ -96,6 +24,98 @@
             schema:
               $ref: "#/components/schemas/HealthcheckStatus"
         description: System healthcheck payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/system/auth/status:
+  get:
+    operationId: getSystemAuthStatus
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SystemAuthStatus"
+        description: Enterprise authentication bootstrap and session state.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/system/auth/captcha:
+  post:
+    operationId: createSystemAuthCaptcha
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CaptchaChallenge"
+        description: Captcha challenge payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/system/auth/login:
+  post:
+    operationId: systemAuthLogin
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/EnterpriseLoginRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnterpriseAuthSuccess"
+        description: Enterprise login response with session summary.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/system/auth/bootstrap-admin:
+  post:
+    operationId: registerBootstrapAdmin
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RegisterBootstrapAdminRequest"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnterpriseAuthSuccess"
+        description: Bootstrap admin registration response.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/system/auth/session:
+  get:
+    operationId: getSystemAuthSession
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnterpriseSessionSummary"
+        description: Current enterprise auth session summary.
       default:
         content:
           application/json:

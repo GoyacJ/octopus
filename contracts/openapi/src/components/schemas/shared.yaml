@@ -2,6 +2,8 @@ ApiErrorCode:
   enum:
     - UNAUTHENTICATED
     - SESSION_EXPIRED
+    - PERMISSION_DENIED
+    - AUTHORIZATION_STALE
     - FORBIDDEN
     - NOT_FOUND
     - CONFLICT
@@ -117,36 +119,6 @@ PasswordState:
     - set
     - reset-required
     - temporary
-  type: string
-RbacPermissionKind:
-  enum:
-    - atomic
-    - bundle
-  type: string
-RbacPermissionStatus:
-  enum:
-    - active
-    - disabled
-  type: string
-RbacPermissionTargetType:
-  enum:
-    - workspace
-    - project
-    - user
-    - role
-    - permission
-    - menu
-    - resource
-    - agent
-    - knowledge
-    - tool
-    - skill
-    - mcp
-  type: string
-RbacRoleStatus:
-  enum:
-    - active
-    - disabled
   type: string
 RiskLevel:
   enum:

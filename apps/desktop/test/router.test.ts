@@ -5,7 +5,7 @@ import { createPinia, setActivePinia } from 'pinia'
 
 import { router } from '@/router'
 import { useShellStore } from '@/stores/shell'
-import { useWorkspaceAccessStore } from '@/stores/workspace-access'
+import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
 describe('desktop router contract', () => {
@@ -43,11 +43,19 @@ describe('desktop router contract', () => {
     expect(routePaths).toContain('/workspaces/:workspaceId/personal-center')
     expect(routePaths).toContain('/workspaces/:workspaceId/personal-center/profile')
     expect(routePaths).toContain('/workspaces/:workspaceId/personal-center/pet')
-    expect(routePaths).toContain('/workspaces/:workspaceId/permission-center')
-    expect(routePaths).toContain('/workspaces/:workspaceId/permission-center/users')
-    expect(routePaths).toContain('/workspaces/:workspaceId/permission-center/roles')
-    expect(routePaths).toContain('/workspaces/:workspaceId/permission-center/permissions')
-    expect(routePaths).toContain('/workspaces/:workspaceId/permission-center/menus')
+    expect(routePaths).toContain('/workspaces/:workspaceId/access-control')
+    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/users')
+    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/org')
+    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/roles')
+    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/policies')
+    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/menus')
+    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/resources')
+    expect(routePaths).toContain('/workspaces/:workspaceId/access-control/sessions')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/permission-center')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/permission-center/users')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/permission-center/roles')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/permission-center/permissions')
+    expect(routePaths).not.toContain('/workspaces/:workspaceId/permission-center/menus')
     expect(routePaths).toContain('/workspaces/:workspaceId/automations')
     expect(routePaths).toContain('/connections')
   })
@@ -69,9 +77,9 @@ describe('desktop router contract', () => {
 
   it('redirects the console root to the first authorized child route', async () => {
     const shell = useShellStore()
-    const workspaceAccessStore = useWorkspaceAccessStore()
+    const workspaceAccessControlStore = useWorkspaceAccessControlStore()
     await shell.bootstrap('ws-local', 'proj-redesign')
-    await workspaceAccessStore.load()
+    await workspaceAccessControlStore.load()
 
     await router.push('/workspaces/ws-local/console')
 
@@ -80,15 +88,19 @@ describe('desktop router contract', () => {
 
   it('redirects unauthorized console routes back to workspace overview', async () => {
     const shell = useShellStore()
-    const workspaceAccessStore = useWorkspaceAccessStore()
+    const workspaceAccessControlStore = useWorkspaceAccessControlStore()
     await shell.bootstrap('ws-local', 'proj-redesign')
-    await workspaceAccessStore.load()
+    await workspaceAccessControlStore.load()
 
-    const ownerRole = workspaceAccessStore.roles.find(role => role.id === 'role-owner')
-    if (!ownerRole) {
-      throw new Error('Expected owner role in fixture')
+    if (!workspaceAccessControlStore.authorization) {
+      throw new Error('Expected access-control authorization in fixture')
     }
-    ownerRole.menuIds = ownerRole.menuIds.filter(menuId => !menuId.startsWith('menu-workspace-console'))
+    workspaceAccessControlStore.authorization.visibleMenuIds = workspaceAccessControlStore.authorization.visibleMenuIds
+      .filter(menuId => !menuId.startsWith('menu-workspace-console'))
+    workspaceAccessControlStore.authorization.menuGates = workspaceAccessControlStore.authorization.menuGates
+      .map(gate => gate.menuId.startsWith('menu-workspace-console')
+        ? { ...gate, allowed: false, reason: 'removed in test' }
+        : gate)
 
     await router.push('/workspaces/ws-local/console/projects')
 
@@ -104,15 +116,27 @@ describe('desktop router contract', () => {
     expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
   })
 
-  it('redirects the permission center root to the first authorized child route', async () => {
+  it('redirects the access control root to the first authorized child route', async () => {
     const shell = useShellStore()
-    const workspaceAccessStore = useWorkspaceAccessStore()
+    const workspaceAccessControlStore = useWorkspaceAccessControlStore()
     await shell.bootstrap('ws-local', 'proj-redesign')
-    await workspaceAccessStore.load()
+    await workspaceAccessControlStore.load()
 
-    await router.push('/workspaces/ws-local/permission-center')
+    await router.push('/workspaces/ws-local/access-control')
 
-    expect(router.currentRoute.value.name).toBe('workspace-permission-center-users')
+    expect(router.currentRoute.value.name).toBe('workspace-access-control-users')
+  })
+
+  it('rejects legacy permission center deep links because the routes are removed', async () => {
+    const resolved = router.resolve('/workspaces/ws-local/permission-center/roles')
+
+    expect(resolved.matched).toHaveLength(1)
+    expect(resolved.matched[0]?.path).toBe('/:pathMatch(.*)*')
+    await router.push('/workspaces/ws-local/permission-center/roles')
+    expect(router.currentRoute.value.matched).toHaveLength(1)
+    expect(router.currentRoute.value.matched[0]?.path).toBe('/workspaces/:workspaceId/overview')
+    expect(router.currentRoute.value.name).toBe('workspace-overview')
+    expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
   })
 
   it('redirects the personal center root to the profile route', async () => {

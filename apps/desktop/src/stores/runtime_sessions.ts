@@ -172,6 +172,35 @@ export const runtimeSessionActions = {
     this.configError = snapshot.configError
     this.error = snapshot.error
   },
+  clearWorkspaceScope(this: any, workspaceConnectionId: string) {
+    const nextSnapshots = { ...this.workspaceStateSnapshots }
+    delete nextSnapshots[workspaceConnectionId]
+    this.workspaceStateSnapshots = nextSnapshots
+
+    if (this.activeWorkspaceConnectionId === workspaceConnectionId) {
+      this.stopRealtimeTransport()
+      const snapshot = createRuntimeWorkspaceSnapshot()
+      this.provider = snapshot.provider
+      this.bootstrapped = snapshot.bootstrapped
+      this.loading = snapshot.loading
+      this.sessions = snapshot.sessions
+      this.sessionDetails = snapshot.sessionDetails
+      this.activeSessionId = snapshot.activeSessionId
+      this.activeConversationId = snapshot.activeConversationId
+      this.queuedTurns = snapshot.queuedTurns
+      this.lastEventIds = snapshot.lastEventIds
+      this.config = snapshot.config
+      this.configDrafts = { ...snapshot.configDrafts }
+      this.configValidation = { ...snapshot.configValidation }
+      this.configuredModelProbeResult = snapshot.configuredModelProbeResult
+      this.configuredModelProbing = snapshot.configuredModelProbing
+      this.configLoading = snapshot.configLoading
+      this.configSaving = snapshot.configSaving
+      this.configValidating = snapshot.configValidating
+      this.configError = snapshot.configError
+      this.error = snapshot.error
+    }
+  },
   syncWorkspaceScopeFromShell(this: any) {
     const shell = useShellStore()
     const nextConnectionId = shell.activeWorkspaceConnection?.workspaceConnectionId ?? ''

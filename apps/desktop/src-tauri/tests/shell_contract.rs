@@ -23,6 +23,61 @@ use octopus_desktop_shell::updates::get_host_update_status;
 use parking_lot::RwLock;
 use tempfile::tempdir;
 
+async fn bootstrap_admin_session(base_url: &str) -> String {
+    let client = reqwest::Client::new();
+    let captcha = client
+        .post(format!("{base_url}/api/v1/system/auth/captcha"))
+        .send()
+        .await
+        .expect("captcha request")
+        .json::<serde_json::Value>()
+        .await
+        .expect("captcha payload");
+
+    let challenge_id = captcha["challengeId"]
+        .as_str()
+        .expect("captcha challenge id")
+        .to_string();
+    let svg_data = captcha["svgData"].as_str().expect("captcha svg data");
+    let code_marker = "data-code=\"";
+    let code_start = svg_data.find(code_marker).expect("captcha code marker") + code_marker.len();
+    let code_end = svg_data[code_start..]
+        .find('"')
+        .map(|offset| code_start + offset)
+        .expect("captcha code terminator");
+    let captcha_code = svg_data[code_start..code_end].to_string();
+
+    let response = client
+        .post(format!("{base_url}/api/v1/system/auth/bootstrap-admin"))
+        .json(&serde_json::json!({
+            "clientAppId": "octopus-desktop",
+            "username": "owner",
+            "displayName": "Workspace Owner",
+            "password": "password-123",
+            "confirmPassword": "password-123",
+            "avatar": {
+                "fileName": "avatar.png",
+                "contentType": "image/png",
+                "dataBase64": "YXZhdGFy",
+                "byteSize": 6u64
+            },
+            "captchaChallengeId": challenge_id,
+            "captchaCode": captcha_code,
+            "workspaceId": "ws-local"
+        }))
+        .send()
+        .await
+        .expect("bootstrap admin request")
+        .json::<serde_json::Value>()
+        .await
+        .expect("bootstrap admin payload");
+
+    response["session"]["token"]
+        .as_str()
+        .expect("bootstrap admin session token")
+        .to_string()
+}
+
 fn test_host_state() -> HostState {
     HostState {
         platform: "tauri".into(),
@@ -446,12 +501,13 @@ async fn runtime_config_sources_expose_workspace_relative_metadata_without_absol
         .start_dev(&state.host_state, state.preferences_service.path())
         .await
         .expect("backend should start in dev mode");
+    let base_url = connection.base_url.expect("backend base url");
+    let session_token = bootstrap_admin_session(&base_url).await;
 
     let config = reqwest::Client::new()
-        .get(format!(
-            "{}/api/v1/runtime/config",
-            connection.base_url.expect("backend base url")
-        ))
+        .get(format!("{base_url}/api/v1/runtime/config"))
+        .bearer_auth(session_token)
+        .header("X-Workspace-Id", "ws-local")
         .send()
         .await
         .expect("runtime config request")
