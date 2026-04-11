@@ -192,7 +192,7 @@ async function deletePolicy(policyId: string) {
           <article
             v-for="resource in accessControlStore.protectedResources"
             :key="`${resource.resourceType}:${resource.id}`"
-            class="rounded-[12px] border border-border bg-card p-4"
+            class="rounded-[var(--radius-l)] border border-border bg-card p-4"
           >
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -221,7 +221,7 @@ async function deletePolicy(policyId: string) {
 
       <UiPanelFrame variant="panel" padding="md" :title="selectedResource ? '资源元数据与对象策略' : '选择资源'" subtitle="先维护标签、密级和 owner，再配置对象级 allow / deny 策略。">
         <div v-if="selectedResource" class="space-y-4">
-          <div class="rounded-[12px] border border-border bg-muted/35 p-4">
+          <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
               <div class="text-sm font-semibold text-foreground">{{ selectedResource.name }}</div>
               <UiBadge :label="selectedResource.resourceType" subtle />
@@ -285,7 +285,7 @@ async function deletePolicy(policyId: string) {
             <article
               v-for="policy in selectedResourcePolicies"
               :key="policy.id"
-              class="rounded-[8px] border border-border bg-card p-3"
+              class="rounded-[var(--radius-m)] border border-border bg-card p-3"
             >
               <div class="flex items-start justify-between gap-2">
                 <div>

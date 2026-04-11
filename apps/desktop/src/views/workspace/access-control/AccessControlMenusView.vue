@@ -139,7 +139,7 @@ async function handleDelete() {
           <article
             v-for="menu in accessControlStore.menuDefinitions"
             :key="menu.id"
-            class="rounded-[12px] border border-border bg-card p-4"
+            class="rounded-[var(--radius-l)] border border-border bg-card p-4"
           >
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -169,7 +169,7 @@ async function handleDelete() {
 
       <UiPanelFrame variant="panel" padding="md" :title="selectedMenu ? '菜单策略' : '选择菜单'" subtitle="系统预置 menu code，管理员只维护策略，不新增菜单目录。">
         <div v-if="selectedMenu" class="space-y-4">
-          <div class="rounded-[12px] border border-border bg-muted/35 p-4">
+          <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
               <div class="text-sm font-semibold text-foreground">{{ getMenuDefinition(selectedMenu.id)?.defaultLabel ?? selectedMenu.label }}</div>
               <UiBadge :label="selectedMenu.source" subtle />

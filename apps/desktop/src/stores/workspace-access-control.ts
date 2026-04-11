@@ -466,6 +466,7 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
             scopeType: 'selected-projects',
             projectIds: [projectId],
             tags: [],
+            classifications: [],
             effect: 'allow',
           } satisfies DataPolicyUpsertRequest,
         }

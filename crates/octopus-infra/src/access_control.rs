@@ -48,7 +48,10 @@ fn normalize_subject_type(value: &str) -> &str {
     }
 }
 
-pub(super) fn org_unit_ancestor_ids(units: &[OrgUnitRecord], org_unit_id: &str) -> BTreeSet<String> {
+pub(super) fn org_unit_ancestor_ids(
+    units: &[OrgUnitRecord],
+    org_unit_id: &str,
+) -> BTreeSet<String> {
     let parent_by_id = units
         .iter()
         .map(|unit| (unit.id.as_str(), unit.parent_id.as_deref()))
@@ -209,7 +212,9 @@ pub(super) fn load_data_policies(
         .map_err(|error| AppError::database(error.to_string()))
 }
 
-fn load_resource_policies(connection: &Connection) -> Result<Vec<ResourcePolicyRecord>, AppError> {
+pub(super) fn load_resource_policies(
+    connection: &Connection,
+) -> Result<Vec<ResourcePolicyRecord>, AppError> {
     let mut stmt = connection
         .prepare(
             "SELECT id, subject_type, subject_id, resource_type, resource_id, action_name, effect
@@ -285,13 +290,15 @@ pub(super) fn resolve_subject_resource_policies(
 
     Ok(load_resource_policies(connection)?
         .into_iter()
-        .filter(|policy| match normalize_subject_type(&policy.subject_type) {
-            "user" => policy.subject_id == user_id,
-            "org-unit" => org_unit_ids.contains(&policy.subject_id),
-            "position" => position_ids.contains(&policy.subject_id),
-            "user-group" => user_group_ids.contains(&policy.subject_id),
-            _ => false,
-        })
+        .filter(
+            |policy| match normalize_subject_type(&policy.subject_type) {
+                "user" => policy.subject_id == user_id,
+                "org-unit" => org_unit_ids.contains(&policy.subject_id),
+                "position" => position_ids.contains(&policy.subject_id),
+                "user-group" => user_group_ids.contains(&policy.subject_id),
+                _ => false,
+            },
+        )
         .collect())
 }
 
@@ -350,13 +357,15 @@ pub(super) fn resolve_subject_role_bindings(
 
     Ok(load_role_bindings(connection)?
         .into_iter()
-        .filter(|binding| match normalize_subject_type(&binding.subject_type) {
-            "user" => binding.subject_id == user_id,
-            "org-unit" => org_unit_ids.contains(&binding.subject_id),
-            "position" => position_ids.contains(&binding.subject_id),
-            "user-group" => user_group_ids.contains(&binding.subject_id),
-            _ => false,
-        })
+        .filter(
+            |binding| match normalize_subject_type(&binding.subject_type) {
+                "user" => binding.subject_id == user_id,
+                "org-unit" => org_unit_ids.contains(&binding.subject_id),
+                "position" => position_ids.contains(&binding.subject_id),
+                "user-group" => user_group_ids.contains(&binding.subject_id),
+                _ => false,
+            },
+        )
         .collect())
 }
 
@@ -381,13 +390,15 @@ pub(super) fn resolve_subject_data_policies(
 
     Ok(load_data_policies(connection)?
         .into_iter()
-        .filter(|policy| match normalize_subject_type(&policy.subject_type) {
-            "user" => policy.subject_id == user_id,
-            "org-unit" => org_unit_ids.contains(&policy.subject_id),
-            "position" => position_ids.contains(&policy.subject_id),
-            "user-group" => user_group_ids.contains(&policy.subject_id),
-            _ => false,
-        })
+        .filter(
+            |policy| match normalize_subject_type(&policy.subject_type) {
+                "user" => policy.subject_id == user_id,
+                "org-unit" => org_unit_ids.contains(&policy.subject_id),
+                "position" => position_ids.contains(&policy.subject_id),
+                "user-group" => user_group_ids.contains(&policy.subject_id),
+                _ => false,
+            },
+        )
         .collect())
 }
 

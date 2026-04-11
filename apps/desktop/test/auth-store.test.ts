@@ -38,8 +38,6 @@ describe('useAuthStore', () => {
     expect(auth.dialogOpen).toBe(true)
     expect(auth.mode).toBe('register')
     expect(auth.reason).toBe('first-launch')
-    expect(auth.captchaChallenge?.challengeId).toBeTruthy()
-    expect(auth.captchaChallenge?.svgData).toContain('<svg')
   })
 
   it('requires login when the owner exists but no persisted session is available', async () => {
@@ -57,7 +55,6 @@ describe('useAuthStore', () => {
     expect(auth.dialogOpen).toBe(true)
     expect(auth.mode).toBe('login')
     expect(auth.reason).toBe('missing-session')
-    expect(auth.captchaChallenge?.challengeId).toBeTruthy()
   })
 
   it('accepts a persisted valid session and keeps the auth gate closed on startup', async () => {
@@ -94,7 +91,6 @@ describe('useAuthStore', () => {
     expect(auth.mode).toBe('login')
     expect(auth.reason).toBe('session-expired')
     expect(shell.activeWorkspaceSession).toBeNull()
-    expect(auth.captchaChallenge?.challengeId).toBeTruthy()
   })
 
   it('connects a remote workspace, persists its session, and activates the saved connection', async () => {
@@ -147,13 +143,6 @@ describe('useAuthStore', () => {
               ownerReady: true,
             }),
           },
-          enterpriseAuth: {
-            createCaptcha: async () => ({
-              challengeId: 'captcha-enterprise',
-              svgData: '<svg data-code="ABCD"></svg>',
-              expiresAt: Date.now() + 60_000,
-            }),
-          },
         } as ReturnType<typeof tauriClient.createWorkspaceClient>
       }
 
@@ -182,15 +171,11 @@ describe('useAuthStore', () => {
     })
 
     const auth = useAuthStore()
-    await auth.prepareConnectionCaptcha('https://enterprise.example.test/')
-
-    expect(auth.connectionCaptcha?.challengeId).toBe('captcha-enterprise')
 
     const connection = await auth.connectWorkspace({
       baseUrl: 'https://enterprise.example.test/',
       username: 'owner',
       password: 'secret',
-      captchaCode: 'ABCD',
     })
 
     expect(connection.workspaceConnectionId).toBe('conn-enterprise')

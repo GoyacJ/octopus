@@ -7,6 +7,8 @@ import { promisify } from 'node:util'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { resolvePreviewSinceRefFromTags } from '../../../scripts/release-notes-lib.mjs'
+
 const repoRoot = path.resolve(__dirname, '../../..')
 const nodeExecutable = process.execPath
 const verifyScriptPath = path.join(repoRoot, 'scripts', 'verify-release-artifacts.mjs')
@@ -186,6 +188,21 @@ describe('release artifact governance scripts', () => {
     }).trim()
 
     expect(tag).toBe('v0.1.0-preview.42')
+  })
+
+  it('resolves preview release notes from the latest formal release tag instead of the latest preview tag', () => {
+    expect(resolvePreviewSinceRefFromTags([
+      'v0.2.4',
+      'v0.2.4-preview.23',
+      'v0.2.4-preview.21',
+      'v0.2.3',
+    ], 'v0.2.4-preview.24')).toBe('v0.2.4')
+
+    expect(resolvePreviewSinceRefFromTags([
+      'v0.2.4',
+      'v0.2.3',
+      'v0.2.2',
+    ], 'v0.2.5-preview.1')).toBe('v0.2.4')
   })
 
   it('collects canonical release metadata into a flat directory for publish verification', () => {

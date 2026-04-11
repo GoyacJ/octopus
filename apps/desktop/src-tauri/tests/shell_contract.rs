@@ -25,28 +25,6 @@ use tempfile::tempdir;
 
 async fn bootstrap_admin_session(base_url: &str) -> String {
     let client = reqwest::Client::new();
-    let captcha = client
-        .post(format!("{base_url}/api/v1/system/auth/captcha"))
-        .send()
-        .await
-        .expect("captcha request")
-        .json::<serde_json::Value>()
-        .await
-        .expect("captcha payload");
-
-    let challenge_id = captcha["challengeId"]
-        .as_str()
-        .expect("captcha challenge id")
-        .to_string();
-    let svg_data = captcha["svgData"].as_str().expect("captcha svg data");
-    let code_marker = "data-code=\"";
-    let code_start = svg_data.find(code_marker).expect("captcha code marker") + code_marker.len();
-    let code_end = svg_data[code_start..]
-        .find('"')
-        .map(|offset| code_start + offset)
-        .expect("captcha code terminator");
-    let captcha_code = svg_data[code_start..code_end].to_string();
-
     let response = client
         .post(format!("{base_url}/api/v1/system/auth/bootstrap-admin"))
         .json(&serde_json::json!({
@@ -61,8 +39,6 @@ async fn bootstrap_admin_session(base_url: &str) -> String {
                 "dataBase64": "YXZhdGFy",
                 "byteSize": 6u64
             },
-            "captchaChallengeId": challenge_id,
-            "captchaCode": captcha_code,
             "workspaceId": "ws-local"
         }))
         .send()

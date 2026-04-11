@@ -5,8 +5,7 @@ use octopus_core::{
     OrgUnitUpsertRequest, PositionRecord, PositionUpsertRequest, ProtectedResourceDescriptor,
     ProtectedResourceMetadataUpsertRequest, ResourcePolicyRecord, ResourcePolicyUpsertRequest,
     RoleBindingRecord, RoleBindingUpsertRequest, RoleUpsertRequest, UserGroupRecord,
-    UserGroupUpsertRequest, UserOrgAssignmentRecord,
-    UserOrgAssignmentUpsertRequest,
+    UserGroupUpsertRequest, UserOrgAssignmentRecord, UserOrgAssignmentUpsertRequest,
 };
 
 #[async_trait]

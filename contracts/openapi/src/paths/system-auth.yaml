@@ -46,22 +46,6 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
-/api/v1/system/auth/captcha:
-  post:
-    operationId: createSystemAuthCaptcha
-    responses:
-      "200":
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CaptchaChallenge"
-        description: Captcha challenge payload.
-      default:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ApiErrorEnvelope"
-        description: API error envelope.
 /api/v1/system/auth/login:
   post:
     operationId: systemAuthLogin

@@ -6,13 +6,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct CaptchaPolicyPayload {
-    required: bool,
-    ttl_seconds: u64,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub(crate) struct EnterprisePrincipalPayload {
     user_id: String,
     username: String,
@@ -39,16 +32,7 @@ pub(crate) struct SystemAuthStatusPayload {
     workspace: WorkspaceSummary,
     bootstrap_admin_required: bool,
     owner_ready: bool,
-    captcha: CaptchaPolicyPayload,
     session: Option<EnterpriseSessionSummaryPayload>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct CaptchaChallengePayload {
-    challenge_id: String,
-    svg_data: String,
-    expires_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -64,8 +48,6 @@ pub(crate) struct EnterpriseLoginRequestPayload {
     client_app_id: String,
     username: String,
     password: String,
-    captcha_challenge_id: String,
-    captcha_code: String,
     workspace_id: Option<String>,
 }
 
@@ -78,8 +60,6 @@ pub(crate) struct RegisterBootstrapAdminRequestPayload {
     password: String,
     confirm_password: String,
     avatar: AvatarUploadPayload,
-    captcha_challenge_id: String,
-    captcha_code: String,
     workspace_id: Option<String>,
 }
 
@@ -478,7 +458,7 @@ async fn build_access_feature_definitions(
         ),
     ]);
     Ok(menus
-        .into_iter()
+        .iter()
         .map(|menu| FeatureDefinition {
             id: menu.feature_code.clone(),
             code: menu.feature_code.clone(),
@@ -491,10 +471,7 @@ async fn build_access_feature_definitions(
         .collect())
 }
 
-fn org_unit_ancestor_closure(
-    org_units: &[OrgUnitRecord],
-    org_unit_id: &str,
-) -> BTreeSet<String> {
+fn org_unit_ancestor_closure(org_units: &[OrgUnitRecord], org_unit_id: &str) -> BTreeSet<String> {
     let parent_by_id = org_units
         .iter()
         .map(|unit| (unit.id.as_str(), unit.parent_id.as_deref()))
@@ -736,7 +713,9 @@ fn merge_protected_resource_descriptor(
     defaults: ProtectedResourceDescriptor,
     metadata_by_key: &HashMap<(String, String), ProtectedResourceDescriptor>,
 ) -> ProtectedResourceDescriptor {
-    let Some(metadata) = metadata_by_key.get(&(defaults.resource_type.clone(), defaults.id.clone())) else {
+    let Some(metadata) =
+        metadata_by_key.get(&(defaults.resource_type.clone(), defaults.id.clone()))
+    else {
         return defaults;
     };
     ProtectedResourceDescriptor {
@@ -857,64 +836,6 @@ async fn build_access_protected_resource_descriptors(
             .then_with(|| left.id.cmp(&right.id))
     });
     Ok(descriptors)
-}
-
-fn render_captcha_svg(code: &str) -> String {
-    format!(
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"160\" height=\"52\" viewBox=\"0 0 160 52\" fill=\"none\"><rect width=\"160\" height=\"52\" rx=\"10\" fill=\"#F3F4F6\"/><text x=\"80\" y=\"33\" text-anchor=\"middle\" font-family=\"monospace\" font-size=\"22\" font-weight=\"700\" fill=\"#111827\" letter-spacing=\"6\" data-code=\"{code}\">{code}</text></svg>"
-    )
-}
-
-fn create_auth_challenge(state: &ServerState) -> Result<CaptchaChallengePayload, ApiError> {
-    let challenge_id = format!("captcha-{}", Uuid::new_v4());
-    let code = Uuid::new_v4()
-        .simple()
-        .to_string()
-        .chars()
-        .take(4)
-        .collect::<String>()
-        .to_uppercase();
-    let expires_at = timestamp_now() + 5 * 60 * 1000;
-    state
-        .auth_captcha_challenges
-        .lock()
-        .map_err(|_| AppError::runtime("captcha mutex poisoned"))?
-        .insert(
-            challenge_id.clone(),
-            AuthCaptchaChallenge {
-                challenge_id: challenge_id.clone(),
-                code: code.clone(),
-                expires_at,
-            },
-        );
-    Ok(CaptchaChallengePayload {
-        challenge_id,
-        svg_data: render_captcha_svg(&code),
-        expires_at,
-    })
-}
-
-fn verify_auth_challenge(
-    state: &ServerState,
-    challenge_id: &str,
-    code: &str,
-) -> Result<(), ApiError> {
-    let challenge = state
-        .auth_captcha_challenges
-        .lock()
-        .map_err(|_| AppError::runtime("captcha mutex poisoned"))?
-        .remove(challenge_id)
-        .ok_or_else(|| AppError::auth("captcha challenge not found"))?;
-    if challenge.challenge_id != challenge_id {
-        return Err(ApiError::from(AppError::auth("captcha challenge mismatch")));
-    }
-    if challenge.expires_at < timestamp_now() {
-        return Err(ApiError::from(AppError::auth("captcha challenge expired")));
-    }
-    if challenge.code != code.trim().to_uppercase() {
-        return Err(ApiError::from(AppError::auth("invalid captcha code")));
-    }
-    Ok(())
 }
 
 async fn audit_auth_event(
@@ -2420,18 +2341,8 @@ pub(crate) async fn system_auth_status(
         workspace: bootstrap.workspace,
         bootstrap_admin_required: !bootstrap.owner_ready,
         owner_ready: bootstrap.owner_ready,
-        captcha: CaptchaPolicyPayload {
-            required: true,
-            ttl_seconds: 300,
-        },
         session,
     }))
-}
-
-pub(crate) async fn create_system_auth_captcha(
-    State(state): State<ServerState>,
-) -> Result<Json<CaptchaChallengePayload>, ApiError> {
-    Ok(Json(create_auth_challenge(&state)?))
 }
 
 pub(crate) async fn system_auth_login(
@@ -2443,22 +2354,6 @@ pub(crate) async fn system_auth_login(
     let attempt_key =
         ensure_auth_attempt_allowed(&state, &workspace_id, &request.username, &headers).await?;
     let username = request.username.clone();
-    if let Err(error) = verify_auth_challenge(
-        &state,
-        &request.captcha_challenge_id,
-        &request.captcha_code,
-    ) {
-        let message = error.source.to_string();
-        let action = if message.contains("not found") {
-            "system.auth.captcha.missing"
-        } else if message.contains("expired") {
-            "system.auth.captcha.expired"
-        } else {
-            "system.auth.captcha.invalid"
-        };
-        record_auth_failure_event(&state, &attempt_key, &request.username, action, &message).await?;
-        return Err(error);
-    }
     let response = match state
         .services
         .auth
@@ -2485,11 +2380,21 @@ pub(crate) async fn system_auth_login(
     };
     let recovered = clear_auth_failures(&state, &attempt_key)?;
     if recovered {
-        audit_auth_event(&state, &response.session.user_id, "system.auth.recovered", "cleared")
-            .await?;
-    }
-    audit_auth_event(&state, &response.session.user_id, "system.auth.login.success", "success")
+        audit_auth_event(
+            &state,
+            &response.session.user_id,
+            "system.auth.recovered",
+            "cleared",
+        )
         .await?;
+    }
+    audit_auth_event(
+        &state,
+        &response.session.user_id,
+        "system.auth.login.success",
+        "success",
+    )
+    .await?;
     let session = build_enterprise_session_summary(&state, &response.session).await?;
     Ok(Json(EnterpriseAuthSuccessPayload {
         session,
@@ -2506,22 +2411,6 @@ pub(crate) async fn system_auth_bootstrap_admin(
     let attempt_key =
         ensure_auth_attempt_allowed(&state, &workspace_id, &request.username, &headers).await?;
     let username = request.username.clone();
-    if let Err(error) = verify_auth_challenge(
-        &state,
-        &request.captcha_challenge_id,
-        &request.captcha_code,
-    ) {
-        let message = error.source.to_string();
-        let action = if message.contains("not found") {
-            "system.auth.captcha.missing"
-        } else if message.contains("expired") {
-            "system.auth.captcha.expired"
-        } else {
-            "system.auth.captcha.invalid"
-        };
-        record_auth_failure_event(&state, &attempt_key, &request.username, action, &message).await?;
-        return Err(error);
-    }
     let response = match state
         .services
         .auth
@@ -2551,8 +2440,13 @@ pub(crate) async fn system_auth_bootstrap_admin(
     };
     let recovered = clear_auth_failures(&state, &attempt_key)?;
     if recovered {
-        audit_auth_event(&state, &response.session.user_id, "system.auth.recovered", "cleared")
-            .await?;
+        audit_auth_event(
+            &state,
+            &response.session.user_id,
+            "system.auth.recovered",
+            "cleared",
+        )
+        .await?;
     }
     audit_auth_event(
         &state,
@@ -2621,7 +2515,8 @@ pub(crate) async fn revoke_access_session(
     headers: HeaderMap,
     Path(session_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let session = ensure_authorized_session(&state, &headers, "access.sessions.manage", None).await?;
+    let session =
+        ensure_authorized_session(&state, &headers, "access.sessions.manage", None).await?;
     state.services.auth.revoke_session(&session_id).await?;
     append_session_audit(
         &state,
@@ -2977,7 +2872,8 @@ pub(crate) async fn create_access_role_binding(
     headers: HeaderMap,
     Json(request): Json<RoleBindingUpsertRequest>,
 ) -> Result<Json<RoleBindingRecord>, ApiError> {
-    let session = ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
+    let session =
+        ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
     let record = state
         .services
         .access_control
@@ -3001,7 +2897,8 @@ pub(crate) async fn update_access_role_binding(
     Path(binding_id): Path<String>,
     Json(request): Json<RoleBindingUpsertRequest>,
 ) -> Result<Json<RoleBindingRecord>, ApiError> {
-    let session = ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
+    let session =
+        ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
     let record = state
         .services
         .access_control
@@ -3024,7 +2921,8 @@ pub(crate) async fn delete_access_role_binding(
     headers: HeaderMap,
     Path(binding_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let session = ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
+    let session =
+        ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
     state
         .services
         .access_control
@@ -3057,7 +2955,8 @@ pub(crate) async fn create_access_data_policy(
     headers: HeaderMap,
     Json(request): Json<DataPolicyUpsertRequest>,
 ) -> Result<Json<DataPolicyRecord>, ApiError> {
-    let session = ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
+    let session =
+        ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
     let record = state
         .services
         .access_control
@@ -3081,7 +2980,8 @@ pub(crate) async fn update_access_data_policy(
     Path(policy_id): Path<String>,
     Json(request): Json<DataPolicyUpsertRequest>,
 ) -> Result<Json<DataPolicyRecord>, ApiError> {
-    let session = ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
+    let session =
+        ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
     let record = state
         .services
         .access_control
@@ -3104,7 +3004,8 @@ pub(crate) async fn delete_access_data_policy(
     headers: HeaderMap,
     Path(policy_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let session = ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
+    let session =
+        ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
     state
         .services
         .access_control
@@ -3141,7 +3042,8 @@ pub(crate) async fn create_access_resource_policy(
     headers: HeaderMap,
     Json(request): Json<ResourcePolicyUpsertRequest>,
 ) -> Result<Json<ResourcePolicyRecord>, ApiError> {
-    let session = ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
+    let session =
+        ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
     let record = state
         .services
         .access_control
@@ -3165,7 +3067,8 @@ pub(crate) async fn update_access_resource_policy(
     Path(policy_id): Path<String>,
     Json(request): Json<ResourcePolicyUpsertRequest>,
 ) -> Result<Json<ResourcePolicyRecord>, ApiError> {
-    let session = ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
+    let session =
+        ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
     let record = state
         .services
         .access_control
@@ -3188,7 +3091,8 @@ pub(crate) async fn delete_access_resource_policy(
     headers: HeaderMap,
     Path(policy_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    let session = ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
+    let session =
+        ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
     state
         .services
         .access_control
@@ -3330,7 +3234,9 @@ pub(crate) async fn list_access_protected_resources(
     headers: HeaderMap,
 ) -> Result<Json<Vec<ProtectedResourceDescriptor>>, ApiError> {
     ensure_authorized_session(&state, &headers, "access.policies.read", None).await?;
-    Ok(Json(build_access_protected_resource_descriptors(&state).await?))
+    Ok(Json(
+        build_access_protected_resource_descriptors(&state).await?,
+    ))
 }
 
 pub(crate) async fn upsert_access_protected_resource(
@@ -3339,7 +3245,8 @@ pub(crate) async fn upsert_access_protected_resource(
     Path((resource_type, resource_id)): Path<(String, String)>,
     Json(request): Json<ProtectedResourceMetadataUpsertRequest>,
 ) -> Result<Json<ProtectedResourceDescriptor>, ApiError> {
-    let session = ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
+    let session =
+        ensure_authorized_session(&state, &headers, "access.policies.manage", None).await?;
     let _ = build_access_protected_resource_descriptors(&state)
         .await?
         .into_iter()
@@ -3362,7 +3269,9 @@ pub(crate) async fn upsert_access_protected_resource(
     let record = build_access_protected_resource_descriptors(&state)
         .await?
         .into_iter()
-        .find(|descriptor| descriptor.resource_type == resource_type && descriptor.id == resource_id)
+        .find(|descriptor| {
+            descriptor.resource_type == resource_type && descriptor.id == resource_id
+        })
         .ok_or_else(|| ApiError::from(AppError::not_found("protected resource")))?;
     Ok(Json(record))
 }
@@ -3372,6 +3281,7 @@ pub(crate) async fn list_access_audit(
     headers: HeaderMap,
     Query(query): Query<AccessAuditQuery>,
 ) -> Result<Json<AccessAuditListResponse>, ApiError> {
+    const PAGE_SIZE: usize = 50;
     ensure_authorized_session(&state, &headers, "audit.read", None).await?;
     let mut items = state.services.observation.list_audit_records().await?;
     items.sort_by(|left, right| right.created_at.cmp(&left.created_at));
@@ -3402,8 +3312,9 @@ pub(crate) async fn list_access_audit(
     if let Some(cursor) = query.cursor.as_deref() {
         items.retain(|record| record.created_at.to_string().as_str() < cursor);
     }
-    const PAGE_SIZE: usize = 50;
-    let next_cursor = items.get(PAGE_SIZE).map(|record| record.created_at.to_string());
+    let next_cursor = items
+        .get(PAGE_SIZE)
+        .map(|record| record.created_at.to_string());
     items.truncate(PAGE_SIZE);
     Ok(Json(AccessAuditListResponse { items, next_cursor }))
 }

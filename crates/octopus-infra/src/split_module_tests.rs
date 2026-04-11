@@ -86,3 +86,56 @@ fn workspace_bootstrap_hard_resets_legacy_access_control_tables_with_data() {
     assert_eq!(role_bindings_count, 0);
     assert_eq!(data_policies_count, 0);
 }
+
+#[test]
+fn workspace_bootstrap_hard_resets_legacy_sessions_table_shape() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let paths = workspace_paths::WorkspacePaths::new(temp.path());
+    paths.ensure_layout().expect("layout");
+
+    let connection = Connection::open(&paths.db_path).expect("db");
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE sessions (
+              id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              client_app_id TEXT NOT NULL,
+              token TEXT NOT NULL UNIQUE,
+              status TEXT NOT NULL,
+              role_ids TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              expires_at INTEGER
+            );
+            ",
+        )
+        .expect("seed legacy sessions");
+
+    bootstrap::initialize_workspace(temp.path()).expect("workspace initialized");
+
+    let connection = Connection::open(&paths.db_path).expect("db");
+    let mut pragma = connection
+        .prepare("PRAGMA table_info(sessions)")
+        .expect("pragma sessions");
+    let columns = pragma
+        .query_map([], |row| row.get::<_, String>(1))
+        .expect("query columns")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("collect columns");
+
+    assert!(!columns.iter().any(|column| column == "role_ids"));
+    assert_eq!(
+        columns,
+        vec![
+            "id",
+            "workspace_id",
+            "user_id",
+            "client_app_id",
+            "token",
+            "status",
+            "created_at",
+            "expires_at",
+        ]
+    );
+}

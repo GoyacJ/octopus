@@ -7,7 +7,6 @@ import type {
   AgentRecord,
   AutomationRecord,
   AuthorizationSnapshot,
-  CaptchaChallenge,
   ChangeCurrentUserPasswordResponse,
   CredentialBinding,
   DataPolicyRecord,
@@ -83,14 +82,6 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
             session: context.session,
           },
         ) as SystemAuthStatus
-      },
-      async createCaptcha() {
-        return await fetchWorkspaceOpenApi(
-          context.connection,
-          '/api/v1/system/auth/captcha',
-          'post',
-          {},
-        ) as CaptchaChallenge
       },
       async login(input) {
         return await fetchWorkspaceOpenApi(

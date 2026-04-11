@@ -57,7 +57,6 @@ async fn main() -> Result<(), AppError> {
         host_auth_token: args.auth_token.clone(),
         transport_security: "loopback".into(),
         idempotency_cache: Arc::new(Mutex::new(HashMap::new())),
-        auth_captcha_challenges: Arc::new(Mutex::new(HashMap::new())),
         auth_rate_limits: Arc::new(Mutex::new(HashMap::new())),
         host_state: HostState {
             platform: args.host_platform.clone(),

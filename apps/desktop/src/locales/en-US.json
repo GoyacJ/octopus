@@ -130,22 +130,18 @@
       "avatar": "Avatar",
       "avatarHint": "PNG, JPEG, and WEBP are supported. Avatar is required.",
       "password": "Password",
-      "confirmPassword": "Confirm password",
-      "captcha": "Captcha",
-      "captchaHint": "Enter the captcha challenge code."
+      "confirmPassword": "Confirm password"
     },
     "actions": {
       "login": "Sign in",
       "register": "Register and continue",
-      "pickAvatar": "Choose avatar",
-      "refreshCaptcha": "Refresh captcha"
+      "pickAvatar": "Choose avatar"
     },
     "validation": {
       "usernameRequired": "Enter a username.",
       "displayNameRequired": "Enter a display name.",
       "avatarRequired": "Choose an avatar image.",
       "passwordRequired": "Enter a password.",
-      "captchaRequired": "Enter the captcha code.",
       "passwordMinLength": "Password must be at least 8 characters.",
       "passwordMismatch": "Passwords do not match."
     }
@@ -157,24 +153,20 @@
     "fields": {
       "baseUrl": "Workspace URL",
       "username": "Username",
-      "password": "Password",
-      "captcha": "Captcha",
-      "captchaHint": "Enter the image captcha before connecting."
+      "password": "Password"
     },
     "placeholders": {
       "baseUrl": "https://workspace.example.com"
     },
     "actions": {
       "trigger": "Add or connect workspace",
-      "submit": "Connect and continue",
-      "refreshCaptcha": "Refresh captcha"
+      "submit": "Connect and continue"
     },
     "validation": {
       "baseUrlRequired": "Enter a workspace URL.",
       "baseUrlInvalid": "Enter a valid workspace URL.",
       "usernameRequired": "Enter a username.",
-      "passwordRequired": "Enter a password.",
-      "captchaRequired": "Enter the captcha code."
+      "passwordRequired": "Enter a password."
     }
   },
   "searchOverlay": {

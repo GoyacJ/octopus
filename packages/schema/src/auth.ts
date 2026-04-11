@@ -1,6 +1,5 @@
 import type {
   AvatarUploadPayload as OpenApiAvatarUploadPayload,
-  CaptchaChallenge as OpenApiCaptchaChallenge,
   EnterpriseAuthSuccess as OpenApiEnterpriseAuthSuccess,
   EnterpriseLoginRequest as OpenApiEnterpriseLoginRequest,
   EnterprisePrincipal as OpenApiEnterprisePrincipal,
@@ -11,7 +10,6 @@ import type {
 } from './generated'
 
 export type AvatarUploadPayload = OpenApiAvatarUploadPayload
-export type CaptchaChallenge = OpenApiCaptchaChallenge
 export type EnterpriseAuthSuccess = OpenApiEnterpriseAuthSuccess
 export type EnterpriseLoginRequest = OpenApiEnterpriseLoginRequest
 export type EnterprisePrincipal = OpenApiEnterprisePrincipal

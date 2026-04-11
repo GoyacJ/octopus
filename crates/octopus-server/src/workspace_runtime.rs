@@ -127,9 +127,13 @@ async fn resource_authorization_request(
             owner_subject_type: None,
             owner_subject_id: None,
         },
-        protected_resource_metadata(state, "resource", &record.id).await?.as_ref(),
+        protected_resource_metadata(state, "resource", &record.id)
+            .await?
+            .as_ref(),
     );
-    Ok(authorization_request_from_descriptor(session, capability, descriptor))
+    Ok(authorization_request_from_descriptor(
+        session, capability, descriptor,
+    ))
 }
 
 fn resource_input_authorization_request(
@@ -170,9 +174,13 @@ async fn knowledge_authorization_request(
             owner_subject_type: None,
             owner_subject_id: None,
         },
-        protected_resource_metadata(state, "knowledge", &record.id).await?.as_ref(),
+        protected_resource_metadata(state, "knowledge", &record.id)
+            .await?
+            .as_ref(),
     );
-    Ok(authorization_request_from_descriptor(session, capability, descriptor))
+    Ok(authorization_request_from_descriptor(
+        session, capability, descriptor,
+    ))
 }
 
 async fn agent_authorization_request(
@@ -193,9 +201,13 @@ async fn agent_authorization_request(
             owner_subject_type: None,
             owner_subject_id: None,
         },
-        protected_resource_metadata(state, "agent", &record.id).await?.as_ref(),
+        protected_resource_metadata(state, "agent", &record.id)
+            .await?
+            .as_ref(),
     );
-    Ok(authorization_request_from_descriptor(session, capability, descriptor))
+    Ok(authorization_request_from_descriptor(
+        session, capability, descriptor,
+    ))
 }
 
 fn agent_input_authorization_request(
@@ -268,7 +280,9 @@ async fn tool_record_authorization_request(
             .await?
             .as_ref(),
     );
-    Ok(authorization_request_from_descriptor(session, capability, descriptor))
+    Ok(authorization_request_from_descriptor(
+        session, capability, descriptor,
+    ))
 }
 
 async fn skill_authorization_request(
@@ -295,7 +309,9 @@ async fn skill_authorization_request(
                     .await?
                     .as_ref(),
             );
-            Ok(authorization_request_from_descriptor(session, capability, descriptor))
+            Ok(authorization_request_from_descriptor(
+                session, capability, descriptor,
+            ))
         }
         None => Ok(capability_authorization_request(
             &session.user_id,
@@ -336,7 +352,9 @@ async fn mcp_server_authorization_request(
                     .await?
                     .as_ref(),
             );
-            Ok(authorization_request_from_descriptor(session, capability, descriptor))
+            Ok(authorization_request_from_descriptor(
+                session, capability, descriptor,
+            ))
         }
         None => Ok(capability_authorization_request(
             &session.user_id,
@@ -1871,8 +1889,13 @@ pub(crate) async fn delete_workspace_skill_route(
     authorize_request(
         &state,
         &session,
-        &skill_authorization_request(&state, &session, "tool.skill.delete", Some(skill_id.as_str()))
-            .await?,
+        &skill_authorization_request(
+            &state,
+            &session,
+            "tool.skill.delete",
+            Some(skill_id.as_str()),
+        )
+        .await?,
         &request_id(&headers),
     )
     .await?;
@@ -1893,8 +1916,13 @@ pub(crate) async fn get_workspace_mcp_server_route(
     authorize_request(
         &state,
         &session,
-        &mcp_server_authorization_request(&state, &session, "tool.mcp.view", Some(server_name.as_str()))
-            .await?,
+        &mcp_server_authorization_request(
+            &state,
+            &session,
+            "tool.mcp.view",
+            Some(server_name.as_str()),
+        )
+        .await?,
         &request_id(&headers),
     )
     .await?;
@@ -1967,8 +1995,13 @@ pub(crate) async fn delete_workspace_mcp_server_route(
     authorize_request(
         &state,
         &session,
-        &mcp_server_authorization_request(&state, &session, "tool.mcp.delete", Some(server_name.as_str()))
-            .await?,
+        &mcp_server_authorization_request(
+            &state,
+            &session,
+            "tool.mcp.delete",
+            Some(server_name.as_str()),
+        )
+        .await?,
         &request_id(&headers),
     )
     .await?;

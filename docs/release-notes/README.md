@@ -37,6 +37,7 @@ Examples:
 
 - preview releases may be generated entirely from fragments plus Git history
 - preview notes must clearly state that they come from `main` and are not stable guarantees
+- preview notes default to `latest formal tag -> current preview tag` as the change range unless `--since-ref` is provided
 - `internal-*` and `governance-*` fragments may appear in preview notes
 
 ## Lifecycle

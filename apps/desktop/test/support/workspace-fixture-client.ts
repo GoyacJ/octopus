@@ -1057,17 +1057,6 @@ export function createWorkspaceClientFixture(
           workspace: clone(workspaceState.workspace),
           bootstrapAdminRequired: !workspaceState.systemBootstrap.ownerReady,
           ownerReady: workspaceState.systemBootstrap.ownerReady,
-          captcha: {
-            required: true,
-            ttlSeconds: 300,
-          },
-        }
-      },
-      async createCaptcha() {
-        return {
-          challengeId: `captcha-${connection.workspaceId || 'remote'}`,
-          svgData: '<svg data-code="ABCD"></svg>',
-          expiresAt: Date.now() + 60_000,
         }
       },
       async login(request) {

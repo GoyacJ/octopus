@@ -214,8 +214,6 @@ describe('workspace client transport', () => {
 
     const requestBody: RegisterBootstrapAdminRequest = {
       clientAppId: 'octopus-desktop',
-      captchaChallengeId: 'captcha-1',
-      captchaCode: '1234',
       username: 'owner',
       displayName: 'Workspace Owner',
       password: 'owner-owner',

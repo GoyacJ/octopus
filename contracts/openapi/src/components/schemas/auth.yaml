@@ -1,14 +1,3 @@
-CaptchaPolicy:
-  additionalProperties: false
-  properties:
-    required:
-      type: boolean
-    ttlSeconds:
-      type: integer
-  required:
-    - required
-    - ttlSeconds
-  type: object
 EnterprisePrincipal:
   additionalProperties: false
   properties:
@@ -63,29 +52,12 @@ SystemAuthStatus:
       type: boolean
     ownerReady:
       type: boolean
-    captcha:
-      $ref: "#/components/schemas/CaptchaPolicy"
     session:
       $ref: "#/components/schemas/EnterpriseSessionSummary"
   required:
     - workspace
     - bootstrapAdminRequired
     - ownerReady
-    - captcha
-  type: object
-CaptchaChallenge:
-  additionalProperties: false
-  properties:
-    challengeId:
-      type: string
-    svgData:
-      type: string
-    expiresAt:
-      type: integer
-  required:
-    - challengeId
-    - svgData
-    - expiresAt
   type: object
 EnterpriseLoginRequest:
   additionalProperties: false
@@ -96,18 +68,12 @@ EnterpriseLoginRequest:
       type: string
     password:
       type: string
-    captchaChallengeId:
-      type: string
-    captchaCode:
-      type: string
     workspaceId:
       type: string
   required:
     - clientAppId
     - username
     - password
-    - captchaChallengeId
-    - captchaCode
   type: object
 RegisterBootstrapAdminRequest:
   additionalProperties: false
@@ -124,10 +90,6 @@ RegisterBootstrapAdminRequest:
       type: string
     avatar:
       $ref: "#/components/schemas/AvatarUploadPayload"
-    captchaChallengeId:
-      type: string
-    captchaCode:
-      type: string
     workspaceId:
       type: string
   required:
@@ -137,8 +99,6 @@ RegisterBootstrapAdminRequest:
     - password
     - confirmPassword
     - avatar
-    - captchaChallengeId
-    - captchaCode
   type: object
 EnterpriseAuthSuccess:
   additionalProperties: false

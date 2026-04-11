@@ -57,6 +57,7 @@ Because `apps/desktop/src-tauri/tauri.conf.json` bundles `bin/octopus-desktop-ba
 - preview releases do not rewrite `VERSION`; they derive a unique prerelease tag as `vX.Y.Z-preview.<run_number>`
 - preview releases reuse the same metadata normalization, artifact collection, checksum generation, and per-platform artifact verification gates as formal releases
 - preview GitHub Releases are published as `prerelease=true` and are not marked as latest
+- preview release notes default their change range to the latest formal `vX.Y.Z` tag unless `--since-ref` is supplied explicitly
   - `release-artifacts/metadata/*`
   - `release-artifacts/SHA256SUMS.txt`
 

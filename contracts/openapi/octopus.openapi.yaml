@@ -2481,22 +2481,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
-  /api/v1/system/auth/captcha:
-    post:
-      operationId: createSystemAuthCaptcha
-      responses:
-        "200":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CaptchaChallenge"
-          description: Captcha challenge payload.
-        default:
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorEnvelope"
-          description: API error envelope.
   /api/v1/system/auth/login:
     post:
       operationId: systemAuthLogin
@@ -4203,31 +4187,6 @@ components:
         - capabilityId
         - label
       type: object
-    CaptchaChallenge:
-      additionalProperties: false
-      properties:
-        challengeId:
-          type: string
-        expiresAt:
-          type: integer
-        svgData:
-          type: string
-      required:
-        - challengeId
-        - svgData
-        - expiresAt
-      type: object
-    CaptchaPolicy:
-      additionalProperties: false
-      properties:
-        required:
-          type: boolean
-        ttlSeconds:
-          type: integer
-      required:
-        - required
-        - ttlSeconds
-      type: object
     ChangeCurrentUserPasswordRequest:
       additionalProperties: false
       properties:
@@ -4620,10 +4579,6 @@ components:
     EnterpriseLoginRequest:
       additionalProperties: false
       properties:
-        captchaChallengeId:
-          type: string
-        captchaCode:
-          type: string
         clientAppId:
           type: string
         password:
@@ -4636,8 +4591,6 @@ components:
         - clientAppId
         - username
         - password
-        - captchaChallengeId
-        - captchaCode
       type: object
     EnterprisePrincipal:
       additionalProperties: false
@@ -6270,10 +6223,6 @@ components:
       properties:
         avatar:
           $ref: "#/components/schemas/AvatarUploadPayload"
-        captchaChallengeId:
-          type: string
-        captchaCode:
-          type: string
         clientAppId:
           type: string
         confirmPassword:
@@ -6293,8 +6242,6 @@ components:
         - password
         - confirmPassword
         - avatar
-        - captchaChallengeId
-        - captchaCode
       type: object
     ResolvedExecutionTarget:
       additionalProperties: false
@@ -7138,8 +7085,6 @@ components:
       properties:
         bootstrapAdminRequired:
           type: boolean
-        captcha:
-          $ref: "#/components/schemas/CaptchaPolicy"
         ownerReady:
           type: boolean
         session:
@@ -7150,7 +7095,6 @@ components:
         - workspace
         - bootstrapAdminRequired
         - ownerReady
-        - captcha
       type: object
     SystemBootstrapStatus:
       additionalProperties: false

@@ -364,7 +364,7 @@ resetAssignmentForm()
             <article
               v-for="unit in accessControlStore.orgUnits"
               :key="unit.id"
-              class="rounded-[12px] border border-border bg-card p-4"
+              class="rounded-[var(--radius-l)] border border-border bg-card p-4"
             >
               <div class="flex items-start justify-between gap-3">
                 <div>
@@ -394,7 +394,7 @@ resetAssignmentForm()
 
       <UiPanelFrame variant="panel" padding="md" title="岗位与用户组" subtitle="岗位、用户组用于组织归属和角色绑定扩展。">
         <div class="grid gap-4">
-          <section class="space-y-3 rounded-[12px] border border-border bg-muted/30 p-4">
+          <section class="space-y-3 rounded-[var(--radius-l)] border border-border bg-muted/30 p-4">
             <div class="grid gap-3 md:grid-cols-3">
               <UiField label="岗位编码">
                 <UiInput v-model="positionForm.code" />
@@ -416,7 +416,7 @@ resetAssignmentForm()
               <article
                 v-for="position in accessControlStore.positions"
                 :key="position.id"
-                class="flex items-center justify-between rounded-[8px] border border-border bg-card px-3 py-2"
+                class="flex items-center justify-between rounded-[var(--radius-m)] border border-border bg-card px-3 py-2"
               >
                 <div>
                   <div class="text-sm font-medium text-foreground">{{ position.name }}</div>
@@ -431,7 +431,7 @@ resetAssignmentForm()
             <p v-else class="text-sm text-muted-foreground">暂无岗位。</p>
           </section>
 
-          <section class="space-y-3 rounded-[12px] border border-border bg-muted/30 p-4">
+          <section class="space-y-3 rounded-[var(--radius-l)] border border-border bg-muted/30 p-4">
             <div class="grid gap-3 md:grid-cols-3">
               <UiField label="用户组编码">
                 <UiInput v-model="groupForm.code" />
@@ -453,7 +453,7 @@ resetAssignmentForm()
               <article
                 v-for="group in accessControlStore.userGroups"
                 :key="group.id"
-                class="flex items-center justify-between rounded-[8px] border border-border bg-card px-3 py-2"
+                class="flex items-center justify-between rounded-[var(--radius-m)] border border-border bg-card px-3 py-2"
               >
                 <div>
                   <div class="text-sm font-medium text-foreground">{{ group.name }}</div>
@@ -473,7 +473,7 @@ resetAssignmentForm()
 
     <UiPanelFrame variant="panel" padding="md" title="用户组织归属" subtitle="支持主部门、附属部门、岗位、用户组的组合归属。">
       <div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-        <div class="space-y-4 rounded-[12px] border border-border bg-muted/30 p-4">
+        <div class="space-y-4 rounded-[var(--radius-l)] border border-border bg-muted/30 p-4">
           <div class="grid gap-3 md:grid-cols-2">
             <UiField label="用户">
               <UiSelect v-model="assignmentForm.userId" :options="userOptions" data-testid="access-control-assignment-user" />
@@ -484,7 +484,7 @@ resetAssignmentForm()
           </div>
           <div class="grid gap-3 md:grid-cols-2">
             <UiField label="岗位">
-              <div class="grid gap-2 rounded-[8px] border border-border bg-card p-3">
+              <div class="grid gap-2 rounded-[var(--radius-m)] border border-border bg-card p-3">
                 <UiCheckbox
                   v-for="position in accessControlStore.positions"
                   :key="position.id"
@@ -497,7 +497,7 @@ resetAssignmentForm()
               </div>
             </UiField>
             <UiField label="用户组">
-              <div class="grid gap-2 rounded-[8px] border border-border bg-card p-3">
+              <div class="grid gap-2 rounded-[var(--radius-m)] border border-border bg-card p-3">
                 <UiCheckbox
                   v-for="group in accessControlStore.userGroups"
                   :key="group.id"
@@ -523,7 +523,7 @@ resetAssignmentForm()
           <article
             v-for="assignment in accessControlStore.userOrgAssignments"
             :key="`${assignment.userId}:${assignment.orgUnitId}`"
-            class="rounded-[12px] border border-border bg-card p-4 text-sm"
+            class="rounded-[var(--radius-l)] border border-border bg-card p-4 text-sm"
           >
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="space-y-1">

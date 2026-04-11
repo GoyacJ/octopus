@@ -131,7 +131,7 @@ async function handleDelete(roleId: string) {
           <article
             v-for="role in accessControlStore.roles"
             :key="role.id"
-            class="rounded-[12px] border border-border bg-card p-4"
+            class="rounded-[var(--radius-l)] border border-border bg-card p-4"
           >
             <div class="flex items-start justify-between gap-3">
               <div>
@@ -194,7 +194,7 @@ async function handleDelete(roleId: string) {
           </div>
 
           <UiField label="权限目录绑定">
-            <div class="grid gap-2 rounded-[8px] border border-border bg-muted/35 p-3">
+            <div class="grid gap-2 rounded-[var(--radius-m)] border border-border bg-muted/35 p-3">
               <UiCheckbox
                 v-for="permission in accessControlStore.permissionDefinitions"
                 :key="permission.code"

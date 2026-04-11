@@ -114,6 +114,7 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
     let connection =
         Connection::open(&paths.db_path).map_err(|error| AppError::database(error.to_string()))?;
     drop_legacy_access_control_tables(&connection)?;
+    reset_legacy_sessions_table(&connection)?;
 
     connection
         .execute_batch(
@@ -1112,6 +1113,48 @@ fn drop_legacy_access_control_tables(connection: &Connection) -> Result<(), AppE
             .execute(&format!("DROP TABLE IF EXISTS {table}"), [])
             .map_err(|error| AppError::database(error.to_string()))?;
     }
+    Ok(())
+}
+
+fn reset_legacy_sessions_table(connection: &Connection) -> Result<(), AppError> {
+    let table_exists = connection
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sessions' LIMIT 1",
+            [],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(|error| AppError::database(error.to_string()))?
+        .is_some();
+    if !table_exists {
+        return Ok(());
+    }
+
+    let expected_columns = [
+        "id",
+        "workspace_id",
+        "user_id",
+        "client_app_id",
+        "token",
+        "status",
+        "created_at",
+        "expires_at",
+    ];
+    let mut pragma = connection
+        .prepare("PRAGMA table_info(sessions)")
+        .map_err(|error| AppError::database(error.to_string()))?;
+    let columns = pragma
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|error| AppError::database(error.to_string()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| AppError::database(error.to_string()))?;
+
+    if columns != expected_columns {
+        connection
+            .execute("DROP TABLE sessions", [])
+            .map_err(|error| AppError::database(error.to_string()))?;
+    }
+
     Ok(())
 }
 

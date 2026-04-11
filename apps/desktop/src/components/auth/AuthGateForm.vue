@@ -7,12 +7,6 @@ import { UiButton, UiField, UiInput } from '@octopus/ui'
 import * as tauriClient from '@/tauri/client'
 import { useAuthStore } from '@/stores/auth'
 
-const props = withDefaults(defineProps<{
-  inline?: boolean
-}>(), {
-  inline: false,
-})
-
 const { t } = useI18n()
 const auth = useAuthStore()
 
@@ -20,7 +14,6 @@ const username = ref('')
 const displayName = ref('')
 const password = ref('')
 const confirmPassword = ref('')
-const captchaCode = ref('')
 const avatarFileName = ref('')
 const avatarPreview = ref('')
 const avatarPayload = ref<Awaited<ReturnType<typeof tauriClient.pickAvatarImage>>>(null)
@@ -28,14 +21,6 @@ const localError = ref('')
 
 const isRegister = computed(() => auth.mode === 'register')
 const activeError = computed(() => localError.value || auth.error)
-const captchaImageSrc = computed(() => {
-  const svgData = auth.captchaChallenge?.svgData
-  if (!svgData) {
-    return ''
-  }
-
-  return `data:image/svg+xml;base64,${window.btoa(unescape(encodeURIComponent(svgData)))}`
-})
 
 watch(
   () => auth.mode,
@@ -43,29 +28,11 @@ watch(
     localError.value = ''
     password.value = ''
     confirmPassword.value = ''
-    captchaCode.value = ''
     if (auth.mode === 'login') {
       displayName.value = ''
       avatarFileName.value = ''
       avatarPreview.value = ''
       avatarPayload.value = null
-    }
-  },
-  { immediate: true },
-)
-
-watch(
-  () => [auth.dialogOpen, auth.isReady, auth.captchaChallenge?.challengeId, props.inline] as const,
-  async ([open, ready, challengeId, inline]) => {
-    if (!ready) {
-      return
-    }
-    if (!open && !inline) {
-      return
-    }
-    captchaCode.value = ''
-    if (!challengeId) {
-      await auth.prepareCaptchaChallenge()
     }
   },
   { immediate: true },
@@ -91,11 +58,6 @@ async function pickAvatar() {
   localError.value = ''
 }
 
-async function refreshCaptcha() {
-  await auth.prepareCaptchaChallenge()
-  captchaCode.value = ''
-}
-
 function validate(): boolean {
   if (!username.value.trim()) {
     localError.value = t('authGate.validation.usernameRequired')
@@ -103,10 +65,6 @@ function validate(): boolean {
   }
   if (!password.value) {
     localError.value = t('authGate.validation.passwordRequired')
-    return false
-  }
-  if (!captchaCode.value.trim()) {
-    localError.value = t('authGate.validation.captchaRequired')
     return false
   }
   if (isRegister.value) {
@@ -144,7 +102,6 @@ async function submit() {
       password: password.value,
       confirmPassword: confirmPassword.value,
       avatar: avatarPayload.value,
-      captchaCode: captchaCode.value,
     })
     return
   }
@@ -152,7 +109,6 @@ async function submit() {
   await auth.login({
     username: username.value.trim(),
     password: password.value,
-    captchaCode: captchaCode.value,
   })
 }
 </script>
@@ -194,26 +150,6 @@ async function submit() {
 
       <UiField v-if="isRegister" :label="t('authGate.fields.confirmPassword')">
         <UiInput v-model="confirmPassword" type="password" autocomplete="new-password" />
-      </UiField>
-
-      <UiField :label="t('authGate.fields.captcha')" :hint="t('authGate.fields.captchaHint')">
-        <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_176px] sm:items-start">
-          <UiInput v-model="captchaCode" autocomplete="one-time-code" />
-          <div class="rounded-[var(--radius-lg)] border border-border bg-subtle p-2">
-            <img
-              v-if="captchaImageSrc"
-              :src="captchaImageSrc"
-              :alt="t('authGate.fields.captcha')"
-              class="h-[52px] w-full rounded-[4px] border border-border/60 bg-white object-contain"
-            >
-            <div v-else class="flex h-[52px] items-center justify-center text-xs text-text-tertiary">
-              {{ t('authGate.actions.refreshCaptcha') }}
-            </div>
-            <UiButton type="button" variant="ghost" class="mt-2 w-full justify-center" @click="refreshCaptcha">
-              {{ t('authGate.actions.refreshCaptcha') }}
-            </UiButton>
-          </div>
-        </div>
       </UiField>
     </div>
 

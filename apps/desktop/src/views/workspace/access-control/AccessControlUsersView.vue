@@ -220,7 +220,7 @@ function userPositionAndGroupLabels(userId: string) {
           <article
             v-for="user in users"
             :key="user.id"
-            class="rounded-[12px] border border-border bg-card p-4"
+            class="rounded-[var(--radius-l)] border border-border bg-card p-4"
           >
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="space-y-1">
@@ -329,7 +329,7 @@ function userPositionAndGroupLabels(userId: string) {
             </UiField>
           </div>
 
-          <div v-if="editingUserId" class="rounded-[8px] border border-border bg-muted/35 p-3">
+          <div v-if="editingUserId" class="rounded-[var(--radius-m)] border border-border bg-muted/35 p-3">
             <UiCheckbox
               v-model="form.resetPassword"
               data-testid="access-control-user-form-reset-password"

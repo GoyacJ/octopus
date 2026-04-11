@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 0a81fa8cad1c034b0b80d9ee713dfaa70466802771d31c639d1c1e62166fbd60
+// Source hash: 565c198945486cfd02b9f066352d12313c38ef0fdbe9662823b7138a6ab11f1b
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "0a81fa8cad1c034b0b80d9ee713dfaa70466802771d31c639d1c1e62166fbd60"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "565c198945486cfd02b9f066352d12313c38ef0fdbe9662823b7138a6ab11f1b"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -169,17 +169,6 @@ export interface CapabilityDescriptor {
   label: string
 }
 
-export interface CaptchaChallenge {
-  challengeId: string
-  expiresAt: number
-  svgData: string
-}
-
-export interface CaptchaPolicy {
-  required: boolean
-  ttlSeconds: number
-}
-
 export interface ChangeCurrentUserPasswordRequest {
   confirmPassword: string
   currentPassword: string
@@ -332,8 +321,6 @@ export interface EnterpriseAuthSuccess {
 }
 
 export interface EnterpriseLoginRequest {
-  captchaChallengeId: string
-  captchaCode: string
   clientAppId: string
   password: string
   username: string
@@ -938,8 +925,6 @@ export interface ProviderConfig {
 
 export interface RegisterBootstrapAdminRequest {
   avatar: AvatarUploadPayload
-  captchaChallengeId: string
-  captchaCode: string
   clientAppId: string
   confirmPassword: string
   displayName: string
@@ -1267,7 +1252,6 @@ export interface SubmitRuntimeTurnInput {
 
 export interface SystemAuthStatus {
   bootstrapAdminRequired: boolean
-  captcha: CaptchaPolicy
   ownerReady: boolean
   session?: EnterpriseSessionSummary
   workspace: WorkspaceSummary
@@ -1952,9 +1936,6 @@ export interface OctopusApiPaths {
   }
   "/api/v1/system/auth/bootstrap-admin": {
     post: { operationId: "registerBootstrapAdmin"; response: EnterpriseAuthSuccess; error: ApiErrorEnvelope }
-  }
-  "/api/v1/system/auth/captcha": {
-    post: { operationId: "createSystemAuthCaptcha"; response: CaptchaChallenge; error: ApiErrorEnvelope }
   }
   "/api/v1/system/auth/login": {
     post: { operationId: "systemAuthLogin"; response: EnterpriseAuthSuccess; error: ApiErrorEnvelope }

@@ -30,9 +30,8 @@ use octopus_core::{
     timestamp_now, AccessAuditListResponse, AccessAuditQuery, AccessRoleRecord,
     AccessSessionRecord, AccessUserRecord, AccessUserUpsertRequest, AgentRecord, ApiErrorDetail,
     ApiErrorEnvelope, AppError, AuditRecord, AuthorizationRequest, AuthorizationSnapshot,
-    AutomationRecord,
-    ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse, ClientAppRecord,
-    ConnectionProfile, ConversationRecord, CopyWorkspaceSkillToManagedInput,
+    AutomationRecord, ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse,
+    ClientAppRecord, ConnectionProfile, ConversationRecord, CopyWorkspaceSkillToManagedInput,
     CreateHostWorkspaceConnectionInput, CreateMenuPolicyRequest, CreateNotificationInput,
     CreateProjectRequest, CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput,
     CreateWorkspaceSkillInput, DataPolicyRecord, DataPolicyUpsertRequest, DesktopBackendConnection,
@@ -49,8 +48,7 @@ use octopus_core::{
     ProjectTeamLinkRecord, ProtectedResourceDescriptor, ProtectedResourceMetadataUpsertRequest,
     ProviderCredentialRecord, RegisterBootstrapAdminRequest, ResolveRuntimeApprovalInput,
     ResourceActionGrant, ResourcePolicyRecord, ResourcePolicyUpsertRequest, RoleBindingRecord,
-    RoleBindingUpsertRequest, RoleUpsertRequest, RuntimeConfigPatch,
-    RuntimeConfigValidationResult,
+    RoleBindingUpsertRequest, RoleUpsertRequest, RuntimeConfigPatch, RuntimeConfigValidationResult,
     RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
     SavePetPresenceInput, SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput,
     TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
@@ -75,7 +73,6 @@ pub struct ServerState {
     pub host_auth_token: String,
     pub transport_security: String,
     pub idempotency_cache: Arc<Mutex<HashMap<String, serde_json::Value>>>,
-    pub auth_captcha_challenges: Arc<Mutex<HashMap<String, AuthCaptchaChallenge>>>,
     pub auth_rate_limits: Arc<Mutex<HashMap<String, AuthRateLimitState>>>,
     pub host_state: HostState,
     pub host_connections: Vec<ConnectionProfile>,
@@ -83,13 +80,6 @@ pub struct ServerState {
     pub host_workspace_connections_path: PathBuf,
     pub host_default_preferences: ShellPreferences,
     pub backend_connection: DesktopBackendConnection,
-}
-
-#[derive(Clone, Debug)]
-pub struct AuthCaptchaChallenge {
-    challenge_id: String,
-    code: String,
-    expires_at: u64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -475,10 +465,8 @@ async fn authorize_request(
             .resource_type
             .as_deref()
             .unwrap_or("authorization");
-        let resource = audit_resource_label(
-            resource_type,
-            authorization_request.resource_id.as_deref(),
-        );
+        let resource =
+            audit_resource_label(resource_type, authorization_request.resource_id.as_deref());
         let outcome = if decision.allowed {
             "allowed".to_string()
         } else {
@@ -666,18 +654,18 @@ fn auth_rate_limit_key(workspace_id: &str, username: &str, headers: &HeaderMap) 
     )
 }
 
-fn check_auth_rate_limit(
-    state: &ServerState,
-    key: &str,
-) -> Result<Option<u64>, ApiError> {
+fn check_auth_rate_limit(state: &ServerState, key: &str) -> Result<Option<u64>, ApiError> {
     let now = timestamp_now();
-    let mut rate_limits = state.auth_rate_limits.lock().map_err(|_| {
-        ApiError::from(AppError::runtime("auth rate-limit mutex poisoned"))
-    })?;
+    let mut rate_limits = state
+        .auth_rate_limits
+        .lock()
+        .map_err(|_| ApiError::from(AppError::runtime("auth rate-limit mutex poisoned")))?;
     let Some(entry) = rate_limits.get_mut(key) else {
         return Ok(None);
     };
-    entry.failed_attempts.retain(|attempt| now.saturating_sub(*attempt) <= AUTH_RATE_LIMIT_WINDOW_SECONDS);
+    entry
+        .failed_attempts
+        .retain(|attempt| now.saturating_sub(*attempt) <= AUTH_RATE_LIMIT_WINDOW_SECONDS);
     if let Some(locked_until) = entry.locked_until {
         if locked_until > now {
             return Ok(Some(locked_until));
@@ -688,16 +676,16 @@ fn check_auth_rate_limit(
     Ok(None)
 }
 
-fn record_auth_failure(
-    state: &ServerState,
-    key: &str,
-) -> Result<Option<u64>, ApiError> {
+fn record_auth_failure(state: &ServerState, key: &str) -> Result<Option<u64>, ApiError> {
     let now = timestamp_now();
-    let mut rate_limits = state.auth_rate_limits.lock().map_err(|_| {
-        ApiError::from(AppError::runtime("auth rate-limit mutex poisoned"))
-    })?;
+    let mut rate_limits = state
+        .auth_rate_limits
+        .lock()
+        .map_err(|_| ApiError::from(AppError::runtime("auth rate-limit mutex poisoned")))?;
     let entry = rate_limits.entry(key.to_string()).or_default();
-    entry.failed_attempts.retain(|attempt| now.saturating_sub(*attempt) <= AUTH_RATE_LIMIT_WINDOW_SECONDS);
+    entry
+        .failed_attempts
+        .retain(|attempt| now.saturating_sub(*attempt) <= AUTH_RATE_LIMIT_WINDOW_SECONDS);
     entry.failed_attempts.push(now);
     if entry.failed_attempts.len() >= AUTH_RATE_LIMIT_MAX_FAILURES {
         let locked_until = now + AUTH_RATE_LIMIT_LOCK_SECONDS;
@@ -708,13 +696,11 @@ fn record_auth_failure(
     Ok(None)
 }
 
-fn clear_auth_failures(
-    state: &ServerState,
-    key: &str,
-) -> Result<bool, ApiError> {
-    let mut rate_limits = state.auth_rate_limits.lock().map_err(|_| {
-        ApiError::from(AppError::runtime("auth rate-limit mutex poisoned"))
-    })?;
+fn clear_auth_failures(state: &ServerState, key: &str) -> Result<bool, ApiError> {
+    let mut rate_limits = state
+        .auth_rate_limits
+        .lock()
+        .map_err(|_| ApiError::from(AppError::runtime("auth rate-limit mutex poisoned")))?;
     Ok(rate_limits.remove(key).is_some())
 }
 

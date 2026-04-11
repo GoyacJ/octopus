@@ -57,10 +57,6 @@ pub fn build_router(state: ServerState) -> Router {
         .route("/api/v1/system/health", get(healthcheck))
         .route("/api/v1/system/bootstrap", get(system_bootstrap))
         .route("/api/v1/system/auth/status", get(system_auth_status))
-        .route(
-            "/api/v1/system/auth/captcha",
-            post(create_system_auth_captcha),
-        )
         .route("/api/v1/system/auth/login", post(system_auth_login))
         .route(
             "/api/v1/system/auth/bootstrap-admin",

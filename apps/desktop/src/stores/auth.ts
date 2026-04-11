@@ -2,7 +2,6 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import type {
-  CaptchaChallenge,
   EnterpriseSessionSummary,
   SystemBootstrapStatus,
   WorkspaceConnectionRecord,
@@ -77,8 +76,6 @@ export const useAuthStore = defineStore('auth', () => {
   const reason = ref<AuthReason>('manual')
   const submitting = ref(false)
   const error = ref('')
-  const captchaChallengeByConnection = ref<Record<string, CaptchaChallenge>>({})
-  const connectionCaptchaState = ref<{ baseUrl: string, challenge: CaptchaChallenge } | null>(null)
 
   const activeConnectionId = computed(() => shell.activeWorkspaceConnectionId)
   const activeConnection = computed(() => shell.activeWorkspaceConnection)
@@ -94,10 +91,6 @@ export const useAuthStore = defineStore('auth', () => {
   const bootstrapping = computed(() =>
     activeConnectionId.value ? bootstrappingByConnection.value[activeConnectionId.value] ?? false : false,
   )
-  const captchaChallenge = computed(() =>
-    activeConnectionId.value ? captchaChallengeByConnection.value[activeConnectionId.value] ?? null : null,
-  )
-  const connectionCaptcha = computed(() => connectionCaptchaState.value?.challenge ?? null)
 
   function resolveConnection(workspaceConnectionId?: string): WorkspaceConnectionRecord | null {
     if (workspaceConnectionId) {
@@ -178,31 +171,6 @@ export const useAuthStore = defineStore('auth', () => {
     usePetStore().clearWorkspaceScope(workspaceConnectionId)
   }
 
-  async function prepareCaptchaChallenge(workspaceConnectionId?: string) {
-    const connection = resolveConnection(workspaceConnectionId)
-    if (!connection) {
-      return null
-    }
-
-    const client = tauriClient.createWorkspaceClient({ connection })
-    const challenge = await client.enterpriseAuth.createCaptcha()
-    captchaChallengeByConnection.value = {
-      ...captchaChallengeByConnection.value,
-      [connection.workspaceConnectionId]: challenge,
-    }
-    return challenge
-  }
-
-  function clearCaptchaChallenge(workspaceConnectionId?: string) {
-    const connection = resolveConnection(workspaceConnectionId)
-    if (!connection) {
-      return
-    }
-
-    const { [connection.workspaceConnectionId]: _removed, ...rest } = captchaChallengeByConnection.value
-    captchaChallengeByConnection.value = rest
-  }
-
   function buildProvisionalConnection(baseUrl: string): WorkspaceConnectionRecord {
     const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '')
     return {
@@ -220,27 +188,6 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function prepareConnectionCaptcha(baseUrl: string) {
-    const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, '')
-    if (!normalizedBaseUrl) {
-      connectionCaptchaState.value = null
-      return null
-    }
-
-    const provisionalConnection = buildProvisionalConnection(normalizedBaseUrl)
-    const client = tauriClient.createWorkspaceClient({ connection: provisionalConnection })
-    const challenge = await client.enterpriseAuth.createCaptcha()
-    connectionCaptchaState.value = {
-      baseUrl: normalizedBaseUrl,
-      challenge,
-    }
-    return challenge
-  }
-
-  function clearConnectionCaptcha() {
-    connectionCaptchaState.value = null
-  }
-
   async function applyUnauthenticatedState(
     workspaceConnectionId: string,
     nextReason: AuthReason,
@@ -250,7 +197,6 @@ export const useAuthStore = defineStore('auth', () => {
     shell.clearWorkspaceSession(workspaceConnectionId)
     setAuthenticated(workspaceConnectionId, false)
     markReady(workspaceConnectionId, true)
-    await prepareCaptchaChallenge(workspaceConnectionId)
     openAuthDialog(resolveMode(status), nextReason, workspaceConnectionId)
   }
 
@@ -297,7 +243,6 @@ export const useAuthStore = defineStore('auth', () => {
       )
       setAuthenticated(connectionId, true)
       markReady(connectionId, true)
-      clearCaptchaChallenge(connectionId)
       closeAuthDialog(connectionId)
     } catch (cause) {
       if (isWorkspaceApiError(cause) && (cause.code === 'UNAUTHENTICATED' || cause.code === 'SESSION_EXPIRED')) {
@@ -325,7 +270,6 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(input: {
     username: string
     password: string
-    captchaCode: string
   }, workspaceConnectionId?: string) {
     const connection = resolveConnection(workspaceConnectionId)
     if (!connection) {
@@ -335,20 +279,12 @@ export const useAuthStore = defineStore('auth', () => {
     submitting.value = true
     error.value = ''
     try {
-      const challenge = captchaChallengeByConnection.value[connection.workspaceConnectionId]
-        ?? await prepareCaptchaChallenge(connection.workspaceConnectionId)
-      if (!challenge) {
-        throw new Error('Captcha challenge is unavailable')
-      }
-
       const client = tauriClient.createWorkspaceClient({ connection })
       const response = await client.enterpriseAuth.login({
         clientAppId: 'octopus-desktop',
         workspaceId: connection.workspaceId,
         username: input.username.trim(),
         password: input.password,
-        captchaChallengeId: challenge.challengeId,
-        captchaCode: input.captchaCode.trim(),
       })
       shell.setWorkspaceSession(
         toSessionEnvelope(
@@ -358,7 +294,6 @@ export const useAuthStore = defineStore('auth', () => {
       )
       setAuthenticated(connection.workspaceConnectionId, true)
       markReady(connection.workspaceConnectionId, true)
-      clearCaptchaChallenge(connection.workspaceConnectionId)
       storeBootstrapStatus(
         connection.workspaceConnectionId,
         fallbackBootstrapStatus(connection, {
@@ -388,7 +323,6 @@ export const useAuthStore = defineStore('auth', () => {
       return response
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : 'Failed to login'
-      await prepareCaptchaChallenge(connection.workspaceConnectionId)
       throw cause
     } finally {
       submitting.value = false
@@ -402,7 +336,6 @@ export const useAuthStore = defineStore('auth', () => {
       password: string
       confirmPassword: string
       avatar: NonNullable<Awaited<ReturnType<typeof tauriClient.pickAvatarImage>>>
-      captchaCode: string
     },
     workspaceConnectionId?: string,
   ) {
@@ -414,12 +347,6 @@ export const useAuthStore = defineStore('auth', () => {
     submitting.value = true
     error.value = ''
     try {
-      const challenge = captchaChallengeByConnection.value[connection.workspaceConnectionId]
-        ?? await prepareCaptchaChallenge(connection.workspaceConnectionId)
-      if (!challenge) {
-        throw new Error('Captcha challenge is unavailable')
-      }
-
       const client = tauriClient.createWorkspaceClient({ connection })
       const response = await client.enterpriseAuth.bootstrapAdmin({
         clientAppId: 'octopus-desktop',
@@ -429,8 +356,6 @@ export const useAuthStore = defineStore('auth', () => {
         password: input.password,
         confirmPassword: input.confirmPassword,
         avatar: input.avatar,
-        captchaChallengeId: challenge.challengeId,
-        captchaCode: input.captchaCode.trim(),
       })
       shell.setWorkspaceSession(
         toSessionEnvelope(
@@ -440,7 +365,6 @@ export const useAuthStore = defineStore('auth', () => {
       )
       setAuthenticated(connection.workspaceConnectionId, true)
       markReady(connection.workspaceConnectionId, true)
-      clearCaptchaChallenge(connection.workspaceConnectionId)
       storeBootstrapStatus(
         connection.workspaceConnectionId,
         fallbackBootstrapStatus(connection, {
@@ -470,7 +394,6 @@ export const useAuthStore = defineStore('auth', () => {
       return response
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : 'Failed to register workspace owner'
-      await prepareCaptchaChallenge(connection.workspaceConnectionId)
       throw cause
     } finally {
       submitting.value = false
@@ -522,7 +445,6 @@ export const useAuthStore = defineStore('auth', () => {
     baseUrl: string
     username: string
     password: string
-    captchaCode: string
   }) {
     submitting.value = true
     error.value = ''
@@ -533,12 +455,6 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const bootstrapClient = tauriClient.createWorkspaceClient({ connection: provisionalConnection })
       const status = await bootstrapClient.system.bootstrap()
-      const challenge = connectionCaptchaState.value?.baseUrl === normalizedBaseUrl
-        ? connectionCaptchaState.value.challenge
-        : await prepareConnectionCaptcha(normalizedBaseUrl)
-      if (!challenge) {
-        throw new Error('Captcha challenge is unavailable')
-      }
 
       const authenticatedConnection: WorkspaceConnectionRecord = {
         ...provisionalConnection,
@@ -553,8 +469,6 @@ export const useAuthStore = defineStore('auth', () => {
         workspaceId: status.workspace.id,
         username: input.username.trim(),
         password: input.password,
-        captchaChallengeId: challenge.challengeId,
-        captchaCode: input.captchaCode.trim(),
       })
 
       const persistedConnection = await shell.createWorkspaceConnection({
@@ -572,7 +486,6 @@ export const useAuthStore = defineStore('auth', () => {
       )
       setAuthenticated(persistedConnection.workspaceConnectionId, true)
       markReady(persistedConnection.workspaceConnectionId, true)
-      clearConnectionCaptcha()
       storeBootstrapStatus(
         persistedConnection.workspaceConnectionId,
         fallbackBootstrapStatus(persistedConnection, {
@@ -586,7 +499,6 @@ export const useAuthStore = defineStore('auth', () => {
       return persistedConnection
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : 'Failed to connect workspace'
-      await prepareConnectionCaptcha(normalizedBaseUrl)
       throw cause
     } finally {
       submitting.value = false
@@ -601,18 +513,12 @@ export const useAuthStore = defineStore('auth', () => {
     submitting,
     bootstrapping,
     bootstrapStatus,
-    captchaChallenge,
-    connectionCaptcha,
     isReady,
     isAuthenticated,
     bootstrapAuth,
-    prepareCaptchaChallenge,
-    clearCaptchaChallenge,
     requireLogin,
     login,
     registerOwner,
-    prepareConnectionCaptcha,
-    clearConnectionCaptcha,
     connectWorkspace,
     logout,
     handleAuthError,

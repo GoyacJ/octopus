@@ -8,7 +8,6 @@ import type {
   AgentRecord,
   AutomationRecord,
   AuthorizationSnapshot,
-  CaptchaChallenge,
   CreateMenuPolicyRequest,
   ChangeCurrentUserPasswordRequest,
   ChangeCurrentUserPasswordResponse,
@@ -134,7 +133,6 @@ export interface WorkspaceClient {
   }
   enterpriseAuth: {
     getStatus: () => Promise<SystemAuthStatus>
-    createCaptcha: () => Promise<CaptchaChallenge>
     login: (input: EnterpriseLoginRequest) => Promise<EnterpriseAuthSuccess>
     bootstrapAdmin: (input: RegisterBootstrapAdminRequest) => Promise<EnterpriseAuthSuccess>
     session: () => Promise<EnterpriseSessionSummary>

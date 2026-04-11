@@ -1,6 +1,6 @@
 use super::*;
-use std::collections::BTreeSet;
 use octopus_core::{AuthorizationRequest, DataPolicyRecord};
+use std::collections::BTreeSet;
 
 pub(super) fn to_user_summary(paths: &WorkspacePaths, user: &StoredUser) -> UserRecordSummary {
     UserRecordSummary {
@@ -837,7 +837,8 @@ impl AuthorizationService for InfraAuthorizationService {
             let Some(request_type) = request_type else {
                 return policy_type == "project";
             };
-            policy_type == request_type || (policy_type == "tool" && request_type.starts_with("tool."))
+            policy_type == request_type
+                || (policy_type == "tool" && request_type.starts_with("tool."))
         }
 
         fn resource_policy_action_matches(
@@ -855,6 +856,7 @@ impl AuthorizationService for InfraAuthorizationService {
         let (permission_codes, bindings) =
             resolve_effective_permission_codes(&connection, &session.user_id)?;
         let data_policies = resolve_subject_data_policies(&connection, &session.user_id)?;
+        let all_resource_policies = load_resource_policies(&connection)?;
         let resource_policies = resolve_subject_resource_policies(&connection, &session.user_id)?;
 
         if !permission_codes
@@ -892,10 +894,16 @@ impl AuthorizationService for InfraAuthorizationService {
             _ => BTreeSet::new(),
         };
 
-        let data_policy_matches_scope = |policy: &DataPolicyRecord| match policy.scope_type.as_str() {
+        let data_policy_matches_scope = |policy: &DataPolicyRecord| match policy.scope_type.as_str()
+        {
             "all" | "all-projects" => true,
             "selected-projects" => request_project_id
-                .map(|project_id| policy.project_ids.iter().any(|candidate| candidate == project_id))
+                .map(|project_id| {
+                    policy
+                        .project_ids
+                        .iter()
+                        .any(|candidate| candidate == project_id)
+                })
                 .unwrap_or(false),
             "org-unit-self" => matches!(
                 (request_owner_type, request_owner_id),
@@ -972,6 +980,18 @@ impl AuthorizationService for InfraAuthorizationService {
             request.resource_type.as_deref(),
             request.resource_id.as_deref(),
         ) {
+            let relevant_resource_policies = all_resource_policies
+                .iter()
+                .filter(|policy| {
+                    policy.resource_type == resource_type
+                        && policy.resource_id == resource_id
+                        && resource_policy_action_matches(
+                            &policy.action,
+                            requested_action,
+                            &request.capability,
+                        )
+                })
+                .collect::<Vec<_>>();
             let matching_resource_policies = resource_policies
                 .iter()
                 .filter(|policy| {
@@ -986,7 +1006,7 @@ impl AuthorizationService for InfraAuthorizationService {
                 .collect::<Vec<_>>();
 
             matched_policy_ids.extend(
-                matching_resource_policies
+                relevant_resource_policies
                     .iter()
                     .map(|policy| policy.id.clone()),
             );
@@ -1003,7 +1023,7 @@ impl AuthorizationService for InfraAuthorizationService {
                 });
             }
 
-            if !matching_resource_policies.is_empty()
+            if !relevant_resource_policies.is_empty()
                 && !matching_resource_policies
                     .iter()
                     .any(|policy| policy.effect == "allow")
@@ -1049,15 +1069,19 @@ mod tests {
     fn bootstrap_admin(bundle: &crate::InfraBundle) -> SessionRecord {
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
         runtime
-            .block_on(bundle.auth.register_bootstrap_admin(RegisterBootstrapAdminRequest {
-                client_app_id: "octopus-desktop".into(),
-                username: "owner".into(),
-                display_name: "Owner".into(),
-                password: "password123".into(),
-                confirm_password: "password123".into(),
-                avatar: avatar_payload(),
-                workspace_id: Some("ws-local".into()),
-            }))
+            .block_on(
+                bundle
+                    .auth
+                    .register_bootstrap_admin(RegisterBootstrapAdminRequest {
+                        client_app_id: "octopus-desktop".into(),
+                        username: "owner".into(),
+                        display_name: "Owner".into(),
+                        password: "password123".into(),
+                        confirm_password: "password123".into(),
+                        avatar: avatar_payload(),
+                        workspace_id: Some("ws-local".into()),
+                    }),
+            )
             .expect("bootstrap admin")
             .session
     }
@@ -1068,33 +1092,32 @@ mod tests {
         display_name: &str,
     ) -> SessionRecord {
         let runtime = tokio::runtime::Runtime::new().expect("runtime");
-        runtime
-            .block_on(async {
-                bundle
-                    .access_control
-                    .create_user(AccessUserUpsertRequest {
-                        username: username.into(),
-                        display_name: display_name.into(),
-                        status: "active".into(),
-                        password: Some("password123".into()),
-                        confirm_password: Some("password123".into()),
-                        reset_password: Some(false),
-                    })
-                    .await
-                    .expect("create user");
+        runtime.block_on(async {
+            bundle
+                .access_control
+                .create_user(AccessUserUpsertRequest {
+                    username: username.into(),
+                    display_name: display_name.into(),
+                    status: "active".into(),
+                    password: Some("password123".into()),
+                    confirm_password: Some("password123".into()),
+                    reset_password: Some(false),
+                })
+                .await
+                .expect("create user");
 
-                bundle
-                    .auth
-                    .login(LoginRequest {
-                        client_app_id: "octopus-desktop".into(),
-                        username: username.into(),
-                        password: "password123".into(),
-                        workspace_id: Some("ws-local".into()),
-                    })
-                    .await
-                    .expect("login user")
-                    .session
-            })
+            bundle
+                .auth
+                .login(LoginRequest {
+                    client_app_id: "octopus-desktop".into(),
+                    username: username.into(),
+                    password: "password123".into(),
+                    workspace_id: Some("ws-local".into()),
+                })
+                .await
+                .expect("login user")
+                .session
+        })
     }
 
     #[test]
@@ -1174,7 +1197,10 @@ mod tests {
                 .await
                 .expect("decision");
 
-            assert!(!decision.allowed, "object-scoped allow list should deny unmatched subject");
+            assert!(
+                !decision.allowed,
+                "object-scoped allow list should deny unmatched subject"
+            );
         });
     }
 

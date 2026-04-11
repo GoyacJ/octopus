@@ -32,7 +32,7 @@ import type {
   UserOrgAssignmentUpsertRequest as OpenApiUserOrgAssignmentUpsertRequest,
 } from './generated'
 
-export interface AccessAuditQuery {
+export interface AccessAuditQuery extends Record<string, string | number | boolean | null | undefined> {
   actorId?: string
   action?: string
   resourceType?: string

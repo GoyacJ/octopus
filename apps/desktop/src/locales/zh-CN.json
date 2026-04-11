@@ -130,22 +130,18 @@
       "avatar": "头像",
       "avatarHint": "支持 PNG、JPEG、WEBP，头像为必填。",
       "password": "密码",
-      "confirmPassword": "确认密码",
-      "captcha": "验证码",
-      "captchaHint": "请输入图形验证码。"
+      "confirmPassword": "确认密码"
     },
     "actions": {
       "login": "登录",
       "register": "注册并进入工作区",
-      "pickAvatar": "选择头像",
-      "refreshCaptcha": "刷新验证码"
+      "pickAvatar": "选择头像"
     },
     "validation": {
       "usernameRequired": "请输入用户名。",
       "displayNameRequired": "请输入昵称。",
       "avatarRequired": "请选择头像。",
       "passwordRequired": "请输入密码。",
-      "captchaRequired": "请输入验证码。",
       "passwordMinLength": "密码长度至少 8 位。",
       "passwordMismatch": "两次输入的密码不一致。"
     }
@@ -157,24 +153,20 @@
     "fields": {
       "baseUrl": "工作区地址",
       "username": "用户名",
-      "password": "密码",
-      "captcha": "验证码",
-      "captchaHint": "输入图形验证码后再连接。"
+      "password": "密码"
     },
     "placeholders": {
       "baseUrl": "https://workspace.example.com"
     },
     "actions": {
       "trigger": "新增/连接工作区",
-      "submit": "连接并进入",
-      "refreshCaptcha": "刷新验证码"
+      "submit": "连接并进入"
     },
     "validation": {
       "baseUrlRequired": "请输入工作区地址。",
       "baseUrlInvalid": "请输入合法的工作区地址。",
       "usernameRequired": "请输入用户名。",
-      "passwordRequired": "请输入密码。",
-      "captchaRequired": "请输入验证码。"
+      "passwordRequired": "请输入密码。"
     }
   },
   "searchOverlay": {

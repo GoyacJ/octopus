@@ -174,6 +174,10 @@ function resolveFormalSinceRef(releaseTag) {
     .map((entry) => entry.trim())
     .filter(Boolean)
 
+  return resolveFormalSinceRefFromTags(tags, releaseTag)
+}
+
+export function resolveFormalSinceRefFromTags(tags, releaseTag) {
   if (!tags.length) {
     return null
   }
@@ -186,13 +190,17 @@ function resolveFormalSinceRef(releaseTag) {
   return tags.find((entry) => entry !== releaseTag) ?? null
 }
 
+export function resolvePreviewSinceRefFromTags(tags, releaseTag) {
+  return resolveFormalSinceRefFromTags(tags, releaseTag)
+}
+
 function resolvePreviewSinceRef(releaseTag) {
-  const tags = runGit(['tag', '--list', 'v*-preview.*', '--sort=-creatordate'], { allowFailure: true })
+  const tags = runGit(['tag', '--list', 'v[0-9]*.[0-9]*.[0-9]*', '--sort=-version:refname'], { allowFailure: true })
     .split('\n')
     .map((entry) => entry.trim())
     .filter(Boolean)
 
-  return tags.find((entry) => entry !== releaseTag) ?? null
+  return resolvePreviewSinceRefFromTags(tags, releaseTag)
 }
 
 export function resolveSinceRef({ channel, releaseTag, requestedSinceRef }) {

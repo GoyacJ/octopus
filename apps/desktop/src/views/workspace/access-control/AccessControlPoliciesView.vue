@@ -340,7 +340,7 @@ resetResourcePolicyForm()
           <article
             v-for="permission in accessControlStore.permissionDefinitions"
             :key="permission.code"
-            class="rounded-[12px] border border-border bg-card p-4"
+            class="rounded-[var(--radius-l)] border border-border bg-card p-4"
           >
             <div class="flex flex-wrap items-center gap-2">
               <h3 class="text-sm font-semibold text-foreground">{{ permission.name }}</h3>
@@ -358,7 +358,7 @@ resetResourcePolicyForm()
           <article
             v-for="grant in accessControlStore.currentResourceActionGrants"
             :key="grant.resourceType"
-            class="rounded-[12px] border border-border bg-card p-4"
+            class="rounded-[var(--radius-l)] border border-border bg-card p-4"
           >
             <div class="text-sm font-semibold text-foreground">{{ grant.resourceType }}</div>
             <div class="mt-3 flex flex-wrap gap-2">
@@ -402,7 +402,7 @@ resetResourcePolicyForm()
             <article
               v-for="binding in accessControlStore.roleBindings"
               :key="binding.id"
-              class="rounded-[8px] border border-border bg-card p-3"
+              class="rounded-[var(--radius-m)] border border-border bg-card p-3"
             >
               <div class="flex items-start justify-between gap-2">
                 <div>
@@ -462,7 +462,7 @@ resetResourcePolicyForm()
             <article
               v-for="policy in accessControlStore.dataPolicies"
               :key="policy.id"
-              class="rounded-[8px] border border-border bg-card p-3"
+              class="rounded-[var(--radius-m)] border border-border bg-card p-3"
             >
               <div class="flex items-start justify-between gap-2">
                 <div>
@@ -517,7 +517,7 @@ resetResourcePolicyForm()
             <article
               v-for="policy in accessControlStore.resourcePolicies"
               :key="policy.id"
-              class="rounded-[8px] border border-border bg-card p-3"
+              class="rounded-[var(--radius-m)] border border-border bg-card p-3"
             >
               <div class="flex items-start justify-between gap-2">
                 <div>

@@ -28,7 +28,6 @@ const schema = toTypedSchema(z.object({
   baseUrl: z.string().trim().min(1, t('connectWorkspace.validation.baseUrlRequired')).url(t('connectWorkspace.validation.baseUrlInvalid')),
   username: z.string().trim().min(1, t('connectWorkspace.validation.usernameRequired')),
   password: z.string().min(1, t('connectWorkspace.validation.passwordRequired')),
-  captchaCode: z.string().trim().min(1, t('connectWorkspace.validation.captchaRequired')),
 }))
 
 const { defineField, errors, handleSubmit, resetForm } = useForm({
@@ -37,24 +36,14 @@ const { defineField, errors, handleSubmit, resetForm } = useForm({
     baseUrl: '',
     username: '',
     password: '',
-    captchaCode: '',
   },
 })
 
 const [baseUrl] = defineField('baseUrl')
 const [username] = defineField('username')
 const [password] = defineField('password')
-const [captchaCode] = defineField('captchaCode')
 
 const activeError = computed(() => auth.error)
-const captchaImageSrc = computed(() => {
-  const svgData = auth.connectionCaptcha?.svgData
-  if (!svgData) {
-    return ''
-  }
-
-  return `data:image/svg+xml;base64,${window.btoa(unescape(encodeURIComponent(svgData)))}`
-})
 
 watch(
   () => props.open,
@@ -65,37 +54,12 @@ watch(
           baseUrl: '',
           username: '',
           password: '',
-          captchaCode: '',
         },
       })
       auth.error = ''
-      auth.clearConnectionCaptcha()
     }
   },
 )
-
-watch(
-  () => baseUrl.value,
-  async (nextBaseUrl) => {
-    const normalized = (nextBaseUrl ?? '').trim()
-    if (!props.open || !/^https?:\/\//.test(normalized)) {
-      auth.clearConnectionCaptcha()
-      return
-    }
-
-    await auth.prepareConnectionCaptcha(normalized)
-  },
-)
-
-async function refreshCaptcha() {
-  const normalizedBaseUrl = (baseUrl.value ?? '').trim()
-  if (!normalizedBaseUrl) {
-    return
-  }
-
-  await auth.prepareConnectionCaptcha(normalizedBaseUrl)
-  captchaCode.value = ''
-}
 
 const submit = handleSubmit(async (values) => {
   const connection = await auth.connectWorkspace(values)
@@ -136,26 +100,6 @@ const submit = handleSubmit(async (values) => {
 
         <UiField :label="t('connectWorkspace.fields.password')" :hint="errors.password">
           <UiInput v-model="password" data-testid="connect-workspace-password" type="password" autocomplete="current-password" />
-        </UiField>
-
-        <UiField :label="t('connectWorkspace.fields.captcha')" :hint="errors.captchaCode || t('connectWorkspace.fields.captchaHint')">
-          <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_176px] sm:items-start">
-            <UiInput v-model="captchaCode" data-testid="connect-workspace-captcha" autocomplete="one-time-code" />
-            <div class="rounded-[var(--radius-lg)] border border-border bg-subtle p-2">
-              <img
-                v-if="captchaImageSrc"
-                :src="captchaImageSrc"
-                :alt="t('connectWorkspace.fields.captcha')"
-                class="h-[52px] w-full rounded-[4px] border border-border/60 bg-white object-contain"
-              >
-              <div v-else class="flex h-[52px] items-center justify-center text-xs text-text-tertiary">
-                {{ t('connectWorkspace.actions.refreshCaptcha') }}
-              </div>
-              <UiButton type="button" variant="ghost" class="mt-2 w-full justify-center" @click="refreshCaptcha">
-                {{ t('connectWorkspace.actions.refreshCaptcha') }}
-              </UiButton>
-            </div>
-          </div>
         </UiField>
       </div>
 

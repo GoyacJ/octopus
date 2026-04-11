@@ -132,7 +132,7 @@ async function handleLoadMoreAudit() {
         <article
           v-for="session in accessControlStore.sessions"
           :key="session.sessionId"
-          class="rounded-[12px] border border-border bg-card p-4"
+          class="rounded-[var(--radius-l)] border border-border bg-card p-4"
         >
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -218,7 +218,7 @@ async function handleLoadMoreAudit() {
           <article
             v-for="record in accessControlStore.auditRecords"
             :key="record.id"
-            class="rounded-[12px] border border-border bg-card p-4"
+            class="rounded-[var(--radius-l)] border border-border bg-card p-4"
           >
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
