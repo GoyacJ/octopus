@@ -37,6 +37,7 @@
     "release:notes:preview": "node scripts/generate-release-notes.mjs --channel preview",
     "release:notes:check": "node scripts/generate-release-notes.mjs --require-manual-summary true",
     "release:collect-artifacts": "node scripts/collect-release-artifacts.mjs",
+    "release:archive-fragments": "node scripts/archive-release-fragments.mjs",
     "release:collect-metadata": "node scripts/collect-release-metadata.mjs",
     "release:tag:preview": "node scripts/generate-preview-release-tag.mjs",
     "release:verify-artifacts": "node scripts/verify-release-artifacts.mjs",

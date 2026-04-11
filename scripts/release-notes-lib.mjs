@@ -7,6 +7,7 @@ import { repoRoot, versionFilePath } from './governance-lib.mjs'
 export const releaseNotesFragmentsDir = path.join(repoRoot, 'docs', 'release-notes', 'fragments')
 
 const fragmentCategoryOrder = ['summary', 'feature', 'fix', 'breaking', 'migration', 'docs', 'internal', 'governance']
+const previewTagPattern = /^v\d+\.\d+\.\d+-preview\.\d+$/
 const conventionalCommitCategoryPatterns = [
   ['breaking', /(^.+!:\s)|(^breaking(\(.+\))?:\s)|\bbreaking change\b/i],
   ['migration', /(^migration(\(.+\))?:\s)|\bmigration\b/i],
@@ -150,6 +151,7 @@ export async function collectFragments(fragmentsDir) {
     const slug = match?.[2] ?? fileName.replace(/\.md$/, '')
     fragments.push({
       fileName,
+      relativePath: path.relative(repoRoot, path.join(fragmentsDir, fileName)).replaceAll(path.sep, '/'),
       category,
       slug,
       title: slugToTitle(slug),
@@ -166,6 +168,15 @@ export async function collectFragments(fragmentsDir) {
     }
     return left.fileName.localeCompare(right.fileName)
   })
+}
+
+export function selectFragmentsForRange(fragments, changedFragmentPaths, sinceRef) {
+  if (!sinceRef || !changedFragmentPaths) {
+    return fragments
+  }
+
+  const changedPaths = new Set(changedFragmentPaths)
+  return fragments.filter((fragment) => changedPaths.has(fragment.relativePath))
 }
 
 function resolveFormalSinceRef(releaseTag) {
@@ -191,7 +202,17 @@ export function resolveFormalSinceRefFromTags(tags, releaseTag) {
 }
 
 export function resolvePreviewSinceRefFromTags(tags, releaseTag) {
-  return resolveFormalSinceRefFromTags(tags, releaseTag)
+  const previewTags = tags.filter((entry) => previewTagPattern.test(entry))
+  if (!previewTags.length) {
+    return null
+  }
+
+  const currentIndex = previewTags.indexOf(releaseTag)
+  if (currentIndex >= 0) {
+    return previewTags[currentIndex + 1] ?? null
+  }
+
+  return previewTags.find((entry) => entry !== releaseTag) ?? null
 }
 
 function resolvePreviewSinceRef(releaseTag) {
@@ -216,9 +237,30 @@ export function resolveChangeRangeLabel(sinceRef, releaseTag) {
   return `${sinceRef ?? '仓库初始化'} -> ${releaseTag}`
 }
 
+export function resolveChangeTargetRef(commitSha, releaseTag) {
+  return commitSha || releaseTag || 'HEAD'
+}
+
+function resolveRangeSpec(sinceRef, targetRef) {
+  return sinceRef ? `${sinceRef}..${targetRef}` : targetRef
+}
+
+export function collectChangedFiles({ sinceRef, targetRef, pathspecs = [] }) {
+  const rangeSpec = resolveRangeSpec(sinceRef, targetRef)
+  const args = ['diff', '--name-only', rangeSpec]
+  if (pathspecs.length > 0) {
+    args.push('--', ...pathspecs)
+  }
+  const output = runGit(args, { allowFailure: true })
+  return output
+    .split('\n')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}
+
 export function collectChangeLog({ channel, releaseTag, commitSha, sinceRef }) {
-  const targetRef = commitSha || releaseTag || 'HEAD'
-  const rangeSpec = sinceRef ? `${sinceRef}..${targetRef}` : targetRef
+  const targetRef = resolveChangeTargetRef(commitSha, releaseTag)
+  const rangeSpec = resolveRangeSpec(sinceRef, targetRef)
   const output = runGit(['log', '--format=%H%x1f%s%x1e', rangeSpec], { allowFailure: true })
   const rawCommits = output
     .split('\x1e')
@@ -264,9 +306,7 @@ export function collectChangeLog({ channel, releaseTag, commitSha, sinceRef }) {
 
 function createAutoSummary({ channel, fragments, changeLog }) {
   const featureCount = fragments.filter((fragment) => ['feature', 'docs'].includes(fragment.category)).length
-    + changeLog.commits.filter((commit) => ['feature', 'docs'].includes(commit.category) && commit.userFacing).length
   const fixCount = fragments.filter((fragment) => fragment.category === 'fix').length
-    + changeLog.commits.filter((commit) => commit.category === 'fix').length
 
   if (channel === 'preview') {
     return `本次预览构建聚合了 ${featureCount} 项能力变更和 ${fixCount} 项修复，用于主干持续回归与安装包验证。`
@@ -287,18 +327,6 @@ function renderFragmentBlocks(items) {
   ])
 }
 
-function renderCommitBullets(items) {
-  if (!items.length) {
-    return []
-  }
-  return [
-    '### 自动汇总变更',
-    '',
-    ...items.map((item) => `- ${item.normalizedSubject}${item.prNumber ? ` (#${item.prNumber})` : ''}`),
-    '',
-  ]
-}
-
 export function buildReleaseNotesData(options, fragments, changeLog) {
   const releaseDate = new Date().toISOString().slice(0, 10)
   const summaryFragments = fragments.filter((fragment) => fragment.category === 'summary')
@@ -310,12 +338,6 @@ export function buildReleaseNotesData(options, fragments, changeLog) {
   const featureFragments = fragments.filter((fragment) => ['feature', 'docs'].includes(fragment.category))
   const fixFragments = fragments.filter((fragment) => fragment.category === 'fix')
   const upgradeFragments = fragments.filter((fragment) => ['breaking', 'migration'].includes(fragment.category))
-  const internalFragments = fragments.filter((fragment) => ['internal', 'governance'].includes(fragment.category))
-
-  const userFacingCommits = changeLog.commits.filter((commit) => commit.userFacing)
-  const featureCommits = userFacingCommits.filter((commit) => ['feature', 'docs'].includes(commit.category))
-  const fixCommits = userFacingCommits.filter((commit) => commit.category === 'fix')
-  const internalCommits = changeLog.commits.filter((commit) => !commit.userFacing)
 
   const generatedSummary = createAutoSummary({ channel: options.channel, fragments, changeLog })
   const overviewItems = summaryFragments.length
@@ -359,6 +381,7 @@ export function buildReleaseNotesData(options, fragments, changeLog) {
     },
     artifacts: [
       'macOS: `.dmg` 桌面安装包',
+      'Linux: `AppImage` 与 `DEB` 安装包',
       'Windows: `NSIS .exe` 安装包',
     ],
     verificationChecks,
@@ -391,12 +414,6 @@ export function buildReleaseNotesData(options, fragments, changeLog) {
             ...featureFragments,
             ...fixFragments,
             ...upgradeFragments,
-            ...internalFragments,
-          ],
-          commitGroups: [
-            ...featureCommits,
-            ...fixCommits,
-            ...internalCommits,
           ],
         },
         verificationStatus: {
@@ -421,7 +438,6 @@ export function buildReleaseNotesData(options, fragments, changeLog) {
           title: '用户可感知变化',
           required: false,
           fragmentGroups: featureFragments,
-          commitGroups: featureCommits,
         },
         upgradeNotes: {
           title: '升级提示',
@@ -433,7 +449,6 @@ export function buildReleaseNotesData(options, fragments, changeLog) {
           title: '修复摘要',
           required: false,
           fragmentGroups: fixFragments,
-          commitGroups: fixCommits,
         },
         appendix: {
           title: '技术附录',
@@ -478,11 +493,10 @@ export function renderReleaseNotesMarkdown(data) {
 
     lines.push(`## ${data.sections.changes.title}`, '')
     const previewFragmentBlocks = renderFragmentBlocks(data.sections.changes.fragmentGroups)
-    const previewCommitBlocks = renderCommitBullets(data.sections.changes.commitGroups)
-    if (!previewFragmentBlocks.length && !previewCommitBlocks.length) {
-      lines.push('本次预览构建没有额外的 fragments，正文已根据提交历史自动生成。', '')
+    if (!previewFragmentBlocks.length) {
+      lines.push('本次预览构建没有新增的用户可见发布说明 fragments。', '')
     } else {
-      lines.push(...previewFragmentBlocks, ...previewCommitBlocks)
+      lines.push(...previewFragmentBlocks)
     }
 
     lines.push(`## ${data.sections.verificationStatus.title}`, '')
@@ -511,11 +525,10 @@ export function renderReleaseNotesMarkdown(data) {
 
   lines.push(`## ${data.sections.userChanges.title}`, '')
   const userChangeBlocks = renderFragmentBlocks(data.sections.userChanges.fragmentGroups)
-  const userChangeCommits = renderCommitBullets(data.sections.userChanges.commitGroups)
-  if (!userChangeBlocks.length && !userChangeCommits.length) {
+  if (!userChangeBlocks.length) {
     lines.push('本版本没有额外的用户可感知功能变更。', '')
   } else {
-    lines.push(...userChangeBlocks, ...userChangeCommits)
+    lines.push(...userChangeBlocks)
   }
 
   lines.push(`## ${data.sections.upgradeNotes.title}`, '')
@@ -528,11 +541,10 @@ export function renderReleaseNotesMarkdown(data) {
 
   lines.push(`## ${data.sections.fixes.title}`, '')
   const fixBlocks = renderFragmentBlocks(data.sections.fixes.fragmentGroups)
-  const fixCommits = renderCommitBullets(data.sections.fixes.commitGroups)
-  if (!fixBlocks.length && !fixCommits.length) {
+  if (!fixBlocks.length) {
     lines.push('本版本没有额外记录的用户可感知修复。', '')
   } else {
-    lines.push(...fixBlocks, ...fixCommits)
+    lines.push(...fixBlocks)
   }
 
   lines.push(`## ${data.sections.appendix.title}`, '')

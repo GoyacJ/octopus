@@ -7,4 +7,6 @@ Quick rules:
 - one Markdown fragment per releasable change
 - use filenames like `summary-*`, `feature-*`, `fix-*`, `breaking-*`, `migration-*`, `internal-*`, or `governance-*`
 - formal releases require at least one `summary-*` fragment
-- remove or archive fragments after they are included in a tagged formal release
+- preview releases do not consume fragments
+- archive consumed formal fragments after they are included in a tagged formal release
+- use `pnpm release:archive-fragments -- --tag vX.Y.Z` to move the consumed formal fragments into `docs/release-notes/archive/vX.Y.Z/`

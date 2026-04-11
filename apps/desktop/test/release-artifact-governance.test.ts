@@ -7,13 +7,18 @@ import { promisify } from 'node:util'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { resolvePreviewSinceRefFromTags } from '../../../scripts/release-notes-lib.mjs'
+import {
+  buildReleaseNotesData,
+  renderReleaseNotesMarkdown,
+  resolvePreviewSinceRefFromTags,
+} from '../../../scripts/release-notes-lib.mjs'
 
 const repoRoot = path.resolve(__dirname, '../../..')
 const nodeExecutable = process.execPath
 const verifyScriptPath = path.join(repoRoot, 'scripts', 'verify-release-artifacts.mjs')
 const collectScriptPath = path.join(repoRoot, 'scripts', 'collect-release-artifacts.mjs')
 const collectMetadataScriptPath = path.join(repoRoot, 'scripts', 'collect-release-metadata.mjs')
+const archiveFragmentsScriptPath = path.join(repoRoot, 'scripts', 'archive-release-fragments.mjs')
 const prepareReleaseAssetsScriptPath = path.join(repoRoot, 'scripts', 'prepare-release-assets.mjs')
 const generateUpdateManifestsScriptPath = path.join(repoRoot, 'scripts', 'generate-update-manifests.mjs')
 const releaseNotesScriptPath = path.join(repoRoot, 'scripts', 'generate-release-notes.mjs')
@@ -129,6 +134,7 @@ describe('release artifact governance scripts', () => {
     const releaseNotesJsonPath = path.join(outputDir, 'release-notes.json')
     const changeLogJsonPath = path.join(outputDir, 'change-log.json')
 
+    writeFile(path.join(fragmentsDir, 'feature-2026-04-08-preview-auth.md'), '预览构建提供了新的登录流程验证入口。')
     writeFile(path.join(fragmentsDir, 'internal-2026-04-08-preview-governance.md'), '预览构建延续 main 分支自动发版链路。')
 
     execFileSync(nodeExecutable, [
@@ -163,7 +169,9 @@ describe('release artifact governance scripts', () => {
     expect(notes).toContain('# Octopus Preview v0.1.0-preview.42')
     expect(notes).toContain('这是来自 `main` 分支的预览构建')
     expect(notes).toContain('## 本次变更')
-    expect(notes).toContain('预览构建延续 main 分支自动发版链路')
+    expect(notes).toContain('预览构建提供了新的登录流程验证入口')
+    expect(notes).not.toContain('预览构建延续 main 分支自动发版链路')
+    expect(notes).not.toContain('### 自动汇总变更')
     expect(notes).toContain('## 构建元数据')
     expect(notes).toContain('Run Number：42')
     expect(notes).toContain('Commit SHA：deadbeefcafebabe')
@@ -190,19 +198,78 @@ describe('release artifact governance scripts', () => {
     expect(tag).toBe('v0.1.0-preview.42')
   })
 
-  it('resolves preview release notes from the latest formal release tag instead of the latest preview tag', () => {
+  it('resolves preview release notes from the latest preview release tag in the same channel', () => {
     expect(resolvePreviewSinceRefFromTags([
       'v0.2.4',
       'v0.2.4-preview.23',
       'v0.2.4-preview.21',
       'v0.2.3',
-    ], 'v0.2.4-preview.24')).toBe('v0.2.4')
+    ], 'v0.2.4-preview.24')).toBe('v0.2.4-preview.23')
 
     expect(resolvePreviewSinceRefFromTags([
+      'v0.2.4-preview.23',
+      'v0.2.4-preview.21',
       'v0.2.4',
       'v0.2.3',
       'v0.2.2',
-    ], 'v0.2.5-preview.1')).toBe('v0.2.4')
+    ], 'v0.2.5-preview.1')).toBe('v0.2.4-preview.23')
+  })
+
+  it('renders preview notes from user-facing fragments only and excludes auto-aggregated commit bullets', () => {
+    const data = buildReleaseNotesData({
+      channel: 'preview',
+      language: 'zh-CN',
+      version: '0.2.4',
+      releaseTag: 'v0.2.4-preview.24',
+      runNumber: '24',
+      commitSha: 'deadbeefcafebabe',
+      sinceRef: 'v0.2.4-preview.23',
+      requireManualSummary: false,
+    }, [
+      {
+        fileName: 'feature-2026-04-11-login.md',
+        category: 'feature',
+        slug: '2026-04-11-login',
+        title: 'Login',
+        lead: '新增统一登录入口。',
+        content: '新增统一登录入口。',
+        userFacing: true,
+      },
+      {
+        fileName: 'internal-2026-04-11-release.md',
+        category: 'internal',
+        slug: '2026-04-11-release',
+        title: 'Release',
+        lead: '内部发布治理调整。',
+        content: '内部发布治理调整。',
+        userFacing: false,
+      },
+    ], {
+      channel: 'preview',
+      sinceRef: 'v0.2.4-preview.23',
+      targetRef: 'deadbeefcafebabe',
+      releaseTag: 'v0.2.4-preview.24',
+      rangeLabel: 'v0.2.4-preview.23 -> v0.2.4-preview.24',
+      commits: [
+        {
+          sha: 'deadbeefcafebabe',
+          shortSha: 'deadbee',
+          subject: 'refactor: split runtime modules',
+          normalizedSubject: 'split runtime modules',
+          category: 'internal',
+          prNumber: null,
+          userFacing: false,
+        },
+      ],
+      pullRequests: [],
+    })
+
+    const markdown = renderReleaseNotesMarkdown(data)
+
+    expect(markdown).toContain('新增统一登录入口。')
+    expect(markdown).not.toContain('内部发布治理调整。')
+    expect(markdown).not.toContain('### 自动汇总变更')
+    expect(markdown).not.toContain('split runtime modules')
   })
 
   it('collects canonical release metadata into a flat directory for publish verification', () => {
@@ -242,6 +309,37 @@ describe('release artifact governance scripts', () => {
     expect(readFileSync(path.join(outputDir, 'v0.1.0.md'), 'utf8')).toBe('# Octopus v0.1.0\n')
     expect(readFileSync(path.join(outputDir, 'release-notes.json'), 'utf8')).toBe('{"title":"Octopus v0.1.0"}\n')
     expect(readFileSync(path.join(outputDir, 'change-log.json'), 'utf8')).toBe('{"rangeLabel":"v0.0.9 -> v0.1.0"}\n')
+  })
+
+  it('archives consumed formal release fragments into the versioned archive directory', () => {
+    const workspaceDir = createTempDir('octopus-release-fragment-archive-')
+    const fragmentsDir = path.join(workspaceDir, 'docs', 'release-notes', 'fragments')
+    const archiveDir = path.join(workspaceDir, 'docs', 'release-notes', 'archive')
+
+    writeFile(path.join(fragmentsDir, 'summary-2026-04-11-release.md'), '正式版概览。')
+    writeFile(path.join(fragmentsDir, 'feature-2026-04-11-login.md'), '新增统一登录入口。')
+    writeFile(path.join(fragmentsDir, 'internal-2026-04-11-governance.md'), '内部治理说明。')
+
+    execFileSync(nodeExecutable, [
+      archiveFragmentsScriptPath,
+      '--tag',
+      'v0.2.5',
+      '--fragments-dir',
+      fragmentsDir,
+      '--archive-dir',
+      archiveDir,
+      '--files',
+      'summary-2026-04-11-release.md,feature-2026-04-11-login.md',
+    ], {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    })
+
+    expect(() => readFileSync(path.join(fragmentsDir, 'summary-2026-04-11-release.md'), 'utf8')).toThrow()
+    expect(() => readFileSync(path.join(fragmentsDir, 'feature-2026-04-11-login.md'), 'utf8')).toThrow()
+    expect(readFileSync(path.join(fragmentsDir, 'internal-2026-04-11-governance.md'), 'utf8')).toBe('内部治理说明。')
+    expect(readFileSync(path.join(archiveDir, 'v0.2.5', 'summary-2026-04-11-release.md'), 'utf8')).toBe('正式版概览。')
+    expect(readFileSync(path.join(archiveDir, 'v0.2.5', 'feature-2026-04-11-login.md'), 'utf8')).toBe('新增统一登录入口。')
   })
 
   it('fails verification when formal desktop installers are missing', () => {

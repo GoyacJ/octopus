@@ -108,14 +108,12 @@ describe('repository governance', () => {
     expectDesktopMatrix(workflow)
   })
 
-  it('publishes preview releases from main and manual dispatch without formal tag gating', () => {
+  it('publishes preview releases from manual dispatch without formal tag gating', () => {
     const workflowPath = path.join(repoRoot, '.github', 'workflows', 'release-preview.yml')
 
     expect(existsSync(workflowPath)).toBe(true)
 
     const workflow = readFileSync(workflowPath, 'utf8')
-    expect(workflow).toContain('branches:')
-    expect(workflow).toContain('- main')
     expect(workflow).toContain('workflow_dispatch:')
     expect(workflow).toContain('pnpm release:notes:preview')
     expect(workflow).toContain('pnpm release:tag:preview')
@@ -128,6 +126,8 @@ describe('repository governance', () => {
     expect(workflow).toContain('prerelease: true')
     expect(workflow).not.toContain('export RELEASE_TAG="${GITHUB_REF_NAME}"')
     expect(workflow).not.toContain('pnpm version:check "${RELEASE_TAG}"')
+    expect(workflow).not.toContain('push:')
+    expect(workflow).not.toContain('branches:')
     expect(workflow).toContain('pnpm check:desktop-release')
     expect(workflow).not.toContain('pnpm check:website')
     expect(workflow).toContain('target_commitish: ${{ github.sha }}')
@@ -159,6 +159,7 @@ describe('repository governance', () => {
     expect(packageJson.scripts?.['release:notes:preview']).toBe('node scripts/generate-release-notes.mjs --channel preview')
     expect(packageJson.scripts?.['release:notes:check']).toBe('node scripts/generate-release-notes.mjs --require-manual-summary true')
     expect(packageJson.scripts?.['release:collect-artifacts']).toBe('node scripts/collect-release-artifacts.mjs')
+    expect(packageJson.scripts?.['release:archive-fragments']).toBe('node scripts/archive-release-fragments.mjs')
     expect(packageJson.scripts?.['release:tag:preview']).toBe('node scripts/generate-preview-release-tag.mjs')
     expect(packageJson.scripts?.['release:verify-artifacts']).toBe('node scripts/verify-release-artifacts.mjs')
     expect(packageJson.scripts?.['release:generate-update-manifests']).toBe('node scripts/generate-update-manifests.mjs')

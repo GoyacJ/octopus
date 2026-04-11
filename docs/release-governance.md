@@ -53,11 +53,11 @@ Because `apps/desktop/src-tauri/tauri.conf.json` bundles `bin/octopus-desktop-ba
 
 ## Preview Release Flow
 
-- preview publication is branch-driven: pushing `main` or manually dispatching `.github/workflows/release-preview.yml` produces a preview release
+- preview publication is batch-driven: manually dispatching `.github/workflows/release-preview.yml` from `main` produces a preview release
 - preview releases do not rewrite `VERSION`; they derive a unique prerelease tag as `vX.Y.Z-preview.<run_number>`
 - preview releases reuse the same metadata normalization, artifact collection, checksum generation, and per-platform artifact verification gates as formal releases
 - preview GitHub Releases are published as `prerelease=true` and are not marked as latest
-- preview release notes default their change range to the latest formal `vX.Y.Z` tag unless `--since-ref` is supplied explicitly
+- preview release notes default their change range to the previous preview tag in the same channel unless `--since-ref` is supplied explicitly
   - `release-artifacts/metadata/*`
   - `release-artifacts/SHA256SUMS.txt`
 
@@ -69,9 +69,14 @@ Because `apps/desktop/src-tauri/tauri.conf.json` bundles `bin/octopus-desktop-ba
   - the rendered Markdown notes file
   - `release-artifacts/metadata/release-notes.json`
   - `release-artifacts/metadata/change-log.json`
-- formal releases must include at least one `summary-*` fragment as a manually reviewed version overview
-- preview releases may be fully auto-generated, but must state that they are `main` branch preview builds
-- `internal-*` and `governance-*` fragments do not enter the formal user-facing正文；它们只会出现在 preview 内容或技术附录中
+- release note正文 only comes from fragments under `docs/release-notes/fragments/*`
+- Git history is used only to determine release range, compute diagnostics, and warn when releasable changes landed without matching fragments
+- formal releases must include at least one `summary-*` fragment within the current formal release range as a manually reviewed version overview
+- preview releases may use an auto-generated overview paragraph, but the default user-facing body still comes from fragments only
+- release ranges are channel-local by default:
+  - formal: previous formal tag -> current formal tag
+  - preview: previous preview tag -> current preview tag
+- `internal-*` and `governance-*` fragments do not enter the default user-facing body for either channel
 - formal notes emphasize:
   - 版本概览
   - 用户可感知变化
@@ -83,6 +88,12 @@ Because `apps/desktop/src-tauri/tauri.conf.json` bundles `bin/octopus-desktop-ba
   - 本次变更
   - 验证状态
   - 构建元数据
+- fragment lifecycle is fixed:
+  - preview releases do not consume fragments
+  - formal releases consume the fragments selected for the current formal range
+  - consumed formal fragments are archived under `docs/release-notes/archive/<tag>/`
+  - `pnpm release:archive-fragments -- --tag vX.Y.Z` is the supported archive command
+- the repository does not maintain a hand-edited root `CHANGELOG.md`; versioned release notes and archives are the historical source of truth
 
 ## Shared Schema Governance
 
