@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { NotificationRecord } from '@octopus/schema'
-import { Bell, CheckCircle2, CircleAlert, Info, X } from 'lucide-vue-next'
+import { X } from 'lucide-vue-next'
 
 import { formatDateTime } from '../lib/formatDateTime'
+import { getNotificationPresentation, notificationLevelIcons } from '../lib/notificationPresentation'
 import UiSurface from './UiSurface.vue'
 
 const props = defineProps<{
@@ -16,21 +17,15 @@ const emit = defineEmits<{
   select: [notification: NotificationRecord]
 }>()
 
-const levelIcons = {
-  info: Info,
-  success: CheckCircle2,
-  warning: CircleAlert,
-  error: Bell,
-} as const
-
 const timestampLabel = computed(() => formatDateTime(props.notification.createdAt))
+const presentation = computed(() => getNotificationPresentation(props.notification.level))
 </script>
 
 <template>
   <UiSurface
     variant="overlay"
     padding="sm"
-    class="w-full border-border bg-popover shadow-md"
+    :class="`w-full shadow-md ${presentation.toastSurfaceClass}`"
   >
     <div
       class="flex items-start gap-3"
@@ -38,9 +33,10 @@ const timestampLabel = computed(() => formatDateTime(props.notification.createdA
       @click="emit('select', props.notification)"
     >
       <component
-        :is="levelIcons[props.notification.level]"
+        :is="notificationLevelIcons[props.notification.level ?? 'info']"
         :size="16"
-        class="mt-0.5 shrink-0 text-text-secondary"
+        class="mt-0.5 shrink-0"
+        :class="presentation.toastIconClass"
       />
       <div class="min-w-0 flex-1 space-y-1">
         <div class="flex items-start justify-between gap-3">
@@ -51,7 +47,7 @@ const timestampLabel = computed(() => formatDateTime(props.notification.createdA
             {{ timestampLabel }}
           </span>
         </div>
-        <p class="truncate text-sm font-semibold text-text-primary">
+        <p class="truncate text-sm font-semibold" :class="presentation.toastTitleClass">
           {{ props.notification.title }}
         </p>
         <p class="text-xs leading-5 text-text-secondary">

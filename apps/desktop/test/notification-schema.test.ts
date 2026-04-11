@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createDefaultNotificationUnreadSummary,
   normalizeNotificationListResponse,
+  normalizeNotificationRecord,
   type NotificationRecord,
 } from '@octopus/schema'
 
@@ -62,5 +63,14 @@ describe('notification schema', () => {
       workspace: 0,
       user: 1,
     })
+  })
+
+  it('defaults missing notification levels to info during normalization', () => {
+    const normalized = normalizeNotificationRecord({
+      ...createNotification(),
+      level: undefined,
+    })
+
+    expect(normalized.level).toBe('info')
   })
 })

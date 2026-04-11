@@ -4,6 +4,8 @@ import type { NotificationRecord } from '@octopus/schema'
 import { CheckCheck } from 'lucide-vue-next'
 
 import { formatDateTime } from '../lib/formatDateTime'
+import { getNotificationPresentation } from '../lib/notificationPresentation'
+import { cn } from '../lib/utils'
 
 const props = defineProps<{
   notification: NotificationRecord
@@ -24,21 +26,20 @@ function handleMarkRead() {
 }
 
 const timestampLabel = computed(() => formatDateTime(props.notification.createdAt))
+const presentation = computed(() => getNotificationPresentation(props.notification.level))
 </script>
 
 <template>
   <article
     :data-testid="`ui-notification-row-${props.notification.id}`"
     class="group flex items-start gap-3 rounded-[var(--radius-xl)] border border-border bg-surface px-3 py-3 text-left transition-colors duration-fast hover:border-border-strong hover:bg-subtle"
-    :class="{ 'opacity-70': props.notification.readAt }"
+    :class="cn(
+      presentation.rowClass,
+      { 'opacity-70': props.notification.readAt },
+    )"
     @click="handleSelect"
   >
-    <div class="mt-1 h-2.5 w-2.5 rounded-full bg-foreground/70" :class="{
-      'bg-status-success': props.notification.level === 'success',
-      'bg-status-warning': props.notification.level === 'warning',
-      'bg-status-error': props.notification.level === 'error',
-      'bg-status-info': props.notification.level === 'info',
-    }" />
+    <div class="mt-1 h-2.5 w-2.5 rounded-full bg-foreground/70" :class="presentation.dotClass" />
     <div class="min-w-0 flex-1 space-y-1">
       <div class="flex items-start justify-between gap-3">
         <div class="flex min-w-0 items-center gap-2">
@@ -53,7 +54,7 @@ const timestampLabel = computed(() => formatDateTime(props.notification.createdA
           {{ timestampLabel }}
         </span>
       </div>
-      <p class="truncate text-sm font-semibold text-text-primary">
+      <p class="truncate text-sm font-semibold" :class="presentation.titleClass">
         {{ props.notification.title }}
       </p>
       <p class="text-xs leading-5 text-text-secondary">

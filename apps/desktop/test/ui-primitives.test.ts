@@ -965,12 +965,46 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('Saved')
     expect(wrapper.text()).toContain('Workspace')
     expect(wrapper.text()).toContain(formatUiTimestamp(createdAt))
+    expect(wrapper.get('[data-testid="ui-notification-row-notif-row"]').classes().join(' ')).toContain('border-l-status-info')
+    expect(wrapper.html()).toContain('bg-status-info')
 
     await wrapper.get('[data-testid="ui-notification-row-mark-read-notif-row"]').trigger('click')
     expect(wrapper.emitted('mark-read')).toEqual([['notif-row']])
 
     await wrapper.get('[data-testid="ui-notification-row-notif-row"]').trigger('click')
     expect(wrapper.emitted('select')).toEqual([[expect.objectContaining({ id: 'notif-row' })]])
+  })
+
+  it('renders warning and error notifications with stronger semantic accents while keeping read rows de-emphasized', () => {
+    const warningWrapper = mount(UiNotificationRow, {
+      props: {
+        notification: createNotification({
+          id: 'notif-warning',
+          level: 'warning',
+        }),
+        scopeLabel: 'App',
+      },
+    })
+
+    const errorWrapper = mount(UiNotificationRow, {
+      props: {
+        notification: createNotification({
+          id: 'notif-error',
+          level: 'error',
+          readAt: 99,
+        }),
+        scopeLabel: 'App',
+      },
+    })
+
+    const warningClasses = warningWrapper.get('[data-testid="ui-notification-row-notif-warning"]').classes().join(' ')
+    const errorClasses = errorWrapper.get('[data-testid="ui-notification-row-notif-error"]').classes().join(' ')
+
+    expect(warningClasses).toContain('border-l-status-warning')
+    expect(warningClasses).toContain('bg-[color-mix(in_srgb,var(--color-status-warning-soft)_42%,var(--bg-surface))]')
+    expect(errorClasses).toContain('border-l-status-error')
+    expect(errorClasses).toContain('bg-[color-mix(in_srgb,var(--color-status-error-soft)_42%,var(--bg-surface))]')
+    expect(errorClasses).toContain('opacity-70')
   })
 
   it('renders UiNotificationCenter filters and list actions', async () => {
@@ -1033,6 +1067,8 @@ describe('Shared UI primitives', () => {
     expect(item.text()).toContain('Saved')
     expect(item.text()).toContain('App')
     expect(item.text()).toContain(formatUiTimestamp(createdAt))
+    expect(item.html()).toContain('text-status-success')
+    expect(item.html()).toContain('border-[color-mix(in_srgb,var(--color-status-success)_22%,var(--border))]')
 
     await item.get('[data-testid="ui-toast-close-notif-toast"]').trigger('click')
     expect(item.emitted('close')).toEqual([['notif-toast']])
@@ -1055,5 +1091,32 @@ describe('Shared UI primitives', () => {
 
     await viewport.get('[data-testid="ui-toast-close-notif-toast"]').trigger('click')
     expect(viewport.emitted('close')).toEqual([['notif-toast']])
+  })
+
+  it('renders warning and error toasts with elevated semantic emphasis', () => {
+    const warningToast = mount(UiToastItem, {
+      props: {
+        notification: createNotification({
+          id: 'notif-toast-warning',
+          level: 'warning',
+        }),
+        scopeLabel: 'Workspace',
+      },
+    })
+
+    const errorToast = mount(UiToastItem, {
+      props: {
+        notification: createNotification({
+          id: 'notif-toast-error',
+          level: 'error',
+        }),
+        scopeLabel: 'Workspace',
+      },
+    })
+
+    expect(warningToast.html()).toContain('text-status-warning')
+    expect(warningToast.html()).toContain('bg-[color-mix(in_srgb,var(--color-status-warning-soft)_48%,var(--bg-popover))]')
+    expect(errorToast.html()).toContain('text-status-error')
+    expect(errorToast.html()).toContain('bg-[color-mix(in_srgb,var(--color-status-error-soft)_48%,var(--bg-popover))]')
   })
 })
