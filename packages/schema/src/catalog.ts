@@ -245,6 +245,8 @@ export interface WorkspaceToolManagementCapabilities {
   canDelete: boolean
 }
 
+export type WorkspaceSkillSourceOrigin = 'skills_dir' | 'legacy_commands_dir' | 'builtin_bundle'
+
 export interface WorkspaceToolConsumerSummary {
   kind: 'agent' | 'team' | string
   id: string
@@ -281,7 +283,7 @@ export interface WorkspaceSkillToolCatalogEntry extends WorkspaceToolCatalogBase
   kind: 'skill'
   active: boolean
   shadowedBy?: string
-  sourceOrigin: 'skills_dir' | 'legacy_commands_dir'
+  sourceOrigin: WorkspaceSkillSourceOrigin
   workspaceOwned: boolean
   relativePath?: string
 }
@@ -300,11 +302,73 @@ export type WorkspaceToolCatalogEntry =
   | WorkspaceSkillToolCatalogEntry
   | WorkspaceMcpToolCatalogEntry
 
-export interface WorkspaceToolCatalogSnapshot {
-  entries: WorkspaceToolCatalogEntry[]
+export type CapabilityAssetState =
+  | 'builtin'
+  | 'workspace'
+  | 'project'
+  | 'user'
+  | 'external'
+  | 'managed'
+  | 'shadowed'
+  | 'disabled'
+
+export type CapabilityAssetImportStatus = 'managed' | 'copy-required' | 'not-importable'
+export type CapabilityAssetExportStatus = 'exportable' | 'readonly' | 'not-exportable'
+
+export interface CapabilityAssetManifest {
+  assetId: string
+  workspaceId: string
+  sourceKey: string
+  kind: WorkspaceToolKind
+  name: string
+  description: string
+  displayPath: string
+  ownerScope?: WorkspaceToolCatalogEntry['ownerScope']
+  ownerId?: string
+  ownerLabel?: string
+  requiredPermission: WorkspaceToolRequiredPermission | null
+  management: WorkspaceToolManagementCapabilities
+  installed: boolean
+  enabled: boolean
+  health: WorkspaceToolAvailability
+  state: CapabilityAssetState
+  importStatus: CapabilityAssetImportStatus
+  exportStatus: CapabilityAssetExportStatus
 }
 
-export interface WorkspaceToolDisablePatch {
+export interface SkillPackageManifest extends CapabilityAssetManifest {
+  kind: 'skill'
+  packageKind: 'workspace' | 'project' | 'builtin' | 'external'
+  active: boolean
+  shadowedBy?: string
+  sourceOrigin: WorkspaceSkillSourceOrigin
+  workspaceOwned: boolean
+  relativePath?: string
+}
+
+export interface McpServerPackageManifest extends CapabilityAssetManifest {
+  kind: 'mcp'
+  packageKind: WorkspaceMcpToolCatalogEntry['scope']
+  serverName: string
+  endpoint: string
+  toolNames: string[]
+  scope: WorkspaceMcpToolCatalogEntry['scope']
+  statusDetail?: string
+}
+
+export type CapabilityManagementEntry =
+  | (WorkspaceBuiltinToolCatalogEntry & CapabilityAssetManifest)
+  | (WorkspaceSkillToolCatalogEntry & CapabilityAssetManifest)
+  | (WorkspaceMcpToolCatalogEntry & CapabilityAssetManifest)
+
+export interface CapabilityManagementProjection {
+  entries: CapabilityManagementEntry[]
+  assets: CapabilityAssetManifest[]
+  skillPackages: SkillPackageManifest[]
+  mcpServerPackages: McpServerPackageManifest[]
+}
+
+export interface CapabilityAssetDisablePatch {
   sourceKey: string
   disabled: boolean
 }
@@ -336,7 +400,7 @@ export interface WorkspaceSkillDocument {
   displayPath: string
   rootPath: string
   tree: WorkspaceSkillTreeNode[]
-  sourceOrigin: 'skills_dir' | 'legacy_commands_dir'
+  sourceOrigin: WorkspaceSkillSourceOrigin
   workspaceOwned: boolean
   relativePath?: string
 }

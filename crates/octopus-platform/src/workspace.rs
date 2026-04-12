@@ -1,8 +1,9 @@
 use async_trait::async_trait;
 use octopus_core::{
     AgentRecord, AppError, AutomationRecord, BindPetConversationInput,
-    ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse,
-    CopyWorkspaceSkillToManagedInput, CreateProjectPromotionRequestInput, CreateProjectRequest,
+    CapabilityManagementProjection, ChangeCurrentUserPasswordRequest,
+    ChangeCurrentUserPasswordResponse, CopyWorkspaceSkillToManagedInput,
+    CreateProjectPromotionRequestInput, CreateProjectRequest,
     CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput, CreateWorkspaceSkillInput,
     ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
     ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
@@ -19,7 +20,7 @@ use octopus_core::{
     WorkspaceMcpServerDocument, WorkspaceResourceChildrenRecord, WorkspaceResourceContentDocument,
     WorkspaceResourceImportInput, WorkspaceResourceRecord, WorkspaceSkillDocument,
     WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceSummary,
-    WorkspaceToolCatalogSnapshot, WorkspaceToolDisablePatch,
+    CapabilityAssetDisablePatch,
 };
 
 #[async_trait]
@@ -240,11 +241,13 @@ pub trait WorkspaceService: Send + Sync {
     async fn unlink_project_team(&self, project_id: &str, team_id: &str) -> Result<(), AppError>;
     async fn list_models(&self) -> Result<Vec<ModelCatalogRecord>, AppError>;
     async fn list_provider_credentials(&self) -> Result<Vec<ProviderCredentialRecord>, AppError>;
-    async fn get_tool_catalog(&self) -> Result<WorkspaceToolCatalogSnapshot, AppError>;
-    async fn set_tool_catalog_disabled(
+    async fn get_capability_management_projection(
         &self,
-        patch: WorkspaceToolDisablePatch,
-    ) -> Result<WorkspaceToolCatalogSnapshot, AppError>;
+    ) -> Result<CapabilityManagementProjection, AppError>;
+    async fn set_capability_asset_disabled(
+        &self,
+        patch: CapabilityAssetDisablePatch,
+    ) -> Result<CapabilityManagementProjection, AppError>;
     async fn get_workspace_skill(&self, skill_id: &str)
         -> Result<WorkspaceSkillDocument, AppError>;
     async fn create_workspace_skill(

@@ -62,8 +62,7 @@ use octopus_core::{
     WorkspaceMcpServerDocument, WorkspaceMetricRecord, WorkspaceOverviewSnapshot,
     WorkspaceResourceChildrenRecord, WorkspaceResourceContentDocument, WorkspaceResourceImportInput,
     WorkspaceResourceRecord, WorkspaceSkillDocument, WorkspaceSkillFileDocument,
-    WorkspaceSkillTreeDocument, WorkspaceSummary, WorkspaceToolCatalogSnapshot,
-    WorkspaceToolDisablePatch,
+    WorkspaceSkillTreeDocument, WorkspaceSummary, CapabilityAssetDisablePatch,
 };
 use octopus_platform::PlatformServices;
 use reqwest::Client;

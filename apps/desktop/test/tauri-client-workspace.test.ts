@@ -704,6 +704,39 @@ describe('workspace client transport', () => {
     )
   })
 
+  it('fetches the formal capability management projection through the workspace catalog adapter', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        entries: [],
+        assets: [],
+        skillPackages: [],
+        mcpServerPackages: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    const projection = await workspaceClient.catalog.getManagementProjection()
+
+    expect(projection.entries).toEqual([])
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/management-projection',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+  })
+
   it('updates the current user profile through the workspace personal center profile endpoint', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
@@ -1114,13 +1147,13 @@ describe('workspace client transport', () => {
       session,
     })
 
-    await workspaceClient.catalog.setToolDisabled({
+    await workspaceClient.catalog.setAssetDisabled({
       sourceKey: 'builtin:bash',
       disabled: true,
     })
     expect(fetchSpy).toHaveBeenNthCalledWith(
       1,
-      'http://127.0.0.1:43127/api/v1/workspace/catalog/tool-catalog/disable',
+      'http://127.0.0.1:43127/api/v1/workspace/catalog/management-projection/disable',
       expect.objectContaining({ method: 'PATCH', headers: expect.any(Headers) }),
     )
 

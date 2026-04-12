@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import type {
   AgentRecord,
   AvatarUploadPayload,
+  CapabilityManagementEntry,
   ExportWorkspaceAgentBundleInput,
   ImportWorkspaceAgentBundlePreview,
   ImportWorkspaceAgentBundleResult,
@@ -12,7 +13,6 @@ import type {
   UpsertAgentInput,
   UpsertTeamInput,
   WorkspaceDirectoryUploadEntry,
-  WorkspaceToolCatalogEntry,
 } from '@octopus/schema'
 
 import { usePagination } from '@/composables/usePagination'
@@ -178,7 +178,7 @@ export function useAgentCenter(scope: CenterScope) {
     isProjectScope.value ? (currentProject.value?.description ?? '') : '',
   )
   const builtinOptions = computed<SelectOption[]>(() =>
-    catalogStore.toolCatalogEntries
+    catalogStore.managementEntries
       .filter(entry => entry.kind === 'builtin')
       .map(entry => ({
         value: entry.builtinKey ?? entry.name,
@@ -188,7 +188,7 @@ export function useAgentCenter(scope: CenterScope) {
       })),
   )
   const skillOptions = computed<SelectOption[]>(() =>
-    catalogStore.toolCatalogEntries
+    catalogStore.managementEntries
       .filter(entry => entry.kind === 'skill')
       .map(entry => ({
         value: entry.id,
@@ -198,7 +198,7 @@ export function useAgentCenter(scope: CenterScope) {
       })),
   )
   const mcpOptions = computed<SelectOption[]>(() =>
-    catalogStore.toolCatalogEntries
+    catalogStore.managementEntries
       .filter(entry => entry.kind === 'mcp')
       .map(entry => ({
         value: entry.serverName ?? entry.name,
@@ -325,7 +325,7 @@ export function useAgentCenter(scope: CenterScope) {
   const selectedTeams = computed(() =>
     currentTeams.value.filter(team => selectedTeamIds.value.includes(team.id)),
   )
-  const activeResourceKind = computed<WorkspaceToolCatalogEntry['kind'] | null>(() =>
+  const activeResourceKind = computed<CapabilityManagementEntry['kind'] | null>(() =>
     activeTab.value === 'builtin' || activeTab.value === 'skill' || activeTab.value === 'mcp'
       ? activeTab.value
       : null,
@@ -362,7 +362,7 @@ export function useAgentCenter(scope: CenterScope) {
   )
   const resourceCatalogEntries = computed(() => {
     const projectOwnerId = projectId.value
-    return catalogStore.toolCatalogEntries
+    return catalogStore.managementEntries
       .filter((entry) => {
         if (!isProjectScope.value) {
           return true
@@ -388,7 +388,7 @@ export function useAgentCenter(scope: CenterScope) {
   const filteredResourceEntries = computed(() => {
     const kind = activeResourceKind.value
     if (!kind) {
-      return [] as WorkspaceToolCatalogEntry[]
+      return [] as CapabilityManagementEntry[]
     }
     const query = resourceQuery.value.trim().toLowerCase()
     return resourceCatalogEntries.value.filter((entry) => {
@@ -469,7 +469,7 @@ export function useAgentCenter(scope: CenterScope) {
     },
     {
       label: '工具集成',
-      value: String(catalogStore.toolCatalogEntries.length),
+      value: String(catalogStore.managementEntries.length),
       helper: '可用工具与技能总数',
       tone: 'default' as const,
     },

@@ -1130,8 +1130,130 @@ pub struct ModelCatalogSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct WorkspaceToolCatalogSnapshot {
-    pub entries: Vec<WorkspaceToolCatalogEntry>,
+pub struct CapabilityAssetManifest {
+    pub asset_id: String,
+    pub workspace_id: String,
+    pub source_key: String,
+    pub kind: String,
+    pub name: String,
+    pub description: String,
+    pub display_path: String,
+    pub owner_scope: Option<String>,
+    pub owner_id: Option<String>,
+    pub owner_label: Option<String>,
+    pub required_permission: Option<String>,
+    pub management: WorkspaceToolManagementCapabilities,
+    pub installed: bool,
+    pub enabled: bool,
+    pub health: String,
+    pub state: String,
+    pub import_status: String,
+    pub export_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillPackageManifest {
+    pub asset_id: String,
+    pub workspace_id: String,
+    pub source_key: String,
+    pub kind: String,
+    pub name: String,
+    pub description: String,
+    pub display_path: String,
+    pub owner_scope: Option<String>,
+    pub owner_id: Option<String>,
+    pub owner_label: Option<String>,
+    pub required_permission: Option<String>,
+    pub management: WorkspaceToolManagementCapabilities,
+    pub installed: bool,
+    pub enabled: bool,
+    pub health: String,
+    pub state: String,
+    pub import_status: String,
+    pub export_status: String,
+    pub package_kind: String,
+    pub active: bool,
+    pub shadowed_by: Option<String>,
+    pub source_origin: String,
+    pub workspace_owned: bool,
+    pub relative_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpServerPackageManifest {
+    pub asset_id: String,
+    pub workspace_id: String,
+    pub source_key: String,
+    pub kind: String,
+    pub name: String,
+    pub description: String,
+    pub display_path: String,
+    pub owner_scope: Option<String>,
+    pub owner_id: Option<String>,
+    pub owner_label: Option<String>,
+    pub required_permission: Option<String>,
+    pub management: WorkspaceToolManagementCapabilities,
+    pub installed: bool,
+    pub enabled: bool,
+    pub health: String,
+    pub state: String,
+    pub import_status: String,
+    pub export_status: String,
+    pub package_kind: String,
+    pub server_name: String,
+    pub endpoint: String,
+    pub tool_names: Vec<String>,
+    pub scope: String,
+    pub status_detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CapabilityManagementEntry {
+    pub id: String,
+    pub asset_id: String,
+    pub workspace_id: String,
+    pub name: String,
+    pub kind: String,
+    pub description: String,
+    pub required_permission: Option<String>,
+    pub availability: String,
+    pub source_key: String,
+    pub display_path: String,
+    pub disabled: bool,
+    pub management: WorkspaceToolManagementCapabilities,
+    pub builtin_key: Option<String>,
+    pub active: Option<bool>,
+    pub shadowed_by: Option<String>,
+    pub source_origin: Option<String>,
+    pub workspace_owned: Option<bool>,
+    pub relative_path: Option<String>,
+    pub server_name: Option<String>,
+    pub endpoint: Option<String>,
+    pub tool_names: Option<Vec<String>>,
+    pub status_detail: Option<String>,
+    pub scope: Option<String>,
+    pub owner_scope: Option<String>,
+    pub owner_id: Option<String>,
+    pub owner_label: Option<String>,
+    pub consumers: Option<Vec<WorkspaceToolConsumerSummary>>,
+    pub installed: bool,
+    pub enabled: bool,
+    pub health: String,
+    pub state: String,
+    pub import_status: String,
+    pub export_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CapabilityManagementProjection {
+    pub entries: Vec<CapabilityManagementEntry>,
+    pub assets: Vec<CapabilityAssetManifest>,
+    pub skill_packages: Vec<SkillPackageManifest>,
+    pub mcp_server_packages: Vec<McpServerPackageManifest>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1186,7 +1308,7 @@ pub struct WorkspaceToolCatalogEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct WorkspaceToolDisablePatch {
+pub struct CapabilityAssetDisablePatch {
     pub source_key: String,
     pub disabled: bool,
 }

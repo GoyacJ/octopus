@@ -2,6 +2,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type {
+  CapabilityManagementEntry,
   JsonValue,
   WorkspaceDirectoryUploadEntry,
   WorkspaceFileUploadPayload,
@@ -10,7 +11,6 @@ import type {
   WorkspaceSkillFileDocument,
   WorkspaceSkillTreeDocument,
   WorkspaceSkillTreeNode,
-  WorkspaceToolCatalogEntry,
   WorkspaceToolKind,
 } from '@octopus/schema'
 
@@ -22,7 +22,7 @@ import { pickSkillArchive, pickSkillFolder } from '@/tauri/client'
 export type DraftMode = 'none' | 'new-skill' | 'new-mcp'
 export type PendingSkillAction = 'copy' | 'import' | null
 export type PendingSkillImportSource = 'archive' | 'folder' | null
-export type SkillCatalogEntry = Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>
+export type SkillCatalogEntry = Extract<CapabilityManagementEntry, { kind: 'skill' }>
 
 export interface SkillTreeRow {
   path: string
@@ -147,7 +147,7 @@ export function useToolsView() {
     label: t(`tools.tabs.${kind}`),
   })))
 
-  const allEntries = computed(() => catalogStore.toolCatalogEntries)
+  const allEntries = computed(() => catalogStore.managementEntries)
   const activeTabEntries = computed(() => allEntries.value.filter(entry => entry.kind === activeTab.value))
   const activeTabCount = computed(() => activeTabEntries.value.length)
   const filteredEntries = computed(() => {
@@ -413,7 +413,7 @@ export function useToolsView() {
     return error instanceof Error ? error.message : t('tools.editor.unknownError')
   }
 
-  function availabilityTone(availability: WorkspaceToolCatalogEntry['availability']) {
+  function availabilityTone(availability: CapabilityManagementEntry['availability']) {
     switch (availability) {
       case 'healthy':
         return 'success'
@@ -428,18 +428,18 @@ export function useToolsView() {
     return t(`tools.tabs.${kind}`)
   }
 
-  function availabilityLabel(availability: WorkspaceToolCatalogEntry['availability']) {
+  function availabilityLabel(availability: CapabilityManagementEntry['availability']) {
     return t(`tools.availability.${availability}`)
   }
 
-  function permissionLabel(permission: WorkspaceToolCatalogEntry['requiredPermission']) {
+  function permissionLabel(permission: CapabilityManagementEntry['requiredPermission']) {
     if (!permission) {
       return t('common.na')
     }
     return t(`tools.requiredPermissions.${permission}`)
   }
 
-  function ownerScopeLabel(ownerScope: WorkspaceToolCatalogEntry['ownerScope']) {
+  function ownerScopeLabel(ownerScope: CapabilityManagementEntry['ownerScope']) {
     if (!ownerScope) {
       return t('common.na')
     }
@@ -448,11 +448,11 @@ export function useToolsView() {
     return translated === translationKey ? ownerScope : translated
   }
 
-  function sourceOriginLabel(entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) {
+  function sourceOriginLabel(entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>) {
     return t(`tools.sourceOrigins.${entry.sourceOrigin}`)
   }
 
-  function skillStateLabel(entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) {
+  function skillStateLabel(entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>) {
     return entry.active ? t('tools.states.active') : t('tools.states.shadowed')
   }
 
@@ -463,7 +463,7 @@ export function useToolsView() {
     return file.isText ? t('tools.editor.textFile') : t('tools.editor.binaryFile')
   }
 
-  function isExternalSkillEntry(entry: WorkspaceToolCatalogEntry): entry is SkillCatalogEntry {
+  function isExternalSkillEntry(entry: CapabilityManagementEntry): entry is SkillCatalogEntry {
     return entry.kind === 'skill' && !entry.workspaceOwned
   }
 
@@ -495,7 +495,7 @@ export function useToolsView() {
           content: newSkillContentDraft.value,
         })
         draftMode.value = 'none'
-        selectedEntryId.value = catalogStore.toolCatalogEntries.find(entry => entry.sourceKey === document.sourceKey)?.id ?? document.id
+        selectedEntryId.value = catalogStore.managementEntries.find(entry => entry.sourceKey === document.sourceKey)?.id ?? document.id
         return
       }
 
@@ -505,7 +505,7 @@ export function useToolsView() {
           config: parseJsonObjectDraft(mcpConfigDraft.value),
         })
         draftMode.value = 'none'
-        selectedEntryId.value = catalogStore.toolCatalogEntries.find(entry => entry.sourceKey === document.sourceKey)?.id ?? ''
+        selectedEntryId.value = catalogStore.managementEntries.find(entry => entry.sourceKey === document.sourceKey)?.id ?? ''
         return
       }
 
@@ -560,11 +560,11 @@ export function useToolsView() {
     }
   }
 
-  async function toggleDisabled(entry: WorkspaceToolCatalogEntry, disabled: boolean) {
+  async function toggleDisabled(entry: CapabilityManagementEntry, disabled: boolean) {
     panelError.value = ''
     toggling.value = true
     try {
-      await catalogStore.setToolDisabled({
+      await catalogStore.setAssetDisabled({
         sourceKey: entry.sourceKey,
         disabled,
       })
@@ -645,7 +645,7 @@ export function useToolsView() {
     submitting.value = true
     try {
       const document = await catalogStore.copyMcpServerToManaged(selectedMcpEntry.value.serverName)
-      selectedEntryId.value = catalogStore.toolCatalogEntries
+      selectedEntryId.value = catalogStore.managementEntries
         .find(entry => entry.kind === 'mcp' && entry.serverName === document.serverName)?.id ?? ''
     } catch (error) {
       panelError.value = toErrorMessage(error)
@@ -715,7 +715,7 @@ export function useToolsView() {
           .filter(id => !pendingSkillCopies.value.some(item => item.skillId === id))
         resetPendingSkillAction()
         if (document) {
-          selectedEntryId.value = catalogStore.toolCatalogEntries.find(entry => entry.sourceKey === document.sourceKey)?.id ?? document.id
+          selectedEntryId.value = catalogStore.managementEntries.find(entry => entry.sourceKey === document.sourceKey)?.id ?? document.id
         }
         return
       }
@@ -743,7 +743,7 @@ export function useToolsView() {
         activeTab.value = 'skill'
         draftMode.value = 'none'
         if (document) {
-          selectedEntryId.value = catalogStore.toolCatalogEntries.find(entry => entry.sourceKey === document.sourceKey)?.id ?? document.id
+          selectedEntryId.value = catalogStore.managementEntries.find(entry => entry.sourceKey === document.sourceKey)?.id ?? document.id
         }
       }
     } catch (error) {
@@ -808,7 +808,7 @@ export function useToolsView() {
     return files[0]?.relativePath.split('/')[0] ?? 'new-skill'
   }
 
-  function resolveSkillTargetSlug(entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) {
+  function resolveSkillTargetSlug(entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>) {
     const relativePath = entry.relativePath ?? ''
     const segments = relativePath.split('/').filter(Boolean)
     const baseName = segments.at(-2) || entry.name

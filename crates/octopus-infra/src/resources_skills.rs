@@ -1,7 +1,11 @@
 use super::*;
 use std::collections::{BTreeMap, HashMap};
 
-use octopus_core::WorkspaceToolConsumerSummary;
+use octopus_core::{
+    CapabilityAssetManifest, CapabilityManagementEntry, CapabilityManagementProjection,
+    McpServerPackageManifest, SkillPackageManifest, WorkspaceToolCatalogEntry,
+    WorkspaceToolConsumerSummary,
+};
 
 use crate::agent_assets::{
     find_builtin_mcp_asset, find_builtin_skill_asset_by_id, list_builtin_agent_templates,
@@ -10,6 +14,28 @@ use crate::agent_assets::{
 };
 
 const BUILTIN_SKILL_SOURCE_ORIGIN: &str = "builtin_bundle";
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WorkspaceCapabilityAssetStateDocument {
+    #[serde(default)]
+    pub(super) assets: BTreeMap<String, WorkspaceCapabilityAssetMetadata>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WorkspaceCapabilityAssetMetadata {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) trusted: Option<bool>,
+}
+
+impl WorkspaceCapabilityAssetMetadata {
+    fn is_empty(&self) -> bool {
+        self.enabled.is_none() && self.trusted.is_none()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum SkillDefinitionSource {
@@ -80,6 +106,226 @@ pub(super) fn normalize_required_permission(permission: runtime::PermissionMode)
         runtime::PermissionMode::WorkspaceWrite => Some("workspace-write".into()),
         runtime::PermissionMode::DangerFullAccess => Some("danger-full-access".into()),
         runtime::PermissionMode::Prompt | runtime::PermissionMode::Allow => None,
+    }
+}
+
+fn capability_asset_import_status(entry: &WorkspaceToolCatalogEntry) -> String {
+    match entry.kind.as_str() {
+        "builtin" => "not-importable".into(),
+        "skill" => {
+            if entry.workspace_owned == Some(true)
+                || entry.owner_scope.as_deref() == Some("project")
+            {
+                "managed".into()
+            } else {
+                "copy-required".into()
+            }
+        }
+        _ => {
+            if entry.scope.as_deref() == Some("builtin") {
+                "copy-required".into()
+            } else {
+                "managed".into()
+            }
+        }
+    }
+}
+
+fn capability_asset_export_status(entry: &WorkspaceToolCatalogEntry) -> String {
+    if entry.kind == "builtin" {
+        "not-exportable".into()
+    } else if entry.management.can_edit || entry.management.can_delete {
+        "exportable".into()
+    } else {
+        "readonly".into()
+    }
+}
+
+fn capability_asset_state(entry: &WorkspaceToolCatalogEntry) -> String {
+    if entry.disabled {
+        return "disabled".into();
+    }
+    match entry.kind.as_str() {
+        "builtin" => "builtin".into(),
+        "skill" => {
+            if entry.shadowed_by.is_some() {
+                "shadowed".into()
+            } else if entry.owner_scope.as_deref() == Some("project") {
+                "project".into()
+            } else if entry.source_origin.as_deref() == Some(BUILTIN_SKILL_SOURCE_ORIGIN) {
+                "builtin".into()
+            } else if entry.workspace_owned == Some(true) {
+                if entry.owner_scope.as_deref() == Some("workspace") {
+                    "workspace".into()
+                } else {
+                    "managed".into()
+                }
+            } else {
+                "external".into()
+            }
+        }
+        _ => entry.scope.clone().unwrap_or_else(|| "workspace".into()),
+    }
+}
+
+fn capability_asset_manifest(entry: &WorkspaceToolCatalogEntry) -> CapabilityAssetManifest {
+    CapabilityAssetManifest {
+        asset_id: entry.id.clone(),
+        workspace_id: entry.workspace_id.clone(),
+        source_key: entry.source_key.clone(),
+        kind: entry.kind.clone(),
+        name: entry.name.clone(),
+        description: entry.description.clone(),
+        display_path: entry.display_path.clone(),
+        owner_scope: entry.owner_scope.clone(),
+        owner_id: entry.owner_id.clone(),
+        owner_label: entry.owner_label.clone(),
+        required_permission: entry.required_permission.clone(),
+        management: entry.management.clone(),
+        installed: true,
+        enabled: !entry.disabled,
+        health: entry.availability.clone(),
+        state: capability_asset_state(entry),
+        import_status: capability_asset_import_status(entry),
+        export_status: capability_asset_export_status(entry),
+    }
+}
+
+fn capability_management_entry(entry: &WorkspaceToolCatalogEntry) -> CapabilityManagementEntry {
+    let asset = capability_asset_manifest(entry);
+    CapabilityManagementEntry {
+        id: entry.id.clone(),
+        asset_id: asset.asset_id.clone(),
+        workspace_id: entry.workspace_id.clone(),
+        name: entry.name.clone(),
+        kind: entry.kind.clone(),
+        description: entry.description.clone(),
+        required_permission: entry.required_permission.clone(),
+        availability: entry.availability.clone(),
+        source_key: entry.source_key.clone(),
+        display_path: entry.display_path.clone(),
+        disabled: entry.disabled,
+        management: entry.management.clone(),
+        builtin_key: entry.builtin_key.clone(),
+        active: entry.active,
+        shadowed_by: entry.shadowed_by.clone(),
+        source_origin: entry.source_origin.clone(),
+        workspace_owned: entry.workspace_owned,
+        relative_path: entry.relative_path.clone(),
+        server_name: entry.server_name.clone(),
+        endpoint: entry.endpoint.clone(),
+        tool_names: entry.tool_names.clone(),
+        status_detail: entry.status_detail.clone(),
+        scope: entry.scope.clone(),
+        owner_scope: entry.owner_scope.clone(),
+        owner_id: entry.owner_id.clone(),
+        owner_label: entry.owner_label.clone(),
+        consumers: entry.consumers.clone(),
+        installed: asset.installed,
+        enabled: asset.enabled,
+        health: asset.health,
+        state: asset.state,
+        import_status: asset.import_status,
+        export_status: asset.export_status,
+    }
+}
+
+fn skill_package_manifest(entry: &WorkspaceToolCatalogEntry) -> Option<SkillPackageManifest> {
+    if entry.kind != "skill" {
+        return None;
+    }
+    let asset = capability_asset_manifest(entry);
+    let package_kind = if entry.owner_scope.as_deref() == Some("project") {
+        "project"
+    } else if entry.source_origin.as_deref() == Some(BUILTIN_SKILL_SOURCE_ORIGIN) {
+        "builtin"
+    } else if entry.workspace_owned == Some(true) {
+        "workspace"
+    } else {
+        "external"
+    };
+    Some(SkillPackageManifest {
+        asset_id: asset.asset_id,
+        workspace_id: asset.workspace_id,
+        source_key: asset.source_key,
+        kind: "skill".into(),
+        name: asset.name,
+        description: asset.description,
+        display_path: asset.display_path,
+        owner_scope: asset.owner_scope,
+        owner_id: asset.owner_id,
+        owner_label: asset.owner_label,
+        required_permission: asset.required_permission,
+        management: asset.management,
+        installed: asset.installed,
+        enabled: asset.enabled,
+        health: asset.health,
+        state: asset.state,
+        import_status: asset.import_status,
+        export_status: asset.export_status,
+        package_kind: package_kind.into(),
+        active: entry.active.unwrap_or(false),
+        shadowed_by: entry.shadowed_by.clone(),
+        source_origin: entry
+            .source_origin
+            .clone()
+            .unwrap_or_else(|| "skills_dir".into()),
+        workspace_owned: entry.workspace_owned.unwrap_or(false),
+        relative_path: entry.relative_path.clone(),
+    })
+}
+
+fn mcp_server_package_manifest(
+    entry: &WorkspaceToolCatalogEntry,
+) -> Option<McpServerPackageManifest> {
+    if entry.kind != "mcp" {
+        return None;
+    }
+    let asset = capability_asset_manifest(entry);
+    let scope = entry.scope.clone().unwrap_or_else(|| "workspace".into());
+    Some(McpServerPackageManifest {
+        asset_id: asset.asset_id,
+        workspace_id: asset.workspace_id,
+        source_key: asset.source_key,
+        kind: "mcp".into(),
+        name: asset.name,
+        description: asset.description,
+        display_path: asset.display_path,
+        owner_scope: asset.owner_scope,
+        owner_id: asset.owner_id,
+        owner_label: asset.owner_label,
+        required_permission: asset.required_permission,
+        management: asset.management,
+        installed: asset.installed,
+        enabled: asset.enabled,
+        health: asset.health,
+        state: asset.state,
+        import_status: asset.import_status,
+        export_status: asset.export_status,
+        package_kind: scope.clone(),
+        server_name: entry.server_name.clone().unwrap_or_default(),
+        endpoint: entry.endpoint.clone().unwrap_or_default(),
+        tool_names: entry.tool_names.clone().unwrap_or_default(),
+        scope,
+        status_detail: entry.status_detail.clone(),
+    })
+}
+
+fn capability_management_projection(
+    entries: Vec<WorkspaceToolCatalogEntry>,
+) -> CapabilityManagementProjection {
+    let management_entries = entries
+        .iter()
+        .map(capability_management_entry)
+        .collect::<Vec<_>>();
+    CapabilityManagementProjection {
+        assets: entries.iter().map(capability_asset_manifest).collect(),
+        skill_packages: entries.iter().filter_map(skill_package_manifest).collect(),
+        mcp_server_packages: entries
+            .iter()
+            .filter_map(mcp_server_package_manifest)
+            .collect(),
+        entries: management_entries,
     }
 }
 
@@ -497,43 +743,77 @@ pub(super) fn skill_source_key(path: &Path, workspace_root: &Path) -> String {
     format!("skill:{}", display_path(path, workspace_root))
 }
 
-pub(super) fn disabled_source_keys(
-    document: &serde_json::Map<String, serde_json::Value>,
-) -> std::collections::BTreeSet<String> {
-    document
-        .get("toolCatalog")
-        .and_then(|value| value.as_object())
-        .and_then(|tool_catalog| tool_catalog.get("disabledSourceKeys"))
-        .and_then(|value| value.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.as_str().map(ToOwned::to_owned))
-                .collect()
-        })
-        .unwrap_or_default()
+pub(super) fn load_workspace_asset_state_document(
+    paths: &WorkspacePaths,
+) -> Result<WorkspaceCapabilityAssetStateDocument, AppError> {
+    match fs::read_to_string(&paths.workspace_asset_state_path) {
+        Ok(raw) => {
+            if raw.trim().is_empty() {
+                return Ok(WorkspaceCapabilityAssetStateDocument::default());
+            }
+            Ok(serde_json::from_str(&raw)?)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            Ok(WorkspaceCapabilityAssetStateDocument::default())
+        }
+        Err(error) => Err(error.into()),
+    }
 }
 
-pub(super) fn set_disabled_source_keys(
-    document: &mut serde_json::Map<String, serde_json::Value>,
-    source_keys: &std::collections::BTreeSet<String>,
+pub(super) fn save_workspace_asset_state_document(
+    paths: &WorkspacePaths,
+    document: &WorkspaceCapabilityAssetStateDocument,
 ) -> Result<(), AppError> {
-    let tool_catalog = document
-        .entry("toolCatalog")
-        .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()))
-        .as_object_mut()
-        .ok_or_else(|| AppError::invalid_input("toolCatalog must be a JSON object"))?;
-    tool_catalog.insert(
-        "disabledSourceKeys".into(),
-        serde_json::Value::Array(
-            source_keys
-                .iter()
-                .cloned()
-                .map(serde_json::Value::String)
-                .collect(),
-        ),
-    );
+    fs::create_dir_all(&paths.asset_config_dir)?;
+    fs::write(
+        &paths.workspace_asset_state_path,
+        serde_json::to_string_pretty(document)?,
+    )?;
     Ok(())
+}
+
+pub(super) fn workspace_asset_is_disabled(
+    document: &WorkspaceCapabilityAssetStateDocument,
+    source_key: &str,
+) -> bool {
+    matches!(
+        document
+            .assets
+            .get(source_key)
+            .and_then(|metadata| metadata.enabled),
+        Some(false)
+    )
+}
+
+fn normalize_workspace_asset_state_document(document: &mut WorkspaceCapabilityAssetStateDocument) {
+    document.assets.retain(|_, metadata| !metadata.is_empty());
+}
+
+pub(super) fn set_workspace_asset_enabled(
+    document: &mut WorkspaceCapabilityAssetStateDocument,
+    source_key: &str,
+    enabled: bool,
+) {
+    let metadata = document.assets.entry(source_key.to_string()).or_default();
+    metadata.enabled = if enabled { None } else { Some(false) };
+    normalize_workspace_asset_state_document(document);
+}
+
+pub(super) fn set_workspace_asset_trusted(
+    document: &mut WorkspaceCapabilityAssetStateDocument,
+    source_key: &str,
+    trusted: bool,
+) {
+    let metadata = document.assets.entry(source_key.to_string()).or_default();
+    metadata.trusted = Some(trusted);
+    normalize_workspace_asset_state_document(document);
+}
+
+pub(super) fn remove_workspace_asset_metadata(
+    document: &mut WorkspaceCapabilityAssetStateDocument,
+    source_key: &str,
+) {
+    document.assets.remove(source_key);
 }
 
 pub(super) fn validate_skill_slug(slug: &str) -> Result<String, AppError> {
@@ -1609,13 +1889,12 @@ impl InfraWorkspaceService {
         write_workspace_runtime_document(&self.state.paths, &document)
     }
 
-    pub(super) async fn build_tool_catalog(
+    pub(super) async fn build_tool_catalog_entries(
         &self,
-    ) -> Result<WorkspaceToolCatalogSnapshot, AppError> {
+    ) -> Result<Vec<WorkspaceToolCatalogEntry>, AppError> {
         let workspace_id = self.state.workspace_id()?;
         let workspace_root = self.state.paths.root.clone();
-        let runtime_document = load_workspace_runtime_document(&self.state.paths)?;
-        let disabled_keys = disabled_source_keys(&runtime_document);
+        let asset_state_document = load_workspace_asset_state_document(&self.state.paths)?;
         let projects = self
             .state
             .projects
@@ -1689,7 +1968,7 @@ impl InfraWorkspaceService {
                 availability: "healthy".into(),
                 source_key: source_key.clone(),
                 display_path: "runtime builtin registry".into(),
-                disabled: disabled_keys.contains(&source_key),
+                disabled: workspace_asset_is_disabled(&asset_state_document, &source_key),
                 management: WorkspaceToolManagementCapabilities {
                     can_disable: true,
                     can_edit: false,
@@ -1737,7 +2016,7 @@ impl InfraWorkspaceService {
                 },
                 source_key: source_key.clone(),
                 display_path: display_path(&skill.path, &workspace_root),
-                disabled: disabled_keys.contains(&source_key),
+                disabled: workspace_asset_is_disabled(&asset_state_document, &source_key),
                 management: WorkspaceToolManagementCapabilities {
                     can_disable: true,
                     can_edit: workspace_owned,
@@ -1783,7 +2062,7 @@ impl InfraWorkspaceService {
                 availability: "healthy".into(),
                 source_key: source_key.clone(),
                 display_path: skill.display_path.clone(),
-                disabled: disabled_keys.contains(&source_key),
+                disabled: workspace_asset_is_disabled(&asset_state_document, &source_key),
                 management: WorkspaceToolManagementCapabilities {
                     can_disable: true,
                     can_edit: false,
@@ -1859,7 +2138,7 @@ impl InfraWorkspaceService {
                 availability: availability.into(),
                 source_key: source_key.clone(),
                 display_path: "config/runtime/workspace.json".into(),
-                disabled: disabled_keys.contains(&source_key),
+                disabled: workspace_asset_is_disabled(&asset_state_document, &source_key),
                 management: WorkspaceToolManagementCapabilities {
                     can_disable: true,
                     can_edit: true,
@@ -1904,7 +2183,10 @@ impl InfraWorkspaceService {
                 availability: "configured".into(),
                 source_key: format!("mcp:{}", asset.server_name),
                 display_path: asset.display_path.clone(),
-                disabled: disabled_keys.contains(&format!("mcp:{}", asset.server_name)),
+                disabled: workspace_asset_is_disabled(
+                    &asset_state_document,
+                    &format!("mcp:{}", asset.server_name),
+                ),
                 management: WorkspaceToolManagementCapabilities {
                     can_disable: true,
                     can_edit: false,
@@ -1949,7 +2231,7 @@ impl InfraWorkspaceService {
                     availability: "configured".into(),
                     source_key: source_key.clone(),
                     display_path: format!("config/runtime/projects/{}.json", project.id),
-                    disabled: disabled_keys.contains(&source_key),
+                    disabled: workspace_asset_is_disabled(&asset_state_document, &source_key),
                     management: WorkspaceToolManagementCapabilities {
                         can_disable: true,
                         can_edit: false,
@@ -1982,6 +2264,13 @@ impl InfraWorkspaceService {
             })
         });
 
-        Ok(WorkspaceToolCatalogSnapshot { entries })
+        Ok(entries)
+    }
+
+    pub(super) async fn build_capability_management_projection(
+        &self,
+    ) -> Result<CapabilityManagementProjection, AppError> {
+        let entries = self.build_tool_catalog_entries().await?;
+        Ok(capability_management_projection(entries))
     }
 }

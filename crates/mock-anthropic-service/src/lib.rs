@@ -447,17 +447,27 @@ fn build_stream_body(request: &MessageRequest, scenario: Scenario) -> String {
                 &[r#"{"command":"printf 'should not run'","timeout":1000}"#],
             ),
         },
-        Scenario::PluginToolRoundtrip => match latest_tool_result(request) {
-            Some((tool_output, _)) => final_text_sse(&format!(
-                "plugin tool completed: {}",
-                extract_plugin_message(&tool_output)
-            )),
-            None => tool_use_sse(
-                "toolu_plugin_echo",
-                "plugin_echo",
-                &[r#"{"message":"hello from plugin parity"}"#],
-            ),
-        },
+        Scenario::PluginToolRoundtrip => {
+            let tool_results = tool_results_by_name(request);
+            if let Some((tool_output, _)) = tool_results.get("plugin_echo") {
+                final_text_sse(&format!(
+                    "plugin tool completed: {}",
+                    extract_plugin_message(tool_output)
+                ))
+            } else if tool_results.contains_key("ToolSearch") {
+                tool_use_sse(
+                    "toolu_plugin_echo",
+                    "plugin_echo",
+                    &[r#"{"message":"hello from plugin parity"}"#],
+                )
+            } else {
+                tool_use_sse(
+                    "toolu_plugin_search",
+                    "ToolSearch",
+                    &[r#"{"query":"select:plugin_echo","max_results":5}"#],
+                )
+            }
+        }
         Scenario::AutoCompactTriggered => {
             final_text_sse_with_usage("auto compact parity complete.", 50_000, 200)
         }
@@ -607,21 +617,32 @@ fn build_message_response(request: &MessageRequest, scenario: Scenario) -> Messa
                 json!({"command": "printf 'should not run'", "timeout": 1000}),
             ),
         },
-        Scenario::PluginToolRoundtrip => match latest_tool_result(request) {
-            Some((tool_output, _)) => text_message_response(
-                "msg_plugin_tool_final",
-                &format!(
-                    "plugin tool completed: {}",
-                    extract_plugin_message(&tool_output)
-                ),
-            ),
-            None => tool_message_response(
-                "msg_plugin_tool_start",
-                "toolu_plugin_echo",
-                "plugin_echo",
-                json!({"message": "hello from plugin parity"}),
-            ),
-        },
+        Scenario::PluginToolRoundtrip => {
+            let tool_results = tool_results_by_name(request);
+            if let Some((tool_output, _)) = tool_results.get("plugin_echo") {
+                text_message_response(
+                    "msg_plugin_tool_final",
+                    &format!(
+                        "plugin tool completed: {}",
+                        extract_plugin_message(tool_output)
+                    ),
+                )
+            } else if tool_results.contains_key("ToolSearch") {
+                tool_message_response(
+                    "msg_plugin_tool_start",
+                    "toolu_plugin_echo",
+                    "plugin_echo",
+                    json!({"message": "hello from plugin parity"}),
+                )
+            } else {
+                tool_message_response(
+                    "msg_plugin_tool_search",
+                    "toolu_plugin_search",
+                    "ToolSearch",
+                    json!({"query": "select:plugin_echo", "max_results": 5}),
+                )
+            }
+        }
         Scenario::AutoCompactTriggered => text_message_response_with_usage(
             "msg_auto_compact_triggered",
             "auto compact parity complete.",

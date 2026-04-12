@@ -1138,17 +1138,290 @@ WorkspaceToolCatalogEntry:
     - $ref: "#/components/schemas/WorkspaceBuiltinToolCatalogEntry"
     - $ref: "#/components/schemas/WorkspaceSkillToolCatalogEntry"
     - $ref: "#/components/schemas/WorkspaceMcpToolCatalogEntry"
-WorkspaceToolCatalogSnapshot:
+CapabilityAssetState:
+  enum:
+    - builtin
+    - workspace
+    - project
+    - user
+    - external
+    - managed
+    - shadowed
+    - disabled
+  type: string
+CapabilityAssetImportStatus:
+  enum:
+    - managed
+    - copy-required
+    - not-importable
+  type: string
+CapabilityAssetExportStatus:
+  enum:
+    - exportable
+    - readonly
+    - not-exportable
+  type: string
+CapabilityAssetManifest:
+  additionalProperties: false
+  properties:
+    assetId:
+      type: string
+    workspaceId:
+      type: string
+    sourceKey:
+      type: string
+    kind:
+      enum:
+        - builtin
+        - skill
+        - mcp
+      type: string
+    name:
+      type: string
+    description:
+      type: string
+    displayPath:
+      type: string
+    ownerScope:
+      type: string
+    ownerId:
+      type: string
+    ownerLabel:
+      type: string
+    requiredPermission:
+      type: string
+      nullable: true
+    management:
+      $ref: "#/components/schemas/WorkspaceToolManagementCapabilities"
+    installed:
+      type: boolean
+    enabled:
+      type: boolean
+    health:
+      type: string
+    state:
+      $ref: "#/components/schemas/CapabilityAssetState"
+    importStatus:
+      $ref: "#/components/schemas/CapabilityAssetImportStatus"
+    exportStatus:
+      $ref: "#/components/schemas/CapabilityAssetExportStatus"
+  required:
+    - assetId
+    - workspaceId
+    - sourceKey
+    - kind
+    - name
+    - description
+    - displayPath
+    - requiredPermission
+    - management
+    - installed
+    - enabled
+    - health
+    - state
+    - importStatus
+    - exportStatus
+  type: object
+SkillPackageManifest:
+  allOf:
+    - $ref: "#/components/schemas/CapabilityAssetManifest"
+    - additionalProperties: false
+      properties:
+        kind:
+          enum:
+            - skill
+          type: string
+        packageKind:
+          enum:
+            - workspace
+            - project
+            - builtin
+            - external
+          type: string
+        active:
+          type: boolean
+        shadowedBy:
+          type: string
+        sourceOrigin:
+          enum:
+            - skills_dir
+            - legacy_commands_dir
+            - builtin_bundle
+          type: string
+        workspaceOwned:
+          type: boolean
+        relativePath:
+          type: string
+      required:
+        - kind
+        - packageKind
+        - active
+        - sourceOrigin
+        - workspaceOwned
+McpServerPackageManifest:
+  allOf:
+    - $ref: "#/components/schemas/CapabilityAssetManifest"
+    - additionalProperties: false
+      properties:
+        kind:
+          enum:
+            - mcp
+          type: string
+        packageKind:
+          enum:
+            - workspace
+            - project
+            - user
+            - builtin
+          type: string
+        serverName:
+          type: string
+        endpoint:
+          type: string
+        toolNames:
+          items:
+            type: string
+          type: array
+        scope:
+          enum:
+            - workspace
+            - project
+            - user
+            - builtin
+          type: string
+        statusDetail:
+          type: string
+      required:
+        - kind
+        - packageKind
+        - serverName
+        - endpoint
+        - toolNames
+        - scope
+CapabilityManagementEntry:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    assetId:
+      type: string
+    workspaceId:
+      type: string
+    name:
+      type: string
+    kind:
+      enum:
+        - builtin
+        - skill
+        - mcp
+      type: string
+    description:
+      type: string
+    requiredPermission:
+      type: string
+      nullable: true
+    availability:
+      type: string
+    sourceKey:
+      type: string
+    displayPath:
+      type: string
+    disabled:
+      type: boolean
+    management:
+      $ref: "#/components/schemas/WorkspaceToolManagementCapabilities"
+    builtinKey:
+      type: string
+    active:
+      type: boolean
+    shadowedBy:
+      type: string
+    sourceOrigin:
+      type: string
+    workspaceOwned:
+      type: boolean
+    relativePath:
+      type: string
+    serverName:
+      type: string
+    endpoint:
+      type: string
+    toolNames:
+      items:
+        type: string
+      type: array
+    statusDetail:
+      type: string
+    scope:
+      type: string
+    ownerScope:
+      type: string
+    ownerId:
+      type: string
+    ownerLabel:
+      type: string
+    consumers:
+      items:
+        $ref: "#/components/schemas/WorkspaceToolConsumerSummary"
+      type: array
+    installed:
+      type: boolean
+    enabled:
+      type: boolean
+    health:
+      type: string
+    state:
+      $ref: "#/components/schemas/CapabilityAssetState"
+    importStatus:
+      $ref: "#/components/schemas/CapabilityAssetImportStatus"
+    exportStatus:
+      $ref: "#/components/schemas/CapabilityAssetExportStatus"
+  required:
+    - id
+    - assetId
+    - workspaceId
+    - name
+    - kind
+    - description
+    - requiredPermission
+    - availability
+    - sourceKey
+    - displayPath
+    - disabled
+    - management
+    - installed
+    - enabled
+    - health
+    - state
+    - importStatus
+    - exportStatus
+  type: object
+CapabilityManagementProjection:
   additionalProperties: false
   properties:
     entries:
       items:
-        $ref: "#/components/schemas/WorkspaceToolCatalogEntry"
+        $ref: "#/components/schemas/CapabilityManagementEntry"
+      type: array
+    assets:
+      items:
+        $ref: "#/components/schemas/CapabilityAssetManifest"
+      type: array
+    skillPackages:
+      items:
+        $ref: "#/components/schemas/SkillPackageManifest"
+      type: array
+    mcpServerPackages:
+      items:
+        $ref: "#/components/schemas/McpServerPackageManifest"
       type: array
   required:
     - entries
+    - assets
+    - skillPackages
+    - mcpServerPackages
   type: object
-WorkspaceToolDisablePatch:
+CapabilityAssetDisablePatch:
   additionalProperties: false
   properties:
     disabled:
@@ -1158,6 +1431,27 @@ WorkspaceToolDisablePatch:
   required:
     - sourceKey
     - disabled
+  type: object
+WorkspaceToolConsumerSummary:
+  additionalProperties: false
+  properties:
+    id:
+      type: string
+    kind:
+      type: string
+    name:
+      type: string
+    ownerId:
+      type: string
+    ownerLabel:
+      type: string
+    scope:
+      type: string
+  required:
+    - kind
+    - id
+    - name
+    - scope
   type: object
 WorkspaceToolManagementCapabilities:
   additionalProperties: false

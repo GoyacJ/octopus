@@ -4,6 +4,7 @@ use octopus_core::{
     AuthorizationRequest, CreateProjectPromotionRequestInput,
     ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult, ProjectPromotionRequest,
     ProtectedResourceDescriptor, ReviewProjectPromotionRequestInput,
+    CapabilityManagementProjection,
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -1905,10 +1906,10 @@ pub(crate) async fn workspace_provider_credentials(
     ))
 }
 
-pub(crate) async fn workspace_tool_catalog(
+pub(crate) async fn workspace_capability_management_projection(
     State(state): State<ServerState>,
     headers: HeaderMap,
-) -> Result<Json<WorkspaceToolCatalogSnapshot>, ApiError> {
+) -> Result<Json<CapabilityManagementProjection>, ApiError> {
     ensure_capability_session(
         &state,
         &headers,
@@ -1918,14 +1919,20 @@ pub(crate) async fn workspace_tool_catalog(
         None,
     )
     .await?;
-    Ok(Json(state.services.workspace.get_tool_catalog().await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .get_capability_management_projection()
+            .await?,
+    ))
 }
 
-pub(crate) async fn workspace_tool_catalog_disable(
+pub(crate) async fn workspace_capability_asset_disable(
     State(state): State<ServerState>,
     headers: HeaderMap,
-    Json(patch): Json<WorkspaceToolDisablePatch>,
-) -> Result<Json<WorkspaceToolCatalogSnapshot>, ApiError> {
+    Json(patch): Json<CapabilityAssetDisablePatch>,
+) -> Result<Json<CapabilityManagementProjection>, ApiError> {
     ensure_capability_session(
         &state,
         &headers,
@@ -1939,7 +1946,7 @@ pub(crate) async fn workspace_tool_catalog_disable(
         state
             .services
             .workspace
-            .set_tool_catalog_disabled(patch)
+            .set_capability_asset_disabled(patch)
             .await?,
     ))
 }
@@ -3271,6 +3278,10 @@ mod tests {
             name: "  Resource Project  ".into(),
             description: "  Resource import coverage.  ".into(),
             resource_directory: "  data/projects/resource-project/resources  ".into(),
+            owner_user_id: None,
+            member_user_ids: None,
+            permission_overrides: None,
+            linked_workspace_assets: None,
             assignments: None,
         })
         .expect("validated request");
@@ -3286,6 +3297,10 @@ mod tests {
             name: "Project".into(),
             description: String::new(),
             resource_directory: "   ".into(),
+            owner_user_id: None,
+            member_user_ids: None,
+            permission_overrides: None,
+            linked_workspace_assets: None,
             assignments: None,
         })
         .is_err());
@@ -3298,6 +3313,10 @@ mod tests {
             description: "  Updated description.  ".into(),
             status: " archived ".into(),
             resource_directory: "  data/projects/resource-project/resources  ".into(),
+            owner_user_id: None,
+            member_user_ids: None,
+            permission_overrides: None,
+            linked_workspace_assets: None,
             assignments: None,
         })
         .expect("validated update");
@@ -3315,6 +3334,10 @@ mod tests {
             description: String::new(),
             status: "disabled".into(),
             resource_directory: "data/projects/resource-project/resources".into(),
+            owner_user_id: None,
+            member_user_ids: None,
+            permission_overrides: None,
+            linked_workspace_assets: None,
             assignments: None,
         })
         .is_err());
@@ -3323,6 +3346,10 @@ mod tests {
             description: String::new(),
             status: "active".into(),
             resource_directory: " ".into(),
+            owner_user_id: None,
+            member_user_ids: None,
+            permission_overrides: None,
+            linked_workspace_assets: None,
             assignments: None,
         })
         .is_err());

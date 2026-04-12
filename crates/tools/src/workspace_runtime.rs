@@ -583,7 +583,22 @@ pub(crate) struct AgentJob {
     pub(crate) manifest: AgentOutput,
     pub(crate) prompt: String,
     system_prompt: Vec<String>,
-    pub(crate) allowed_tools: BTreeSet<String>,
+    pub(crate) capability_profile: CapabilityProfile,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct AgentSpawnFailure {
+    pub(crate) manifest: Option<AgentOutput>,
+    pub(crate) error: String,
+}
+
+impl AgentSpawnFailure {
+    fn new(error: impl Into<String>) -> Self {
+        Self {
+            manifest: None,
+            error: error.into(),
+        }
+    }
 }
 
 const DEFAULT_AGENT_MODEL: &str = "claude-opus-4-6";
@@ -603,16 +618,27 @@ pub(crate) fn execute_agent_with_spawn<F>(
 where
     F: FnOnce(AgentJob) -> Result<(), String>,
 {
+    execute_agent_with_spawn_detailed(input, spawn_fn).map_err(|failure| failure.error)
+}
+
+pub(crate) fn execute_agent_with_spawn_detailed<F>(
+    input: AgentInput,
+    spawn_fn: F,
+) -> Result<AgentOutput, AgentSpawnFailure>
+where
+    F: FnOnce(AgentJob) -> Result<(), String>,
+{
     if input.description.trim().is_empty() {
-        return Err(String::from("description must not be empty"));
+        return Err(AgentSpawnFailure::new("description must not be empty"));
     }
     if input.prompt.trim().is_empty() {
-        return Err(String::from("prompt must not be empty"));
+        return Err(AgentSpawnFailure::new("prompt must not be empty"));
     }
 
     let agent_id = make_agent_id();
-    let output_dir = agent_store_dir()?;
-    std::fs::create_dir_all(&output_dir).map_err(|error| error.to_string())?;
+    let output_dir = agent_store_dir().map_err(AgentSpawnFailure::new)?;
+    std::fs::create_dir_all(&output_dir)
+        .map_err(|error| AgentSpawnFailure::new(error.to_string()))?;
     let output_file = output_dir.join(format!("{agent_id}.md"));
     let manifest_file = output_dir.join(format!("{agent_id}.json"));
     let normalized_subagent_type = normalize_subagent_type(input.subagent_type.as_deref());
@@ -624,8 +650,9 @@ where
         .filter(|name| !name.is_empty())
         .unwrap_or_else(|| slugify_agent_name(&input.description));
     let created_at = iso8601_now();
-    let system_prompt = build_agent_system_prompt(&normalized_subagent_type)?;
-    let allowed_tools = allowed_tools_for_subagent(&normalized_subagent_type);
+    let system_prompt =
+        build_agent_system_prompt(&normalized_subagent_type).map_err(AgentSpawnFailure::new)?;
+    let capability_profile = capability_profile_for_subagent(&normalized_subagent_type);
 
     let output_contents = format!(
         "# Agent Task
@@ -642,7 +669,8 @@ where
 ",
         agent_id, agent_name, input.description, normalized_subagent_type, created_at, input.prompt
     );
-    std::fs::write(&output_file, output_contents).map_err(|error| error.to_string())?;
+    std::fs::write(&output_file, output_contents)
+        .map_err(|error| AgentSpawnFailure::new(error.to_string()))?;
 
     let manifest = AgentOutput {
         agent_id,
@@ -661,25 +689,33 @@ where
         derived_state: String::from("working"),
         error: None,
     };
-    write_agent_manifest(&manifest)?;
+    write_agent_manifest(&manifest).map_err(AgentSpawnFailure::new)?;
 
     let manifest_for_spawn = manifest.clone();
     let job = AgentJob {
         manifest: manifest_for_spawn,
         prompt: input.prompt,
         system_prompt,
-        allowed_tools,
+        capability_profile,
     };
     if let Err(error) = spawn_fn(job) {
         let error = format!("failed to spawn sub-agent: {error}");
-        persist_agent_terminal_state(&manifest, "failed", None, Some(error.clone()))?;
-        return Err(error);
+        persist_agent_terminal_state(&manifest, "failed", None, Some(error.clone())).map_err(
+            |persist_error| AgentSpawnFailure {
+                manifest: Some(manifest.clone()),
+                error: persist_error,
+            },
+        )?;
+        return Err(AgentSpawnFailure {
+            manifest: Some(manifest),
+            error,
+        });
     }
 
     Ok(manifest)
 }
 
-fn spawn_agent_job(job: AgentJob) -> Result<(), String> {
+pub(crate) fn spawn_agent_job(job: AgentJob) -> Result<(), String> {
     let thread_name = format!("clawd-agent-{}", job.manifest.agent_id);
     std::thread::Builder::new()
         .name(thread_name)
@@ -723,11 +759,23 @@ fn build_agent_runtime(
         .model
         .clone()
         .unwrap_or_else(|| DEFAULT_AGENT_MODEL.to_string());
-    let allowed_tools = job.allowed_tools.clone();
-    let api_client = ProviderRuntimeClient::new(model, allowed_tools.clone())?;
+    let capability_profile = job.capability_profile.clone();
+    let capability_provider = CapabilityProvider::builtin();
+    let capability_state =
+        std::sync::Arc::new(std::sync::Mutex::new(SessionCapabilityState::default()));
+    let api_client = ProviderRuntimeClient::from_capability_provider(
+        model,
+        capability_provider.clone(),
+        capability_profile.clone(),
+        capability_state.clone(),
+    )?;
     let permission_policy = agent_permission_policy();
-    let tool_executor = SubagentToolExecutor::new(allowed_tools)
-        .with_enforcer(PermissionEnforcer::new(permission_policy.clone()));
+    let tool_executor = SubagentToolExecutor::from_capability_provider(
+        capability_profile,
+        capability_provider,
+        capability_state,
+    )
+    .with_enforcer(PermissionEnforcer::new(permission_policy.clone()));
     Ok(ConversationRuntime::new(
         Session::new(),
         api_client,
@@ -760,7 +808,7 @@ fn resolve_agent_model(model: Option<&str>) -> String {
         .to_string()
 }
 
-pub(crate) fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String> {
+fn capability_profile_for_subagent(subagent_type: &str) -> CapabilityProfile {
     let tools = match subagent_type {
         "Explore" => vec![
             "read_file",
@@ -769,7 +817,8 @@ pub(crate) fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String
             "WebFetch",
             "WebSearch",
             "ToolSearch",
-            "Skill",
+            "SkillDiscovery",
+            "SkillTool",
             "StructuredOutput",
         ],
         "Plan" => vec![
@@ -779,7 +828,8 @@ pub(crate) fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String
             "WebFetch",
             "WebSearch",
             "ToolSearch",
-            "Skill",
+            "SkillDiscovery",
+            "SkillTool",
             "TodoWrite",
             "StructuredOutput",
             "SendUserMessage",
@@ -792,6 +842,8 @@ pub(crate) fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String
             "WebFetch",
             "WebSearch",
             "ToolSearch",
+            "SkillDiscovery",
+            "SkillTool",
             "TodoWrite",
             "StructuredOutput",
             "SendUserMessage",
@@ -804,7 +856,8 @@ pub(crate) fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String
             "WebFetch",
             "WebSearch",
             "ToolSearch",
-            "Skill",
+            "SkillDiscovery",
+            "SkillTool",
             "StructuredOutput",
             "SendUserMessage",
         ],
@@ -827,7 +880,8 @@ pub(crate) fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String
             "WebFetch",
             "WebSearch",
             "TodoWrite",
-            "Skill",
+            "SkillDiscovery",
+            "SkillTool",
             "ToolSearch",
             "NotebookEdit",
             "Sleep",
@@ -838,7 +892,14 @@ pub(crate) fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String
             "PowerShell",
         ],
     };
-    tools.into_iter().map(str::to_string).collect()
+    CapabilityProfile::from_tools(tools.into_iter().map(str::to_string).collect())
+}
+
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn allowed_tools_for_subagent(subagent_type: &str) -> BTreeSet<String> {
+    capability_profile_for_subagent(subagent_type)
+        .allowed_tools()
+        .clone()
 }
 
 pub(crate) fn agent_permission_policy() -> PermissionPolicy {
@@ -1061,19 +1122,43 @@ struct ProviderRuntimeClient {
     runtime: tokio::runtime::Runtime,
     client: ProviderClient,
     model: String,
-    allowed_tools: BTreeSet<String>,
+    capability_runtime: CapabilityRuntime,
+    capability_profile: CapabilityProfile,
+    session_capability_store: SessionCapabilityStore,
 }
 
 impl ProviderRuntimeClient {
     #[allow(clippy::needless_pass_by_value)]
-    fn new(model: String, allowed_tools: BTreeSet<String>) -> Result<Self, String> {
+    fn from_capability_provider(
+        model: String,
+        capability_provider: CapabilityProvider,
+        capability_profile: CapabilityProfile,
+        session_capability_state: SharedSessionCapabilityState,
+    ) -> Result<Self, String> {
+        Self::with_capability_runtime(
+            model,
+            CapabilityRuntime::new(capability_provider),
+            capability_profile,
+            session_capability_state,
+        )
+    }
+
+    #[allow(clippy::needless_pass_by_value)]
+    fn with_capability_runtime(
+        model: String,
+        capability_runtime: CapabilityRuntime,
+        capability_profile: CapabilityProfile,
+        session_capability_state: SharedSessionCapabilityState,
+    ) -> Result<Self, String> {
         let model = resolve_model_alias(&model).clone();
         let client = ProviderClient::from_model(&model).map_err(|error| error.to_string())?;
         Ok(Self {
             runtime: tokio::runtime::Runtime::new().map_err(|error| error.to_string())?,
             client,
             model,
-            allowed_tools,
+            capability_runtime,
+            capability_profile,
+            session_capability_store: SessionCapabilityStore::from_shared(session_capability_state),
         })
     }
 }
@@ -1081,28 +1166,39 @@ impl ProviderRuntimeClient {
 impl ApiClient for ProviderRuntimeClient {
     #[allow(clippy::too_many_lines)]
     fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>, RuntimeError> {
-        let tools = tool_specs_for_allowed_tools(Some(&self.allowed_tools))
-            .into_iter()
-            .map(|spec| ToolDefinition {
-                name: spec.name.to_string(),
-                description: Some(spec.description.to_string()),
-                input_schema: spec.input_schema,
-            })
-            .collect::<Vec<_>>();
+        let current_dir = std::env::current_dir().ok();
+        let (tools, request_overrides) = {
+            let state = self.session_capability_store.snapshot();
+            let tools = self
+                .capability_runtime
+                .planned_tool_definitions(
+                    CapabilityPlannerInput::new(
+                        Some(self.capability_profile.allowed_tools()),
+                        Some(&state),
+                    )
+                    .with_current_dir(current_dir.as_deref()),
+                )
+                .map_err(RuntimeError::new)?;
+            let overrides =
+                apply_skill_session_overrides(&self.model, request.system_prompt.clone(), &state);
+            (tools, overrides)
+        };
+        let tools_enabled = !tools.is_empty();
         let message_request = MessageRequest {
-            model: self.model.clone(),
-            max_tokens: max_tokens_for_model(&self.model),
+            model: request_overrides.model.clone(),
+            max_tokens: max_tokens_for_model(&request_overrides.model),
             messages: convert_messages(&request.messages),
-            system: (!request.system_prompt.is_empty()).then(|| request.system_prompt.join("\n\n")),
-            tools: (!tools.is_empty()).then_some(tools),
-            tool_choice: (!self.allowed_tools.is_empty()).then_some(ToolChoice::Auto),
+            system: (!request_overrides.system_sections.is_empty())
+                .then(|| request_overrides.system_sections.join("\n\n")),
+            tools: tools_enabled.then_some(tools),
+            tool_choice: tools_enabled.then_some(ToolChoice::Auto),
             stream: true,
             temperature: None,
             top_p: None,
             frequency_penalty: None,
             presence_penalty: None,
             stop: None,
-            reasoning_effort: None,
+            reasoning_effort: request_overrides.reasoning_effort.clone(),
         };
 
         self.runtime.block_on(async {
@@ -1198,35 +1294,77 @@ impl ApiClient for ProviderRuntimeClient {
 }
 
 pub(crate) struct SubagentToolExecutor {
-    allowed_tools: BTreeSet<String>,
-    enforcer: Option<PermissionEnforcer>,
+    capability_runtime: CapabilityRuntime,
+    capability_profile: CapabilityProfile,
+    session_capability_store: SessionCapabilityStore,
 }
 
 impl SubagentToolExecutor {
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn new(allowed_tools: BTreeSet<String>) -> Self {
+        Self::from_capability_provider(
+            CapabilityProfile::from_tools(allowed_tools),
+            CapabilityProvider::builtin(),
+            std::sync::Arc::new(std::sync::Mutex::new(SessionCapabilityState::default())),
+        )
+    }
+
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn from_capability_provider(
+        capability_profile: CapabilityProfile,
+        capability_provider: CapabilityProvider,
+        session_capability_state: SharedSessionCapabilityState,
+    ) -> Self {
+        Self::from_capability_runtime(
+            capability_profile,
+            CapabilityRuntime::new(capability_provider),
+            session_capability_state,
+        )
+    }
+
+    pub(crate) fn from_capability_runtime(
+        capability_profile: CapabilityProfile,
+        capability_runtime: CapabilityRuntime,
+        session_capability_state: SharedSessionCapabilityState,
+    ) -> Self {
         Self {
-            allowed_tools,
-            enforcer: None,
+            capability_runtime,
+            capability_profile,
+            session_capability_store: SessionCapabilityStore::from_shared(session_capability_state),
         }
     }
 
     pub(crate) fn with_enforcer(mut self, enforcer: PermissionEnforcer) -> Self {
-        self.enforcer = Some(enforcer);
+        self.capability_runtime.set_enforcer(enforcer);
         self
     }
 }
 
 impl ToolExecutor for SubagentToolExecutor {
     fn execute(&mut self, tool_name: &str, input: &str) -> Result<String, ToolError> {
-        if !self.allowed_tools.contains(tool_name) {
-            return Err(ToolError::new(format!(
-                "tool `{tool_name}` is not enabled for this sub-agent"
-            )));
-        }
         let value: Value = serde_json::from_str(input)
             .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")))?;
-        execute_tool_with_enforcer(self.enforcer.as_ref(), tool_name, &value)
-            .map_err(ToolError::new)
+        let current_dir = std::env::current_dir().ok();
+        let state = self.session_capability_store.snapshot();
+        let capability_runtime = self.capability_runtime.clone();
+        let capability_store = self.session_capability_store.clone();
+        capability_runtime.execute_tool(
+            tool_name,
+            value,
+            CapabilityPlannerInput::new(
+                Some(self.capability_profile.allowed_tools()),
+                Some(&state),
+            )
+            .with_current_dir(current_dir.as_deref()),
+            &capability_store,
+            None,
+            None,
+            move |_dispatch_kind, name, _value| {
+                Err(ToolError::new(format!(
+                    "runtime capability `{name}` is not available for this sub-agent"
+                )))
+            },
+        )
     }
 }
 

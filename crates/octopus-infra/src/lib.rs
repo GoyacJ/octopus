@@ -55,9 +55,8 @@ use octopus_core::{
     WorkspaceResourceContentDocument, WorkspaceResourceFolderUploadEntry,
     WorkspaceResourceImportInput, WorkspaceResourceRecord, WorkspaceSkillDocument,
     WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceSkillTreeNode,
-    WorkspaceSummary, WorkspaceToolCatalogEntry, WorkspaceToolCatalogSnapshot,
-    WorkspaceToolDisablePatch, WorkspaceToolManagementCapabilities, DEFAULT_PROJECT_ID,
-    DEFAULT_WORKSPACE_ID,
+    WorkspaceSummary, CapabilityAssetDisablePatch,
+    WorkspaceToolManagementCapabilities, DEFAULT_PROJECT_ID, DEFAULT_WORKSPACE_ID,
 };
 use octopus_platform::{
     AccessControlService, AppRegistryService, ArtifactService, AuthService, AuthorizationService,

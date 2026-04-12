@@ -1,8 +1,9 @@
+use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 
-use crate::json::JsonError;
+use crate::json::{JsonError, JsonValue};
 use crate::usage::TokenUsage;
 
 mod session_records;
@@ -82,6 +83,7 @@ pub struct Session {
     pub compaction: Option<SessionCompaction>,
     pub fork: Option<SessionFork>,
     pub workspace_root: Option<PathBuf>,
+    pub extensions: BTreeMap<String, JsonValue>,
     persistence: Option<SessionPersistence>,
 }
 
@@ -95,6 +97,7 @@ impl PartialEq for Session {
             && self.compaction == other.compaction
             && self.fork == other.fork
             && self.workspace_root == other.workspace_root
+            && self.extensions == other.extensions
     }
 }
 
@@ -145,6 +148,7 @@ impl Session {
             compaction: None,
             fork: None,
             workspace_root: None,
+            extensions: BTreeMap::new(),
             persistence: None,
         }
     }
@@ -169,6 +173,24 @@ impl Session {
     #[must_use]
     pub fn persistence_path(&self) -> Option<&Path> {
         self.persistence.as_ref().map(|value| value.path.as_path())
+    }
+
+    pub fn set_extension(&mut self, key: impl Into<String>, value: JsonValue) {
+        self.extensions.insert(key.into(), value);
+        self.touch();
+    }
+
+    pub fn remove_extension(&mut self, key: &str) -> Option<JsonValue> {
+        let removed = self.extensions.remove(key);
+        if removed.is_some() {
+            self.touch();
+        }
+        removed
+    }
+
+    #[must_use]
+    pub fn extension(&self, key: &str) -> Option<&JsonValue> {
+        self.extensions.get(key)
     }
 
     pub fn push_user_text(&mut self, text: impl Into<String>) -> Result<(), SessionError> {
@@ -200,6 +222,7 @@ impl Session {
                 branch_name: session_store::normalize_optional_string(branch_name),
             }),
             workspace_root: self.workspace_root.clone(),
+            extensions: self.extensions.clone(),
             persistence: None,
         }
     }

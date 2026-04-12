@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { WorkspaceToolCatalogEntry } from '@octopus/schema'
+import type { CapabilityManagementEntry } from '@octopus/schema'
 import { UiBadge, UiButton, UiEmptyState, UiRecordCard, UiSelect, UiStatusCallout } from '@octopus/ui'
 
 import type { ToolPermissionSelection, ToolSection } from './useProjectSettings'
@@ -10,7 +10,7 @@ const props = defineProps<{
   toolsError: string
   savingTools: boolean
   resolveToolSelection: (sourceKey: string) => string
-  toolPermissionSummaryLabel: (entry: WorkspaceToolCatalogEntry) => string
+  toolPermissionSummaryLabel: (entry: CapabilityManagementEntry) => string
 }>()
 
 const emit = defineEmits<{

@@ -3,6 +3,7 @@ import type {
   AgentRecord,
   ArtifactRecord,
   AutomationRecord,
+  CapabilityManagementProjection,
   CredentialBinding,
   DataPolicyRecord,
   InboxItemRecord,
@@ -39,10 +40,10 @@ import type {
   WorkspaceSkillDocument,
   WorkspaceSkillFileDocument,
   WorkspaceToolCatalogEntry,
-  WorkspaceToolCatalogSnapshot,
 } from '@octopus/schema'
 
 import { buildWorkspaceMenuNodes } from '@/navigation/menuRegistry'
+import { deriveCapabilityManagementProjection } from '@/stores/catalog_management'
 
 import { clone } from './workspace-fixture-bootstrap'
 import {
@@ -73,6 +74,10 @@ export interface FixtureOptions {
     state: WorkspaceFixtureState,
     connection: WorkspaceConnectionRecord,
   ) => void
+  toolCatalogTransform?: (entries: WorkspaceToolCatalogEntry[]) => WorkspaceToolCatalogEntry[]
+  managementProjectionTransform?: (
+    projection: CapabilityManagementProjection,
+  ) => CapabilityManagementProjection
 }
 
 export interface WorkspaceFixtureState {
@@ -96,7 +101,8 @@ export interface WorkspaceFixtureState {
   teams: TeamRecord[]
   projectTeamLinks: Record<string, ProjectTeamLinkRecord[]>
   catalog: ModelCatalogSnapshot
-  toolCatalog: WorkspaceToolCatalogSnapshot
+  toolCatalog: { entries: WorkspaceToolCatalogEntry[] }
+  managementProjection: CapabilityManagementProjection
   skillDocuments: Record<string, WorkspaceSkillDocument>
   skillFiles: Record<string, Record<string, WorkspaceSkillFileDocument>>
   mcpDocuments: Record<string, WorkspaceMcpServerDocument>
@@ -1717,7 +1723,14 @@ export function createWorkspaceFixtureState(
         description: 'Builtin finance MCP server.',
       }),
     ] satisfies WorkspaceToolCatalogEntry[],
-  }
+  } satisfies { entries: WorkspaceToolCatalogEntry[] }
+  const transformedToolCatalog = options.toolCatalogTransform
+    ? { entries: options.toolCatalogTransform(clone(toolCatalog.entries)) }
+    : toolCatalog
+  const managementProjectionBase = deriveCapabilityManagementProjection(transformedToolCatalog.entries)
+  const managementProjection = options.managementProjectionTransform
+    ? options.managementProjectionTransform(clone(managementProjectionBase))
+    : managementProjectionBase
 
   const automations: AutomationRecord[] = local
     ? [
@@ -2112,7 +2125,8 @@ export function createWorkspaceFixtureState(
     teams,
     projectTeamLinks,
     catalog,
-    toolCatalog,
+    toolCatalog: transformedToolCatalog,
+    managementProjection,
     skillDocuments,
     skillFiles,
     mcpDocuments,

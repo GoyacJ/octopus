@@ -4,9 +4,9 @@ import { useRoute } from 'vue-router'
 
 import type {
   AgentRecord,
+  CapabilityManagementEntry,
   ProjectRecord,
   TeamRecord,
-  WorkspaceToolCatalogEntry,
   WorkspaceToolKind,
   WorkspaceToolPermissionMode,
 } from '@octopus/schema'
@@ -22,7 +22,7 @@ export type ToolPermissionSelection = 'inherit' | WorkspaceToolPermissionMode
 
 export interface ToolSection {
   kind: WorkspaceToolKind
-  entries: WorkspaceToolCatalogEntry[]
+  entries: CapabilityManagementEntry[]
 }
 
 const TOOL_TAB_ORDER: WorkspaceToolKind[] = ['builtin', 'skill', 'mcp']
@@ -92,7 +92,7 @@ export function useProjectSettings() {
     workspaceAssignments.value?.tools?.sourceKeys ?? [],
   )
   const allowedToolEntries = computed(() =>
-    catalogStore.toolCatalogEntries.filter(entry => allowedToolSourceKeys.value.includes(entry.sourceKey) && !entry.disabled),
+    catalogStore.managementEntries.filter(entry => allowedToolSourceKeys.value.includes(entry.sourceKey) && !entry.disabled),
   )
   const workspaceAssignedAgents = computed<AgentRecord[]>(() => {
     const assignedIds = workspaceAssignments.value?.agents?.agentIds ?? []
@@ -298,7 +298,7 @@ export function useProjectSettings() {
     return status === 'archived' ? 'warning' : 'success'
   }
 
-  function inferWorkspaceToolPermission(entry: WorkspaceToolCatalogEntry): WorkspaceToolPermissionMode {
+  function inferWorkspaceToolPermission(entry: CapabilityManagementEntry): WorkspaceToolPermissionMode {
     const matchedTool = catalogStore.tools.find(tool =>
       tool.kind === entry.kind
       && tool.name.trim().toLowerCase() === entry.name.trim().toLowerCase(),
@@ -322,7 +322,7 @@ export function useProjectSettings() {
     return toolPermissionDraft.value[sourceKey] ?? 'inherit'
   }
 
-  function toolPermissionSummaryLabel(entry: WorkspaceToolCatalogEntry) {
+  function toolPermissionSummaryLabel(entry: CapabilityManagementEntry) {
     const selection = resolveToolSelection(entry.sourceKey)
     if (selection === 'inherit') {
       return `${t('projectSettings.tools.modes.inherit')} · ${t(`projectSettings.tools.modes.${inferWorkspaceToolPermission(entry)}`)}`

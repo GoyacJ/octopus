@@ -1,6 +1,8 @@
 import type {
   AuditRecord,
   BindPetConversationInput,
+  CapabilityAssetDisablePatch,
+  CapabilityManagementProjection,
   ChangeCurrentUserPasswordRequest,
   ChangeCurrentUserPasswordResponse,
   CopyWorkspaceSkillToManagedInput,
@@ -51,7 +53,6 @@ import type {
   WorkspaceSkillFileDocument,
   ProtectedResourceDescriptor,
   WorkspaceToolCatalogEntry,
-  WorkspaceToolDisablePatch,
   WorkspaceDirectoryUploadEntry,
   ProtectedResourceMetadataUpsertRequest,
   ReviewProjectPromotionRequestInput,
@@ -60,6 +61,7 @@ import { resolveRuntimePermissionMode } from '@octopus/schema'
 
 import type { WorkspaceClient } from '@/tauri/workspace-client'
 import { WorkspaceApiError } from '@/tauri/shared'
+import { deriveCapabilityManagementProjection } from '@/stores/catalog_management'
 
 import { clone, createWorkspaceSessionEnvelope } from './workspace-fixture-bootstrap'
 import type { FixtureOptions, WorkspaceFixtureState } from './workspace-fixture-state'
@@ -1026,6 +1028,7 @@ export function createWorkspaceClientFixture(
   }
 
   const syncManagedToolConfig = () => {
+    syncManagementProjection()
     updateWorkspaceRuntimeDocument((current) => {
       const currentToolCatalog = typeof current.toolCatalog === 'object' && current.toolCatalog && !Array.isArray(current.toolCatalog)
         ? current.toolCatalog
@@ -1043,6 +1046,12 @@ export function createWorkspaceClientFixture(
         ),
       }
     })
+  }
+
+  const syncManagementProjection = () => {
+    workspaceState.managementProjection = deriveCapabilityManagementProjection(
+      workspaceState.toolCatalog.entries,
+    )
   }
 
   const findToolCatalogEntry = (sourceKey: string) =>
@@ -2044,10 +2053,10 @@ export function createWorkspaceClientFixture(
       async getSnapshot() {
         return clone(workspaceState.catalog)
       },
-      async getToolCatalog() {
-        return clone(workspaceState.toolCatalog)
+      async getManagementProjection(): Promise<CapabilityManagementProjection> {
+        return clone(workspaceState.managementProjection)
       },
-      async setToolDisabled(patch: WorkspaceToolDisablePatch) {
+      async setAssetDisabled(patch: CapabilityAssetDisablePatch) {
         const current = findToolCatalogEntry(patch.sourceKey)
         if (!current) {
           throw new WorkspaceApiError({
@@ -2064,7 +2073,7 @@ export function createWorkspaceClientFixture(
           disabled: patch.disabled,
         })
         syncManagedToolConfig()
-        return clone(workspaceState.toolCatalog)
+        return clone(workspaceState.managementProjection)
       },
       async getSkill(skillId) {
         return clone(ensureSkillDocument(skillId))

@@ -185,8 +185,8 @@ fn clean_env_cli_reaches_mock_anthropic_service_across_scripted_parity_scenarios
     let captured = runtime.block_on(server.captured_requests());
     assert_eq!(
         captured.len(),
-        21,
-        "twelve scenarios should produce twenty-one requests"
+        22,
+        "twelve scenarios should produce twenty-two requests"
     );
     assert!(captured
         .iter()
@@ -217,6 +217,7 @@ fn clean_env_cli_reaches_mock_anthropic_service_across_scripted_parity_scenarios
             "bash_permission_prompt_approved",
             "bash_permission_prompt_denied",
             "bash_permission_prompt_denied",
+            "plugin_tool_roundtrip",
             "plugin_tool_roundtrip",
             "plugin_tool_roundtrip",
             "auto_compact_triggered",
@@ -657,12 +658,16 @@ fn assert_bash_permission_prompt_denied(_: &HarnessWorkspace, run: &ScenarioRun)
 }
 
 fn assert_plugin_tool_roundtrip(_: &HarnessWorkspace, run: &ScenarioRun) {
-    assert_eq!(run.response["iterations"], Value::from(2));
+    assert_eq!(run.response["iterations"], Value::from(3));
     assert_eq!(
         run.response["tool_uses"][0]["name"],
+        Value::String("ToolSearch".to_string())
+    );
+    assert_eq!(
+        run.response["tool_uses"][1]["name"],
         Value::String("plugin_echo".to_string())
     );
-    let tool_output = run.response["tool_results"][0]["output"]
+    let tool_output = run.response["tool_results"][1]["output"]
         .as_str()
         .expect("tool output");
     let parsed: Value = serde_json::from_str(tool_output).expect("plugin output json");

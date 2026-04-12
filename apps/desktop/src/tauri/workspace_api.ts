@@ -7,6 +7,8 @@ import type {
   AgentRecord,
   AutomationRecord,
   AuthorizationSnapshot,
+  CapabilityAssetDisablePatch,
+  CapabilityManagementProjection,
   ChangeCurrentUserPasswordResponse,
   CreateProjectPromotionRequestInput,
   CredentialBinding,
@@ -40,7 +42,6 @@ import type {
   WorkspaceSkillDocument,
   WorkspaceSkillFileDocument,
   WorkspaceSkillTreeDocument,
-  WorkspaceToolCatalogSnapshot,
 } from '@octopus/schema'
 
 import { fetchWorkspaceOpenApi } from './shared'
@@ -780,16 +781,21 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
           session: assertWorkspaceRequestReady(context),
         }) as unknown as ModelCatalogSnapshot
       },
-      async getToolCatalog() {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/tool-catalog', 'get', {
-          session: assertWorkspaceRequestReady(context),
-        }) as unknown as WorkspaceToolCatalogSnapshot
+      async getManagementProjection() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/catalog/management-projection',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as unknown as CapabilityManagementProjection
       },
-      async setToolDisabled(patch) {
-        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/tool-catalog/disable', 'patch', {
+      async setAssetDisabled(patch: CapabilityAssetDisablePatch) {
+        return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/management-projection/disable', 'patch', {
           session: assertWorkspaceRequestReady(context),
           body: JSON.stringify(patch),
-        }) as unknown as WorkspaceToolCatalogSnapshot
+        }) as unknown as CapabilityManagementProjection
       },
       async getSkill(skillId) {
         return await fetchWorkspaceOpenApi(context.connection, '/api/v1/workspace/catalog/skills/{skillId}', 'get', {

@@ -1408,33 +1408,28 @@ impl WorkspaceService for InfraWorkspaceService {
             .clone())
     }
 
-    async fn get_tool_catalog(&self) -> Result<WorkspaceToolCatalogSnapshot, AppError> {
-        self.build_tool_catalog().await
+    async fn get_capability_management_projection(
+        &self,
+    ) -> Result<octopus_core::CapabilityManagementProjection, AppError> {
+        self.build_capability_management_projection().await
     }
 
-    async fn set_tool_catalog_disabled(
+    async fn set_capability_asset_disabled(
         &self,
-        patch: WorkspaceToolDisablePatch,
-    ) -> Result<WorkspaceToolCatalogSnapshot, AppError> {
-        let snapshot = self.build_tool_catalog().await?;
-        if !snapshot
-            .entries
+        patch: CapabilityAssetDisablePatch,
+    ) -> Result<octopus_core::CapabilityManagementProjection, AppError> {
+        let entries = self.build_tool_catalog_entries().await?;
+        if !entries
             .iter()
             .any(|entry| entry.source_key == patch.source_key)
         {
-            return Err(AppError::not_found("workspace tool catalog entry"));
+            return Err(AppError::not_found("workspace capability asset"));
         }
 
-        let mut document = load_workspace_runtime_document(&self.state.paths)?;
-        let mut disabled_keys = disabled_source_keys(&document);
-        if patch.disabled {
-            disabled_keys.insert(patch.source_key);
-        } else {
-            disabled_keys.remove(&patch.source_key);
-        }
-        set_disabled_source_keys(&mut document, &disabled_keys)?;
-        self.save_workspace_runtime_document(document)?;
-        self.build_tool_catalog().await
+        let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
+        set_workspace_asset_enabled(&mut asset_state, &patch.source_key, !patch.disabled);
+        save_workspace_asset_state_document(&self.state.paths, &asset_state)?;
+        self.build_capability_management_projection().await
     }
 
     async fn get_workspace_skill(
@@ -1458,11 +1453,15 @@ impl WorkspaceService for InfraWorkspaceService {
         fs::create_dir_all(&skill_dir)?;
         let skill_path = skill_dir.join("SKILL.md");
         fs::write(&skill_path, input.content)?;
-        skill_document_from_path(
+        let document = skill_document_from_path(
             &self.state.paths.root,
             &skill_path,
             SkillSourceOrigin::SkillsDir,
-        )
+        )?;
+        let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
+        set_workspace_asset_trusted(&mut asset_state, &document.source_key, true);
+        save_workspace_asset_state_document(&self.state.paths, &asset_state)?;
+        Ok(document)
     }
 
     async fn update_workspace_skill(
@@ -1526,7 +1525,11 @@ impl WorkspaceService for InfraWorkspaceService {
         input: CopyWorkspaceSkillToManagedInput,
     ) -> Result<WorkspaceSkillDocument, AppError> {
         if let Some(asset) = crate::agent_assets::find_builtin_skill_asset_by_id(skill_id)? {
-            return self.import_skill_files_to_managed_root(&input.slug, asset.files);
+            let document = self.import_skill_files_to_managed_root(&input.slug, asset.files)?;
+            let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
+            set_workspace_asset_trusted(&mut asset_state, &document.source_key, true);
+            save_workspace_asset_state_document(&self.state.paths, &asset_state)?;
+            return Ok(document);
         }
         let entry = self.find_skill_catalog_entry(skill_id)?;
         let source_root = skill_root_path(&entry.path, entry.origin)?;
@@ -1547,7 +1550,11 @@ impl WorkspaceService for InfraWorkspaceService {
                 fs::read(&source_root)?,
             )],
         };
-        self.import_skill_files_to_managed_root(&input.slug, files)
+        let document = self.import_skill_files_to_managed_root(&input.slug, files)?;
+        let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
+        set_workspace_asset_trusted(&mut asset_state, &document.source_key, true);
+        save_workspace_asset_state_document(&self.state.paths, &asset_state)?;
+        Ok(document)
     }
 
     async fn import_workspace_skill_archive(
@@ -1555,7 +1562,11 @@ impl WorkspaceService for InfraWorkspaceService {
         input: ImportWorkspaceSkillArchiveInput,
     ) -> Result<WorkspaceSkillDocument, AppError> {
         let files = extract_archive_entries(&input)?;
-        self.import_skill_files_to_managed_root(&input.slug, files)
+        let document = self.import_skill_files_to_managed_root(&input.slug, files)?;
+        let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
+        set_workspace_asset_trusted(&mut asset_state, &document.source_key, true);
+        save_workspace_asset_state_document(&self.state.paths, &asset_state)?;
+        Ok(document)
     }
 
     async fn import_workspace_skill_folder(
@@ -1563,16 +1574,24 @@ impl WorkspaceService for InfraWorkspaceService {
         input: ImportWorkspaceSkillFolderInput,
     ) -> Result<WorkspaceSkillDocument, AppError> {
         let files = normalize_uploaded_files(&input.files)?;
-        self.import_skill_files_to_managed_root(&input.slug, files)
+        let document = self.import_skill_files_to_managed_root(&input.slug, files)?;
+        let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
+        set_workspace_asset_trusted(&mut asset_state, &document.source_key, true);
+        save_workspace_asset_state_document(&self.state.paths, &asset_state)?;
+        Ok(document)
     }
 
     async fn delete_workspace_skill(&self, skill_id: &str) -> Result<(), AppError> {
         let entry = self.ensure_workspace_owned_skill_entry(skill_id)?;
+        let source_key = skill_source_key(&entry.path, &self.state.paths.root);
         let skill_dir = entry
             .path
             .parent()
             .ok_or_else(|| AppError::invalid_input("workspace skill path is invalid"))?;
         fs::remove_dir_all(skill_dir)?;
+        let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
+        remove_workspace_asset_metadata(&mut asset_state, &source_key);
+        save_workspace_asset_state_document(&self.state.paths, &asset_state)?;
         Ok(())
     }
 
@@ -1604,7 +1623,11 @@ impl WorkspaceService for InfraWorkspaceService {
             })?;
         servers.insert(input.server_name.clone(), serde_json::Value::Object(config));
         self.save_workspace_runtime_document(document)?;
-        self.load_mcp_server_document(&input.server_name)
+        let document = self.load_mcp_server_document(&input.server_name)?;
+        let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
+        set_workspace_asset_trusted(&mut asset_state, &document.source_key, true);
+        save_workspace_asset_state_document(&self.state.paths, &asset_state)?;
+        Ok(document)
     }
 
     async fn copy_workspace_mcp_server_to_managed(
@@ -1627,7 +1650,11 @@ impl WorkspaceService for InfraWorkspaceService {
         }
         servers.insert(server_name.into(), serde_json::Value::Object(config));
         self.save_workspace_runtime_document(document)?;
-        self.load_mcp_server_document(server_name)
+        let document = self.load_mcp_server_document(server_name)?;
+        let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
+        set_workspace_asset_trusted(&mut asset_state, &document.source_key, true);
+        save_workspace_asset_state_document(&self.state.paths, &asset_state)?;
+        Ok(document)
     }
 
     async fn update_workspace_mcp_server(
@@ -1651,7 +1678,11 @@ impl WorkspaceService for InfraWorkspaceService {
             })?;
         servers.insert(server_name.into(), serde_json::Value::Object(config));
         self.save_workspace_runtime_document(document)?;
-        self.load_mcp_server_document(server_name)
+        let document = self.load_mcp_server_document(server_name)?;
+        let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
+        set_workspace_asset_trusted(&mut asset_state, &document.source_key, true);
+        save_workspace_asset_state_document(&self.state.paths, &asset_state)?;
+        Ok(document)
     }
 
     async fn delete_workspace_mcp_server(&self, server_name: &str) -> Result<(), AppError> {
@@ -1661,6 +1692,9 @@ impl WorkspaceService for InfraWorkspaceService {
             return Err(AppError::not_found("workspace mcp server"));
         }
         self.save_workspace_runtime_document(document)?;
+        let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
+        remove_workspace_asset_metadata(&mut asset_state, &format!("mcp:{server_name}"));
+        save_workspace_asset_state_document(&self.state.paths, &asset_state)?;
         Ok(())
     }
 
@@ -2853,6 +2887,10 @@ mod tests {
                 name: "Resource Project".into(),
                 description: "Resource directory persistence.".into(),
                 resource_directory: "data/projects/resource-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
                 assignments: None,
             }))
             .expect("created project");
@@ -2881,6 +2919,10 @@ mod tests {
                 name: "Import Project".into(),
                 description: "Resource import coverage.".into(),
                 resource_directory: "data/projects/import-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
                 assignments: None,
             }))
             .expect("created project");
@@ -3020,6 +3062,10 @@ mod tests {
                 name: "Promotion Project".into(),
                 description: "Promotion coverage.".into(),
                 resource_directory: "data/projects/promotion-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
                 assignments: None,
             }))
             .expect("created project");

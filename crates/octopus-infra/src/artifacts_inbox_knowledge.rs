@@ -184,9 +184,15 @@ mod tests {
     use super::{
         build_infra_bundle, initialize_workspace, CopyWorkspaceSkillToManagedInput, WorkspacePaths,
     };
-    use octopus_core::{CreateProjectRequest, UpdateProjectRequest};
+    use octopus_core::{CapabilityAssetDisablePatch, CreateProjectRequest, UpdateProjectRequest};
     use octopus_platform::{InboxService, WorkspaceService};
     use rusqlite::Connection;
+    use serde_json::Value as JsonValue;
+
+    fn read_json_file(path: &std::path::Path) -> JsonValue {
+        let raw = std::fs::read_to_string(path).expect("json file");
+        serde_json::from_str(&raw).expect("json document")
+    }
 
     #[test]
     fn workspace_initialization_creates_expected_layout_and_defaults() {
@@ -195,6 +201,7 @@ mod tests {
 
         for path in [
             &paths.config_dir,
+            &paths.asset_config_dir,
             &paths.data_dir,
             &paths.runtime_dir,
             &paths.logs_dir,
@@ -323,6 +330,10 @@ default_project_id = "proj-redesign"
                 name: "Assigned Project".into(),
                 description: "Project assignment persistence coverage.".into(),
                 resource_directory: "data/projects/assigned-project/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
                 assignments: Some(octopus_core::ProjectWorkspaceAssignments {
                     models: Some(octopus_core::ProjectModelAssignments {
                         configured_model_ids: vec!["anthropic-primary".into()],
@@ -356,6 +367,10 @@ default_project_id = "proj-redesign"
                     description: "Updated assignment persistence coverage.".into(),
                     status: "active".into(),
                     resource_directory: created.resource_directory.clone(),
+                    owner_user_id: None,
+                    member_user_ids: None,
+                    permission_overrides: None,
+                    linked_workspace_assets: None,
                     assignments: Some(octopus_core::ProjectWorkspaceAssignments {
                         models: Some(octopus_core::ProjectModelAssignments {
                             configured_model_ids: vec!["anthropic-alt".into()],
@@ -419,12 +434,12 @@ default_project_id = "proj-redesign"
         )
         .expect("claude skill");
 
-        let snapshot = tokio::runtime::Runtime::new()
+        let projection = tokio::runtime::Runtime::new()
             .expect("runtime")
-            .block_on(bundle.workspace.get_tool_catalog())
-            .expect("tool catalog");
+            .block_on(bundle.workspace.get_capability_management_projection())
+            .expect("management projection");
 
-        let help_entries = snapshot
+        let help_entries = projection
             .entries
             .iter()
             .filter(|entry| entry.kind == "skill" && entry.name == "help")
@@ -453,12 +468,12 @@ default_project_id = "proj-redesign"
         )
         .expect("workspace runtime config");
 
-        let snapshot = tokio::runtime::Runtime::new()
+        let projection = tokio::runtime::Runtime::new()
             .expect("runtime")
-            .block_on(bundle.workspace.get_tool_catalog())
-            .expect("tool catalog");
+            .block_on(bundle.workspace.get_capability_management_projection())
+            .expect("management projection");
 
-        let ops = snapshot
+        let ops = projection
             .entries
             .iter()
             .find(|entry| entry.kind == "mcp" && entry.server_name.as_deref() == Some("ops"))
@@ -469,6 +484,152 @@ default_project_id = "proj-redesign"
             .status_detail
             .as_deref()
             .is_some_and(|detail| detail.contains("not supported")));
+    }
+
+    #[test]
+    fn capability_management_projection_matches_tool_catalog_and_tracks_disabled_assets() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+        let projection = runtime
+            .block_on(bundle.workspace.get_capability_management_projection())
+            .expect("management projection");
+
+        let projection_keys = projection
+            .entries
+            .iter()
+            .map(|entry| entry.source_key.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert!(projection_keys.contains("builtin:bash"));
+
+        let builtin_bash = projection
+            .entries
+            .iter()
+            .find(|entry| entry.source_key == "builtin:bash")
+            .expect("builtin bash entry");
+        assert!(builtin_bash.enabled);
+        assert_eq!(builtin_bash.state, "builtin");
+
+        let updated_projection = runtime
+            .block_on(
+                bundle
+                    .workspace
+                    .set_capability_asset_disabled(CapabilityAssetDisablePatch {
+                        source_key: "builtin:bash".into(),
+                        disabled: true,
+                    }),
+            )
+            .expect("disabled tool");
+        assert!(updated_projection
+            .entries
+            .iter()
+            .any(|entry| entry.source_key == "builtin:bash" && entry.disabled));
+
+        let projection_after_disable = runtime
+            .block_on(bundle.workspace.get_capability_management_projection())
+            .expect("management projection after disable");
+        let disabled_bash = projection_after_disable
+            .entries
+            .iter()
+            .find(|entry| entry.source_key == "builtin:bash")
+            .expect("disabled bash entry");
+        assert!(!disabled_bash.enabled);
+        assert_eq!(disabled_bash.state, "disabled");
+
+        let runtime_config_path = bundle.paths.runtime_config_dir.join("workspace.json");
+        if runtime_config_path.exists() {
+            let runtime_document = read_json_file(&runtime_config_path);
+            assert!(
+                runtime_document
+                    .get("toolCatalog")
+                    .and_then(|value| value.get("disabledSourceKeys"))
+                    .is_none(),
+                "runtime config should no longer persist disabledSourceKeys: {runtime_document}"
+            );
+        }
+
+        let asset_state = read_json_file(&bundle.paths.workspace_asset_state_path);
+        assert_eq!(
+            asset_state["assets"]["builtin:bash"]["enabled"],
+            JsonValue::Bool(false)
+        );
+    }
+
+    #[test]
+    fn copy_workspace_skill_to_managed_persists_asset_state_metadata() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        let codex_skill_dir = bundle.paths.root.join(".codex/skills/external-help");
+        std::fs::create_dir_all(&codex_skill_dir).expect("codex skill dir");
+        std::fs::write(
+            codex_skill_dir.join("SKILL.md"),
+            "---\nname: external-help\ndescription: External help skill.\n---\n",
+        )
+        .expect("external skill");
+
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+        let projection = runtime
+            .block_on(bundle.workspace.get_capability_management_projection())
+            .expect("management projection");
+        let source = projection
+            .entries
+            .iter()
+            .find(|entry| {
+                entry.kind == "skill"
+                    && entry.display_path == ".codex/skills/external-help/SKILL.md"
+            })
+            .expect("source skill");
+
+        let copied = runtime
+            .block_on(bundle.workspace.copy_workspace_skill_to_managed(
+                &source.id,
+                CopyWorkspaceSkillToManagedInput {
+                    slug: "copied-help".into(),
+                },
+            ))
+            .expect("copied skill");
+
+        let asset_state = read_json_file(&bundle.paths.workspace_asset_state_path);
+        assert_eq!(
+            asset_state["assets"][copied.source_key.as_str()]["trusted"],
+            JsonValue::Bool(true)
+        );
+        assert!(
+            asset_state["assets"][copied.source_key.as_str()]["enabled"].is_null(),
+            "managed skill should default to enabled without an explicit override"
+        );
+    }
+
+    #[test]
+    fn create_workspace_mcp_server_persists_asset_state_metadata() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+        let created = runtime
+            .block_on(bundle.workspace.create_workspace_mcp_server(
+                octopus_core::UpsertWorkspaceMcpServerInput {
+                    server_name: "ops".into(),
+                    config: serde_json::json!({
+                        "transport": "stdio",
+                        "command": "ops-mcp",
+                        "args": ["serve"]
+                    }),
+                },
+            ))
+            .expect("created mcp");
+
+        let asset_state = read_json_file(&bundle.paths.workspace_asset_state_path);
+        assert_eq!(
+            asset_state["assets"][created.source_key.as_str()]["trusted"],
+            JsonValue::Bool(true)
+        );
+        assert!(
+            asset_state["assets"][created.source_key.as_str()]["enabled"].is_null(),
+            "managed mcp should default to enabled without an explicit override"
+        );
     }
 
     #[test]
@@ -484,11 +645,11 @@ default_project_id = "proj-redesign"
         )
         .expect("external skill");
 
-        let snapshot = tokio::runtime::Runtime::new()
+        let projection = tokio::runtime::Runtime::new()
             .expect("runtime")
-            .block_on(bundle.workspace.get_tool_catalog())
-            .expect("tool catalog");
-        let source = snapshot
+            .block_on(bundle.workspace.get_capability_management_projection())
+            .expect("management projection");
+        let source = projection
             .entries
             .iter()
             .find(|entry| {

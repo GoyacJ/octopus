@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 4842ab9309c7b26af58d21e28628c35fc3a19ac135074e6d321f06e179c20bdf
+// Source hash: 89c366274f9ce76b615d696c2cba1cfb339a0a0972a714315247486d831f352a
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "4842ab9309c7b26af58d21e28628c35fc3a19ac135074e6d321f06e179c20bdf"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "89c366274f9ce76b615d696c2cba1cfb339a0a0972a714315247486d831f352a"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -164,9 +164,84 @@ export interface BindPetConversationInput {
   sessionId?: string
 }
 
+export interface CapabilityAssetDisablePatch {
+  disabled: boolean
+  sourceKey: string
+}
+
+export type CapabilityAssetExportStatus = "exportable" | "readonly" | "not-exportable"
+
+export type CapabilityAssetImportStatus = "managed" | "copy-required" | "not-importable"
+
+export interface CapabilityAssetManifest {
+  assetId: string
+  description: string
+  displayPath: string
+  enabled: boolean
+  exportStatus: CapabilityAssetExportStatus
+  health: string
+  importStatus: CapabilityAssetImportStatus
+  installed: boolean
+  kind: "builtin" | "skill" | "mcp"
+  management: WorkspaceToolManagementCapabilities
+  name: string
+  ownerId?: string
+  ownerLabel?: string
+  ownerScope?: string
+  requiredPermission: string
+  sourceKey: string
+  state: CapabilityAssetState
+  workspaceId: string
+}
+
+export type CapabilityAssetState = "builtin" | "workspace" | "project" | "user" | "external" | "managed" | "shadowed" | "disabled"
+
 export interface CapabilityDescriptor {
   capabilityId: string
   label: string
+}
+
+export interface CapabilityManagementEntry {
+  active?: boolean
+  assetId: string
+  availability: string
+  builtinKey?: string
+  consumers?: WorkspaceToolConsumerSummary[]
+  description: string
+  disabled: boolean
+  displayPath: string
+  enabled: boolean
+  endpoint?: string
+  exportStatus: CapabilityAssetExportStatus
+  health: string
+  id: string
+  importStatus: CapabilityAssetImportStatus
+  installed: boolean
+  kind: "builtin" | "skill" | "mcp"
+  management: WorkspaceToolManagementCapabilities
+  name: string
+  ownerId?: string
+  ownerLabel?: string
+  ownerScope?: string
+  relativePath?: string
+  requiredPermission: string
+  scope?: string
+  serverName?: string
+  shadowedBy?: string
+  sourceKey: string
+  sourceOrigin?: string
+  state: CapabilityAssetState
+  statusDetail?: string
+  toolNames?: string[]
+  workspaceId: string
+  workspaceOwned?: boolean
+}
+
+export interface CapabilityManagementProjection {
+  assets: CapabilityAssetManifest[]
+  entries: CapabilityManagementEntry[]
+  mcpServerPackages: McpServerPackageManifest[]
+  skillPackages: SkillPackageManifest[]
 }
 
 export interface ChangeCurrentUserPasswordRequest {
@@ -630,6 +705,8 @@ export type KnowledgeSourceType = "conversation" | "artifact" | "run"
 export type KnowledgeStatus = "candidate" | "reviewed" | "shared" | "archived"
 
 export type Locale = "zh-CN" | "en-US"
+
+export type McpServerPackageManifest = CapabilityAssetManifest & unknown
 
 export interface MenuDefinition {
   featureCode: string
@@ -1318,6 +1395,8 @@ export interface ShellPreferences {
   updateChannel: HostUpdateChannel
 }
 
+export type SkillPackageManifest = CapabilityAssetManifest & unknown
+
 export interface SubmitRuntimeTurnInput {
   actorId?: string
   actorKind?: ConversationActorKind
@@ -1775,13 +1854,13 @@ export interface WorkspaceSummary {
 
 export type WorkspaceToolCatalogEntry = WorkspaceBuiltinToolCatalogEntry | WorkspaceSkillToolCatalogEntry | WorkspaceMcpToolCatalogEntry
 
-export interface WorkspaceToolCatalogSnapshot {
-  entries: WorkspaceToolCatalogEntry[]
-}
-
-export interface WorkspaceToolDisablePatch {
-  disabled: boolean
-  sourceKey: string
+export interface WorkspaceToolConsumerSummary {
+  id: string
+  kind: string
+  name: string
+  ownerId?: string
+  ownerLabel?: string
+  scope: string
 }
 
 export interface WorkspaceToolManagementCapabilities {
@@ -2138,6 +2217,12 @@ export interface OctopusApiPaths {
     patch: { operationId: "updateWorkspaceAutomation"; response: AutomationRecord; error: ApiErrorEnvelope }
     delete: { operationId: "deleteWorkspaceAutomation"; response: void; error: ApiErrorEnvelope }
   }
+  "/api/v1/workspace/catalog/management-projection": {
+    get: { operationId: "getWorkspaceCapabilityManagementProjection"; response: CapabilityManagementProjection; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/catalog/management-projection/disable": {
+    patch: { operationId: "setWorkspaceCapabilityAssetDisabled"; response: CapabilityManagementProjection; error: ApiErrorEnvelope }
+  }
   "/api/v1/workspace/catalog/mcp-servers": {
     post: { operationId: "createWorkspaceMcpServer"; response: WorkspaceMcpServerDocument; error: ApiErrorEnvelope }
   }
@@ -2178,12 +2263,6 @@ export interface OctopusApiPaths {
   }
   "/api/v1/workspace/catalog/skills/import-folder": {
     post: { operationId: "importWorkspaceSkillFolder"; response: WorkspaceSkillDocument; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/catalog/tool-catalog": {
-    get: { operationId: "getWorkspaceToolCatalog"; response: WorkspaceToolCatalogSnapshot; error: ApiErrorEnvelope }
-  }
-  "/api/v1/workspace/catalog/tool-catalog/disable": {
-    patch: { operationId: "setWorkspaceToolCatalogDisabled"; response: WorkspaceToolCatalogSnapshot; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/catalog/tools": {
     get: { operationId: "listWorkspaceTools"; response: ToolRecord[]; error: ApiErrorEnvelope }

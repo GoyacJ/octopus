@@ -8,6 +8,8 @@ import type {
   AgentRecord,
   AutomationRecord,
   AuthorizationSnapshot,
+  CapabilityManagementProjection,
+  CapabilityAssetDisablePatch,
   CreateMenuPolicyRequest,
   ChangeCurrentUserPasswordRequest,
   ChangeCurrentUserPasswordResponse,
@@ -108,8 +110,6 @@ import type {
   WorkspaceSkillDocument,
   WorkspaceSkillFileDocument,
   WorkspaceSkillTreeDocument,
-  WorkspaceToolCatalogSnapshot,
-  WorkspaceToolDisablePatch,
   ArtifactRecord,
 } from '@octopus/schema'
 
@@ -243,8 +243,8 @@ export interface WorkspaceClient {
   }
   catalog: {
     getSnapshot: () => Promise<ModelCatalogSnapshot>
-    getToolCatalog: () => Promise<WorkspaceToolCatalogSnapshot>
-    setToolDisabled: (patch: WorkspaceToolDisablePatch) => Promise<WorkspaceToolCatalogSnapshot>
+    getManagementProjection: () => Promise<CapabilityManagementProjection>
+    setAssetDisabled: (patch: CapabilityAssetDisablePatch) => Promise<CapabilityManagementProjection>
     getSkill: (skillId: string) => Promise<WorkspaceSkillDocument>
     getSkillTree: (skillId: string) => Promise<WorkspaceSkillTreeDocument>
     getSkillFile: (skillId: string, relativePath: string) => Promise<WorkspaceSkillFileDocument>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
-import type { WorkspaceToolCatalogEntry } from '@octopus/schema'
+import type { CapabilityManagementEntry } from '@octopus/schema'
 import { UiBadge, UiEmptyState, UiInput, UiPagination, UiRecordCard, UiToolbarRow } from '@octopus/ui'
 
 const props = defineProps<{
@@ -9,7 +9,7 @@ const props = defineProps<{
   total: number
   page: number
   pageCount: number
-  pagedEntries: WorkspaceToolCatalogEntry[]
+  pagedEntries: CapabilityManagementEntry[]
 }>()
 
 const emit = defineEmits<{
@@ -19,7 +19,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-function ownerScopeLabel(ownerScope: WorkspaceToolCatalogEntry['ownerScope']) {
+function ownerScopeLabel(ownerScope: CapabilityManagementEntry['ownerScope']) {
   if (!ownerScope) {
     return t('common.na')
   }

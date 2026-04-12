@@ -269,12 +269,12 @@ pub fn build_router(state: ServerState) -> Router {
             get(workspace_provider_credentials),
         )
         .route(
-            "/api/v1/workspace/catalog/tool-catalog",
-            get(workspace_tool_catalog),
+            "/api/v1/workspace/catalog/management-projection",
+            get(workspace_capability_management_projection),
         )
         .route(
-            "/api/v1/workspace/catalog/tool-catalog/disable",
-            patch(workspace_tool_catalog_disable),
+            "/api/v1/workspace/catalog/management-projection/disable",
+            patch(workspace_capability_asset_disable),
         )
         .route(
             "/api/v1/workspace/catalog/skills",
