@@ -10,21 +10,25 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Barrier, Mutex, OnceLock};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::{
-    agent_permission_policy, allowed_tools_for_subagent, classify_lane_failure, derive_agent_state,
+    AgentInput, AgentJob, CapabilityPlannerInput, CapabilityProvider, CapabilityRuntime,
+    LaneEventName, LaneFailureClass, SubagentToolExecutor, agent_permission_policy,
+    allowed_tools_for_subagent, classify_lane_failure, derive_agent_state,
     execute_agent_with_spawn, execute_tool, final_assistant_text, maybe_commit_provenance,
     mvp_tool_specs, permission_mode_from_plugin, persist_agent_terminal_state, push_output_block,
-    run_task_packet, AgentInput, AgentJob, GlobalToolRegistry, LaneEventName, LaneFailureClass,
-    SubagentToolExecutor,
+    run_task_packet,
 };
 use api::OutputContentBlock;
+use plugins::{PluginTool, PluginToolDefinition, PluginToolPermission};
 use runtime::{
-    permission_enforcer::PermissionEnforcer, ApiRequest, AssistantEvent, ConversationRuntime,
-    PermissionMode, PermissionPolicy, RuntimeError, Session, TaskPacket, ToolExecutor,
+    ApiRequest, AssistantEvent, ConfigLoader, ConversationRuntime, PermissionMode,
+    PermissionPolicy, RuntimeError, Session, TaskPacket, ToolExecutor,
+    permission_enforcer::PermissionEnforcer,
 };
 use serde_json::json;
 
@@ -78,6 +82,61 @@ fn permission_policy_for_mode(mode: PermissionMode) -> PermissionPolicy {
         })
 }
 
+fn capability_provider_from_sources(
+    plugin_tools: Vec<PluginTool>,
+    runtime_tools: Vec<super::RuntimeToolDefinition>,
+    provided_capabilities: Vec<super::CapabilitySpec>,
+    enforcer: Option<PermissionEnforcer>,
+) -> CapabilityProvider {
+    CapabilityProvider::from_sources_checked(
+        plugin_tools,
+        runtime_tools,
+        provided_capabilities,
+        enforcer,
+    )
+    .expect("capability sources should validate")
+}
+
+fn capability_runtime_from_sources(
+    plugin_tools: Vec<PluginTool>,
+    runtime_tools: Vec<super::RuntimeToolDefinition>,
+    provided_capabilities: Vec<super::CapabilitySpec>,
+    enforcer: Option<PermissionEnforcer>,
+) -> CapabilityRuntime {
+    CapabilityRuntime::new(capability_provider_from_sources(
+        plugin_tools,
+        runtime_tools,
+        provided_capabilities,
+        enforcer,
+    ))
+}
+
+fn capability_runtime_with_provided_capabilities(
+    provided_capabilities: Vec<super::CapabilitySpec>,
+) -> CapabilityRuntime {
+    capability_runtime_from_sources(Vec::new(), Vec::new(), provided_capabilities, None)
+}
+
+fn capability_runtime_with_runtime_tools(
+    runtime_tools: Vec<super::RuntimeToolDefinition>,
+) -> CapabilityRuntime {
+    capability_runtime_from_sources(Vec::new(), runtime_tools, Vec::new(), None)
+}
+
+fn capability_runtime_with_plugin_tools(plugin_tools: Vec<PluginTool>) -> CapabilityRuntime {
+    capability_runtime_from_sources(plugin_tools, Vec::new(), Vec::new(), None)
+}
+
+fn execute_local_tool_with_runtime(
+    runtime: &CapabilityRuntime,
+    name: &str,
+    input: &serde_json::Value,
+) -> Result<String, String> {
+    runtime
+        .execute_local_tool(name, input)
+        .map_err(|error| error.to_string())
+}
+
 #[test]
 fn exposes_mvp_tools() {
     let names = mvp_tool_specs()
@@ -89,7 +148,8 @@ fn exposes_mvp_tools() {
     assert!(names.contains(&"WebFetch"));
     assert!(names.contains(&"WebSearch"));
     assert!(names.contains(&"TodoWrite"));
-    assert!(names.contains(&"Skill"));
+    assert!(names.contains(&"SkillDiscovery"));
+    assert!(names.contains(&"SkillTool"));
     assert!(names.contains(&"Agent"));
     assert!(names.contains(&"ToolSearch"));
     assert!(names.contains(&"NotebookEdit"));
@@ -381,9 +441,11 @@ fn worker_get_on_unknown_id_returns_error() {
         result.is_err(),
         "WorkerGet on unknown id should return error"
     );
-    assert!(result
-        .expect_err("unknown worker get should fail")
-        .contains("worker not found"));
+    assert!(
+        result
+            .expect_err("unknown worker get should fail")
+            .contains("worker not found")
+    );
 }
 
 #[test]
@@ -603,21 +665,26 @@ fn worker_create_uses_config_trusted_roots_by_default() {
 }
 
 #[test]
-fn global_tool_registry_denies_blocked_tool_before_dispatch() {
+fn capability_runtime_denies_blocked_tool_before_dispatch() {
     // given
     let policy = permission_policy_for_mode(PermissionMode::ReadOnly);
-    let registry = GlobalToolRegistry::builtin().with_enforcer(PermissionEnforcer::new(policy));
+    let runtime = capability_runtime_from_sources(
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Some(PermissionEnforcer::new(policy)),
+    );
 
     // when
-    let error = registry
-        .execute(
-            "write_file",
-            &json!({
-                "path": "blocked.txt",
-                "content": "blocked"
-            }),
-        )
-        .expect_err("write tool should be denied before dispatch");
+    let error = execute_local_tool_with_runtime(
+        &runtime,
+        "write_file",
+        &json!({
+            "path": "blocked.txt",
+            "content": "blocked"
+        }),
+    )
+    .expect_err("write tool should be denied before dispatch");
 
     // then
     assert!(error.contains("requires workspace-write permission"));
@@ -643,9 +710,159 @@ fn subagent_tool_executor_denies_blocked_tool_before_dispatch() {
         .expect_err("subagent write tool should be denied before dispatch");
 
     // then
-    assert!(error
-        .to_string()
-        .contains("requires workspace-write permission"));
+    assert!(
+        error
+            .to_string()
+            .contains("is not enabled in the current capability surface")
+    );
+}
+
+#[test]
+fn subagent_tool_search_select_updates_shared_session_capability_state() {
+    let capability_provider = CapabilityProvider::builtin();
+    let capability_runtime = CapabilityRuntime::new(capability_provider.clone());
+    let profile = super::CapabilityProfile::from_tools(
+        ["ToolSearch", "WebSearch"]
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+    );
+    let shared_state = std::sync::Arc::new(std::sync::Mutex::new(
+        super::SessionCapabilityState::default(),
+    ));
+    let mut executor = SubagentToolExecutor::from_capability_provider(
+        profile.clone(),
+        capability_provider,
+        shared_state.clone(),
+    );
+
+    let output = executor
+        .execute(
+            "ToolSearch",
+            r#"{"query":"select:WebSearch","max_results":5}"#,
+        )
+        .expect("ToolSearch select should succeed");
+    let output_json: serde_json::Value =
+        serde_json::from_str(&output).expect("search output should be valid json");
+    assert_eq!(output_json["matches"][0], "WebSearch");
+
+    let locked = shared_state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert!(locked.is_tool_activated("WebSearch"));
+
+    let surface = capability_runtime
+        .surface_projection(super::CapabilityPlannerInput::new(
+            Some(profile.allowed_tools()),
+            Some(&locked),
+        ))
+        .expect("activated tool should be visible");
+    assert!(
+        surface
+            .visible_tools
+            .iter()
+            .any(|capability| capability.display_name == "WebSearch")
+    );
+}
+
+#[test]
+fn workspace_and_subagent_skill_paths_match_runtime_surface_rules() {
+    let capability = super::CapabilitySpec {
+        capability_id: "plugin-skill.workspace-guide-parity".to_string(),
+        source_kind: super::CapabilitySourceKind::PluginSkill,
+        execution_kind: super::CapabilityExecutionKind::PromptSkill,
+        display_name: "workspace-guide-parity".to_string(),
+        description: "Provider-backed workspace guidance skill.".to_string(),
+        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "skill": { "type": "string" },
+                "arguments": {}
+            },
+            "required": ["skill"],
+            "additionalProperties": false
+        }),
+        search_hint: Some("workspace guidance".to_string()),
+        visibility: super::CapabilityVisibility::DefaultVisible,
+        state: super::CapabilityState::Ready,
+        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
+            required_permission: PermissionMode::ReadOnly,
+        },
+        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
+            selectable: true,
+            requires_approval: false,
+            requires_auth: false,
+        },
+        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
+    };
+    let capability_provider =
+        capability_provider_from_sources(Vec::new(), Vec::new(), vec![capability], None);
+    let capability_runtime = CapabilityRuntime::new(capability_provider.clone());
+
+    let workspace_discovery = capability_runtime.skill_discovery(
+        "workspace guidance",
+        10,
+        super::CapabilityPlannerInput::default(),
+    );
+    let workspace_discovery: serde_json::Value =
+        serde_json::to_value(workspace_discovery).expect("workspace discovery should serialize");
+    assert!(
+        !workspace_discovery["matches"]
+            .as_array()
+            .expect("matches")
+            .iter()
+            .any(|value| value == "workspace-guide-parity")
+    );
+
+    let workspace_error = capability_runtime
+        .execute_skill(
+            "workspace-guide-parity",
+            Some(json!({ "topic": "workspace" })),
+            super::CapabilityPlannerInput::default(),
+        )
+        .expect_err("workspace/runtime skill path should be surface gated");
+    assert!(workspace_error.contains("is not enabled in the current capability surface"));
+
+    let profile = super::CapabilityProfile::from_tools(
+        ["SkillDiscovery", "SkillTool"]
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+    );
+    let shared_state = std::sync::Arc::new(std::sync::Mutex::new(
+        super::SessionCapabilityState::default(),
+    ));
+    let mut executor =
+        SubagentToolExecutor::from_capability_provider(profile, capability_provider, shared_state);
+
+    let subagent_discovery = executor
+        .execute(
+            "SkillDiscovery",
+            r#"{"query":"workspace guidance","max_results":10}"#,
+        )
+        .expect("subagent skill discovery should succeed");
+    let subagent_discovery: serde_json::Value =
+        serde_json::from_str(&subagent_discovery).expect("subagent discovery should be json");
+    assert!(
+        !subagent_discovery["matches"]
+            .as_array()
+            .expect("matches")
+            .iter()
+            .any(|value| value == "workspace-guide-parity")
+    );
+
+    let subagent_error = executor
+        .execute(
+            "SkillTool",
+            r#"{"skill":"workspace-guide-parity","arguments":{"topic":"workspace"}}"#,
+        )
+        .expect_err("subagent skill path should be surface gated");
+    assert!(
+        subagent_error
+            .to_string()
+            .contains("is not enabled in the current capability surface")
+    );
 }
 
 #[test]
@@ -660,9 +877,67 @@ fn permission_mode_from_plugin_rejects_invalid_inputs() {
 }
 
 #[test]
-fn runtime_tools_extend_registry_definitions_permissions_and_search() {
-    let registry = GlobalToolRegistry::builtin()
-        .with_runtime_tools(vec![super::RuntimeToolDefinition {
+fn builtin_capability_surface_classifies_default_visible_and_deferred_tools() {
+    let surface = CapabilityRuntime::builtin()
+        .surface_projection_for_allowlist(None, None)
+        .expect("builtin capabilities should plan");
+
+    let visible = surface
+        .visible_tools
+        .iter()
+        .map(|capability| capability.display_name.as_str())
+        .collect::<Vec<_>>();
+    let deferred = surface
+        .deferred_tools
+        .iter()
+        .map(|capability| capability.display_name.as_str())
+        .collect::<Vec<_>>();
+    let hidden = surface
+        .hidden_capabilities
+        .iter()
+        .map(|capability| capability.display_name.as_str())
+        .collect::<Vec<_>>();
+
+    assert!(visible.contains(&"read_file"));
+    assert!(visible.contains(&"ToolSearch"));
+    assert!(visible.contains(&"SkillDiscovery"));
+    assert!(visible.contains(&"SkillTool"));
+    assert!(!deferred.contains(&"read_file"));
+    assert!(deferred.contains(&"WebSearch"));
+    assert!(!deferred.contains(&"Skill"));
+    assert!(!hidden.contains(&"Skill"));
+}
+
+#[test]
+fn denied_tools_are_filtered_before_exposure() {
+    let policy = permission_policy_for_mode(runtime::PermissionMode::ReadOnly);
+    let runtime = capability_runtime_from_sources(
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Some(PermissionEnforcer::new(policy)),
+    );
+    let allowed = runtime
+        .normalize_allowed_tools(&["read_file,write_file".to_string()])
+        .expect("allow-list should normalize")
+        .expect("allow-list should be populated");
+
+    let definitions = runtime
+        .tool_definitions_for_allowlist(Some(&allowed), None)
+        .expect("definitions should plan");
+    let names = definitions
+        .into_iter()
+        .map(|definition| definition.name)
+        .collect::<Vec<_>>();
+
+    assert_eq!(names, vec!["read_file".to_string()]);
+}
+
+#[test]
+fn runtime_tools_compile_into_deferred_runtime_capabilities() {
+    let runtime = capability_runtime_from_sources(
+        Vec::new(),
+        vec![super::RuntimeToolDefinition {
             name: "mcp__demo__echo".to_string(),
             description: Some("Echo text from the demo MCP server".to_string()),
             input_schema: json!({
@@ -671,21 +946,70 @@ fn runtime_tools_extend_registry_definitions_permissions_and_search() {
                 "additionalProperties": false
             }),
             required_permission: runtime::PermissionMode::ReadOnly,
-        }])
-        .expect("runtime tools should register");
+        }],
+        Vec::new(),
+        None,
+    );
+    let surface = runtime
+        .surface_projection_for_allowlist(None, None)
+        .expect("runtime capabilities should plan");
 
-    let allowed = registry
+    let capability = surface
+        .deferred_tools
+        .iter()
+        .find(|capability| capability.display_name == "mcp__demo__echo")
+        .expect("runtime capability should be present");
+
+    assert_eq!(
+        capability.source_kind,
+        super::capability_runtime::CapabilitySourceKind::RuntimeTool
+    );
+    assert_eq!(
+        capability.execution_kind,
+        super::capability_runtime::CapabilityExecutionKind::Tool
+    );
+    assert_eq!(
+        capability.visibility,
+        super::capability_runtime::CapabilityVisibility::Deferred
+    );
+    assert_eq!(
+        capability.permission_profile.required_permission,
+        runtime::PermissionMode::ReadOnly
+    );
+}
+
+#[test]
+fn runtime_tools_extend_provider_definitions_permissions_and_search() {
+    let runtime = capability_runtime_from_sources(
+        Vec::new(),
+        vec![super::RuntimeToolDefinition {
+            name: "mcp__demo__echo".to_string(),
+            description: Some("Echo text from the demo MCP server".to_string()),
+            input_schema: json!({
+                "type": "object",
+                "properties": { "text": { "type": "string" } },
+                "additionalProperties": false
+            }),
+            required_permission: runtime::PermissionMode::ReadOnly,
+        }],
+        Vec::new(),
+        None,
+    );
+
+    let allowed = runtime
         .normalize_allowed_tools(&["mcp__demo__echo".to_string()])
         .expect("runtime tool should be allow-listable")
         .expect("allow-list should be populated");
     assert!(allowed.contains("mcp__demo__echo"));
 
-    let definitions = registry.definitions(Some(&allowed));
+    let definitions = runtime
+        .tool_definitions_for_allowlist(Some(&allowed), None)
+        .expect("definitions should plan");
     assert_eq!(definitions.len(), 1);
     assert_eq!(definitions[0].name, "mcp__demo__echo");
 
-    let permissions = registry
-        .permission_specs(Some(&allowed))
+    let permissions = runtime
+        .permission_specs_for_allowlist(Some(&allowed), None)
         .expect("runtime tool permissions should resolve");
     assert_eq!(
         permissions,
@@ -695,9 +1019,10 @@ fn runtime_tools_extend_registry_definitions_permissions_and_search() {
         )]
     );
 
-    let search = registry.search(
+    let search = runtime.search(
         "demo echo",
         5,
+        super::CapabilityPlannerInput::default(),
         Some(vec!["pending-server".to_string()]),
         Some(runtime::McpDegradedReport::new(
             vec!["demo".to_string()],
@@ -726,14 +1051,290 @@ fn runtime_tools_extend_registry_definitions_permissions_and_search() {
 }
 
 #[test]
+fn tool_search_returns_only_deferred_tool_capabilities_with_metadata() {
+    let runtime = capability_runtime_from_sources(
+        Vec::new(),
+        vec![super::RuntimeToolDefinition {
+            name: "mcp__demo__echo".to_string(),
+            description: Some("Echo text from the demo MCP server".to_string()),
+            input_schema: json!({
+                "type": "object",
+                "properties": { "text": { "type": "string" } },
+                "additionalProperties": false
+            }),
+            required_permission: runtime::PermissionMode::ReadOnly,
+        }],
+        Vec::new(),
+        None,
+    );
+
+    let search = runtime.search(
+        "select:read_file,mcp__demo__echo,WebSearch",
+        5,
+        super::CapabilityPlannerInput::default(),
+        None,
+        None,
+    );
+    let output = serde_json::to_value(search).expect("search output should serialize");
+    let matches = output["matches"]
+        .as_array()
+        .expect("matches should be present");
+    assert_eq!(matches.len(), 2);
+    assert_eq!(matches[0], "mcp__demo__echo");
+    assert_eq!(matches[1], "WebSearch");
+
+    let results = output["results"]
+        .as_array()
+        .expect("results should be present");
+    let runtime_match = results
+        .iter()
+        .find(|entry| entry["name"] == "mcp__demo__echo")
+        .expect("runtime match should be present");
+    assert_eq!(runtime_match["source_kind"], "runtime_tool");
+    assert_eq!(runtime_match["permission"], "read-only");
+    assert_eq!(runtime_match["state"], "ready");
+    assert_eq!(runtime_match["deferred"], true);
+
+    let builtin_match = results
+        .iter()
+        .find(|entry| entry["name"] == "WebSearch")
+        .expect("builtin match should be present");
+    assert_eq!(builtin_match["source_kind"], "builtin");
+    assert_eq!(builtin_match["deferred"], true);
+}
+
+#[test]
+fn mcp_capability_helpers_build_tool_and_resource_specs() {
+    let tool = runtime::ManagedMcpTool {
+        server_name: "alpha".to_string(),
+        qualified_name: "mcp__alpha__echo".to_string(),
+        raw_name: "echo".to_string(),
+        tool: runtime::McpTool {
+            name: "echo".to_string(),
+            description: Some("Echo input".to_string()),
+            input_schema: Some(json!({
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string" }
+                },
+                "required": ["text"]
+            })),
+            annotations: Some(json!({
+                "readOnlyHint": true
+            })),
+            meta: None,
+        },
+    };
+    let tool_descriptor = super::capability_runtime::mcp_tool_capability_descriptor(&tool);
+    assert_eq!(tool_descriptor.display_name, "mcp__alpha__echo");
+    assert_eq!(
+        tool_descriptor.source_kind,
+        super::CapabilitySourceKind::McpTool
+    );
+    assert_eq!(
+        tool_descriptor.execution_kind,
+        super::CapabilityExecutionKind::Tool
+    );
+    assert_eq!(
+        tool_descriptor.required_permission,
+        PermissionMode::ReadOnly
+    );
+    assert!(!tool_descriptor.requires_auth);
+    assert!(!tool_descriptor.requires_approval);
+
+    let destructive_tool = runtime::McpTool {
+        name: "apply".to_string(),
+        description: None,
+        input_schema: None,
+        annotations: Some(json!({
+            "destructiveHint": true
+        })),
+        meta: None,
+    };
+    assert_eq!(
+        super::capability_runtime::permission_mode_for_mcp_tool(&destructive_tool),
+        PermissionMode::DangerFullAccess
+    );
+
+    let resource = runtime::McpResource {
+        uri: "file://guide.txt".to_string(),
+        name: Some("Guide".to_string()),
+        description: Some("Workspace guide".to_string()),
+        mime_type: Some("text/plain".to_string()),
+        annotations: None,
+        meta: None,
+    };
+    let resource_descriptor =
+        super::capability_runtime::mcp_resource_capability_descriptor("alpha", &resource);
+    assert_eq!(
+        resource_descriptor.source_kind,
+        super::CapabilitySourceKind::McpResource
+    );
+    assert_eq!(
+        resource_descriptor.execution_kind,
+        super::CapabilityExecutionKind::Resource
+    );
+    assert_eq!(
+        resource_descriptor.visibility,
+        super::CapabilityVisibility::DefaultVisible
+    );
+    assert_eq!(
+        resource_descriptor.required_permission,
+        PermissionMode::ReadOnly
+    );
+}
+
+#[test]
+fn managed_mcp_runtime_builds_capabilities_and_surfaces_connection_state() {
+    let (config_home, workspace, mut mcp_runtime) = setup_managed_mcp_runtime_fixture(true);
+
+    let provided_capabilities = mcp_runtime.provided_capabilities();
+    assert!(provided_capabilities.iter().any(|capability| {
+        capability.display_name == "mcp__alpha__echo"
+            && capability.source_kind == super::CapabilitySourceKind::McpTool
+            && capability.execution_kind == super::CapabilityExecutionKind::Tool
+    }));
+    assert!(provided_capabilities.iter().any(|capability| {
+        capability.source_kind == super::CapabilitySourceKind::McpResource
+            && capability.execution_kind == super::CapabilityExecutionKind::Resource
+    }));
+
+    let connections = mcp_runtime.connection_projections();
+    assert!(connections.iter().any(|connection| {
+        connection.server_name == "alpha" && connection.state == super::CapabilityState::Ready
+    }));
+    assert!(connections.iter().any(|connection| {
+        connection.server_name == "broken" && connection.state == super::CapabilityState::Degraded
+    }));
+
+    assert_eq!(
+        mcp_runtime.pending_servers(),
+        Some(vec!["broken".to_string()])
+    );
+    let degraded = mcp_runtime
+        .degraded_report()
+        .expect("degraded report should surface failed server");
+    assert_eq!(degraded.failed_servers[0].server_name, "broken");
+
+    mcp_runtime.shutdown().expect("mcp shutdown should succeed");
+    cleanup_mcp_runtime_fixture(&config_home, &workspace);
+}
+
+#[test]
+fn managed_mcp_runtime_dispatches_direct_calls_without_wrapper_passthroughs() {
+    let (config_home, workspace, mut mcp_runtime) = setup_managed_mcp_runtime_fixture(false);
+
+    let direct = mcp_runtime
+        .execute_tool("mcp__alpha__echo", json!({"text":"hello"}))
+        .expect("direct discovered mcp tool should execute");
+    let direct_json: serde_json::Value =
+        serde_json::from_str(&direct).expect("direct output should be json");
+    assert_eq!(direct_json["structuredContent"]["echoed"], "hello");
+
+    let wrapper_error = mcp_runtime
+        .execute_tool(
+            "MCPTool",
+            json!({
+                "qualifiedName": "mcp__alpha__echo",
+                "arguments": { "text": "wrapped" }
+            }),
+        )
+        .expect_err("wrapper mcp tool should no longer be dispatchable");
+    assert!(wrapper_error.to_string().contains("MCPTool"));
+
+    mcp_runtime.shutdown().expect("mcp shutdown should succeed");
+    cleanup_mcp_runtime_fixture(&config_home, &workspace);
+}
+
+#[test]
+fn session_activation_moves_deferred_tools_into_visible_surface() {
+    let runtime = CapabilityRuntime::builtin();
+    let profile = BTreeSet::from([String::from("ToolSearch"), String::from("WebSearch")]);
+    let mut state = super::SessionCapabilityState::default();
+
+    let before = runtime
+        .surface_projection(super::CapabilityPlannerInput::new(
+            Some(&profile),
+            Some(&state),
+        ))
+        .expect("planner surface should resolve");
+    assert!(
+        before
+            .visible_tools
+            .iter()
+            .any(|capability| capability.display_name == "ToolSearch")
+    );
+    assert!(
+        !before
+            .visible_tools
+            .iter()
+            .any(|capability| capability.display_name == "WebSearch")
+    );
+    assert!(
+        before
+            .deferred_tools
+            .iter()
+            .any(|capability| capability.display_name == "WebSearch")
+    );
+
+    let search = runtime.search(
+        "select:WebSearch",
+        5,
+        super::CapabilityPlannerInput::new(Some(&profile), Some(&state)),
+        None,
+        None,
+    );
+    let search_json = serde_json::to_value(search).expect("search output should serialize");
+    assert_eq!(search_json["matches"][0], "WebSearch");
+
+    state.activate(super::CapabilityActivation::tool("WebSearch"));
+
+    let after = runtime
+        .surface_projection(super::CapabilityPlannerInput::new(
+            Some(&profile),
+            Some(&state),
+        ))
+        .expect("planner surface should resolve after activation");
+    assert!(
+        after
+            .visible_tools
+            .iter()
+            .any(|capability| capability.display_name == "WebSearch")
+    );
+    assert!(
+        !after
+            .deferred_tools
+            .iter()
+            .any(|capability| capability.display_name == "WebSearch")
+    );
+
+    let after_search = runtime.search(
+        "web",
+        5,
+        super::CapabilityPlannerInput::new(Some(&profile), Some(&state)),
+        None,
+        None,
+    );
+    let after_search_json =
+        serde_json::to_value(after_search).expect("search output should serialize");
+    assert!(
+        !after_search_json["matches"]
+            .as_array()
+            .expect("matches should be present")
+            .iter()
+            .any(|value| value == "WebSearch")
+    );
+}
+
+#[test]
 fn web_fetch_returns_prompt_aware_summary() {
     let server = TestServer::spawn(Arc::new(|request_line: &str| {
         assert!(request_line.starts_with("GET /page "));
         HttpResponse::html(
-                200,
-                "OK",
-                "<html><head><title>Ignored</title></head><body><h1>Test Page</h1><p>Hello <b>world</b> from local server.</p></body></html>",
-            )
+            200,
+            "OK",
+            "<html><head><title>Ignored</title></head><body><h1>Test Page</h1><p>Hello <b>world</b> from local server.</p></body></html>",
+        )
     }));
 
     let result = execute_tool(
@@ -783,10 +1384,12 @@ fn web_fetch_supports_plain_text_and_rejects_invalid_url() {
 
     let output: serde_json::Value = serde_json::from_str(&result).expect("valid json");
     assert_eq!(output["url"], format!("http://{}/plain", server.addr()));
-    assert!(output["result"]
-        .as_str()
-        .expect("result")
-        .contains("plain text response"));
+    assert!(
+        output["result"]
+            .as_str()
+            .expect("result")
+            .contains("plain text response")
+    );
 
     let error = execute_tool(
         "WebFetch",
@@ -1052,62 +1655,15 @@ fn todo_write_rejects_invalid_payloads_and_sets_verification_nudge() {
 }
 
 #[test]
-fn skill_loads_local_skill_prompt() {
-    let _guard = env_lock()
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let home = temp_path("skills-home");
-    let skill_dir = home.join(".agents").join("skills").join("help");
-    fs::create_dir_all(&skill_dir).expect("skill dir should exist");
-    fs::write(
-        skill_dir.join("SKILL.md"),
-        "# help\n\nGuide on using oh-my-codex plugin\n",
-    )
-    .expect("skill file should exist");
-    let original_home = std::env::var("HOME").ok();
-    std::env::set_var("HOME", &home);
-
-    let result = execute_tool(
+fn legacy_skill_shim_is_removed_from_builtin_dispatch() {
+    let error = execute_tool(
         "Skill",
         &json!({
-            "skill": "help",
-            "args": "overview"
+            "skill": "help"
         }),
     )
-    .expect("Skill should succeed");
-
-    let output: serde_json::Value = serde_json::from_str(&result).expect("valid json");
-    assert_eq!(output["skill"], "help");
-    assert!(output["path"]
-        .as_str()
-        .expect("path")
-        .ends_with("/help/SKILL.md"));
-    assert!(output["prompt"]
-        .as_str()
-        .expect("prompt")
-        .contains("Guide on using oh-my-codex plugin"));
-
-    let dollar_result = execute_tool(
-        "Skill",
-        &json!({
-            "skill": "$help"
-        }),
-    )
-    .expect("Skill should accept $skill invocation form");
-    let dollar_output: serde_json::Value =
-        serde_json::from_str(&dollar_result).expect("valid json");
-    assert_eq!(dollar_output["skill"], "$help");
-    assert!(dollar_output["path"]
-        .as_str()
-        .expect("path")
-        .ends_with("/help/SKILL.md"));
-
-    if let Some(home) = original_home {
-        std::env::set_var("HOME", home);
-    } else {
-        std::env::remove_var("HOME");
-    }
-    fs::remove_dir_all(home).expect("temp home should clean up");
+    .expect_err("legacy Skill shim should no longer be dispatchable");
+    assert!(error.contains("unsupported tool: Skill"));
 }
 
 #[test]
@@ -1121,11 +1677,11 @@ fn tool_search_supports_keyword_and_select_queries() {
     let matches = keyword_output["matches"].as_array().expect("matches");
     assert!(matches.iter().any(|value| value == "WebSearch"));
 
-    let selected = execute_tool("ToolSearch", &json!({"query": "select:Agent,Skill"}))
+    let selected = execute_tool("ToolSearch", &json!({"query": "select:Agent,WebSearch"}))
         .expect("ToolSearch should succeed");
     let selected_output: serde_json::Value = serde_json::from_str(&selected).expect("valid json");
     assert_eq!(selected_output["matches"][0], "Agent");
-    assert_eq!(selected_output["matches"][1], "Skill");
+    assert_eq!(selected_output["matches"][1], "WebSearch");
 
     let aliased = execute_tool("ToolSearch", &json!({"query": "AgentTool"}))
         .expect("ToolSearch should support tool aliases");
@@ -1133,13 +1689,2143 @@ fn tool_search_supports_keyword_and_select_queries() {
     assert_eq!(aliased_output["matches"][0], "Agent");
     assert_eq!(aliased_output["normalized_query"], "agent");
 
-    let selected_with_alias =
-        execute_tool("ToolSearch", &json!({"query": "select:AgentTool,Skill"}))
-            .expect("ToolSearch alias select should succeed");
+    let selected_with_alias = execute_tool(
+        "ToolSearch",
+        &json!({"query": "select:AgentTool,WebSearch"}),
+    )
+    .expect("ToolSearch alias select should succeed");
     let selected_with_alias_output: serde_json::Value =
         serde_json::from_str(&selected_with_alias).expect("valid json");
     assert_eq!(selected_with_alias_output["matches"][0], "Agent");
-    assert_eq!(selected_with_alias_output["matches"][1], "Skill");
+    assert_eq!(selected_with_alias_output["matches"][1], "WebSearch");
+}
+
+#[test]
+fn skill_discovery_lists_only_model_invocable_skills() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("skill-discovery-home");
+    let executable_skill_dir = home.join(".agents").join("skills").join("help");
+    let doc_skill_dir = home.join(".agents").join("skills").join("reference");
+    fs::create_dir_all(&executable_skill_dir).expect("executable skill dir should exist");
+    fs::create_dir_all(&doc_skill_dir).expect("doc skill dir should exist");
+    fs::write(
+        executable_skill_dir.join("SKILL.md"),
+        r#"---
+name: help
+description: Help the model decide when to use the workspace guidance skill.
+when_to_use: Use when the task asks for workspace orientation.
+allowed-tools:
+  - WebSearch
+model-invocable: true
+user-invocable: true
+context: inline
+---
+# help
+
+Guide the model through the workspace.
+"#,
+    )
+    .expect("executable skill file should exist");
+    fs::write(
+        doc_skill_dir.join("SKILL.md"),
+        r#"---
+name: reference
+description: Reference-only skill that should not be model invocable.
+model-invocable: false
+---
+# reference
+
+Reference notes only.
+"#,
+    )
+    .expect("doc skill file should exist");
+
+    let original_home = std::env::var("HOME").ok();
+    std::env::set_var("HOME", &home);
+
+    let discovered = execute_tool(
+        "SkillDiscovery",
+        &json!({
+            "query": "workspace guidance",
+            "max_results": 5
+        }),
+    )
+    .expect("SkillDiscovery should succeed");
+
+    let output: serde_json::Value = serde_json::from_str(&discovered).expect("valid json");
+    assert_eq!(output["matches"][0], "help");
+    let results = output["results"].as_array().expect("results");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0]["name"], "help");
+    assert_eq!(results[0]["source_kind"], "local_skill");
+    assert_eq!(results[0]["execution_kind"], "prompt_skill");
+    assert_eq!(results[0]["tool_grants"][0], "WebSearch");
+
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    fs::remove_dir_all(home).expect("temp home should clean up");
+}
+
+#[test]
+fn skill_discovery_surfaces_bundled_skills_with_distinct_source_kinds() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("skill-bundled-home");
+    let bundled_root = temp_path("skill-bundled-root");
+    let local_skill_dir = home.join(".agents").join("skills").join("local-help");
+    let bundled_skill_dir = bundled_root.join("bundled-help");
+    fs::create_dir_all(&local_skill_dir).expect("local skill dir should exist");
+    fs::create_dir_all(&bundled_skill_dir).expect("bundled skill dir should exist");
+    fs::write(
+        local_skill_dir.join("SKILL.md"),
+        r#"---
+name: local-help
+description: Local workspace guidance skill.
+model-invocable: true
+user-invocable: true
+---
+# local-help
+
+Local workspace guidance.
+"#,
+    )
+    .expect("local skill file should exist");
+    fs::write(
+        bundled_skill_dir.join("SKILL.md"),
+        r#"---
+name: bundled-help
+description: Bundled workspace guidance skill.
+model-invocable: true
+user-invocable: true
+---
+# bundled-help
+
+Bundled workspace guidance.
+"#,
+    )
+    .expect("bundled skill file should exist");
+
+    let original_home = std::env::var("HOME").ok();
+    let original_bundled_roots = std::env::var("OCTOPUS_BUNDLED_SKILLS_ROOTS").ok();
+    std::env::set_var("HOME", &home);
+    std::env::set_var("OCTOPUS_BUNDLED_SKILLS_ROOTS", &bundled_root);
+
+    let discovery = CapabilityRuntime::builtin().skill_discovery(
+        "workspace guidance",
+        10,
+        super::CapabilityPlannerInput::default(),
+    );
+    let output: serde_json::Value =
+        serde_json::to_value(discovery).expect("skill discovery output should be json");
+    let results = output["results"].as_array().expect("results");
+    let sources = results
+        .iter()
+        .filter_map(|entry| {
+            Some((
+                entry.get("name")?.as_str()?.to_string(),
+                entry.get("source_kind")?.as_str()?.to_string(),
+            ))
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    assert_eq!(
+        sources.get("local-help").map(String::as_str),
+        Some("local_skill")
+    );
+    assert_eq!(
+        sources.get("bundled-help").map(String::as_str),
+        Some("bundled_skill")
+    );
+
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    if let Some(bundled_roots) = original_bundled_roots {
+        std::env::set_var("OCTOPUS_BUNDLED_SKILLS_ROOTS", bundled_roots);
+    } else {
+        std::env::remove_var("OCTOPUS_BUNDLED_SKILLS_ROOTS");
+    }
+    fs::remove_dir_all(home).expect("temp home should clean up");
+    fs::remove_dir_all(bundled_root).expect("temp bundled root should clean up");
+}
+
+#[test]
+fn skill_discovery_trust_gates_local_skills_but_keeps_bundled_skills_visible() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("skill-trust-home");
+    let bundled_root = temp_path("skill-trust-bundled");
+    let cwd = temp_path("skill-trust-cwd");
+    let local_skill_dir = home.join(".agents").join("skills").join("local-help");
+    let bundled_skill_dir = bundled_root.join("bundled-help");
+    fs::create_dir_all(&local_skill_dir).expect("local skill dir should exist");
+    fs::create_dir_all(&bundled_skill_dir).expect("bundled skill dir should exist");
+    fs::create_dir_all(cwd.join(".claw")).expect("config dir should exist");
+    fs::write(
+        cwd.join(".claw").join("settings.json"),
+        r#"{"trustedRoots":["/definitely/not-this-workspace"]}"#,
+    )
+    .expect("workspace settings should exist");
+    fs::write(
+        local_skill_dir.join("SKILL.md"),
+        r#"---
+name: local-help
+description: Local workspace guidance skill.
+model-invocable: true
+user-invocable: true
+---
+# local-help
+
+Local workspace guidance.
+"#,
+    )
+    .expect("local skill file should exist");
+    fs::write(
+        bundled_skill_dir.join("SKILL.md"),
+        r#"---
+name: bundled-help
+description: Bundled workspace guidance skill.
+model-invocable: true
+user-invocable: true
+---
+# bundled-help
+
+Bundled workspace guidance.
+"#,
+    )
+    .expect("bundled skill file should exist");
+
+    let original_home = std::env::var("HOME").ok();
+    let original_bundled_roots = std::env::var("OCTOPUS_BUNDLED_SKILLS_ROOTS").ok();
+    let original_cwd = std::env::current_dir().expect("current dir");
+    std::env::set_var("HOME", &home);
+    std::env::set_var("OCTOPUS_BUNDLED_SKILLS_ROOTS", &bundled_root);
+    std::env::set_current_dir(&cwd).expect("cwd should switch");
+
+    let discovery = CapabilityRuntime::builtin().skill_discovery(
+        "workspace guidance",
+        10,
+        super::CapabilityPlannerInput::default().with_current_dir(Some(cwd.as_path())),
+    );
+    let output: serde_json::Value =
+        serde_json::to_value(discovery).expect("skill discovery output should be json");
+    let matches = output["matches"].as_array().expect("matches");
+
+    assert!(!matches.iter().any(|value| value == "local-help"));
+    assert!(matches.iter().any(|value| value == "bundled-help"));
+
+    std::env::set_current_dir(original_cwd).expect("cwd should restore");
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    if let Some(bundled_roots) = original_bundled_roots {
+        std::env::set_var("OCTOPUS_BUNDLED_SKILLS_ROOTS", bundled_roots);
+    } else {
+        std::env::remove_var("OCTOPUS_BUNDLED_SKILLS_ROOTS");
+    }
+    fs::remove_dir_all(home).expect("temp home should clean up");
+    fs::remove_dir_all(bundled_root).expect("temp bundled root should clean up");
+    fs::remove_dir_all(cwd).expect("temp cwd should clean up");
+}
+
+#[test]
+fn provider_prompt_skills_without_runtime_executors_stay_hidden_from_skill_discovery() {
+    let capability = super::CapabilitySpec {
+        capability_id: "plugin-skill.workspace-guide".to_string(),
+        source_kind: super::CapabilitySourceKind::PluginSkill,
+        execution_kind: super::CapabilityExecutionKind::PromptSkill,
+        display_name: "workspace-guide".to_string(),
+        description: "Provider-backed workspace guidance skill.".to_string(),
+        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "skill": { "type": "string" },
+                "arguments": {}
+            },
+            "required": ["skill"],
+            "additionalProperties": false
+        }),
+        search_hint: Some("workspace guidance".to_string()),
+        visibility: super::CapabilityVisibility::DefaultVisible,
+        state: super::CapabilityState::Ready,
+        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
+            required_permission: PermissionMode::ReadOnly,
+        },
+        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
+            selectable: true,
+            requires_approval: false,
+            requires_auth: false,
+        },
+        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
+    };
+    let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
+
+    let surface = runtime
+        .surface_projection(super::CapabilityPlannerInput::default())
+        .expect("planner should project a capability surface");
+    assert!(
+        !surface
+            .discoverable_skills
+            .iter()
+            .any(|skill| skill.display_name == "workspace-guide")
+    );
+    assert!(
+        surface
+            .hidden_capabilities
+            .iter()
+            .any(|skill| skill.display_name == "workspace-guide")
+    );
+
+    let discovery = runtime.skill_discovery(
+        "workspace guidance",
+        10,
+        super::CapabilityPlannerInput::default(),
+    );
+    let output: serde_json::Value =
+        serde_json::to_value(discovery).expect("skill discovery output should be json");
+    let matches = output["matches"].as_array().expect("matches");
+    let results = output["results"].as_array().expect("results");
+
+    assert!(!matches.iter().any(|value| value == "workspace-guide"));
+    assert!(
+        !results
+            .iter()
+            .any(|entry| entry["name"] == "workspace-guide")
+    );
+}
+
+#[test]
+fn capability_runtime_execute_tool_surface_gates_provider_prompt_skill_without_runtime_executor() {
+    let capability = super::CapabilitySpec {
+        capability_id: "plugin-skill.workspace-guide".to_string(),
+        source_kind: super::CapabilitySourceKind::PluginSkill,
+        execution_kind: super::CapabilityExecutionKind::PromptSkill,
+        display_name: "workspace-guide".to_string(),
+        description: "Provider-backed workspace guidance skill.".to_string(),
+        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "skill": { "type": "string" },
+                "arguments": {}
+            },
+            "required": ["skill"],
+            "additionalProperties": false
+        }),
+        search_hint: Some("workspace guidance".to_string()),
+        visibility: super::CapabilityVisibility::DefaultVisible,
+        state: super::CapabilityState::Ready,
+        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
+            required_permission: PermissionMode::ReadOnly,
+        },
+        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
+            selectable: true,
+            requires_approval: false,
+            requires_auth: false,
+        },
+        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
+    };
+    let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
+    let store = super::SessionCapabilityStore::default();
+
+    let error = runtime
+        .execute_tool(
+            "SkillTool",
+            json!({
+                "skill": "workspace-guide",
+                "arguments": { "topic": "workspace" }
+            }),
+            super::CapabilityPlannerInput::default(),
+            &store,
+            None,
+            None,
+            |_kind, _tool_name, _input| {
+                panic!("provider prompt skills should not dispatch through legacy tool lookup")
+            },
+        )
+        .expect_err("provider-backed prompt skills without executors should be surface gated");
+
+    assert!(
+        error
+            .to_string()
+            .contains("is not enabled in the current capability surface")
+    );
+    let snapshot = store.snapshot();
+    assert!(snapshot.skill_state_updates().is_empty());
+    assert!(snapshot.injected_skill_messages().is_empty());
+    assert_eq!(snapshot.model_override(), None);
+    assert_eq!(snapshot.effort_override(), None);
+}
+
+#[test]
+fn capability_runtime_execute_tool_reports_hidden_provider_prompt_skill_as_surface_gated() {
+    let capability = super::CapabilitySpec {
+        capability_id: "plugin-skill.workspace-guide-hidden".to_string(),
+        source_kind: super::CapabilitySourceKind::PluginSkill,
+        execution_kind: super::CapabilityExecutionKind::PromptSkill,
+        display_name: "workspace-guide-hidden".to_string(),
+        description: "Provider-backed workspace guidance skill.".to_string(),
+        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "skill": { "type": "string" },
+                "arguments": {}
+            },
+            "required": ["skill"],
+            "additionalProperties": false
+        }),
+        search_hint: Some("workspace guidance".to_string()),
+        visibility: super::CapabilityVisibility::Hidden,
+        state: super::CapabilityState::Ready,
+        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
+            required_permission: PermissionMode::ReadOnly,
+        },
+        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
+            selectable: true,
+            requires_approval: false,
+            requires_auth: false,
+        },
+        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
+    };
+    let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
+    let store = super::SessionCapabilityStore::default();
+
+    let error = runtime
+        .execute_tool(
+            "SkillTool",
+            json!({
+                "skill": "workspace-guide-hidden",
+                "arguments": { "topic": "workspace" }
+            }),
+            super::CapabilityPlannerInput::default(),
+            &store,
+            None,
+            None,
+            |_kind, _tool_name, _input| {
+                panic!(
+                    "hidden provider prompt skills should not dispatch through legacy tool lookup"
+                )
+            },
+        )
+        .expect_err("hidden provider prompt skills should be surface gated");
+
+    assert!(
+        error
+            .to_string()
+            .contains("is not enabled in the current capability surface")
+    );
+}
+
+#[test]
+fn skill_discovery_hides_non_selectable_provider_prompt_skills() {
+    let capability = super::CapabilitySpec {
+        capability_id: "plugin-skill.workspace-guide-disabled".to_string(),
+        source_kind: super::CapabilitySourceKind::PluginSkill,
+        execution_kind: super::CapabilityExecutionKind::PromptSkill,
+        display_name: "workspace-guide-disabled".to_string(),
+        description: "Provider-backed workspace guidance skill.".to_string(),
+        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "skill": { "type": "string" },
+                "arguments": {}
+            },
+            "required": ["skill"],
+            "additionalProperties": false
+        }),
+        search_hint: Some("workspace guidance".to_string()),
+        visibility: super::CapabilityVisibility::DefaultVisible,
+        state: super::CapabilityState::Ready,
+        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
+            required_permission: PermissionMode::ReadOnly,
+        },
+        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
+            selectable: false,
+            requires_approval: false,
+            requires_auth: false,
+        },
+        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
+    };
+    let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
+
+    let surface = runtime
+        .surface_projection(super::CapabilityPlannerInput::default())
+        .expect("planner should project a capability surface");
+    assert!(
+        !surface
+            .discoverable_skills
+            .iter()
+            .any(|skill| skill.display_name == "workspace-guide-disabled")
+    );
+    assert!(
+        surface
+            .hidden_capabilities
+            .iter()
+            .any(|skill| skill.display_name == "workspace-guide-disabled")
+    );
+
+    let discovery = runtime.skill_discovery(
+        "workspace guidance",
+        10,
+        super::CapabilityPlannerInput::default(),
+    );
+    let output: serde_json::Value =
+        serde_json::to_value(discovery).expect("skill discovery output should be json");
+    let matches = output["matches"].as_array().expect("matches");
+    assert!(
+        !matches
+            .iter()
+            .any(|value| value == "workspace-guide-disabled")
+    );
+}
+
+#[test]
+fn builtin_skill_discovery_compat_shim_hides_provider_prompt_skills_without_runtime_executors() {
+    let capability = super::CapabilitySpec {
+        capability_id: "plugin-skill.workspace-guide-compat".to_string(),
+        source_kind: super::CapabilitySourceKind::PluginSkill,
+        execution_kind: super::CapabilityExecutionKind::PromptSkill,
+        display_name: "workspace-guide-compat".to_string(),
+        description: "Provider-backed workspace guidance skill.".to_string(),
+        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "skill": { "type": "string" },
+                "arguments": {}
+            },
+            "required": ["skill"],
+            "additionalProperties": false
+        }),
+        search_hint: Some("workspace guidance".to_string()),
+        visibility: super::CapabilityVisibility::DefaultVisible,
+        state: super::CapabilityState::Ready,
+        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
+            required_permission: PermissionMode::ReadOnly,
+        },
+        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
+            selectable: true,
+            requires_approval: false,
+            requires_auth: false,
+        },
+        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
+    };
+    let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
+
+    let output = super::builtin_exec::run_skill_discovery_with_runtime(
+        &runtime,
+        super::SkillDiscoveryInput {
+            query: "workspace guidance".to_string(),
+            max_results: Some(10),
+        },
+    )
+    .expect("compat shim should execute through runtime facade");
+    let output: serde_json::Value =
+        serde_json::from_str(&output).expect("compat skill discovery output should be json");
+
+    assert!(
+        !output["matches"]
+            .as_array()
+            .expect("matches")
+            .iter()
+            .any(|value| value == "workspace-guide-compat")
+    );
+}
+
+#[test]
+fn builtin_skill_tool_compat_shim_surface_gates_provider_prompt_skills_without_runtime_executors() {
+    let capability = super::CapabilitySpec {
+        capability_id: "plugin-skill.workspace-guide-compat".to_string(),
+        source_kind: super::CapabilitySourceKind::PluginSkill,
+        execution_kind: super::CapabilityExecutionKind::PromptSkill,
+        display_name: "workspace-guide-compat".to_string(),
+        description: "Provider-backed workspace guidance skill.".to_string(),
+        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "skill": { "type": "string" },
+                "arguments": {}
+            },
+            "required": ["skill"],
+            "additionalProperties": false
+        }),
+        search_hint: Some("workspace guidance".to_string()),
+        visibility: super::CapabilityVisibility::DefaultVisible,
+        state: super::CapabilityState::Ready,
+        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
+            required_permission: PermissionMode::ReadOnly,
+        },
+        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
+            selectable: true,
+            requires_approval: false,
+            requires_auth: false,
+        },
+        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
+    };
+    let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
+
+    let error = super::builtin_exec::run_skill_tool_with_runtime(
+        &runtime,
+        super::SkillToolInput {
+            skill: "workspace-guide-compat".to_string(),
+            arguments: Some(json!({ "topic": "workspace" })),
+        },
+    )
+    .expect_err("compat shim should report surface gating");
+
+    assert!(error.contains("is not enabled in the current capability surface"));
+}
+
+#[test]
+fn compat_skill_entrypoints_do_not_bypass_runtime_gating() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("compat-skill-gating-home");
+    let cwd = temp_path("compat-skill-gating-cwd");
+    let skill_dir = home
+        .join(".agents")
+        .join("skills")
+        .join("workspace-guide-compat-local");
+    fs::create_dir_all(&skill_dir).expect("skill dir should exist");
+    fs::create_dir_all(cwd.join(".claw")).expect("workspace config dir should exist");
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: workspace-guide-compat-local
+description: Workspace-scoped compat skill.
+model-invocable: true
+user-invocable: true
+paths:
+  - package.json
+context: inline
+---
+# workspace-guide-compat-local
+
+Scoped workspace guidance.
+"#,
+    )
+    .expect("skill file should exist");
+
+    let original_home = std::env::var("HOME").ok();
+    let original_cwd = std::env::current_dir().expect("current dir");
+    std::env::set_var("HOME", &home);
+    std::env::set_current_dir(&cwd).expect("cwd should switch");
+
+    let runtime = CapabilityRuntime::builtin();
+
+    let path_mismatch_discovery = super::builtin_exec::run_skill_discovery_with_runtime(
+        &runtime,
+        super::SkillDiscoveryInput {
+            query: "workspace guidance".to_string(),
+            max_results: Some(10),
+        },
+    )
+    .expect("compat discovery should execute through runtime facade");
+    let path_mismatch_discovery: serde_json::Value = serde_json::from_str(&path_mismatch_discovery)
+        .expect("compat discovery output should be json");
+    assert!(
+        !path_mismatch_discovery["matches"]
+            .as_array()
+            .expect("matches")
+            .iter()
+            .any(|value| value == "workspace-guide-compat-local")
+    );
+
+    let path_mismatch_error = super::builtin_exec::run_skill_tool_with_runtime(
+        &runtime,
+        super::SkillToolInput {
+            skill: "workspace-guide-compat-local".to_string(),
+            arguments: Some(json!({ "topic": "workspace" })),
+        },
+    )
+    .expect_err("compat skill tool should stay surface-gated when paths do not match");
+    assert!(path_mismatch_error.contains("is not visible for the current workspace"));
+
+    fs::write(
+        cwd.join("package.json"),
+        r#"{"name":"compat-skill-gating"}"#,
+    )
+    .expect("package.json should exist");
+    fs::write(
+        cwd.join(".claw").join("settings.json"),
+        r#"{"trustedRoots":["/definitely/not-this-workspace"]}"#,
+    )
+    .expect("workspace settings should exist");
+
+    let trust_mismatch_discovery = super::builtin_exec::run_skill_discovery_with_runtime(
+        &runtime,
+        super::SkillDiscoveryInput {
+            query: "workspace guidance".to_string(),
+            max_results: Some(10),
+        },
+    )
+    .expect("compat discovery should execute through runtime facade");
+    let trust_mismatch_discovery: serde_json::Value =
+        serde_json::from_str(&trust_mismatch_discovery)
+            .expect("compat discovery output should be json");
+    assert!(
+        !trust_mismatch_discovery["matches"]
+            .as_array()
+            .expect("matches")
+            .iter()
+            .any(|value| value == "workspace-guide-compat-local")
+    );
+
+    let trust_mismatch_error = super::builtin_exec::run_skill_tool_with_runtime(
+        &runtime,
+        super::SkillToolInput {
+            skill: "workspace-guide-compat-local".to_string(),
+            arguments: Some(json!({ "topic": "workspace" })),
+        },
+    )
+    .expect_err("compat skill tool should stay surface-gated when workspace is untrusted");
+    assert!(trust_mismatch_error.contains("is not trusted for the current workspace"));
+
+    std::env::set_current_dir(original_cwd).expect("cwd should restore");
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    fs::remove_dir_all(home).expect("temp home should clean up");
+    fs::remove_dir_all(cwd).expect("temp cwd should clean up");
+}
+
+#[test]
+fn skill_tool_rejects_model_non_invocable_skills() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("skill-model-invocable-home");
+    let skill_dir = home.join(".agents").join("skills").join("reference");
+    fs::create_dir_all(&skill_dir).expect("skill dir should exist");
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: reference
+description: Reference-only user skill.
+model-invocable: false
+user-invocable: true
+context: inline
+---
+# reference
+
+Reference notes only.
+"#,
+    )
+    .expect("skill file should exist");
+
+    let original_home = std::env::var("HOME").ok();
+    std::env::set_var("HOME", &home);
+
+    let error = CapabilityRuntime::builtin()
+        .execute_skill("reference", None, super::CapabilityPlannerInput::default())
+        .expect_err("model-only skill execution should reject non-model-invocable skills");
+    assert!(error.contains("not model invocable"));
+
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    fs::remove_dir_all(home).expect("temp home should clean up");
+}
+
+fn noop_skill_fork_spawn(_job: super::AgentJob) -> Result<(), String> {
+    Ok(())
+}
+
+fn fail_skill_fork_spawn(_job: super::AgentJob) -> Result<(), String> {
+    Err(String::from("thread creation failed"))
+}
+
+#[test]
+fn skill_tool_fork_context_spawns_structured_agent_state() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("skill-fork-home");
+    let agent_store = temp_path("skill-fork-agent-store");
+    let skill_dir = home.join(".agents").join("skills").join("planner");
+    fs::create_dir_all(&skill_dir).expect("skill dir should exist");
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: planner
+description: Fork planning guidance into a dedicated subagent.
+allowed-tools:
+  - WebSearch
+model-invocable: true
+user-invocable: true
+agent: plan
+model: claude-sonnet-4-5
+effort: high
+context: fork
+---
+# planner
+
+Build a plan for the provided task.
+"#,
+    )
+    .expect("skill file should exist");
+
+    let original_home = std::env::var("HOME").ok();
+    let original_agent_store = std::env::var("CLAWD_AGENT_STORE").ok();
+    std::env::set_var("HOME", &home);
+    std::env::set_var("CLAWD_AGENT_STORE", &agent_store);
+    super::skill_runtime::set_skill_fork_spawn_override(Some(noop_skill_fork_spawn));
+
+    let result = CapabilityRuntime::builtin()
+        .execute_skill(
+            "planner",
+            Some(json!({"topic":"auth"})),
+            super::CapabilityPlannerInput::default(),
+        )
+        .expect("fork skill should execute");
+
+    assert_eq!(result.context, super::skill_runtime::SkillContextKind::Fork);
+    assert!(result.messages_to_inject.is_empty());
+    assert_eq!(result.tool_grants, vec![String::from("WebSearch")]);
+    assert_eq!(result.model_override.as_deref(), Some("claude-sonnet-4-5"));
+    assert_eq!(result.effort_override.as_deref(), Some("high"));
+
+    let fork_spawn = result
+        .state_updates
+        .iter()
+        .find_map(|update| match update {
+            super::SkillStateUpdate::ForkSpawned {
+                agent_id,
+                subagent_type,
+                output_file,
+                manifest_file,
+            } => Some((
+                agent_id.clone(),
+                subagent_type.clone(),
+                output_file.clone(),
+                manifest_file.clone(),
+            )),
+            _ => None,
+        })
+        .expect("fork skill should emit fork_spawned state");
+    assert!(!fork_spawn.0.is_empty());
+    assert_eq!(fork_spawn.1.as_deref(), Some("Plan"));
+    assert!(Path::new(&fork_spawn.2).exists());
+    assert!(Path::new(&fork_spawn.3).exists());
+
+    super::skill_runtime::set_skill_fork_spawn_override(None);
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    if let Some(agent_store) = original_agent_store {
+        std::env::set_var("CLAWD_AGENT_STORE", agent_store);
+    } else {
+        std::env::remove_var("CLAWD_AGENT_STORE");
+    }
+    fs::remove_dir_all(home).expect("temp home should clean up");
+    fs::remove_dir_all(agent_store).expect("temp agent store should clean up");
+}
+
+#[test]
+fn capability_surface_projects_prompt_skills_separately_from_tool_surface() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("skill-surface-home");
+    let skill_dir = home.join(".agents").join("skills").join("help");
+    fs::create_dir_all(&skill_dir).expect("skill dir should exist");
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: help
+description: Help the model decide when to use the workspace guidance skill.
+when_to_use: Use when the task asks for workspace orientation.
+allowed-tools:
+  - WebSearch
+model-invocable: true
+user-invocable: true
+context: inline
+---
+# help
+
+Guide the model through the workspace.
+"#,
+    )
+    .expect("skill file should exist");
+
+    let original_home = std::env::var("HOME").ok();
+    std::env::set_var("HOME", &home);
+
+    let surface = CapabilityRuntime::builtin()
+        .surface_projection_for_allowlist(None, None)
+        .expect("builtin capabilities should plan");
+
+    assert!(
+        surface
+            .visible_tools
+            .iter()
+            .any(|capability| capability.display_name == "read_file")
+    );
+    assert!(
+        surface
+            .discoverable_skills
+            .iter()
+            .any(|capability| capability.display_name == "help")
+    );
+    assert!(surface.available_resources.is_empty());
+    assert!(
+        !surface
+            .hidden_capabilities
+            .iter()
+            .any(|capability| capability.display_name == "help")
+    );
+
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    fs::remove_dir_all(home).expect("temp home should clean up");
+}
+
+#[test]
+fn capability_runtime_facade_projects_surface_and_search_from_provider() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("capability-runtime-facade-home");
+    let skill_dir = home.join(".agents").join("skills").join("help");
+    fs::create_dir_all(&skill_dir).expect("skill dir should exist");
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: help
+description: Help the model decide when to use the workspace guidance skill.
+when_to_use: Use when the task asks for workspace orientation.
+allowed-tools:
+  - WebSearch
+model-invocable: true
+user-invocable: true
+context: inline
+---
+# help
+
+Guide the model through the workspace.
+"#,
+    )
+    .expect("skill file should exist");
+
+    let original_home = std::env::var("HOME").ok();
+    std::env::set_var("HOME", &home);
+
+    let runtime = CapabilityRuntime::builtin();
+    let profile = BTreeSet::from([
+        String::from("ToolSearch"),
+        String::from("SkillDiscovery"),
+        String::from("SkillTool"),
+        String::from("WebSearch"),
+    ]);
+
+    let surface = runtime
+        .surface_projection(super::CapabilityPlannerInput::new(Some(&profile), None))
+        .expect("runtime facade should project a capability surface");
+    assert!(
+        surface
+            .visible_tools
+            .iter()
+            .any(|capability| capability.display_name == "ToolSearch")
+    );
+    assert!(
+        surface
+            .discoverable_skills
+            .iter()
+            .any(|capability| capability.display_name == "help")
+    );
+    assert!(
+        surface
+            .deferred_tools
+            .iter()
+            .any(|capability| capability.display_name == "WebSearch")
+    );
+
+    let search = runtime.search(
+        "select:WebSearch",
+        5,
+        super::CapabilityPlannerInput::new(Some(&profile), None),
+        None,
+        None,
+    );
+    let search_json = serde_json::to_value(search).expect("search output should serialize");
+    assert_eq!(search_json["matches"][0], "WebSearch");
+    assert_eq!(search_json["results"][0]["source_kind"], "builtin");
+
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    fs::remove_dir_all(home).expect("temp home should clean up");
+}
+
+#[test]
+fn capability_runtime_execute_tool_applies_tool_search_activation() {
+    let runtime = CapabilityRuntime::builtin();
+    let store = super::SessionCapabilityStore::default();
+
+    let output = runtime
+        .execute_tool(
+            "ToolSearch",
+            json!({
+                "query": "select:WebSearch",
+                "max_results": 5
+            }),
+            super::CapabilityPlannerInput::default(),
+            &store,
+            None,
+            None,
+            |_kind, _tool_name, _input| {
+                panic!("ToolSearch should execute inside capability runtime")
+            },
+        )
+        .expect("ToolSearch should execute through runtime facade");
+    let output_json: serde_json::Value =
+        serde_json::from_str(&output).expect("tool search output should be json");
+
+    assert_eq!(output_json["matches"][0], "WebSearch");
+    assert!(store.snapshot().is_tool_activated("WebSearch"));
+}
+
+#[test]
+fn capability_runtime_execute_tool_applies_skill_state_updates() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("runtime-skill-home");
+    let skill_dir = home.join(".agents").join("skills").join("help");
+    fs::create_dir_all(&skill_dir).expect("skill dir should exist");
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: help
+description: Help the model decide when to use the workspace guidance skill.
+when_to_use: Use when the task asks for workspace orientation.
+allowed-tools:
+  - WebSearch
+model-invocable: true
+user-invocable: true
+model: claude-sonnet-4-5
+effort: high
+context: inline
+---
+# help
+
+Guide the model through the workspace.
+"#,
+    )
+    .expect("skill file should exist");
+
+    let original_home = std::env::var("HOME").ok();
+    std::env::set_var("HOME", &home);
+
+    let runtime = CapabilityRuntime::builtin();
+    let store = super::SessionCapabilityStore::default();
+
+    let output = runtime
+        .execute_tool(
+            "SkillTool",
+            json!({
+                "skill": "help",
+                "arguments": { "topic": "workspace" }
+            }),
+            super::CapabilityPlannerInput::default(),
+            &store,
+            None,
+            None,
+            |_kind, _tool_name, _input| {
+                panic!("SkillTool should execute inside capability runtime")
+            },
+        )
+        .expect("SkillTool should execute through runtime facade");
+    let output_json: serde_json::Value =
+        serde_json::from_str(&output).expect("skill tool output should be json");
+
+    assert_eq!(output_json["skill"], "help");
+    assert_eq!(output_json["tool_grants"][0], "WebSearch");
+    let snapshot = store.snapshot();
+    assert!(snapshot.is_tool_granted("WebSearch"));
+    assert_eq!(snapshot.model_override(), Some("claude-sonnet-4-5"));
+    assert_eq!(snapshot.effort_override(), Some("high"));
+    assert!(
+        snapshot
+            .injected_skill_messages()
+            .iter()
+            .any(|message| message.contains("Guide the model through the workspace"))
+    );
+
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    fs::remove_dir_all(home).expect("temp home should clean up");
+}
+
+#[test]
+fn capability_runtime_execute_tool_persists_failed_fork_skill_state_updates() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("runtime-skill-fork-failure-home");
+    let agent_store = temp_path("runtime-skill-fork-failure-agent-store");
+    let skill_dir = home.join(".agents").join("skills").join("planner");
+    fs::create_dir_all(&skill_dir).expect("skill dir should exist");
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: planner
+description: Fork planning guidance into a dedicated subagent.
+allowed-tools:
+  - WebSearch
+model-invocable: true
+user-invocable: true
+agent: plan
+model: claude-sonnet-4-5
+effort: high
+context: fork
+---
+# planner
+
+Build a plan for the provided task.
+"#,
+    )
+    .expect("skill file should exist");
+
+    let original_home = std::env::var("HOME").ok();
+    let original_agent_store = std::env::var("CLAWD_AGENT_STORE").ok();
+    std::env::set_var("HOME", &home);
+    std::env::set_var("CLAWD_AGENT_STORE", &agent_store);
+    super::skill_runtime::set_skill_fork_spawn_override(Some(fail_skill_fork_spawn));
+
+    let runtime = CapabilityRuntime::builtin();
+    let store = super::SessionCapabilityStore::default();
+
+    let error = runtime
+        .execute_tool(
+            "SkillTool",
+            json!({
+                "skill": "planner",
+                "arguments": { "topic": "workspace auth" }
+            }),
+            super::CapabilityPlannerInput::default(),
+            &store,
+            None,
+            None,
+            |_kind, _tool_name, _input| {
+                panic!("SkillTool should execute inside capability runtime")
+            },
+        )
+        .expect_err("fork spawn failures should surface");
+    assert!(error.to_string().contains("failed to spawn sub-agent"));
+
+    let raw_state = store.with_state(Clone::clone);
+    assert!(!raw_state.is_tool_granted("WebSearch"));
+    assert_eq!(raw_state.model_override(), None);
+    assert_eq!(raw_state.effort_override(), None);
+
+    let fork_spawn = raw_state
+        .skill_state_updates()
+        .iter()
+        .find_map(|update| match update {
+            super::SkillStateUpdate::ForkSpawned {
+                agent_id,
+                subagent_type,
+                output_file,
+                manifest_file,
+            } => Some((
+                agent_id.clone(),
+                subagent_type.clone(),
+                output_file.clone(),
+                manifest_file.clone(),
+            )),
+            _ => None,
+        })
+        .expect("failed fork skill should still record fork_spawned");
+    assert!(!fork_spawn.0.is_empty());
+    assert_eq!(fork_spawn.1.as_deref(), Some("Plan"));
+    assert!(Path::new(&fork_spawn.2).exists());
+    assert!(Path::new(&fork_spawn.3).exists());
+    assert!(
+        raw_state
+            .skill_state_updates()
+            .contains(&super::SkillStateUpdate::ForkFailed {
+                agent_id: fork_spawn.0,
+                output_file: fork_spawn.2,
+                manifest_file: fork_spawn.3,
+                error: Some("failed to spawn sub-agent: thread creation failed".to_string()),
+            })
+    );
+
+    super::skill_runtime::set_skill_fork_spawn_override(None);
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    if let Some(agent_store) = original_agent_store {
+        std::env::set_var("CLAWD_AGENT_STORE", agent_store);
+    } else {
+        std::env::remove_var("CLAWD_AGENT_STORE");
+    }
+    fs::remove_dir_all(home).expect("temp home should clean up");
+    fs::remove_dir_all(agent_store).expect("temp agent store should clean up");
+}
+
+#[test]
+fn capability_runtime_execute_tool_routes_runtime_capabilities_through_dispatch_kind() {
+    let runtime = capability_runtime_with_runtime_tools(vec![super::RuntimeToolDefinition {
+        name: "RuntimeEcho".to_string(),
+        description: Some("Echo runtime payload.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "value": { "type": "string" }
+            },
+            "required": ["value"],
+            "additionalProperties": false
+        }),
+        required_permission: runtime::PermissionMode::ReadOnly,
+    }]);
+    let store = super::SessionCapabilityStore::default();
+    store.activate(super::CapabilityActivation::tool("RuntimeEcho"));
+    let profile = BTreeSet::from([String::from("RuntimeEcho")]);
+    let state = store.snapshot();
+    let dispatched = Arc::new(Mutex::new(None::<(String, String, serde_json::Value)>));
+    let captured = Arc::clone(&dispatched);
+
+    let output = runtime
+        .execute_tool(
+            "RuntimeEcho",
+            json!({ "value": "ok" }),
+            super::CapabilityPlannerInput::new(Some(&profile), Some(&state)),
+            &store,
+            None,
+            None,
+            move |kind: super::CapabilityDispatchKind,
+                  tool_name: &str,
+                  input: serde_json::Value| {
+                *captured
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner) =
+                    Some((format!("{kind:?}"), tool_name.to_string(), input.clone()));
+                Ok("runtime dispatch".to_string())
+            },
+        )
+        .expect("runtime capability should dispatch through facade");
+
+    assert_eq!(output, "runtime dispatch");
+    let dispatched = dispatched
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone()
+        .expect("runtime dispatch should be captured");
+    assert_eq!(dispatched.0, "RuntimeCapability");
+    assert_eq!(dispatched.1, "RuntimeEcho");
+    assert_eq!(dispatched.2, json!({ "value": "ok" }));
+}
+
+#[test]
+fn capability_runtime_execute_tool_serializes_non_read_only_dispatches() {
+    let runtime = capability_runtime_with_runtime_tools(vec![super::RuntimeToolDefinition {
+        name: "RuntimeWrite".to_string(),
+        description: Some("Serialized runtime write.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "value": { "type": "string" }
+            },
+            "required": ["value"],
+            "additionalProperties": false
+        }),
+        required_permission: runtime::PermissionMode::WorkspaceWrite,
+    }]);
+    let store = super::SessionCapabilityStore::default();
+    store.activate(super::CapabilityActivation::tool("RuntimeWrite"));
+    let profile = Arc::new(BTreeSet::from([String::from("RuntimeWrite")]));
+    let state = Arc::new(store.snapshot());
+    let start_barrier = Arc::new(Barrier::new(3));
+    let active = Arc::new(AtomicUsize::new(0));
+    let max_active = Arc::new(AtomicUsize::new(0));
+
+    let mut handles = Vec::new();
+    for value in ["first", "second"] {
+        let runtime = runtime.clone();
+        let store = store.clone();
+        let profile = Arc::clone(&profile);
+        let state = Arc::clone(&state);
+        let start_barrier = Arc::clone(&start_barrier);
+        let active = Arc::clone(&active);
+        let max_active = Arc::clone(&max_active);
+        handles.push(thread::spawn(move || {
+            start_barrier.wait();
+            runtime
+                .execute_tool(
+                    "RuntimeWrite",
+                    json!({ "value": value }),
+                    super::CapabilityPlannerInput::new(Some(&profile), Some(&state)),
+                    &store,
+                    None,
+                    None,
+                    move |_dispatch_kind, _tool_name, _input| {
+                        let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                        max_active.fetch_max(current, Ordering::SeqCst);
+                        thread::sleep(Duration::from_millis(120));
+                        active.fetch_sub(1, Ordering::SeqCst);
+                        Ok(value.to_string())
+                    },
+                )
+                .expect("serialized runtime call should succeed")
+        }));
+    }
+
+    let started = Instant::now();
+    start_barrier.wait();
+    let outputs = handles
+        .into_iter()
+        .map(|handle| handle.join().expect("thread should finish"))
+        .collect::<Vec<_>>();
+
+    assert_eq!(outputs.len(), 2);
+    assert_eq!(max_active.load(Ordering::SeqCst), 1);
+    assert!(
+        started.elapsed() >= Duration::from_millis(200),
+        "serialized dispatches should not overlap"
+    );
+}
+
+#[test]
+fn capability_runtime_execute_tool_allows_parallel_read_dispatches() {
+    let runtime = capability_runtime_with_runtime_tools(vec![super::RuntimeToolDefinition {
+        name: "RuntimeRead".to_string(),
+        description: Some("Parallel runtime read.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "value": { "type": "string" }
+            },
+            "required": ["value"],
+            "additionalProperties": false
+        }),
+        required_permission: runtime::PermissionMode::ReadOnly,
+    }]);
+    let store = super::SessionCapabilityStore::default();
+    store.activate(super::CapabilityActivation::tool("RuntimeRead"));
+    let profile = Arc::new(BTreeSet::from([String::from("RuntimeRead")]));
+    let state = Arc::new(store.snapshot());
+    let start_barrier = Arc::new(Barrier::new(3));
+    let active = Arc::new(AtomicUsize::new(0));
+    let max_active = Arc::new(AtomicUsize::new(0));
+
+    let mut handles = Vec::new();
+    for value in ["alpha", "beta"] {
+        let runtime = runtime.clone();
+        let store = store.clone();
+        let profile = Arc::clone(&profile);
+        let state = Arc::clone(&state);
+        let start_barrier = Arc::clone(&start_barrier);
+        let active = Arc::clone(&active);
+        let max_active = Arc::clone(&max_active);
+        handles.push(thread::spawn(move || {
+            start_barrier.wait();
+            runtime
+                .execute_tool(
+                    "RuntimeRead",
+                    json!({ "value": value }),
+                    super::CapabilityPlannerInput::new(Some(&profile), Some(&state)),
+                    &store,
+                    None,
+                    None,
+                    move |_dispatch_kind, _tool_name, _input| {
+                        let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                        max_active.fetch_max(current, Ordering::SeqCst);
+                        thread::sleep(Duration::from_millis(120));
+                        active.fetch_sub(1, Ordering::SeqCst);
+                        Ok(value.to_string())
+                    },
+                )
+                .expect("parallel runtime call should succeed")
+        }));
+    }
+
+    let started = Instant::now();
+    start_barrier.wait();
+    let outputs = handles
+        .into_iter()
+        .map(|handle| handle.join().expect("thread should finish"))
+        .collect::<Vec<_>>();
+
+    assert_eq!(outputs.len(), 2);
+    assert!(
+        max_active.load(Ordering::SeqCst) >= 2,
+        "read-only dispatches should be allowed to overlap"
+    );
+    assert!(
+        started.elapsed() < Duration::from_millis(220),
+        "parallel read dispatches should finish without serialized delay"
+    );
+}
+
+#[test]
+fn capability_runtime_execute_tool_mediation_hook_blocks_and_traces_dispatch() {
+    let runtime = capability_runtime_with_runtime_tools(vec![super::RuntimeToolDefinition {
+        name: "RuntimeApproval".to_string(),
+        description: Some("Approval-gated runtime write.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "value": { "type": "string" }
+            },
+            "required": ["value"],
+            "additionalProperties": false
+        }),
+        required_permission: runtime::PermissionMode::WorkspaceWrite,
+    }]);
+    let store = super::SessionCapabilityStore::default();
+    store.activate(super::CapabilityActivation::tool("RuntimeApproval"));
+    let profile = BTreeSet::from([String::from("RuntimeApproval")]);
+    let state = store.snapshot();
+    let events = Arc::new(Mutex::new(Vec::new()));
+    let captured_events = Arc::clone(&events);
+
+    runtime.set_execution_hook(move |event| {
+        captured_events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push(event);
+    });
+    runtime.set_mediation_hook(|request| {
+        assert_eq!(request.tool_name, "RuntimeApproval");
+        assert_eq!(
+            request.required_permission,
+            runtime::PermissionMode::WorkspaceWrite
+        );
+        super::CapabilityMediationDecision::RequireApproval(Some(
+            "approval required for runtime write".to_string(),
+        ))
+    });
+
+    let error = runtime
+        .execute_tool(
+            "RuntimeApproval",
+            json!({ "value": "blocked" }),
+            super::CapabilityPlannerInput::new(Some(&profile), Some(&state)),
+            &store,
+            None,
+            None,
+            |_dispatch_kind, _tool_name, _input| {
+                panic!("approval-gated dispatch should not execute")
+            },
+        )
+        .expect_err("mediation hook should block runtime dispatch");
+
+    assert!(error.to_string().contains("requires approval"));
+    assert!(store.snapshot().is_tool_pending("RuntimeApproval"));
+    let events = events
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert!(events.iter().any(|event| {
+        event.phase == super::CapabilityExecutionPhase::BlockedApproval
+            && event.tool_name == "RuntimeApproval"
+    }));
+}
+
+#[test]
+fn capability_runtime_execute_tool_executes_builtin_without_external_dispatch() {
+    let runtime = CapabilityRuntime::builtin();
+    let store = super::SessionCapabilityStore::default();
+
+    let output = runtime
+        .execute_tool(
+            "StructuredOutput",
+            json!({ "ok": true, "items": [1, 2, 3] }),
+            super::CapabilityPlannerInput::default(),
+            &store,
+            None,
+            None,
+            |_kind, _tool_name, _input| {
+                panic!("builtin tools should execute inside capability runtime")
+            },
+        )
+        .expect("builtin tool should execute through runtime facade");
+    let output_json: serde_json::Value =
+        serde_json::from_str(&output).expect("builtin output should be json");
+
+    assert_eq!(
+        output_json["data"],
+        "Structured output provided successfully"
+    );
+    assert_eq!(output_json["structured_output"]["ok"], true);
+    assert_eq!(output_json["structured_output"]["items"], json!([1, 2, 3]));
+}
+
+#[test]
+fn capability_runtime_execute_tool_executes_plugin_without_external_dispatch() {
+    let runtime = capability_runtime_with_plugin_tools(vec![plugins::PluginTool::new(
+        "plugin-demo@external",
+        "plugin-demo",
+        plugins::PluginToolDefinition {
+            name: "plugin_echo".to_string(),
+            description: Some("Echo plugin payload".to_string()),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "message": { "type": "string" }
+                },
+                "required": ["message"],
+                "additionalProperties": false
+            }),
+        },
+        "sh".to_string(),
+        vec!["-c".to_string(), "cat".to_string()],
+        plugins::PluginToolPermission::WorkspaceWrite,
+        None,
+    )]);
+    let store = super::SessionCapabilityStore::default();
+    store.activate(super::CapabilityActivation::tool("plugin_echo"));
+    let profile = BTreeSet::from([String::from("plugin_echo")]);
+    let state = store.snapshot();
+
+    let output = runtime
+        .execute_tool(
+            "plugin_echo",
+            json!({ "message": "runtime-owned plugin dispatch" }),
+            super::CapabilityPlannerInput::new(Some(&profile), Some(&state)),
+            &store,
+            None,
+            None,
+            |_kind, _tool_name, _input| {
+                panic!("plugin tools should execute inside capability runtime")
+            },
+        )
+        .expect("plugin tool should execute through runtime facade");
+    let output_json: serde_json::Value =
+        serde_json::from_str(&output).expect("plugin output should be json");
+
+    assert_eq!(output_json["message"], "runtime-owned plugin dispatch");
+}
+
+#[test]
+fn session_capability_store_persists_and_restores_shared_runtime_state() {
+    let store = super::SessionCapabilityStore::default();
+    store.activate(super::CapabilityActivation::tool("WebSearch"));
+    store.apply_skill_execution_result(&super::SkillExecutionResult {
+        skill: "help".to_string(),
+        path: "/tmp/help/SKILL.md".to_string(),
+        description: Some("workspace help".to_string()),
+        context: super::skill_runtime::SkillContextKind::Inline,
+        messages_to_inject: vec![super::skill_runtime::SkillInjectedMessage::system(
+            "Injected guidance".to_string(),
+        )],
+        tool_grants: vec!["WebSearch".to_string()],
+        model_override: Some("claude-sonnet-4-6".to_string()),
+        effort_override: Some("medium".to_string()),
+        state_updates: vec![
+            super::SkillStateUpdate::ContextPrepared {
+                context: super::skill_runtime::SkillContextKind::Inline,
+            },
+            super::SkillStateUpdate::MessageInjected {
+                role: "system".to_string(),
+            },
+            super::SkillStateUpdate::ToolGranted {
+                tool: "WebSearch".to_string(),
+            },
+            super::SkillStateUpdate::ModelOverride {
+                model: "claude-sonnet-4-6".to_string(),
+            },
+            super::SkillStateUpdate::EffortOverride {
+                effort: "medium".to_string(),
+            },
+            super::SkillStateUpdate::ForkSpawned {
+                agent_id: "agent-123".to_string(),
+                subagent_type: Some("Plan".to_string()),
+                output_file: "/tmp/agent-123/output.json".to_string(),
+                manifest_file: "/tmp/agent-123/manifest.json".to_string(),
+            },
+        ],
+    });
+
+    let mut session = runtime::Session::new();
+    store
+        .persist_into_session(&mut session)
+        .expect("store state should persist");
+
+    let restored = super::SessionCapabilityStore::restore_from_session(&session)
+        .expect("store state should restore");
+    let snapshot = restored.snapshot();
+    assert!(snapshot.is_tool_activated("WebSearch"));
+    assert!(snapshot.is_tool_granted("WebSearch"));
+    assert_eq!(snapshot.injected_skill_messages(), &["Injected guidance"]);
+    assert_eq!(snapshot.model_override(), Some("claude-sonnet-4-6"));
+    assert_eq!(snapshot.effort_override(), Some("medium"));
+    assert!(
+        snapshot
+            .skill_state_updates()
+            .contains(&super::SkillStateUpdate::ForkSpawned {
+                agent_id: "agent-123".to_string(),
+                subagent_type: Some("Plan".to_string()),
+                output_file: "/tmp/agent-123/output.json".to_string(),
+                manifest_file: "/tmp/agent-123/manifest.json".to_string(),
+            })
+    );
+}
+
+#[test]
+fn session_capability_store_restore_marks_fork_lifecycle_from_agent_manifest() {
+    let output_dir = temp_path("session-skill-fork-restore");
+    fs::create_dir_all(&output_dir).expect("output dir should exist");
+    let output_file = output_dir.join("agent-restore.md");
+    let manifest_file = output_dir.join("agent-restore.json");
+    fs::write(&output_file, "# Agent Task\n").expect("output file should exist");
+
+    let manifest = super::AgentOutput {
+        agent_id: "agent-restore".to_string(),
+        name: "planner".to_string(),
+        description: "Execute planning fork skill".to_string(),
+        subagent_type: Some("Plan".to_string()),
+        model: Some("claude-sonnet-4-5".to_string()),
+        status: "completed".to_string(),
+        output_file: output_file.display().to_string(),
+        manifest_file: manifest_file.display().to_string(),
+        created_at: "2026-04-12T00:00:00Z".to_string(),
+        started_at: Some("2026-04-12T00:00:01Z".to_string()),
+        completed_at: Some("2026-04-12T00:00:05Z".to_string()),
+        lane_events: Vec::new(),
+        current_blocker: None,
+        derived_state: "finished_cleanable".to_string(),
+        error: None,
+    };
+    fs::write(
+        &manifest_file,
+        serde_json::to_string_pretty(&manifest).expect("manifest should serialize"),
+    )
+    .expect("manifest should exist");
+
+    let store = super::SessionCapabilityStore::default();
+    store.apply_skill_execution_result(&super::SkillExecutionResult {
+        skill: "planner".to_string(),
+        path: "/tmp/planner/SKILL.md".to_string(),
+        description: Some("Fork planning guidance into a dedicated subagent.".to_string()),
+        context: super::skill_runtime::SkillContextKind::Fork,
+        messages_to_inject: Vec::new(),
+        tool_grants: vec!["WebSearch".to_string()],
+        model_override: Some("claude-sonnet-4-5".to_string()),
+        effort_override: Some("high".to_string()),
+        state_updates: vec![
+            super::SkillStateUpdate::ContextPrepared {
+                context: super::skill_runtime::SkillContextKind::Fork,
+            },
+            super::SkillStateUpdate::ForkSpawned {
+                agent_id: "agent-restore".to_string(),
+                subagent_type: Some("Plan".to_string()),
+                output_file: output_file.display().to_string(),
+                manifest_file: manifest_file.display().to_string(),
+            },
+        ],
+    });
+
+    let mut session = Session::new();
+    store
+        .persist_into_session(&mut session)
+        .expect("store state should persist");
+
+    let restored = super::SessionCapabilityStore::restore_from_session(&session)
+        .expect("store state should restore");
+    let snapshot = restored.snapshot();
+
+    assert!(
+        snapshot
+            .skill_state_updates()
+            .contains(&super::SkillStateUpdate::ForkRestored {
+                agent_id: "agent-restore".to_string(),
+                status: "completed".to_string(),
+                derived_state: "finished_cleanable".to_string(),
+                output_file: output_file.display().to_string(),
+                manifest_file: manifest_file.display().to_string(),
+            })
+    );
+    assert!(
+        snapshot
+            .skill_state_updates()
+            .contains(&super::SkillStateUpdate::ForkCompleted {
+                agent_id: "agent-restore".to_string(),
+                output_file: output_file.display().to_string(),
+                manifest_file: manifest_file.display().to_string(),
+                completed_at: Some("2026-04-12T00:00:05Z".to_string()),
+            })
+    );
+
+    fs::remove_dir_all(output_dir).expect("temp output dir should clean up");
+}
+
+#[test]
+fn session_capability_store_restore_is_idempotent_for_fork_manifest() {
+    let output_dir = temp_path("session-skill-fork-restore-idempotent");
+    fs::create_dir_all(&output_dir).expect("output dir should exist");
+    let output_file = output_dir.join("agent-restore.md");
+    let manifest_file = output_dir.join("agent-restore.json");
+    fs::write(&output_file, "# Agent Task\n").expect("output file should exist");
+
+    let manifest = super::AgentOutput {
+        agent_id: "agent-restore".to_string(),
+        name: "planner".to_string(),
+        description: "Execute planning fork skill".to_string(),
+        subagent_type: Some("Plan".to_string()),
+        model: Some("claude-sonnet-4-5".to_string()),
+        status: "completed".to_string(),
+        output_file: output_file.display().to_string(),
+        manifest_file: manifest_file.display().to_string(),
+        created_at: "2026-04-12T00:00:00Z".to_string(),
+        started_at: Some("2026-04-12T00:00:01Z".to_string()),
+        completed_at: Some("2026-04-12T00:00:05Z".to_string()),
+        lane_events: Vec::new(),
+        current_blocker: None,
+        derived_state: "finished_cleanable".to_string(),
+        error: None,
+    };
+    fs::write(
+        &manifest_file,
+        serde_json::to_string_pretty(&manifest).expect("manifest should serialize"),
+    )
+    .expect("manifest should exist");
+
+    let store = super::SessionCapabilityStore::default();
+    store.apply_skill_execution_result(&super::SkillExecutionResult {
+        skill: "planner".to_string(),
+        path: "/tmp/planner/SKILL.md".to_string(),
+        description: Some("Fork planning guidance into a dedicated subagent.".to_string()),
+        context: super::skill_runtime::SkillContextKind::Fork,
+        messages_to_inject: Vec::new(),
+        tool_grants: vec!["WebSearch".to_string()],
+        model_override: Some("claude-sonnet-4-5".to_string()),
+        effort_override: Some("high".to_string()),
+        state_updates: vec![
+            super::SkillStateUpdate::ContextPrepared {
+                context: super::skill_runtime::SkillContextKind::Fork,
+            },
+            super::SkillStateUpdate::ForkSpawned {
+                agent_id: "agent-restore".to_string(),
+                subagent_type: Some("Plan".to_string()),
+                output_file: output_file.display().to_string(),
+                manifest_file: manifest_file.display().to_string(),
+            },
+        ],
+    });
+
+    let mut first_session = Session::new();
+    store
+        .persist_into_session(&mut first_session)
+        .expect("store state should persist");
+
+    let first_restore = super::SessionCapabilityStore::restore_from_session(&first_session)
+        .expect("first restore should succeed");
+    let first_snapshot = first_restore.snapshot();
+    assert_eq!(
+        first_snapshot
+            .skill_state_updates()
+            .iter()
+            .filter(|update| matches!(
+                update,
+                super::SkillStateUpdate::ForkRestored { agent_id, .. } if agent_id == "agent-restore"
+            ))
+            .count(),
+        1
+    );
+    assert_eq!(
+        first_snapshot
+            .skill_state_updates()
+            .iter()
+            .filter(|update| matches!(
+                update,
+                super::SkillStateUpdate::ForkCompleted { agent_id, .. } if agent_id == "agent-restore"
+            ))
+            .count(),
+        1
+    );
+
+    let mut second_session = Session::new();
+    first_restore
+        .persist_into_session(&mut second_session)
+        .expect("restored store state should persist");
+
+    let second_restore = super::SessionCapabilityStore::restore_from_session(&second_session)
+        .expect("second restore should succeed");
+    let second_snapshot = second_restore.snapshot();
+    assert_eq!(
+        second_snapshot
+            .skill_state_updates()
+            .iter()
+            .filter(|update| matches!(
+                update,
+                super::SkillStateUpdate::ForkRestored { agent_id, .. } if agent_id == "agent-restore"
+            ))
+            .count(),
+        1
+    );
+    assert_eq!(
+        second_snapshot
+            .skill_state_updates()
+            .iter()
+            .filter(|update| matches!(
+                update,
+                super::SkillStateUpdate::ForkCompleted { agent_id, .. } if agent_id == "agent-restore"
+            ))
+            .count(),
+        1
+    );
+
+    fs::remove_dir_all(output_dir).expect("temp output dir should clean up");
+}
+
+#[test]
+fn session_capability_store_snapshot_marks_failed_fork_lifecycle_from_agent_manifest() {
+    let output_dir = temp_path("session-skill-fork-failed");
+    fs::create_dir_all(&output_dir).expect("output dir should exist");
+    let output_file = output_dir.join("agent-failed.md");
+    let manifest_file = output_dir.join("agent-failed.json");
+    fs::write(&output_file, "# Agent Task\n").expect("output file should exist");
+
+    let manifest = super::AgentOutput {
+        agent_id: "agent-failed".to_string(),
+        name: "planner".to_string(),
+        description: "Execute planning fork skill".to_string(),
+        subagent_type: Some("Plan".to_string()),
+        model: Some("claude-sonnet-4-5".to_string()),
+        status: "failed".to_string(),
+        output_file: output_file.display().to_string(),
+        manifest_file: manifest_file.display().to_string(),
+        created_at: "2026-04-12T00:00:00Z".to_string(),
+        started_at: Some("2026-04-12T00:00:01Z".to_string()),
+        completed_at: Some("2026-04-12T00:00:05Z".to_string()),
+        lane_events: Vec::new(),
+        current_blocker: None,
+        derived_state: "truly_idle".to_string(),
+        error: Some("sub-agent thread panicked".to_string()),
+    };
+    fs::write(
+        &manifest_file,
+        serde_json::to_string_pretty(&manifest).expect("manifest should serialize"),
+    )
+    .expect("manifest should exist");
+
+    let store = super::SessionCapabilityStore::default();
+    store.apply_skill_execution_result(&super::SkillExecutionResult {
+        skill: "planner".to_string(),
+        path: "/tmp/planner/SKILL.md".to_string(),
+        description: Some("Fork planning guidance into a dedicated subagent.".to_string()),
+        context: super::skill_runtime::SkillContextKind::Fork,
+        messages_to_inject: Vec::new(),
+        tool_grants: Vec::new(),
+        model_override: None,
+        effort_override: None,
+        state_updates: vec![
+            super::SkillStateUpdate::ContextPrepared {
+                context: super::skill_runtime::SkillContextKind::Fork,
+            },
+            super::SkillStateUpdate::ForkSpawned {
+                agent_id: "agent-failed".to_string(),
+                subagent_type: Some("Plan".to_string()),
+                output_file: output_file.display().to_string(),
+                manifest_file: manifest_file.display().to_string(),
+            },
+        ],
+    });
+
+    let snapshot = store.snapshot();
+    assert!(
+        snapshot
+            .skill_state_updates()
+            .contains(&super::SkillStateUpdate::ForkFailed {
+                agent_id: "agent-failed".to_string(),
+                output_file: output_file.display().to_string(),
+                manifest_file: manifest_file.display().to_string(),
+                error: Some("sub-agent thread panicked".to_string()),
+            })
+    );
+    assert!(
+        !snapshot.skill_state_updates().iter().any(|update| matches!(
+            update,
+            super::SkillStateUpdate::ForkRestored { agent_id, .. } if agent_id == "agent-failed"
+        ))
+    );
+
+    fs::remove_dir_all(output_dir).expect("temp output dir should clean up");
+}
+
+#[test]
+fn session_capability_store_snapshot_does_not_duplicate_terminal_fork_updates() {
+    let output_dir = temp_path("session-skill-fork-terminal-conflict");
+    fs::create_dir_all(&output_dir).expect("output dir should exist");
+    let output_file = output_dir.join("agent-conflict.md");
+    let manifest_file = output_dir.join("agent-conflict.json");
+    fs::write(&output_file, "# Agent Task\n").expect("output file should exist");
+
+    let manifest = super::AgentOutput {
+        agent_id: "agent-conflict".to_string(),
+        name: "planner".to_string(),
+        description: "Execute planning fork skill".to_string(),
+        subagent_type: Some("Plan".to_string()),
+        model: Some("claude-sonnet-4-5".to_string()),
+        status: "failed".to_string(),
+        output_file: output_file.display().to_string(),
+        manifest_file: manifest_file.display().to_string(),
+        created_at: "2026-04-12T00:00:00Z".to_string(),
+        started_at: Some("2026-04-12T00:00:01Z".to_string()),
+        completed_at: Some("2026-04-12T00:00:05Z".to_string()),
+        lane_events: Vec::new(),
+        current_blocker: None,
+        derived_state: "truly_idle".to_string(),
+        error: Some("sub-agent thread panicked".to_string()),
+    };
+    fs::write(
+        &manifest_file,
+        serde_json::to_string_pretty(&manifest).expect("manifest should serialize"),
+    )
+    .expect("manifest should exist");
+
+    let store = super::SessionCapabilityStore::default();
+    store.apply_skill_state_updates(&[
+        super::SkillStateUpdate::ForkSpawned {
+            agent_id: "agent-conflict".to_string(),
+            subagent_type: Some("Plan".to_string()),
+            output_file: output_file.display().to_string(),
+            manifest_file: manifest_file.display().to_string(),
+        },
+        super::SkillStateUpdate::ForkCompleted {
+            agent_id: "agent-conflict".to_string(),
+            output_file: output_file.display().to_string(),
+            manifest_file: manifest_file.display().to_string(),
+            completed_at: Some("2026-04-12T00:00:05Z".to_string()),
+        },
+    ]);
+
+    let snapshot = store.snapshot();
+    assert_eq!(
+        snapshot
+            .skill_state_updates()
+            .iter()
+            .filter(|update| matches!(
+                update,
+                super::SkillStateUpdate::ForkCompleted { agent_id, .. } if agent_id == "agent-conflict"
+            ))
+            .count(),
+        1
+    );
+    assert_eq!(
+        snapshot
+            .skill_state_updates()
+            .iter()
+            .filter(|update| matches!(
+                update,
+                super::SkillStateUpdate::ForkFailed { agent_id, .. } if agent_id == "agent-conflict"
+            ))
+            .count(),
+        0
+    );
+
+    fs::remove_dir_all(output_dir).expect("temp output dir should clean up");
+}
+
+#[test]
+fn skill_tool_grants_deferred_tools_into_visible_surface() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("skill-tool-home");
+    let skill_dir = home.join(".agents").join("skills").join("help");
+    fs::create_dir_all(&skill_dir).expect("skill dir should exist");
+    fs::write(
+        skill_dir.join("SKILL.md"),
+        r#"---
+name: help
+description: Help the model decide when to use the workspace guidance skill.
+when_to_use: Use when the task asks for workspace orientation.
+allowed-tools:
+  - WebSearch
+model-invocable: true
+user-invocable: true
+context: inline
+---
+# help
+
+Guide the model through the workspace.
+"#,
+    )
+    .expect("skill file should exist");
+
+    let original_home = std::env::var("HOME").ok();
+    std::env::set_var("HOME", &home);
+
+    let capability_provider = CapabilityProvider::builtin();
+    let capability_runtime = CapabilityRuntime::new(capability_provider.clone());
+    let profile = BTreeSet::from([
+        String::from("SkillDiscovery"),
+        String::from("SkillTool"),
+        String::from("ToolSearch"),
+        String::from("WebSearch"),
+    ]);
+    let shared_state = std::sync::Arc::new(std::sync::Mutex::new(
+        super::SessionCapabilityState::default(),
+    ));
+    let mut executor = SubagentToolExecutor::from_capability_provider(
+        super::CapabilityProfile::from_tools(profile.clone()),
+        capability_provider,
+        shared_state.clone(),
+    );
+
+    let before = {
+        let locked = shared_state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        capability_runtime
+            .surface_projection(super::CapabilityPlannerInput::new(
+                Some(&profile),
+                Some(&locked),
+            ))
+            .expect("planner surface should resolve before grant")
+    };
+    assert!(
+        !before
+            .visible_tools
+            .iter()
+            .any(|capability| capability.display_name == "WebSearch")
+    );
+
+    let result = executor
+        .execute(
+            "SkillTool",
+            r#"{"skill":"help","arguments":{"topic":"workspace"}} "#,
+        )
+        .expect("SkillTool should succeed");
+    let result_json: serde_json::Value = serde_json::from_str(&result).expect("valid json");
+    assert_eq!(result_json["skill"], "help");
+    assert_eq!(result_json["context"], "inline");
+    assert_eq!(result_json["tool_grants"][0], "WebSearch");
+    assert_eq!(result_json["messages_to_inject"][0]["role"], "system");
+    assert_eq!(result_json["state_updates"][0]["kind"], "context_prepared");
+    assert_eq!(result_json["state_updates"][1]["kind"], "message_injected");
+    assert_eq!(result_json["state_updates"][2]["kind"], "tool_granted");
+    assert_eq!(result_json["state_updates"][2]["tool"], "WebSearch");
+
+    let locked = shared_state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    assert!(locked.is_tool_granted("WebSearch"));
+    let after = capability_runtime
+        .surface_projection(super::CapabilityPlannerInput::new(
+            Some(&profile),
+            Some(&locked),
+        ))
+        .expect("planner surface should resolve after grant");
+    assert!(
+        after
+            .visible_tools
+            .iter()
+            .any(|capability| capability.display_name == "WebSearch")
+    );
+    assert!(
+        locked
+            .injected_skill_messages()
+            .iter()
+            .any(|message| message.contains("Guide the model through the workspace"))
+    );
+
+    if let Some(home) = original_home {
+        std::env::set_var("HOME", home);
+    } else {
+        std::env::remove_var("HOME");
+    }
+    fs::remove_dir_all(home).expect("temp home should clean up");
+}
+
+#[test]
+fn mcp_prompt_capabilities_without_runtime_executors_stay_hidden_from_skill_discovery() {
+    let capability = super::CapabilitySpec {
+        capability_id: "mcp-prompt.workspace-guide".to_string(),
+        source_kind: super::CapabilitySourceKind::McpPrompt,
+        execution_kind: super::CapabilityExecutionKind::PromptSkill,
+        display_name: "workspace-guide".to_string(),
+        description: "MCP prompt-backed workspace guidance skill.".to_string(),
+        when_to_use: Some("Use when the task needs MCP-provided workspace guidance.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "skill": { "type": "string" },
+                "arguments": {}
+            },
+            "required": ["skill"],
+            "additionalProperties": false
+        }),
+        search_hint: Some("workspace guidance".to_string()),
+        visibility: super::CapabilityVisibility::DefaultVisible,
+        state: super::CapabilityState::Ready,
+        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
+            required_permission: PermissionMode::ReadOnly,
+        },
+        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
+            selectable: true,
+            requires_approval: false,
+            requires_auth: false,
+        },
+        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
+    };
+    let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
+
+    let surface = runtime
+        .surface_projection(super::CapabilityPlannerInput::default())
+        .expect("planner should project a capability surface");
+    assert!(
+        !surface
+            .discoverable_skills
+            .iter()
+            .any(|skill| skill.display_name == "workspace-guide")
+    );
+    assert!(
+        surface
+            .hidden_capabilities
+            .iter()
+            .any(|skill| skill.display_name == "workspace-guide")
+    );
+
+    let discovery = runtime.skill_discovery(
+        "workspace guidance",
+        10,
+        super::CapabilityPlannerInput::default(),
+    );
+    let output: serde_json::Value =
+        serde_json::to_value(discovery).expect("skill discovery output should be json");
+    assert!(
+        !output["matches"]
+            .as_array()
+            .expect("matches")
+            .iter()
+            .any(|value| value == "workspace-guide")
+    );
 }
 
 #[test]
@@ -1194,8 +3880,18 @@ fn agent_persists_handoff_metadata() {
         .clone()
         .expect("spawn job should be captured");
     assert_eq!(captured_job.prompt, "Check tests and outstanding work.");
-    assert!(captured_job.allowed_tools.contains("read_file"));
-    assert!(!captured_job.allowed_tools.contains("Agent"));
+    assert!(
+        captured_job
+            .capability_profile
+            .allowed_tools()
+            .contains("read_file")
+    );
+    assert!(
+        !captured_job
+            .capability_profile
+            .allowed_tools()
+            .contains("Agent")
+    );
 
     let normalized = execute_tool(
         "Agent",
@@ -1489,21 +4185,33 @@ fn agent_tool_subset_mapping_is_expected() {
     let general = allowed_tools_for_subagent("general-purpose");
     assert!(general.contains("bash"));
     assert!(general.contains("write_file"));
+    assert!(general.contains("SkillDiscovery"));
+    assert!(general.contains("SkillTool"));
+    assert!(!general.contains("Skill"));
     assert!(!general.contains("Agent"));
 
     let explore = allowed_tools_for_subagent("Explore");
     assert!(explore.contains("read_file"));
     assert!(explore.contains("grep_search"));
+    assert!(explore.contains("SkillDiscovery"));
+    assert!(explore.contains("SkillTool"));
+    assert!(!explore.contains("Skill"));
     assert!(!explore.contains("bash"));
 
     let plan = allowed_tools_for_subagent("Plan");
     assert!(plan.contains("TodoWrite"));
     assert!(plan.contains("StructuredOutput"));
+    assert!(plan.contains("SkillDiscovery"));
+    assert!(plan.contains("SkillTool"));
+    assert!(!plan.contains("Skill"));
     assert!(!plan.contains("Agent"));
 
     let verification = allowed_tools_for_subagent("Verification");
     assert!(verification.contains("bash"));
     assert!(verification.contains("PowerShell"));
+    assert!(verification.contains("SkillDiscovery"));
+    assert!(verification.contains("SkillTool"));
+    assert!(!verification.contains("Skill"));
     assert!(!verification.contains("write_file"));
 }
 
@@ -1567,16 +4275,18 @@ fn subagent_runtime_executes_tool_loop_with_isolated_session() {
         final_assistant_text(&summary),
         "Scope: completed mock review"
     );
-    assert!(runtime
-        .session()
-        .messages
-        .iter()
-        .flat_map(|message| message.blocks.iter())
-        .any(|block| matches!(
-            block,
-            runtime::ContentBlock::ToolResult { output, .. }
-                if output.contains("hello from child")
-        )));
+    assert!(
+        runtime
+            .session()
+            .messages
+            .iter()
+            .flat_map(|message| message.blocks.iter())
+            .any(|block| matches!(
+                block,
+                runtime::ContentBlock::ToolResult { output, .. }
+                    if output.contains("hello from child")
+            ))
+    );
 
     let _ = std::fs::remove_file(path);
 }
@@ -1740,20 +4450,24 @@ fn bash_tool_reports_success_exit_failure_timeout_and_background() {
         .expect("bash failure should still return structured output");
     let failure_output: serde_json::Value = serde_json::from_str(&failure).expect("json");
     assert_eq!(failure_output["returnCodeInterpretation"], "exit_code:7");
-    assert!(failure_output["stderr"]
-        .as_str()
-        .expect("stderr")
-        .contains("oops"));
+    assert!(
+        failure_output["stderr"]
+            .as_str()
+            .expect("stderr")
+            .contains("oops")
+    );
 
     let timeout = execute_tool("bash", &json!({ "command": "sleep 1", "timeout": 10 }))
         .expect("bash timeout should return output");
     let timeout_output: serde_json::Value = serde_json::from_str(&timeout).expect("json");
     assert_eq!(timeout_output["interrupted"], true);
     assert_eq!(timeout_output["returnCodeInterpretation"], "timeout");
-    assert!(timeout_output["stderr"]
-        .as_str()
-        .expect("stderr")
-        .contains("Command exceeded timeout"));
+    assert!(
+        timeout_output["stderr"]
+            .as_str()
+            .expect("stderr")
+            .contains("Command exceeded timeout")
+    );
 
     let background = execute_tool(
         "bash",
@@ -1794,10 +4508,12 @@ fn bash_workspace_tests_are_blocked_when_branch_is_behind_main() {
         output_json["returnCodeInterpretation"],
         "preflight_blocked:branch_divergence"
     );
-    assert!(output_json["stderr"]
-        .as_str()
-        .expect("stderr")
-        .contains("branch divergence detected before workspace tests"));
+    assert!(
+        output_json["stderr"]
+            .as_str()
+            .expect("stderr")
+            .contains("branch divergence detected before workspace tests")
+    );
     assert_eq!(
         output_json["structuredContent"][0]["event"],
         "branch.stale_against_main"
@@ -1979,10 +4695,12 @@ fn glob_and_grep_tools_cover_success_and_errors() {
         .expect("glob should succeed");
     let globbed_output: serde_json::Value = serde_json::from_str(&globbed).expect("json");
     assert_eq!(globbed_output["numFiles"], 1);
-    assert!(globbed_output["filenames"][0]
-        .as_str()
-        .expect("filename")
-        .ends_with("nested/lib.rs"));
+    assert!(
+        globbed_output["filenames"][0]
+            .as_str()
+            .expect("filename")
+            .ends_with("nested/lib.rs")
+    );
 
     let glob_error = execute_tool("glob_search", &json!({ "pattern": "[" }))
         .expect_err("invalid glob should fail");
@@ -2005,10 +4723,12 @@ fn glob_and_grep_tools_cover_success_and_errors() {
     assert_eq!(grep_content_output["numFiles"], 0);
     assert!(grep_content_output["appliedLimit"].is_null());
     assert_eq!(grep_content_output["appliedOffset"], 1);
-    assert!(grep_content_output["content"]
-        .as_str()
-        .expect("content")
-        .contains("let alpha = 2;"));
+    assert!(
+        grep_content_output["content"]
+            .as_str()
+            .expect("content")
+            .contains("let alpha = 2;")
+    );
 
     let grep_count = execute_tool(
         "grep_search",
@@ -2036,10 +4756,12 @@ fn sleep_waits_and_reports_duration() {
     let elapsed = started.elapsed();
     let output: serde_json::Value = serde_json::from_str(&result).expect("json");
     assert_eq!(output["duration_ms"], 20);
-    assert!(output["message"]
-        .as_str()
-        .expect("message")
-        .contains("Slept for 20ms"));
+    assert!(
+        output["message"]
+            .as_str()
+            .expect("message")
+            .contains("Slept for 20ms")
+    );
     assert!(elapsed >= Duration::from_millis(15));
 }
 
@@ -2207,11 +4929,12 @@ fn enter_and_exit_plan_mode_round_trip_existing_local_override() {
     let local_settings = std::fs::read_to_string(cwd.join(".claw").join("settings.local.json"))
         .expect("local settings after exit");
     assert!(local_settings.contains(r#""defaultMode": "acceptEdits""#));
-    assert!(!cwd
-        .join(".claw")
-        .join("tool-state")
-        .join("plan-mode.json")
-        .exists());
+    assert!(
+        !cwd.join(".claw")
+            .join("tool-state")
+            .join("plan-mode.json")
+            .exists()
+    );
 
     std::env::set_current_dir(&original_dir).expect("restore cwd");
     match original_home {
@@ -2268,11 +4991,12 @@ fn exit_plan_mode_clears_override_when_enter_created_it_from_empty_local_state()
         None,
         "permissions override should be removed on exit"
     );
-    assert!(!cwd
-        .join(".claw")
-        .join("tool-state")
-        .join("plan-mode.json")
-        .exists());
+    assert!(
+        !cwd.join(".claw")
+            .join("tool-state")
+            .join("plan-mode.json")
+            .exists()
+    );
 
     std::env::set_current_dir(&original_dir).expect("restore cwd");
     match original_home {
@@ -2431,24 +5155,23 @@ fn powershell_errors_when_shell_is_missing() {
     assert!(err.contains("PowerShell executable not found"));
 }
 
-fn read_only_registry() -> super::GlobalToolRegistry {
-    use runtime::permission_enforcer::PermissionEnforcer;
-    use runtime::PermissionPolicy;
-
+fn read_only_capability_runtime() -> CapabilityRuntime {
     let policy = mvp_tool_specs().into_iter().fold(
         PermissionPolicy::new(runtime::PermissionMode::ReadOnly),
         |policy, spec| policy.with_tool_requirement(spec.name, spec.required_permission),
     );
-    let mut registry = super::GlobalToolRegistry::builtin();
-    registry.set_enforcer(PermissionEnforcer::new(policy));
-    registry
+    capability_runtime_from_sources(
+        Vec::new(),
+        Vec::new(),
+        Vec::new(),
+        Some(PermissionEnforcer::new(policy)),
+    )
 }
 
 #[test]
 fn given_read_only_enforcer_when_bash_then_denied() {
-    let registry = read_only_registry();
-    let err = registry
-        .execute("bash", &json!({ "command": "echo hi" }))
+    let runtime = read_only_capability_runtime();
+    let err = execute_local_tool_with_runtime(&runtime, "bash", &json!({ "command": "echo hi" }))
         .expect_err("bash should be denied in read-only mode");
     assert!(
         err.contains("current mode is read-only"),
@@ -2458,13 +5181,13 @@ fn given_read_only_enforcer_when_bash_then_denied() {
 
 #[test]
 fn given_read_only_enforcer_when_write_file_then_denied() {
-    let registry = read_only_registry();
-    let err = registry
-        .execute(
-            "write_file",
-            &json!({ "path": "/tmp/x.txt", "content": "x" }),
-        )
-        .expect_err("write_file should be denied in read-only mode");
+    let runtime = read_only_capability_runtime();
+    let err = execute_local_tool_with_runtime(
+        &runtime,
+        "write_file",
+        &json!({ "path": "/tmp/x.txt", "content": "x" }),
+    )
+    .expect_err("write_file should be denied in read-only mode");
     assert!(
         err.contains("current mode is read-only"),
         "should cite active mode: {err}"
@@ -2473,13 +5196,13 @@ fn given_read_only_enforcer_when_write_file_then_denied() {
 
 #[test]
 fn given_read_only_enforcer_when_edit_file_then_denied() {
-    let registry = read_only_registry();
-    let err = registry
-        .execute(
-            "edit_file",
-            &json!({ "path": "/tmp/x.txt", "old_string": "a", "new_string": "b" }),
-        )
-        .expect_err("edit_file should be denied in read-only mode");
+    let runtime = read_only_capability_runtime();
+    let err = execute_local_tool_with_runtime(
+        &runtime,
+        "edit_file",
+        &json!({ "path": "/tmp/x.txt", "old_string": "a", "new_string": "b" }),
+    )
+    .expect_err("edit_file should be denied in read-only mode");
     assert!(
         err.contains("current mode is read-only"),
         "should cite active mode: {err}"
@@ -2496,8 +5219,12 @@ fn given_read_only_enforcer_when_read_file_then_not_permission_denied() {
     let file = root.join("readable.txt");
     fs::write(&file, "content\n").expect("write test file");
 
-    let registry = read_only_registry();
-    let result = registry.execute("read_file", &json!({ "path": file.display().to_string() }));
+    let runtime = read_only_capability_runtime();
+    let result = execute_local_tool_with_runtime(
+        &runtime,
+        "read_file",
+        &json!({ "path": file.display().to_string() }),
+    );
     assert!(result.is_ok(), "read_file should be allowed: {result:?}");
 
     let _ = fs::remove_dir_all(root);
@@ -2505,8 +5232,9 @@ fn given_read_only_enforcer_when_read_file_then_not_permission_denied() {
 
 #[test]
 fn given_read_only_enforcer_when_glob_search_then_not_permission_denied() {
-    let registry = read_only_registry();
-    let result = registry.execute("glob_search", &json!({ "pattern": "*.rs" }));
+    let runtime = read_only_capability_runtime();
+    let result =
+        execute_local_tool_with_runtime(&runtime, "glob_search", &json!({ "pattern": "*.rs" }));
     assert!(
         result.is_ok(),
         "glob_search should be allowed in read-only mode: {result:?}"
@@ -2518,12 +5246,88 @@ fn given_no_enforcer_when_bash_then_executes_normally() {
     let _guard = env_lock()
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let registry = super::GlobalToolRegistry::builtin();
-    let result = registry
-        .execute("bash", &json!({ "command": "printf 'ok'" }))
-        .expect("bash should succeed without enforcer");
+    let runtime = CapabilityRuntime::builtin();
+    let result =
+        execute_local_tool_with_runtime(&runtime, "bash", &json!({ "command": "printf 'ok'" }))
+            .expect("bash should succeed without enforcer");
     let output: serde_json::Value = serde_json::from_str(&result).expect("json");
     assert_eq!(output["stdout"], "ok");
+}
+
+#[test]
+fn builtin_capability_runtime_matches_provider_built_surface() {
+    let runtime = CapabilityRuntime::builtin();
+    let provider_runtime =
+        capability_runtime_from_sources(Vec::new(), Vec::new(), Vec::new(), None);
+
+    let runtime_defs = runtime
+        .planned_tool_definitions(CapabilityPlannerInput::default())
+        .expect("builtin runtime definitions");
+    let provider_defs = provider_runtime
+        .planned_tool_definitions(CapabilityPlannerInput::default())
+        .expect("provider runtime definitions");
+
+    let runtime_names = runtime_defs
+        .into_iter()
+        .map(|definition| definition.name)
+        .collect::<Vec<_>>();
+    let provider_names = provider_defs
+        .into_iter()
+        .map(|definition| definition.name)
+        .collect::<Vec<_>>();
+    assert_eq!(runtime_names, provider_names);
+}
+
+#[test]
+fn capability_runtime_normalize_allowed_tools_matches_provider_resolution() {
+    let plugin_tools = vec![PluginTool::new(
+        "plugin-demo@external",
+        "plugin-demo",
+        PluginToolDefinition {
+            name: "plugin_echo".into(),
+            description: Some("Echo from plugin".into()),
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "message": { "type": "string" }
+                },
+                "required": ["message"],
+                "additionalProperties": false
+            }),
+        },
+        "echo",
+        Vec::new(),
+        PluginToolPermission::WorkspaceWrite,
+        None,
+    )];
+    let runtime_tools = vec![super::RuntimeToolDefinition {
+        name: "mcp__demo__echo".into(),
+        description: Some("Echo from runtime".into()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "message": { "type": "string" }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+        }),
+        required_permission: PermissionMode::ReadOnly,
+    }];
+    let provider = capability_provider_from_sources(plugin_tools, runtime_tools, Vec::new(), None);
+    let runtime = CapabilityRuntime::new(provider.clone());
+    let values = vec![
+        "read,plugin_echo".to_string(),
+        "mcp__demo__echo".to_string(),
+    ];
+
+    let provider_allowed = provider
+        .normalize_allowed_tools(&values)
+        .expect("provider allow-list");
+    let runtime_allowed = runtime
+        .normalize_allowed_tools(&values)
+        .expect("runtime allow-list");
+
+    assert_eq!(runtime_allowed, provider_allowed);
 }
 
 #[test]
@@ -2554,6 +5358,175 @@ fn run_task_packet_creates_packet_backed_task() {
     );
 }
 
+fn setup_managed_mcp_runtime_fixture(
+    include_broken_server: bool,
+) -> (PathBuf, PathBuf, super::ManagedMcpRuntime) {
+    let config_home = temp_path("managed-mcp-config");
+    let workspace = temp_path("managed-mcp-workspace");
+    fs::create_dir_all(&config_home).expect("config home should exist");
+    fs::create_dir_all(&workspace).expect("workspace should exist");
+
+    let script_path = workspace.join("fixture-mcp.py");
+    write_mcp_server_fixture(&script_path);
+
+    let mcp_servers = if include_broken_server {
+        format!(
+            r#"{{
+              "alpha": {{
+                "command": "python3",
+                "args": ["{}"]
+              }},
+              "broken": {{
+                "command": "python3",
+                "args": ["-c", "import sys; sys.exit(0)"]
+              }}
+            }}"#,
+            script_path.to_string_lossy()
+        )
+    } else {
+        format!(
+            r#"{{
+              "alpha": {{
+                "command": "python3",
+                "args": ["{}"]
+              }}
+            }}"#,
+            script_path.to_string_lossy()
+        )
+    };
+
+    fs::write(
+        config_home.join("settings.json"),
+        format!(r#"{{"mcpServers": {mcp_servers}}}"#),
+    )
+    .expect("mcp settings should write");
+
+    let loader = ConfigLoader::new(&workspace, &config_home);
+    let runtime_config = loader.load().expect("runtime config should load");
+    let mcp_runtime = super::ManagedMcpRuntime::new(&runtime_config)
+        .expect("managed mcp runtime should build")
+        .expect("managed mcp runtime should exist");
+
+    (config_home, workspace, mcp_runtime)
+}
+
+fn cleanup_mcp_runtime_fixture(config_home: &Path, workspace: &Path) {
+    let _ = fs::remove_dir_all(config_home);
+    let _ = fs::remove_dir_all(workspace);
+}
+
+fn write_mcp_server_fixture(script_path: &Path) {
+    let script = [
+        "#!/usr/bin/env python3",
+        "import json, sys",
+        "",
+        "def read_message():",
+        "    header = b''",
+        r"    while not header.endswith(b'\r\n\r\n'):",
+        "        chunk = sys.stdin.buffer.read(1)",
+        "        if not chunk:",
+        "            return None",
+        "        header += chunk",
+        "    length = 0",
+        r"    for line in header.decode().split('\r\n'):",
+        r"        if line.lower().startswith('content-length:'):",
+        "            length = int(line.split(':', 1)[1].strip())",
+        "    payload = sys.stdin.buffer.read(length)",
+        "    return json.loads(payload.decode())",
+        "",
+        "def send_message(message):",
+        "    payload = json.dumps(message).encode()",
+        r"    sys.stdout.buffer.write(f'Content-Length: {len(payload)}\r\n\r\n'.encode() + payload)",
+        "    sys.stdout.buffer.flush()",
+        "",
+        "while True:",
+        "    request = read_message()",
+        "    if request is None:",
+        "        break",
+        "    method = request['method']",
+        "    if method == 'initialize':",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request['id'],",
+        "            'result': {",
+        "                'protocolVersion': request['params']['protocolVersion'],",
+        "                'capabilities': {'tools': {}, 'resources': {}},",
+        "                'serverInfo': {'name': 'fixture', 'version': '1.0.0'}",
+        "            }",
+        "        })",
+        "    elif method == 'tools/list':",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request['id'],",
+        "            'result': {",
+        "                'tools': [",
+        "                    {",
+        "                        'name': 'echo',",
+        "                        'description': 'Echo from MCP fixture',",
+        "                        'inputSchema': {",
+        "                            'type': 'object',",
+        "                            'properties': {'text': {'type': 'string'}},",
+        "                            'required': ['text']",
+        "                        },",
+        "                        'annotations': {'readOnlyHint': True}",
+        "                    }",
+        "                ]",
+        "            }",
+        "        })",
+        "    elif method == 'tools/call':",
+        "        arguments = request['params'].get('arguments') or {}",
+        "        text = arguments.get('text', '')",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request['id'],",
+        "            'result': {",
+        "                'content': [{'type': 'text', 'text': text}],",
+        "                'structuredContent': {'echoed': text},",
+        "                'isError': False",
+        "            }",
+        "        })",
+        "    elif method == 'resources/list':",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request['id'],",
+        "            'result': {",
+        "                'resources': [",
+        "                    {",
+        "                        'uri': 'file://guide.txt',",
+        "                        'name': 'Guide',",
+        "                        'description': 'Workspace guide',",
+        "                        'mimeType': 'text/plain'",
+        "                    }",
+        "                ]",
+        "            }",
+        "        })",
+        "    elif method == 'resources/read':",
+        "        uri = request['params']['uri']",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request['id'],",
+        "            'result': {",
+        "                'contents': [",
+        "                    {'uri': uri, 'mimeType': 'text/plain', 'text': f'contents for {uri}'}",
+        "                ]",
+        "            }",
+        "        })",
+        "    elif method == 'notifications/initialized':",
+        "        continue",
+        "    else:",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request.get('id'),",
+        "            'error': {",
+        "                'code': -32601,",
+        "                'message': f'unsupported method {method}'",
+        "            }",
+        "        })",
+    ];
+
+    fs::write(script_path, script.join("\n")).expect("fixture mcp script should write");
+}
+
 struct TestServer {
     addr: SocketAddr,
     shutdown: Option<std::sync::mpsc::Sender<()>>,
@@ -2569,26 +5542,28 @@ impl TestServer {
         let addr = listener.local_addr().expect("local addr");
         let (tx, rx) = std::sync::mpsc::channel::<()>();
 
-        let handle = thread::spawn(move || loop {
-            if rx.try_recv().is_ok() {
-                break;
-            }
+        let handle = thread::spawn(move || {
+            loop {
+                if rx.try_recv().is_ok() {
+                    break;
+                }
 
-            match listener.accept() {
-                Ok((mut stream, _)) => {
-                    let mut buffer = [0_u8; 4096];
-                    let size = stream.read(&mut buffer).expect("read request");
-                    let request = String::from_utf8_lossy(&buffer[..size]).into_owned();
-                    let request_line = request.lines().next().unwrap_or_default().to_string();
-                    let response = handler(&request_line);
-                    stream
-                        .write_all(response.to_bytes().as_slice())
-                        .expect("write response");
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        let mut buffer = [0_u8; 4096];
+                        let size = stream.read(&mut buffer).expect("read request");
+                        let request = String::from_utf8_lossy(&buffer[..size]).into_owned();
+                        let request_line = request.lines().next().unwrap_or_default().to_string();
+                        let response = handler(&request_line);
+                        stream
+                            .write_all(response.to_bytes().as_slice())
+                            .expect("write response");
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(error) => panic!("server accept failed: {error}"),
                 }
-                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(error) => panic!("server accept failed: {error}"),
             }
         });
 

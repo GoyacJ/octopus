@@ -100,6 +100,12 @@ impl Session {
                 JsonValue::String(workspace_root_to_string(workspace_root)?),
             );
         }
+        if !self.extensions.is_empty() {
+            object.insert(
+                "extensions".to_string(),
+                JsonValue::Object(self.extensions.clone()),
+            );
+        }
         Ok(JsonValue::Object(object))
     }
 
@@ -144,6 +150,11 @@ impl Session {
             .get("workspace_root")
             .and_then(JsonValue::as_str)
             .map(PathBuf::from);
+        let extensions = object
+            .get("extensions")
+            .and_then(JsonValue::as_object)
+            .cloned()
+            .unwrap_or_default();
         Ok(Self {
             version,
             session_id,
@@ -153,6 +164,7 @@ impl Session {
             compaction,
             fork,
             workspace_root,
+            extensions,
             persistence: None,
         })
     }
@@ -166,6 +178,7 @@ impl Session {
         let mut compaction = None;
         let mut fork = None;
         let mut workspace_root = None;
+        let mut extensions = BTreeMap::new();
 
         for (line_number, raw_line) in contents.lines().enumerate() {
             let line = raw_line.trim();
@@ -204,6 +217,11 @@ impl Session {
                         .get("workspace_root")
                         .and_then(JsonValue::as_str)
                         .map(PathBuf::from);
+                    extensions = object
+                        .get("extensions")
+                        .and_then(JsonValue::as_object)
+                        .cloned()
+                        .unwrap_or_default();
                 }
                 "message" => {
                     let message_value = object.get("message").ok_or_else(|| {
@@ -238,6 +256,7 @@ impl Session {
             compaction,
             fork,
             workspace_root,
+            extensions,
             persistence: None,
         })
     }
@@ -305,6 +324,12 @@ impl Session {
             object.insert(
                 "workspace_root".to_string(),
                 JsonValue::String(workspace_root_to_string(workspace_root)?),
+            );
+        }
+        if !self.extensions.is_empty() {
+            object.insert(
+                "extensions".to_string(),
+                JsonValue::Object(self.extensions.clone()),
             );
         }
         Ok(JsonValue::Object(object))

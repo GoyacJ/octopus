@@ -1,8 +1,8 @@
 use super::*;
 use crate::dto_mapping::metric_record;
 use octopus_core::{
-    AuthorizationRequest, ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
-    ProtectedResourceDescriptor,
+    AuthorizationRequest, CapabilityManagementProjection, ExportWorkspaceAgentBundleInput,
+    ExportWorkspaceAgentBundleResult, ProtectedResourceDescriptor,
 };
 
 fn capability_authorization_request(
@@ -1619,10 +1619,10 @@ pub(crate) async fn workspace_provider_credentials(
     ))
 }
 
-pub(crate) async fn workspace_tool_catalog(
+pub(crate) async fn workspace_capability_management_projection(
     State(state): State<ServerState>,
     headers: HeaderMap,
-) -> Result<Json<WorkspaceToolCatalogSnapshot>, ApiError> {
+) -> Result<Json<CapabilityManagementProjection>, ApiError> {
     ensure_capability_session(
         &state,
         &headers,
@@ -1632,14 +1632,20 @@ pub(crate) async fn workspace_tool_catalog(
         None,
     )
     .await?;
-    Ok(Json(state.services.workspace.get_tool_catalog().await?))
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .get_capability_management_projection()
+            .await?,
+    ))
 }
 
-pub(crate) async fn workspace_tool_catalog_disable(
+pub(crate) async fn workspace_capability_asset_disable(
     State(state): State<ServerState>,
     headers: HeaderMap,
-    Json(patch): Json<WorkspaceToolDisablePatch>,
-) -> Result<Json<WorkspaceToolCatalogSnapshot>, ApiError> {
+    Json(patch): Json<CapabilityAssetDisablePatch>,
+) -> Result<Json<CapabilityManagementProjection>, ApiError> {
     ensure_capability_session(
         &state,
         &headers,
@@ -1653,7 +1659,7 @@ pub(crate) async fn workspace_tool_catalog_disable(
         state
             .services
             .workspace
-            .set_tool_catalog_disabled(patch)
+            .set_capability_asset_disabled(patch)
             .await?,
     ))
 }

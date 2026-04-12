@@ -52,7 +52,8 @@ pub(crate) fn execute_tool_with_enforcer(
         "WebFetch" => from_value::<WebFetchInput>(input).and_then(run_web_fetch),
         "WebSearch" => from_value::<WebSearchInput>(input).and_then(run_web_search),
         "TodoWrite" => from_value::<TodoWriteInput>(input).and_then(run_todo_write),
-        "Skill" => from_value::<SkillInput>(input).and_then(run_skill),
+        "SkillDiscovery" => from_value::<SkillDiscoveryInput>(input).and_then(run_skill_discovery),
+        "SkillTool" => from_value::<SkillToolInput>(input).and_then(run_skill_tool),
         "Agent" => from_value::<AgentInput>(input).and_then(run_agent),
         "ToolSearch" => from_value::<ToolSearchInput>(input).and_then(run_tool_search),
         "NotebookEdit" => from_value::<NotebookEditInput>(input).and_then(run_notebook_edit),
@@ -189,8 +190,28 @@ pub(crate) fn run_todo_write(input: TodoWriteInput) -> Result<String, String> {
     to_pretty_json(execute_todo_write(input)?)
 }
 
-pub(crate) fn run_skill(input: SkillInput) -> Result<String, String> {
-    to_pretty_json(execute_skill(input)?)
+pub(crate) fn run_skill_discovery(input: SkillDiscoveryInput) -> Result<String, String> {
+    let runtime = crate::CapabilityRuntime::builtin();
+    run_skill_discovery_with_runtime(&runtime, input)
+}
+
+pub(crate) fn run_skill_tool(input: SkillToolInput) -> Result<String, String> {
+    let runtime = crate::CapabilityRuntime::builtin();
+    run_skill_tool_with_runtime(&runtime, input)
+}
+
+pub(crate) fn run_skill_discovery_with_runtime(
+    runtime: &crate::CapabilityRuntime,
+    input: SkillDiscoveryInput,
+) -> Result<String, String> {
+    execute_runtime_skill_compat_tool(runtime, "SkillDiscovery", input)
+}
+
+pub(crate) fn run_skill_tool_with_runtime(
+    runtime: &crate::CapabilityRuntime,
+    input: SkillToolInput,
+) -> Result<String, String> {
+    execute_runtime_skill_compat_tool(runtime, "SkillTool", input)
 }
 
 pub(crate) fn run_tool_search(input: ToolSearchInput) -> Result<String, String> {
@@ -246,10 +267,17 @@ enum TodoStatus {
     Completed,
 }
 
-#[derive(Debug, Deserialize)]
-pub(crate) struct SkillInput {
-    skill: String,
-    args: Option<String>,
+#[derive(Debug, Deserialize, Serialize)]
+pub(crate) struct SkillDiscoveryInput {
+    pub(crate) query: String,
+    pub(crate) max_results: Option<usize>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub(crate) struct SkillToolInput {
+    pub(crate) skill: String,
+    #[serde(default)]
+    pub(crate) arguments: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -323,15 +351,6 @@ struct TodoWriteOutput {
     new_todos: Vec<TodoItem>,
     #[serde(rename = "verificationNudgeNeeded")]
     verification_nudge_needed: Option<bool>,
-}
-
-#[derive(Debug, Serialize)]
-struct SkillOutput {
-    skill: String,
-    path: String,
-    args: Option<String>,
-    description: Option<String>,
-    prompt: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -448,18 +467,32 @@ fn execute_todo_write(input: TodoWriteInput) -> Result<TodoWriteOutput, String> 
     })
 }
 
-fn execute_skill(input: SkillInput) -> Result<SkillOutput, String> {
-    let skill_path = resolve_skill_path(&input.skill)?;
-    let prompt = std::fs::read_to_string(&skill_path).map_err(|error| error.to_string())?;
-    let description = parse_skill_description(&prompt);
+fn execute_runtime_skill_compat_tool<T: Serialize>(
+    runtime: &crate::CapabilityRuntime,
+    tool_name: &str,
+    input: T,
+) -> Result<String, String> {
+    let current_dir = std::env::current_dir().ok();
+    let input = serde_json::to_value(input).map_err(|error| error.to_string())?;
+    let store = crate::SessionCapabilityStore::default();
 
-    Ok(SkillOutput {
-        skill: input.skill,
-        path: skill_path.display().to_string(),
-        args: input.args,
-        description,
-        prompt,
-    })
+    // Keep the compat shim thin: all model-facing skill gating must come from the
+    // capability runtime surface and executor, not from ad-hoc callsite logic here.
+    runtime
+        .execute_tool(
+            tool_name,
+            input,
+            crate::CapabilityPlannerInput::default().with_current_dir(current_dir.as_deref()),
+            &store,
+            None,
+            None,
+            |_kind, runtime_tool_name, _input| {
+                Err(ToolError::new(format!(
+                    "tool `{runtime_tool_name}` requires a runtime host and is not available through the builtin compatibility shim"
+                )))
+            },
+        )
+        .map_err(|error| error.to_string())
 }
 
 fn validate_todos(todos: &[TodoItem]) -> Result<(), String> {
@@ -482,56 +515,6 @@ fn todo_store_path() -> Result<std::path::PathBuf, String> {
     }
     let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
     Ok(cwd.join(".clawd-todos.json"))
-}
-
-fn resolve_skill_path(skill: &str) -> Result<std::path::PathBuf, String> {
-    let requested = skill.trim().trim_start_matches('/').trim_start_matches('$');
-    if requested.is_empty() {
-        return Err(String::from("skill must not be empty"));
-    }
-
-    let mut candidates = Vec::new();
-    if let Ok(claw_config_home) = std::env::var("CLAW_CONFIG_HOME") {
-        candidates.push(std::path::PathBuf::from(claw_config_home).join("skills"));
-    }
-    if let Ok(codex_home) = std::env::var("CODEX_HOME") {
-        candidates.push(std::path::PathBuf::from(codex_home).join("skills"));
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        let home = std::path::PathBuf::from(home);
-        candidates.push(home.join(".claw").join("skills"));
-        candidates.push(home.join(".agents").join("skills"));
-        candidates.push(home.join(".config").join("opencode").join("skills"));
-        candidates.push(home.join(".codex").join("skills"));
-        candidates.push(home.join(".claude").join("skills"));
-    }
-    candidates.push(std::path::PathBuf::from("/home/bellman/.claw/skills"));
-    candidates.push(std::path::PathBuf::from("/home/bellman/.codex/skills"));
-
-    for root in candidates {
-        let direct = root.join(requested).join("SKILL.md");
-        if direct.exists() {
-            return Ok(direct);
-        }
-
-        if let Ok(entries) = std::fs::read_dir(&root) {
-            for entry in entries.flatten() {
-                let path = entry.path().join("SKILL.md");
-                if !path.exists() {
-                    continue;
-                }
-                if entry
-                    .file_name()
-                    .to_string_lossy()
-                    .eq_ignore_ascii_case(requested)
-                {
-                    return Ok(path);
-                }
-            }
-        }
-    }
-
-    Err(format!("unknown skill: {requested}"))
 }
 
 const MAX_SLEEP_DURATION_MS: u64 = 300_000;
@@ -932,7 +915,7 @@ fn normalize_config_value(spec: ConfigSettingSpec, value: ConfigValue) -> Result
             }
         }
         (ConfigKind::Boolean, ConfigValue::Number(_)) => {
-            return Err(String::from("setting requires true or false"))
+            return Err(String::from("setting requires true or false"));
         }
         (ConfigKind::String, ConfigValue::String(value)) => Value::String(value),
         (ConfigKind::String, ConfigValue::Bool(value)) => Value::String(value.to_string()),
@@ -1103,16 +1086,4 @@ fn iso8601_timestamp() -> String {
         }
     }
     iso8601_now()
-}
-
-pub(crate) fn parse_skill_description(contents: &str) -> Option<String> {
-    for line in contents.lines() {
-        if let Some(value) = line.strip_prefix("description:") {
-            let trimmed = value.trim();
-            if !trimmed.is_empty() {
-                return Some(trimmed.to_string());
-            }
-        }
-    }
-    None
 }

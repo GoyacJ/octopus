@@ -639,38 +639,38 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
-/api/v1/workspace/catalog/tool-catalog:
+/api/v1/workspace/catalog/management-projection:
   get:
-    operationId: getWorkspaceToolCatalog
+    operationId: getWorkspaceCapabilityManagementProjection
     responses:
       "200":
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/WorkspaceToolCatalogSnapshot"
-        description: Workspace tool catalog snapshot payload.
+              $ref: "#/components/schemas/CapabilityManagementProjection"
+        description: Workspace capability management projection payload.
       default:
         content:
           application/json:
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
-/api/v1/workspace/catalog/tool-catalog/disable:
+/api/v1/workspace/catalog/management-projection/disable:
   patch:
-    operationId: setWorkspaceToolCatalogDisabled
+    operationId: setWorkspaceCapabilityAssetDisabled
     requestBody:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/WorkspaceToolDisablePatch"
+            $ref: "#/components/schemas/CapabilityAssetDisablePatch"
       required: true
     responses:
       "200":
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/WorkspaceToolCatalogSnapshot"
-        description: Updated workspace tool catalog snapshot payload.
+              $ref: "#/components/schemas/CapabilityManagementProjection"
+        description: Updated capability management projection payload.
       default:
         content:
           application/json:

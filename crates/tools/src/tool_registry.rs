@@ -37,270 +37,12 @@ pub struct ToolSpec {
     pub required_permission: PermissionMode,
 }
 
-#[derive(Debug, Clone)]
-pub struct GlobalToolRegistry {
-    plugin_tools: Vec<PluginTool>,
-    runtime_tools: Vec<RuntimeToolDefinition>,
-    enforcer: Option<PermissionEnforcer>,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeToolDefinition {
     pub name: String,
     pub description: Option<String>,
     pub input_schema: Value,
     pub required_permission: PermissionMode,
-}
-
-impl GlobalToolRegistry {
-    #[must_use]
-    pub fn builtin() -> Self {
-        Self {
-            plugin_tools: Vec::new(),
-            runtime_tools: Vec::new(),
-            enforcer: None,
-        }
-    }
-
-    pub fn with_plugin_tools(plugin_tools: Vec<PluginTool>) -> Result<Self, String> {
-        let builtin_names = mvp_tool_specs()
-            .into_iter()
-            .map(|spec| spec.name.to_string())
-            .collect::<BTreeSet<_>>();
-        let mut seen_plugin_names = BTreeSet::new();
-
-        for tool in &plugin_tools {
-            let name = tool.definition().name.clone();
-            if builtin_names.contains(&name) {
-                return Err(format!(
-                    "plugin tool `{name}` conflicts with a built-in tool name"
-                ));
-            }
-            if !seen_plugin_names.insert(name.clone()) {
-                return Err(format!("duplicate plugin tool name `{name}`"));
-            }
-        }
-
-        Ok(Self {
-            plugin_tools,
-            runtime_tools: Vec::new(),
-            enforcer: None,
-        })
-    }
-
-    pub fn with_runtime_tools(
-        mut self,
-        runtime_tools: Vec<RuntimeToolDefinition>,
-    ) -> Result<Self, String> {
-        let mut seen_names = mvp_tool_specs()
-            .into_iter()
-            .map(|spec| spec.name.to_string())
-            .chain(
-                self.plugin_tools
-                    .iter()
-                    .map(|tool| tool.definition().name.clone()),
-            )
-            .collect::<BTreeSet<_>>();
-
-        for tool in &runtime_tools {
-            if !seen_names.insert(tool.name.clone()) {
-                return Err(format!(
-                    "runtime tool `{}` conflicts with an existing tool name",
-                    tool.name
-                ));
-            }
-        }
-
-        self.runtime_tools = runtime_tools;
-        Ok(self)
-    }
-
-    #[must_use]
-    pub fn with_enforcer(mut self, enforcer: PermissionEnforcer) -> Self {
-        self.set_enforcer(enforcer);
-        self
-    }
-
-    pub fn normalize_allowed_tools(
-        &self,
-        values: &[String],
-    ) -> Result<Option<BTreeSet<String>>, String> {
-        if values.is_empty() {
-            return Ok(None);
-        }
-
-        let builtin_specs = mvp_tool_specs();
-        let canonical_names = builtin_specs
-            .iter()
-            .map(|spec| spec.name.to_string())
-            .chain(
-                self.plugin_tools
-                    .iter()
-                    .map(|tool| tool.definition().name.clone()),
-            )
-            .chain(self.runtime_tools.iter().map(|tool| tool.name.clone()))
-            .collect::<Vec<_>>();
-        let mut name_map = canonical_names
-            .iter()
-            .map(|name| (normalize_tool_name(name), name.clone()))
-            .collect::<BTreeMap<_, _>>();
-
-        for (alias, canonical) in [
-            ("read", "read_file"),
-            ("write", "write_file"),
-            ("edit", "edit_file"),
-            ("glob", "glob_search"),
-            ("grep", "grep_search"),
-        ] {
-            name_map.insert(alias.to_string(), canonical.to_string());
-        }
-
-        let mut allowed = BTreeSet::new();
-        for value in values {
-            for token in value
-                .split(|ch: char| ch == ',' || ch.is_whitespace())
-                .filter(|token| !token.is_empty())
-            {
-                let normalized = normalize_tool_name(token);
-                let canonical = name_map.get(&normalized).ok_or_else(|| {
-                    format!(
-                        "unsupported tool in --allowedTools: {token} (expected one of: {})",
-                        canonical_names.join(", ")
-                    )
-                })?;
-                allowed.insert(canonical.clone());
-            }
-        }
-
-        Ok(Some(allowed))
-    }
-
-    #[must_use]
-    pub fn definitions(&self, allowed_tools: Option<&BTreeSet<String>>) -> Vec<ToolDefinition> {
-        let builtin = mvp_tool_specs()
-            .into_iter()
-            .filter(|spec| allowed_tools.is_none_or(|allowed| allowed.contains(spec.name)))
-            .map(|spec| ToolDefinition {
-                name: spec.name.to_string(),
-                description: Some(spec.description.to_string()),
-                input_schema: spec.input_schema,
-            });
-        let runtime = self
-            .runtime_tools
-            .iter()
-            .filter(|tool| allowed_tools.is_none_or(|allowed| allowed.contains(tool.name.as_str())))
-            .map(|tool| ToolDefinition {
-                name: tool.name.clone(),
-                description: tool.description.clone(),
-                input_schema: tool.input_schema.clone(),
-            });
-        let plugin = self
-            .plugin_tools
-            .iter()
-            .filter(|tool| {
-                allowed_tools
-                    .is_none_or(|allowed| allowed.contains(tool.definition().name.as_str()))
-            })
-            .map(|tool| ToolDefinition {
-                name: tool.definition().name.clone(),
-                description: tool.definition().description.clone(),
-                input_schema: tool.definition().input_schema.clone(),
-            });
-        builtin.chain(runtime).chain(plugin).collect()
-    }
-
-    pub fn permission_specs(
-        &self,
-        allowed_tools: Option<&BTreeSet<String>>,
-    ) -> Result<Vec<(String, PermissionMode)>, String> {
-        let builtin = mvp_tool_specs()
-            .into_iter()
-            .filter(|spec| allowed_tools.is_none_or(|allowed| allowed.contains(spec.name)))
-            .map(|spec| (spec.name.to_string(), spec.required_permission));
-        let runtime = self
-            .runtime_tools
-            .iter()
-            .filter(|tool| allowed_tools.is_none_or(|allowed| allowed.contains(tool.name.as_str())))
-            .map(|tool| (tool.name.clone(), tool.required_permission));
-        let plugin = self
-            .plugin_tools
-            .iter()
-            .filter(|tool| {
-                allowed_tools
-                    .is_none_or(|allowed| allowed.contains(tool.definition().name.as_str()))
-            })
-            .map(|tool| {
-                permission_mode_from_plugin(tool.required_permission())
-                    .map(|permission| (tool.definition().name.clone(), permission))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(builtin.chain(runtime).chain(plugin).collect())
-    }
-
-    #[must_use]
-    pub fn has_runtime_tool(&self, name: &str) -> bool {
-        self.runtime_tools.iter().any(|tool| tool.name == name)
-    }
-
-    #[must_use]
-    pub fn search(
-        &self,
-        query: &str,
-        max_results: usize,
-        pending_mcp_servers: Option<Vec<String>>,
-        mcp_degraded: Option<McpDegradedReport>,
-    ) -> ToolSearchOutput {
-        let query = query.trim().to_string();
-        let normalized_query = normalize_tool_search_query(&query);
-        let matches = search_tool_specs(&query, max_results.max(1), &self.searchable_tool_specs());
-
-        ToolSearchOutput {
-            matches,
-            query,
-            normalized_query,
-            total_deferred_tools: self.searchable_tool_specs().len(),
-            pending_mcp_servers,
-            mcp_degraded,
-        }
-    }
-
-    pub fn set_enforcer(&mut self, enforcer: PermissionEnforcer) {
-        self.enforcer = Some(enforcer);
-    }
-
-    pub fn execute(&self, name: &str, input: &Value) -> Result<String, String> {
-        if mvp_tool_specs().iter().any(|spec| spec.name == name) {
-            return execute_tool_with_enforcer(self.enforcer.as_ref(), name, input);
-        }
-        self.plugin_tools
-            .iter()
-            .find(|tool| tool.definition().name == name)
-            .ok_or_else(|| format!("unsupported tool: {name}"))?
-            .execute(input)
-            .map_err(|error| error.to_string())
-    }
-
-    fn searchable_tool_specs(&self) -> Vec<SearchableToolSpec> {
-        let builtin = deferred_tool_specs()
-            .into_iter()
-            .map(|spec| SearchableToolSpec {
-                name: spec.name.to_string(),
-                description: spec.description.to_string(),
-            });
-        let runtime = self.runtime_tools.iter().map(|tool| SearchableToolSpec {
-            name: tool.name.clone(),
-            description: tool.description.clone().unwrap_or_default(),
-        });
-        let plugin = self.plugin_tools.iter().map(|tool| SearchableToolSpec {
-            name: tool.definition().name.clone(),
-            description: tool.definition().description.clone().unwrap_or_default(),
-        });
-        builtin.chain(runtime).chain(plugin).collect()
-    }
-}
-
-fn normalize_tool_name(value: &str) -> String {
-    value.trim().replace('-', "_").to_ascii_lowercase()
 }
 
 pub(crate) fn permission_mode_from_plugin(value: &str) -> Result<PermissionMode, String> {
@@ -424,8 +166,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "WebFetch",
-            description:
-                "Fetch a URL, convert it into readable text, and answer a prompt about it.",
+            description: "Fetch a URL, convert it into readable text, and answer a prompt about it.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
@@ -487,13 +228,27 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             required_permission: PermissionMode::WorkspaceWrite,
         },
         ToolSpec {
-            name: "Skill",
-            description: "Load a local skill definition and its instructions.",
+            name: "SkillDiscovery",
+            description: "Discover executable prompt skills that can inject context or tool grants.",
+            input_schema: json!({
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string" },
+                    "max_results": { "type": "integer", "minimum": 1 }
+                },
+                "required": ["query"],
+                "additionalProperties": false
+            }),
+            required_permission: PermissionMode::ReadOnly,
+        },
+        ToolSpec {
+            name: "SkillTool",
+            description: "Execute an executable prompt skill and apply its runtime effects.",
             input_schema: json!({
                 "type": "object",
                 "properties": {
                     "skill": { "type": "string" },
-                    "args": { "type": "string" }
+                    "arguments": {}
                 },
                 "required": ["skill"],
                 "additionalProperties": false
@@ -1091,6 +846,7 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ToolSearchOutput {
     matches: Vec<String>,
+    results: Vec<ToolSearchResult>,
     query: String,
     normalized_query: String,
     #[serde(rename = "total_deferred_tools")]
@@ -1101,35 +857,125 @@ pub struct ToolSearchOutput {
     mcp_degraded: Option<McpDegradedReport>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct SearchableToolSpec {
-    name: String,
-    description: String,
+impl ToolSearchOutput {
+    #[must_use]
+    pub(crate) fn new(
+        matches: Vec<String>,
+        results: Vec<ToolSearchResult>,
+        query: String,
+        normalized_query: String,
+        total_deferred_tools: usize,
+        pending_mcp_servers: Option<Vec<String>>,
+        mcp_degraded: Option<McpDegradedReport>,
+    ) -> Self {
+        Self {
+            matches,
+            results,
+            query,
+            normalized_query,
+            total_deferred_tools,
+            pending_mcp_servers,
+            mcp_degraded,
+        }
+    }
+
+    #[must_use]
+    pub fn matches(&self) -> &[String] {
+        &self.matches
+    }
 }
 
-pub(crate) fn tool_specs_for_allowed_tools(
-    allowed_tools: Option<&BTreeSet<String>>,
-) -> Vec<ToolSpec> {
-    mvp_tool_specs()
-        .into_iter()
-        .filter(|spec| allowed_tools.is_none_or(|allowed| allowed.contains(spec.name)))
-        .collect()
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ToolSearchResult {
+    name: String,
+    source_kind: crate::capability_runtime::CapabilitySourceKind,
+    description: String,
+    permission: String,
+    state: crate::capability_runtime::CapabilityState,
+    requires_auth: bool,
+    requires_approval: bool,
+    deferred: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    search_hint: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct SearchableToolSpec {
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) source_kind: crate::capability_runtime::CapabilitySourceKind,
+    pub(crate) permission: String,
+    pub(crate) state: crate::capability_runtime::CapabilityState,
+    pub(crate) requires_auth: bool,
+    pub(crate) requires_approval: bool,
+    pub(crate) deferred: bool,
+    pub(crate) search_hint: Option<String>,
+}
+
+impl From<crate::capability_runtime::CapabilitySpec> for SearchableToolSpec {
+    fn from(capability: crate::capability_runtime::CapabilitySpec) -> Self {
+        Self {
+            name: capability.display_name,
+            description: capability.description,
+            source_kind: capability.source_kind,
+            permission: capability
+                .permission_profile
+                .required_permission
+                .as_str()
+                .to_string(),
+            state: capability.state,
+            requires_auth: capability.invocation_policy.requires_auth,
+            requires_approval: capability.invocation_policy.requires_approval,
+            deferred: capability.visibility
+                == crate::capability_runtime::CapabilityVisibility::Deferred,
+            search_hint: capability.search_hint,
+        }
+    }
+}
+
+impl SearchableToolSpec {
+    pub(crate) fn to_search_result(&self) -> ToolSearchResult {
+        ToolSearchResult {
+            name: self.name.clone(),
+            source_kind: self.source_kind,
+            description: self.description.clone(),
+            permission: self.permission.clone(),
+            state: self.state,
+            requires_auth: self.requires_auth,
+            requires_approval: self.requires_approval,
+            deferred: self.deferred,
+            search_hint: self.search_hint.clone(),
+        }
+    }
 }
 
 #[allow(clippy::needless_pass_by_value)]
 pub(crate) fn execute_tool_search(input: ToolSearchInput) -> ToolSearchOutput {
-    GlobalToolRegistry::builtin().search(&input.query, input.max_results.unwrap_or(5), None, None)
+    crate::CapabilityRuntime::builtin().search(
+        &input.query,
+        input.max_results.unwrap_or(5),
+        crate::CapabilityPlannerInput::default(),
+        None,
+        None,
+    )
 }
 
+#[allow(dead_code)]
 pub(crate) fn deferred_tool_specs() -> Vec<ToolSpec> {
+    let surface = crate::capability_runtime::plan_effective_capability_surface(
+        crate::capability_runtime::compile_capability_specs(mvp_tool_specs(), &[], &[], &[], None),
+        None,
+        None,
+    );
+    let deferred_names = surface
+        .deferred_tools
+        .into_iter()
+        .map(|capability| capability.display_name)
+        .collect::<BTreeSet<_>>();
+
     mvp_tool_specs()
         .into_iter()
-        .filter(|spec| {
-            !matches!(
-                spec.name,
-                "bash" | "read_file" | "write_file" | "edit_file" | "glob_search" | "grep_search"
-            )
-        })
+        .filter(|spec| deferred_names.contains(spec.name))
         .collect()
 }
 
@@ -1145,10 +991,27 @@ pub(crate) fn search_tool_specs(
             .map(str::trim)
             .filter(|part| !part.is_empty())
             .filter_map(|wanted| {
+                let exact_wanted = wanted
+                    .chars()
+                    .filter(char::is_ascii_alphanumeric)
+                    .flat_map(char::to_lowercase)
+                    .collect::<String>();
                 let wanted = canonical_tool_token(wanted);
                 specs
                     .iter()
-                    .find(|spec| canonical_tool_token(&spec.name) == wanted)
+                    .find(|spec| {
+                        spec.name
+                            .chars()
+                            .filter(char::is_ascii_alphanumeric)
+                            .flat_map(char::to_lowercase)
+                            .collect::<String>()
+                            == exact_wanted
+                    })
+                    .or_else(|| {
+                        specs
+                            .iter()
+                            .find(|spec| canonical_tool_token(&spec.name) == wanted)
+                    })
                     .map(|spec| spec.name.clone())
             })
             .take(max_results)

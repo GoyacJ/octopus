@@ -284,6 +284,51 @@ fn persists_workspace_root_in_jsonl_snapshot_and_forks() {
     assert_eq!(forked.workspace_root(), Some(workspace_root.as_path()));
 }
 
+#[test]
+fn persists_session_extensions_in_jsonl_snapshot_and_forks() {
+    let path = temp_session_path("extensions");
+    let mut session = Session::new();
+    session.set_extension(
+        "capability_runtime",
+        JsonValue::Object(
+            [
+                (
+                    "activated_tools".to_string(),
+                    JsonValue::Array(vec![JsonValue::String("WebSearch".to_string())]),
+                ),
+                (
+                    "model_override".to_string(),
+                    JsonValue::String("claude-sonnet-4-5".to_string()),
+                ),
+            ]
+            .into_iter()
+            .collect(),
+        ),
+    );
+    session.save_to_path(&path).expect("session should save");
+
+    let restored = Session::load_from_path(&path).expect("session should load");
+    let forked = restored.fork(Some("extension-fork".to_string()));
+    fs::remove_file(&path).expect("temp file should be removable");
+
+    let restored_extension = restored
+        .extension("capability_runtime")
+        .expect("extension should persist");
+    assert_eq!(
+        restored_extension
+            .as_object()
+            .and_then(|object| object.get("model_override"))
+            .and_then(JsonValue::as_str),
+        Some("claude-sonnet-4-5")
+    );
+    assert_eq!(
+        forked
+            .extension("capability_runtime")
+            .expect("fork should preserve extension"),
+        restored_extension
+    );
+}
+
 fn temp_session_path(label: &str) -> PathBuf {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)

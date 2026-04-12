@@ -21,8 +21,11 @@ use sha2::{Digest, Sha256};
 use crate::{
     infra_state::{agent_avatar, load_agents, load_teams, write_team_record},
     resources_skills::{
-        catalog_hash_id, disabled_source_keys, discover_skill_roots, load_skills_from_roots,
+        catalog_hash_id, discover_skill_roots, load_skills_from_roots,
+        load_workspace_asset_state_document, save_workspace_asset_state_document,
+        set_workspace_asset_enabled, set_workspace_asset_trusted, skill_source_key,
         validate_skill_file_relative_path, validate_skill_slug, write_workspace_runtime_document,
+        WorkspaceCapabilityAssetMetadata,
     },
     WorkspacePaths,
 };
@@ -36,6 +39,7 @@ const SOURCE_SCOPE_SKILL: &str = "skill";
 const SOURCE_SCOPE_MCP: &str = "mcp";
 const SOURCE_SCOPE_AVATAR: &str = "avatar";
 const SKILL_FRONTMATTER_FILE: &str = "SKILL.md";
+const BUNDLE_ASSET_STATE_PATH: &str = ".octopus/asset-state.json";
 const RESERVED_DIRS: &[&str] = &["skills", "mcps", ".octopus"];
 const FILTERED_DIR_NAMES: &[&str] = &[
     "node_modules",
@@ -289,6 +293,7 @@ struct BundlePlan {
     agents: Vec<PlannedAgent>,
     teams: Vec<PlannedTeam>,
     avatars: Vec<ParsedAssetAvatar>,
+    asset_state: BundleAssetStateDocument,
 }
 
 #[derive(Debug, Clone)]
@@ -398,6 +403,7 @@ pub(crate) fn execute_import(
     let effective_mcp_document =
         plan_mcp_document_updates(existing_mcp_target, &plan.mcps, &mut issues)?;
     write_target_runtime_document(paths, &target, &effective_mcp_document)?;
+    apply_imported_asset_state(paths, &target, &plan)?;
 
     let mut mcp_results = Vec::new();
     for mcp in &plan.mcps {
@@ -714,6 +720,13 @@ pub(crate) fn export_assets(
             "teamIds": context.teams.iter().map(|item| item.id.clone()).collect::<Vec<_>>(),
         }))?,
     ));
+    if !context.asset_state.is_empty() {
+        files.push(encode_file(
+            &format!("{root_dir_name}/{BUNDLE_ASSET_STATE_PATH}"),
+            "application/json",
+            serde_json::to_vec_pretty(&context.asset_state)?,
+        ));
+    }
 
     Ok(ExportWorkspaceAgentBundleResult {
         root_dir_name,
@@ -738,6 +751,7 @@ struct ExportContext {
     builtin_skill_assets: HashMap<String, BuiltinSkillAsset>,
     mcp_configs: HashMap<String, JsonValue>,
     avatar_payloads: HashMap<String, (String, String, Vec<u8>)>,
+    asset_state: BundleAssetStateDocument,
     issues: Vec<ImportIssue>,
 }
 
@@ -1117,6 +1131,7 @@ fn build_bundle_plan(
         agents: planned_agents,
         teams: planned_teams,
         avatars: parsed.avatars,
+        asset_state: parsed.asset_state,
     })
 }
 
@@ -1127,6 +1142,22 @@ struct ParsedBundle {
     skills: Vec<ParsedSkillSource>,
     mcps: Vec<ParsedMcpSource>,
     avatars: Vec<ParsedAssetAvatar>,
+    asset_state: BundleAssetStateDocument,
+}
+
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct BundleAssetStateDocument {
+    #[serde(default)]
+    skills: BTreeMap<String, WorkspaceCapabilityAssetMetadata>,
+    #[serde(default)]
+    mcps: BTreeMap<String, WorkspaceCapabilityAssetMetadata>,
+}
+
+impl BundleAssetStateDocument {
+    fn is_empty(&self) -> bool {
+        self.skills.is_empty() && self.mcps.is_empty()
+    }
 }
 
 fn parse_bundle_files(
@@ -1134,7 +1165,13 @@ fn parse_bundle_files(
     target: &AssetTargetScope<'_>,
     issues: &mut Vec<ImportIssue>,
 ) -> Result<ParsedBundle, AppError> {
-    let grouped = group_top_level(files);
+    let asset_state = parse_bundle_asset_state(files, issues);
+    let content_files = files
+        .iter()
+        .filter(|file| !file.relative_path.starts_with(".octopus/"))
+        .cloned()
+        .collect::<Vec<_>>();
+    let grouped = group_top_level(&content_files);
     let builtin_tool_keys = builtin_tool_keys();
 
     let mut agents = Vec::new();
@@ -1287,7 +1324,38 @@ fn parse_bundle_files(
         skills,
         mcps,
         avatars,
+        asset_state,
     })
+}
+
+fn parse_bundle_asset_state(
+    files: &[BundleFile],
+    issues: &mut Vec<ImportIssue>,
+) -> BundleAssetStateDocument {
+    let Some(file) = files
+        .iter()
+        .find(|file| {
+            file.relative_path == BUNDLE_ASSET_STATE_PATH
+                || file
+                    .relative_path
+                    .ends_with(&format!("/{BUNDLE_ASSET_STATE_PATH}"))
+        })
+    else {
+        return BundleAssetStateDocument::default();
+    };
+
+    match serde_json::from_slice::<BundleAssetStateDocument>(&file.bytes) {
+        Ok(document) => document,
+        Err(error) => {
+            issues.push(issue(
+                ISSUE_WARNING,
+                SOURCE_SCOPE_BUNDLE,
+                None,
+                format!("ignored invalid '{BUNDLE_ASSET_STATE_PATH}': {error}"),
+            ));
+            BundleAssetStateDocument::default()
+        }
+    }
 }
 
 pub(crate) fn list_builtin_skill_assets() -> Result<Vec<BuiltinSkillAsset>, AppError> {
@@ -2228,6 +2296,80 @@ fn managed_skill_id(target: &AssetTargetScope<'_>, slug: &str) -> String {
     catalog_hash_id("skill", &display_path)
 }
 
+fn apply_imported_asset_state(
+    paths: &WorkspacePaths,
+    target: &AssetTargetScope<'_>,
+    plan: &BundlePlan,
+) -> Result<(), AppError> {
+    if plan.asset_state.is_empty() {
+        return Ok(());
+    }
+
+    let mut document = load_workspace_asset_state_document(paths)?;
+    let mut changed = false;
+
+    for skill in &plan.skills {
+        if skill.action == ImportAction::Failed {
+            continue;
+        }
+        let Some(metadata) = plan.asset_state.skills.get(&skill.slug) else {
+            continue;
+        };
+        let source_key = skill_source_key(
+            &target
+                .skill_root(paths)
+                .join(&skill.slug)
+                .join(SKILL_FRONTMATTER_FILE),
+            &paths.root,
+        );
+        apply_asset_metadata(&mut document, &source_key, metadata);
+        changed = true;
+    }
+
+    for mcp in &plan.mcps {
+        if mcp.action == ImportAction::Failed || (!mcp.resolved && mcp.action != ImportAction::Skip)
+        {
+            continue;
+        }
+        let Some(metadata) = plan.asset_state.mcps.get(&mcp.server_name) else {
+            continue;
+        };
+        let source_key = bundle_mcp_source_key(target, &mcp.server_name);
+        apply_asset_metadata(&mut document, &source_key, metadata);
+        changed = true;
+    }
+
+    if changed {
+        save_workspace_asset_state_document(paths, &document)?;
+    }
+
+    Ok(())
+}
+
+fn apply_asset_metadata(
+    document: &mut crate::resources_skills::WorkspaceCapabilityAssetStateDocument,
+    source_key: &str,
+    metadata: &WorkspaceCapabilityAssetMetadata,
+) {
+    if let Some(enabled) = metadata.enabled {
+        set_workspace_asset_enabled(document, source_key, enabled);
+    }
+    if let Some(trusted) = metadata.trusted {
+        set_workspace_asset_trusted(document, source_key, trusted);
+    }
+}
+
+fn asset_metadata_has_values(metadata: &WorkspaceCapabilityAssetMetadata) -> bool {
+    metadata.enabled.is_some() || metadata.trusted.is_some()
+}
+
+fn bundle_mcp_source_key(target: &AssetTargetScope<'_>, server_name: &str) -> String {
+    match target {
+        AssetTargetScope::Project(project_id) => format!("mcp:project:{project_id}:{server_name}"),
+        AssetTargetScope::Workspace => format!("mcp:{server_name}"),
+    }
+}
+
 fn deterministic_asset_id(prefix: &str, target: &AssetTargetScope<'_>, source_id: &str) -> String {
     format!(
         "{prefix}-{}",
@@ -2682,7 +2824,6 @@ fn plan_mcp_document_updates(
     mcps: &[PlannedMcp],
     issues: &mut Vec<ImportIssue>,
 ) -> Result<JsonMap<String, JsonValue>, AppError> {
-    let disabled_keys = disabled_source_keys(&document);
     let servers = document
         .entry("mcpServers")
         .or_insert_with(|| JsonValue::Object(JsonMap::new()))
@@ -2709,23 +2850,6 @@ fn plan_mcp_document_updates(
             continue;
         }
         servers.insert(mcp.server_name.clone(), config.clone());
-    }
-
-    if !disabled_keys.is_empty() {
-        let tool_catalog = document
-            .entry("toolCatalog")
-            .or_insert_with(|| JsonValue::Object(JsonMap::new()))
-            .as_object_mut()
-            .ok_or_else(|| AppError::invalid_input("toolCatalog must be a JSON object"))?;
-        tool_catalog.insert(
-            "disabledSourceKeys".into(),
-            JsonValue::Array(
-                disabled_keys
-                    .into_iter()
-                    .map(JsonValue::String)
-                    .collect::<Vec<_>>(),
-            ),
-        );
     }
 
     Ok(document)
@@ -3440,6 +3564,7 @@ fn build_export_context(
     let builtin_skill_assets = resolve_builtin_skill_assets(&agents, &teams)?;
     let mcp_configs = resolve_mcp_configs(paths, &target, &agents, &teams)?;
     let avatar_payloads = resolve_avatar_payloads(paths, &target, &agents, &teams)?;
+    let asset_state = build_bundle_asset_state(paths, &target, &skill_paths, &mcp_configs)?;
     let root_dir_name = if input.mode == "single"
         && teams.len() == 1
         && agents
@@ -3462,8 +3587,45 @@ fn build_export_context(
         builtin_skill_assets,
         mcp_configs,
         avatar_payloads,
+        asset_state,
         issues: Vec::new(),
     })
+}
+
+fn build_bundle_asset_state(
+    paths: &WorkspacePaths,
+    target: &AssetTargetScope<'_>,
+    skill_paths: &HashMap<String, PathBuf>,
+    mcp_configs: &HashMap<String, JsonValue>,
+) -> Result<BundleAssetStateDocument, AppError> {
+    let document = load_workspace_asset_state_document(paths)?;
+    let mut asset_state = BundleAssetStateDocument::default();
+
+    for path in skill_paths.values() {
+        let source_key = skill_source_key(&path.join(SKILL_FRONTMATTER_FILE), &paths.root);
+        if let Some(metadata) = document
+            .assets
+            .get(&source_key)
+            .filter(|metadata| asset_metadata_has_values(metadata))
+        {
+            if let Some(slug) = path.file_name().and_then(|segment| segment.to_str()) {
+                asset_state.skills.insert(slug.to_string(), metadata.clone());
+            }
+        }
+    }
+
+    for server_name in mcp_configs.keys() {
+        let source_key = bundle_mcp_source_key(target, server_name);
+        if let Some(metadata) = document
+            .assets
+            .get(&source_key)
+            .filter(|metadata| asset_metadata_has_values(metadata))
+        {
+            asset_state.mcps.insert(server_name.clone(), metadata.clone());
+        }
+    }
+
+    Ok(asset_state)
 }
 
 fn load_project_linked_ids(
@@ -4058,5 +4220,154 @@ mod tests {
         assert_eq!(imported.skill_count, 1);
         assert_eq!(imported.mcp_count, 1);
         assert_eq!(imported.avatar_count, 1);
+    }
+
+    #[test]
+    fn export_import_roundtrips_asset_state_metadata_for_managed_skill_and_mcp() {
+        let source_temp = tempfile::tempdir().expect("source tempdir");
+        let source_paths = WorkspacePaths::new(source_temp.path());
+        source_paths.ensure_layout().expect("source layout");
+        let source_connection = Connection::open(source_paths.db_path.clone()).expect("source db");
+        ensure_test_tables(&source_connection);
+
+        let skill_slug = "managed-roundtrip";
+        let skill_dir = source_paths.managed_skills_dir.join(skill_slug);
+        fs::create_dir_all(&skill_dir).expect("managed skill dir");
+        fs::write(
+            skill_dir.join(SKILL_FRONTMATTER_FILE),
+            "---\nname: managed-roundtrip\ndescription: Managed roundtrip skill.\n---\n",
+        )
+        .expect("write managed skill");
+
+        let skill_source_key =
+            format!("skill:data/skills/{skill_slug}/{SKILL_FRONTMATTER_FILE}");
+        let mcp_server_name = "roundtrip-mcp";
+        let mcp_source_key = format!("mcp:{mcp_server_name}");
+
+        let mut source_asset_state =
+            crate::resources_skills::load_workspace_asset_state_document(&source_paths)
+                .expect("load source asset state");
+        crate::resources_skills::set_workspace_asset_enabled(
+            &mut source_asset_state,
+            &skill_source_key,
+            false,
+        );
+        crate::resources_skills::set_workspace_asset_trusted(
+            &mut source_asset_state,
+            &skill_source_key,
+            true,
+        );
+        crate::resources_skills::set_workspace_asset_enabled(
+            &mut source_asset_state,
+            &mcp_source_key,
+            false,
+        );
+        crate::resources_skills::set_workspace_asset_trusted(
+            &mut source_asset_state,
+            &mcp_source_key,
+            true,
+        );
+        crate::resources_skills::save_workspace_asset_state_document(
+            &source_paths,
+            &source_asset_state,
+        )
+        .expect("save source asset state");
+
+        crate::resources_skills::write_workspace_runtime_document(
+            &source_paths,
+            &serde_json::Map::from_iter([(
+                "mcpServers".to_string(),
+                json!({
+                    mcp_server_name: {
+                        "transport": "stdio",
+                        "command": "roundtrip-mcp",
+                        "args": ["serve"]
+                    }
+                }),
+            )]),
+        )
+        .expect("write workspace runtime document");
+
+        let agent_id = "agent-managed-roundtrip";
+        let record = AgentRecord {
+            id: agent_id.into(),
+            workspace_id: "ws-local".into(),
+            project_id: None,
+            scope: "workspace".into(),
+            name: "Managed Roundtrip".into(),
+            avatar_path: None,
+            avatar: None,
+            personality: "Verifies asset metadata export and import".into(),
+            tags: vec!["roundtrip".into()],
+            prompt: "# Role\nVerify asset metadata roundtrip.\n".into(),
+            builtin_tool_keys: vec!["bash".into()],
+            skill_ids: vec![managed_skill_id(&AssetTargetScope::Workspace, skill_slug)],
+            mcp_server_names: vec![mcp_server_name.into()],
+            integration_source: None,
+            description: "Managed asset metadata roundtrip".into(),
+            status: "active".into(),
+            updated_at: timestamp_now(),
+        };
+        write_agent_record(&source_connection, &record, false).expect("write source agent");
+
+        let exported = export_assets(
+            &source_connection,
+            &source_paths,
+            "ws-local",
+            AssetTargetScope::Workspace,
+            ExportWorkspaceAgentBundleInput {
+                mode: "single".into(),
+                agent_ids: vec![agent_id.into()],
+                team_ids: Vec::new(),
+            },
+        )
+        .expect("export source assets");
+        assert!(
+            exported
+                .files
+                .iter()
+                .any(|file| file.relative_path.ends_with(".octopus/asset-state.json")),
+            "bundle should carry serialized asset metadata"
+        );
+
+        let destination_temp = tempfile::tempdir().expect("destination tempdir");
+        let destination_paths = WorkspacePaths::new(destination_temp.path());
+        destination_paths.ensure_layout().expect("destination layout");
+        let destination_connection =
+            Connection::open(destination_paths.db_path.clone()).expect("destination db");
+        ensure_test_tables(&destination_connection);
+
+        execute_import(
+            &destination_connection,
+            &destination_paths,
+            "ws-local",
+            AssetTargetScope::Workspace,
+            ImportWorkspaceAgentBundleInput {
+                files: exported.files,
+            },
+        )
+        .expect("import destination assets");
+
+        let destination_asset_state: JsonValue = serde_json::from_str(
+            &fs::read_to_string(&destination_paths.workspace_asset_state_path)
+                .expect("destination asset state file"),
+        )
+        .expect("parse destination asset state");
+        assert_eq!(
+            destination_asset_state["assets"][skill_source_key.as_str()]["enabled"],
+            JsonValue::Bool(false)
+        );
+        assert_eq!(
+            destination_asset_state["assets"][skill_source_key.as_str()]["trusted"],
+            JsonValue::Bool(true)
+        );
+        assert_eq!(
+            destination_asset_state["assets"][mcp_source_key.as_str()]["enabled"],
+            JsonValue::Bool(false)
+        );
+        assert_eq!(
+            destination_asset_state["assets"][mcp_source_key.as_str()]["trusted"],
+            JsonValue::Bool(true)
+        );
     }
 }

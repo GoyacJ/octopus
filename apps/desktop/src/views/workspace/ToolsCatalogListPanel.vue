@@ -2,7 +2,7 @@
 import { useI18n } from 'vue-i18n'
 
 import type {
-  WorkspaceToolCatalogEntry,
+  CapabilityManagementEntry,
   WorkspaceToolKind,
 } from '@octopus/schema'
 import {
@@ -21,8 +21,8 @@ defineProps<{
   activeTab: WorkspaceToolKind
   tabs: Array<{ value: WorkspaceToolKind, label: string }>
   searchQuery: string
-  pagedEntries: WorkspaceToolCatalogEntry[]
-  filteredEntries: WorkspaceToolCatalogEntry[]
+  pagedEntries: CapabilityManagementEntry[]
+  filteredEntries: CapabilityManagementEntry[]
   activeTabCount: number
   page: number
   pageCount: number
@@ -31,13 +31,13 @@ defineProps<{
   canCopySelectedSkillsToManaged: boolean
   selectedExternalSkillCount: number
   kindLabel: (kind: WorkspaceToolKind) => string
-  availabilityLabel: (availability: WorkspaceToolCatalogEntry['availability']) => string
-  availabilityTone: (availability: WorkspaceToolCatalogEntry['availability']) => 'default' | 'success' | 'warning'
-  permissionLabel: (permission: WorkspaceToolCatalogEntry['requiredPermission']) => string
-  ownerScopeLabel: (ownerScope: WorkspaceToolCatalogEntry['ownerScope']) => string
-  skillStateLabel: (entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) => string
-  sourceOriginLabel: (entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) => string
-  isExternalSkillEntry: (entry: WorkspaceToolCatalogEntry) => boolean
+  availabilityLabel: (availability: CapabilityManagementEntry['availability']) => string
+  availabilityTone: (availability: CapabilityManagementEntry['availability']) => 'default' | 'success' | 'warning'
+  permissionLabel: (permission: CapabilityManagementEntry['requiredPermission']) => string
+  ownerScopeLabel: (ownerScope: CapabilityManagementEntry['ownerScope']) => string
+  skillStateLabel: (entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>) => string
+  sourceOriginLabel: (entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>) => string
+  isExternalSkillEntry: (entry: CapabilityManagementEntry) => boolean
 }>()
 
 const emit = defineEmits<{

@@ -24,35 +24,41 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use api::{
-    oauth_token_is_expired, resolve_startup_auth_source, AnthropicClient, AuthSource,
-    ContentBlockDelta, InputContentBlock, InputMessage, MessageRequest, MessageResponse,
-    OutputContentBlock, PromptCache, StreamEvent as ApiStreamEvent, ToolChoice, ToolDefinition,
-    ToolResultContentBlock,
+    AnthropicClient, AuthSource, ContentBlockDelta, InputContentBlock, InputMessage,
+    MessageRequest, MessageResponse, OutputContentBlock, PromptCache,
+    StreamEvent as ApiStreamEvent, ToolChoice, ToolDefinition, ToolResultContentBlock,
+    oauth_token_is_expired, resolve_startup_auth_source,
 };
 
 use commands::{
-    handle_agents_slash_command, handle_agents_slash_command_json, handle_mcp_slash_command,
-    handle_mcp_slash_command_json, handle_plugins_slash_command, handle_skills_slash_command,
-    handle_skills_slash_command_json, render_slash_command_help, resume_supported_slash_commands,
-    slash_command_specs, validate_slash_command_input, SlashCommand,
+    SlashCommand, handle_agents_slash_command, handle_agents_slash_command_json,
+    handle_mcp_slash_command, handle_mcp_slash_command_json, handle_plugins_slash_command,
+    handle_skills_slash_command, handle_skills_slash_command_json, render_slash_command_help,
+    resume_supported_slash_commands, slash_command_specs, validate_slash_command_input,
 };
-use compat_harness::{extract_manifest, UpstreamPaths};
+use compat_harness::{UpstreamPaths, extract_manifest};
 use init::initialize_repo;
 use plugins::{PluginHooks, PluginManager, PluginManagerConfig, PluginRegistry};
 use render::{MarkdownStreamState, Spinner, TerminalRenderer};
 use runtime::{
-    clear_oauth_credentials, format_usd, generate_pkce_pair, generate_state,
-    load_oauth_credentials, load_system_prompt, parse_oauth_callback_request_target,
-    pricing_for_model, resolve_sandbox_status, save_oauth_credentials, ApiClient, ApiRequest,
-    AssistantEvent, CompactionConfig, ConfigLoader, ConfigSource, ContentBlock,
-    ConversationMessage, ConversationRuntime, McpServerManager, McpTool, MessageRole, ModelPricing,
+    ApiClient, ApiRequest, AssistantEvent, CompactionConfig, ConfigLoader, ConfigSource,
+    ContentBlock, ConversationMessage, ConversationRuntime, MessageRole, ModelPricing,
     OAuthAuthorizationRequest, OAuthConfig, OAuthTokenExchangeRequest, PermissionMode,
     PermissionPolicy, ProjectContext, PromptCacheEvent, ResolvedPermissionMode, RuntimeError,
-    Session, TokenUsage, ToolError, ToolExecutor, UsageTracker,
+    Session, TokenUsage, ToolError, ToolExecutor, UsageTracker, clear_oauth_credentials,
+    format_usd, generate_pkce_pair, generate_state, load_oauth_credentials, load_system_prompt,
+    parse_oauth_callback_request_target, pricing_for_model, resolve_sandbox_status,
+    save_oauth_credentials,
 };
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
-use tools::{GlobalToolRegistry, RuntimeToolDefinition, ToolSearchOutput};
+use serde_json::{Map, Value, json};
+use tools::{
+    CapabilityActivation, CapabilityExecutionEvent, CapabilityExecutionPhase,
+    CapabilityExecutionRequest, CapabilityMediationDecision, CapabilityPlannerInput,
+    CapabilityProvider, CapabilityRuntime, CapabilitySpec, ManagedMcpRuntime,
+    RuntimeToolDefinition, SessionCapabilityState, SessionCapabilityStore,
+    SharedSessionCapabilityState, ToolSearchOutput, apply_skill_session_overrides,
+};
 
 const DEFAULT_MODEL: &str = "claude-opus-4-6";
 fn max_tokens_for_model(model: &str) -> u32 {
@@ -89,9 +95,11 @@ const CLI_OPTION_SUGGESTIONS: &[&str] = &[
 ];
 
 type AllowedToolSet = BTreeSet<String>;
+type RuntimeMcpState = ManagedMcpRuntime;
 type RuntimePluginStateBuildOutput = (
     Option<Arc<Mutex<RuntimeMcpState>>>,
     Vec<RuntimeToolDefinition>,
+    Vec<CapabilitySpec>,
 );
 
 fn main() {
@@ -367,7 +375,7 @@ fn parse_args(args: &[String]) -> Result<CliAction, String> {
                 index += 1;
             }
             other if rest.is_empty() && other.starts_with('-') => {
-                return Err(format_unknown_option(other))
+                return Err(format_unknown_option(other));
             }
             other => {
                 rest.push(other.to_string());
@@ -690,16 +698,16 @@ fn normalize_allowed_tools(values: &[String]) -> Result<Option<AllowedToolSet>, 
     if values.is_empty() {
         return Ok(None);
     }
-    current_tool_registry()?.normalize_allowed_tools(values)
+    current_capability_runtime()?.normalize_allowed_tools(values)
 }
 
-fn current_tool_registry() -> Result<GlobalToolRegistry, String> {
+fn current_capability_runtime() -> Result<CapabilityRuntime, String> {
     let cwd = env::current_dir().map_err(|error| error.to_string())?;
     let loader = ConfigLoader::default_for(&cwd);
     let runtime_config = loader.load().map_err(|error| error.to_string())?;
     let state = build_runtime_plugin_state_with_loader(&cwd, &loader, &runtime_config)
         .map_err(|error| error.to_string())?;
-    let registry = state.tool_registry.clone();
+    let capability_runtime = state.capability_runtime.clone();
     if let Some(mcp_state) = state.mcp_state {
         mcp_state
             .lock()
@@ -707,7 +715,7 @@ fn current_tool_registry() -> Result<GlobalToolRegistry, String> {
             .shutdown()
             .map_err(|error| error.to_string())?;
     }
-    Ok(registry)
+    Ok(capability_runtime)
 }
 
 fn parse_permission_mode_arg(value: &str) -> Result<PermissionMode, String> {
@@ -758,10 +766,42 @@ fn config_permission_mode_for_current_dir() -> Option<PermissionMode> {
 }
 
 fn filter_tool_specs(
-    tool_registry: &GlobalToolRegistry,
+    capability_runtime: &CapabilityRuntime,
     allowed_tools: Option<&AllowedToolSet>,
 ) -> Vec<ToolDefinition> {
-    tool_registry.definitions(allowed_tools)
+    capability_runtime
+        .tool_definitions_for_allowlist(allowed_tools, None)
+        .expect("capability surface should plan")
+}
+
+fn planned_tool_specs(
+    capability_runtime: &CapabilityRuntime,
+    allowed_tools: Option<&AllowedToolSet>,
+    session_state: &SessionCapabilityState,
+) -> Result<Vec<ToolDefinition>, String> {
+    let current_dir = env::current_dir().ok();
+    capability_runtime.planned_tool_definitions(
+        CapabilityPlannerInput::new(allowed_tools, Some(session_state))
+            .with_current_dir(current_dir.as_deref()),
+    )
+}
+
+fn persist_capability_state_into_session(
+    session: &mut Session,
+    capability_state: &SharedSessionCapabilityState,
+) -> Result<(), String> {
+    capability_state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .persist_into_session(session)
+}
+
+fn restore_shared_capability_state(
+    session: &Session,
+) -> Result<SharedSessionCapabilityState, String> {
+    Ok(Arc::new(Mutex::new(
+        SessionCapabilityState::restore_from_session(session)?,
+    )))
 }
 
 fn parse_system_prompt_args(
@@ -1312,10 +1352,12 @@ fn check_workspace_health(context: &StatusContext) -> DiagnosticCheck {
         ("cwd".to_string(), json!(context.cwd.display().to_string())),
         (
             "project_root".to_string(),
-            json!(context
-                .project_root
-                .as_ref()
-                .map(|path| path.display().to_string())),
+            json!(
+                context
+                    .project_root
+                    .as_ref()
+                    .map(|path| path.display().to_string())
+            ),
         ),
         ("in_git_repo".to_string(), json!(in_repo)),
         ("git_branch".to_string(), json!(context.git_branch)),
@@ -2418,22 +2460,16 @@ struct LiveCli {
     allowed_tools: Option<AllowedToolSet>,
     permission_mode: PermissionMode,
     system_prompt: Vec<String>,
+    capability_state: SharedSessionCapabilityState,
     runtime: BuiltRuntime,
     session: SessionHandle,
 }
 
 struct RuntimePluginState {
     feature_config: runtime::RuntimeFeatureConfig,
-    tool_registry: GlobalToolRegistry,
+    capability_runtime: CapabilityRuntime,
     plugin_registry: PluginRegistry,
     mcp_state: Option<Arc<Mutex<RuntimeMcpState>>>,
-}
-
-struct RuntimeMcpState {
-    runtime: tokio::runtime::Runtime,
-    manager: McpServerManager,
-    pending_servers: Vec<String>,
-    degraded_report: Option<runtime::McpDegradedReport>,
 }
 
 struct BuiltRuntime {
@@ -2515,327 +2551,20 @@ impl Drop for BuiltRuntime {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct ToolSearchRequest {
-    query: String,
-    max_results: Option<usize>,
-}
-
-#[derive(Debug, Deserialize)]
-struct McpToolRequest {
-    #[serde(rename = "qualifiedName")]
-    qualified_name: Option<String>,
-    tool: Option<String>,
-    arguments: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ListMcpResourcesRequest {
-    server: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ReadMcpResourceRequest {
-    server: String,
-    uri: String,
-}
-
-impl RuntimeMcpState {
-    fn new(
-        runtime_config: &runtime::RuntimeConfig,
-    ) -> Result<Option<(Self, runtime::McpToolDiscoveryReport)>, Box<dyn std::error::Error>> {
-        let mut manager = McpServerManager::from_runtime_config(runtime_config);
-        if manager.server_names().is_empty() && manager.unsupported_servers().is_empty() {
-            return Ok(None);
-        }
-
-        let runtime = tokio::runtime::Runtime::new()?;
-        let discovery = runtime.block_on(manager.discover_tools_best_effort());
-        let pending_servers = discovery
-            .failed_servers
-            .iter()
-            .map(|failure| failure.server_name.clone())
-            .chain(
-                discovery
-                    .unsupported_servers
-                    .iter()
-                    .map(|server| server.server_name.clone()),
-            )
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-        let available_tools = discovery
-            .tools
-            .iter()
-            .map(|tool| tool.qualified_name.clone())
-            .collect::<Vec<_>>();
-        let failed_server_names = pending_servers.iter().cloned().collect::<BTreeSet<_>>();
-        let working_servers = manager
-            .server_names()
-            .into_iter()
-            .filter(|server_name| !failed_server_names.contains(server_name))
-            .collect::<Vec<_>>();
-        let failed_servers =
-            discovery
-                .failed_servers
-                .iter()
-                .map(|failure| runtime::McpFailedServer {
-                    server_name: failure.server_name.clone(),
-                    phase: runtime::McpLifecyclePhase::ToolDiscovery,
-                    error: runtime::McpErrorSurface::new(
-                        runtime::McpLifecyclePhase::ToolDiscovery,
-                        Some(failure.server_name.clone()),
-                        failure.error.clone(),
-                        std::collections::BTreeMap::new(),
-                        true,
-                    ),
-                })
-                .chain(discovery.unsupported_servers.iter().map(|server| {
-                    runtime::McpFailedServer {
-                        server_name: server.server_name.clone(),
-                        phase: runtime::McpLifecyclePhase::ServerRegistration,
-                        error: runtime::McpErrorSurface::new(
-                            runtime::McpLifecyclePhase::ServerRegistration,
-                            Some(server.server_name.clone()),
-                            server.reason.clone(),
-                            std::collections::BTreeMap::from([(
-                                "transport".to_string(),
-                                format!("{:?}", server.transport).to_ascii_lowercase(),
-                            )]),
-                            false,
-                        ),
-                    }
-                }))
-                .collect::<Vec<_>>();
-        let degraded_report = (!failed_servers.is_empty()).then(|| {
-            runtime::McpDegradedReport::new(
-                working_servers,
-                failed_servers,
-                available_tools.clone(),
-                available_tools,
-            )
-        });
-
-        Ok(Some((
-            Self {
-                runtime,
-                manager,
-                pending_servers,
-                degraded_report,
-            },
-            discovery,
-        )))
-    }
-
-    fn shutdown(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.runtime.block_on(self.manager.shutdown())?;
-        Ok(())
-    }
-
-    fn pending_servers(&self) -> Option<Vec<String>> {
-        (!self.pending_servers.is_empty()).then(|| self.pending_servers.clone())
-    }
-
-    fn degraded_report(&self) -> Option<runtime::McpDegradedReport> {
-        self.degraded_report.clone()
-    }
-
-    fn server_names(&self) -> Vec<String> {
-        self.manager.server_names()
-    }
-
-    fn call_tool(
-        &mut self,
-        qualified_tool_name: &str,
-        arguments: Option<serde_json::Value>,
-    ) -> Result<String, ToolError> {
-        let response = self
-            .runtime
-            .block_on(self.manager.call_tool(qualified_tool_name, arguments))
-            .map_err(|error| ToolError::new(error.to_string()))?;
-        if let Some(error) = response.error {
-            return Err(ToolError::new(format!(
-                "MCP tool `{qualified_tool_name}` returned JSON-RPC error: {} ({})",
-                error.message, error.code
-            )));
-        }
-
-        let result = response.result.ok_or_else(|| {
-            ToolError::new(format!(
-                "MCP tool `{qualified_tool_name}` returned no result payload"
-            ))
-        })?;
-        serde_json::to_string_pretty(&result).map_err(|error| ToolError::new(error.to_string()))
-    }
-
-    fn list_resources_for_server(&mut self, server_name: &str) -> Result<String, ToolError> {
-        let result = self
-            .runtime
-            .block_on(self.manager.list_resources(server_name))
-            .map_err(|error| ToolError::new(error.to_string()))?;
-        serde_json::to_string_pretty(&json!({
-            "server": server_name,
-            "resources": result.resources,
-        }))
-        .map_err(|error| ToolError::new(error.to_string()))
-    }
-
-    fn list_resources_for_all_servers(&mut self) -> Result<String, ToolError> {
-        let mut resources = Vec::new();
-        let mut failures = Vec::new();
-
-        for server_name in self.server_names() {
-            match self
-                .runtime
-                .block_on(self.manager.list_resources(&server_name))
-            {
-                Ok(result) => resources.push(json!({
-                    "server": server_name,
-                    "resources": result.resources,
-                })),
-                Err(error) => failures.push(json!({
-                    "server": server_name,
-                    "error": error.to_string(),
-                })),
-            }
-        }
-
-        if resources.is_empty() && !failures.is_empty() {
-            let message = failures
-                .iter()
-                .filter_map(|failure| failure.get("error").and_then(serde_json::Value::as_str))
-                .collect::<Vec<_>>()
-                .join("; ");
-            return Err(ToolError::new(message));
-        }
-
-        serde_json::to_string_pretty(&json!({
-            "resources": resources,
-            "failures": failures,
-        }))
-        .map_err(|error| ToolError::new(error.to_string()))
-    }
-
-    fn read_resource(&mut self, server_name: &str, uri: &str) -> Result<String, ToolError> {
-        let result = self
-            .runtime
-            .block_on(self.manager.read_resource(server_name, uri))
-            .map_err(|error| ToolError::new(error.to_string()))?;
-        serde_json::to_string_pretty(&json!({
-            "server": server_name,
-            "contents": result.contents,
-        }))
-        .map_err(|error| ToolError::new(error.to_string()))
-    }
-}
-
 fn build_runtime_mcp_state(
     runtime_config: &runtime::RuntimeConfig,
 ) -> Result<RuntimePluginStateBuildOutput, Box<dyn std::error::Error>> {
-    let Some((mcp_state, discovery)) = RuntimeMcpState::new(runtime_config)? else {
-        return Ok((None, Vec::new()));
+    let Some(mcp_state) = RuntimeMcpState::new(runtime_config)? else {
+        return Ok((None, Vec::new(), Vec::new()));
     };
 
-    let mut runtime_tools = discovery
-        .tools
-        .iter()
-        .map(mcp_runtime_tool_definition)
-        .collect::<Vec<_>>();
-    if !mcp_state.server_names().is_empty() {
-        runtime_tools.extend(mcp_wrapper_tool_definitions());
-    }
+    let provided_capabilities = mcp_state.provided_capabilities();
 
-    Ok((Some(Arc::new(Mutex::new(mcp_state))), runtime_tools))
-}
-
-fn mcp_runtime_tool_definition(tool: &runtime::ManagedMcpTool) -> RuntimeToolDefinition {
-    RuntimeToolDefinition {
-        name: tool.qualified_name.clone(),
-        description: Some(
-            tool.tool
-                .description
-                .clone()
-                .unwrap_or_else(|| format!("Invoke MCP tool `{}`.", tool.qualified_name)),
-        ),
-        input_schema: tool
-            .tool
-            .input_schema
-            .clone()
-            .unwrap_or_else(|| json!({ "type": "object", "additionalProperties": true })),
-        required_permission: permission_mode_for_mcp_tool(&tool.tool),
-    }
-}
-
-fn mcp_wrapper_tool_definitions() -> Vec<RuntimeToolDefinition> {
-    vec![
-        RuntimeToolDefinition {
-            name: "MCPTool".to_string(),
-            description: Some(
-                "Call a configured MCP tool by its qualified name and JSON arguments.".to_string(),
-            ),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "qualifiedName": { "type": "string" },
-                    "arguments": {}
-                },
-                "required": ["qualifiedName"],
-                "additionalProperties": false
-            }),
-            required_permission: PermissionMode::DangerFullAccess,
-        },
-        RuntimeToolDefinition {
-            name: "ListMcpResourcesTool".to_string(),
-            description: Some(
-                "List MCP resources from one configured server or from every connected server."
-                    .to_string(),
-            ),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "server": { "type": "string" }
-                },
-                "additionalProperties": false
-            }),
-            required_permission: PermissionMode::ReadOnly,
-        },
-        RuntimeToolDefinition {
-            name: "ReadMcpResourceTool".to_string(),
-            description: Some("Read a specific MCP resource from a configured server.".to_string()),
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "server": { "type": "string" },
-                    "uri": { "type": "string" }
-                },
-                "required": ["server", "uri"],
-                "additionalProperties": false
-            }),
-            required_permission: PermissionMode::ReadOnly,
-        },
-    ]
-}
-
-fn permission_mode_for_mcp_tool(tool: &McpTool) -> PermissionMode {
-    let read_only = mcp_annotation_flag(tool, "readOnlyHint");
-    let destructive = mcp_annotation_flag(tool, "destructiveHint");
-    let open_world = mcp_annotation_flag(tool, "openWorldHint");
-
-    if read_only && !destructive && !open_world {
-        PermissionMode::ReadOnly
-    } else if destructive || open_world {
-        PermissionMode::DangerFullAccess
-    } else {
-        PermissionMode::WorkspaceWrite
-    }
-}
-
-fn mcp_annotation_flag(tool: &McpTool, key: &str) -> bool {
-    tool.annotations
-        .as_ref()
-        .and_then(|annotations| annotations.get(key))
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
+    Ok((
+        Some(Arc::new(Mutex::new(mcp_state))),
+        Vec::new(),
+        provided_capabilities,
+    ))
 }
 
 struct HookAbortMonitor {
@@ -2903,6 +2632,7 @@ impl LiveCli {
         let system_prompt = build_system_prompt()?;
         let session_state = Session::new();
         let session = create_managed_session_handle(&session_state.session_id)?;
+        let capability_state = Arc::new(Mutex::new(SessionCapabilityState::default()));
         let runtime = build_runtime(
             session_state.with_persistence_path(session.path.clone()),
             &session.id,
@@ -2913,12 +2643,14 @@ impl LiveCli {
             allowed_tools.clone(),
             permission_mode,
             None,
+            capability_state.clone(),
         )?;
         let cli = Self {
             model,
             allowed_tools,
             permission_mode,
             system_prompt,
+            capability_state,
             runtime,
             session,
         };
@@ -2996,6 +2728,7 @@ impl LiveCli {
             self.allowed_tools.clone(),
             self.permission_mode,
             None,
+            self.capability_state.clone(),
         )?
         .with_hook_abort_signal(hook_abort_signal.clone());
         let hook_abort_monitor = HookAbortMonitor::spawn(hook_abort_signal);
@@ -3260,7 +2993,10 @@ impl LiveCli {
     }
 
     fn persist_session(&self) -> Result<(), Box<dyn std::error::Error>> {
-        self.runtime.session().save_to_path(&self.session.path)?;
+        let mut session = self.runtime.session().clone();
+        persist_capability_state_into_session(&mut session, &self.capability_state)
+            .map_err(std::io::Error::other)?;
+        session.save_to_path(&self.session.path)?;
         Ok(())
     }
 
@@ -3336,6 +3072,7 @@ impl LiveCli {
             self.allowed_tools.clone(),
             self.permission_mode,
             None,
+            self.capability_state.clone(),
         )?;
         self.replace_runtime(runtime)?;
         self.model.clone_from(&model);
@@ -3382,6 +3119,7 @@ impl LiveCli {
             self.allowed_tools.clone(),
             self.permission_mode,
             None,
+            self.capability_state.clone(),
         )?;
         self.replace_runtime(runtime)?;
         println!(
@@ -3402,6 +3140,7 @@ impl LiveCli {
         let previous_session = self.session.clone();
         let session_state = Session::new();
         self.session = create_managed_session_handle(&session_state.session_id)?;
+        self.capability_state = Arc::new(Mutex::new(SessionCapabilityState::default()));
         let runtime = build_runtime(
             session_state.with_persistence_path(self.session.path.clone()),
             &self.session.id,
@@ -3412,6 +3151,7 @@ impl LiveCli {
             self.allowed_tools.clone(),
             self.permission_mode,
             None,
+            self.capability_state.clone(),
         )?;
         self.replace_runtime(runtime)?;
         println!(
@@ -3444,6 +3184,8 @@ impl LiveCli {
         let session = Session::load_from_path(&handle.path)?;
         let message_count = session.messages.len();
         let session_id = session.session_id.clone();
+        let capability_state =
+            restore_shared_capability_state(&session).map_err(std::io::Error::other)?;
         let runtime = build_runtime(
             session,
             &handle.id,
@@ -3454,8 +3196,10 @@ impl LiveCli {
             self.allowed_tools.clone(),
             self.permission_mode,
             None,
+            capability_state.clone(),
         )?;
         self.replace_runtime(runtime)?;
+        self.capability_state = capability_state;
         self.session = SessionHandle {
             id: session_id,
             path: handle.path,
@@ -3568,6 +3312,8 @@ impl LiveCli {
                 let session = Session::load_from_path(&handle.path)?;
                 let message_count = session.messages.len();
                 let session_id = session.session_id.clone();
+                let capability_state =
+                    restore_shared_capability_state(&session).map_err(std::io::Error::other)?;
                 let runtime = build_runtime(
                     session,
                     &handle.id,
@@ -3578,8 +3324,10 @@ impl LiveCli {
                     self.allowed_tools.clone(),
                     self.permission_mode,
                     None,
+                    capability_state.clone(),
                 )?;
                 self.replace_runtime(runtime)?;
+                self.capability_state = capability_state;
                 self.session = SessionHandle {
                     id: session_id,
                     path: handle.path,
@@ -3593,16 +3341,20 @@ impl LiveCli {
                 Ok(true)
             }
             Some("fork") => {
-                let forked = self.runtime.fork_session(target.map(ToOwned::to_owned));
+                let mut forked = self.runtime.fork_session(target.map(ToOwned::to_owned));
                 let parent_session_id = self.session.id.clone();
                 let handle = create_managed_session_handle(&forked.session_id)?;
                 let branch_name = forked
                     .fork
                     .as_ref()
                     .and_then(|fork| fork.branch_name.clone());
+                persist_capability_state_into_session(&mut forked, &self.capability_state)
+                    .map_err(std::io::Error::other)?;
                 let forked = forked.with_persistence_path(handle.path.clone());
                 let message_count = forked.messages.len();
                 forked.save_to_path(&handle.path)?;
+                let capability_state =
+                    restore_shared_capability_state(&forked).map_err(std::io::Error::other)?;
                 let runtime = build_runtime(
                     forked,
                     &handle.id,
@@ -3613,8 +3365,10 @@ impl LiveCli {
                     self.allowed_tools.clone(),
                     self.permission_mode,
                     None,
+                    capability_state.clone(),
                 )?;
                 self.replace_runtime(runtime)?;
+                self.capability_state = capability_state;
                 self.session = handle;
                 println!(
                     "Session forked\n  Parent session   {}\n  Active session   {}\n  Branch           {}\n  File             {}\n  Messages         {}",
@@ -3663,6 +3417,7 @@ impl LiveCli {
             self.allowed_tools.clone(),
             self.permission_mode,
             None,
+            self.capability_state.clone(),
         )?;
         self.replace_runtime(runtime)?;
         self.persist_session()
@@ -3683,6 +3438,7 @@ impl LiveCli {
             self.allowed_tools.clone(),
             self.permission_mode,
             None,
+            self.capability_state.clone(),
         )?;
         self.replace_runtime(runtime)?;
         self.persist_session()?;
@@ -3707,6 +3463,7 @@ impl LiveCli {
             self.allowed_tools.clone(),
             self.permission_mode,
             progress,
+            self.capability_state.clone(),
         )?;
         let mut permission_prompter = CliPermissionPrompter::new(self.permission_mode);
         let summary = runtime.run_turn(prompt, Some(&mut permission_prompter))?;
@@ -4906,12 +4663,18 @@ fn build_runtime_plugin_state_with_loader(
         .feature_config()
         .clone()
         .with_hooks(runtime_config.hooks().merged(&plugin_hook_config));
-    let (mcp_state, runtime_tools) = build_runtime_mcp_state(runtime_config)?;
-    let tool_registry = GlobalToolRegistry::with_plugin_tools(plugin_registry.aggregated_tools()?)?
-        .with_runtime_tools(runtime_tools)?;
+    let (mcp_state, runtime_tools, provided_capabilities) =
+        build_runtime_mcp_state(runtime_config)?;
+    let capability_provider = CapabilityProvider::from_sources_checked(
+        plugin_registry.aggregated_tools()?,
+        runtime_tools,
+        provided_capabilities,
+        None,
+    )?;
+    let capability_runtime = CapabilityRuntime::new(capability_provider);
     Ok(RuntimePluginState {
         feature_config,
-        tool_registry,
+        capability_runtime,
         plugin_registry,
         mcp_state,
     })
@@ -5138,10 +4901,12 @@ impl InternalPromptProgressRun {
 
         let (heartbeat_stop, heartbeat_rx) = mpsc::channel();
         let heartbeat_reporter = reporter.clone();
-        let heartbeat_handle = thread::spawn(move || loop {
-            match heartbeat_rx.recv_timeout(INTERNAL_PROGRESS_HEARTBEAT_INTERVAL) {
-                Ok(()) | Err(RecvTimeoutError::Disconnected) => break,
-                Err(RecvTimeoutError::Timeout) => heartbeat_reporter.emit_heartbeat(),
+        let heartbeat_handle = thread::spawn(move || {
+            loop {
+                match heartbeat_rx.recv_timeout(INTERNAL_PROGRESS_HEARTBEAT_INTERVAL) {
+                    Ok(()) | Err(RecvTimeoutError::Disconnected) => break,
+                    Err(RecvTimeoutError::Timeout) => heartbeat_reporter.emit_heartbeat(),
+                }
             }
         });
 
@@ -5301,6 +5066,7 @@ fn build_runtime(
     allowed_tools: Option<AllowedToolSet>,
     permission_mode: PermissionMode,
     progress_reporter: Option<InternalPromptProgressReporter>,
+    capability_state: SharedSessionCapabilityState,
 ) -> Result<BuiltRuntime, Box<dyn std::error::Error>> {
     let runtime_plugin_state = build_runtime_plugin_state()?;
     build_runtime_with_plugin_state(
@@ -5313,6 +5079,7 @@ fn build_runtime(
         allowed_tools,
         permission_mode,
         progress_reporter,
+        capability_state,
         runtime_plugin_state,
     )
 }
@@ -5329,35 +5096,40 @@ fn build_runtime_with_plugin_state(
     allowed_tools: Option<AllowedToolSet>,
     permission_mode: PermissionMode,
     progress_reporter: Option<InternalPromptProgressReporter>,
+    capability_state: SharedSessionCapabilityState,
     runtime_plugin_state: RuntimePluginState,
 ) -> Result<BuiltRuntime, Box<dyn std::error::Error>> {
     let RuntimePluginState {
         feature_config,
-        tool_registry,
+        capability_runtime,
         plugin_registry,
         mcp_state,
     } = runtime_plugin_state;
     plugin_registry.initialize()?;
-    let policy = permission_policy(permission_mode, &feature_config, &tool_registry)
+    let executor_policy = permission_policy(permission_mode, &feature_config, &capability_runtime)
         .map_err(std::io::Error::other)?;
+    let runtime_policy = runtime_capability_passthrough_policy();
     let mut runtime = ConversationRuntime::new_with_features(
         session,
-        AnthropicRuntimeClient::new(
+        AnthropicRuntimeClient::from_capability_runtime(
             session_id,
             model,
             enable_tools,
             emit_output,
             allowed_tools.clone(),
-            tool_registry.clone(),
+            capability_runtime.clone(),
             progress_reporter,
+            capability_state.clone(),
         )?,
-        CliToolExecutor::new(
+        CliToolExecutor::from_capability_runtime(
             allowed_tools.clone(),
             emit_output,
-            tool_registry.clone(),
+            capability_runtime,
             mcp_state.clone(),
+            capability_state,
+            executor_policy.clone(),
         ),
-        policy,
+        runtime_policy,
         system_prompt,
         &feature_config,
     );
@@ -5457,19 +5229,21 @@ struct AnthropicRuntimeClient {
     enable_tools: bool,
     emit_output: bool,
     allowed_tools: Option<AllowedToolSet>,
-    tool_registry: GlobalToolRegistry,
+    capability_runtime: CapabilityRuntime,
     progress_reporter: Option<InternalPromptProgressReporter>,
+    capability_store: SessionCapabilityStore,
 }
 
 impl AnthropicRuntimeClient {
-    fn new(
+    fn from_capability_runtime(
         session_id: &str,
         model: String,
         enable_tools: bool,
         emit_output: bool,
         allowed_tools: Option<AllowedToolSet>,
-        tool_registry: GlobalToolRegistry,
+        capability_runtime: CapabilityRuntime,
         progress_reporter: Option<InternalPromptProgressReporter>,
+        capability_state: SharedSessionCapabilityState,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         Ok(Self {
             runtime: tokio::runtime::Runtime::new()?,
@@ -5481,8 +5255,9 @@ impl AnthropicRuntimeClient {
             enable_tools,
             emit_output,
             allowed_tools,
-            tool_registry,
+            capability_runtime,
             progress_reporter,
+            capability_store: SessionCapabilityStore::from_shared(capability_state),
         })
     }
 }
@@ -5503,22 +5278,47 @@ impl ApiClient for AnthropicRuntimeClient {
         if let Some(progress_reporter) = &self.progress_reporter {
             progress_reporter.mark_model_phase();
         }
+        let (tools, request_overrides) = if self.enable_tools {
+            let state = self.capability_store.snapshot();
+            (
+                Some(
+                    planned_tool_specs(
+                        &self.capability_runtime,
+                        self.allowed_tools.as_ref(),
+                        &state,
+                    )
+                    .map_err(RuntimeError::new)?,
+                ),
+                apply_skill_session_overrides(&self.model, request.system_prompt.clone(), &state),
+            )
+        } else {
+            (
+                None,
+                apply_skill_session_overrides(
+                    &self.model,
+                    request.system_prompt.clone(),
+                    &SessionCapabilityState::default(),
+                ),
+            )
+        };
         let message_request = MessageRequest {
-            model: self.model.clone(),
-            max_tokens: max_tokens_for_model(&self.model),
+            model: request_overrides.model.clone(),
+            max_tokens: max_tokens_for_model(&request_overrides.model),
             messages: convert_messages(&request.messages),
-            system: (!request.system_prompt.is_empty()).then(|| request.system_prompt.join("\n\n")),
-            tools: self
-                .enable_tools
-                .then(|| filter_tool_specs(&self.tool_registry, self.allowed_tools.as_ref())),
-            tool_choice: self.enable_tools.then_some(ToolChoice::Auto),
+            system: (!request_overrides.system_sections.is_empty())
+                .then(|| request_overrides.system_sections.join("\n\n")),
+            tools: tools.clone(),
+            tool_choice: tools
+                .as_ref()
+                .filter(|tools| !tools.is_empty())
+                .map(|_| ToolChoice::Auto),
             stream: true,
             temperature: None,
             top_p: None,
             frequency_penalty: None,
             presence_penalty: None,
             stop: None,
-            reasoning_effort: None,
+            reasoning_effort: request_overrides.reasoning_effort.clone(),
         };
 
         self.runtime.block_on(async {
@@ -6329,29 +6129,89 @@ struct CliToolExecutor {
     renderer: TerminalRenderer,
     emit_output: bool,
     allowed_tools: Option<AllowedToolSet>,
-    tool_registry: GlobalToolRegistry,
+    capability_runtime: CapabilityRuntime,
     mcp_state: Option<Arc<Mutex<RuntimeMcpState>>>,
+    capability_store: SessionCapabilityStore,
+}
+
+type CliCapabilityPermissionPromptHook =
+    Arc<dyn Fn(&runtime::PermissionRequest) -> runtime::PermissionPromptDecision + Send + Sync>;
+type CliCapabilityExecutionEventHook = Arc<dyn Fn(CapabilityExecutionEvent) + Send + Sync>;
+
+struct HookBackedPermissionPrompter {
+    hook: CliCapabilityPermissionPromptHook,
+}
+
+impl HookBackedPermissionPrompter {
+    fn new(hook: CliCapabilityPermissionPromptHook) -> Self {
+        Self { hook }
+    }
+}
+
+impl runtime::PermissionPrompter for HookBackedPermissionPrompter {
+    fn decide(
+        &mut self,
+        request: &runtime::PermissionRequest,
+    ) -> runtime::PermissionPromptDecision {
+        (self.hook)(request)
+    }
 }
 
 impl CliToolExecutor {
-    fn new(
+    fn from_capability_runtime(
         allowed_tools: Option<AllowedToolSet>,
         emit_output: bool,
-        tool_registry: GlobalToolRegistry,
+        capability_runtime: CapabilityRuntime,
         mcp_state: Option<Arc<Mutex<RuntimeMcpState>>>,
+        capability_state: SharedSessionCapabilityState,
+        permission_policy: PermissionPolicy,
     ) -> Self {
+        Self::new_with_runtime_hooks(
+            allowed_tools,
+            emit_output,
+            capability_runtime,
+            mcp_state,
+            capability_state,
+            permission_policy,
+            None,
+            None,
+        )
+    }
+
+    fn new_with_runtime_hooks(
+        allowed_tools: Option<AllowedToolSet>,
+        emit_output: bool,
+        capability_runtime: CapabilityRuntime,
+        mcp_state: Option<Arc<Mutex<RuntimeMcpState>>>,
+        capability_state: SharedSessionCapabilityState,
+        permission_policy: PermissionPolicy,
+        permission_prompt_hook: Option<CliCapabilityPermissionPromptHook>,
+        execution_event_hook: Option<CliCapabilityExecutionEventHook>,
+    ) -> Self {
+        configure_cli_capability_runtime_hooks(
+            &capability_runtime,
+            emit_output,
+            permission_policy,
+            permission_prompt_hook,
+            execution_event_hook,
+        );
         Self {
             renderer: TerminalRenderer::new(),
             emit_output,
             allowed_tools,
-            tool_registry,
+            capability_runtime,
             mcp_state,
+            capability_store: SessionCapabilityStore::from_shared(capability_state),
         }
     }
+}
 
-    fn execute_search_tool(&self, value: serde_json::Value) -> Result<String, ToolError> {
-        let input: ToolSearchRequest = serde_json::from_value(value)
+impl ToolExecutor for CliToolExecutor {
+    fn execute(&mut self, tool_name: &str, input: &str) -> Result<String, ToolError> {
+        let value = serde_json::from_str(input)
             .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")))?;
+        let current_dir = env::current_dir().ok();
+        let state = self.capability_store.snapshot();
         let (pending_mcp_servers, mcp_degraded) =
             self.mcp_state.as_ref().map_or((None, None), |state| {
                 let state = state
@@ -6359,79 +6219,21 @@ impl CliToolExecutor {
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
                 (state.pending_servers(), state.degraded_report())
             });
-        serde_json::to_string_pretty(&self.tool_registry.search(
-            &input.query,
-            input.max_results.unwrap_or(5),
+        let capability_runtime = self.capability_runtime.clone();
+        let capability_store = self.capability_store.clone();
+        let mcp_state = self.mcp_state.clone();
+        let result = capability_runtime.execute_tool(
+            tool_name,
+            value,
+            CapabilityPlannerInput::new(self.allowed_tools.as_ref(), Some(&state))
+                .with_current_dir(current_dir.as_deref()),
+            &capability_store,
             pending_mcp_servers,
             mcp_degraded,
-        ))
-        .map_err(|error| ToolError::new(error.to_string()))
-    }
-
-    fn execute_runtime_tool(
-        &self,
-        tool_name: &str,
-        value: serde_json::Value,
-    ) -> Result<String, ToolError> {
-        let Some(mcp_state) = &self.mcp_state else {
-            return Err(ToolError::new(format!(
-                "runtime tool `{tool_name}` is unavailable without configured MCP servers"
-            )));
-        };
-        let mut mcp_state = mcp_state
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-
-        match tool_name {
-            "MCPTool" => {
-                let input: McpToolRequest = serde_json::from_value(value)
-                    .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")))?;
-                let qualified_name = input
-                    .qualified_name
-                    .or(input.tool)
-                    .ok_or_else(|| ToolError::new("missing required field `qualifiedName`"))?;
-                mcp_state.call_tool(&qualified_name, input.arguments)
-            }
-            "ListMcpResourcesTool" => {
-                let input: ListMcpResourcesRequest = serde_json::from_value(value)
-                    .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")))?;
-                match input.server {
-                    Some(server_name) => mcp_state.list_resources_for_server(&server_name),
-                    None => mcp_state.list_resources_for_all_servers(),
-                }
-            }
-            "ReadMcpResourceTool" => {
-                let input: ReadMcpResourceRequest = serde_json::from_value(value)
-                    .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")))?;
-                mcp_state.read_resource(&input.server, &input.uri)
-            }
-            _ => mcp_state.call_tool(tool_name, Some(value)),
-        }
-    }
-}
-
-impl ToolExecutor for CliToolExecutor {
-    fn execute(&mut self, tool_name: &str, input: &str) -> Result<String, ToolError> {
-        if self
-            .allowed_tools
-            .as_ref()
-            .is_some_and(|allowed| !allowed.contains(tool_name))
-        {
-            return Err(ToolError::new(format!(
-                "tool `{tool_name}` is not enabled by the current --allowedTools setting"
-            )));
-        }
-        let value = serde_json::from_str(input)
-            .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")))?;
-        let result = if tool_name == "ToolSearch" {
-            self.execute_search_tool(value)
-        } else if self.tool_registry.has_runtime_tool(tool_name) {
-            self.execute_runtime_tool(tool_name, value)
-        } else {
-            self.tool_registry
-                .execute(tool_name, &value)
-                .map_err(ToolError::new)
-        };
+            move |_dispatch_kind, name, value| {
+                execute_runtime_capability(mcp_state.as_ref(), name, value)
+            },
+        );
         match result {
             Ok(output) => {
                 if self.emit_output {
@@ -6455,17 +6257,126 @@ impl ToolExecutor for CliToolExecutor {
     }
 }
 
+fn configure_cli_capability_runtime_hooks(
+    capability_runtime: &CapabilityRuntime,
+    emit_output: bool,
+    permission_policy: PermissionPolicy,
+    permission_prompt_hook: Option<CliCapabilityPermissionPromptHook>,
+    execution_event_hook: Option<CliCapabilityExecutionEventHook>,
+) {
+    let mediation_policy = permission_policy.clone();
+    capability_runtime.set_mediation_hook(move |request| {
+        mediate_capability_execution_request(
+            request,
+            &mediation_policy,
+            permission_prompt_hook.clone(),
+        )
+    });
+
+    if emit_output || execution_event_hook.is_some() {
+        capability_runtime.set_execution_hook(move |event| {
+            if let Some(hook) = execution_event_hook.as_ref() {
+                hook(event.clone());
+            }
+            if emit_output {
+                eprintln!("{}", format_capability_execution_event(&event));
+            }
+        });
+    } else {
+        capability_runtime.clear_execution_hook();
+    }
+}
+
+fn mediate_capability_execution_request(
+    request: &CapabilityExecutionRequest,
+    permission_policy: &PermissionPolicy,
+    permission_prompt_hook: Option<CliCapabilityPermissionPromptHook>,
+) -> CapabilityMediationDecision {
+    if request.requires_auth {
+        return CapabilityMediationDecision::RequireAuth(Some(format!(
+            "tool '{}' requires authentication before execution",
+            request.tool_name
+        )));
+    }
+
+    let input = serde_json::to_string(&request.input).unwrap_or_else(|_| request.input.to_string());
+    let outcome = if let Some(hook) = permission_prompt_hook {
+        let mut prompter = HookBackedPermissionPrompter::new(hook);
+        permission_policy.authorize(&request.tool_name, &input, Some(&mut prompter))
+    } else {
+        let mut prompter = CliPermissionPrompter::new(permission_policy.active_mode());
+        permission_policy.authorize(&request.tool_name, &input, Some(&mut prompter))
+    };
+
+    match outcome {
+        runtime::PermissionOutcome::Allow => CapabilityMediationDecision::Allow,
+        runtime::PermissionOutcome::Deny { reason } => CapabilityMediationDecision::Deny(reason),
+    }
+}
+
+fn format_capability_execution_event(event: &CapabilityExecutionEvent) -> String {
+    let phase = match event.phase {
+        CapabilityExecutionPhase::Started => "started",
+        CapabilityExecutionPhase::Completed => "completed",
+        CapabilityExecutionPhase::Failed => "failed",
+        CapabilityExecutionPhase::BlockedApproval => "blocked-approval",
+        CapabilityExecutionPhase::BlockedAuth => "blocked-auth",
+        CapabilityExecutionPhase::Denied => "denied",
+    };
+    let detail = event
+        .detail
+        .as_deref()
+        .map(|detail| format!(" · {detail}"))
+        .unwrap_or_default();
+    format!(
+        "[capability {phase}] {} · permission={} · concurrency={}{}",
+        event.tool_name,
+        event.required_permission.as_str(),
+        match event.concurrency_policy {
+            tools::CapabilityConcurrencyPolicy::ParallelRead => "parallel_read",
+            tools::CapabilityConcurrencyPolicy::Serialized => "serialized",
+        },
+        detail,
+    )
+}
+
+fn execute_runtime_capability(
+    mcp_state: Option<&Arc<Mutex<RuntimeMcpState>>>,
+    tool_name: &str,
+    value: serde_json::Value,
+) -> Result<String, ToolError> {
+    let Some(mcp_state) = mcp_state else {
+        return Err(ToolError::new(format!(
+            "runtime tool `{tool_name}` is unavailable without configured MCP servers"
+        )));
+    };
+    let mut mcp_state = mcp_state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    mcp_state.execute_tool(tool_name, value)
+}
+
 fn permission_policy(
     mode: PermissionMode,
     feature_config: &runtime::RuntimeFeatureConfig,
-    tool_registry: &GlobalToolRegistry,
+    capability_runtime: &CapabilityRuntime,
 ) -> Result<PermissionPolicy, String> {
-    Ok(tool_registry.permission_specs(None)?.into_iter().fold(
-        PermissionPolicy::new(mode).with_permission_rules(feature_config.permission_rules()),
-        |policy, (name, required_permission)| {
-            policy.with_tool_requirement(name, required_permission)
-        },
-    ))
+    Ok(capability_runtime
+        .all_permission_specs(None)?
+        .into_iter()
+        .fold(
+            PermissionPolicy::new(mode).with_permission_rules(feature_config.permission_rules()),
+            |policy, (name, required_permission)| {
+                policy.with_tool_requirement(name, required_permission)
+            },
+        ))
+}
+
+fn runtime_capability_passthrough_policy() -> PermissionPolicy {
+    // CapabilityExecutor is the single control-plane for runtime-managed tool
+    // approval/auth gating. Keep the outer conversation loop permissive so the
+    // CLI does not re-prompt or deny the same tool call before executor mediation.
+    PermissionPolicy::new(PermissionMode::Allow)
 }
 
 fn convert_messages(messages: &[ConversationMessage]) -> Vec<InputMessage> {
@@ -6580,7 +6491,10 @@ fn print_help_to(out: &mut impl Write) -> io::Result<()> {
         out,
         "  --dangerously-skip-permissions  Skip all permission checks"
     )?;
-    writeln!(out, "  --allowedTools TOOLS       Restrict enabled tools (repeatable; comma-separated aliases supported)")?;
+    writeln!(
+        out,
+        "  --allowedTools TOOLS       Restrict enabled tools (repeatable; comma-separated aliases supported)"
+    )?;
     writeln!(
         out,
         "  --version, -V              Print version and build information locally"
@@ -6656,25 +6570,25 @@ fn print_help(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::
 #[cfg(test)]
 mod tests {
     use super::{
-        build_runtime_plugin_state_with_loader, build_runtime_with_plugin_state,
-        create_managed_session_handle, describe_tool_progress, filter_tool_specs,
-        format_bughunter_report, format_commit_preflight_report, format_commit_skipped_report,
-        format_compact_report, format_cost_report, format_internal_prompt_progress_line,
-        format_issue_report, format_model_report, format_model_switch_report,
-        format_permissions_report, format_permissions_switch_report, format_pr_report,
-        format_resume_report, format_status_report, format_tool_call_start, format_tool_result,
-        format_ultraplan_report, format_unknown_slash_command,
+        CliAction, CliOutputFormat, CliToolExecutor, DEFAULT_MODEL, GitWorkspaceSummary,
+        InternalPromptProgressEvent, InternalPromptProgressState, LiveCli, LocalHelpTopic,
+        SlashCommand, StatusUsage, build_runtime_plugin_state_with_loader,
+        build_runtime_with_plugin_state, create_managed_session_handle, describe_tool_progress,
+        filter_tool_specs, format_bughunter_report, format_commit_preflight_report,
+        format_commit_skipped_report, format_compact_report, format_cost_report,
+        format_internal_prompt_progress_line, format_issue_report, format_model_report,
+        format_model_switch_report, format_permissions_report, format_permissions_switch_report,
+        format_pr_report, format_resume_report, format_status_report, format_tool_call_start,
+        format_tool_result, format_ultraplan_report, format_unknown_slash_command,
         format_unknown_slash_command_message, format_user_visible_api_error,
         normalize_permission_mode, parse_args, parse_git_status_branch,
         parse_git_status_metadata_for, parse_git_workspace_summary, permission_policy,
-        print_help_to, push_output_block, render_config_report, render_diff_report,
-        render_diff_report_for, render_memory_report, render_repl_help, render_resume_usage,
-        resolve_model_alias, resolve_session_reference, response_to_events,
+        planned_tool_specs, print_help_to, push_output_block, render_config_report,
+        render_diff_report, render_diff_report_for, render_memory_report, render_repl_help,
+        render_resume_usage, resolve_model_alias, resolve_session_reference, response_to_events,
         resume_supported_slash_commands, run_resume_command,
         slash_command_completion_candidates_with_sessions, status_context, validate_no_args,
-        write_mcp_server_fixture, CliAction, CliOutputFormat, CliToolExecutor, GitWorkspaceSummary,
-        InternalPromptProgressEvent, InternalPromptProgressState, LiveCli, LocalHelpTopic,
-        SlashCommand, StatusUsage, DEFAULT_MODEL,
+        write_mcp_server_fixture,
     };
     use api::{ApiError, MessageResponse, OutputContentBlock, Usage};
     use plugins::{
@@ -6682,23 +6596,92 @@ mod tests {
     };
     use runtime::{
         AssistantEvent, ConfigLoader, ContentBlock, ConversationMessage, MessageRole,
-        PermissionMode, Session, ToolExecutor,
+        PermissionMode, PermissionPolicy, Session, ToolExecutor,
     };
     use serde_json::json;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
-    use std::sync::{Mutex, MutexGuard, OnceLock};
+    use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
-    use tools::GlobalToolRegistry;
+    use tools::{
+        CapabilityActivation, CapabilityExecutionEvent, CapabilityExecutionPhase,
+        CapabilityPlannerInput, CapabilityProvider, CapabilityRuntime, RuntimeToolDefinition,
+        SessionCapabilityState,
+    };
 
-    fn registry_with_plugin_tool() -> GlobalToolRegistry {
-        GlobalToolRegistry::with_plugin_tools(vec![PluginTool::new(
-            "plugin-demo@external",
-            "plugin-demo",
-            PluginToolDefinition {
-                name: "plugin_echo".to_string(),
-                description: Some("Echo plugin payload".to_string()),
+    fn builtin_capability_runtime() -> CapabilityRuntime {
+        CapabilityRuntime::new(CapabilityProvider::builtin())
+    }
+
+    fn capability_runtime_with_plugin_tool() -> CapabilityRuntime {
+        let provider = CapabilityProvider::from_sources_checked(
+            vec![PluginTool::new(
+                "plugin-demo@external",
+                "plugin-demo",
+                PluginToolDefinition {
+                    name: "plugin_echo".to_string(),
+                    description: Some("Echo plugin payload".to_string()),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "message": { "type": "string" }
+                        },
+                        "required": ["message"],
+                        "additionalProperties": false
+                    }),
+                },
+                "echo".to_string(),
+                Vec::new(),
+                PluginToolPermission::WorkspaceWrite,
+                None,
+            )],
+            Vec::new(),
+            Vec::new(),
+            None,
+        )
+        .expect("plugin tool capability provider should build");
+        CapabilityRuntime::new(provider)
+    }
+
+    fn test_permission_policy(
+        mode: PermissionMode,
+        capability_runtime: &CapabilityRuntime,
+    ) -> PermissionPolicy {
+        permission_policy(
+            mode,
+            &runtime::RuntimeFeatureConfig::default(),
+            capability_runtime,
+        )
+        .expect("permission policy should build")
+    }
+
+    #[test]
+    fn capability_provider_checked_builder_surfaces_plugin_and_runtime_tools_without_registry() {
+        let provider = CapabilityProvider::from_sources_checked(
+            vec![PluginTool::new(
+                "plugin-demo@external",
+                "plugin-demo",
+                PluginToolDefinition {
+                    name: "plugin_echo".to_string(),
+                    description: Some("Echo plugin payload".to_string()),
+                    input_schema: json!({
+                        "type": "object",
+                        "properties": {
+                            "message": { "type": "string" }
+                        },
+                        "required": ["message"],
+                        "additionalProperties": false
+                    }),
+                },
+                "echo".to_string(),
+                Vec::new(),
+                PluginToolPermission::WorkspaceWrite,
+                None,
+            )],
+            vec![RuntimeToolDefinition {
+                name: "runtime_echo".to_string(),
+                description: Some("Echo runtime payload".to_string()),
                 input_schema: json!({
                     "type": "object",
                     "properties": {
@@ -6707,13 +6690,29 @@ mod tests {
                     "required": ["message"],
                     "additionalProperties": false
                 }),
-            },
-            "echo".to_string(),
+                required_permission: PermissionMode::ReadOnly,
+            }],
             Vec::new(),
-            PluginToolPermission::WorkspaceWrite,
             None,
-        )])
-        .expect("plugin tool registry should build")
+        )
+        .expect("capability provider should build");
+        let runtime = CapabilityRuntime::new(provider);
+        let surface = runtime
+            .surface_projection(CapabilityPlannerInput::default())
+            .expect("capability surface should plan");
+
+        assert!(
+            surface
+                .deferred_tools
+                .iter()
+                .any(|capability| capability.display_name == "plugin_echo")
+        );
+        assert!(
+            surface
+                .deferred_tools
+                .iter()
+                .any(|capability| capability.display_name == "runtime_echo")
+        );
     }
 
     #[test]
@@ -7430,7 +7429,7 @@ mod tests {
             .into_iter()
             .map(str::to_string)
             .collect();
-        let filtered = filter_tool_specs(&GlobalToolRegistry::builtin(), Some(&allowed));
+        let filtered = filter_tool_specs(&builtin_capability_runtime(), Some(&allowed));
         let names = filtered
             .into_iter()
             .map(|spec| spec.name)
@@ -7440,13 +7439,45 @@ mod tests {
 
     #[test]
     fn filtered_tool_specs_include_plugin_tools() {
-        let filtered = filter_tool_specs(&registry_with_plugin_tool(), None);
+        let capability_runtime = capability_runtime_with_plugin_tool();
+        let filtered = filter_tool_specs(&capability_runtime, None);
         let names = filtered
             .into_iter()
             .map(|definition| definition.name)
             .collect::<Vec<_>>();
         assert!(names.contains(&"bash".to_string()));
-        assert!(names.contains(&"plugin_echo".to_string()));
+        assert!(!names.contains(&"plugin_echo".to_string()));
+
+        let search = capability_runtime.search(
+            "plugin echo",
+            5,
+            CapabilityPlannerInput::default(),
+            None,
+            None,
+        );
+        let matches = serde_json::to_value(search).expect("search should serialize");
+        assert_eq!(matches["matches"][0], "plugin_echo");
+        assert_eq!(matches["results"][0]["source_kind"], "plugin_tool");
+        assert_eq!(matches["results"][0]["deferred"], true);
+    }
+
+    #[test]
+    fn planned_tool_specs_respect_session_capability_activation() {
+        let capability_runtime = builtin_capability_runtime();
+        let mut session_state = SessionCapabilityState::default();
+
+        let before = planned_tool_specs(&capability_runtime, None, &session_state)
+            .expect("planned tool specs should resolve");
+        let before_names = before.into_iter().map(|tool| tool.name).collect::<Vec<_>>();
+        assert!(before_names.contains(&"ToolSearch".to_string()));
+        assert!(!before_names.contains(&"WebSearch".to_string()));
+
+        session_state.activate(CapabilityActivation::tool("WebSearch"));
+
+        let after = planned_tool_specs(&capability_runtime, None, &session_state)
+            .expect("planned tool specs should resolve after activation");
+        let after_names = after.into_iter().map(|tool| tool.name).collect::<Vec<_>>();
+        assert!(after_names.contains(&"WebSearch".to_string()));
     }
 
     #[test]
@@ -7455,7 +7486,7 @@ mod tests {
         let policy = permission_policy(
             PermissionMode::ReadOnly,
             &feature_config,
-            &registry_with_plugin_tool(),
+            &capability_runtime_with_plugin_tool(),
         )
         .expect("permission policy should build");
         let required = policy.required_mode_for("plugin_echo");
@@ -7728,16 +7759,22 @@ mod tests {
         assert!(preflight.contains("Result           ready"));
         assert!(preflight.contains("Branch           feature/ux"));
         assert!(preflight.contains("Workspace        dirty · 2 files · 1 staged, 1 unstaged"));
-        assert!(preflight
-            .contains("Action           create a git commit from the current workspace changes"));
+        assert!(
+            preflight.contains(
+                "Action           create a git commit from the current workspace changes"
+            )
+        );
     }
 
     #[test]
     fn commit_skipped_report_points_to_next_steps() {
         let report = format_commit_skipped_report();
         assert!(report.contains("Reason           no workspace changes"));
-        assert!(report
-            .contains("Action           create a git commit from the current workspace changes"));
+        assert!(
+            report.contains(
+                "Action           create a git commit from the current workspace changes"
+            )
+        );
         assert!(report.contains("/status to inspect context"));
         assert!(report.contains("/diff to inspect repo changes"));
     }
@@ -8562,37 +8599,45 @@ UU conflicted.rs",
         let state = build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
             .expect("runtime plugin state should load");
 
+        let surface = state
+            .capability_runtime
+            .surface_projection(tools::CapabilityPlannerInput::default())
+            .expect("capability surface should plan");
+        assert!(
+            surface
+                .deferred_tools
+                .iter()
+                .any(|capability| capability.display_name == "mcp__alpha__echo"
+                    && format!("{:?}", capability.source_kind) == "McpTool")
+        );
+        assert!(
+            surface
+                .available_resources
+                .iter()
+                .any(|capability| format!("{:?}", capability.source_kind) == "McpResource")
+        );
+
         let allowed = state
-            .tool_registry
-            .normalize_allowed_tools(&["mcp__alpha__echo".to_string(), "MCPTool".to_string()])
+            .capability_runtime
+            .normalize_allowed_tools(&["mcp__alpha__echo".to_string()])
             .expect("mcp tools should be allow-listable")
             .expect("allow-list should exist");
         assert!(allowed.contains("mcp__alpha__echo"));
-        assert!(allowed.contains("MCPTool"));
-
-        let mut executor = CliToolExecutor::new(
-            None,
-            false,
-            state.tool_registry.clone(),
-            state.mcp_state.clone(),
+        assert!(
+            state
+                .capability_runtime
+                .normalize_allowed_tools(&["MCPTool".to_string()])
+                .is_err()
         );
 
-        let tool_output = executor
-            .execute("mcp__alpha__echo", r#"{"text":"hello"}"#)
-            .expect("discovered mcp tool should execute");
-        let tool_json: serde_json::Value =
-            serde_json::from_str(&tool_output).expect("tool output should be json");
-        assert_eq!(tool_json["structuredContent"]["echoed"], "hello");
-
-        let wrapped_output = executor
-            .execute(
-                "MCPTool",
-                r#"{"qualifiedName":"mcp__alpha__echo","arguments":{"text":"wrapped"}}"#,
-            )
-            .expect("generic mcp wrapper should execute");
-        let wrapped_json: serde_json::Value =
-            serde_json::from_str(&wrapped_output).expect("wrapped output should be json");
-        assert_eq!(wrapped_json["structuredContent"]["echoed"], "wrapped");
+        let mut executor = CliToolExecutor::from_capability_runtime(
+            None,
+            false,
+            state.capability_runtime.clone(),
+            state.mcp_state.clone(),
+            std::sync::Arc::new(std::sync::Mutex::new(SessionCapabilityState::default())),
+            test_permission_policy(PermissionMode::DangerFullAccess, &state.capability_runtime),
+        );
 
         let search_output = executor
             .execute("ToolSearch", r#"{"query":"alpha echo","max_results":5}"#)
@@ -8600,6 +8645,7 @@ UU conflicted.rs",
         let search_json: serde_json::Value =
             serde_json::from_str(&search_output).expect("search output should be json");
         assert_eq!(search_json["matches"][0], "mcp__alpha__echo");
+        assert_eq!(search_json["results"][0]["source_kind"], "mcp_tool");
         assert_eq!(search_json["pending_mcp_servers"][0], "broken");
         assert_eq!(
             search_json["mcp_degraded"]["failed_servers"][0]["server_name"],
@@ -8614,24 +8660,30 @@ UU conflicted.rs",
             "mcp__alpha__echo"
         );
 
-        let listed = executor
-            .execute("ListMcpResourcesTool", r#"{"server":"alpha"}"#)
-            .expect("resources should list");
-        let listed_json: serde_json::Value =
-            serde_json::from_str(&listed).expect("resource output should be json");
-        assert_eq!(listed_json["resources"][0]["uri"], "file://guide.txt");
-
-        let read = executor
+        executor
             .execute(
-                "ReadMcpResourceTool",
-                r#"{"server":"alpha","uri":"file://guide.txt"}"#,
+                "ToolSearch",
+                r#"{"query":"select:mcp__alpha__echo","max_results":8}"#,
             )
-            .expect("resource should read");
-        let read_json: serde_json::Value =
-            serde_json::from_str(&read).expect("resource read output should be json");
-        assert_eq!(
-            read_json["contents"][0]["text"],
-            "contents for file://guide.txt"
+            .expect("runtime mcp tools should be activatable");
+
+        let tool_output = executor
+            .execute("mcp__alpha__echo", r#"{"text":"hello"}"#)
+            .expect("discovered mcp tool should execute");
+        let tool_json: serde_json::Value =
+            serde_json::from_str(&tool_output).expect("tool output should be json");
+        assert_eq!(tool_json["structuredContent"]["echoed"], "hello");
+
+        let wrapper_error = executor
+            .execute(
+                "MCPTool",
+                r#"{"qualifiedName":"mcp__alpha__echo","arguments":{"text":"wrapped"}}"#,
+            )
+            .expect_err("generic mcp wrapper should no longer execute");
+        assert!(
+            wrapper_error
+                .to_string()
+                .contains("current capability surface")
         );
 
         if let Some(mcp_state) = state.mcp_state {
@@ -8668,11 +8720,13 @@ UU conflicted.rs",
         let runtime_config = loader.load().expect("runtime config should load");
         let state = build_runtime_plugin_state_with_loader(&workspace, &loader, &runtime_config)
             .expect("runtime plugin state should load");
-        let mut executor = CliToolExecutor::new(
+        let mut executor = CliToolExecutor::from_capability_runtime(
             None,
             false,
-            state.tool_registry.clone(),
+            state.capability_runtime.clone(),
             state.mcp_state.clone(),
+            std::sync::Arc::new(std::sync::Mutex::new(SessionCapabilityState::default())),
+            test_permission_policy(PermissionMode::DangerFullAccess, &state.capability_runtime),
         );
 
         let search_output = executor
@@ -8696,6 +8750,276 @@ UU conflicted.rs",
 
         let _ = fs::remove_dir_all(config_home);
         let _ = fs::remove_dir_all(workspace);
+    }
+
+    #[test]
+    fn cli_tool_search_select_updates_session_capability_state() {
+        let capability_state =
+            std::sync::Arc::new(std::sync::Mutex::new(SessionCapabilityState::default()));
+        let capability_runtime = builtin_capability_runtime();
+        let mut executor = CliToolExecutor::from_capability_runtime(
+            None,
+            false,
+            capability_runtime.clone(),
+            None,
+            capability_state.clone(),
+            test_permission_policy(PermissionMode::DangerFullAccess, &capability_runtime),
+        );
+
+        let output = executor
+            .execute(
+                "ToolSearch",
+                r#"{"query":"select:WebSearch","max_results":5}"#,
+            )
+            .expect("ToolSearch select should succeed");
+        let output_json: serde_json::Value =
+            serde_json::from_str(&output).expect("tool search output should be json");
+        assert_eq!(output_json["matches"][0], "WebSearch");
+
+        let locked = capability_state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(locked.is_tool_activated("WebSearch"));
+
+        let visible = planned_tool_specs(&capability_runtime, None, &locked)
+            .expect("planned tool specs should resolve after activation");
+        let names = visible
+            .into_iter()
+            .map(|tool| tool.name)
+            .collect::<Vec<_>>();
+        assert!(names.contains(&"WebSearch".to_string()));
+    }
+
+    #[test]
+    fn cli_skill_tool_updates_session_state_with_tool_grants_and_overrides() {
+        let _guard = env_lock();
+        let home = temp_dir();
+        let skill_dir = home.join(".agents").join("skills").join("help");
+        fs::create_dir_all(&skill_dir).expect("skill dir should exist");
+        fs::write(
+            skill_dir.join("SKILL.md"),
+            r#"---
+name: help
+description: Help the model decide when to use the workspace guidance skill.
+when_to_use: Use when the task asks for workspace orientation.
+allowed-tools:
+  - WebSearch
+model-invocable: true
+user-invocable: true
+model: claude-sonnet-4-5
+effort: high
+context: inline
+---
+# help
+
+Guide the model through the workspace.
+"#,
+        )
+        .expect("skill file should exist");
+
+        let original_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", &home);
+
+        let capability_state =
+            std::sync::Arc::new(std::sync::Mutex::new(SessionCapabilityState::default()));
+        let capability_runtime = builtin_capability_runtime();
+        let mut executor = CliToolExecutor::from_capability_runtime(
+            None,
+            false,
+            capability_runtime.clone(),
+            None,
+            capability_state.clone(),
+            test_permission_policy(PermissionMode::DangerFullAccess, &capability_runtime),
+        );
+
+        let output = executor
+            .execute(
+                "SkillTool",
+                r#"{"skill":"help","arguments":{"topic":"workspace"}}"#,
+            )
+            .expect("SkillTool should succeed");
+        let output_json: serde_json::Value =
+            serde_json::from_str(&output).expect("skill tool output should be json");
+        assert_eq!(output_json["tool_grants"][0], "WebSearch");
+        assert_eq!(output_json["model_override"], "claude-sonnet-4-5");
+        assert_eq!(output_json["effort_override"], "high");
+
+        let locked = capability_state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(locked.is_tool_granted("WebSearch"));
+        assert_eq!(locked.model_override(), Some("claude-sonnet-4-5"));
+        assert_eq!(locked.effort_override(), Some("high"));
+        assert!(
+            locked
+                .injected_skill_messages()
+                .iter()
+                .any(|message| message.contains("Guide the model through the workspace"))
+        );
+
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn cli_tool_executor_routes_runtime_mediation_through_permission_prompt_hook() {
+        let capability_state = Arc::new(Mutex::new(SessionCapabilityState::default()));
+        let observed_requests = Arc::new(Mutex::new(Vec::new()));
+        let observed_requests_for_hook = observed_requests.clone();
+        let capability_runtime = builtin_capability_runtime();
+        let permission_policy = permission_policy(
+            PermissionMode::WorkspaceWrite,
+            &runtime::RuntimeFeatureConfig::default(),
+            &capability_runtime,
+        )
+        .expect("permission policy should build");
+        let mut executor = CliToolExecutor::new_with_runtime_hooks(
+            None,
+            false,
+            capability_runtime,
+            None,
+            capability_state.clone(),
+            permission_policy,
+            Some(Arc::new(move |request: &runtime::PermissionRequest| {
+                observed_requests_for_hook
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(request.clone());
+                runtime::PermissionPromptDecision::Allow
+            })),
+            None,
+        );
+
+        let output = executor
+            .execute("bash", r#"{"command":"printf 'hello'"}"#)
+            .expect("bash execution should be approved by prompt hook");
+        assert!(output.contains("hello"));
+
+        let observed = observed_requests
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert_eq!(observed.len(), 1);
+        assert_eq!(observed[0].tool_name, "bash");
+        assert_eq!(observed[0].current_mode, PermissionMode::WorkspaceWrite);
+        assert_eq!(observed[0].required_mode, PermissionMode::DangerFullAccess);
+        drop(observed);
+
+        let locked = capability_state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        assert!(locked.is_tool_approved("bash"));
+        assert!(!locked.is_tool_pending("bash"));
+    }
+
+    #[test]
+    fn cli_tool_executor_surfaces_runtime_execution_events_through_hook() {
+        let observed_events = Arc::new(Mutex::new(Vec::new()));
+        let observed_events_for_hook = observed_events.clone();
+        let capability_runtime = builtin_capability_runtime();
+        let permission_policy = permission_policy(
+            PermissionMode::DangerFullAccess,
+            &runtime::RuntimeFeatureConfig::default(),
+            &capability_runtime,
+        )
+        .expect("permission policy should build");
+        let mut executor = CliToolExecutor::new_with_runtime_hooks(
+            None,
+            false,
+            capability_runtime,
+            None,
+            Arc::new(Mutex::new(SessionCapabilityState::default())),
+            permission_policy,
+            None,
+            Some(Arc::new(move |event: CapabilityExecutionEvent| {
+                observed_events_for_hook
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(event);
+            })),
+        );
+
+        executor
+            .execute("ToolSearch", r#"{"query":"web","max_results":3}"#)
+            .expect("ToolSearch should execute");
+
+        let observed = observed_events
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let phases = observed
+            .iter()
+            .map(|event| event.phase)
+            .collect::<Vec<CapabilityExecutionPhase>>();
+        assert_eq!(
+            phases,
+            vec![
+                CapabilityExecutionPhase::Started,
+                CapabilityExecutionPhase::Completed,
+            ]
+        );
+        assert!(observed.iter().all(|event| event.tool_name == "ToolSearch"));
+    }
+
+    #[test]
+    fn session_capability_state_augments_model_request_after_skill_execution() {
+        let mut state = SessionCapabilityState::default();
+        state.push_injected_skill_message("Skill message".to_string());
+        state.set_model_override(Some("claude-sonnet-4-5".to_string()));
+        state.set_effort_override(Some("high".to_string()));
+
+        let request = tools::apply_skill_session_overrides(
+            "claude-opus-4-6",
+            vec!["Base system prompt".to_string()],
+            &state,
+        );
+
+        assert_eq!(request.model, "claude-sonnet-4-5");
+        assert_eq!(request.reasoning_effort.as_deref(), Some("high"));
+        assert_eq!(
+            request.system_sections,
+            vec![
+                "Base system prompt".to_string(),
+                "Skill message".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn session_capability_state_round_trips_through_persisted_session_metadata() {
+        let session_path = temp_dir().join("capability-runtime-session.jsonl");
+        let mut session = Session::new().with_persistence_path(session_path.clone());
+        let mut state = SessionCapabilityState::default();
+        state.activate(CapabilityActivation::tool("WebSearch"));
+        state.grant_tool("mcp__alpha__echo");
+        state.push_injected_skill_message("Skill message".to_string());
+        state.set_model_override(Some("claude-sonnet-4-5".to_string()));
+        state.set_effort_override(Some("high".to_string()));
+        state
+            .persist_into_session(&mut session)
+            .expect("capability state should serialize into session");
+        session
+            .save_to_path(&session_path)
+            .expect("session should save");
+
+        let restored_session = Session::load_from_path(&session_path).expect("session should load");
+        let restored_state = SessionCapabilityState::restore_from_session(&restored_session)
+            .expect("capability state should restore from session");
+
+        assert!(restored_state.is_tool_activated("WebSearch"));
+        assert!(restored_state.is_tool_granted("mcp__alpha__echo"));
+        assert!(
+            restored_state
+                .injected_skill_messages()
+                .iter()
+                .any(|message| message == "Skill message")
+        );
+        assert_eq!(restored_state.model_override(), Some("claude-sonnet-4-5"));
+        assert_eq!(restored_state.effort_override(), Some("high"));
+
+        let _ = fs::remove_file(session_path);
     }
 
     #[test]
@@ -8731,6 +9055,7 @@ UU conflicted.rs",
             None,
             PermissionMode::DangerFullAccess,
             None,
+            std::sync::Arc::new(std::sync::Mutex::new(SessionCapabilityState::default())),
             runtime_plugin_state,
         )
         .expect("runtime should build");
@@ -8857,7 +9182,7 @@ fn write_mcp_server_fixture(script_path: &Path) {
 
 #[cfg(test)]
 mod sandbox_report_tests {
-    use super::{format_sandbox_report, HookAbortMonitor};
+    use super::{HookAbortMonitor, format_sandbox_report};
     use runtime::HookAbortSignal;
     use std::sync::mpsc;
     use std::time::Duration;

@@ -57,8 +57,7 @@ use octopus_core::{
     UserGroupUpsertRequest, UserOrgAssignmentRecord, UserOrgAssignmentUpsertRequest,
     UserRecordSummary, WorkspaceActivityRecord, WorkspaceMcpServerDocument, WorkspaceMetricRecord,
     WorkspaceOverviewSnapshot, WorkspaceResourceRecord, WorkspaceSkillDocument,
-    WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceToolCatalogSnapshot,
-    WorkspaceToolDisablePatch,
+    WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, CapabilityAssetDisablePatch,
 };
 use octopus_platform::PlatformServices;
 use reqwest::Client;

@@ -1,6 +1,8 @@
 import type { Ref } from 'vue'
 
 import type {
+  CapabilityAssetDisablePatch,
+  CapabilityManagementProjection,
   CopyWorkspaceSkillToManagedInput,
   CreateWorkspaceSkillInput,
   ModelCatalogSnapshot,
@@ -12,8 +14,6 @@ import type {
   WorkspaceSkillDocument,
   WorkspaceSkillFileDocument,
   WorkspaceSkillTreeDocument,
-  WorkspaceToolCatalogSnapshot,
-  WorkspaceToolDisablePatch,
   ImportWorkspaceSkillArchiveInput,
   ImportWorkspaceSkillFolderInput,
 } from '@octopus/schema'
@@ -27,7 +27,7 @@ import { normalizeSnapshot } from './catalog_normalizers'
 
 interface CatalogActionContext {
   snapshots: Ref<Record<string, ModelCatalogSnapshot>>
-  toolCatalogsByConnection: Ref<Record<string, WorkspaceToolCatalogSnapshot>>
+  managementProjectionsByConnection: Ref<Record<string, CapabilityManagementProjection>>
   skillDocumentsByConnection: Ref<Record<string, Record<string, WorkspaceSkillDocument>>>
   skillTreesByConnection: Ref<Record<string, Record<string, WorkspaceSkillTreeDocument>>>
   skillFilesByConnection: Ref<Record<string, Record<string, WorkspaceSkillFileDocument>>>
@@ -38,10 +38,13 @@ interface CatalogActionContext {
 }
 
 export function createCatalogActions(context: CatalogActionContext) {
-  function replaceToolCatalog(connectionId: string, nextToolCatalog: WorkspaceToolCatalogSnapshot) {
-    context.toolCatalogsByConnection.value = {
-      ...context.toolCatalogsByConnection.value,
-      [connectionId]: nextToolCatalog,
+  function replaceManagementProjection(
+    connectionId: string,
+    nextManagementProjection: CapabilityManagementProjection,
+  ) {
+    context.managementProjectionsByConnection.value = {
+      ...context.managementProjectionsByConnection.value,
+      [connectionId]: nextManagementProjection,
     }
   }
 
@@ -54,9 +57,9 @@ export function createCatalogActions(context: CatalogActionContext) {
     const token = createWorkspaceRequestToken(context.requestTokens.value[connectionId] ?? 0)
     context.requestTokens.value[connectionId] = token
     try {
-      const [nextSnapshot, nextToolCatalog, nextTools] = await Promise.all([
+      const [nextSnapshot, nextManagementProjection, nextTools] = await Promise.all([
         client.catalog.getSnapshot(),
-        client.catalog.getToolCatalog(),
+        client.catalog.getManagementProjection(),
         client.catalog.listTools(),
       ])
       if (context.requestTokens.value[connectionId] !== token) {
@@ -66,9 +69,9 @@ export function createCatalogActions(context: CatalogActionContext) {
         ...context.snapshots.value,
         [connectionId]: normalizeSnapshot(nextSnapshot),
       }
-      context.toolCatalogsByConnection.value = {
-        ...context.toolCatalogsByConnection.value,
-        [connectionId]: nextToolCatalog,
+      context.managementProjectionsByConnection.value = {
+        ...context.managementProjectionsByConnection.value,
+        [connectionId]: nextManagementProjection,
       }
       context.toolsByConnection.value = {
         ...context.toolsByConnection.value,
@@ -88,21 +91,26 @@ export function createCatalogActions(context: CatalogActionContext) {
     }
   }
 
-  async function refreshToolCatalog(workspaceConnectionId?: string) {
+  async function refreshManagementProjection(workspaceConnectionId?: string) {
     const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
     if (!resolvedClient) {
-      return { entries: [] } satisfies WorkspaceToolCatalogSnapshot
+      return {
+        entries: [],
+        assets: [],
+        skillPackages: [],
+        mcpServerPackages: [],
+      } satisfies CapabilityManagementProjection
     }
-    const snapshot = await resolvedClient.client.catalog.getToolCatalog()
-    replaceToolCatalog(resolvedClient.connectionId, snapshot)
-    return snapshot
+    const projection = await resolvedClient.client.catalog.getManagementProjection()
+    replaceManagementProjection(resolvedClient.connectionId, projection)
+    return projection
   }
 
-  async function setToolDisabled(patch: WorkspaceToolDisablePatch) {
+  async function setAssetDisabled(patch: CapabilityAssetDisablePatch) {
     const { client, connectionId } = ensureWorkspaceClientForConnection()
-    const snapshot = await client.catalog.setToolDisabled(patch)
-    replaceToolCatalog(connectionId, snapshot)
-    return snapshot
+    const projection = await client.catalog.setAssetDisabled(patch)
+    replaceManagementProjection(connectionId, projection)
+    return projection
   }
 
   async function getSkillDocument(skillId: string) {
@@ -158,7 +166,7 @@ export function createCatalogActions(context: CatalogActionContext) {
         [document.id]: document,
       },
     }
-    await refreshToolCatalog(connectionId)
+    await refreshManagementProjection(connectionId)
     return document
   }
 
@@ -172,7 +180,7 @@ export function createCatalogActions(context: CatalogActionContext) {
         [skillId]: document,
       },
     }
-    await refreshToolCatalog(connectionId)
+    await refreshManagementProjection(connectionId)
     return document
   }
 
@@ -204,7 +212,7 @@ export function createCatalogActions(context: CatalogActionContext) {
         [skillId]: await client.catalog.getSkillTree(skillId),
       },
     }
-    await refreshToolCatalog(connectionId)
+    await refreshManagementProjection(connectionId)
     return document
   }
 
@@ -218,7 +226,7 @@ export function createCatalogActions(context: CatalogActionContext) {
         [document.id]: document,
       },
     }
-    await refreshToolCatalog(connectionId)
+    await refreshManagementProjection(connectionId)
     return document
   }
 
@@ -232,7 +240,7 @@ export function createCatalogActions(context: CatalogActionContext) {
         [document.id]: document,
       },
     }
-    await refreshToolCatalog(connectionId)
+    await refreshManagementProjection(connectionId)
     return document
   }
 
@@ -246,7 +254,7 @@ export function createCatalogActions(context: CatalogActionContext) {
         [document.id]: document,
       },
     }
-    await refreshToolCatalog(connectionId)
+    await refreshManagementProjection(connectionId)
     return document
   }
 
@@ -273,7 +281,7 @@ export function createCatalogActions(context: CatalogActionContext) {
       ...context.skillFilesByConnection.value,
       [connectionId]: nextFiles,
     }
-    await refreshToolCatalog(connectionId)
+    await refreshManagementProjection(connectionId)
   }
 
   async function getMcpServerDocument(serverName: string) {
@@ -299,7 +307,7 @@ export function createCatalogActions(context: CatalogActionContext) {
         [document.serverName]: document,
       },
     }
-    await refreshToolCatalog(connectionId)
+    await refreshManagementProjection(connectionId)
     return document
   }
 
@@ -313,7 +321,7 @@ export function createCatalogActions(context: CatalogActionContext) {
         [document.serverName]: document,
       },
     }
-    await refreshToolCatalog(connectionId)
+    await refreshManagementProjection(connectionId)
     return document
   }
 
@@ -327,7 +335,7 @@ export function createCatalogActions(context: CatalogActionContext) {
         [document.serverName]: document,
       },
     }
-    await refreshToolCatalog(connectionId)
+    await refreshManagementProjection(connectionId)
     return document
   }
 
@@ -340,7 +348,7 @@ export function createCatalogActions(context: CatalogActionContext) {
       ...context.mcpDocumentsByConnection.value,
       [connectionId]: nextDocuments,
     }
-    await refreshToolCatalog(connectionId)
+    await refreshManagementProjection(connectionId)
   }
 
   async function createTool(record: ToolRecord) {
@@ -374,8 +382,8 @@ export function createCatalogActions(context: CatalogActionContext) {
 
   return {
     load,
-    refreshToolCatalog,
-    setToolDisabled,
+    refreshManagementProjection,
+    setAssetDisabled,
     getSkillDocument,
     getSkillTreeDocument,
     getSkillFileDocument,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
-import type { WorkspaceToolCatalogEntry } from '@octopus/schema'
+import type { CapabilityManagementEntry } from '@octopus/schema'
 import {
   UiBadge,
   UiButton,
@@ -13,7 +13,7 @@ import {
 } from '@octopus/ui'
 
 const props = defineProps<{
-  entry: Extract<WorkspaceToolCatalogEntry, { kind: 'mcp' }>
+  entry: Extract<CapabilityManagementEntry, { kind: 'mcp' }>
   loadingDetail: boolean
   mcpServerNameDraft: string
   mcpConfigDraft: string
@@ -22,9 +22,9 @@ const props = defineProps<{
   deleting: boolean
   toggling: boolean
   canCopyMcpToManaged: boolean
-  availabilityLabel: (availability: WorkspaceToolCatalogEntry['availability']) => string
-  availabilityTone: (availability: WorkspaceToolCatalogEntry['availability']) => 'default' | 'success' | 'warning'
-  ownerScopeLabel: (ownerScope: WorkspaceToolCatalogEntry['ownerScope']) => string
+  availabilityLabel: (availability: CapabilityManagementEntry['availability']) => string
+  availabilityTone: (availability: CapabilityManagementEntry['availability']) => 'default' | 'success' | 'warning'
+  ownerScopeLabel: (ownerScope: CapabilityManagementEntry['ownerScope']) => string
 }>()
 
 const emit = defineEmits<{

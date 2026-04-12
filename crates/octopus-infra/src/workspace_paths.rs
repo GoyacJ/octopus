@@ -6,12 +6,14 @@ use octopus_core::AppError;
 pub struct WorkspacePaths {
     pub root: PathBuf,
     pub config_dir: PathBuf,
+    pub asset_config_dir: PathBuf,
     pub data_dir: PathBuf,
     pub runtime_dir: PathBuf,
     pub logs_dir: PathBuf,
     pub tmp_dir: PathBuf,
     pub workspace_config: PathBuf,
     pub app_registry_config: PathBuf,
+    pub workspace_asset_state_path: PathBuf,
     pub runtime_config_dir: PathBuf,
     pub runtime_project_config_dir: PathBuf,
     pub runtime_user_config_dir: PathBuf,
@@ -36,6 +38,7 @@ impl WorkspacePaths {
     pub fn new(root: impl Into<PathBuf>) -> Self {
         let root = root.into();
         let config_dir = root.join("config");
+        let asset_config_dir = config_dir.join("assets");
         let data_dir = root.join("data");
         let runtime_dir = root.join("runtime");
         let logs_dir = root.join("logs");
@@ -61,6 +64,8 @@ impl WorkspacePaths {
         Self {
             workspace_config: config_dir.join("workspace.toml"),
             app_registry_config: config_dir.join("app-registry.toml"),
+            workspace_asset_state_path: asset_config_dir.join("workspace.json"),
+            asset_config_dir,
             runtime_config_dir,
             runtime_project_config_dir,
             runtime_user_config_dir,
@@ -92,6 +97,7 @@ impl WorkspacePaths {
         for path in [
             &self.root,
             &self.config_dir,
+            &self.asset_config_dir,
             &self.runtime_config_dir,
             &self.runtime_project_config_dir,
             &self.runtime_user_config_dir,

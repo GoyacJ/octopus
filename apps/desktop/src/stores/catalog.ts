@@ -2,13 +2,13 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
 import type {
+  CapabilityManagementProjection,
   ModelCatalogSnapshot,
   ToolRecord,
   WorkspaceMcpServerDocument,
   WorkspaceSkillDocument,
   WorkspaceSkillFileDocument,
   WorkspaceSkillTreeDocument,
-  WorkspaceToolCatalogSnapshot,
 } from '@octopus/schema'
 
 import {
@@ -30,7 +30,7 @@ export type {
 
 export const useCatalogStore = defineStore('catalog', () => {
   const snapshots = ref<Record<string, ModelCatalogSnapshot>>({})
-  const toolCatalogsByConnection = ref<Record<string, WorkspaceToolCatalogSnapshot>>({})
+  const managementProjectionsByConnection = ref<Record<string, CapabilityManagementProjection>>({})
   const skillDocumentsByConnection = ref<Record<string, Record<string, WorkspaceSkillDocument>>>({})
   const skillTreesByConnection = ref<Record<string, Record<string, WorkspaceSkillTreeDocument>>>({})
   const skillFilesByConnection = ref<Record<string, Record<string, WorkspaceSkillFileDocument>>>({})
@@ -44,12 +44,12 @@ export const useCatalogStore = defineStore('catalog', () => {
   const filters = createCatalogFilters({
     activeConnectionId,
     snapshots,
-    toolCatalogsByConnection,
+    managementProjectionsByConnection,
     toolsByConnection,
   })
   const actions = createCatalogActions({
     snapshots,
-    toolCatalogsByConnection,
+    managementProjectionsByConnection,
     skillDocumentsByConnection,
     skillTreesByConnection,
     skillFilesByConnection,

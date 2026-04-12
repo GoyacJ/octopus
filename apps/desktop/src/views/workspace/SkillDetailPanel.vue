@@ -2,8 +2,8 @@
 import { useI18n } from 'vue-i18n'
 
 import type {
+  CapabilityManagementEntry,
   WorkspaceSkillFileDocument,
-  WorkspaceToolCatalogEntry,
 } from '@octopus/schema'
 import {
   UiBadge,
@@ -17,7 +17,7 @@ import {
 import type { SkillTreeRow } from './useToolsView'
 
 const props = defineProps<{
-  entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>
+  entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>
   loadingDetail: boolean
   loadingSkillFile: boolean
   selectedSkillTreeRows: SkillTreeRow[]
@@ -30,11 +30,11 @@ const props = defineProps<{
   submitting: boolean
   deleting: boolean
   toggling: boolean
-  availabilityLabel: (availability: WorkspaceToolCatalogEntry['availability']) => string
-  availabilityTone: (availability: WorkspaceToolCatalogEntry['availability']) => 'default' | 'success' | 'warning'
-  ownerScopeLabel: (ownerScope: WorkspaceToolCatalogEntry['ownerScope']) => string
-  skillStateLabel: (entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) => string
-  sourceOriginLabel: (entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>) => string
+  availabilityLabel: (availability: CapabilityManagementEntry['availability']) => string
+  availabilityTone: (availability: CapabilityManagementEntry['availability']) => 'default' | 'success' | 'warning'
+  ownerScopeLabel: (ownerScope: CapabilityManagementEntry['ownerScope']) => string
+  skillStateLabel: (entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>) => string
+  sourceOriginLabel: (entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>) => string
   fileTypeLabel: (file: WorkspaceSkillFileDocument | null) => string
 }>()
 

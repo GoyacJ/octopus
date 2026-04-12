@@ -1,6 +1,7 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
 
 import type {
+  CapabilityManagementProjection,
   ConfiguredModelRecord,
   CredentialBinding,
   DefaultSelection,
@@ -9,8 +10,6 @@ import type {
   ModelRegistryRecord,
   ProviderRegistryRecord,
   ToolRecord,
-  WorkspaceToolCatalogEntry,
-  WorkspaceToolCatalogSnapshot,
 } from '@octopus/schema'
 
 import {
@@ -32,14 +31,22 @@ import {
 interface CatalogFilterContext {
   activeConnectionId: ComputedRef<string>
   snapshots: Ref<Record<string, ModelCatalogSnapshot>>
-  toolCatalogsByConnection: Ref<Record<string, WorkspaceToolCatalogSnapshot>>
+  managementProjectionsByConnection: Ref<Record<string, CapabilityManagementProjection>>
   toolsByConnection: Ref<Record<string, ToolRecord[]>>
 }
 
 export function createCatalogFilters(context: CatalogFilterContext) {
   const snapshot = computed<ModelCatalogSnapshot>(() => context.snapshots.value[context.activeConnectionId.value] ?? EMPTY_SNAPSHOT)
-  const toolCatalog = computed<WorkspaceToolCatalogSnapshot>(() => context.toolCatalogsByConnection.value[context.activeConnectionId.value] ?? { entries: [] })
-  const toolCatalogEntries = computed<WorkspaceToolCatalogEntry[]>(() => toolCatalog.value.entries)
+  const managementProjection = computed<CapabilityManagementProjection>(() =>
+    context.managementProjectionsByConnection.value[context.activeConnectionId.value]
+    ?? {
+      entries: [],
+      assets: [],
+      skillPackages: [],
+      mcpServerPackages: [],
+    },
+  )
+  const managementEntries = computed(() => managementProjection.value.entries)
   const providers = computed<ProviderRegistryRecord[]>(() => snapshot.value.providers)
   const models = computed<ModelRegistryRecord[]>(() => snapshot.value.models)
   const configuredModels = computed<ConfiguredModelRecord[]>(() => snapshot.value.configuredModels)
@@ -249,8 +256,8 @@ export function createCatalogFilters(context: CatalogFilterContext) {
 
   return {
     snapshot,
-    toolCatalog,
-    toolCatalogEntries,
+    managementProjection,
+    managementEntries,
     providers,
     models,
     configuredModels,
