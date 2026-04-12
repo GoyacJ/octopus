@@ -7,12 +7,6 @@ fn global_lsp_registry() -> &'static LspRegistry {
     REGISTRY.get_or_init(LspRegistry::new)
 }
 
-fn global_mcp_registry() -> &'static McpToolRegistry {
-    use std::sync::OnceLock;
-    static REGISTRY: OnceLock<McpToolRegistry> = OnceLock::new();
-    REGISTRY.get_or_init(McpToolRegistry::new)
-}
-
 fn global_team_registry() -> &'static TeamRegistry {
     use std::sync::OnceLock;
     static REGISTRY: OnceLock<TeamRegistry> = OnceLock::new();
@@ -330,97 +324,6 @@ pub(crate) fn run_lsp(input: LspInput) -> Result<String, String> {
     }
 }
 
-#[allow(clippy::needless_pass_by_value)]
-pub(crate) fn run_list_mcp_resources(input: McpResourceInput) -> Result<String, String> {
-    let registry = global_mcp_registry();
-    let server = input.server.as_deref().unwrap_or("default");
-    match registry.list_resources(server) {
-        Ok(resources) => {
-            let items: Vec<_> = resources
-                .iter()
-                .map(|r| {
-                    json!({
-                        "uri": r.uri,
-                        "name": r.name,
-                        "description": r.description,
-                        "mime_type": r.mime_type,
-                    })
-                })
-                .collect();
-            to_pretty_json(json!({
-                "server": server,
-                "resources": items,
-                "count": items.len()
-            }))
-        }
-        Err(e) => to_pretty_json(json!({
-            "server": server,
-            "resources": [],
-            "error": e
-        })),
-    }
-}
-
-#[allow(clippy::needless_pass_by_value)]
-pub(crate) fn run_read_mcp_resource(input: McpResourceInput) -> Result<String, String> {
-    let registry = global_mcp_registry();
-    let uri = input.uri.as_deref().unwrap_or("");
-    let server = input.server.as_deref().unwrap_or("default");
-    match registry.read_resource(server, uri) {
-        Ok(resource) => to_pretty_json(json!({
-            "server": server,
-            "uri": resource.uri,
-            "name": resource.name,
-            "description": resource.description,
-            "mime_type": resource.mime_type
-        })),
-        Err(e) => to_pretty_json(json!({
-            "server": server,
-            "uri": uri,
-            "error": e
-        })),
-    }
-}
-
-#[allow(clippy::needless_pass_by_value)]
-pub(crate) fn run_mcp_auth(input: McpAuthInput) -> Result<String, String> {
-    let registry = global_mcp_registry();
-    match registry.get_server(&input.server) {
-        Some(state) => to_pretty_json(json!({
-            "server": input.server,
-            "status": state.status,
-            "server_info": state.server_info,
-            "tool_count": state.tools.len(),
-            "resource_count": state.resources.len()
-        })),
-        None => to_pretty_json(json!({
-            "server": input.server,
-            "status": "disconnected",
-            "message": "Server not registered. Use MCP tool to connect first."
-        })),
-    }
-}
-
-#[allow(clippy::needless_pass_by_value)]
-pub(crate) fn run_mcp_tool(input: McpToolInput) -> Result<String, String> {
-    let registry = global_mcp_registry();
-    let args = input.arguments.unwrap_or(serde_json::json!({}));
-    match registry.call_tool(&input.server, &input.tool, &args) {
-        Ok(result) => to_pretty_json(json!({
-            "server": input.server,
-            "tool": input.tool,
-            "result": result,
-            "status": "success"
-        })),
-        Err(e) => to_pretty_json(json!({
-            "server": input.server,
-            "tool": input.tool,
-            "error": e,
-            "status": "error"
-        })),
-    }
-}
-
 pub(crate) fn run_agent(input: AgentInput) -> Result<String, String> {
     to_pretty_json(execute_agent(input)?)
 }
@@ -525,27 +428,6 @@ pub(crate) struct LspInput {
     character: Option<u32>,
     #[serde(default)]
     query: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct McpResourceInput {
-    #[serde(default)]
-    server: Option<String>,
-    #[serde(default)]
-    uri: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct McpAuthInput {
-    server: String,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct McpToolInput {
-    server: String,
-    tool: String,
-    #[serde(default)]
-    arguments: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

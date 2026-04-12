@@ -145,6 +145,8 @@ impl SkillCapability {
             capability_id: self.capability_id.clone(),
             source_kind: self.source_kind,
             execution_kind: CapabilityExecutionKind::PromptSkill,
+            provider_key: None,
+            executor_key: None,
             display_name: self.display_name.clone(),
             description: self.description.clone(),
             when_to_use: self.when_to_use.clone(),
@@ -162,6 +164,14 @@ impl SkillCapability {
             state: CapabilityState::Ready,
             permission_profile: CapabilityPermissionProfile {
                 required_permission: runtime::PermissionMode::ReadOnly,
+            },
+            trust_profile: crate::capability_runtime::CapabilityTrustProfile {
+                requires_trusted_workspace: self.source_kind == CapabilitySourceKind::LocalSkill,
+                requires_explicit_user_trust: false,
+            },
+            scope_constraints: crate::capability_runtime::CapabilityScopeConstraints {
+                workspace_only: !self.frontmatter.paths.is_empty(),
+                requires_current_dir: !self.frontmatter.paths.is_empty(),
             },
             invocation_policy: CapabilityInvocationPolicy {
                 selectable: self.is_model_invocable(),
@@ -299,6 +309,65 @@ pub(crate) struct SkillExecutionFailure {
 }
 
 #[derive(Debug, Clone)]
+pub struct PromptSkillExecutor {
+    capability_executor: Option<crate::CapabilityExecutor>,
+}
+
+impl PromptSkillExecutor {
+    #[must_use]
+    pub fn new(capability_executor: Option<crate::CapabilityExecutor>) -> Self {
+        Self { capability_executor }
+    }
+
+    pub fn execute(
+        &self,
+        capability: &CapabilitySpec,
+        arguments: Option<Value>,
+        current_dir: Option<&Path>,
+    ) -> Result<SkillExecutionResult, SkillExecutionFailure> {
+        match capability.source_kind {
+            CapabilitySourceKind::LocalSkill | CapabilitySourceKind::BundledSkill => {
+                let skill = discover_skill_capabilities()
+                    .into_iter()
+                    .find(|skill| {
+                        skill.source_kind == capability.source_kind
+                            && (skill.capability_id == capability.capability_id
+                                || skill.display_name == capability.display_name)
+                    })
+                    .ok_or_else(|| SkillExecutionFailure {
+                        message: format!(
+                            "skill `{}` backing definition is no longer available",
+                            capability.display_name
+                        ),
+                        state_updates: Vec::new(),
+                    })?;
+                execute_resolved_skill_capability_detailed(skill, arguments)
+            }
+            CapabilitySourceKind::PluginSkill | CapabilitySourceKind::McpPrompt => self
+                .capability_executor
+                .clone()
+                .ok_or_else(|| SkillExecutionFailure {
+                    message: format!(
+                        "skill `{}` does not have a runtime executor yet",
+                        capability.display_name
+                    ),
+                    state_updates: Vec::new(),
+                })?
+                .execute_prompt_skill(capability, arguments, current_dir),
+            _ => Err(SkillExecutionFailure {
+                message: format!(
+                    "skill `{}` uses unsupported source `{}`",
+                    capability.display_name,
+                    serde_json::to_string(&capability.source_kind)
+                        .unwrap_or_else(|_| "unknown".to_string())
+                ),
+                state_updates: Vec::new(),
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 struct ForkSpawnSnapshot {
     output_file: String,
     manifest_file: String,
@@ -432,55 +501,24 @@ pub(crate) fn discover_skill_capabilities() -> Vec<SkillCapability> {
 pub(crate) fn execute_skill_capability_from_spec_detailed(
     capability: &CapabilitySpec,
     arguments: Option<Value>,
-    _current_dir: Option<&Path>,
+    current_dir: Option<&Path>,
+    executor: Option<crate::CapabilityExecutor>,
 ) -> Result<SkillExecutionResult, SkillExecutionFailure> {
-    match capability.source_kind {
-        CapabilitySourceKind::LocalSkill | CapabilitySourceKind::BundledSkill => {
-            let skill = discover_skill_capabilities()
-                .into_iter()
-                .find(|skill| {
-                    skill.source_kind == capability.source_kind
-                        && (skill.capability_id == capability.capability_id
-                            || skill.display_name == capability.display_name)
-                })
-                .ok_or_else(|| SkillExecutionFailure {
-                    message: format!(
-                        "skill `{}` backing definition is no longer available",
-                        capability.display_name
-                    ),
-                    state_updates: Vec::new(),
-                })?;
-            execute_resolved_skill_capability_detailed(skill, arguments)
-        }
-        CapabilitySourceKind::PluginSkill | CapabilitySourceKind::McpPrompt => {
-            Err(SkillExecutionFailure {
-                message: format!(
-                    "skill `{}` does not have a runtime executor yet",
-                    capability.display_name
-                ),
-                state_updates: Vec::new(),
-            })
-        }
-        _ => Err(SkillExecutionFailure {
-            message: format!(
-                "skill `{}` uses unsupported source `{}`",
-                capability.display_name,
-                serde_json::to_string(&capability.source_kind)
-                    .unwrap_or_else(|_| "unknown".to_string())
-            ),
-            state_updates: Vec::new(),
-        }),
-    }
+    PromptSkillExecutor::new(executor).execute(capability, arguments, current_dir)
 }
 
 pub(crate) fn prompt_skill_has_runtime_executor(capability: &CapabilitySpec) -> bool {
-    // Provider-backed prompt skills stay in the capability graph for diagnostics, but
-    // they are not model-executable until the runtime owns a real prompt-skill executor.
     capability.execution_kind == CapabilityExecutionKind::PromptSkill
-        && matches!(
-            capability.source_kind,
-            CapabilitySourceKind::LocalSkill | CapabilitySourceKind::BundledSkill
-        )
+        && match capability.source_kind {
+            CapabilitySourceKind::LocalSkill | CapabilitySourceKind::BundledSkill => true,
+            CapabilitySourceKind::PluginSkill | CapabilitySourceKind::McpPrompt => {
+                capability
+                    .executor_key
+                    .as_ref()
+                    .is_some_and(|key| !key.trim().is_empty())
+            }
+            _ => false,
+        }
 }
 
 pub(crate) fn explain_model_skill_unavailability(

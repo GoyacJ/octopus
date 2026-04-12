@@ -56,7 +56,7 @@ describe('useCatalogStore', () => {
     const { catalog } = await prepareCatalogStore()
 
     expect(catalog.managementProjection.entries.length).toBeGreaterThan(0)
-    expect(catalog.managementProjection.assets).toHaveLength(catalog.managementProjection.entries.length)
+    expect(catalog.managementProjection.assets.length).toBeGreaterThan(0)
 
     const builtinEntry = catalog.managementProjection.entries.find(entry => entry.sourceKey === 'builtin:bash')
     expect(builtinEntry?.enabled).toBe(true)
@@ -83,6 +83,77 @@ describe('useCatalogStore', () => {
     expect(workspaceMcp?.packageKind).toBe('workspace')
     expect(workspaceMcp?.health).toBe('attention')
     expect(workspaceMcp?.state).toBe('workspace')
+  })
+
+  it('surfaces capability-aware MCP entries while keeping the server asset grouped', async () => {
+    const { catalog } = await prepareCatalogStore({
+      toolCatalogTransform(entries) {
+        const workspaceMcp = entries.find(entry => entry.sourceKey === 'mcp:ops')
+        expect(workspaceMcp).toBeTruthy()
+        return [
+          ...entries.filter(entry => entry.sourceKey !== 'mcp:ops'),
+          {
+            ...workspaceMcp!,
+            id: 'mcp-ops-tool-tail-logs',
+            assetId: 'mcp-asset-ops',
+            capabilityId: 'mcp_tool__ops__tail_logs',
+            sourceKind: 'mcp_tool',
+            executionKind: 'tool',
+            name: 'tail_logs',
+            description: 'Tail operational logs from the ops server.',
+            toolNames: ['tail_logs'],
+          } as any,
+          {
+            ...workspaceMcp!,
+            id: 'mcp-ops-prompt-deploy-review',
+            assetId: 'mcp-asset-ops',
+            capabilityId: 'mcp_prompt__ops__deploy_review',
+            sourceKind: 'mcp_prompt',
+            executionKind: 'prompt_skill',
+            name: 'deploy_review',
+            description: 'Prepare a deploy review checklist.',
+            toolNames: [],
+          } as any,
+          {
+            ...workspaceMcp!,
+            id: 'mcp-ops-resource-guide',
+            assetId: 'mcp-asset-ops',
+            capabilityId: 'mcp_resource__ops__guide_txt',
+            sourceKind: 'mcp_resource',
+            executionKind: 'resource',
+            name: 'Ops Guide',
+            description: 'Operational guide resource.',
+            toolNames: [],
+            resourceUri: 'file://ops-guide.txt',
+          } as any,
+        ]
+      },
+    })
+
+    const mcpEntries = catalog.managementProjection.entries.filter(entry => entry.sourceKey === 'mcp:ops')
+    expect(mcpEntries).toHaveLength(3)
+    expect(mcpEntries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceKind: 'mcp_tool', executionKind: 'tool' }),
+      expect.objectContaining({ sourceKind: 'mcp_prompt', executionKind: 'prompt_skill' }),
+      expect.objectContaining({ sourceKind: 'mcp_resource', executionKind: 'resource' }),
+    ]))
+
+    const mcpAssets = catalog.managementProjection.assets.filter(entry => entry.sourceKey === 'mcp:ops')
+    expect(mcpAssets).toHaveLength(1)
+    expect(mcpAssets[0]).toMatchObject({
+      assetId: 'mcp-asset-ops',
+      sourceKinds: ['mcp_prompt', 'mcp_resource', 'mcp_tool'],
+      executionKinds: ['prompt_skill', 'resource', 'tool'],
+    })
+
+    const workspaceMcp = catalog.managementProjection.mcpServerPackages.find(entry => entry.sourceKey === 'mcp:ops')
+    expect(workspaceMcp).toMatchObject({
+      promptNames: ['deploy_review'],
+      resourceUris: ['file://ops-guide.txt'],
+      toolNames: ['tail_logs'],
+      sourceKinds: ['mcp_prompt', 'mcp_resource', 'mcp_tool'],
+      executionKinds: ['prompt_skill', 'resource', 'tool'],
+    })
   })
 
   it('keeps management projection state in sync when disabling a builtin tool', async () => {

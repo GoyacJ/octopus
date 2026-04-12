@@ -2567,6 +2567,50 @@ fn build_runtime_mcp_state(
     ))
 }
 
+fn register_managed_mcp_capability_executors(
+    capability_runtime: &CapabilityRuntime,
+    mcp_state: &Arc<Mutex<RuntimeMcpState>>,
+) {
+    let provided_capabilities = mcp_state
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .provided_capabilities();
+
+    for capability in provided_capabilities {
+        let Some(executor_key) = capability.executor_key.clone() else {
+            continue;
+        };
+
+        match capability.execution_kind {
+            tools::CapabilityExecutionKind::PromptSkill => {
+                let mcp_state = Arc::clone(mcp_state);
+                capability_runtime.register_prompt_skill_executor(
+                    executor_key,
+                    move |capability, arguments, _current_dir| {
+                        mcp_state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .execute_prompt_skill(capability, arguments)
+                    },
+                );
+            }
+            tools::CapabilityExecutionKind::Resource => {
+                let mcp_state = Arc::clone(mcp_state);
+                capability_runtime.register_resource_executor(
+                    executor_key,
+                    move |capability, _input, _current_dir| {
+                        mcp_state
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .read_resource_capability(capability)
+                    },
+                );
+            }
+            tools::CapabilityExecutionKind::Tool => {}
+        }
+    }
+}
+
 struct HookAbortMonitor {
     stop_tx: Option<Sender<()>>,
     join_handle: Option<JoinHandle<()>>,
@@ -4672,6 +4716,9 @@ fn build_runtime_plugin_state_with_loader(
         None,
     )?;
     let capability_runtime = CapabilityRuntime::new(capability_provider);
+    if let Some(mcp_state) = &mcp_state {
+        register_managed_mcp_capability_executors(&capability_runtime, mcp_state);
+    }
     Ok(RuntimePluginState {
         feature_config,
         capability_runtime,
@@ -8616,6 +8663,13 @@ UU conflicted.rs",
                 .iter()
                 .any(|capability| format!("{:?}", capability.source_kind) == "McpResource")
         );
+        assert!(
+            surface
+                .discoverable_skills
+                .iter()
+                .any(|capability| capability.display_name == "workspace-guide"
+                    && format!("{:?}", capability.source_kind) == "McpPrompt")
+        );
 
         let allowed = state
             .capability_runtime
@@ -8673,6 +8727,44 @@ UU conflicted.rs",
         let tool_json: serde_json::Value =
             serde_json::from_str(&tool_output).expect("tool output should be json");
         assert_eq!(tool_json["structuredContent"]["echoed"], "hello");
+
+        let skill_output = executor
+            .execute(
+                "SkillTool",
+                r#"{"skill":"workspace-guide","arguments":{"topic":"workspace"}}"#,
+            )
+            .expect("mcp prompt-backed skill should execute");
+        let skill_json: serde_json::Value =
+            serde_json::from_str(&skill_output).expect("skill output should be json");
+        assert_eq!(skill_json["skill"], "workspace-guide");
+        assert!(
+            skill_json["messages_to_inject"][0]["content"]
+                .as_str()
+                .is_some_and(|message| message.contains("MCP workspace guidance for workspace"))
+        );
+
+        let execution_plan = state
+            .capability_runtime
+            .execution_plan(
+                tools::CapabilityPlannerInput::default().with_current_dir(Some(&workspace)),
+            )
+            .expect("execution plan should resolve");
+        let resource_capability = execution_plan
+            .available_resources
+            .iter()
+            .find(|capability| format!("{:?}", capability.source_kind) == "McpResource")
+            .cloned()
+            .expect("mcp resource capability should be available");
+        let resource_output = state
+            .capability_runtime
+            .read_resource(&resource_capability, json!({}), Some(&workspace))
+            .expect("mcp resource should read through runtime-owned executor");
+        let resource_json: serde_json::Value =
+            serde_json::from_str(&resource_output).expect("resource output should be json");
+        assert_eq!(
+            resource_json["contents"][0]["text"],
+            "contents for file://guide.txt"
+        );
 
         let wrapper_error = executor
             .execute(
@@ -9116,7 +9208,7 @@ fn write_mcp_server_fixture(script_path: &Path) {
             "            'id': request['id'],",
             "            'result': {",
             "                'protocolVersion': request['params']['protocolVersion'],",
-            "                'capabilities': {'tools': {}, 'resources': {}},",
+            "                'capabilities': {'tools': {}, 'resources': {}, 'prompts': {}},",
             "                'serverInfo': {'name': 'fixture', 'version': '1.0.0'}",
             "            }",
             "        })",
@@ -9136,6 +9228,38 @@ fn write_mcp_server_fixture(script_path: &Path) {
             "                            'additionalProperties': False",
             "                        },",
             "                        'annotations': {'readOnlyHint': True}",
+            "                    }",
+            "                ]",
+            "            }",
+            "        })",
+            "    elif method == 'prompts/list':",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'prompts': [",
+            "                    {",
+            "                        'name': 'workspace-guide',",
+            "                        'description': 'MCP workspace guidance',",
+            "                        'arguments': [",
+            "                            {'name': 'topic', 'description': 'Topic to explain', 'required': False}",
+            "                        ]",
+            "                    }",
+            "                ]",
+            "            }",
+            "        })",
+            "    elif method == 'prompts/get':",
+            "        args = request['params'].get('arguments') or {}",
+            "        topic = args.get('topic', 'general')",
+            "        send_message({",
+            "            'jsonrpc': '2.0',",
+            "            'id': request['id'],",
+            "            'result': {",
+            "                'description': 'MCP workspace guidance',",
+            "                'messages': [",
+            "                    {",
+            "                        'role': 'system',",
+            "                        'content': {'type': 'text', 'text': f'MCP workspace guidance for {topic}'}",
             "                    }",
             "                ]",
             "            }",

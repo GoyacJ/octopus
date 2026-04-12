@@ -788,9 +788,13 @@ UpsertWorkspaceMcpServerInput:
 WorkspaceBuiltinToolCatalogEntry:
   additionalProperties: false
   properties:
+    assetId:
+      type: string
     availability:
       $ref: "#/components/schemas/ViewStatus"
     builtinKey:
+      type: string
+    capabilityId:
       type: string
     description:
       type: string
@@ -798,6 +802,8 @@ WorkspaceBuiltinToolCatalogEntry:
       type: boolean
     displayPath:
       type: string
+    executionKind:
+      $ref: "#/components/schemas/CapabilityExecutionKind"
     id:
       type: string
     kind:
@@ -808,6 +814,8 @@ WorkspaceBuiltinToolCatalogEntry:
       $ref: "#/components/schemas/WorkspaceToolManagementCapabilities"
     name:
       type: string
+    sourceKind:
+      $ref: "#/components/schemas/CapabilitySourceKind"
     requiredPermission:
       enum:
         - readonly
@@ -888,8 +896,12 @@ WorkspaceMcpServerDocument:
 WorkspaceMcpToolCatalogEntry:
   additionalProperties: false
   properties:
+    assetId:
+      type: string
     availability:
       $ref: "#/components/schemas/ViewStatus"
+    capabilityId:
+      type: string
     description:
       type: string
     disabled:
@@ -898,6 +910,8 @@ WorkspaceMcpToolCatalogEntry:
       type: string
     endpoint:
       type: string
+    executionKind:
+      $ref: "#/components/schemas/CapabilityExecutionKind"
     id:
       type: string
     kind:
@@ -907,6 +921,8 @@ WorkspaceMcpToolCatalogEntry:
     management:
       $ref: "#/components/schemas/WorkspaceToolManagementCapabilities"
     name:
+      type: string
+    resourceUri:
       type: string
     requiredPermission:
       enum:
@@ -924,6 +940,8 @@ WorkspaceMcpToolCatalogEntry:
       type: string
     serverName:
       type: string
+    sourceKind:
+      $ref: "#/components/schemas/CapabilitySourceKind"
     sourceKey:
       type: string
     statusDetail:
@@ -1031,14 +1049,20 @@ WorkspaceSkillToolCatalogEntry:
   properties:
     active:
       type: boolean
+    assetId:
+      type: string
     availability:
       $ref: "#/components/schemas/ViewStatus"
+    capabilityId:
+      type: string
     description:
       type: string
     disabled:
       type: boolean
     displayPath:
       type: string
+    executionKind:
+      $ref: "#/components/schemas/CapabilityExecutionKind"
     id:
       type: string
     kind:
@@ -1051,6 +1075,8 @@ WorkspaceSkillToolCatalogEntry:
       type: string
     relativePath:
       type: string
+    sourceKind:
+      $ref: "#/components/schemas/CapabilitySourceKind"
     requiredPermission:
       enum:
         - readonly
@@ -1066,6 +1092,7 @@ WorkspaceSkillToolCatalogEntry:
       enum:
         - skills_dir
         - legacy_commands_dir
+        - builtin_bundle
       type: string
     workspaceId:
       type: string
@@ -1138,6 +1165,24 @@ WorkspaceToolCatalogEntry:
     - $ref: "#/components/schemas/WorkspaceBuiltinToolCatalogEntry"
     - $ref: "#/components/schemas/WorkspaceSkillToolCatalogEntry"
     - $ref: "#/components/schemas/WorkspaceMcpToolCatalogEntry"
+CapabilitySourceKind:
+  enum:
+    - builtin
+    - runtime_tool
+    - plugin_tool
+    - local_skill
+    - bundled_skill
+    - mcp_tool
+    - mcp_prompt
+    - mcp_resource
+    - plugin_skill
+  type: string
+CapabilityExecutionKind:
+  enum:
+    - tool
+    - prompt_skill
+    - resource
+  type: string
 CapabilityAssetState:
   enum:
     - builtin
@@ -1176,6 +1221,14 @@ CapabilityAssetManifest:
         - skill
         - mcp
       type: string
+    sourceKinds:
+      items:
+        $ref: "#/components/schemas/CapabilitySourceKind"
+      type: array
+    executionKinds:
+      items:
+        $ref: "#/components/schemas/CapabilityExecutionKind"
+      type: array
     name:
       type: string
     description:
@@ -1210,6 +1263,8 @@ CapabilityAssetManifest:
     - workspaceId
     - sourceKey
     - kind
+    - sourceKinds
+    - executionKinds
     - name
     - description
     - displayPath
@@ -1282,6 +1337,14 @@ McpServerPackageManifest:
           items:
             type: string
           type: array
+        promptNames:
+          items:
+            type: string
+          type: array
+        resourceUris:
+          items:
+            type: string
+          type: array
         scope:
           enum:
             - workspace
@@ -1297,6 +1360,8 @@ McpServerPackageManifest:
         - serverName
         - endpoint
         - toolNames
+        - promptNames
+        - resourceUris
         - scope
 CapabilityManagementEntry:
   additionalProperties: false
@@ -1304,6 +1369,8 @@ CapabilityManagementEntry:
     id:
       type: string
     assetId:
+      type: string
+    capabilityId:
       type: string
     workspaceId:
       type: string
@@ -1315,6 +1382,10 @@ CapabilityManagementEntry:
         - skill
         - mcp
       type: string
+    sourceKind:
+      $ref: "#/components/schemas/CapabilitySourceKind"
+    executionKind:
+      $ref: "#/components/schemas/CapabilityExecutionKind"
     description:
       type: string
     requiredPermission:
@@ -1350,6 +1421,8 @@ CapabilityManagementEntry:
       items:
         type: string
       type: array
+    resourceUri:
+      type: string
     statusDetail:
       type: string
     scope:
@@ -1379,9 +1452,12 @@ CapabilityManagementEntry:
   required:
     - id
     - assetId
+    - capabilityId
     - workspaceId
     - name
     - kind
+    - sourceKind
+    - executionKind
     - description
     - requiredPermission
     - availability

@@ -1135,6 +1135,8 @@ pub struct CapabilityAssetManifest {
     pub workspace_id: String,
     pub source_key: String,
     pub kind: String,
+    pub source_kinds: Vec<String>,
+    pub execution_kinds: Vec<String>,
     pub name: String,
     pub description: String,
     pub display_path: String,
@@ -1158,6 +1160,8 @@ pub struct SkillPackageManifest {
     pub workspace_id: String,
     pub source_key: String,
     pub kind: String,
+    pub source_kinds: Vec<String>,
+    pub execution_kinds: Vec<String>,
     pub name: String,
     pub description: String,
     pub display_path: String,
@@ -1187,6 +1191,8 @@ pub struct McpServerPackageManifest {
     pub workspace_id: String,
     pub source_key: String,
     pub kind: String,
+    pub source_kinds: Vec<String>,
+    pub execution_kinds: Vec<String>,
     pub name: String,
     pub description: String,
     pub display_path: String,
@@ -1205,6 +1211,8 @@ pub struct McpServerPackageManifest {
     pub server_name: String,
     pub endpoint: String,
     pub tool_names: Vec<String>,
+    pub prompt_names: Vec<String>,
+    pub resource_uris: Vec<String>,
     pub scope: String,
     pub status_detail: Option<String>,
 }
@@ -1214,9 +1222,12 @@ pub struct McpServerPackageManifest {
 pub struct CapabilityManagementEntry {
     pub id: String,
     pub asset_id: String,
+    pub capability_id: String,
     pub workspace_id: String,
     pub name: String,
     pub kind: String,
+    pub source_kind: String,
+    pub execution_kind: String,
     pub description: String,
     pub required_permission: Option<String>,
     pub availability: String,
@@ -1233,6 +1244,7 @@ pub struct CapabilityManagementEntry {
     pub server_name: Option<String>,
     pub endpoint: Option<String>,
     pub tool_names: Option<Vec<String>>,
+    pub resource_uri: Option<String>,
     pub status_detail: Option<String>,
     pub scope: Option<String>,
     pub owner_scope: Option<String>,
@@ -1279,9 +1291,17 @@ pub struct WorkspaceToolConsumerSummary {
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceToolCatalogEntry {
     pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub asset_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_id: Option<String>,
     pub workspace_id: String,
     pub name: String,
     pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_kind: Option<String>,
     pub description: String,
     pub required_permission: Option<String>,
     pub availability: String,
@@ -1298,6 +1318,8 @@ pub struct WorkspaceToolCatalogEntry {
     pub server_name: Option<String>,
     pub endpoint: Option<String>,
     pub tool_names: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resource_uri: Option<String>,
     pub status_detail: Option<String>,
     pub scope: Option<String>,
     pub owner_scope: Option<String>,

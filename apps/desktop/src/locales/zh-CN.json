@@ -1193,9 +1193,12 @@
       "workspaceOwned": "归属",
       "workspaceOwnedYes": "工作区管理",
       "workspaceOwnedNo": "外部来源",
+      "sourceKind": "能力来源",
+      "executionKind": "执行类型",
       "serverName": "服务名",
       "endpoint": "端点",
       "toolNames": "已发现工具",
+      "resourceUri": "资源 URI",
       "scope": "配置范围",
       "statusDetail": "状态说明",
       "consumers": "使用者"
@@ -1246,6 +1249,22 @@
       "builtin_bundle": "内置资源包",
       "skills_dir": "技能",
       "legacy_commands_dir": "旧版 /commands"
+    },
+    "sourceKinds": {
+      "builtin": "内置工具",
+      "runtime_tool": "运行时工具",
+      "plugin_tool": "插件工具",
+      "local_skill": "本地技能",
+      "bundled_skill": "内置技能",
+      "mcp_tool": "MCP 工具",
+      "mcp_prompt": "MCP Prompt",
+      "mcp_resource": "MCP 资源",
+      "plugin_skill": "插件技能"
+    },
+    "executionKinds": {
+      "tool": "工具",
+      "prompt_skill": "Prompt Skill",
+      "resource": "资源"
     },
     "ownerScopes": {
       "builtin": "内置",

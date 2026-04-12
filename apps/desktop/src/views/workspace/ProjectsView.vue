@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import type { CapabilityManagementEntry, ProjectRecord, WorkspaceToolKind } from '@octopus/schema'
+import type { CapabilityAssetManifest, ProjectRecord, WorkspaceToolKind } from '@octopus/schema'
 import {
   UiBadge,
   UiButton,
@@ -55,7 +55,7 @@ const form = reactive({
 
 const projects = computed(() => workspaceStore.projects)
 const workspaceConfiguredModels = computed(() => catalogStore.workspaceConfiguredModelOptions)
-const workspaceToolEntries = computed(() => catalogStore.managementEntries.filter(entry => !entry.disabled))
+const workspaceToolEntries = computed(() => catalogStore.managementProjection.assets.filter(entry => entry.enabled))
 const workspaceAgents = computed(() => agentStore.workspaceAgents)
 const workspaceTeams = computed(() => teamStore.workspaceTeams)
 const viewReady = computed(() =>
@@ -66,7 +66,7 @@ const selectedProject = computed(() =>
   projects.value.find(project => project.id === selectedProjectId.value) ?? null,
 )
 const TOOL_GROUP_ORDER: WorkspaceToolKind[] = ['builtin', 'skill', 'mcp']
-const workspaceToolSections = computed<{ kind: WorkspaceToolKind, entries: CapabilityManagementEntry[] }[]>(() =>
+const workspaceToolSections = computed<{ kind: WorkspaceToolKind, entries: CapabilityAssetManifest[] }[]>(() =>
   TOOL_GROUP_ORDER
     .map(kind => ({
       kind,

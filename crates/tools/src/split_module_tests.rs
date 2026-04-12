@@ -117,6 +117,84 @@ fn capability_runtime_with_provided_capabilities(
     capability_runtime_from_sources(Vec::new(), Vec::new(), provided_capabilities, None)
 }
 
+fn provider_prompt_skill_capability(
+    capability_id: &str,
+    source_kind: super::CapabilitySourceKind,
+    display_name: &str,
+) -> super::CapabilitySpec {
+    super::CapabilitySpec {
+        capability_id: capability_id.to_string(),
+        source_kind,
+        execution_kind: super::CapabilityExecutionKind::PromptSkill,
+        display_name: display_name.to_string(),
+        description: "Provider-backed workspace guidance skill.".to_string(),
+        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "skill": { "type": "string" },
+                "arguments": {}
+            },
+            "required": ["skill"],
+            "additionalProperties": false
+        }),
+        search_hint: Some("workspace guidance".to_string()),
+        visibility: super::CapabilityVisibility::DefaultVisible,
+        state: super::CapabilityState::Ready,
+        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
+            required_permission: PermissionMode::ReadOnly,
+        },
+        trust_profile: crate::capability_runtime::CapabilityTrustProfile::default(),
+        scope_constraints: crate::capability_runtime::CapabilityScopeConstraints::default(),
+        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
+            selectable: true,
+            requires_approval: false,
+            requires_auth: false,
+        },
+        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
+        provider_key: Some(source_kind.to_string()),
+        executor_key: Some(capability_id.to_string()),
+    }
+}
+
+fn provider_resource_capability(
+    capability_id: &str,
+    display_name: &str,
+) -> super::CapabilitySpec {
+    super::CapabilitySpec {
+        capability_id: capability_id.to_string(),
+        source_kind: super::CapabilitySourceKind::McpResource,
+        execution_kind: super::CapabilityExecutionKind::Resource,
+        display_name: display_name.to_string(),
+        description: "Read a provider-backed workspace resource.".to_string(),
+        when_to_use: Some("Use when the task needs provider-backed reference material.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "uri": { "type": "string" }
+            },
+            "required": ["uri"],
+            "additionalProperties": false
+        }),
+        search_hint: Some("workspace reference".to_string()),
+        visibility: super::CapabilityVisibility::DefaultVisible,
+        state: super::CapabilityState::Ready,
+        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
+            required_permission: PermissionMode::ReadOnly,
+        },
+        trust_profile: crate::capability_runtime::CapabilityTrustProfile::default(),
+        scope_constraints: crate::capability_runtime::CapabilityScopeConstraints::default(),
+        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
+            selectable: true,
+            requires_approval: false,
+            requires_auth: false,
+        },
+        concurrency_policy: super::CapabilityConcurrencyPolicy::ParallelRead,
+        provider_key: Some("mcp".to_string()),
+        executor_key: Some(capability_id.to_string()),
+    }
+}
+
 fn capability_runtime_with_runtime_tools(
     runtime_tools: Vec<super::RuntimeToolDefinition>,
 ) -> CapabilityRuntime {
@@ -771,6 +849,8 @@ fn workspace_and_subagent_skill_paths_match_runtime_surface_rules() {
         capability_id: "plugin-skill.workspace-guide-parity".to_string(),
         source_kind: super::CapabilitySourceKind::PluginSkill,
         execution_kind: super::CapabilityExecutionKind::PromptSkill,
+        provider_key: Some("plugin_skill".to_string()),
+        executor_key: Some("plugin-skill.workspace-guide-parity".to_string()),
         display_name: "workspace-guide-parity".to_string(),
         description: "Provider-backed workspace guidance skill.".to_string(),
         when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
@@ -789,6 +869,8 @@ fn workspace_and_subagent_skill_paths_match_runtime_surface_rules() {
         permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
             required_permission: PermissionMode::ReadOnly,
         },
+        trust_profile: crate::capability_runtime::CapabilityTrustProfile::default(),
+        scope_constraints: crate::capability_runtime::CapabilityScopeConstraints::default(),
         invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
             selectable: true,
             requires_approval: false,
@@ -1247,6 +1329,35 @@ fn managed_mcp_runtime_dispatches_direct_calls_without_wrapper_passthroughs() {
 }
 
 #[test]
+fn managed_mcp_runtime_discovers_and_executes_prompt_capabilities() {
+    let (config_home, workspace, mut mcp_runtime) = setup_managed_mcp_runtime_fixture(false);
+
+    let prompt_capability = mcp_runtime
+        .provided_capabilities()
+        .into_iter()
+        .find(|capability| {
+            capability.source_kind == super::CapabilitySourceKind::McpPrompt
+                && capability.execution_kind == super::CapabilityExecutionKind::PromptSkill
+        })
+        .expect("managed runtime should expose MCP prompt capabilities");
+
+    let executed = mcp_runtime
+        .execute_prompt_skill(&prompt_capability, Some(json!({"topic": "workspace"})))
+        .expect("managed runtime should execute MCP prompts as prompt skills");
+
+    assert_eq!(executed.skill, prompt_capability.display_name);
+    assert!(
+        executed
+            .injected_system_sections()
+            .iter()
+            .any(|message| message.contains("MCP workspace guidance"))
+    );
+
+    mcp_runtime.shutdown().expect("mcp shutdown should succeed");
+    cleanup_mcp_runtime_fixture(&config_home, &workspace);
+}
+
+#[test]
 fn session_activation_moves_deferred_tools_into_visible_surface() {
     let runtime = CapabilityRuntime::builtin();
     let profile = BTreeSet::from([String::from("ToolSearch"), String::from("WebSearch")]);
@@ -1667,6 +1778,25 @@ fn legacy_skill_shim_is_removed_from_builtin_dispatch() {
 }
 
 #[test]
+fn legacy_mcp_wrappers_are_removed_from_builtin_dispatch() {
+    for (tool_name, input) in [
+        ("MCP", json!({"server": "alpha", "tool": "echo"})),
+        ("ListMcpResources", json!({"server": "alpha"})),
+        (
+            "ReadMcpResource",
+            json!({"server": "alpha", "uri": "file://guide.txt"}),
+        ),
+    ] {
+        let error = execute_tool(tool_name, &input)
+            .expect_err("legacy MCP wrappers should no longer be dispatchable");
+        assert!(
+            error.contains(&format!("unsupported tool: {tool_name}")),
+            "unexpected error for {tool_name}: {error}"
+        );
+    }
+}
+
+#[test]
 fn tool_search_supports_keyword_and_select_queries() {
     let keyword = execute_tool(
         "ToolSearch",
@@ -1941,35 +2071,12 @@ Bundled workspace guidance.
 
 #[test]
 fn provider_prompt_skills_without_runtime_executors_stay_hidden_from_skill_discovery() {
-    let capability = super::CapabilitySpec {
-        capability_id: "plugin-skill.workspace-guide".to_string(),
-        source_kind: super::CapabilitySourceKind::PluginSkill,
-        execution_kind: super::CapabilityExecutionKind::PromptSkill,
-        display_name: "workspace-guide".to_string(),
-        description: "Provider-backed workspace guidance skill.".to_string(),
-        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "skill": { "type": "string" },
-                "arguments": {}
-            },
-            "required": ["skill"],
-            "additionalProperties": false
-        }),
-        search_hint: Some("workspace guidance".to_string()),
-        visibility: super::CapabilityVisibility::DefaultVisible,
-        state: super::CapabilityState::Ready,
-        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
-            required_permission: PermissionMode::ReadOnly,
-        },
-        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
-            selectable: true,
-            requires_approval: false,
-            requires_auth: false,
-        },
-        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
-    };
+    let mut capability = provider_prompt_skill_capability(
+        "plugin-skill.workspace-guide",
+        super::CapabilitySourceKind::PluginSkill,
+        "workspace-guide",
+    );
+    capability.executor_key = None;
     let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
 
     let surface = runtime
@@ -2007,36 +2114,109 @@ fn provider_prompt_skills_without_runtime_executors_stay_hidden_from_skill_disco
 }
 
 #[test]
-fn capability_runtime_execute_tool_surface_gates_provider_prompt_skill_without_runtime_executor() {
-    let capability = super::CapabilitySpec {
-        capability_id: "plugin-skill.workspace-guide".to_string(),
-        source_kind: super::CapabilitySourceKind::PluginSkill,
-        execution_kind: super::CapabilityExecutionKind::PromptSkill,
-        display_name: "workspace-guide".to_string(),
-        description: "Provider-backed workspace guidance skill.".to_string(),
-        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "skill": { "type": "string" },
-                "arguments": {}
+fn provider_prompt_skills_with_registered_runtime_executors_are_discoverable_and_executable() {
+    let capability = provider_prompt_skill_capability(
+        "plugin-skill.workspace-guide",
+        super::CapabilitySourceKind::PluginSkill,
+        "workspace-guide",
+    );
+    let mut runtime = capability_runtime_with_provided_capabilities(vec![capability.clone()]);
+    runtime.register_prompt_skill_executor(
+        capability
+            .executor_key
+            .clone()
+            .expect("provider prompt skill should have executor key"),
+        |_capability, arguments, _current_dir| {
+            Ok(super::SkillExecutionResult {
+                skill: "workspace-guide".to_string(),
+                path: "plugin://workspace-guide".to_string(),
+                description: Some("Provider-backed workspace guidance skill.".to_string()),
+                context: super::skill_runtime::SkillContextKind::Inline,
+                messages_to_inject: vec![super::skill_runtime::SkillInjectedMessage::system(
+                    format!(
+                        "Provider workspace guidance\n{}",
+                        serde_json::to_string(&arguments.unwrap_or_default()).expect("json")
+                    ),
+                )],
+                tool_grants: vec!["WebSearch".to_string()],
+                model_override: Some("claude-opus-4-6".to_string()),
+                effort_override: Some("high".to_string()),
+                state_updates: vec![super::SkillStateUpdate::ContextPrepared {
+                    context: super::skill_runtime::SkillContextKind::Inline,
+                }],
+            })
+        },
+    );
+    let store = super::SessionCapabilityStore::default();
+
+    let surface = runtime
+        .surface_projection(super::CapabilityPlannerInput::default())
+        .expect("planner should project a capability surface");
+    assert!(
+        surface
+            .discoverable_skills
+            .iter()
+            .any(|skill| skill.display_name == "workspace-guide")
+    );
+
+    let discovery = runtime.skill_discovery(
+        "workspace guidance",
+        10,
+        super::CapabilityPlannerInput::default(),
+    );
+    let output: serde_json::Value =
+        serde_json::to_value(discovery).expect("skill discovery output should be json");
+    assert!(
+        output["matches"]
+            .as_array()
+            .expect("matches")
+            .iter()
+            .any(|value| value == "workspace-guide")
+    );
+
+    let executed = runtime
+        .execute_tool(
+            "SkillTool",
+            json!({
+                "skill": "workspace-guide",
+                "arguments": { "topic": "workspace" }
+            }),
+            super::CapabilityPlannerInput::default(),
+            &store,
+            None,
+            None,
+            |_kind, _tool_name, _input| {
+                panic!("provider prompt skills should execute through the prompt-skill executor")
             },
-            "required": ["skill"],
-            "additionalProperties": false
-        }),
-        search_hint: Some("workspace guidance".to_string()),
-        visibility: super::CapabilityVisibility::DefaultVisible,
-        state: super::CapabilityState::Ready,
-        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
-            required_permission: PermissionMode::ReadOnly,
-        },
-        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
-            selectable: true,
-            requires_approval: false,
-            requires_auth: false,
-        },
-        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
-    };
+        )
+        .expect("provider-backed prompt skill should execute");
+    let executed: serde_json::Value =
+        serde_json::from_str(&executed).expect("skill execution output should be json");
+    assert_eq!(executed["skill"], "workspace-guide");
+    assert_eq!(executed["tool_grants"][0], "WebSearch");
+    assert_eq!(executed["model_override"], "claude-opus-4-6");
+    assert_eq!(executed["effort_override"], "high");
+
+    let snapshot = store.snapshot();
+    assert!(snapshot.is_tool_granted("WebSearch"));
+    assert_eq!(snapshot.model_override(), Some("claude-opus-4-6"));
+    assert_eq!(snapshot.effort_override(), Some("high"));
+    assert!(
+        snapshot
+            .injected_skill_messages()
+            .iter()
+            .any(|message| message.contains("Provider workspace guidance"))
+    );
+}
+
+#[test]
+fn capability_runtime_execute_tool_surface_gates_provider_prompt_skill_without_runtime_executor() {
+    let mut capability = provider_prompt_skill_capability(
+        "plugin-skill.workspace-guide",
+        super::CapabilitySourceKind::PluginSkill,
+        "workspace-guide",
+    );
+    capability.executor_key = None;
     let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
     let store = super::SessionCapabilityStore::default();
 
@@ -2071,35 +2251,13 @@ fn capability_runtime_execute_tool_surface_gates_provider_prompt_skill_without_r
 
 #[test]
 fn capability_runtime_execute_tool_reports_hidden_provider_prompt_skill_as_surface_gated() {
-    let capability = super::CapabilitySpec {
-        capability_id: "plugin-skill.workspace-guide-hidden".to_string(),
-        source_kind: super::CapabilitySourceKind::PluginSkill,
-        execution_kind: super::CapabilityExecutionKind::PromptSkill,
-        display_name: "workspace-guide-hidden".to_string(),
-        description: "Provider-backed workspace guidance skill.".to_string(),
-        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "skill": { "type": "string" },
-                "arguments": {}
-            },
-            "required": ["skill"],
-            "additionalProperties": false
-        }),
-        search_hint: Some("workspace guidance".to_string()),
-        visibility: super::CapabilityVisibility::Hidden,
-        state: super::CapabilityState::Ready,
-        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
-            required_permission: PermissionMode::ReadOnly,
-        },
-        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
-            selectable: true,
-            requires_approval: false,
-            requires_auth: false,
-        },
-        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
-    };
+    let mut capability = provider_prompt_skill_capability(
+        "plugin-skill.workspace-guide-hidden",
+        super::CapabilitySourceKind::PluginSkill,
+        "workspace-guide-hidden",
+    );
+    capability.visibility = super::CapabilityVisibility::Hidden;
+    capability.executor_key = None;
     let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
     let store = super::SessionCapabilityStore::default();
 
@@ -2131,35 +2289,12 @@ fn capability_runtime_execute_tool_reports_hidden_provider_prompt_skill_as_surfa
 
 #[test]
 fn skill_discovery_hides_non_selectable_provider_prompt_skills() {
-    let capability = super::CapabilitySpec {
-        capability_id: "plugin-skill.workspace-guide-disabled".to_string(),
-        source_kind: super::CapabilitySourceKind::PluginSkill,
-        execution_kind: super::CapabilityExecutionKind::PromptSkill,
-        display_name: "workspace-guide-disabled".to_string(),
-        description: "Provider-backed workspace guidance skill.".to_string(),
-        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "skill": { "type": "string" },
-                "arguments": {}
-            },
-            "required": ["skill"],
-            "additionalProperties": false
-        }),
-        search_hint: Some("workspace guidance".to_string()),
-        visibility: super::CapabilityVisibility::DefaultVisible,
-        state: super::CapabilityState::Ready,
-        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
-            required_permission: PermissionMode::ReadOnly,
-        },
-        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
-            selectable: false,
-            requires_approval: false,
-            requires_auth: false,
-        },
-        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
-    };
+    let mut capability = provider_prompt_skill_capability(
+        "plugin-skill.workspace-guide-disabled",
+        super::CapabilitySourceKind::PluginSkill,
+        "workspace-guide-disabled",
+    );
+    capability.invocation_policy.selectable = false;
     let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
 
     let surface = runtime
@@ -2195,35 +2330,12 @@ fn skill_discovery_hides_non_selectable_provider_prompt_skills() {
 
 #[test]
 fn builtin_skill_discovery_compat_shim_hides_provider_prompt_skills_without_runtime_executors() {
-    let capability = super::CapabilitySpec {
-        capability_id: "plugin-skill.workspace-guide-compat".to_string(),
-        source_kind: super::CapabilitySourceKind::PluginSkill,
-        execution_kind: super::CapabilityExecutionKind::PromptSkill,
-        display_name: "workspace-guide-compat".to_string(),
-        description: "Provider-backed workspace guidance skill.".to_string(),
-        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "skill": { "type": "string" },
-                "arguments": {}
-            },
-            "required": ["skill"],
-            "additionalProperties": false
-        }),
-        search_hint: Some("workspace guidance".to_string()),
-        visibility: super::CapabilityVisibility::DefaultVisible,
-        state: super::CapabilityState::Ready,
-        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
-            required_permission: PermissionMode::ReadOnly,
-        },
-        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
-            selectable: true,
-            requires_approval: false,
-            requires_auth: false,
-        },
-        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
-    };
+    let mut capability = provider_prompt_skill_capability(
+        "plugin-skill.workspace-guide-compat",
+        super::CapabilitySourceKind::PluginSkill,
+        "workspace-guide-compat",
+    );
+    capability.executor_key = None;
     let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
 
     let output = super::builtin_exec::run_skill_discovery_with_runtime(
@@ -2248,35 +2360,12 @@ fn builtin_skill_discovery_compat_shim_hides_provider_prompt_skills_without_runt
 
 #[test]
 fn builtin_skill_tool_compat_shim_surface_gates_provider_prompt_skills_without_runtime_executors() {
-    let capability = super::CapabilitySpec {
-        capability_id: "plugin-skill.workspace-guide-compat".to_string(),
-        source_kind: super::CapabilitySourceKind::PluginSkill,
-        execution_kind: super::CapabilityExecutionKind::PromptSkill,
-        display_name: "workspace-guide-compat".to_string(),
-        description: "Provider-backed workspace guidance skill.".to_string(),
-        when_to_use: Some("Use when the task needs workspace-specific guidance.".to_string()),
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "skill": { "type": "string" },
-                "arguments": {}
-            },
-            "required": ["skill"],
-            "additionalProperties": false
-        }),
-        search_hint: Some("workspace guidance".to_string()),
-        visibility: super::CapabilityVisibility::DefaultVisible,
-        state: super::CapabilityState::Ready,
-        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
-            required_permission: PermissionMode::ReadOnly,
-        },
-        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
-            selectable: true,
-            requires_approval: false,
-            requires_auth: false,
-        },
-        concurrency_policy: super::CapabilityConcurrencyPolicy::Serialized,
-    };
+    let mut capability = provider_prompt_skill_capability(
+        "plugin-skill.workspace-guide-compat",
+        super::CapabilitySourceKind::PluginSkill,
+        "workspace-guide-compat",
+    );
+    capability.executor_key = None;
     let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
 
     let error = super::builtin_exec::run_skill_tool_with_runtime(
@@ -3769,6 +3858,8 @@ fn mcp_prompt_capabilities_without_runtime_executors_stay_hidden_from_skill_disc
         capability_id: "mcp-prompt.workspace-guide".to_string(),
         source_kind: super::CapabilitySourceKind::McpPrompt,
         execution_kind: super::CapabilityExecutionKind::PromptSkill,
+        provider_key: Some("mcp".to_string()),
+        executor_key: Some("mcp-prompt.workspace-guide".to_string()),
         display_name: "workspace-guide".to_string(),
         description: "MCP prompt-backed workspace guidance skill.".to_string(),
         when_to_use: Some("Use when the task needs MCP-provided workspace guidance.".to_string()),
@@ -3787,6 +3878,8 @@ fn mcp_prompt_capabilities_without_runtime_executors_stay_hidden_from_skill_disc
         permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
             required_permission: PermissionMode::ReadOnly,
         },
+        trust_profile: crate::capability_runtime::CapabilityTrustProfile::default(),
+        scope_constraints: crate::capability_runtime::CapabilityScopeConstraints::default(),
         invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
             selectable: true,
             requires_approval: false,
@@ -5450,7 +5543,7 @@ fn write_mcp_server_fixture(script_path: &Path) {
         "            'id': request['id'],",
         "            'result': {",
         "                'protocolVersion': request['params']['protocolVersion'],",
-        "                'capabilities': {'tools': {}, 'resources': {}},",
+        "                'capabilities': {'tools': {}, 'resources': {}, 'prompts': {}},",
         "                'serverInfo': {'name': 'fixture', 'version': '1.0.0'}",
         "            }",
         "        })",
@@ -5483,6 +5576,45 @@ fn write_mcp_server_fixture(script_path: &Path) {
         "                'content': [{'type': 'text', 'text': text}],",
         "                'structuredContent': {'echoed': text},",
         "                'isError': False",
+        "            }",
+        "        })",
+        "    elif method == 'prompts/list':",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request['id'],",
+        "            'result': {",
+        "                'prompts': [",
+        "                    {",
+        "                        'name': 'workspace-guide',",
+        "                        'description': 'MCP workspace guidance',",
+        "                        'arguments': [",
+        "                            {",
+        "                                'name': 'topic',",
+        "                                'description': 'Workspace topic',",
+        "                                'required': False",
+        "                            }",
+        "                        ]",
+        "                    }",
+        "                ]",
+        "            }",
+        "        })",
+        "    elif method == 'prompts/get':",
+        "        arguments = request['params'].get('arguments') or {}",
+        "        topic = arguments.get('topic', 'workspace')",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request['id'],",
+        "            'result': {",
+        "                'description': 'MCP workspace guidance',",
+        "                'messages': [",
+        "                    {",
+        "                        'role': 'system',",
+        "                        'content': {",
+        "                            'type': 'text',",
+        "                            'text': f'MCP workspace guidance for {topic}'",
+        "                        }",
+        "                    }",
+        "                ]",
         "            }",
         "        })",
         "    elif method == 'resources/list':",

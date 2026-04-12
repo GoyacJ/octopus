@@ -238,6 +238,17 @@ export interface ModelRegistryDiagnostics {
 export type WorkspaceToolKind = ToolCatalogKind
 export type WorkspaceToolRequiredPermission = 'readonly' | 'workspace-write' | 'danger-full-access'
 export type WorkspaceToolAvailability = ViewStatus
+export type CapabilitySourceKind =
+  | 'builtin'
+  | 'runtime_tool'
+  | 'plugin_tool'
+  | 'local_skill'
+  | 'bundled_skill'
+  | 'mcp_tool'
+  | 'mcp_prompt'
+  | 'mcp_resource'
+  | 'plugin_skill'
+export type CapabilityExecutionKind = 'tool' | 'prompt_skill' | 'resource'
 
 export interface WorkspaceToolManagementCapabilities {
   canDisable: boolean
@@ -258,9 +269,13 @@ export interface WorkspaceToolConsumerSummary {
 
 interface WorkspaceToolCatalogBase {
   id: string
+  assetId?: string
+  capabilityId?: string
   workspaceId: string
   name: string
   kind: WorkspaceToolKind
+  sourceKind?: CapabilitySourceKind
+  executionKind?: CapabilityExecutionKind
   description: string
   requiredPermission: WorkspaceToolRequiredPermission | null
   availability: WorkspaceToolAvailability
@@ -293,6 +308,7 @@ export interface WorkspaceMcpToolCatalogEntry extends WorkspaceToolCatalogBase {
   serverName: string
   endpoint: string
   toolNames: string[]
+  resourceUri?: string
   statusDetail?: string
   scope: 'workspace' | 'project' | 'user' | 'builtin'
 }
@@ -320,6 +336,8 @@ export interface CapabilityAssetManifest {
   workspaceId: string
   sourceKey: string
   kind: WorkspaceToolKind
+  sourceKinds: CapabilitySourceKind[]
+  executionKinds: CapabilityExecutionKind[]
   name: string
   description: string
   displayPath: string
@@ -352,14 +370,38 @@ export interface McpServerPackageManifest extends CapabilityAssetManifest {
   serverName: string
   endpoint: string
   toolNames: string[]
+  promptNames: string[]
+  resourceUris: string[]
   scope: WorkspaceMcpToolCatalogEntry['scope']
   statusDetail?: string
 }
 
+interface CapabilityManagementBase extends Omit<CapabilityAssetManifest, 'sourceKinds' | 'executionKinds'> {
+  id: string
+  capabilityId: string
+  sourceKind: CapabilitySourceKind
+  executionKind: CapabilityExecutionKind
+  availability: WorkspaceToolAvailability
+  disabled: boolean
+  builtinKey?: string
+  active?: boolean
+  shadowedBy?: string
+  sourceOrigin?: WorkspaceSkillSourceOrigin
+  workspaceOwned?: boolean
+  relativePath?: string
+  serverName?: string
+  endpoint?: string
+  toolNames?: string[]
+  resourceUri?: string
+  statusDetail?: string
+  scope?: WorkspaceMcpToolCatalogEntry['scope']
+  consumers?: WorkspaceToolConsumerSummary[]
+}
+
 export type CapabilityManagementEntry =
-  | (WorkspaceBuiltinToolCatalogEntry & CapabilityAssetManifest)
-  | (WorkspaceSkillToolCatalogEntry & CapabilityAssetManifest)
-  | (WorkspaceMcpToolCatalogEntry & CapabilityAssetManifest)
+  | (Omit<WorkspaceBuiltinToolCatalogEntry, 'assetId' | 'capabilityId' | 'sourceKind' | 'executionKind'> & CapabilityManagementBase & { kind: 'builtin' })
+  | (Omit<WorkspaceSkillToolCatalogEntry, 'assetId' | 'capabilityId' | 'sourceKind' | 'executionKind'> & CapabilityManagementBase & { kind: 'skill' })
+  | (Omit<WorkspaceMcpToolCatalogEntry, 'assetId' | 'capabilityId' | 'sourceKind' | 'executionKind'> & CapabilityManagementBase & { kind: 'mcp' })
 
 export interface CapabilityManagementProjection {
   entries: CapabilityManagementEntry[]

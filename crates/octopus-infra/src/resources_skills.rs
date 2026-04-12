@@ -1,5 +1,5 @@
 use super::*;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use octopus_core::{
     CapabilityAssetManifest, CapabilityManagementEntry, CapabilityManagementProjection,
@@ -168,14 +168,88 @@ fn capability_asset_state(entry: &WorkspaceToolCatalogEntry) -> String {
     }
 }
 
-fn capability_asset_manifest(entry: &WorkspaceToolCatalogEntry) -> CapabilityAssetManifest {
+fn capability_asset_id(entry: &WorkspaceToolCatalogEntry) -> String {
+    entry.asset_id.clone().unwrap_or_else(|| entry.id.clone())
+}
+
+fn capability_id(entry: &WorkspaceToolCatalogEntry) -> String {
+    entry.capability_id.clone().unwrap_or_else(|| entry.id.clone())
+}
+
+fn capability_source_kind(entry: &WorkspaceToolCatalogEntry) -> String {
+    entry.source_kind.clone().unwrap_or_else(|| match entry.kind.as_str() {
+        "builtin" => "builtin".into(),
+        "skill" => {
+            if entry.source_origin.as_deref() == Some(BUILTIN_SKILL_SOURCE_ORIGIN) {
+                "bundled_skill".into()
+            } else {
+                "local_skill".into()
+            }
+        }
+        "mcp" => "mcp_tool".into(),
+        _ => "builtin".into(),
+    })
+}
+
+fn capability_execution_kind(entry: &WorkspaceToolCatalogEntry) -> String {
+    entry.execution_kind.clone().unwrap_or_else(|| match entry.kind.as_str() {
+        "skill" => "prompt_skill".into(),
+        "mcp" => {
+            if entry.resource_uri.is_some() {
+                "resource".into()
+            } else {
+                "tool".into()
+            }
+        }
+        _ => "tool".into(),
+    })
+}
+
+fn unique_sorted(values: impl IntoIterator<Item = String>) -> Vec<String> {
+    values
+        .into_iter()
+        .filter(|value| !value.is_empty())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
+fn capability_asset_name(entry: &WorkspaceToolCatalogEntry) -> String {
+    if entry.kind == "mcp" {
+        entry.server_name.clone().unwrap_or_else(|| entry.name.clone())
+    } else {
+        entry.name.clone()
+    }
+}
+
+fn capability_asset_description(entry: &WorkspaceToolCatalogEntry) -> String {
+    if entry.kind == "mcp" {
+        if entry.scope.as_deref() == Some("builtin") {
+            "Builtin MCP server template.".into()
+        } else {
+            "Configured MCP server.".into()
+        }
+    } else {
+        entry.description.clone()
+    }
+}
+
+fn capability_asset_manifest(entries: &[&WorkspaceToolCatalogEntry]) -> CapabilityAssetManifest {
+    let entry = entries
+        .first()
+        .copied()
+        .expect("capability asset manifest requires at least one entry");
     CapabilityAssetManifest {
-        asset_id: entry.id.clone(),
+        asset_id: capability_asset_id(entry),
         workspace_id: entry.workspace_id.clone(),
         source_key: entry.source_key.clone(),
         kind: entry.kind.clone(),
-        name: entry.name.clone(),
-        description: entry.description.clone(),
+        source_kinds: unique_sorted(entries.iter().map(|item| capability_source_kind(item))),
+        execution_kinds: unique_sorted(
+            entries.iter().map(|item| capability_execution_kind(item)),
+        ),
+        name: capability_asset_name(entry),
+        description: capability_asset_description(entry),
         display_path: entry.display_path.clone(),
         owner_scope: entry.owner_scope.clone(),
         owner_id: entry.owner_id.clone(),
@@ -192,13 +266,16 @@ fn capability_asset_manifest(entry: &WorkspaceToolCatalogEntry) -> CapabilityAss
 }
 
 fn capability_management_entry(entry: &WorkspaceToolCatalogEntry) -> CapabilityManagementEntry {
-    let asset = capability_asset_manifest(entry);
+    let asset = capability_asset_manifest(&[entry]);
     CapabilityManagementEntry {
         id: entry.id.clone(),
         asset_id: asset.asset_id.clone(),
+        capability_id: capability_id(entry),
         workspace_id: entry.workspace_id.clone(),
         name: entry.name.clone(),
         kind: entry.kind.clone(),
+        source_kind: capability_source_kind(entry),
+        execution_kind: capability_execution_kind(entry),
         description: entry.description.clone(),
         required_permission: entry.required_permission.clone(),
         availability: entry.availability.clone(),
@@ -215,6 +292,7 @@ fn capability_management_entry(entry: &WorkspaceToolCatalogEntry) -> CapabilityM
         server_name: entry.server_name.clone(),
         endpoint: entry.endpoint.clone(),
         tool_names: entry.tool_names.clone(),
+        resource_uri: entry.resource_uri.clone(),
         status_detail: entry.status_detail.clone(),
         scope: entry.scope.clone(),
         owner_scope: entry.owner_scope.clone(),
@@ -234,7 +312,7 @@ fn skill_package_manifest(entry: &WorkspaceToolCatalogEntry) -> Option<SkillPack
     if entry.kind != "skill" {
         return None;
     }
-    let asset = capability_asset_manifest(entry);
+    let asset = capability_asset_manifest(&[entry]);
     let package_kind = if entry.owner_scope.as_deref() == Some("project") {
         "project"
     } else if entry.source_origin.as_deref() == Some(BUILTIN_SKILL_SOURCE_ORIGIN) {
@@ -249,6 +327,8 @@ fn skill_package_manifest(entry: &WorkspaceToolCatalogEntry) -> Option<SkillPack
         workspace_id: asset.workspace_id,
         source_key: asset.source_key,
         kind: "skill".into(),
+        source_kinds: asset.source_kinds,
+        execution_kinds: asset.execution_kinds,
         name: asset.name,
         description: asset.description,
         display_path: asset.display_path,
@@ -275,19 +355,20 @@ fn skill_package_manifest(entry: &WorkspaceToolCatalogEntry) -> Option<SkillPack
     })
 }
 
-fn mcp_server_package_manifest(
-    entry: &WorkspaceToolCatalogEntry,
-) -> Option<McpServerPackageManifest> {
+fn mcp_server_package_manifest(entries: &[&WorkspaceToolCatalogEntry]) -> Option<McpServerPackageManifest> {
+    let entry = entries.first().copied()?;
     if entry.kind != "mcp" {
         return None;
     }
-    let asset = capability_asset_manifest(entry);
+    let asset = capability_asset_manifest(entries);
     let scope = entry.scope.clone().unwrap_or_else(|| "workspace".into());
     Some(McpServerPackageManifest {
         asset_id: asset.asset_id,
         workspace_id: asset.workspace_id,
         source_key: asset.source_key,
         kind: "mcp".into(),
+        source_kinds: asset.source_kinds,
+        execution_kinds: asset.execution_kinds,
         name: asset.name,
         description: asset.description,
         display_path: asset.display_path,
@@ -305,7 +386,22 @@ fn mcp_server_package_manifest(
         package_kind: scope.clone(),
         server_name: entry.server_name.clone().unwrap_or_default(),
         endpoint: entry.endpoint.clone().unwrap_or_default(),
-        tool_names: entry.tool_names.clone().unwrap_or_default(),
+        tool_names: unique_sorted(
+            entries
+                .iter()
+                .flat_map(|item| item.tool_names.clone().unwrap_or_default()),
+        ),
+        prompt_names: unique_sorted(
+            entries
+                .iter()
+                .filter(|item| capability_source_kind(item) == "mcp_prompt")
+                .map(|item| item.name.clone()),
+        ),
+        resource_uris: unique_sorted(
+            entries
+                .iter()
+                .filter_map(|item| item.resource_uri.clone()),
+        ),
         scope,
         status_detail: entry.status_detail.clone(),
     })
@@ -318,12 +414,22 @@ fn capability_management_projection(
         .iter()
         .map(capability_management_entry)
         .collect::<Vec<_>>();
+    let mut grouped_entries = BTreeMap::<String, Vec<&WorkspaceToolCatalogEntry>>::new();
+    for entry in &entries {
+        grouped_entries
+            .entry(format!("{}::{}", capability_asset_id(entry), entry.source_key))
+            .or_default()
+            .push(entry);
+    }
     CapabilityManagementProjection {
-        assets: entries.iter().map(capability_asset_manifest).collect(),
+        assets: grouped_entries
+            .values()
+            .map(|group| capability_asset_manifest(group))
+            .collect(),
         skill_packages: entries.iter().filter_map(skill_package_manifest).collect(),
-        mcp_server_packages: entries
-            .iter()
-            .filter_map(mcp_server_package_manifest)
+        mcp_server_packages: grouped_entries
+            .values()
+            .filter_map(|group| mcp_server_package_manifest(group))
             .collect(),
         entries: management_entries,
     }
@@ -1504,6 +1610,101 @@ fn extract_mcp_server_configs(
     Ok(servers)
 }
 
+fn string_map_from_json(value: Option<&serde_json::Value>) -> BTreeMap<String, String> {
+    value
+        .and_then(|item| item.as_object())
+        .map(|object| {
+            object
+                .iter()
+                .filter_map(|(key, value)| value.as_str().map(|item| (key.clone(), item.to_string())))
+                .collect::<BTreeMap<_, _>>()
+        })
+        .unwrap_or_default()
+}
+
+fn mcp_oauth_config_from_json(value: Option<&serde_json::Value>) -> Option<runtime::McpOAuthConfig> {
+    let object = value?.as_object()?;
+    Some(runtime::McpOAuthConfig {
+        client_id: object
+            .get("clientId")
+            .and_then(|item| item.as_str())
+            .map(ToOwned::to_owned),
+        callback_port: object
+            .get("callbackPort")
+            .and_then(|item| item.as_u64())
+            .and_then(|item| u16::try_from(item).ok()),
+        auth_server_metadata_url: object
+            .get("authServerMetadataUrl")
+            .and_then(|item| item.as_str())
+            .map(ToOwned::to_owned),
+        xaa: object.get("xaa").and_then(|item| item.as_bool()),
+    })
+}
+
+fn scoped_mcp_server_config_from_document(
+    scope: runtime::ConfigSource,
+    value: &serde_json::Value,
+) -> Option<runtime::ScopedMcpServerConfig> {
+    let object = value.as_object()?;
+    let config = match object.get("type").and_then(|item| item.as_str()) {
+        Some("stdio") => runtime::McpServerConfig::Stdio(runtime::McpStdioServerConfig {
+            command: object.get("command")?.as_str()?.to_string(),
+            args: object
+                .get("args")
+                .and_then(|item| item.as_array())
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|item| item.as_str().map(ToOwned::to_owned))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default(),
+            env: string_map_from_json(object.get("env")),
+            tool_call_timeout_ms: object
+                .get("toolCallTimeoutMs")
+                .and_then(|item| item.as_u64()),
+        }),
+        Some("sse") => runtime::McpServerConfig::Sse(runtime::McpRemoteServerConfig {
+            url: object.get("url")?.as_str()?.to_string(),
+            headers: string_map_from_json(object.get("headers")),
+            headers_helper: object
+                .get("headersHelper")
+                .and_then(|item| item.as_str())
+                .map(ToOwned::to_owned),
+            oauth: mcp_oauth_config_from_json(object.get("oauth")),
+        }),
+        Some("http") => runtime::McpServerConfig::Http(runtime::McpRemoteServerConfig {
+            url: object.get("url")?.as_str()?.to_string(),
+            headers: string_map_from_json(object.get("headers")),
+            headers_helper: object
+                .get("headersHelper")
+                .and_then(|item| item.as_str())
+                .map(ToOwned::to_owned),
+            oauth: mcp_oauth_config_from_json(object.get("oauth")),
+        }),
+        Some("ws") => runtime::McpServerConfig::Ws(runtime::McpWebSocketServerConfig {
+            url: object.get("url")?.as_str()?.to_string(),
+            headers: string_map_from_json(object.get("headers")),
+            headers_helper: object
+                .get("headersHelper")
+                .and_then(|item| item.as_str())
+                .map(ToOwned::to_owned),
+        }),
+        Some("sdk") => runtime::McpServerConfig::Sdk(runtime::McpSdkServerConfig {
+            name: object.get("name")?.as_str()?.to_string(),
+        }),
+        Some("claudeai-proxy") => {
+            runtime::McpServerConfig::ManagedProxy(runtime::McpManagedProxyServerConfig {
+                url: object.get("url")?.as_str()?.to_string(),
+                id: object.get("id")?.as_str()?.to_string(),
+            })
+        }
+        _ => return None,
+    };
+
+    Some(runtime::ScopedMcpServerConfig { scope, config })
+}
+
 fn mcp_endpoint_from_document(config: &serde_json::Value) -> String {
     let Some(object) = config.as_object() else {
         return String::new();
@@ -1714,6 +1915,239 @@ pub(super) fn mcp_endpoint(config: &runtime::McpServerConfig) -> String {
         runtime::McpServerConfig::Ws(config) => config.url.clone(),
         runtime::McpServerConfig::Sdk(config) => format!("sdk: {}", config.name),
         runtime::McpServerConfig::ManagedProxy(config) => config.url.clone(),
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct DiscoveredMcpServerCapabilities {
+    tools: Vec<runtime::ManagedMcpTool>,
+    prompts: Vec<runtime::ManagedMcpPrompt>,
+    resources: Vec<runtime::McpResource>,
+    status_detail: Option<String>,
+    availability: String,
+}
+
+impl DiscoveredMcpServerCapabilities {
+    fn finalize(mut self) -> Self {
+        if self.availability.is_empty() {
+            self.availability = if self.status_detail.is_some() {
+                "attention".into()
+            } else if self.tools.is_empty() && self.prompts.is_empty() && self.resources.is_empty() {
+                "configured".into()
+            } else {
+                "healthy".into()
+            };
+        }
+        self
+    }
+}
+
+fn mcp_resource_capability_id(server_name: &str, uri: &str) -> String {
+    format!(
+        "mcp_resource__{}__{}",
+        server_name,
+        uri.replace(|ch: char| !ch.is_ascii_alphanumeric(), "_")
+    )
+}
+
+async fn discover_mcp_server_capabilities(
+    servers: &BTreeMap<String, runtime::ScopedMcpServerConfig>,
+) -> BTreeMap<String, DiscoveredMcpServerCapabilities> {
+    let mut discovered = servers
+        .keys()
+        .cloned()
+        .map(|server_name| (server_name, DiscoveredMcpServerCapabilities::default()))
+        .collect::<BTreeMap<_, _>>();
+
+    let mut manager = runtime::McpServerManager::from_servers(servers);
+    let discovery_report = manager.discover_tools_best_effort().await;
+
+    for tool in discovery_report.tools {
+        discovered
+            .entry(tool.server_name.clone())
+            .or_default()
+            .tools
+            .push(tool);
+    }
+
+    for failure in discovery_report.failed_servers {
+        let entry = discovered.entry(failure.server_name).or_default();
+        entry.status_detail = Some(failure.error);
+        entry.availability = "attention".into();
+    }
+
+    for unsupported in discovery_report.unsupported_servers {
+        let entry = discovered.entry(unsupported.server_name).or_default();
+        entry.status_detail = Some(unsupported.reason);
+        entry.availability = "attention".into();
+    }
+
+    for server_name in servers.keys() {
+        let Some(entry) = discovered.get_mut(server_name) else {
+            continue;
+        };
+        if entry.status_detail.is_some() {
+            continue;
+        }
+
+        match manager.discover_prompts_for_server(server_name).await {
+            Ok(prompts) => entry.prompts = prompts,
+            Err(error) => {
+                entry.status_detail = Some(error.to_string());
+                entry.availability = "attention".into();
+                continue;
+            }
+        }
+
+        match manager.list_resources(server_name).await {
+            Ok(resources) => entry.resources = resources.resources,
+            Err(error) => {
+                entry.status_detail = Some(error.to_string());
+                entry.availability = "attention".into();
+            }
+        }
+    }
+
+    discovered
+        .into_iter()
+        .map(|(server_name, capabilities)| (server_name, capabilities.finalize()))
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_mcp_catalog_entries(
+    entries: &mut Vec<WorkspaceToolCatalogEntry>,
+    workspace_id: &str,
+    asset_state_document: &WorkspaceCapabilityAssetStateDocument,
+    source_key: &str,
+    display_path: &str,
+    management: WorkspaceToolManagementCapabilities,
+    owner_scope: Option<String>,
+    owner_id: Option<String>,
+    owner_label: Option<String>,
+    scope: &str,
+    server_name: &str,
+    endpoint: &str,
+    consumers: Option<Vec<WorkspaceToolConsumerSummary>>,
+    discovered: Option<&DiscoveredMcpServerCapabilities>,
+    fallback_description: &str,
+) {
+    let asset_id = catalog_hash_id("mcp-asset", source_key);
+    let disabled = workspace_asset_is_disabled(asset_state_document, source_key);
+    let discovered = discovered.cloned().unwrap_or_default().finalize();
+
+    let mut push_entry = |id: String,
+                          capability_id: String,
+                          name: String,
+                          source_kind: &str,
+                          execution_kind: &str,
+                          description: String,
+                          tool_names: Vec<String>,
+                          resource_uri: Option<String>| {
+        entries.push(WorkspaceToolCatalogEntry {
+            id,
+            asset_id: Some(asset_id.clone()),
+            capability_id: Some(capability_id),
+            workspace_id: workspace_id.to_string(),
+            name,
+            kind: "mcp".into(),
+            source_kind: Some(source_kind.into()),
+            execution_kind: Some(execution_kind.into()),
+            description,
+            required_permission: None,
+            availability: discovered.availability.clone(),
+            source_key: source_key.to_string(),
+            display_path: display_path.to_string(),
+            disabled,
+            management: management.clone(),
+            builtin_key: None,
+            active: None,
+            shadowed_by: None,
+            source_origin: None,
+            workspace_owned: None,
+            relative_path: None,
+            server_name: Some(server_name.to_string()),
+            endpoint: Some(endpoint.to_string()),
+            tool_names: Some(tool_names),
+            resource_uri,
+            status_detail: discovered.status_detail.clone(),
+            scope: Some(scope.to_string()),
+            owner_scope: owner_scope.clone(),
+            owner_id: owner_id.clone(),
+            owner_label: owner_label.clone(),
+            consumers: consumers.clone(),
+        });
+    };
+
+    if discovered.tools.is_empty() && discovered.prompts.is_empty() && discovered.resources.is_empty() {
+        let capability_id = format!("mcp_server__{}__{}", scope, server_name);
+        push_entry(
+            capability_id.clone(),
+            capability_id,
+            server_name.to_string(),
+            "mcp_tool",
+            "tool",
+            fallback_description.to_string(),
+            Vec::new(),
+            None,
+        );
+        return;
+    }
+
+    for tool in &discovered.tools {
+        push_entry(
+            tool.qualified_name.clone(),
+            tool.qualified_name.clone(),
+            tool.raw_name.clone(),
+            "mcp_tool",
+            "tool",
+            tool.tool
+                .description
+                .clone()
+                .unwrap_or_else(|| format!("Invoke MCP tool `{}`.", tool.raw_name)),
+            vec![tool.raw_name.clone()],
+            None,
+        );
+    }
+
+    for prompt in &discovered.prompts {
+        push_entry(
+            prompt.qualified_name.clone(),
+            prompt.qualified_name.clone(),
+            prompt.raw_name.clone(),
+            "mcp_prompt",
+            "prompt_skill",
+            prompt
+                .prompt
+                .description
+                .clone()
+                .unwrap_or_else(|| format!("Execute MCP prompt `{}`.", prompt.raw_name)),
+            Vec::new(),
+            None,
+        );
+    }
+
+    for resource in &discovered.resources {
+        let capability_id = mcp_resource_capability_id(server_name, &resource.uri);
+        push_entry(
+            capability_id.clone(),
+            capability_id,
+            resource
+                .name
+                .clone()
+                .unwrap_or_else(|| resource.uri.clone()),
+            "mcp_resource",
+            "resource",
+            resource
+                .description
+                .clone()
+                .or_else(|| resource.name.clone())
+                .unwrap_or_else(|| {
+                    format!("Read MCP resource `{}` from server `{server_name}`.", resource.uri)
+                }),
+            Vec::new(),
+            Some(resource.uri.clone()),
+        );
     }
 }
 
@@ -1935,6 +2369,19 @@ impl InfraWorkspaceService {
                 Ok::<_, AppError>((project.id.clone(), configs))
             })
             .collect::<Result<HashMap<_, _>, _>>()?;
+        let project_mcp_servers = project_mcp_configs
+            .iter()
+            .map(|(project_id, configs)| {
+                let parsed = configs
+                    .iter()
+                    .filter_map(|(server_name, config)| {
+                        scoped_mcp_server_config_from_document(runtime::ConfigSource::Project, config)
+                            .map(|parsed| (server_name.clone(), parsed))
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                (project_id.clone(), parsed)
+            })
+            .collect::<HashMap<_, _>>();
         let project_mcp_source_keys = project_mcp_configs
             .iter()
             .flat_map(
@@ -1958,11 +2405,16 @@ impl InfraWorkspaceService {
 
         for spec in tools::mvp_tool_specs() {
             let source_key = format!("builtin:{}", spec.name);
+            let capability_id = format!("builtin-{}", spec.name);
             entries.push(WorkspaceToolCatalogEntry {
-                id: format!("builtin-{}", spec.name),
+                id: capability_id.clone(),
+                asset_id: Some(capability_id.clone()),
+                capability_id: Some(capability_id),
                 workspace_id: workspace_id.clone(),
                 name: spec.name.into(),
                 kind: "builtin".into(),
+                source_kind: Some("builtin".into()),
+                execution_kind: Some("tool".into()),
                 description: spec.description.into(),
                 required_permission: normalize_required_permission(spec.required_permission),
                 availability: "healthy".into(),
@@ -1983,6 +2435,7 @@ impl InfraWorkspaceService {
                 server_name: None,
                 endpoint: None,
                 tool_names: None,
+                resource_uri: None,
                 status_detail: None,
                 scope: None,
                 owner_scope: Some("builtin".into()),
@@ -2004,9 +2457,13 @@ impl InfraWorkspaceService {
             let skill_id = catalog_hash_id("skill", &display_path(&skill.path, &workspace_root));
             entries.push(WorkspaceToolCatalogEntry {
                 id: skill_id.clone(),
+                asset_id: Some(skill_id.clone()),
+                capability_id: Some(skill_id.clone()),
                 workspace_id: workspace_id.clone(),
                 name: skill.name.clone(),
                 kind: "skill".into(),
+                source_kind: Some("local_skill".into()),
+                execution_kind: Some("prompt_skill".into()),
                 description: skill.description.unwrap_or_default(),
                 required_permission: None,
                 availability: if is_active {
@@ -2031,6 +2488,7 @@ impl InfraWorkspaceService {
                 server_name: None,
                 endpoint: None,
                 tool_names: None,
+                resource_uri: None,
                 status_detail: None,
                 scope: None,
                 owner_scope: if workspace_owned {
@@ -2054,9 +2512,13 @@ impl InfraWorkspaceService {
             let source_key = builtin_skill_source_key(&skill);
             entries.push(WorkspaceToolCatalogEntry {
                 id: skill_id.clone(),
+                asset_id: Some(skill_id.clone()),
+                capability_id: Some(skill_id.clone()),
                 workspace_id: workspace_id.clone(),
                 name: skill.name.clone(),
                 kind: "skill".into(),
+                source_kind: Some("bundled_skill".into()),
+                execution_kind: Some("prompt_skill".into()),
                 description: skill.description.clone(),
                 required_permission: None,
                 availability: "healthy".into(),
@@ -2077,6 +2539,7 @@ impl InfraWorkspaceService {
                 server_name: None,
                 endpoint: None,
                 tool_names: None,
+                resource_uri: None,
                 status_detail: None,
                 scope: None,
                 owner_scope: Some("builtin".into()),
@@ -2087,79 +2550,32 @@ impl InfraWorkspaceService {
         }
 
         let runtime_config = load_workspace_runtime_config(&self.state.paths)?;
-        let mut manager = runtime::McpServerManager::from_runtime_config(&runtime_config);
-        let discovery_report = manager.discover_tools_best_effort().await;
-        let discovered_tool_names = discovery_report.tools.iter().fold(
-            BTreeMap::<String, Vec<String>>::new(),
-            |mut grouped, tool| {
-                grouped
-                    .entry(tool.server_name.clone())
-                    .or_default()
-                    .push(tool.qualified_name.clone());
-                grouped
-            },
-        );
-        let failed_servers = discovery_report
-            .failed_servers
-            .iter()
-            .map(|failure| (failure.server_name.clone(), failure.error.clone()))
-            .collect::<BTreeMap<_, _>>();
-        let unsupported_servers = discovery_report
-            .unsupported_servers
-            .iter()
-            .map(|server| (server.server_name.clone(), server.reason.clone()))
-            .collect::<BTreeMap<_, _>>();
+        let workspace_mcp_capabilities =
+            discover_mcp_server_capabilities(runtime_config.mcp().servers()).await;
 
         for (server_name, scoped_config) in runtime_config.mcp().servers() {
-            let tool_names = discovered_tool_names
-                .get(server_name)
-                .cloned()
-                .unwrap_or_default();
-            let status_detail = failed_servers
-                .get(server_name)
-                .cloned()
-                .or_else(|| unsupported_servers.get(server_name).cloned());
-            let availability = if status_detail.is_some() {
-                "attention"
-            } else if tool_names.is_empty() {
-                "configured"
-            } else {
-                "healthy"
-            };
             let source_key = mcp_source_key("workspace", None, server_name);
-
-            entries.push(WorkspaceToolCatalogEntry {
-                id: format!("mcp-{server_name}"),
-                workspace_id: workspace_id.clone(),
-                name: server_name.clone(),
-                kind: "mcp".into(),
-                description: "Configured MCP server.".into(),
-                required_permission: None,
-                availability: availability.into(),
-                source_key: source_key.clone(),
-                display_path: "config/runtime/workspace.json".into(),
-                disabled: workspace_asset_is_disabled(&asset_state_document, &source_key),
-                management: WorkspaceToolManagementCapabilities {
+            append_mcp_catalog_entries(
+                &mut entries,
+                &workspace_id,
+                &asset_state_document,
+                &source_key,
+                "config/runtime/workspace.json",
+                WorkspaceToolManagementCapabilities {
                     can_disable: true,
                     can_edit: true,
                     can_delete: true,
                 },
-                builtin_key: None,
-                active: None,
-                shadowed_by: None,
-                source_origin: None,
-                workspace_owned: None,
-                relative_path: None,
-                server_name: Some(server_name.clone()),
-                endpoint: Some(mcp_endpoint(&scoped_config.config)),
-                tool_names: Some(tool_names),
-                status_detail,
-                scope: Some(mcp_scope_label(scoped_config.scope).into()),
-                owner_scope: Some("workspace".into()),
-                owner_id: None,
-                owner_label: Some("Workspace".into()),
-                consumers: clone_non_empty_consumers(consumer_maps.mcps.get(&source_key)),
-            });
+                Some("workspace".into()),
+                None,
+                Some("Workspace".into()),
+                mcp_scope_label(scoped_config.scope),
+                server_name,
+                &mcp_endpoint(&scoped_config.config),
+                clone_non_empty_consumers(consumer_maps.mcps.get(&source_key)),
+                workspace_mcp_capabilities.get(server_name),
+                "Configured MCP server.",
+            );
         }
 
         let managed_workspace_servers = runtime_config
@@ -2169,49 +2585,51 @@ impl InfraWorkspaceService {
             .cloned()
             .collect::<std::collections::HashSet<_>>();
 
-        for asset in list_builtin_mcp_assets()? {
+        let builtin_mcp_assets = list_builtin_mcp_assets()?;
+        let builtin_mcp_servers = builtin_mcp_assets
+            .iter()
+            .filter(|asset| !managed_workspace_servers.contains(&asset.server_name))
+            .filter_map(|asset| {
+                scoped_mcp_server_config_from_document(runtime::ConfigSource::Local, &asset.config)
+                    .map(|config| (asset.server_name.clone(), config))
+            })
+            .collect::<BTreeMap<_, _>>();
+        let builtin_mcp_capabilities = discover_mcp_server_capabilities(&builtin_mcp_servers).await;
+
+        for asset in builtin_mcp_assets {
             if managed_workspace_servers.contains(&asset.server_name) {
                 continue;
             }
-            entries.push(WorkspaceToolCatalogEntry {
-                id: format!("mcp-builtin-{}", asset.server_name),
-                workspace_id: workspace_id.clone(),
-                name: asset.server_name.clone(),
-                kind: "mcp".into(),
-                description: "Builtin MCP server template.".into(),
-                required_permission: None,
-                availability: "configured".into(),
-                source_key: format!("mcp:{}", asset.server_name),
-                display_path: asset.display_path.clone(),
-                disabled: workspace_asset_is_disabled(
-                    &asset_state_document,
-                    &format!("mcp:{}", asset.server_name),
-                ),
-                management: WorkspaceToolManagementCapabilities {
+            let source_key = format!("mcp:{}", asset.server_name);
+            append_mcp_catalog_entries(
+                &mut entries,
+                &workspace_id,
+                &asset_state_document,
+                &source_key,
+                &asset.display_path,
+                WorkspaceToolManagementCapabilities {
                     can_disable: true,
                     can_edit: false,
                     can_delete: false,
                 },
-                builtin_key: None,
-                active: None,
-                shadowed_by: None,
-                source_origin: None,
-                workspace_owned: None,
-                relative_path: None,
-                server_name: Some(asset.server_name.clone()),
-                endpoint: Some(mcp_endpoint_from_document(&asset.config)),
-                tool_names: Some(Vec::new()),
-                status_detail: None,
-                scope: Some("builtin".into()),
-                owner_scope: Some("builtin".into()),
-                owner_id: None,
-                owner_label: Some("Builtin".into()),
-                consumers: clone_non_empty_consumers(
-                    consumer_maps
-                        .mcps
-                        .get(&format!("mcp:{}", asset.server_name)),
-                ),
-            });
+                Some("builtin".into()),
+                None,
+                Some("Builtin".into()),
+                "builtin",
+                &asset.server_name,
+                &mcp_endpoint_from_document(&asset.config),
+                clone_non_empty_consumers(consumer_maps.mcps.get(&source_key)),
+                builtin_mcp_capabilities.get(&asset.server_name),
+                "Builtin MCP server template.",
+            );
+        }
+
+        let mut project_mcp_capabilities = HashMap::new();
+        for (project_id, servers) in &project_mcp_servers {
+            project_mcp_capabilities.insert(
+                project_id.clone(),
+                discover_mcp_server_capabilities(servers).await,
+            );
         }
 
         for project in &projects {
@@ -2221,38 +2639,30 @@ impl InfraWorkspaceService {
                 .unwrap_or_default();
             for (server_name, config) in project_configs {
                 let source_key = mcp_source_key("project", Some(&project.id), &server_name);
-                entries.push(WorkspaceToolCatalogEntry {
-                    id: format!("mcp-project-{}-{}", project.id, server_name),
-                    workspace_id: workspace_id.clone(),
-                    name: server_name.clone(),
-                    kind: "mcp".into(),
-                    description: "Configured MCP server.".into(),
-                    required_permission: None,
-                    availability: "configured".into(),
-                    source_key: source_key.clone(),
-                    display_path: format!("config/runtime/projects/{}.json", project.id),
-                    disabled: workspace_asset_is_disabled(&asset_state_document, &source_key),
-                    management: WorkspaceToolManagementCapabilities {
+                let discovered = project_mcp_capabilities
+                    .get(&project.id)
+                    .and_then(|capabilities| capabilities.get(&server_name));
+                append_mcp_catalog_entries(
+                    &mut entries,
+                    &workspace_id,
+                    &asset_state_document,
+                    &source_key,
+                    &format!("config/runtime/projects/{}.json", project.id),
+                    WorkspaceToolManagementCapabilities {
                         can_disable: true,
                         can_edit: false,
                         can_delete: false,
                     },
-                    builtin_key: None,
-                    active: None,
-                    shadowed_by: None,
-                    source_origin: None,
-                    workspace_owned: None,
-                    relative_path: None,
-                    server_name: Some(server_name.clone()),
-                    endpoint: Some(mcp_endpoint_from_document(&config)),
-                    tool_names: Some(Vec::new()),
-                    status_detail: None,
-                    scope: Some("project".into()),
-                    owner_scope: Some("project".into()),
-                    owner_id: Some(project.id.clone()),
-                    owner_label: Some(project.name.clone()),
-                    consumers: clone_non_empty_consumers(consumer_maps.mcps.get(&source_key)),
-                });
+                    Some("project".into()),
+                    Some(project.id.clone()),
+                    Some(project.name.clone()),
+                    "project",
+                    &server_name,
+                    &mcp_endpoint_from_document(&config),
+                    clone_non_empty_consumers(consumer_maps.mcps.get(&source_key)),
+                    discovered,
+                    "Configured MCP server.",
+                );
             }
         }
 
@@ -2272,5 +2682,137 @@ impl InfraWorkspaceService {
     ) -> Result<CapabilityManagementProjection, AppError> {
         let entries = self.build_tool_catalog_entries().await?;
         Ok(capability_management_projection(entries))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn management_capabilities() -> WorkspaceToolManagementCapabilities {
+        WorkspaceToolManagementCapabilities {
+            can_disable: true,
+            can_edit: true,
+            can_delete: true,
+        }
+    }
+
+    fn workspace_mcp_entry(
+        id: &str,
+        name: &str,
+        source_kind: &str,
+        execution_kind: &str,
+        tool_names: Vec<&str>,
+        resource_uri: Option<&str>,
+    ) -> WorkspaceToolCatalogEntry {
+        serde_json::from_value(json!({
+            "id": id,
+            "assetId": "mcp-asset-ops",
+            "capabilityId": id,
+            "workspaceId": "ws-test",
+            "name": name,
+            "kind": "mcp",
+            "sourceKind": source_kind,
+            "executionKind": execution_kind,
+            "description": format!("Capability for {name}"),
+            "requiredPermission": null,
+            "availability": "healthy",
+            "sourceKey": "mcp:ops",
+            "displayPath": "config/runtime/workspace.json",
+            "disabled": false,
+            "management": management_capabilities(),
+            "builtinKey": null,
+            "active": null,
+            "shadowedBy": null,
+            "sourceOrigin": null,
+            "workspaceOwned": null,
+            "relativePath": null,
+            "serverName": "ops",
+            "endpoint": "https://ops.example.com/mcp",
+            "toolNames": tool_names,
+            "resourceUri": resource_uri,
+            "statusDetail": null,
+            "scope": "workspace",
+            "ownerScope": "workspace",
+            "ownerId": "ws-test",
+            "ownerLabel": "Workspace",
+            "consumers": []
+        }))
+        .expect("mcp entry should deserialize")
+    }
+
+    #[test]
+    fn capability_management_projection_groups_mcp_capabilities_by_asset() {
+        let projection = capability_management_projection(vec![
+            workspace_mcp_entry(
+                "mcp_tool__ops__tail_logs",
+                "tail_logs",
+                "mcp_tool",
+                "tool",
+                vec!["tail_logs"],
+                None,
+            ),
+            workspace_mcp_entry(
+                "mcp_prompt__ops__deploy_review",
+                "deploy_review",
+                "mcp_prompt",
+                "prompt_skill",
+                Vec::new(),
+                None,
+            ),
+            workspace_mcp_entry(
+                "mcp_resource__ops__guide_txt",
+                "Ops Guide",
+                "mcp_resource",
+                "resource",
+                Vec::new(),
+                Some("file://ops-guide.txt"),
+            ),
+        ]);
+
+        let projection_json =
+            serde_json::to_value(&projection).expect("projection should serialize to JSON");
+
+        let entries = projection_json["entries"]
+            .as_array()
+            .expect("entries should serialize as array");
+        assert_eq!(entries.len(), 3);
+        assert!(entries.iter().any(|entry| {
+            entry["sourceKind"] == "mcp_tool" && entry["executionKind"] == "tool"
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry["sourceKind"] == "mcp_prompt"
+                && entry["executionKind"] == "prompt_skill"
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry["sourceKind"] == "mcp_resource"
+                && entry["executionKind"] == "resource"
+        }));
+
+        let assets = projection_json["assets"]
+            .as_array()
+            .expect("assets should serialize as array");
+        assert_eq!(
+            assets.len(),
+            1,
+            "three MCP capabilities should collapse into one server asset"
+        );
+        assert_eq!(
+            assets[0]["sourceKinds"],
+            json!(["mcp_prompt", "mcp_resource", "mcp_tool"])
+        );
+        assert_eq!(
+            assets[0]["executionKinds"],
+            json!(["prompt_skill", "resource", "tool"])
+        );
+
+        let packages = projection_json["mcpServerPackages"]
+            .as_array()
+            .expect("mcp packages should serialize as array");
+        assert_eq!(packages.len(), 1);
+        assert_eq!(packages[0]["toolNames"], json!(["tail_logs"]));
+        assert_eq!(packages[0]["promptNames"], json!(["deploy_review"]));
+        assert_eq!(packages[0]["resourceUris"], json!(["file://ops-guide.txt"]));
     }
 }

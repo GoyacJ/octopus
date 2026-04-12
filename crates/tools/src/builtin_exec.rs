@@ -97,13 +97,7 @@ pub(crate) fn execute_tool_with_enforcer(
         "CronDelete" => from_value::<CronDeleteInput>(input).and_then(run_cron_delete),
         "CronList" => run_cron_list(input.clone()),
         "LSP" => from_value::<LspInput>(input).and_then(run_lsp),
-        "ListMcpResources" => {
-            from_value::<McpResourceInput>(input).and_then(run_list_mcp_resources)
-        }
-        "ReadMcpResource" => from_value::<McpResourceInput>(input).and_then(run_read_mcp_resource),
-        "McpAuth" => from_value::<McpAuthInput>(input).and_then(run_mcp_auth),
         "RemoteTrigger" => from_value::<RemoteTriggerInput>(input).and_then(run_remote_trigger),
-        "MCP" => from_value::<McpToolInput>(input).and_then(run_mcp_tool),
         "TestingPermission" => {
             from_value::<TestingPermissionInput>(input).and_then(run_testing_permission)
         }

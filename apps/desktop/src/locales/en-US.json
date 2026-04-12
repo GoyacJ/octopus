@@ -1193,9 +1193,12 @@
       "workspaceOwned": "Ownership",
       "workspaceOwnedYes": "Workspace managed",
       "workspaceOwnedNo": "External source",
+      "sourceKind": "Capability source",
+      "executionKind": "Execution kind",
       "serverName": "Server",
       "endpoint": "Endpoint",
       "toolNames": "Discovered tools",
+      "resourceUri": "Resource URI",
       "scope": "Config scope",
       "statusDetail": "Status detail",
       "consumers": "Consumers"
@@ -1246,6 +1249,22 @@
       "builtin_bundle": "Builtin bundle",
       "skills_dir": "Skills",
       "legacy_commands_dir": "Legacy /commands"
+    },
+    "sourceKinds": {
+      "builtin": "Built-in",
+      "runtime_tool": "Runtime tool",
+      "plugin_tool": "Plugin tool",
+      "local_skill": "Local skill",
+      "bundled_skill": "Bundled skill",
+      "mcp_tool": "MCP tool",
+      "mcp_prompt": "MCP prompt",
+      "mcp_resource": "MCP resource",
+      "plugin_skill": "Plugin skill"
+    },
+    "executionKinds": {
+      "tool": "Tool",
+      "prompt_skill": "Prompt skill",
+      "resource": "Resource"
     },
     "ownerScopes": {
       "builtin": "Built-in",

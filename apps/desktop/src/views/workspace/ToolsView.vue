@@ -65,6 +65,8 @@ const {
   ownerScopeLabel,
   skillStateLabel,
   sourceOriginLabel,
+  sourceKindLabel,
+  executionKindLabel,
   fileTypeLabel,
   isExternalSkillEntry,
   skillDisplayPath,
@@ -129,6 +131,8 @@ const {
           :owner-scope-label="ownerScopeLabel"
           :skill-state-label="skillStateLabel"
           :source-origin-label="sourceOriginLabel"
+          :source-kind-label="sourceKindLabel"
+          :execution-kind-label="executionKindLabel"
           :is-external-skill-entry="isExternalSkillEntry"
           @update:active-tab="activeTab = $event"
           @update:search-query="searchQuery = $event"
@@ -272,6 +276,8 @@ const {
             :availability-label="availabilityLabel"
             :availability-tone="availabilityTone"
             :owner-scope-label="ownerScopeLabel"
+            :source-kind-label="sourceKindLabel"
+            :execution-kind-label="executionKindLabel"
             @update:mcp-config-draft="mcpConfigDraft = $event"
             @toggle-disabled="toggleDisabled(selectedMcpEntry, $event)"
             @save="saveCurrent"

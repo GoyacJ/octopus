@@ -11,8 +11,9 @@ use tokio::process::Command;
 use crate::mcp_client::{McpClientBootstrap, McpClientTransport, McpStdioTransport};
 
 use super::{
-    JsonRpcId, JsonRpcRequest, JsonRpcResponse, McpInitializeClientInfo, McpInitializeParams,
-    McpInitializeResult, McpListResourcesParams, McpListResourcesResult, McpListToolsParams,
+    JsonRpcId, JsonRpcRequest, JsonRpcResponse, McpGetPromptParams, McpGetPromptResult,
+    McpInitializeClientInfo, McpInitializeParams, McpInitializeResult, McpListPromptsParams,
+    McpListPromptsResult, McpListResourcesParams, McpListResourcesResult, McpListToolsParams,
     McpListToolsResult, McpReadResourceParams, McpReadResourceResult, McpStdioProcess,
     McpToolCallParams, McpToolCallResult,
 };
@@ -196,6 +197,22 @@ impl McpStdioProcess {
         params: McpToolCallParams,
     ) -> io::Result<JsonRpcResponse<McpToolCallResult>> {
         self.request(id, "tools/call", Some(params)).await
+    }
+
+    pub async fn list_prompts(
+        &mut self,
+        id: JsonRpcId,
+        params: Option<McpListPromptsParams>,
+    ) -> io::Result<JsonRpcResponse<McpListPromptsResult>> {
+        self.request(id, "prompts/list", params).await
+    }
+
+    pub async fn get_prompt(
+        &mut self,
+        id: JsonRpcId,
+        params: McpGetPromptParams,
+    ) -> io::Result<JsonRpcResponse<McpGetPromptResult>> {
+        self.request(id, "prompts/get", Some(params)).await
     }
 
     pub async fn list_resources(

@@ -4475,6 +4475,10 @@ components:
           type: string
         enabled:
           type: boolean
+        executionKinds:
+          items:
+            $ref: "#/components/schemas/CapabilityExecutionKind"
+          type: array
         exportStatus:
           $ref: "#/components/schemas/CapabilityAssetExportStatus"
         health:
@@ -4504,6 +4508,10 @@ components:
           type: string
         sourceKey:
           type: string
+        sourceKinds:
+          items:
+            $ref: "#/components/schemas/CapabilitySourceKind"
+          type: array
         state:
           $ref: "#/components/schemas/CapabilityAssetState"
         workspaceId:
@@ -4513,6 +4521,8 @@ components:
         - workspaceId
         - sourceKey
         - kind
+        - sourceKinds
+        - executionKinds
         - name
         - description
         - displayPath
@@ -4547,6 +4557,12 @@ components:
         - capabilityId
         - label
       type: object
+    CapabilityExecutionKind:
+      enum:
+        - tool
+        - prompt_skill
+        - resource
+      type: string
     CapabilityManagementEntry:
       additionalProperties: false
       properties:
@@ -4557,6 +4573,8 @@ components:
         availability:
           type: string
         builtinKey:
+          type: string
+        capabilityId:
           type: string
         consumers:
           items:
@@ -4572,6 +4590,8 @@ components:
           type: boolean
         endpoint:
           type: string
+        executionKind:
+          $ref: "#/components/schemas/CapabilityExecutionKind"
         exportStatus:
           $ref: "#/components/schemas/CapabilityAssetExportStatus"
         health:
@@ -4603,6 +4623,8 @@ components:
         requiredPermission:
           nullable: true
           type: string
+        resourceUri:
+          type: string
         scope:
           type: string
         serverName:
@@ -4611,6 +4633,8 @@ components:
           type: string
         sourceKey:
           type: string
+        sourceKind:
+          $ref: "#/components/schemas/CapabilitySourceKind"
         sourceOrigin:
           type: string
         state:
@@ -4628,9 +4652,12 @@ components:
       required:
         - id
         - assetId
+        - capabilityId
         - workspaceId
         - name
         - kind
+        - sourceKind
+        - executionKind
         - description
         - requiredPermission
         - availability
@@ -4670,6 +4697,18 @@ components:
         - skillPackages
         - mcpServerPackages
       type: object
+    CapabilitySourceKind:
+      enum:
+        - builtin
+        - runtime_tool
+        - plugin_tool
+        - local_skill
+        - bundled_skill
+        - mcp_tool
+        - mcp_prompt
+        - mcp_resource
+        - plugin_skill
+      type: string
     ChangeCurrentUserPasswordRequest:
       additionalProperties: false
       properties:
@@ -5956,6 +5995,14 @@ components:
                 - user
                 - builtin
               type: string
+            promptNames:
+              items:
+                type: string
+              type: array
+            resourceUris:
+              items:
+                type: string
+              type: array
             scope:
               enum:
                 - workspace
@@ -5977,6 +6024,8 @@ components:
             - serverName
             - endpoint
             - toolNames
+            - promptNames
+            - resourceUris
             - scope
     MenuDefinition:
       additionalProperties: false
@@ -8392,9 +8441,13 @@ components:
     WorkspaceBuiltinToolCatalogEntry:
       additionalProperties: false
       properties:
+        assetId:
+          type: string
         availability:
           $ref: "#/components/schemas/ViewStatus"
         builtinKey:
+          type: string
+        capabilityId:
           type: string
         description:
           type: string
@@ -8402,6 +8455,8 @@ components:
           type: boolean
         displayPath:
           type: string
+        executionKind:
+          $ref: "#/components/schemas/CapabilityExecutionKind"
         id:
           type: string
         kind:
@@ -8421,6 +8476,8 @@ components:
           type: string
         sourceKey:
           type: string
+        sourceKind:
+          $ref: "#/components/schemas/CapabilitySourceKind"
         workspaceId:
           type: string
       required:
@@ -8573,8 +8630,12 @@ components:
     WorkspaceMcpToolCatalogEntry:
       additionalProperties: false
       properties:
+        assetId:
+          type: string
         availability:
           $ref: "#/components/schemas/ViewStatus"
+        capabilityId:
+          type: string
         description:
           type: string
         disabled:
@@ -8583,6 +8644,8 @@ components:
           type: string
         endpoint:
           type: string
+        executionKind:
+          $ref: "#/components/schemas/CapabilityExecutionKind"
         id:
           type: string
         kind:
@@ -8600,6 +8663,8 @@ components:
             - danger-full-access
             - "null"
           type: string
+        resourceUri:
+          type: string
         scope:
           enum:
             - builtin
@@ -8611,6 +8676,8 @@ components:
           type: string
         sourceKey:
           type: string
+        sourceKind:
+          $ref: "#/components/schemas/CapabilitySourceKind"
         statusDetail:
           type: string
         toolNames:
@@ -8948,14 +9015,20 @@ components:
       properties:
         active:
           type: boolean
+        assetId:
+          type: string
         availability:
           $ref: "#/components/schemas/ViewStatus"
+        capabilityId:
+          type: string
         description:
           type: string
         disabled:
           type: boolean
         displayPath:
           type: string
+        executionKind:
+          $ref: "#/components/schemas/CapabilityExecutionKind"
         id:
           type: string
         kind:
@@ -8979,10 +9052,13 @@ components:
           type: string
         sourceKey:
           type: string
+        sourceKind:
+          $ref: "#/components/schemas/CapabilitySourceKind"
         sourceOrigin:
           enum:
             - skills_dir
             - legacy_commands_dir
+            - builtin_bundle
           type: string
         workspaceId:
           type: string

@@ -169,6 +169,66 @@ pub struct McpToolCallResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct McpListPromptsParams {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct McpPromptArgument {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct McpPrompt {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<Vec<McpPromptArgument>>,
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<JsonValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpListPromptsResult {
+    pub prompts: Vec<McpPrompt>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpGetPromptParams {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<JsonValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct McpPromptMessage {
+    pub role: String,
+    pub content: JsonValue,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct McpGetPromptResult {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub messages: Vec<McpPromptMessage>,
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<JsonValue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct McpListResourcesParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<String>,
@@ -227,6 +287,14 @@ pub struct ManagedMcpTool {
     pub qualified_name: String,
     pub raw_name: String,
     pub tool: McpTool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ManagedMcpPrompt {
+    pub server_name: String,
+    pub qualified_name: String,
+    pub raw_name: String,
+    pub prompt: McpPrompt,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -435,9 +503,9 @@ impl McpServerManagerError {
 fn lifecycle_phase_for_method(method: &str) -> McpLifecyclePhase {
     match method {
         "initialize" => McpLifecyclePhase::InitializeHandshake,
-        "tools/list" => McpLifecyclePhase::ToolDiscovery,
+        "tools/list" | "prompts/list" => McpLifecyclePhase::ToolDiscovery,
         "resources/list" => McpLifecyclePhase::ResourceDiscovery,
-        "resources/read" | "tools/call" => McpLifecyclePhase::Invocation,
+        "resources/read" | "tools/call" | "prompts/get" => McpLifecyclePhase::Invocation,
         _ => McpLifecyclePhase::ErrorSurfacing,
     }
 }

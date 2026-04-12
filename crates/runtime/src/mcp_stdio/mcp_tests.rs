@@ -20,8 +20,9 @@ use crate::McpLifecyclePhase;
 use super::{
     spawn_mcp_stdio_process, unsupported_server_failed_server, JsonRpcId, JsonRpcRequest,
     JsonRpcResponse, McpInitializeClientInfo, McpInitializeParams, McpInitializeResult,
-    McpInitializeServerInfo, McpListToolsResult, McpReadResourceParams, McpReadResourceResult,
-    McpServerManager, McpServerManagerError, McpStdioProcess, McpTool, McpToolCallParams,
+    McpInitializeServerInfo, McpListPromptsResult, McpListToolsResult, McpPrompt,
+    McpPromptMessage, McpReadResourceParams, McpReadResourceResult, McpServerManager,
+    McpServerManagerError, McpStdioProcess, McpTool, McpToolCallParams,
 };
 
 fn temp_dir() -> PathBuf {
@@ -136,7 +137,7 @@ fn write_mcp_server_script() -> PathBuf {
         "            'id': request['id'],",
         "            'result': {",
         "                'protocolVersion': request['params']['protocolVersion'],",
-        "                'capabilities': {'tools': {}, 'resources': {}},",
+        "                'capabilities': {'tools': {}, 'resources': {}, 'prompts': {}},",
         "                'serverInfo': {'name': 'fake-mcp', 'version': '0.2.0'}",
         "            }",
         "        })",
@@ -183,6 +184,38 @@ fn write_mcp_server_script() -> PathBuf {
         "                    'isError': False",
         "                }",
         "            })",
+        "    elif method == 'prompts/list':",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request['id'],",
+        "            'result': {",
+        "                'prompts': [",
+        "                    {",
+        "                        'name': 'workspace-guide',",
+        "                        'description': 'Workspace guidance prompt',",
+        "                        'arguments': [",
+        "                            {'name': 'topic', 'description': 'Topic to explain', 'required': False}",
+        "                        ]",
+        "                    }",
+        "                ]",
+        "            }",
+        "        })",
+        "    elif method == 'prompts/get':",
+        "        args = request['params'].get('arguments') or {}",
+        "        topic = args.get('topic', 'general')",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request['id'],",
+        "            'result': {",
+        "                'description': 'Workspace guidance prompt',",
+        "                'messages': [",
+        "                    {",
+        "                        'role': 'system',",
+        "                        'content': {'type': 'text', 'text': f'workspace guidance for {topic}'}",
+        "                    }",
+        "                ]",
+        "            }",
+        "        })",
         "    elif method == 'resources/list':",
         "        send_message({",
         "            'jsonrpc': '2.0',",
@@ -295,7 +328,7 @@ fn write_manager_mcp_server_script() -> PathBuf {
         "            'id': request['id'],",
         "            'result': {",
         "                'protocolVersion': request['params']['protocolVersion'],",
-        "                'capabilities': {'tools': {}},",
+        "                'capabilities': {'tools': {}, 'prompts': {}},",
         "                'serverInfo': {'name': LABEL, 'version': '1.0.0'}",
         "            }",
         "        })",
@@ -319,6 +352,38 @@ fn write_manager_mcp_server_script() -> PathBuf {
         "        })",
         "        if EXIT_AFTER_TOOLS_LIST:",
         "            raise SystemExit(0)",
+        "    elif method == 'prompts/list':",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request['id'],",
+        "            'result': {",
+        "                'prompts': [",
+        "                    {",
+        "                        'name': 'workspace-guide',",
+        "                        'description': f'Workspace prompt for {LABEL}',",
+        "                        'arguments': [",
+        "                            {'name': 'topic', 'description': 'Topic to explain', 'required': False}",
+        "                        ]",
+        "                    }",
+        "                ]",
+        "            }",
+        "        })",
+        "    elif method == 'prompts/get':",
+        "        args = request['params'].get('arguments') or {}",
+        "        text = args.get('topic', 'general')",
+        "        send_message({",
+        "            'jsonrpc': '2.0',",
+        "            'id': request['id'],",
+        "            'result': {",
+        "                'description': f'Workspace prompt for {LABEL}',",
+        "                'messages': [",
+        "                    {",
+        "                        'role': 'system',",
+        "                        'content': {'type': 'text', 'text': f'{LABEL}:{text}'}",
+        "                    }",
+        "                ]",
+        "            }",
+        "        })",
         "    elif method == 'tools/call':",
         "        if FAIL_ONCE_MODE == 'tool_call_disconnect' and should_fail_once():",
         "            log('tools/call-disconnect')",
@@ -751,6 +816,50 @@ fn lists_tools_calls_tool_and_reads_resources_over_jsonrpc() {
                     meta: None,
                 }],
             })
+        );
+
+        let prompts = process
+            .list_prompts(JsonRpcId::Number(5), None)
+            .await
+            .expect("list prompts");
+        assert_eq!(
+            prompts.result,
+            Some(McpListPromptsResult {
+                prompts: vec![McpPrompt {
+                    name: "workspace-guide".to_string(),
+                    description: Some("Workspace guidance prompt".to_string()),
+                    arguments: Some(vec![crate::McpPromptArgument {
+                        name: "topic".to_string(),
+                        description: Some("Topic to explain".to_string()),
+                        required: Some(false),
+                    }]),
+                    meta: None,
+                }],
+                next_cursor: None,
+            })
+        );
+
+        let prompt = process
+            .get_prompt(
+                JsonRpcId::Number(6),
+                crate::McpGetPromptParams {
+                    name: "workspace-guide".to_string(),
+                    arguments: Some(json!({"topic": "workspace"})),
+                },
+            )
+            .await
+            .expect("get prompt");
+        let prompt_result = prompt.result.expect("prompt result");
+        assert_eq!(
+            prompt_result.description.as_deref(),
+            Some("Workspace guidance prompt")
+        );
+        assert_eq!(
+            prompt_result.messages,
+            vec![McpPromptMessage {
+                role: "system".to_string(),
+                content: json!({"type": "text", "text": "workspace guidance for workspace"}),
+            }]
         );
 
         process.terminate().await.expect("terminate child");
@@ -1232,6 +1341,48 @@ fn manager_lists_and_reads_resources_from_stdio_servers() {
         assert_eq!(
             read.contents[0].text.as_deref(),
             Some("contents for file://guide.txt")
+        );
+
+        manager.shutdown().await.expect("shutdown");
+        cleanup_script(&script_path);
+    });
+}
+
+#[test]
+fn manager_discovers_and_gets_prompts_from_stdio_servers() {
+    let runtime = Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    runtime.block_on(async {
+        let script_path = write_manager_mcp_server_script();
+        let root = script_path.parent().expect("script parent");
+        let log_path = root.join("prompts.log");
+        let servers = BTreeMap::from([(
+            "alpha".to_string(),
+            manager_server_config(&script_path, "alpha", &log_path),
+        )]);
+        let mut manager = McpServerManager::from_servers(&servers);
+
+        let prompts = manager
+            .discover_prompts_for_server("alpha")
+            .await
+            .expect("discover prompts");
+        assert_eq!(prompts.len(), 1);
+        assert_eq!(prompts[0].server_name, "alpha");
+        assert_eq!(prompts[0].raw_name, "workspace-guide");
+        assert_eq!(prompts[0].qualified_name, "mcp_prompt__alpha__workspace-guide");
+
+        let prompt = manager
+            .get_prompt("alpha", "workspace-guide", Some(json!({"topic": "workspace"})))
+            .await
+            .expect("get prompt");
+        assert_eq!(
+            prompt.messages,
+            vec![McpPromptMessage {
+                role: "system".to_string(),
+                content: json!({"type": "text", "text": "alpha:workspace"}),
+            }]
         );
 
         manager.shutdown().await.expect("shutdown");

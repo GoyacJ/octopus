@@ -1,10 +1,12 @@
 import type {
+  CapabilityExecutionKind,
   CapabilityAssetExportStatus,
   CapabilityAssetImportStatus,
   CapabilityAssetManifest,
   CapabilityAssetState,
   CapabilityManagementEntry,
   CapabilityManagementProjection,
+  CapabilitySourceKind,
   McpServerPackageManifest,
   SkillPackageManifest,
   WorkspaceToolCatalogEntry,
@@ -52,16 +54,68 @@ function resolveAssetState(entry: WorkspaceToolCatalogEntry): CapabilityAssetSta
   return entry.scope
 }
 
+function capabilityAssetId(entry: WorkspaceToolCatalogEntry) {
+  return entry.assetId ?? entry.id
+}
+
+function capabilityId(entry: WorkspaceToolCatalogEntry) {
+  return entry.capabilityId ?? entry.id
+}
+
+function capabilitySourceKind(entry: WorkspaceToolCatalogEntry): CapabilitySourceKind {
+  if (entry.sourceKind) {
+    return entry.sourceKind
+  }
+  if (entry.kind === 'builtin') {
+    return 'builtin'
+  }
+  if (entry.kind === 'skill') {
+    return entry.sourceOrigin === 'builtin_bundle' ? 'bundled_skill' : 'local_skill'
+  }
+  return 'mcp_tool'
+}
+
+function capabilityExecutionKind(entry: WorkspaceToolCatalogEntry): CapabilityExecutionKind {
+  if (entry.executionKind) {
+    return entry.executionKind
+  }
+  if (entry.kind === 'skill') {
+    return 'prompt_skill'
+  }
+  if (entry.kind === 'mcp' && entry.resourceUri) {
+    return 'resource'
+  }
+  return 'tool'
+}
+
+function uniqueSorted<T extends string>(values: readonly T[]): T[] {
+  return [...new Set(values.filter(Boolean))].sort()
+}
+
+function assetName(entry: WorkspaceToolCatalogEntry) {
+  return entry.kind === 'mcp' ? (entry.serverName ?? entry.name) : entry.name
+}
+
+function assetDescription(entry: WorkspaceToolCatalogEntry) {
+  if (entry.kind !== 'mcp') {
+    return entry.description
+  }
+  return entry.scope === 'builtin' ? 'Builtin MCP server template.' : 'Configured MCP server.'
+}
+
 function toAssetManifest<TEntry extends WorkspaceToolCatalogEntry>(
-  entry: TEntry,
+  entries: TEntry[],
 ): CapabilityAssetManifest & { kind: TEntry['kind'] } {
+  const entry = entries[0]
   return {
-    assetId: entry.id,
+    assetId: capabilityAssetId(entry),
     workspaceId: entry.workspaceId,
     sourceKey: entry.sourceKey,
     kind: entry.kind,
-    name: entry.name,
-    description: entry.description,
+    sourceKinds: uniqueSorted(entries.map(item => capabilitySourceKind(item))),
+    executionKinds: uniqueSorted(entries.map(item => capabilityExecutionKind(item))),
+    name: assetName(entry),
+    description: assetDescription(entry),
     displayPath: entry.displayPath,
     ownerScope: entry.ownerScope,
     ownerId: entry.ownerId,
@@ -78,28 +132,42 @@ function toAssetManifest<TEntry extends WorkspaceToolCatalogEntry>(
 }
 
 function toManagementEntry(entry: WorkspaceToolCatalogEntry): CapabilityManagementEntry {
-  const manifest = toAssetManifest(entry)
+  const manifest = toAssetManifest([entry])
+  const { sourceKinds: _sourceKinds, executionKinds: _executionKinds, ...assetFields } = manifest
   if (entry.kind === 'builtin') {
     return {
       ...entry,
-      ...manifest,
+      ...assetFields,
+      assetId: capabilityAssetId(entry),
+      capabilityId: capabilityId(entry),
+      sourceKind: capabilitySourceKind(entry),
+      executionKind: capabilityExecutionKind(entry),
     } as Extract<CapabilityManagementEntry, { kind: 'builtin' }>
   }
   if (entry.kind === 'skill') {
     return {
       ...entry,
-      ...manifest,
+      ...assetFields,
+      assetId: capabilityAssetId(entry),
+      capabilityId: capabilityId(entry),
+      sourceKind: capabilitySourceKind(entry),
+      executionKind: capabilityExecutionKind(entry),
     } as Extract<CapabilityManagementEntry, { kind: 'skill' }>
   }
   return {
     ...entry,
-    ...manifest,
+    ...assetFields,
+    assetId: capabilityAssetId(entry),
+    capabilityId: capabilityId(entry),
+    sourceKind: capabilitySourceKind(entry),
+    executionKind: capabilityExecutionKind(entry),
+    resourceUri: entry.resourceUri,
   } as Extract<CapabilityManagementEntry, { kind: 'mcp' }>
 }
 
 function toSkillPackageManifest(entry: Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }>): SkillPackageManifest {
   return {
-    ...toAssetManifest(entry),
+    ...toAssetManifest([entry]),
     kind: 'skill',
     packageKind: entry.ownerScope === 'project'
       ? 'project'
@@ -116,14 +184,21 @@ function toSkillPackageManifest(entry: Extract<WorkspaceToolCatalogEntry, { kind
   }
 }
 
-function toMcpServerPackageManifest(entry: Extract<WorkspaceToolCatalogEntry, { kind: 'mcp' }>): McpServerPackageManifest {
+function toMcpServerPackageManifest(entries: Extract<WorkspaceToolCatalogEntry, { kind: 'mcp' }>[]): McpServerPackageManifest {
+  const entry = entries[0]
   return {
-    ...toAssetManifest(entry),
+    ...toAssetManifest(entries),
     kind: 'mcp',
     packageKind: entry.scope,
     serverName: entry.serverName,
     endpoint: entry.endpoint,
-    toolNames: [...entry.toolNames],
+    toolNames: uniqueSorted(entries.flatMap(item => item.toolNames ?? [])),
+    promptNames: uniqueSorted(entries
+      .filter(item => capabilitySourceKind(item) === 'mcp_prompt')
+      .map(item => item.name)),
+    resourceUris: uniqueSorted(entries
+      .map(item => item.resourceUri)
+      .filter((value): value is string => Boolean(value))),
     scope: entry.scope,
     statusDetail: entry.statusDetail,
   }
@@ -131,55 +206,19 @@ function toMcpServerPackageManifest(entry: Extract<WorkspaceToolCatalogEntry, { 
 
 export function deriveCapabilityManagementProjection(entries: WorkspaceToolCatalogEntry[]): CapabilityManagementProjection {
   const managementEntries = entries.map(toManagementEntry)
+  const groupedAssets = new Map<string, WorkspaceToolCatalogEntry[]>()
+  for (const entry of entries) {
+    const key = `${capabilityAssetId(entry)}::${entry.sourceKey}`
+    groupedAssets.set(key, [...(groupedAssets.get(key) ?? []), entry])
+  }
   return {
     entries: managementEntries,
-    assets: managementEntries.map((entry) => {
-      const {
-        assetId,
-        workspaceId,
-        sourceKey,
-        kind,
-        name,
-        description,
-        displayPath,
-        ownerScope,
-        ownerId,
-        ownerLabel,
-        requiredPermission,
-        management,
-        installed,
-        enabled,
-        health,
-        state,
-        importStatus,
-        exportStatus,
-      } = entry
-      return {
-        assetId,
-        workspaceId,
-        sourceKey,
-        kind,
-        name,
-        description,
-        displayPath,
-        ownerScope,
-        ownerId,
-        ownerLabel,
-        requiredPermission,
-        management,
-        installed,
-        enabled,
-        health,
-        state,
-        importStatus,
-        exportStatus,
-      }
-    }),
+    assets: [...groupedAssets.values()].map(group => toAssetManifest(group)),
     skillPackages: entries
       .filter((entry): entry is Extract<WorkspaceToolCatalogEntry, { kind: 'skill' }> => entry.kind === 'skill')
       .map(toSkillPackageManifest),
-    mcpServerPackages: entries
-      .filter((entry): entry is Extract<WorkspaceToolCatalogEntry, { kind: 'mcp' }> => entry.kind === 'mcp')
+    mcpServerPackages: [...groupedAssets.values()]
+      .filter((group): group is Extract<WorkspaceToolCatalogEntry, { kind: 'mcp' }>[] => group[0]?.kind === 'mcp')
       .map(toMcpServerPackageManifest),
   }
 }

@@ -25,7 +25,6 @@ mod mcp;
 mod mcp_client;
 pub mod mcp_lifecycle_hardened;
 mod mcp_stdio;
-pub mod mcp_tool_bridge;
 mod oauth;
 pub mod permission_enforcer;
 mod permissions;
@@ -96,9 +95,11 @@ pub use mcp_lifecycle_hardened::{
 };
 pub use mcp_stdio::{
     spawn_mcp_stdio_process, JsonRpcError, JsonRpcId, JsonRpcRequest, JsonRpcResponse,
-    ManagedMcpTool, McpDiscoveryFailure, McpInitializeClientInfo, McpInitializeParams,
-    McpInitializeResult, McpInitializeServerInfo, McpListResourcesParams, McpListResourcesResult,
-    McpListToolsParams, McpListToolsResult, McpReadResourceParams, McpReadResourceResult,
+    ManagedMcpPrompt, ManagedMcpTool, McpDiscoveryFailure, McpGetPromptParams,
+    McpGetPromptResult, McpInitializeClientInfo, McpInitializeParams, McpInitializeResult,
+    McpInitializeServerInfo, McpListPromptsParams, McpListPromptsResult, McpListResourcesParams,
+    McpListResourcesResult, McpListToolsParams, McpListToolsResult, McpPrompt,
+    McpPromptArgument, McpPromptMessage, McpReadResourceParams, McpReadResourceResult,
     McpResource, McpResourceContents, McpServerManager, McpServerManagerError, McpStdioProcess,
     McpTool, McpToolCallContent, McpToolCallParams, McpToolCallResult, McpToolDiscoveryReport,
     UnsupportedMcpServer,

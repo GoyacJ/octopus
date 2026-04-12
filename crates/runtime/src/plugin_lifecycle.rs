@@ -4,7 +4,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::config::RuntimePluginConfig;
-use crate::mcp_tool_bridge::{McpResourceInfo, McpToolInfo};
 
 fn now_secs() -> u64 {
     SystemTime::now()
@@ -13,8 +12,20 @@ fn now_secs() -> u64 {
         .as_secs()
 }
 
-pub type ToolInfo = McpToolInfo;
-pub type ResourceInfo = McpResourceInfo;
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceInfo {
+    pub uri: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub mime_type: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ToolInfo {
+    pub name: String,
+    pub description: Option<String>,
+    pub input_schema: Option<serde_json::Value>,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

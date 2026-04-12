@@ -4,7 +4,8 @@ use crate::mcp::mcp_tool_name;
 use crate::mcp_lifecycle_hardened::{McpDegradedReport, McpErrorSurface, McpFailedServer};
 
 use super::{
-    unsupported_server_failed_server, ManagedMcpTool, McpListResourcesParams,
+    unsupported_server_failed_server, ManagedMcpPrompt, ManagedMcpTool, McpGetPromptParams,
+    McpGetPromptResult, McpListPromptsParams, McpListPromptsResult, McpListResourcesParams,
     McpListResourcesResult, McpReadResourceParams, McpReadResourceResult, McpServerManager,
     McpServerManagerError, McpToolCallParams, McpToolCallResult, McpToolDiscoveryReport, ToolRoute,
     MCP_LIST_TOOLS_TIMEOUT_MS,
@@ -134,6 +135,54 @@ impl McpServerManager {
         }
 
         response
+    }
+
+    pub async fn list_prompts(
+        &mut self,
+        server_name: &str,
+    ) -> Result<McpListPromptsResult, McpServerManagerError> {
+        let mut attempts = 0;
+
+        loop {
+            match self.list_prompts_once(server_name).await {
+                Ok(prompts) => return Ok(prompts),
+                Err(error) if attempts == 0 && Self::is_retryable_error(&error) => {
+                    self.reset_server(server_name).await?;
+                    attempts += 1;
+                }
+                Err(error) => {
+                    if Self::should_reset_server(&error) {
+                        self.reset_server(server_name).await?;
+                    }
+                    return Err(error);
+                }
+            }
+        }
+    }
+
+    pub async fn get_prompt(
+        &mut self,
+        server_name: &str,
+        name: &str,
+        arguments: Option<JsonValue>,
+    ) -> Result<McpGetPromptResult, McpServerManagerError> {
+        let mut attempts = 0;
+
+        loop {
+            match self.get_prompt_once(server_name, name, arguments.clone()).await {
+                Ok(prompt) => return Ok(prompt),
+                Err(error) if attempts == 0 && Self::is_retryable_error(&error) => {
+                    self.reset_server(server_name).await?;
+                    attempts += 1;
+                }
+                Err(error) => {
+                    if Self::should_reset_server(&error) {
+                        self.reset_server(server_name).await?;
+                    }
+                    return Err(error);
+                }
+            }
+        }
     }
 
     pub async fn list_resources(
@@ -354,6 +403,69 @@ impl McpServerManager {
         })
     }
 
+    async fn list_prompts_once(
+        &mut self,
+        server_name: &str,
+    ) -> Result<McpListPromptsResult, McpServerManagerError> {
+        self.ensure_server_ready(server_name).await?;
+
+        let mut prompts = Vec::new();
+        let mut cursor = None;
+        loop {
+            let request_id = self.take_request_id();
+            let response = {
+                let server = self.server_mut(server_name)?;
+                let process = server.process.as_mut().ok_or_else(|| {
+                    McpServerManagerError::InvalidResponse {
+                        server_name: server_name.to_string(),
+                        method: "prompts/list",
+                        details: "server process missing after initialization".to_string(),
+                    }
+                })?;
+                Self::run_process_request(
+                    server_name,
+                    "prompts/list",
+                    MCP_LIST_TOOLS_TIMEOUT_MS,
+                    process.list_prompts(
+                        request_id,
+                        Some(McpListPromptsParams {
+                            cursor: cursor.clone(),
+                        }),
+                    ),
+                )
+                .await?
+            };
+
+            if let Some(error) = response.error {
+                return Err(McpServerManagerError::JsonRpc {
+                    server_name: server_name.to_string(),
+                    method: "prompts/list",
+                    error,
+                });
+            }
+
+            let result = response
+                .result
+                .ok_or_else(|| McpServerManagerError::InvalidResponse {
+                    server_name: server_name.to_string(),
+                    method: "prompts/list",
+                    details: "missing result payload".to_string(),
+                })?;
+
+            prompts.extend(result.prompts);
+
+            match result.next_cursor {
+                Some(next_cursor) => cursor = Some(next_cursor),
+                None => break,
+            }
+        }
+
+        Ok(McpListPromptsResult {
+            prompts,
+            next_cursor: None,
+        })
+    }
+
     async fn read_resource_once(
         &mut self,
         server_name: &str,
@@ -399,6 +511,73 @@ impl McpServerManager {
             .ok_or_else(|| McpServerManagerError::InvalidResponse {
                 server_name: server_name.to_string(),
                 method: "resources/read",
+                details: "missing result payload".to_string(),
+            })
+    }
+
+    pub async fn discover_prompts_for_server(
+        &mut self,
+        server_name: &str,
+    ) -> Result<Vec<ManagedMcpPrompt>, McpServerManagerError> {
+        let prompts = self.list_prompts(server_name).await?;
+        Ok(prompts
+            .prompts
+            .into_iter()
+            .map(|prompt| ManagedMcpPrompt {
+                server_name: server_name.to_string(),
+                qualified_name: format!("mcp_prompt__{}__{}", server_name, prompt.name),
+                raw_name: prompt.name.clone(),
+                prompt,
+            })
+            .collect())
+    }
+
+    async fn get_prompt_once(
+        &mut self,
+        server_name: &str,
+        name: &str,
+        arguments: Option<JsonValue>,
+    ) -> Result<McpGetPromptResult, McpServerManagerError> {
+        self.ensure_server_ready(server_name).await?;
+
+        let request_id = self.take_request_id();
+        let response = {
+            let server = self.server_mut(server_name)?;
+            let process = server.process.as_mut().ok_or_else(|| {
+                McpServerManagerError::InvalidResponse {
+                    server_name: server_name.to_string(),
+                    method: "prompts/get",
+                    details: "server process missing after initialization".to_string(),
+                }
+            })?;
+            Self::run_process_request(
+                server_name,
+                "prompts/get",
+                MCP_LIST_TOOLS_TIMEOUT_MS,
+                process.get_prompt(
+                    request_id,
+                    McpGetPromptParams {
+                        name: name.to_string(),
+                        arguments,
+                    },
+                ),
+            )
+            .await?
+        };
+
+        if let Some(error) = response.error {
+            return Err(McpServerManagerError::JsonRpc {
+                server_name: server_name.to_string(),
+                method: "prompts/get",
+                error,
+            });
+        }
+
+        response
+            .result
+            .ok_or_else(|| McpServerManagerError::InvalidResponse {
+                server_name: server_name.to_string(),
+                method: "prompts/get",
                 details: "missing result payload".to_string(),
             })
     }

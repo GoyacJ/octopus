@@ -758,45 +758,6 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             required_permission: PermissionMode::ReadOnly,
         },
         ToolSpec {
-            name: "ListMcpResources",
-            description: "List available resources from connected MCP servers.",
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "server": { "type": "string" }
-                },
-                "additionalProperties": false
-            }),
-            required_permission: PermissionMode::ReadOnly,
-        },
-        ToolSpec {
-            name: "ReadMcpResource",
-            description: "Read a specific resource from an MCP server by URI.",
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "server": { "type": "string" },
-                    "uri": { "type": "string" }
-                },
-                "required": ["uri"],
-                "additionalProperties": false
-            }),
-            required_permission: PermissionMode::ReadOnly,
-        },
-        ToolSpec {
-            name: "McpAuth",
-            description: "Authenticate with an MCP server that requires OAuth or credentials.",
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "server": { "type": "string" }
-                },
-                "required": ["server"],
-                "additionalProperties": false
-            }),
-            required_permission: PermissionMode::DangerFullAccess,
-        },
-        ToolSpec {
             name: "RemoteTrigger",
             description: "Trigger a remote action or webhook endpoint.",
             input_schema: json!({
@@ -808,21 +769,6 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
                     "body": { "type": "string" }
                 },
                 "required": ["url"],
-                "additionalProperties": false
-            }),
-            required_permission: PermissionMode::DangerFullAccess,
-        },
-        ToolSpec {
-            name: "MCP",
-            description: "Execute a tool provided by a connected MCP server.",
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "server": { "type": "string" },
-                    "tool": { "type": "string" },
-                    "arguments": { "type": "object" }
-                },
-                "required": ["server", "tool"],
                 "additionalProperties": false
             }),
             required_permission: PermissionMode::DangerFullAccess,

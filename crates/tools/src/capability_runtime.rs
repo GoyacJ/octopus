@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -19,7 +20,7 @@ use crate::tool_registry::{
     normalize_tool_search_query, permission_mode_from_plugin, search_tool_specs,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilitySourceKind {
     Builtin,
@@ -33,7 +34,30 @@ pub enum CapabilitySourceKind {
     PluginSkill,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+impl CapabilitySourceKind {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Builtin => "builtin",
+            Self::RuntimeTool => "runtime_tool",
+            Self::PluginTool => "plugin_tool",
+            Self::LocalSkill => "local_skill",
+            Self::BundledSkill => "bundled_skill",
+            Self::McpTool => "mcp_tool",
+            Self::McpPrompt => "mcp_prompt",
+            Self::McpResource => "mcp_resource",
+            Self::PluginSkill => "plugin_skill",
+        }
+    }
+}
+
+impl fmt::Display for CapabilitySourceKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityExecutionKind {
     Tool,
@@ -41,7 +65,24 @@ pub enum CapabilityExecutionKind {
     Resource,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+impl CapabilityExecutionKind {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Tool => "tool",
+            Self::PromptSkill => "prompt_skill",
+            Self::Resource => "resource",
+        }
+    }
+}
+
+impl fmt::Display for CapabilityExecutionKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityVisibility {
     DefaultVisible,
@@ -49,7 +90,7 @@ pub enum CapabilityVisibility {
     Hidden,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityState {
     Ready,
@@ -60,7 +101,7 @@ pub enum CapabilityState {
     Unavailable,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CapabilityConcurrencyPolicy {
     ParallelRead,
@@ -72,11 +113,36 @@ pub struct CapabilityPermissionProfile {
     pub required_permission: PermissionMode,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CapabilityInvocationPolicy {
     pub selectable: bool,
     pub requires_approval: bool,
     pub requires_auth: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CapabilityTrustProfile {
+    pub requires_trusted_workspace: bool,
+    pub requires_explicit_user_trust: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CapabilityScopeConstraints {
+    pub workspace_only: bool,
+    pub requires_current_dir: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CapabilityHandle {
+    pub capability_id: String,
+    pub source_kind: CapabilitySourceKind,
+    pub execution_kind: CapabilityExecutionKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub executor_key: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -92,11 +158,26 @@ pub struct CapabilitySpec {
     pub visibility: CapabilityVisibility,
     pub state: CapabilityState,
     pub permission_profile: CapabilityPermissionProfile,
+    pub trust_profile: CapabilityTrustProfile,
+    pub scope_constraints: CapabilityScopeConstraints,
     pub invocation_policy: CapabilityInvocationPolicy,
     pub concurrency_policy: CapabilityConcurrencyPolicy,
+    pub provider_key: Option<String>,
+    pub executor_key: Option<String>,
 }
 
 impl CapabilitySpec {
+    #[must_use]
+    pub fn handle(&self) -> CapabilityHandle {
+        CapabilityHandle {
+            capability_id: self.capability_id.clone(),
+            source_kind: self.source_kind,
+            execution_kind: self.execution_kind,
+            provider_key: self.provider_key.clone(),
+            executor_key: self.executor_key.clone(),
+        }
+    }
+
     #[must_use]
     pub fn to_tool_definition(&self) -> ToolDefinition {
         ToolDefinition {
@@ -105,6 +186,15 @@ impl CapabilitySpec {
             input_schema: self.input_schema.clone(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct CapabilitySurface {
+    pub visible_tools: Vec<CapabilitySpec>,
+    pub deferred_tools: Vec<CapabilitySpec>,
+    pub discoverable_skills: Vec<CapabilitySpec>,
+    pub available_resources: Vec<CapabilitySpec>,
+    pub hidden_capabilities: Vec<CapabilitySpec>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -119,6 +209,8 @@ pub struct McpCapabilityDescriptor {
     pub capability_id: String,
     pub source_kind: CapabilitySourceKind,
     pub execution_kind: CapabilityExecutionKind,
+    pub provider_key: Option<String>,
+    pub executor_key: Option<String>,
     pub display_name: String,
     pub description: String,
     pub when_to_use: Option<String>,
@@ -129,6 +221,8 @@ pub struct McpCapabilityDescriptor {
     pub required_permission: PermissionMode,
     pub requires_auth: bool,
     pub requires_approval: bool,
+    pub trust_profile: CapabilityTrustProfile,
+    pub scope_constraints: CapabilityScopeConstraints,
 }
 
 impl McpCapabilityDescriptor {
@@ -138,6 +232,8 @@ impl McpCapabilityDescriptor {
             capability_id: self.capability_id.clone(),
             source_kind: self.source_kind,
             execution_kind: self.execution_kind,
+            provider_key: self.provider_key.clone(),
+            executor_key: self.executor_key.clone(),
             display_name: self.display_name.clone(),
             description: self.description.clone(),
             when_to_use: self.when_to_use.clone(),
@@ -148,6 +244,8 @@ impl McpCapabilityDescriptor {
             permission_profile: CapabilityPermissionProfile {
                 required_permission: self.required_permission,
             },
+            trust_profile: self.trust_profile.clone(),
+            scope_constraints: self.scope_constraints.clone(),
             invocation_policy: CapabilityInvocationPolicy {
                 selectable: true,
                 requires_approval: self.requires_approval,
@@ -203,6 +301,8 @@ pub struct ManagedMcpRuntime {
     degraded_report: Option<McpDegradedReport>,
     capability_provider: McpCapabilityProvider,
     tool_capability_names: BTreeSet<String>,
+    prompt_routes: BTreeMap<String, (String, String)>,
+    resource_routes: BTreeMap<String, (String, String)>,
 }
 
 impl ManagedMcpRuntime {
@@ -270,6 +370,7 @@ impl ManagedMcpRuntime {
                     }
                 }))
                 .collect::<Vec<_>>();
+        let mut listed_prompts = Vec::new();
         let mut listed_resources = Vec::new();
         let mut connection_projections = working_servers
             .iter()
@@ -280,6 +381,31 @@ impl ManagedMcpRuntime {
             })
             .collect::<Vec<_>>();
         for server_name in &working_servers {
+            match runtime.block_on(manager.discover_prompts_for_server(server_name)) {
+                Ok(prompts) => {
+                    listed_prompts.extend(prompts);
+                }
+                Err(error) => {
+                    connection_projections
+                        .retain(|projection| projection.server_name != *server_name);
+                    connection_projections.push(McpConnectionProjection {
+                        server_name: server_name.clone(),
+                        state: CapabilityState::Degraded,
+                        status_detail: Some(error.to_string()),
+                    });
+                    failed_servers.push(runtime::McpFailedServer {
+                        server_name: server_name.clone(),
+                        phase: runtime::McpLifecyclePhase::ToolDiscovery,
+                        error: runtime::McpErrorSurface::new(
+                            runtime::McpLifecyclePhase::ToolDiscovery,
+                            Some(server_name.clone()),
+                            error.to_string(),
+                            std::collections::BTreeMap::new(),
+                            true,
+                        ),
+                    });
+                }
+            }
             match runtime.block_on(manager.list_resources(server_name)) {
                 Ok(result) => {
                     listed_resources.extend(
@@ -338,6 +464,11 @@ impl ManagedMcpRuntime {
             .iter()
             .map(mcp_tool_capability_descriptor)
             .collect::<Vec<_>>();
+        capability_descriptors.extend(
+            listed_prompts
+                .iter()
+                .map(mcp_prompt_capability_descriptor),
+        );
         capability_descriptors.extend(listed_resources.iter().map(|(server_name, resource)| {
             mcp_resource_capability_descriptor(server_name, resource)
         }));
@@ -348,6 +479,26 @@ impl ManagedMcpRuntime {
             .iter()
             .map(|tool| tool.qualified_name.clone())
             .collect::<BTreeSet<_>>();
+        let prompt_routes = listed_prompts
+            .iter()
+            .map(|prompt| {
+                (
+                    prompt.qualified_name.clone(),
+                    (prompt.server_name.clone(), prompt.raw_name.clone()),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+        let resource_routes = listed_resources
+            .iter()
+            .map(|(server_name, resource)| {
+                let capability_id =
+                    mcp_resource_capability_descriptor(server_name, resource).capability_id;
+                (
+                    capability_id,
+                    (server_name.clone(), resource.uri.clone()),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
 
         Ok(Some(Self {
             runtime,
@@ -356,6 +507,8 @@ impl ManagedMcpRuntime {
             degraded_report,
             capability_provider,
             tool_capability_names,
+            prompt_routes,
+            resource_routes,
         }))
     }
 
@@ -393,6 +546,77 @@ impl ManagedMcpRuntime {
         self.call_tool(tool_name, Some(value))
     }
 
+    pub fn execute_prompt_skill(
+        &mut self,
+        capability: &CapabilitySpec,
+        arguments: Option<Value>,
+    ) -> Result<crate::SkillExecutionResult, String> {
+        let executor_key = capability
+            .executor_key
+            .as_ref()
+            .ok_or_else(|| format!("prompt `{}` does not have a runtime executor", capability.display_name))?;
+        let (server_name, raw_name) = self
+            .prompt_routes
+            .get(executor_key)
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "prompt `{}` is not registered with the MCP runtime",
+                    capability.display_name
+                )
+            })?;
+        let prompt = self
+            .runtime
+            .block_on(self.manager.get_prompt(&server_name, &raw_name, arguments))
+            .map_err(|error| error.to_string())?;
+        let rendered_prompt = render_mcp_prompt_messages(&prompt.messages);
+        Ok(crate::SkillExecutionResult {
+            skill: capability.display_name.clone(),
+            path: format!("mcp://{server_name}/{raw_name}"),
+            description: prompt.description.or_else(|| Some(capability.description.clone())),
+            context: crate::skill_runtime::SkillContextKind::Inline,
+            messages_to_inject: vec![crate::skill_runtime::SkillInjectedMessage::system(
+                rendered_prompt,
+            )],
+            tool_grants: Vec::new(),
+            model_override: None,
+            effort_override: None,
+            state_updates: vec![
+                crate::SkillStateUpdate::ContextPrepared {
+                    context: crate::skill_runtime::SkillContextKind::Inline,
+                },
+                crate::SkillStateUpdate::MessageInjected {
+                    role: "system".to_string(),
+                },
+            ],
+        })
+    }
+
+    pub fn read_resource_capability(
+        &mut self,
+        capability: &CapabilitySpec,
+    ) -> Result<String, String> {
+        let executor_key = capability
+            .executor_key
+            .as_ref()
+            .ok_or_else(|| format!("resource `{}` does not have a runtime executor", capability.display_name))?;
+        let (server_name, uri) = self
+            .resource_routes
+            .get(executor_key)
+            .cloned()
+            .ok_or_else(|| {
+                format!(
+                    "resource `{}` is not registered with the MCP runtime",
+                    capability.display_name
+                )
+            })?;
+        let result = self
+            .runtime
+            .block_on(self.manager.read_resource(&server_name, &uri))
+            .map_err(|error| error.to_string())?;
+        serde_json::to_string_pretty(&result).map_err(|error| error.to_string())
+    }
+
     fn server_names(&self) -> Vec<String> {
         self.manager.server_names()
     }
@@ -427,6 +651,8 @@ pub fn mcp_tool_capability_descriptor(tool: &runtime::ManagedMcpTool) -> McpCapa
         capability_id: tool.qualified_name.clone(),
         source_kind: CapabilitySourceKind::McpTool,
         execution_kind: CapabilityExecutionKind::Tool,
+        provider_key: Some(tool.server_name.clone()),
+        executor_key: Some(tool.qualified_name.clone()),
         display_name: tool.qualified_name.clone(),
         description: tool
             .tool
@@ -443,6 +669,44 @@ pub fn mcp_tool_capability_descriptor(tool: &runtime::ManagedMcpTool) -> McpCapa
         required_permission: permission_mode_for_mcp_tool(&tool.tool),
         requires_auth: false,
         requires_approval: permission_mode_for_mcp_tool(&tool.tool) != PermissionMode::ReadOnly,
+        trust_profile: CapabilityTrustProfile::default(),
+        scope_constraints: CapabilityScopeConstraints::default(),
+    }
+}
+
+pub fn mcp_prompt_capability_descriptor(
+    prompt: &runtime::ManagedMcpPrompt,
+) -> McpCapabilityDescriptor {
+    McpCapabilityDescriptor {
+        capability_id: prompt.qualified_name.clone(),
+        source_kind: CapabilitySourceKind::McpPrompt,
+        execution_kind: CapabilityExecutionKind::PromptSkill,
+        provider_key: Some(prompt.server_name.clone()),
+        executor_key: Some(prompt.qualified_name.clone()),
+        display_name: prompt.raw_name.clone(),
+        description: prompt
+            .prompt
+            .description
+            .clone()
+            .unwrap_or_else(|| format!("Execute MCP prompt `{}`.", prompt.raw_name)),
+        when_to_use: prompt.prompt.description.clone(),
+        input_schema: serde_json::json!({
+            "type": "object",
+            "properties": {
+                "skill": { "type": "string", "const": prompt.raw_name },
+                "arguments": { "type": "object" }
+            },
+            "required": ["skill"],
+            "additionalProperties": false
+        }),
+        search_hint: prompt.prompt.description.clone(),
+        visibility: CapabilityVisibility::DefaultVisible,
+        state: CapabilityState::Ready,
+        required_permission: PermissionMode::ReadOnly,
+        requires_auth: false,
+        requires_approval: false,
+        trust_profile: CapabilityTrustProfile::default(),
+        scope_constraints: CapabilityScopeConstraints::default(),
     }
 }
 
@@ -471,6 +735,8 @@ pub fn mcp_resource_capability_descriptor(
         capability_id: display_name.clone(),
         source_kind: CapabilitySourceKind::McpResource,
         execution_kind: CapabilityExecutionKind::Resource,
+        provider_key: Some(server_name.to_string()),
+        executor_key: Some(display_name.clone()),
         display_name,
         description,
         when_to_use: None,
@@ -492,6 +758,8 @@ pub fn mcp_resource_capability_descriptor(
         required_permission: PermissionMode::ReadOnly,
         requires_auth: false,
         requires_approval: false,
+        trust_profile: CapabilityTrustProfile::default(),
+        scope_constraints: CapabilityScopeConstraints::default(),
     }
 }
 
@@ -517,13 +785,54 @@ fn mcp_annotation_flag(tool: &runtime::McpTool, key: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn render_mcp_prompt_messages(messages: &[runtime::McpPromptMessage]) -> String {
+    let rendered = messages
+        .iter()
+        .map(|message| {
+            let text = message
+                .content
+                .get("text")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+                .unwrap_or_else(|| message.content.to_string());
+            format!("{}:\n{}", message.role, text)
+        })
+        .collect::<Vec<_>>();
+    if rendered.is_empty() {
+        "MCP prompt returned no messages.".to_string()
+    } else {
+        rendered.join("\n\n")
+    }
+}
+
+pub type EffectiveCapabilitySurface = CapabilitySurface;
+
 #[derive(Debug, Clone, PartialEq)]
-pub struct EffectiveCapabilitySurface {
+pub struct CapabilityExecutionPlan {
     pub visible_tools: Vec<CapabilitySpec>,
     pub deferred_tools: Vec<CapabilitySpec>,
     pub discoverable_skills: Vec<CapabilitySpec>,
     pub available_resources: Vec<CapabilitySpec>,
     pub hidden_capabilities: Vec<CapabilitySpec>,
+    pub activated_tools: Vec<String>,
+    pub granted_tools: Vec<String>,
+    pub pending_tools: Vec<String>,
+    pub approved_tools: Vec<String>,
+    pub auth_resolved_tools: Vec<String>,
+    pub provider_fallbacks: Vec<String>,
+}
+
+impl CapabilityExecutionPlan {
+    #[must_use]
+    pub fn surface(&self) -> CapabilitySurface {
+        CapabilitySurface {
+            visible_tools: self.visible_tools.clone(),
+            deferred_tools: self.deferred_tools.clone(),
+            discoverable_skills: self.discoverable_skills.clone(),
+            available_resources: self.available_resources.clone(),
+            hidden_capabilities: self.hidden_capabilities.clone(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -621,6 +930,11 @@ impl SessionCapabilityState {
         self.activated_tools.contains(tool_name)
     }
 
+    #[must_use]
+    pub fn activated_tools(&self) -> &BTreeSet<String> {
+        &self.activated_tools
+    }
+
     pub fn grant_tool(&mut self, tool_name: impl Into<String>) {
         self.granted_tools.insert(tool_name.into());
     }
@@ -628,6 +942,11 @@ impl SessionCapabilityState {
     #[must_use]
     pub fn is_tool_granted(&self, tool_name: &str) -> bool {
         self.granted_tools.contains(tool_name)
+    }
+
+    #[must_use]
+    pub fn granted_tools(&self) -> &BTreeSet<String> {
+        &self.granted_tools
     }
 
     pub fn push_injected_skill_message(&mut self, message: String) {
@@ -649,6 +968,11 @@ impl SessionCapabilityState {
         self.pending_tools.contains(tool_name)
     }
 
+    #[must_use]
+    pub fn pending_tools(&self) -> &BTreeSet<String> {
+        &self.pending_tools
+    }
+
     pub fn approve_tool(&mut self, tool_name: impl Into<String>) {
         let tool_name = tool_name.into();
         self.pending_tools.remove(&tool_name);
@@ -660,6 +984,11 @@ impl SessionCapabilityState {
         self.approved_tools.contains(tool_name)
     }
 
+    #[must_use]
+    pub fn approved_tools(&self) -> &BTreeSet<String> {
+        &self.approved_tools
+    }
+
     pub fn resolve_tool_auth(&mut self, tool_name: impl Into<String>) {
         let tool_name = tool_name.into();
         self.pending_tools.remove(&tool_name);
@@ -669,6 +998,11 @@ impl SessionCapabilityState {
     #[must_use]
     pub fn is_tool_auth_resolved(&self, tool_name: &str) -> bool {
         self.auth_resolved_tools.contains(tool_name)
+    }
+
+    #[must_use]
+    pub fn auth_resolved_tools(&self) -> &BTreeSet<String> {
+        &self.auth_resolved_tools
     }
 
     #[must_use]
@@ -816,7 +1150,7 @@ impl SessionCapabilityStore {
     }
 }
 
-pub type CapabilitySurfaceProjection = EffectiveCapabilitySurface;
+pub type CapabilitySurfaceProjection = CapabilitySurface;
 
 #[derive(Debug, Clone)]
 pub struct CapabilityProvider {
@@ -1150,12 +1484,22 @@ pub enum CapabilityMediationDecision {
 type CapabilityExecutionHook = Arc<dyn Fn(CapabilityExecutionEvent) + Send + Sync>;
 type CapabilityMediationHook =
     Arc<dyn Fn(&CapabilityExecutionRequest) -> CapabilityMediationDecision + Send + Sync>;
+type PromptSkillExecutor = Arc<
+    dyn Fn(&CapabilitySpec, Option<Value>, Option<&Path>) -> Result<crate::SkillExecutionResult, String>
+        + Send
+        + Sync,
+>;
+type ResourceExecutor = Arc<
+    dyn Fn(&CapabilitySpec, Value, Option<&Path>) -> Result<String, String> + Send + Sync,
+>;
 
 #[derive(Default)]
 struct CapabilityExecutorInner {
     serialized_gate: Mutex<()>,
     execution_hook: Mutex<Option<CapabilityExecutionHook>>,
     mediation_hook: Mutex<Option<CapabilityMediationHook>>,
+    prompt_skill_executors: Mutex<BTreeMap<String, PromptSkillExecutor>>,
+    resource_executors: Mutex<BTreeMap<String, ResourceExecutor>>,
 }
 
 #[derive(Clone, Default)]
@@ -1176,6 +1520,155 @@ pub enum CapabilityDispatchKind {
 }
 
 impl CapabilityExecutor {
+    pub fn register_prompt_skill_executor<F>(&self, key: impl Into<String>, executor: F)
+    where
+        F: Fn(
+                &CapabilitySpec,
+                Option<Value>,
+                Option<&Path>,
+            ) -> Result<crate::SkillExecutionResult, String>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.inner
+            .prompt_skill_executors
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(key.into(), Arc::new(executor));
+    }
+
+    pub fn register_resource_executor<F>(&self, key: impl Into<String>, executor: F)
+    where
+        F: Fn(&CapabilitySpec, Value, Option<&Path>) -> Result<String, String>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.inner
+            .resource_executors
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(key.into(), Arc::new(executor));
+    }
+
+    #[must_use]
+    pub fn has_prompt_skill_executor(&self, capability: &CapabilitySpec) -> bool {
+        if !matches!(
+            capability.execution_kind,
+            CapabilityExecutionKind::PromptSkill
+        ) {
+            return false;
+        }
+
+        if matches!(
+            capability.source_kind,
+            CapabilitySourceKind::LocalSkill | CapabilitySourceKind::BundledSkill
+        ) {
+            return true;
+        }
+
+        capability
+            .executor_key
+            .as_ref()
+            .map(|key| {
+                self.inner
+                    .prompt_skill_executors
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .contains_key(key)
+            })
+            .unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn has_resource_executor(&self, capability: &CapabilitySpec) -> bool {
+        if capability.execution_kind != CapabilityExecutionKind::Resource {
+            return false;
+        }
+
+        capability
+            .executor_key
+            .as_ref()
+            .map(|key| {
+                self.inner
+                    .resource_executors
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .contains_key(key)
+            })
+            .unwrap_or(false)
+    }
+
+    pub(crate) fn execute_prompt_skill(
+        &self,
+        capability: &CapabilitySpec,
+        arguments: Option<Value>,
+        current_dir: Option<&Path>,
+    ) -> Result<crate::SkillExecutionResult, crate::skill_runtime::SkillExecutionFailure> {
+        let Some(executor_key) = capability.executor_key.as_ref() else {
+            return Err(crate::skill_runtime::SkillExecutionFailure {
+                message: format!(
+                    "skill `{}` does not have a runtime executor yet",
+                    capability.display_name
+                ),
+                state_updates: Vec::new(),
+            });
+        };
+
+        let executor = self
+            .inner
+            .prompt_skill_executors
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(executor_key)
+            .cloned()
+            .ok_or_else(|| crate::skill_runtime::SkillExecutionFailure {
+                message: format!(
+                    "skill `{}` does not have a runtime executor yet",
+                    capability.display_name
+                ),
+                state_updates: Vec::new(),
+            })?;
+
+        executor(capability, arguments, current_dir).map_err(|message| {
+            crate::skill_runtime::SkillExecutionFailure {
+                message,
+                state_updates: Vec::new(),
+            }
+        })
+    }
+
+    pub fn read_resource(
+        &self,
+        capability: &CapabilitySpec,
+        input: Value,
+        current_dir: Option<&Path>,
+    ) -> Result<String, ToolError> {
+        let Some(executor_key) = capability.executor_key.as_ref() else {
+            return Err(ToolError::new(format!(
+                "resource `{}` does not have a runtime executor",
+                capability.display_name
+            )));
+        };
+
+        let executor = self
+            .inner
+            .resource_executors
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(executor_key)
+            .cloned()
+            .ok_or_else(|| {
+                ToolError::new(format!(
+                    "resource `{}` does not have a runtime executor",
+                    capability.display_name
+                ))
+            })?;
+
+        executor(capability, input, current_dir).map_err(ToolError::new)
+    }
+
     pub fn set_execution_hook<F>(&self, hook: F)
     where
         F: Fn(CapabilityExecutionEvent) + Send + Sync + 'static,
@@ -1511,6 +2004,30 @@ impl CapabilityRuntime {
         self.executor.clone()
     }
 
+    pub fn register_prompt_skill_executor<F>(&self, key: impl Into<String>, executor: F)
+    where
+        F: Fn(
+                &CapabilitySpec,
+                Option<Value>,
+                Option<&Path>,
+            ) -> Result<crate::SkillExecutionResult, String>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.executor.register_prompt_skill_executor(key, executor);
+    }
+
+    pub fn register_resource_executor<F>(&self, key: impl Into<String>, executor: F)
+    where
+        F: Fn(&CapabilitySpec, Value, Option<&Path>) -> Result<String, String>
+            + Send
+            + Sync
+            + 'static,
+    {
+        self.executor.register_resource_executor(key, executor);
+    }
+
     pub fn normalize_allowed_tools(
         &self,
         values: &[String],
@@ -1580,7 +2097,30 @@ impl CapabilityRuntime {
         let graph = self
             .compiler
             .compile(self.provider.compilation_input(planner_input.current_dir))?;
-        Ok(self.planner.surface_projection(graph, planner_input))
+        Ok(self.finalize_surface(
+            self.planner.surface_projection(graph, planner_input),
+        ))
+    }
+
+    pub fn execution_plan(
+        &self,
+        planner_input: CapabilityPlannerInput<'_>,
+    ) -> Result<CapabilityExecutionPlan, String> {
+        let surface = self.surface_projection(planner_input)?;
+        let session_state = planner_input.session_state.cloned().unwrap_or_default();
+        Ok(CapabilityExecutionPlan {
+            visible_tools: surface.visible_tools.clone(),
+            deferred_tools: surface.deferred_tools.clone(),
+            discoverable_skills: surface.discoverable_skills.clone(),
+            available_resources: surface.available_resources.clone(),
+            hidden_capabilities: surface.hidden_capabilities.clone(),
+            activated_tools: session_state.activated_tools().iter().cloned().collect(),
+            granted_tools: session_state.granted_tools().iter().cloned().collect(),
+            pending_tools: session_state.pending_tools().iter().cloned().collect(),
+            approved_tools: session_state.approved_tools().iter().cloned().collect(),
+            auth_resolved_tools: session_state.auth_resolved_tools().iter().cloned().collect(),
+            provider_fallbacks: self.provider_fallbacks(&surface),
+        })
     }
 
     pub fn planned_tool_definitions(
@@ -1673,11 +2213,11 @@ impl CapabilityRuntime {
         let graph = self
             .compiler
             .compile(self.provider.compilation_input(current_dir))?;
-        Ok(plan_effective_capability_surface(
+        Ok(self.finalize_surface(plan_effective_capability_surface(
             graph.capabilities,
             allowed_tools,
             graph.enforcer.as_ref(),
-        ))
+        )))
     }
 
     #[must_use]
@@ -1783,7 +2323,64 @@ impl CapabilityRuntime {
             &capability,
             arguments,
             planner_input.current_dir,
+            Some(self.executor()),
         )
+    }
+
+    pub fn read_resource(
+        &self,
+        capability: &CapabilitySpec,
+        input: Value,
+        current_dir: Option<&Path>,
+    ) -> Result<String, ToolError> {
+        self.executor.read_resource(capability, input, current_dir)
+    }
+
+    fn finalize_surface(&self, surface: CapabilitySurface) -> CapabilitySurface {
+        let mut discoverable_skills = Vec::new();
+        let mut available_resources = Vec::new();
+        let mut hidden_capabilities = surface.hidden_capabilities;
+
+        for capability in surface.discoverable_skills {
+            if self.executor.has_prompt_skill_executor(&capability) {
+                discoverable_skills.push(capability);
+            } else {
+                hidden_capabilities.push(capability);
+            }
+        }
+
+        for capability in surface.available_resources {
+            if capability.state == CapabilityState::Ready
+                && self.executor.has_resource_executor(&capability)
+            {
+                available_resources.push(capability);
+            } else {
+                hidden_capabilities.push(capability);
+            }
+        }
+
+        CapabilitySurface {
+            visible_tools: surface.visible_tools,
+            deferred_tools: surface.deferred_tools,
+            discoverable_skills,
+            available_resources,
+            hidden_capabilities,
+        }
+    }
+
+    fn provider_fallbacks(&self, surface: &CapabilitySurface) -> Vec<String> {
+        surface
+            .available_resources
+            .iter()
+            .filter_map(|capability| {
+                capability.provider_key.as_ref().map(|provider_key| {
+                    format!(
+                        "resource shim via provider `{provider_key}` for `{}`",
+                        capability.display_name
+                    )
+                })
+            })
+            .collect()
     }
 }
 
@@ -1880,6 +2477,8 @@ fn compile_builtin_capability(spec: ToolSpec) -> CapabilitySpec {
         capability_id: spec.name.to_string(),
         source_kind: CapabilitySourceKind::Builtin,
         execution_kind: CapabilityExecutionKind::Tool,
+        provider_key: None,
+        executor_key: None,
         display_name: spec.name.to_string(),
         description: spec.description.to_string(),
         when_to_use: None,
@@ -1890,6 +2489,8 @@ fn compile_builtin_capability(spec: ToolSpec) -> CapabilitySpec {
         permission_profile: CapabilityPermissionProfile {
             required_permission: spec.required_permission,
         },
+        trust_profile: CapabilityTrustProfile::default(),
+        scope_constraints: CapabilityScopeConstraints::default(),
         invocation_policy: invocation_policy(spec.required_permission),
         concurrency_policy: concurrency_policy(spec.required_permission),
     }
@@ -1900,6 +2501,8 @@ fn compile_runtime_capability(tool: &RuntimeToolDefinition) -> CapabilitySpec {
         capability_id: tool.name.clone(),
         source_kind: CapabilitySourceKind::RuntimeTool,
         execution_kind: CapabilityExecutionKind::Tool,
+        provider_key: None,
+        executor_key: Some(tool.name.clone()),
         display_name: tool.name.clone(),
         description: tool.description.clone().unwrap_or_default(),
         when_to_use: None,
@@ -1910,6 +2513,8 @@ fn compile_runtime_capability(tool: &RuntimeToolDefinition) -> CapabilitySpec {
         permission_profile: CapabilityPermissionProfile {
             required_permission: tool.required_permission,
         },
+        trust_profile: CapabilityTrustProfile::default(),
+        scope_constraints: CapabilityScopeConstraints::default(),
         invocation_policy: invocation_policy(tool.required_permission),
         concurrency_policy: concurrency_policy(tool.required_permission),
     }
@@ -1928,6 +2533,8 @@ fn compile_plugin_capability(tool: &PluginTool) -> CapabilitySpec {
         capability_id: tool.definition().name.clone(),
         source_kind: CapabilitySourceKind::PluginTool,
         execution_kind: CapabilityExecutionKind::Tool,
+        provider_key: Some(tool.plugin_id().to_string()),
+        executor_key: Some(tool.definition().name.clone()),
         display_name: tool.definition().name.clone(),
         description: tool.definition().description.clone().unwrap_or_default(),
         when_to_use: None,
@@ -1938,6 +2545,8 @@ fn compile_plugin_capability(tool: &PluginTool) -> CapabilitySpec {
         permission_profile: CapabilityPermissionProfile {
             required_permission,
         },
+        trust_profile: CapabilityTrustProfile::default(),
+        scope_constraints: CapabilityScopeConstraints::default(),
         invocation_policy: invocation_policy(required_permission),
         concurrency_policy: concurrency_policy(required_permission),
     }
@@ -1969,7 +2578,7 @@ pub(crate) fn plan_effective_capability_surface(
     capabilities: Vec<CapabilitySpec>,
     allowed_tools: Option<&BTreeSet<String>>,
     enforcer: Option<&PermissionEnforcer>,
-) -> EffectiveCapabilitySurface {
+) -> CapabilitySurface {
     let mut visible_tools = Vec::new();
     let mut deferred_tools = Vec::new();
     let mut discoverable_skills = Vec::new();
@@ -2027,16 +2636,23 @@ pub(crate) fn plan_effective_capability_surface(
                     }
                 }
             }
-            CapabilityExecutionKind::Resource => match capability.visibility {
-                CapabilityVisibility::Hidden => hidden_capabilities.push(capability),
-                CapabilityVisibility::DefaultVisible | CapabilityVisibility::Deferred => {
-                    available_resources.push(capability);
+            CapabilityExecutionKind::Resource => {
+                if capability.state != CapabilityState::Ready {
+                    hidden_capabilities.push(capability);
+                    continue;
                 }
-            },
+
+                match capability.visibility {
+                    CapabilityVisibility::Hidden => hidden_capabilities.push(capability),
+                    CapabilityVisibility::DefaultVisible | CapabilityVisibility::Deferred => {
+                        available_resources.push(capability);
+                    }
+                }
+            }
         }
     }
 
-    EffectiveCapabilitySurface {
+    CapabilitySurface {
         visible_tools,
         deferred_tools,
         discoverable_skills,
@@ -2050,7 +2666,7 @@ pub(crate) fn plan_effective_capability_surface_with_planner(
     capabilities: Vec<CapabilitySpec>,
     planner_input: CapabilityPlannerInput<'_>,
     enforcer: Option<&PermissionEnforcer>,
-) -> EffectiveCapabilitySurface {
+) -> CapabilitySurface {
     let mut visible_tools = Vec::new();
     let mut deferred_tools = Vec::new();
     let mut discoverable_skills = Vec::new();
@@ -2116,16 +2732,23 @@ pub(crate) fn plan_effective_capability_surface_with_planner(
                     }
                 }
             }
-            CapabilityExecutionKind::Resource => match capability.visibility {
-                CapabilityVisibility::Hidden => hidden_capabilities.push(capability),
-                CapabilityVisibility::DefaultVisible | CapabilityVisibility::Deferred => {
-                    available_resources.push(capability);
+            CapabilityExecutionKind::Resource => {
+                if capability.state != CapabilityState::Ready {
+                    hidden_capabilities.push(capability);
+                    continue;
                 }
-            },
+
+                match capability.visibility {
+                    CapabilityVisibility::Hidden => hidden_capabilities.push(capability),
+                    CapabilityVisibility::DefaultVisible | CapabilityVisibility::Deferred => {
+                        available_resources.push(capability);
+                    }
+                }
+            }
         }
     }
 
-    EffectiveCapabilitySurface {
+    CapabilitySurface {
         visible_tools,
         deferred_tools,
         discoverable_skills,

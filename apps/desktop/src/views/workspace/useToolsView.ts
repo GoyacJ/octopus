@@ -175,6 +175,9 @@ export function useToolsView() {
         entry.kind === 'mcp' ? entry.serverName : '',
         entry.kind === 'mcp' ? entry.endpoint : '',
         entry.kind === 'mcp' ? entry.toolNames.join(' ') : '',
+        entry.kind === 'mcp' ? entry.sourceKind : '',
+        entry.kind === 'mcp' ? entry.executionKind : '',
+        entry.kind === 'mcp' ? entry.resourceUri ?? '' : '',
         entry.kind === 'mcp' ? entry.statusDetail ?? '' : '',
         entry.kind === 'mcp' ? entry.scope : '',
         entry.ownerScope ?? '',
@@ -450,6 +453,18 @@ export function useToolsView() {
 
   function sourceOriginLabel(entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>) {
     return t(`tools.sourceOrigins.${entry.sourceOrigin}`)
+  }
+
+  function sourceKindLabel(sourceKind: Extract<CapabilityManagementEntry, { kind: 'mcp' }>['sourceKind']) {
+    const translationKey = `tools.sourceKinds.${sourceKind}`
+    const translated = t(translationKey)
+    return translated === translationKey ? sourceKind : translated
+  }
+
+  function executionKindLabel(executionKind: Extract<CapabilityManagementEntry, { kind: 'mcp' }>['executionKind']) {
+    const translationKey = `tools.executionKinds.${executionKind}`
+    const translated = t(translationKey)
+    return translated === translationKey ? executionKind : translated
   }
 
   function skillStateLabel(entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>) {
@@ -882,6 +897,8 @@ export function useToolsView() {
     permissionLabel,
     ownerScopeLabel,
     sourceOriginLabel,
+    sourceKindLabel,
+    executionKindLabel,
     skillStateLabel,
     fileTypeLabel,
     isExternalSkillEntry,

@@ -25,6 +25,8 @@ const props = defineProps<{
   availabilityLabel: (availability: CapabilityManagementEntry['availability']) => string
   availabilityTone: (availability: CapabilityManagementEntry['availability']) => 'default' | 'success' | 'warning'
   ownerScopeLabel: (ownerScope: CapabilityManagementEntry['ownerScope']) => string
+  sourceKindLabel: (sourceKind: Extract<CapabilityManagementEntry, { kind: 'mcp' }>['sourceKind']) => string
+  executionKindLabel: (executionKind: Extract<CapabilityManagementEntry, { kind: 'mcp' }>['executionKind']) => string
 }>()
 
 const emit = defineEmits<{
@@ -53,7 +55,8 @@ const { t } = useI18n()
       <div class="flex min-h-10 min-w-[196px] flex-wrap content-start justify-end gap-1.5">
         <UiBadge :label="availabilityLabel(entry.availability)" :tone="availabilityTone(entry.availability)" />
         <UiBadge v-if="entry.disabled" :label="t('tools.states.disabled')" tone="warning" />
-        <UiBadge v-if="entry.toolNames.length" :label="`${entry.toolNames.length} tools`" subtle />
+        <UiBadge :label="sourceKindLabel(entry.sourceKind)" subtle />
+        <UiBadge :label="executionKindLabel(entry.executionKind)" subtle />
       </div>
     </div>
 
@@ -110,6 +113,24 @@ const { t } = useI18n()
     <div class="space-y-3">
       <div class="space-y-1">
         <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+          {{ t('tools.detail.sourceKind') }}
+        </div>
+        <div class="text-[13px] text-text-primary">
+          {{ sourceKindLabel(entry.sourceKind) }}
+        </div>
+      </div>
+
+      <div class="space-y-1">
+        <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+          {{ t('tools.detail.executionKind') }}
+        </div>
+        <div class="text-[13px] text-text-primary">
+          {{ executionKindLabel(entry.executionKind) }}
+        </div>
+      </div>
+
+      <div class="space-y-1">
+        <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
           {{ t('tools.detail.serverName') }}
         </div>
         <div class="text-[13px] text-text-primary">
@@ -136,10 +157,10 @@ const { t } = useI18n()
       </div>
     </div>
 
-    <div class="space-y-1">
-      <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
-        {{ t('tools.detail.toolNames') }}
-      </div>
+      <div class="space-y-1">
+        <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+          {{ t('tools.detail.toolNames') }}
+        </div>
       <div
         v-if="entry.toolNames.length"
         class="flex flex-wrap gap-1.5"
@@ -153,6 +174,15 @@ const { t } = useI18n()
       </div>
       <div v-else class="text-[13px] text-text-secondary">
         {{ t('common.na') }}
+      </div>
+    </div>
+
+    <div v-if="entry.resourceUri" class="space-y-1">
+      <div class="text-[11px] uppercase tracking-[0.22em] text-text-tertiary">
+        {{ t('tools.detail.resourceUri') }}
+      </div>
+      <div class="break-all font-mono text-[12px] text-text-secondary">
+        {{ entry.resourceUri }}
       </div>
     </div>
 

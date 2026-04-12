@@ -198,10 +198,9 @@ export function useAgentCenter(scope: CenterScope) {
       })),
   )
   const mcpOptions = computed<SelectOption[]>(() =>
-    catalogStore.managementEntries
-      .filter(entry => entry.kind === 'mcp')
+    catalogStore.managementProjection.mcpServerPackages
       .map(entry => ({
-        value: entry.serverName ?? entry.name,
+        value: entry.serverName,
         label: entry.name,
         keywords: [entry.description, entry.sourceKey].filter(Boolean),
         helper: entry.displayPath,

@@ -37,6 +37,8 @@ defineProps<{
   ownerScopeLabel: (ownerScope: CapabilityManagementEntry['ownerScope']) => string
   skillStateLabel: (entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>) => string
   sourceOriginLabel: (entry: Extract<CapabilityManagementEntry, { kind: 'skill' }>) => string
+  sourceKindLabel: (sourceKind: Extract<CapabilityManagementEntry, { kind: 'mcp' }>['sourceKind']) => string
+  executionKindLabel: (executionKind: Extract<CapabilityManagementEntry, { kind: 'mcp' }>['executionKind']) => string
   isExternalSkillEntry: (entry: CapabilityManagementEntry) => boolean
 }>()
 
@@ -139,7 +141,8 @@ const { t } = useI18n()
           <UiBadge v-if="entry.kind === 'skill' && entry.workspaceOwned" :label="t('tools.states.managed')" subtle />
           <UiBadge v-if="entry.kind === 'skill' && !entry.workspaceOwned" :label="t('tools.states.readonly')" subtle />
           <UiBadge v-if="entry.kind === 'skill' && !entry.workspaceOwned" :label="t('tools.states.external')" subtle />
-          <UiBadge v-if="entry.kind === 'mcp' && entry.toolNames.length" :label="`${entry.toolNames.length} tools`" subtle />
+          <UiBadge v-if="entry.kind === 'mcp'" :label="sourceKindLabel(entry.sourceKind)" subtle />
+          <UiBadge v-if="entry.kind === 'mcp'" :label="executionKindLabel(entry.executionKind)" subtle />
           <UiBadge v-if="entry.ownerScope" :label="ownerScopeLabel(entry.ownerScope)" subtle />
           <UiBadge v-if="entry.ownerLabel" :label="entry.ownerLabel" subtle />
         </template>
@@ -149,7 +152,13 @@ const { t } = useI18n()
             {{ entry.displayPath }}
           </p>
           <p
-            v-if="entry.kind === 'mcp' && entry.endpoint"
+            v-if="entry.kind === 'mcp' && entry.resourceUri"
+            class="line-clamp-1 font-mono text-[11px] text-text-tertiary"
+          >
+            {{ entry.resourceUri }}
+          </p>
+          <p
+            v-else-if="entry.kind === 'mcp' && entry.endpoint"
             class="line-clamp-1 font-mono text-[11px] text-text-tertiary"
           >
             {{ entry.endpoint }}

@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 89c366274f9ce76b615d696c2cba1cfb339a0a0972a714315247486d831f352a
+// Source hash: 7143b0fafea4e58d735646edf27e0c645dd4014d9ddd4c9da33efed7caf9b54a
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "89c366274f9ce76b615d696c2cba1cfb339a0a0972a714315247486d831f352a"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "7143b0fafea4e58d735646edf27e0c645dd4014d9ddd4c9da33efed7caf9b54a"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -178,6 +178,7 @@ export interface CapabilityAssetManifest {
   description: string
   displayPath: string
   enabled: boolean
+  executionKinds: CapabilityExecutionKind[]
   exportStatus: CapabilityAssetExportStatus
   health: string
   importStatus: CapabilityAssetImportStatus
@@ -190,6 +191,7 @@ export interface CapabilityAssetManifest {
   ownerScope?: string
   requiredPermission: string
   sourceKey: string
+  sourceKinds: CapabilitySourceKind[]
   state: CapabilityAssetState
   workspaceId: string
 }
@@ -201,17 +203,21 @@ export interface CapabilityDescriptor {
   label: string
 }
 
+export type CapabilityExecutionKind = "tool" | "prompt_skill" | "resource"
+
 export interface CapabilityManagementEntry {
   active?: boolean
   assetId: string
   availability: string
   builtinKey?: string
+  capabilityId: string
   consumers?: WorkspaceToolConsumerSummary[]
   description: string
   disabled: boolean
   displayPath: string
   enabled: boolean
   endpoint?: string
+  executionKind: CapabilityExecutionKind
   exportStatus: CapabilityAssetExportStatus
   health: string
   id: string
@@ -225,10 +231,12 @@ export interface CapabilityManagementEntry {
   ownerScope?: string
   relativePath?: string
   requiredPermission: string
+  resourceUri?: string
   scope?: string
   serverName?: string
   shadowedBy?: string
   sourceKey: string
+  sourceKind: CapabilitySourceKind
   sourceOrigin?: string
   state: CapabilityAssetState
   statusDetail?: string
@@ -243,6 +251,8 @@ export interface CapabilityManagementProjection {
   mcpServerPackages: McpServerPackageManifest[]
   skillPackages: SkillPackageManifest[]
 }
+
+export type CapabilitySourceKind = "builtin" | "runtime_tool" | "plugin_tool" | "local_skill" | "bundled_skill" | "mcp_tool" | "mcp_prompt" | "mcp_resource" | "plugin_skill"
 
 export interface ChangeCurrentUserPasswordRequest {
   confirmPassword: string
@@ -1603,17 +1613,21 @@ export interface WorkspaceActivityRecord {
 export type WorkspaceAuthMode = "session-token"
 
 export interface WorkspaceBuiltinToolCatalogEntry {
+  assetId?: string
   availability: ViewStatus
   builtinKey: string
+  capabilityId?: string
   description: string
   disabled: boolean
   displayPath: string
+  executionKind?: CapabilityExecutionKind
   id: string
   kind: "builtin"
   management: WorkspaceToolManagementCapabilities
   name: string
   requiredPermission?: "readonly" | "workspace-write" | "danger-full-access" | "null"
   sourceKey: string
+  sourceKind?: CapabilitySourceKind
   workspaceId: string
 }
 
@@ -1669,19 +1683,24 @@ export interface WorkspaceMcpServerDocument {
 }
 
 export interface WorkspaceMcpToolCatalogEntry {
+  assetId?: string
   availability: ViewStatus
+  capabilityId?: string
   description: string
   disabled: boolean
   displayPath: string
   endpoint: string
+  executionKind?: CapabilityExecutionKind
   id: string
   kind: "mcp"
   management: WorkspaceToolManagementCapabilities
   name: string
   requiredPermission?: "readonly" | "workspace-write" | "danger-full-access" | "null"
+  resourceUri?: string
   scope: "builtin" | "workspace" | "project" | "user"
   serverName: string
   sourceKey: string
+  sourceKind?: CapabilitySourceKind
   statusDetail?: string
   toolNames: string[]
   workspaceId: string
@@ -1805,10 +1824,13 @@ export interface WorkspaceSkillFileDocument {
 
 export interface WorkspaceSkillToolCatalogEntry {
   active: boolean
+  assetId?: string
   availability: ViewStatus
+  capabilityId?: string
   description: string
   disabled: boolean
   displayPath: string
+  executionKind?: CapabilityExecutionKind
   id: string
   kind: "skill"
   management: WorkspaceToolManagementCapabilities
@@ -1817,7 +1839,8 @@ export interface WorkspaceSkillToolCatalogEntry {
   requiredPermission?: "readonly" | "workspace-write" | "danger-full-access" | "null"
   shadowedBy?: string
   sourceKey: string
-  sourceOrigin: "skills_dir" | "legacy_commands_dir"
+  sourceKind?: CapabilitySourceKind
+  sourceOrigin: "skills_dir" | "legacy_commands_dir" | "builtin_bundle"
   workspaceId: string
   workspaceOwned: boolean
 }
