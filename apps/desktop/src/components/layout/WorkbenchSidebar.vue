@@ -29,6 +29,15 @@ import { UiButton, UiDialog, UiField, UiInput, UiPopover, UiStatusCallout, UiTex
 
 import ConnectWorkspaceDialog from '@/components/layout/ConnectWorkspaceDialog.vue'
 import DesktopPetHost from '@/components/pet/DesktopPetHost.vue'
+import ProjectResourceDirectoryField from '@/components/projects/ProjectResourceDirectoryField.vue'
+import {
+  isProjectMember,
+  isProjectModuleAllowed,
+  isProjectOwner,
+  isProjectOwnerOnlyRoute,
+  projectModuleForRouteName,
+  resolveProjectActorUserId,
+} from '@/composables/project-governance'
 import { resolveWorkspaceLabel } from '@/composables/workspace-label'
 import {
   createProjectConversationTarget,
@@ -62,6 +71,7 @@ const deleteTargetProjectId = ref('')
 const quickCreateForm = reactive({
   name: '',
   description: '',
+  resourceDirectory: '',
 })
 const workspaceLabel = computed(() =>
   resolveWorkspaceLabel(
@@ -112,7 +122,23 @@ const iconMap: Record<MenuIconKey, unknown> = {
 
 const currentWorkspaceId = computed(() => workspaceStore.currentWorkspaceId)
 const currentProjectId = computed(() => workspaceStore.currentProjectId)
-const activeProjects = computed(() => workspaceStore.projects.filter(item => item.status === 'active'))
+const currentProjectActorUserId = computed(() =>
+  resolveProjectActorUserId(
+    workspaceAccessControlStore.currentUser?.id,
+    workspaceAccessControlStore.loading ? undefined : shell.activeWorkspaceSession?.session.userId,
+  ),
+)
+const activeProjects = computed(() =>
+  workspaceStore.projects.filter((item) => {
+    if (item.status !== 'active') {
+      return false
+    }
+    if (!currentProjectActorUserId.value) {
+      return false
+    }
+    return isProjectMember(item, currentProjectActorUserId.value)
+  }),
+)
 const deleteTargetProject = computed(() =>
   activeProjects.value.find(project => project.id === deleteTargetProjectId.value) ?? null,
 )
@@ -191,6 +217,12 @@ function projectConversationId(projectId: string) {
 
 function projectModules(projectId: string): NavigationItem[] {
   const workspaceId = currentWorkspaceId.value
+  const project = activeProjects.value.find(item => item.id === projectId)
+  const actorUserId = currentProjectActorUserId.value
+  if (!workspaceId || !project || !actorUserId) {
+    return []
+  }
+
   return [
     {
       id: `${projectId}:dashboard`,
@@ -255,7 +287,14 @@ function projectModules(projectId: string): NavigationItem[] {
       to: createProjectSurfaceTarget('project-runtime', workspaceId, projectId),
       testId: `sidebar-project-module-${projectId}-runtime`,
     },
-  ]
+  ].filter((item) => {
+    const routeName = item.routeNames[0]
+    if (isProjectOwnerOnlyRoute(routeName)) {
+      return isProjectOwner(project, actorUserId)
+    }
+    const module = projectModuleForRouteName(routeName)
+    return !module || isProjectModuleAllowed(workspaceStore.activeWorkspace, project, module)
+  })
 }
 
 function isRouteActive(routeNames: string[]) {
@@ -296,11 +335,12 @@ function openConnectWorkspaceDialog() {
 function resetQuickCreateForm() {
   quickCreateForm.name = ''
   quickCreateForm.description = ''
+  quickCreateForm.resourceDirectory = ''
 }
 
 async function submitQuickCreateProject() {
   const workspaceId = currentWorkspaceId.value
-  if (!workspaceId || !quickCreateForm.name.trim() || quickCreateSubmitting.value) {
+  if (!workspaceId || !quickCreateForm.name.trim() || !quickCreateForm.resourceDirectory.trim() || quickCreateSubmitting.value) {
     return
   }
 
@@ -310,6 +350,7 @@ async function submitQuickCreateProject() {
     const created = await workspaceStore.createProject({
       name: quickCreateForm.name,
       description: quickCreateForm.description,
+      resourceDirectory: quickCreateForm.resourceDirectory,
     })
     if (!created) {
       return
@@ -441,6 +482,12 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
               />
             </UiField>
 
+            <ProjectResourceDirectoryField
+              v-model="quickCreateForm.resourceDirectory"
+              path-test-id="sidebar-project-create-resource-directory-path"
+              pick-test-id="sidebar-project-create-resource-directory-pick"
+            />
+
             <UiStatusCallout
               v-if="workspaceStore.error"
               tone="error"
@@ -458,7 +505,7 @@ async function removeWorkspaceConnection(workspaceConnectionId: string, workspac
               <UiButton
                 type="submit"
                 data-testid="sidebar-project-create-submit"
-                :disabled="quickCreateSubmitting || !quickCreateForm.name.trim()"
+                :disabled="quickCreateSubmitting || !quickCreateForm.name.trim() || !quickCreateForm.resourceDirectory.trim()"
               >
                 {{ t('projects.actions.create') }}
               </UiButton>

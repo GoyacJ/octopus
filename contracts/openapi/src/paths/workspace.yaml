@@ -48,6 +48,52 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/workspace/promotion-requests:
+  get:
+    operationId: listWorkspacePromotionRequests
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/ProjectPromotionRequest"
+              type: array
+        description: Workspace promotion request payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/promotion-requests/{requestId}/review:
+  post:
+    operationId: reviewProjectPromotionRequest
+    parameters:
+      - in: path
+        name: requestId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ReviewProjectPromotionRequestInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectPromotionRequest"
+        description: Reviewed project promotion request payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/workspace/pet:
   get:
     operationId: getWorkspacePetSnapshot
@@ -147,6 +193,28 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/workspace/resources/import:
+  post:
+    operationId: importWorkspaceResource
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/WorkspaceResourceImportInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceResourceRecord"
+        description: Imported workspace resource payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/workspace/resources/{resourceId}:
   delete:
     operationId: deleteWorkspaceResource
@@ -186,6 +254,124 @@
             schema:
               $ref: "#/components/schemas/WorkspaceResourceRecord"
         description: Updated workspace resource payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/workspace/filesystem/directories:
+  get:
+    operationId: listWorkspaceFilesystemDirectories
+    parameters:
+      - in: query
+        name: path
+        required: false
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceDirectoryBrowserResponse"
+        description: Workspace filesystem directory listing payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/resources/{resourceId}:
+  get:
+    operationId: getWorkspaceResourceDetail
+    parameters:
+      - in: path
+        name: resourceId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceResourceRecord"
+        description: Workspace resource detail payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/resources/{resourceId}/children:
+  get:
+    operationId: listWorkspaceResourceChildren
+    parameters:
+      - in: path
+        name: resourceId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/WorkspaceResourceChildrenRecord"
+              type: array
+        description: Workspace resource child listing payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/resources/{resourceId}/content:
+  get:
+    operationId: getWorkspaceResourceContent
+    parameters:
+      - in: path
+        name: resourceId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceResourceContentDocument"
+        description: Workspace resource content payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/resources/{resourceId}/promote:
+  post:
+    operationId: promoteWorkspaceResource
+    parameters:
+      - in: path
+        name: resourceId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/PromoteWorkspaceResourceInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceResourceRecord"
+        description: Promoted workspace resource payload.
       default:
         content:
           application/json:

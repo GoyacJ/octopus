@@ -36,6 +36,7 @@ import {
 import { normalizeShellBootstrap } from './workspace_connections'
 
 type BrowserDirectoryHandle = {
+  name?: string
   getDirectoryHandle: (name: string, options?: { create?: boolean }) => Promise<BrowserDirectoryHandle>
   getFileHandle: (name: string, options?: { create?: boolean }) => Promise<{
     createWritable: () => Promise<{
@@ -305,6 +306,77 @@ async function pickAvatarImage(): Promise<AvatarUploadPayload | null> {
   })
 }
 
+async function pickResourceDirectory(): Promise<string | null> {
+  const browserWindow = window as typeof window & {
+    showDirectoryPicker?: () => Promise<BrowserDirectoryHandle>
+  }
+  if (browserWindow.showDirectoryPicker) {
+    const handle = await browserWindow.showDirectoryPicker()
+    return handle.name ? `/${handle.name}` : null
+  }
+
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.setAttribute('webkitdirectory', 'true')
+  input.multiple = true
+
+  return await new Promise<string | null>((resolve) => {
+    input.addEventListener('change', () => {
+      const firstFile = input.files?.[0]
+      if (!firstFile) {
+        resolve(null)
+        return
+      }
+
+      const relativePath = (firstFile.webkitRelativePath || firstFile.name).replace(/\\/g, '/')
+      const rootName = relativePath.split('/')[0]?.trim()
+      resolve(rootName ? `/${rootName}` : null)
+    }, { once: true })
+    input.click()
+  })
+}
+
+async function pickResourceFile(): Promise<WorkspaceFileUploadPayload | null> {
+  const input = document.createElement('input')
+  input.type = 'file'
+
+  return await new Promise<WorkspaceFileUploadPayload | null>((resolve) => {
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0]
+      if (!file) {
+        resolve(null)
+        return
+      }
+
+      resolve(await readBrowserFile(file))
+    }, { once: true })
+    input.click()
+  })
+}
+
+async function pickResourceFolder(): Promise<WorkspaceDirectoryUploadEntry[] | null> {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.setAttribute('webkitdirectory', 'true')
+  input.multiple = true
+
+  return await new Promise<WorkspaceDirectoryUploadEntry[] | null>((resolve) => {
+    input.addEventListener('change', async () => {
+      const files = Array.from(input.files ?? [])
+      if (!files.length) {
+        resolve(null)
+        return
+      }
+
+      resolve(await Promise.all(files.map(async (file) => ({
+        ...(await readBrowserFile(file)),
+        relativePath: (file.webkitRelativePath || file.name).replace(/\\/g, '/'),
+      }))))
+    }, { once: true })
+    input.click()
+  })
+}
+
 async function pickSkillArchive(): Promise<WorkspaceFileUploadPayload[] | null> {
   const input = document.createElement('input')
   input.type = 'file'
@@ -528,6 +600,9 @@ export const browserShellClient = {
   restartDesktopBackend,
   resolveDesktopBackendConnection,
   pickAvatarImage,
+  pickResourceDirectory,
+  pickResourceFile,
+  pickResourceFolder,
   pickSkillArchive,
   pickSkillFolder,
   pickAgentBundleArchive,

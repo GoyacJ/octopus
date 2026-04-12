@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, h, reactive, ref } from 'vue'
+import { computed, h, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import {
   type ColumnDef,
@@ -9,6 +10,7 @@ import {
   UiField,
   UiInput,
   UiListDetailWorkspace,
+  UiPagination,
   UiPanelFrame,
   UiSelect,
   UiStatusCallout,
@@ -17,10 +19,21 @@ import {
 } from '@octopus/ui'
 import type { AccessSessionRecord, AuditRecord } from '@octopus/schema'
 
+import { usePagination } from '@/composables/usePagination'
 import { formatDateTime } from '@/i18n/copy'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 
+import {
+  createAuditOutcomeOptions,
+  getAuditOutcomeLabel,
+  getStatusLabel,
+  getSubjectTypeLabel,
+} from './helpers'
+import { useAccessControlNotifications } from './useAccessControlNotifications'
+
+const { t } = useI18n()
 const accessControlStore = useWorkspaceAccessControlStore()
+const { notifySuccess } = useAccessControlNotifications('access-control.sessions')
 
 const activeTab = ref('sessions')
 const selectedSessionId = ref('')
@@ -29,6 +42,7 @@ const sessionStatusFilter = ref('')
 const pendingSessionId = ref('')
 const pendingUserId = ref('')
 const submitError = ref('')
+
 const auditFilters = reactive({
   actorId: '',
   action: '',
@@ -38,35 +52,54 @@ const auditFilters = reactive({
   to: '',
 })
 
-const tabs = [
-  { value: 'sessions', label: '会话' },
-  { value: 'audit', label: '审计' },
-]
-const auditOutcomeOptions = [
-  { label: '全部结果', value: '' },
-  { label: '成功', value: 'success' },
-  { label: '拒绝', value: 'denied' },
-  { label: '失败', value: 'failure' },
-  { label: '锁定', value: 'locked' },
-]
-const sessionStatusOptions = [
-  { label: '全部状态', value: '' },
-  { label: '活跃', value: 'active' },
-  { label: '已撤销', value: 'revoked' },
-  { label: '已过期', value: 'expired' },
-]
+const tabs = computed(() => [
+  { value: 'sessions', label: t('accessControl.sessions.tabs.sessions') },
+  { value: 'audit', label: t('accessControl.sessions.tabs.audit') },
+])
+
+const sessionStatusOptions = computed(() => [
+  { label: t('accessControl.common.filters.allStatuses'), value: '' },
+  { label: getStatusLabel(t, 'active'), value: 'active' },
+  { label: getStatusLabel(t, 'revoked'), value: 'revoked' },
+  { label: getStatusLabel(t, 'expired'), value: 'expired' },
+])
+
+const auditOutcomeOptions = computed(() => [
+  { label: t('accessControl.common.filters.allResults'), value: '' },
+  ...createAuditOutcomeOptions(t),
+])
 
 const filteredSessions = computed(() =>
-  accessControlStore.sessions.filter(session =>
-    !sessionStatusFilter.value || session.status === sessionStatusFilter.value,
-  ),
+  [...accessControlStore.sessions]
+    .filter(session => !sessionStatusFilter.value || session.status === sessionStatusFilter.value)
+    .sort((left, right) => right.createdAt - left.createdAt),
 )
+
+const sessionsPagination = usePagination(filteredSessions, {
+  pageSize: 10,
+  resetOn: [sessionStatusFilter],
+})
+
+const auditPagination = usePagination(() => accessControlStore.auditRecords, {
+  pageSize: 10,
+  resetOn: [
+    () => accessControlStore.auditRecords.length,
+    () => auditFilters.actorId,
+    () => auditFilters.action,
+    () => auditFilters.resourceType,
+    () => auditFilters.outcome,
+    () => auditFilters.from,
+    () => auditFilters.to,
+  ],
+})
+
 const selectedSession = computed(() =>
   accessControlStore.sessions.find(session => session.sessionId === selectedSessionId.value) ?? null,
 )
 const selectedAuditRecord = computed(() =>
   accessControlStore.auditRecords.find(record => record.id === selectedAuditId.value) ?? null,
 )
+
 const auditStats = computed(() => ({
   total: accessControlStore.auditRecords.length,
   denied: accessControlStore.auditRecords.filter(record => record.outcome === 'denied').length,
@@ -75,10 +108,10 @@ const auditStats = computed(() => ({
   ).length,
 }))
 
-const sessionColumns: ColumnDef<AccessSessionRecord>[] = [
+const sessionColumns = computed<ColumnDef<AccessSessionRecord>[]>(() => [
   {
     accessorKey: 'displayName',
-    header: '会话',
+    header: t('accessControl.sessions.sessions.columns.session'),
     cell: ({ row }) => h('div', { class: 'space-y-1' }, [
       h('div', { class: 'text-sm font-medium text-text-primary' }, row.original.displayName),
       h('div', { class: 'text-xs text-text-secondary' }, `${row.original.username} / ${row.original.clientAppId}`),
@@ -86,49 +119,61 @@ const sessionColumns: ColumnDef<AccessSessionRecord>[] = [
   },
   {
     accessorKey: 'createdAt',
-    header: '创建时间',
+    header: t('accessControl.sessions.sessions.columns.createdAt'),
     cell: ({ row }) => formatDateTime(row.original.createdAt),
   },
   {
     accessorKey: 'status',
-    header: '状态',
+    header: t('accessControl.sessions.sessions.columns.status'),
     cell: ({ row }) => h(UiBadge, {
-      label: row.original.current ? '当前会话' : row.original.status,
+      label: row.original.current ? t('accessControl.common.list.currentSession') : getStatusLabel(t, row.original.status),
       tone: row.original.status === 'active' ? 'success' : 'default',
       subtle: true,
     }),
   },
-]
+])
 
-const auditColumns: ColumnDef<AuditRecord>[] = [
+const auditColumns = computed<ColumnDef<AuditRecord>[]>(() => [
   {
     accessorKey: 'action',
-    header: '动作',
+    header: t('accessControl.sessions.audit.columns.action'),
     cell: ({ row }) => h('div', { class: 'space-y-1' }, [
       h('div', { class: 'text-sm font-medium text-text-primary' }, row.original.action),
-      h('div', { class: 'text-xs text-text-secondary' }, `${row.original.actorType} / ${row.original.actorId}`),
+      h('div', { class: 'text-xs text-text-secondary' }, `${getSubjectTypeLabel(t, row.original.actorType)} / ${row.original.actorId}`),
     ]),
   },
   {
     accessorKey: 'resource',
-    header: '资源',
+    header: t('accessControl.sessions.audit.columns.resource'),
     cell: ({ row }) => h('div', { class: 'text-xs text-text-secondary' }, row.original.resource),
   },
   {
     accessorKey: 'createdAt',
-    header: '时间',
+    header: t('accessControl.sessions.audit.columns.createdAt'),
     cell: ({ row }) => formatDateTime(row.original.createdAt),
   },
   {
     accessorKey: 'outcome',
-    header: '结果',
+    header: t('accessControl.sessions.audit.columns.outcome'),
     cell: ({ row }) => h(UiBadge, {
-      label: row.original.outcome,
+      label: getAuditOutcomeLabel(t, row.original.outcome),
       tone: row.original.outcome === 'success' ? 'success' : 'warning',
       subtle: true,
     }),
   },
-]
+])
+
+watch(sessionsPagination.pagedItems, (sessions) => {
+  if (selectedSessionId.value && !sessions.some(session => session.sessionId === selectedSessionId.value)) {
+    selectedSessionId.value = ''
+  }
+}, { immediate: true })
+
+watch(auditPagination.pagedItems, (records) => {
+  if (selectedAuditId.value && !records.some(record => record.id === selectedAuditId.value)) {
+    selectedAuditId.value = ''
+  }
+}, { immediate: true })
 
 function parseTimeInput(value: string): number | undefined {
   if (!value.trim()) {
@@ -138,10 +183,24 @@ function parseTimeInput(value: string): number | undefined {
   return Number.isFinite(timestamp) ? timestamp : undefined
 }
 
+function selectSession(session: AccessSessionRecord) {
+  selectedSessionId.value = session.sessionId
+}
+
+function selectAuditRecord(record: AuditRecord) {
+  selectedAuditId.value = record.id
+}
+
 async function handleRevokeSession(sessionId: string) {
   pendingSessionId.value = sessionId
+  submitError.value = ''
   try {
     await accessControlStore.revokeSession(sessionId)
+    if (selectedSession.value) {
+      await notifySuccess(t('accessControl.sessions.feedback.toastSessionRevoked'), selectedSession.value.displayName)
+    }
+  } catch (error) {
+    submitError.value = error instanceof Error ? error.message : t('accessControl.sessions.feedback.searchFailed')
   } finally {
     pendingSessionId.value = ''
   }
@@ -149,8 +208,13 @@ async function handleRevokeSession(sessionId: string) {
 
 async function handleRevokeUserSessions(userId: string) {
   pendingUserId.value = userId
+  submitError.value = ''
   try {
+    const label = selectedSession.value?.displayName ?? userId
     await accessControlStore.revokeUserSessions(userId)
+    await notifySuccess(t('accessControl.sessions.feedback.toastUserSessionsRevoked'), label)
+  } catch (error) {
+    submitError.value = error instanceof Error ? error.message : t('accessControl.sessions.feedback.searchFailed')
   } finally {
     pendingUserId.value = ''
   }
@@ -168,7 +232,7 @@ async function handleSearchAudit() {
       to: parseTimeInput(auditFilters.to),
     })
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '加载审计日志失败。'
+    submitError.value = error instanceof Error ? error.message : t('accessControl.sessions.feedback.searchFailed')
   }
 }
 
@@ -188,16 +252,8 @@ async function handleLoadMoreAudit() {
   try {
     await accessControlStore.loadMoreAudit()
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '加载更多审计日志失败。'
+    submitError.value = error instanceof Error ? error.message : t('accessControl.sessions.feedback.loadMoreFailed')
   }
-}
-
-function handleSessionRowClick(row: AccessSessionRecord) {
-  selectedSessionId.value = row.sessionId
-}
-
-function handleAuditRowClick(row: AuditRecord) {
-  selectedAuditId.value = row.id
 }
 </script>
 
@@ -215,14 +271,14 @@ function handleAuditRowClick(row: AuditRecord) {
       v-if="activeTab === 'sessions'"
       :has-selection="Boolean(selectedSession)"
       :detail-title="selectedSession ? selectedSession.displayName : ''"
-      detail-subtitle="会话撤销会在下一次请求生效。"
-      empty-detail-title="请选择会话"
-      empty-detail-description="从左侧会话列表中选择一项后即可查看详情并执行撤销操作。"
+      :detail-subtitle="t('accessControl.sessions.sessions.detailSubtitle')"
+      :empty-detail-title="t('accessControl.sessions.sessions.emptyTitle')"
+      :empty-detail-description="t('accessControl.sessions.sessions.emptyDescription')"
     >
       <template #toolbar>
         <UiToolbarRow test-id="access-control-sessions-toolbar">
           <template #filters>
-            <UiField label="会话状态" class="w-full md:w-[180px]">
+            <UiField :label="t('accessControl.sessions.sessions.toolbarStatus')" class="w-full md:w-[180px]">
               <UiSelect v-model="sessionStatusFilter" :options="sessionStatusOptions" />
             </UiField>
           </template>
@@ -230,14 +286,29 @@ function handleAuditRowClick(row: AuditRecord) {
       </template>
 
       <template #list>
-        <UiPanelFrame variant="panel" padding="md" title="会话管理" :subtitle="`共 ${filteredSessions.length} 条会话记录`">
+        <UiPanelFrame
+          variant="panel"
+          padding="md"
+          :title="t('accessControl.sessions.sessions.listTitle')"
+          :subtitle="t('accessControl.common.list.totalSessions', { count: sessionsPagination.totalItems.value })"
+        >
           <UiDataTable
-            :data="filteredSessions"
+            :data="sessionsPagination.pagedItems.value"
             :columns="sessionColumns"
-            empty-title="暂无会话"
-            empty-description="当前筛选条件下没有会话记录。"
-            :on-row-click="handleSessionRowClick"
+            :empty-title="t('accessControl.sessions.sessions.noListTitle')"
+            :empty-description="t('accessControl.sessions.sessions.noListDescription')"
+            :on-row-click="selectSession"
           />
+
+          <div class="mt-3 pt-2">
+            <UiPagination
+              v-model:page="sessionsPagination.currentPage.value"
+              :page-count="sessionsPagination.pageCount.value"
+              :previous-label="t('accessControl.common.pagination.previous')"
+              :next-label="t('accessControl.common.pagination.next')"
+              :summary-label="t('accessControl.common.pagination.summary', { count: sessionsPagination.totalItems.value })"
+            />
+          </div>
         </UiPanelFrame>
       </template>
 
@@ -246,11 +317,11 @@ function handleAuditRowClick(row: AuditRecord) {
           <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
               <div class="text-sm font-semibold text-foreground">{{ selectedSession.displayName }}</div>
-              <UiBadge :label="selectedSession.status" :tone="selectedSession.status === 'active' ? 'success' : 'default'" subtle />
-              <UiBadge v-if="selectedSession.current" label="当前会话" subtle />
+              <UiBadge :label="getStatusLabel(t, selectedSession.status)" :tone="selectedSession.status === 'active' ? 'success' : 'default'" subtle />
+              <UiBadge v-if="selectedSession.current" :label="t('accessControl.common.list.currentSession')" subtle />
             </div>
-            <div class="mt-2 text-xs text-muted-foreground">{{ selectedSession.username }} / {{ selectedSession.clientAppId }}</div>
-            <div class="mt-1 text-xs text-muted-foreground">{{ formatDateTime(selectedSession.createdAt) }}</div>
+            <div class="mt-2 text-xs text-text-secondary">{{ selectedSession.username }} / {{ selectedSession.clientAppId }}</div>
+            <div class="mt-1 text-xs text-text-secondary">{{ formatDateTime(selectedSession.createdAt) }}</div>
           </div>
 
           <div class="flex flex-wrap gap-2">
@@ -260,7 +331,7 @@ function handleAuditRowClick(row: AuditRecord) {
               :loading="pendingSessionId === selectedSession.sessionId"
               @click="handleRevokeSession(selectedSession.sessionId)"
             >
-              撤销当前会话
+              {{ t('accessControl.sessions.sessions.actions.revokeSession') }}
             </UiButton>
             <UiButton
               v-if="!selectedSession.current"
@@ -268,7 +339,7 @@ function handleAuditRowClick(row: AuditRecord) {
               :loading="pendingUserId === selectedSession.userId"
               @click="handleRevokeUserSessions(selectedSession.userId)"
             >
-              撤销该用户全部会话
+              {{ t('accessControl.sessions.sessions.actions.revokeUserSessions') }}
             </UiButton>
           </div>
         </div>
@@ -279,39 +350,39 @@ function handleAuditRowClick(row: AuditRecord) {
       v-else
       :has-selection="Boolean(selectedAuditRecord)"
       :detail-title="selectedAuditRecord ? selectedAuditRecord.action : ''"
-      detail-subtitle="查看事件主体、资源和结果，用于排查授权与审计问题。"
-      empty-detail-title="请选择审计记录"
-      empty-detail-description="从左侧审计结果中选择一项后即可查看详情。"
+      :detail-subtitle="t('accessControl.sessions.audit.detailSubtitle')"
+      :empty-detail-title="t('accessControl.sessions.audit.emptyTitle')"
+      :empty-detail-description="t('accessControl.sessions.audit.emptyDescription')"
     >
       <template #toolbar>
-        <UiToolbarRow test-id="access-control-sessions-toolbar">
+        <UiToolbarRow test-id="access-control-audit-toolbar">
           <template #filters>
-            <UiField label="Actor ID" class="w-full md:w-[180px]">
+            <UiField :label="t('accessControl.sessions.audit.fields.actorId')" class="w-full md:w-[180px]">
               <UiInput v-model="auditFilters.actorId" data-testid="access-control-audit-actor" />
             </UiField>
-            <UiField label="动作" class="w-full md:w-[160px]">
+            <UiField :label="t('accessControl.sessions.audit.fields.action')" class="w-full md:w-[160px]">
               <UiInput v-model="auditFilters.action" data-testid="access-control-audit-action" />
             </UiField>
-            <UiField label="资源类型" class="w-full md:w-[160px]">
+            <UiField :label="t('accessControl.sessions.audit.fields.resourceType')" class="w-full md:w-[160px]">
               <UiInput v-model="auditFilters.resourceType" data-testid="access-control-audit-resource-type" />
             </UiField>
-            <UiField label="结果" class="w-full md:w-[160px]">
+            <UiField :label="t('accessControl.sessions.audit.fields.outcome')" class="w-full md:w-[160px]">
               <UiSelect v-model="auditFilters.outcome" :options="auditOutcomeOptions" data-testid="access-control-audit-outcome" />
             </UiField>
-            <UiField label="开始时间" class="w-full md:w-[200px]">
+            <UiField :label="t('accessControl.sessions.audit.fields.from')" class="w-full md:w-[200px]">
               <UiInput v-model="auditFilters.from" data-testid="access-control-audit-from" />
             </UiField>
-            <UiField label="结束时间" class="w-full md:w-[200px]">
+            <UiField :label="t('accessControl.sessions.audit.fields.to')" class="w-full md:w-[200px]">
               <UiInput v-model="auditFilters.to" data-testid="access-control-audit-to" />
             </UiField>
           </template>
           <template #actions>
             <div class="flex gap-2">
               <UiButton variant="ghost" @click="resetAuditFilters">
-                重置
+                {{ t('accessControl.sessions.audit.actions.reset') }}
               </UiButton>
               <UiButton :loading="accessControlStore.auditLoading" data-testid="access-control-audit-search" @click="handleSearchAudit">
-                查询审计
+                {{ t('accessControl.sessions.audit.actions.search') }}
               </UiButton>
             </div>
           </template>
@@ -319,23 +390,36 @@ function handleAuditRowClick(row: AuditRecord) {
       </template>
 
       <template #list>
-        <UiPanelFrame variant="panel" padding="md" title="审计日志" :subtitle="`已加载 ${auditStats.total} 条记录`">
+        <UiPanelFrame
+          variant="panel"
+          padding="md"
+          :title="t('accessControl.sessions.audit.listTitle')"
+          :subtitle="t('accessControl.common.list.loadedAudit', { count: accessControlStore.auditRecords.length })"
+        >
           <UiDataTable
-            :data="accessControlStore.auditRecords"
+            :data="auditPagination.pagedItems.value"
             :columns="auditColumns"
-            empty-title="暂无审计记录"
-            empty-description="当前筛选条件下没有命中的审计事件。"
-            :on-row-click="handleAuditRowClick"
+            :empty-title="t('accessControl.sessions.audit.noListTitle')"
+            :empty-description="t('accessControl.sessions.audit.noListDescription')"
+            :on-row-click="selectAuditRecord"
           >
             <template #toolbar>
               <div class="flex flex-wrap items-center gap-3 text-xs text-text-tertiary">
-                <span>拒绝事件 {{ auditStats.denied }}</span>
-                <span>敏感动作 {{ auditStats.sensitive }}</span>
+                <span>{{ t('accessControl.common.metrics.deniedAudit', { count: auditStats.denied }) }}</span>
+                <span>{{ t('accessControl.common.metrics.sensitiveAudit', { count: auditStats.sensitive }) }}</span>
               </div>
             </template>
           </UiDataTable>
 
-          <div class="mt-3 flex justify-end">
+          <div class="mt-3 flex flex-wrap items-center justify-between gap-3 pt-2">
+            <UiPagination
+              v-model:page="auditPagination.currentPage.value"
+              :page-count="auditPagination.pageCount.value"
+              :previous-label="t('accessControl.common.pagination.previous')"
+              :next-label="t('accessControl.common.pagination.next')"
+              :summary-label="t('accessControl.common.pagination.summary', { count: accessControlStore.auditRecords.length })"
+            />
+
             <UiButton
               v-if="accessControlStore.auditNextCursor"
               variant="ghost"
@@ -343,7 +427,7 @@ function handleAuditRowClick(row: AuditRecord) {
               data-testid="access-control-audit-load-more"
               @click="handleLoadMoreAudit"
             >
-              加载更多
+              {{ t('accessControl.sessions.audit.actions.loadMore') }}
             </UiButton>
           </div>
         </UiPanelFrame>
@@ -354,23 +438,35 @@ function handleAuditRowClick(row: AuditRecord) {
           <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
               <div class="text-sm font-semibold text-foreground">{{ selectedAuditRecord.action }}</div>
-              <UiBadge :label="selectedAuditRecord.outcome" :tone="selectedAuditRecord.outcome === 'success' ? 'success' : 'warning'" subtle />
+              <UiBadge
+                :label="getAuditOutcomeLabel(t, selectedAuditRecord.outcome)"
+                :tone="selectedAuditRecord.outcome === 'success' ? 'success' : 'warning'"
+                subtle
+              />
             </div>
-            <div class="mt-2 text-xs text-muted-foreground">{{ formatDateTime(selectedAuditRecord.createdAt) }}</div>
+            <div class="mt-2 text-xs text-text-secondary">{{ formatDateTime(selectedAuditRecord.createdAt) }}</div>
           </div>
 
           <div class="grid gap-3">
             <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
-              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">主体</div>
-              <div class="mt-2 text-sm text-foreground">{{ selectedAuditRecord.actorType }} / {{ selectedAuditRecord.actorId }}</div>
+              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+                {{ t('accessControl.sessions.audit.detailBlocks.actor') }}
+              </div>
+              <div class="mt-2 text-sm text-foreground">
+                {{ getSubjectTypeLabel(t, selectedAuditRecord.actorType) }} / {{ selectedAuditRecord.actorId }}
+              </div>
             </div>
             <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
-              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">资源</div>
+              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+                {{ t('accessControl.sessions.audit.detailBlocks.resource') }}
+              </div>
               <div class="mt-2 text-sm text-foreground">{{ selectedAuditRecord.resource }}</div>
             </div>
             <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
-              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">记录 ID</div>
-              <div class="mt-2 break-all text-sm text-foreground">{{ selectedAuditRecord.id }}</div>
+              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+                {{ t('accessControl.sessions.audit.detailBlocks.recordId') }}
+              </div>
+              <div class="mt-2 text-sm text-foreground">{{ selectedAuditRecord.id }}</div>
             </div>
           </div>
         </div>

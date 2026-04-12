@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import {
   UiBadge,
   UiButton,
+  UiCheckbox,
   UiDialog,
   UiEmptyState,
   UiField,
+  UiHierarchyList,
   UiInput,
   UiListDetailWorkspace,
+  UiPagination,
   UiPanelFrame,
+  UiRecordCard,
   UiSelect,
-  UiStatTile,
   UiStatusCallout,
   UiTabs,
   UiToolbarRow,
@@ -27,29 +31,79 @@ import type {
   RoleBindingUpsertRequest,
 } from '@octopus/schema'
 
+import { usePagination } from '@/composables/usePagination'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 
 import {
-  dataResourceTypeOptions,
+  createDataResourceTypeOptions,
+  createPolicyEffectOptions,
+  createResourceTypeOptions,
+  createScopeTypeOptions,
+  createSubjectTypeOptions,
+  getCapabilityModuleLabel,
+  getDataResourceTypeLabel,
+  getPolicyEffectLabel,
+  getResourceTypeLabel,
+  getScopeTypeLabel,
+  getSubjectTypeLabel,
   parseListInput,
-  policyEffectOptions,
-  resourceTypeOptions,
-  scopeTypeOptions,
   stringifyListInput,
-  subjectTypeOptions,
 } from './helpers'
+import { useAccessControlNotifications } from './useAccessControlNotifications'
+import { useAccessControlSelection } from './useAccessControlSelection'
 
+interface RoleBindingFormState {
+  roleId: string
+  subjectType: string
+  subjectId: string
+  effect: string
+}
+
+interface DataPolicyFormState {
+  name: string
+  subjectType: string
+  subjectId: string
+  resourceType: string
+  scopeType: string
+  projectIdsText: string
+  tagsText: string
+  classificationsText: string
+  effect: string
+}
+
+interface ResourcePolicyFormState {
+  subjectType: string
+  subjectId: string
+  resourceType: string
+  resourceId: string
+  action: string
+  effect: string
+}
+
+interface PermissionTreeItem {
+  id: string
+  label: string
+  description?: string
+  depth: number
+  expandable?: boolean
+  expanded?: boolean
+  selectable?: boolean
+  testId: string
+  kind: 'module' | 'permission'
+  permission?: PermissionDefinition
+}
+
+const { t } = useI18n()
 const accessControlStore = useWorkspaceAccessControlStore()
+const { notifyError, notifySuccess, notifyWarning } = useAccessControlNotifications('access-control.policies')
 
-const submitError = ref('')
-const successMessage = ref('')
 const activeSection = ref('permissions')
-
 const permissionQuery = ref('')
 const bindingQuery = ref('')
 const dataPolicyQuery = ref('')
 const resourcePolicyQuery = ref('')
 const resourcePolicyTypeFilter = ref('')
+const submitError = ref('')
 
 const selectedPermissionCode = ref('')
 const selectedRoleBindingId = ref('')
@@ -59,48 +113,38 @@ const selectedResourcePolicyId = ref('')
 const createBindingDialogOpen = ref(false)
 const createDataPolicyDialogOpen = ref(false)
 const createResourcePolicyDialogOpen = ref(false)
+const bulkDeleteBindingsDialogOpen = ref(false)
+const bulkDeleteDataPoliciesDialogOpen = ref(false)
+const bulkDeleteResourcePoliciesDialogOpen = ref(false)
+const expandedPermissionModuleIds = ref<string[]>([])
 
 const savingRoleBinding = ref(false)
-const deletingRoleBindingId = ref('')
 const savingDataPolicy = ref(false)
-const deletingDataPolicyId = ref('')
 const savingResourcePolicy = ref(false)
-const deletingResourcePolicyId = ref('')
+const deletingSelectedBindings = ref(false)
+const deletingSelectedDataPolicies = ref(false)
+const deletingSelectedResourcePolicies = ref(false)
+const hiddenRoleBindingIds = ref<string[]>([])
 
-const sectionTabs = [
-  { value: 'permissions', label: '权限目录' },
-  { value: 'bindings', label: '角色绑定' },
-  { value: 'data', label: '数据策略' },
-  { value: 'resources', label: '资源策略' },
-]
+const createRoleBindingForm = reactive<RoleBindingFormState>(createEmptyRoleBindingForm())
+const editRoleBindingForm = reactive<RoleBindingFormState>(createEmptyRoleBindingForm())
+const createDataPolicyForm = reactive<DataPolicyFormState>(createEmptyDataPolicyForm())
+const editDataPolicyForm = reactive<DataPolicyFormState>(createEmptyDataPolicyForm())
+const createResourcePolicyForm = reactive<ResourcePolicyFormState>(createEmptyResourcePolicyForm())
+const editResourcePolicyForm = reactive<ResourcePolicyFormState>(createEmptyResourcePolicyForm())
 
-const roleBindingForm = reactive({
-  roleId: '',
-  subjectType: 'user',
-  subjectId: '',
-  effect: 'allow',
-})
+const sectionTabs = computed(() => [
+  { value: 'permissions', label: t('accessControl.policies.sections.permissions') },
+  { value: 'bindings', label: t('accessControl.policies.sections.bindings') },
+  { value: 'data', label: t('accessControl.policies.sections.data') },
+  { value: 'resources', label: t('accessControl.policies.sections.resources') },
+])
 
-const dataPolicyForm = reactive({
-  name: '',
-  subjectType: 'user',
-  subjectId: '',
-  resourceType: 'project',
-  scopeType: 'selected-projects',
-  projectIdsText: '',
-  tagsText: '',
-  classificationsText: '',
-  effect: 'allow',
-})
-
-const resourcePolicyForm = reactive({
-  subjectType: 'user',
-  subjectId: '',
-  resourceType: 'agent',
-  resourceId: '',
-  action: 'view',
-  effect: 'allow',
-})
+const subjectTypeOptions = computed(() => createSubjectTypeOptions(t))
+const policyEffectOptions = computed(() => createPolicyEffectOptions(t))
+const scopeTypeOptions = computed(() => createScopeTypeOptions(t))
+const dataResourceTypeOptions = computed(() => createDataResourceTypeOptions(t))
+const resourceTypeOptions = computed(() => createResourceTypeOptions(t))
 
 const roleMap = computed(() => new Map(accessControlStore.roles.map(role => [role.id, role.name])))
 const subjectOptions = computed(() => ({
@@ -109,33 +153,13 @@ const subjectOptions = computed(() => ({
   position: accessControlStore.positions.map(position => ({ label: position.name, value: position.id })),
   user_group: accessControlStore.userGroups.map(group => ({ label: group.name, value: group.id })),
 }))
-const protectedResourceOptions = computed(() =>
+const resourceOptions = computed(() =>
   accessControlStore.protectedResources.map(resource => ({
-    label: `${resource.name} (${resource.resourceType})`,
+    label: `${resource.name} (${resource.id})`,
     value: resource.id,
     resourceType: resource.resourceType,
   })),
 )
-const roleOptions = computed(() => accessControlStore.roles.map(role => ({ label: role.name, value: role.id })))
-const roleBindingSubjectOptions = computed(() =>
-  subjectOptions.value[roleBindingForm.subjectType as keyof typeof subjectOptions.value] ?? [],
-)
-const dataPolicySubjectOptions = computed(() =>
-  subjectOptions.value[dataPolicyForm.subjectType as keyof typeof subjectOptions.value] ?? [],
-)
-const resourcePolicySubjectOptions = computed(() =>
-  subjectOptions.value[resourcePolicyForm.subjectType as keyof typeof subjectOptions.value] ?? [],
-)
-const filteredProtectedResourceOptions = computed(() =>
-  protectedResourceOptions.value.filter(option => option.resourceType === resourcePolicyForm.resourceType),
-)
-
-const metrics = computed(() => ({
-  permissions: accessControlStore.permissionDefinitions.length,
-  bindings: accessControlStore.roleBindings.length,
-  dataPolicies: accessControlStore.dataPolicies.length,
-  resourcePolicies: accessControlStore.resourcePolicies.length,
-}))
 
 const filteredPermissions = computed(() => {
   const normalizedQuery = permissionQuery.value.trim().toLowerCase()
@@ -148,14 +172,42 @@ const filteredPermissions = computed(() => {
       permission.resourceType,
     ].join(' ').toLowerCase().includes(normalizedQuery))
 })
+const permissionModuleItems = computed(() => {
+  const grouped = new Map<string, PermissionDefinition[]>()
+  for (const permission of filteredPermissions.value) {
+    const [moduleName = permission.code] = permission.code.split('.')
+    const items = grouped.get(moduleName) ?? []
+    items.push(permission)
+    grouped.set(moduleName, items)
+  }
+
+  return Array.from(grouped.entries())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([moduleName, permissions]) => ({
+      moduleName,
+      permissions: [...permissions].sort((left, right) => left.code.localeCompare(right.code)),
+    }))
+})
+
+watch(permissionModuleItems, (modules) => {
+  const moduleNames = modules.map(module => module.moduleName)
+  const next = expandedPermissionModuleIds.value.filter(id => moduleNames.includes(id))
+  if (!expandedPermissionModuleIds.value.length) {
+    expandedPermissionModuleIds.value = [...moduleNames]
+    return
+  }
+  expandedPermissionModuleIds.value = next
+}, { immediate: true })
 
 const filteredRoleBindings = computed(() => {
   const normalizedQuery = bindingQuery.value.trim().toLowerCase()
   return [...accessControlStore.roleBindings]
+    .filter(binding => !hiddenRoleBindingIds.value.includes(binding.id))
+    .sort((left, right) => bindingTitle(left).localeCompare(bindingTitle(right)))
     .filter(binding => !normalizedQuery || [
-      roleMap.value.get(binding.roleId) ?? binding.roleId,
+      bindingTitle(binding),
+      bindingSubjectLabel(binding),
       binding.subjectType,
-      resolveSubjectLabel(binding.subjectType, binding.subjectId),
       binding.effect,
     ].join(' ').toLowerCase().includes(normalizedQuery))
 })
@@ -163,15 +215,15 @@ const filteredRoleBindings = computed(() => {
 const filteredDataPolicies = computed(() => {
   const normalizedQuery = dataPolicyQuery.value.trim().toLowerCase()
   return [...accessControlStore.dataPolicies]
+    .sort((left, right) => left.name.localeCompare(right.name))
     .filter(policy => !normalizedQuery || [
       policy.name,
-      policy.subjectType,
       resolveSubjectLabel(policy.subjectType, policy.subjectId),
       policy.resourceType,
       policy.scopeType,
-      ...policy.classifications,
-      ...policy.tags,
       ...policy.projectIds,
+      ...policy.tags,
+      ...policy.classifications,
     ].join(' ').toLowerCase().includes(normalizedQuery))
 })
 
@@ -179,13 +231,42 @@ const filteredResourcePolicies = computed(() => {
   const normalizedQuery = resourcePolicyQuery.value.trim().toLowerCase()
   return [...accessControlStore.resourcePolicies]
     .filter(policy => !resourcePolicyTypeFilter.value || policy.resourceType === resourcePolicyTypeFilter.value)
+    .sort((left, right) => left.action.localeCompare(right.action))
     .filter(policy => !normalizedQuery || [
-      policy.resourceType,
       policy.action,
+      policy.resourceType,
+      policy.resourceId,
       resolveSubjectLabel(policy.subjectType, policy.subjectId),
-      resolveResourceLabel(policy.resourceType, policy.resourceId),
-      policy.effect,
     ].join(' ').toLowerCase().includes(normalizedQuery))
+})
+
+const permissionsPagination = usePagination(permissionModuleItems, {
+  pageSize: 20,
+  resetOn: [permissionQuery],
+})
+const bindingsPagination = usePagination(filteredRoleBindings, {
+  pageSize: 8,
+  resetOn: [bindingQuery],
+})
+const dataPoliciesPagination = usePagination(filteredDataPolicies, {
+  pageSize: 8,
+  resetOn: [dataPolicyQuery],
+})
+const resourcePoliciesPagination = usePagination(filteredResourcePolicies, {
+  pageSize: 8,
+  resetOn: [resourcePolicyQuery, resourcePolicyTypeFilter],
+})
+const bindingSelection = useAccessControlSelection(() => accessControlStore.roleBindings, {
+  getId: binding => binding.id,
+  resetOn: [activeSection],
+})
+const dataPolicySelection = useAccessControlSelection(() => accessControlStore.dataPolicies, {
+  getId: policy => policy.id,
+  resetOn: [activeSection],
+})
+const resourcePolicySelection = useAccessControlSelection(() => accessControlStore.resourcePolicies, {
+  getId: policy => policy.id,
+  resetOn: [activeSection],
 })
 
 const selectedPermission = computed(() =>
@@ -200,111 +281,127 @@ const selectedDataPolicy = computed(() =>
 const selectedResourcePolicy = computed(() =>
   accessControlStore.resourcePolicies.find(policy => policy.id === selectedResourcePolicyId.value) ?? null,
 )
+const visiblePermissionTreeItems = computed<PermissionTreeItem[]>(() => {
+  const items: PermissionTreeItem[] = []
+  const queryActive = Boolean(permissionQuery.value.trim())
 
-watch(selectedRoleBinding, (binding) => {
-  if (!binding) {
-    resetRoleBindingForm()
-    return
-  }
-  populateRoleBindingForm(binding)
-}, { immediate: true })
+  for (const module of permissionsPagination.pagedItems.value) {
+    const expanded = queryActive
+      || expandedPermissionModuleIds.value.includes(module.moduleName)
+    items.push({
+      id: module.moduleName,
+      label: getCapabilityModuleLabel(t, module.moduleName),
+      description: module.moduleName,
+      depth: 0,
+      expandable: true,
+      expanded,
+      selectable: false,
+      testId: `access-control-permission-module-${module.moduleName}`,
+      kind: 'module',
+    })
 
-watch(selectedDataPolicy, (policy) => {
-  if (!policy) {
-    resetDataPolicyForm()
-    return
-  }
-  populateDataPolicyForm(policy)
-}, { immediate: true })
+    if (!expanded) {
+      continue
+    }
 
-watch(selectedResourcePolicy, (policy) => {
-  if (!policy) {
-    resetResourcePolicyForm()
-    return
+    for (const permission of module.permissions) {
+      items.push({
+        id: permission.code,
+        label: permission.name,
+        description: permission.code,
+        depth: 1,
+        selectable: true,
+        testId: `access-control-permission-leaf-${permission.code}`,
+        kind: 'permission',
+        permission,
+      })
+    }
   }
-  populateResourcePolicyForm(policy)
-}, { immediate: true })
 
-watch(filteredPermissions, (permissions) => {
-  if (selectedPermissionCode.value && !permissions.some(permission => permission.code === selectedPermissionCode.value)) {
-    selectedPermissionCode.value = ''
-  }
+  return items
 })
 
-watch(filteredRoleBindings, (bindings) => {
+const resourcePolicyFilterOptions = computed(() => [
+  { label: t('accessControl.common.filters.allTypes'), value: '' },
+  ...resourceTypeOptions.value,
+])
+
+const createRoleBindingSubjectOptions = computed(() => resolveSubjectOptions(createRoleBindingForm.subjectType))
+const editRoleBindingSubjectOptions = computed(() => resolveSubjectOptions(editRoleBindingForm.subjectType))
+const createDataPolicySubjectOptions = computed(() => resolveSubjectOptions(createDataPolicyForm.subjectType))
+const editDataPolicySubjectOptions = computed(() => resolveSubjectOptions(editDataPolicyForm.subjectType))
+const createResourcePolicySubjectOptions = computed(() => resolveSubjectOptions(createResourcePolicyForm.subjectType))
+const editResourcePolicySubjectOptions = computed(() => resolveSubjectOptions(editResourcePolicyForm.subjectType))
+const createResourceChoices = computed(() => resolveResourceOptions(createResourcePolicyForm.resourceType))
+const editResourceChoices = computed(() => resolveResourceOptions(editResourcePolicyForm.resourceType))
+const allVisibleBindingsSelected = computed(() => bindingSelection.isPageSelected(bindingsPagination.pagedItems.value))
+const allVisibleDataPoliciesSelected = computed(() => dataPolicySelection.isPageSelected(dataPoliciesPagination.pagedItems.value))
+const allVisibleResourcePoliciesSelected = computed(() =>
+  resourcePolicySelection.isPageSelected(resourcePoliciesPagination.pagedItems.value),
+)
+const selectedBindingsForDelete = computed(() =>
+  bindingSelection.selectedIds.value
+    .map(id => accessControlStore.roleBindings.find(binding => binding.id === id) ?? null)
+    .filter((binding): binding is NonNullable<typeof binding> => Boolean(binding)),
+)
+const selectedDataPoliciesForDelete = computed(() =>
+  dataPolicySelection.selectedIds.value
+    .map(id => accessControlStore.dataPolicies.find(policy => policy.id === id) ?? null)
+    .filter((policy): policy is NonNullable<typeof policy> => Boolean(policy)),
+)
+const selectedResourcePoliciesForDelete = computed(() =>
+  resourcePolicySelection.selectedIds.value
+    .map(id => accessControlStore.resourcePolicies.find(policy => policy.id === id) ?? null)
+    .filter((policy): policy is NonNullable<typeof policy> => Boolean(policy)),
+)
+
+watch(visiblePermissionTreeItems, (items) => {
+  if (selectedPermissionCode.value && !items.some(item => item.kind === 'permission' && item.id === selectedPermissionCode.value)) {
+    selectedPermissionCode.value = ''
+  }
+}, { immediate: true })
+
+watch(bindingsPagination.pagedItems, (bindings) => {
   if (selectedRoleBindingId.value && !bindings.some(binding => binding.id === selectedRoleBindingId.value)) {
     selectedRoleBindingId.value = ''
   }
-})
+}, { immediate: true })
 
-watch(filteredDataPolicies, (policies) => {
+watch(dataPoliciesPagination.pagedItems, (policies) => {
   if (selectedDataPolicyId.value && !policies.some(policy => policy.id === selectedDataPolicyId.value)) {
     selectedDataPolicyId.value = ''
   }
-})
+}, { immediate: true })
 
-watch(filteredResourcePolicies, (policies) => {
+watch(resourcePoliciesPagination.pagedItems, (policies) => {
   if (selectedResourcePolicyId.value && !policies.some(policy => policy.id === selectedResourcePolicyId.value)) {
     selectedResourcePolicyId.value = ''
   }
-})
+}, { immediate: true })
 
-function clearMessages() {
-  submitError.value = ''
-  successMessage.value = ''
-}
+watch(selectedRoleBinding, (binding) => {
+  Object.assign(editRoleBindingForm, binding ? toRoleBindingForm(binding) : createEmptyRoleBindingForm())
+}, { immediate: true })
 
-function resolveSubjectLabel(subjectType: string, subjectId: string) {
-  const options = subjectOptions.value[subjectType as keyof typeof subjectOptions.value] ?? []
-  return options.find(option => option.value === subjectId)?.label ?? subjectId
-}
+watch(selectedDataPolicy, (policy) => {
+  Object.assign(editDataPolicyForm, policy ? toDataPolicyForm(policy) : createEmptyDataPolicyForm())
+}, { immediate: true })
 
-function resolveResourceLabel(resourceType: string, resourceId: string) {
-  return protectedResourceOptions.value.find(
-    option => option.resourceType === resourceType && option.value === resourceId,
-  )?.label ?? resourceId
-}
+watch(selectedResourcePolicy, (policy) => {
+  Object.assign(editResourcePolicyForm, policy ? toResourcePolicyForm(policy) : createEmptyResourcePolicyForm())
+}, { immediate: true })
 
-function selectPermission(permission: PermissionDefinition) {
-  clearMessages()
-  selectedPermissionCode.value = permission.code
-}
-
-function selectRoleBinding(bindingId: string) {
-  clearMessages()
-  selectedRoleBindingId.value = bindingId
-}
-
-function selectDataPolicy(policyId: string) {
-  clearMessages()
-  selectedDataPolicyId.value = policyId
-}
-
-function selectResourcePolicy(policyId: string) {
-  clearMessages()
-  selectedResourcePolicyId.value = policyId
-}
-
-function resetRoleBindingForm() {
-  Object.assign(roleBindingForm, {
+function createEmptyRoleBindingForm(): RoleBindingFormState {
+  return {
     roleId: accessControlStore.roles[0]?.id ?? '',
     subjectType: 'user',
     subjectId: accessControlStore.users[0]?.id ?? '',
     effect: 'allow',
-  })
+  }
 }
 
-function populateRoleBindingForm(binding: RoleBindingRecord) {
-  Object.assign(roleBindingForm, {
-    roleId: binding.roleId,
-    subjectType: binding.subjectType,
-    subjectId: binding.subjectId,
-    effect: binding.effect,
-  })
-}
-
-function resetDataPolicyForm() {
-  Object.assign(dataPolicyForm, {
+function createEmptyDataPolicyForm(): DataPolicyFormState {
+  return {
     name: '',
     subjectType: 'user',
     subjectId: accessControlStore.users[0]?.id ?? '',
@@ -314,11 +411,34 @@ function resetDataPolicyForm() {
     tagsText: '',
     classificationsText: '',
     effect: 'allow',
-  })
+  }
 }
 
-function populateDataPolicyForm(policy: DataPolicyRecord) {
-  Object.assign(dataPolicyForm, {
+function createEmptyResourcePolicyForm(): ResourcePolicyFormState {
+  const defaultResourceType = accessControlStore.protectedResources[0]?.resourceType ?? 'agent'
+  const defaultResourceId = accessControlStore.protectedResources.find(resource => resource.resourceType === defaultResourceType)?.id ?? ''
+
+  return {
+    subjectType: 'user',
+    subjectId: accessControlStore.users[0]?.id ?? '',
+    resourceType: defaultResourceType,
+    resourceId: defaultResourceId,
+    action: 'view',
+    effect: 'allow',
+  }
+}
+
+function toRoleBindingForm(binding: RoleBindingRecord): RoleBindingFormState {
+  return {
+    roleId: binding.roleId,
+    subjectType: binding.subjectType,
+    subjectId: binding.subjectId,
+    effect: binding.effect,
+  }
+}
+
+function toDataPolicyForm(policy: DataPolicyRecord): DataPolicyFormState {
+  return {
     name: policy.name,
     subjectType: policy.subjectType,
     subjectId: policy.subjectId,
@@ -328,264 +448,509 @@ function populateDataPolicyForm(policy: DataPolicyRecord) {
     tagsText: stringifyListInput(policy.tags),
     classificationsText: stringifyListInput(policy.classifications),
     effect: policy.effect,
-  })
+  }
 }
 
-function resetResourcePolicyForm() {
-  const nextResourceType = protectedResourceOptions.value[0]?.resourceType ?? 'agent'
-  Object.assign(resourcePolicyForm, {
-    subjectType: 'user',
-    subjectId: accessControlStore.users[0]?.id ?? '',
-    resourceType: nextResourceType,
-    resourceId: protectedResourceOptions.value.find(option => option.resourceType === nextResourceType)?.value ?? '',
-    action: 'view',
-    effect: 'allow',
-  })
-}
-
-function populateResourcePolicyForm(policy: ResourcePolicyRecord) {
-  Object.assign(resourcePolicyForm, {
+function toResourcePolicyForm(policy: ResourcePolicyRecord): ResourcePolicyFormState {
+  return {
     subjectType: policy.subjectType,
     subjectId: policy.subjectId,
     resourceType: policy.resourceType,
     resourceId: policy.resourceId,
     action: policy.action,
     effect: policy.effect,
+  }
+}
+
+function resolveSubjectOptions(subjectType: string) {
+  return subjectOptions.value[subjectType as keyof typeof subjectOptions.value] ?? []
+}
+
+function resolveResourceOptions(resourceType: string) {
+  return resourceOptions.value
+    .filter(option => option.resourceType === resourceType)
+    .map(option => ({ label: option.label, value: option.value }))
+}
+
+function resolveSubjectLabel(subjectType: string, subjectId: string) {
+  return resolveSubjectOptions(subjectType).find(option => option.value === subjectId)?.label ?? subjectId
+}
+
+function resolveResourceLabel(resourceType: string, resourceId: string) {
+  return accessControlStore.protectedResources.find(resource =>
+    resource.resourceType === resourceType && resource.id === resourceId,
+  )?.name ?? resourceId
+}
+
+function bindingTitle(binding: Pick<RoleBindingRecord, 'roleId'>) {
+  return roleMap.value.get(binding.roleId) ?? binding.roleId
+}
+
+function bindingSubjectLabel(binding: Pick<RoleBindingRecord, 'subjectType' | 'subjectId'>) {
+  return resolveSubjectLabel(binding.subjectType, binding.subjectId)
+}
+
+function hideRoleBinding(bindingId: string) {
+  if (!hiddenRoleBindingIds.value.includes(bindingId)) {
+    hiddenRoleBindingIds.value = [...hiddenRoleBindingIds.value, bindingId]
+  }
+}
+
+function showRoleBinding(bindingId: string) {
+  hiddenRoleBindingIds.value = hiddenRoleBindingIds.value.filter(id => id !== bindingId)
+}
+
+function selectPermission(permission: PermissionDefinition) {
+  selectedPermissionCode.value = permission.code
+  submitError.value = ''
+  const [moduleName = permission.code] = permission.code.split('.')
+  if (!expandedPermissionModuleIds.value.includes(moduleName)) {
+    expandedPermissionModuleIds.value = [...expandedPermissionModuleIds.value, moduleName]
+  }
+}
+
+function selectPermissionCode(permissionCode: string) {
+  const permission = accessControlStore.permissionDefinitions.find(item => item.code === permissionCode)
+  if (!permission) {
+    return
+  }
+  selectPermission(permission)
+}
+
+function togglePermissionModule(moduleName: string) {
+  const next = new Set(expandedPermissionModuleIds.value)
+  if (next.has(moduleName)) {
+    next.delete(moduleName)
+  } else {
+    next.add(moduleName)
+  }
+  expandedPermissionModuleIds.value = Array.from(next)
+}
+
+function selectRoleBinding(bindingId: string) {
+  selectedRoleBindingId.value = bindingId
+  submitError.value = ''
+}
+
+function selectDataPolicy(policyId: string) {
+  selectedDataPolicyId.value = policyId
+  submitError.value = ''
+}
+
+function selectResourcePolicy(policyId: string) {
+  selectedResourcePolicyId.value = policyId
+  submitError.value = ''
+}
+
+function toggleBindingSelection(bindingId: string, value: boolean) {
+  bindingSelection.toggleSelection(bindingId, value)
+}
+
+function toggleVisibleBindings(value: boolean) {
+  bindingSelection.selectPage(bindingsPagination.pagedItems.value, value)
+}
+
+function toggleDataPolicySelection(policyId: string, value: boolean) {
+  dataPolicySelection.toggleSelection(policyId, value)
+}
+
+function toggleVisibleDataPolicies(value: boolean) {
+  dataPolicySelection.selectPage(dataPoliciesPagination.pagedItems.value, value)
+}
+
+function toggleResourcePolicySelection(policyId: string, value: boolean) {
+  resourcePolicySelection.toggleSelection(policyId, value)
+}
+
+function toggleVisibleResourcePolicies(value: boolean) {
+  resourcePolicySelection.selectPage(resourcePoliciesPagination.pagedItems.value, value)
+}
+
+function getPermissionDefinitionByCode(permissionCode: string) {
+  return accessControlStore.permissionDefinitions.find(permission => permission.code === permissionCode) ?? null
+}
+
+async function notifyBulkDeleteResult(
+  successCount: number,
+  failureCount: number,
+  skippedCount: number,
+  clearSelection: () => void,
+) {
+  await nextTick()
+
+  const body = t('accessControl.common.bulk.resultBody', {
+    success: successCount,
+    failure: failureCount,
+    skipped: skippedCount,
   })
+
+  if (successCount > 0 && failureCount === 0 && skippedCount === 0) {
+    clearSelection()
+    await notifySuccess(t('accessControl.common.bulk.resultAllSuccessTitle'), body)
+    return
+  }
+
+  if (successCount > 0 || skippedCount > 0) {
+    await notifyWarning(t('accessControl.common.bulk.resultPartialTitle'), body)
+    return
+  }
+
+  await notifyError(t('accessControl.common.bulk.resultFailureTitle'), body)
 }
 
 function openCreateRoleBindingDialog() {
-  clearMessages()
-  selectedRoleBindingId.value = ''
-  resetRoleBindingForm()
+  Object.assign(createRoleBindingForm, createEmptyRoleBindingForm())
+  submitError.value = ''
   createBindingDialogOpen.value = true
 }
 
 function openCreateDataPolicyDialog() {
-  clearMessages()
-  selectedDataPolicyId.value = ''
-  resetDataPolicyForm()
+  Object.assign(createDataPolicyForm, createEmptyDataPolicyForm())
+  submitError.value = ''
   createDataPolicyDialogOpen.value = true
 }
 
 function openCreateResourcePolicyDialog() {
-  clearMessages()
-  selectedResourcePolicyId.value = ''
-  resetResourcePolicyForm()
+  Object.assign(createResourcePolicyForm, createEmptyResourcePolicyForm())
+  submitError.value = ''
   createResourcePolicyDialogOpen.value = true
 }
 
-function validateRoleBindingForm() {
-  if (!roleBindingForm.roleId || !roleBindingForm.subjectId) {
-    return '请选择角色和绑定主体。'
+function validateRoleBindingForm(form: RoleBindingFormState) {
+  if (!form.roleId || !form.subjectId) {
+    return t('accessControl.policies.validation.bindingRequired')
   }
   return ''
 }
 
-function validateDataPolicyForm() {
-  if (!dataPolicyForm.name.trim() || !dataPolicyForm.subjectId) {
-    return '请填写策略名称并选择主体。'
+function validateDataPolicyForm(form: DataPolicyFormState) {
+  if (!form.name.trim() || !form.subjectId) {
+    return t('accessControl.policies.validation.dataRequired')
   }
   return ''
 }
 
-function validateResourcePolicyForm() {
-  if (!resourcePolicyForm.subjectId || !resourcePolicyForm.resourceId || !resourcePolicyForm.action.trim()) {
-    return '请选择主体、资源并填写动作。'
+function validateResourcePolicyForm(form: ResourcePolicyFormState) {
+  if (!form.subjectId || !form.resourceId || !form.action.trim()) {
+    return t('accessControl.policies.validation.resourceRequired')
   }
   return ''
 }
 
-async function saveRoleBinding(isCreate = false) {
-  submitError.value = validateRoleBindingForm()
+function toRoleBindingPayload(form: RoleBindingFormState): RoleBindingUpsertRequest {
+  return {
+    roleId: form.roleId,
+    subjectType: form.subjectType,
+    subjectId: form.subjectId,
+    effect: form.effect,
+  }
+}
+
+function toDataPolicyPayload(form: DataPolicyFormState): DataPolicyUpsertRequest {
+  return {
+    name: form.name.trim(),
+    subjectType: form.subjectType,
+    subjectId: form.subjectId,
+    resourceType: form.resourceType,
+    scopeType: form.scopeType,
+    projectIds: parseListInput(form.projectIdsText),
+    tags: parseListInput(form.tagsText),
+    classifications: parseListInput(form.classificationsText),
+    effect: form.effect,
+  }
+}
+
+function toResourcePolicyPayload(form: ResourcePolicyFormState): ResourcePolicyUpsertRequest {
+  return {
+    subjectType: form.subjectType,
+    subjectId: form.subjectId,
+    resourceType: form.resourceType,
+    resourceId: form.resourceId,
+    action: form.action.trim(),
+    effect: form.effect,
+  }
+}
+
+async function handleCreateRoleBinding() {
+  submitError.value = validateRoleBindingForm(createRoleBindingForm)
   if (submitError.value) {
-    return null
+    return
   }
 
   savingRoleBinding.value = true
   try {
-    const payload: RoleBindingUpsertRequest = {
-      roleId: roleBindingForm.roleId,
-      subjectType: roleBindingForm.subjectType,
-      subjectId: roleBindingForm.subjectId,
-      effect: roleBindingForm.effect,
-    }
-
-    const record = isCreate || !selectedRoleBinding.value
-      ? await accessControlStore.createRoleBinding(payload)
-      : await accessControlStore.updateRoleBinding(selectedRoleBinding.value.id, payload)
-
-    successMessage.value = `已保存角色绑定 ${resolveSubjectLabel(record.subjectType, record.subjectId)}`
-    return record
+    const record = await accessControlStore.createRoleBinding(toRoleBindingPayload(createRoleBindingForm))
+    showRoleBinding(record.id)
+    selectedRoleBindingId.value = record.id
+    createBindingDialogOpen.value = false
+    await notifySuccess(t('accessControl.policies.feedback.toastBindingSaved'), bindingSubjectLabel(record))
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '保存角色绑定失败。'
-    return null
+    submitError.value = error instanceof Error ? error.message : t('accessControl.policies.feedback.saveBindingFailed')
   } finally {
     savingRoleBinding.value = false
   }
 }
 
-async function saveDataPolicy(isCreate = false) {
-  submitError.value = validateDataPolicyForm()
+async function handleSaveRoleBinding() {
+  if (!selectedRoleBinding.value) {
+    return
+  }
+
+  submitError.value = validateRoleBindingForm(editRoleBindingForm)
   if (submitError.value) {
-    return null
+    return
+  }
+
+  savingRoleBinding.value = true
+  try {
+    const payload = toRoleBindingPayload(editRoleBindingForm)
+    await accessControlStore.updateRoleBinding(selectedRoleBinding.value.id, payload)
+    showRoleBinding(selectedRoleBinding.value.id)
+    await notifySuccess(t('accessControl.policies.feedback.toastBindingSaved'), resolveSubjectLabel(payload.subjectType, payload.subjectId))
+  } catch (error) {
+    submitError.value = error instanceof Error ? error.message : t('accessControl.policies.feedback.saveBindingFailed')
+  } finally {
+    savingRoleBinding.value = false
+  }
+}
+
+async function handleDeleteRoleBinding() {
+  if (!selectedRoleBinding.value) {
+    return
+  }
+
+  submitError.value = ''
+  try {
+    const label = bindingSubjectLabel(selectedRoleBinding.value)
+    hideRoleBinding(selectedRoleBinding.value.id)
+    await accessControlStore.deleteRoleBinding(selectedRoleBinding.value.id)
+    selectedRoleBindingId.value = ''
+    await notifySuccess(t('accessControl.policies.feedback.toastBindingDeleted'), label)
+  } catch (error) {
+    showRoleBinding(selectedRoleBinding.value.id)
+    submitError.value = error instanceof Error ? error.message : t('accessControl.policies.feedback.deleteBindingFailed')
+  }
+}
+
+async function handleBulkDeleteBindings() {
+  if (!selectedBindingsForDelete.value.length) {
+    bulkDeleteBindingsDialogOpen.value = false
+    return
+  }
+
+  deletingSelectedBindings.value = true
+  submitError.value = ''
+  let successCount = 0
+  let failureCount = 0
+
+  for (const binding of selectedBindingsForDelete.value) {
+    try {
+      hideRoleBinding(binding.id)
+      await accessControlStore.deleteRoleBinding(binding.id)
+      successCount += 1
+      if (selectedRoleBindingId.value === binding.id) {
+        selectedRoleBindingId.value = ''
+      }
+    } catch {
+      showRoleBinding(binding.id)
+      failureCount += 1
+    }
+  }
+
+  deletingSelectedBindings.value = false
+  bulkDeleteBindingsDialogOpen.value = false
+  bindingSelection.setSelection(
+    bindingSelection.selectedIds.value.filter(id =>
+      accessControlStore.roleBindings.some(binding => binding.id === id),
+    ),
+  )
+  await notifyBulkDeleteResult(successCount, failureCount, 0, () => bindingSelection.clearSelection())
+}
+
+async function handleCreateDataPolicy() {
+  submitError.value = validateDataPolicyForm(createDataPolicyForm)
+  if (submitError.value) {
+    return
   }
 
   savingDataPolicy.value = true
   try {
-    const payload: DataPolicyUpsertRequest = {
-      name: dataPolicyForm.name.trim(),
-      subjectType: dataPolicyForm.subjectType,
-      subjectId: dataPolicyForm.subjectId,
-      resourceType: dataPolicyForm.resourceType,
-      scopeType: dataPolicyForm.scopeType,
-      projectIds: parseListInput(dataPolicyForm.projectIdsText),
-      tags: parseListInput(dataPolicyForm.tagsText),
-      classifications: parseListInput(dataPolicyForm.classificationsText),
-      effect: dataPolicyForm.effect,
-    }
-
-    const record = isCreate || !selectedDataPolicy.value
-      ? await accessControlStore.createDataPolicy(payload)
-      : await accessControlStore.updateDataPolicy(selectedDataPolicy.value.id, payload)
-
-    successMessage.value = `已保存数据策略 ${record.name}`
-    return record
+    const record = await accessControlStore.createDataPolicy(toDataPolicyPayload(createDataPolicyForm))
+    selectedDataPolicyId.value = record.id
+    createDataPolicyDialogOpen.value = false
+    await notifySuccess(t('accessControl.policies.feedback.toastDataSaved'), record.name)
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '保存数据策略失败。'
-    return null
+    submitError.value = error instanceof Error ? error.message : t('accessControl.policies.feedback.saveDataFailed')
   } finally {
     savingDataPolicy.value = false
   }
 }
 
-async function saveResourcePolicy(isCreate = false) {
-  submitError.value = validateResourcePolicyForm()
-  if (submitError.value) {
-    return null
-  }
-
-  savingResourcePolicy.value = true
-  try {
-    const payload: ResourcePolicyUpsertRequest = {
-      subjectType: resourcePolicyForm.subjectType,
-      subjectId: resourcePolicyForm.subjectId,
-      resourceType: resourcePolicyForm.resourceType,
-      resourceId: resourcePolicyForm.resourceId,
-      action: resourcePolicyForm.action.trim(),
-      effect: resourcePolicyForm.effect,
-    }
-
-    const record = isCreate || !selectedResourcePolicy.value
-      ? await accessControlStore.createResourcePolicy(payload)
-      : await accessControlStore.updateResourcePolicy(selectedResourcePolicy.value.id, payload)
-
-    successMessage.value = `已保存资源策略 ${record.action}`
-    return record
-  } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '保存资源策略失败。'
-    return null
-  } finally {
-    savingResourcePolicy.value = false
-  }
-}
-
-async function handleCreateRoleBinding() {
-  const record = await saveRoleBinding(true)
-  if (!record) {
-    return
-  }
-  createBindingDialogOpen.value = false
-  selectedRoleBindingId.value = record.id
-}
-
-async function handleCreateDataPolicy() {
-  const record = await saveDataPolicy(true)
-  if (!record) {
-    return
-  }
-  createDataPolicyDialogOpen.value = false
-  selectedDataPolicyId.value = record.id
-}
-
-async function handleCreateResourcePolicy() {
-  const record = await saveResourcePolicy(true)
-  if (!record) {
-    return
-  }
-  createResourcePolicyDialogOpen.value = false
-  selectedResourcePolicyId.value = record.id
-}
-
-async function deleteRoleBinding() {
-  if (!selectedRoleBinding.value) {
-    return
-  }
-
-  deletingRoleBindingId.value = selectedRoleBinding.value.id
-  submitError.value = ''
-  try {
-    const label = resolveSubjectLabel(selectedRoleBinding.value.subjectType, selectedRoleBinding.value.subjectId)
-    await accessControlStore.deleteRoleBinding(selectedRoleBinding.value.id)
-    selectedRoleBindingId.value = ''
-    successMessage.value = `已删除角色绑定 ${label}`
-  } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '删除角色绑定失败。'
-  } finally {
-    deletingRoleBindingId.value = ''
-  }
-}
-
-async function deleteDataPolicy() {
+async function handleSaveDataPolicy() {
   if (!selectedDataPolicy.value) {
     return
   }
 
-  deletingDataPolicyId.value = selectedDataPolicy.value.id
+  submitError.value = validateDataPolicyForm(editDataPolicyForm)
+  if (submitError.value) {
+    return
+  }
+
+  savingDataPolicy.value = true
+  try {
+    const payload = toDataPolicyPayload(editDataPolicyForm)
+    await accessControlStore.updateDataPolicy(selectedDataPolicy.value.id, payload)
+    await notifySuccess(t('accessControl.policies.feedback.toastDataSaved'), payload.name)
+  } catch (error) {
+    submitError.value = error instanceof Error ? error.message : t('accessControl.policies.feedback.saveDataFailed')
+  } finally {
+    savingDataPolicy.value = false
+  }
+}
+
+async function handleDeleteDataPolicy() {
+  if (!selectedDataPolicy.value) {
+    return
+  }
+
   submitError.value = ''
   try {
     const label = selectedDataPolicy.value.name
     await accessControlStore.deleteDataPolicy(selectedDataPolicy.value.id)
     selectedDataPolicyId.value = ''
-    successMessage.value = `已删除数据策略 ${label}`
+    await notifySuccess(t('accessControl.policies.feedback.toastDataDeleted'), label)
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '删除数据策略失败。'
-  } finally {
-    deletingDataPolicyId.value = ''
+    submitError.value = error instanceof Error ? error.message : t('accessControl.policies.feedback.deleteDataFailed')
   }
 }
 
-async function deleteResourcePolicy() {
+async function handleBulkDeleteDataPolicies() {
+  if (!selectedDataPoliciesForDelete.value.length) {
+    bulkDeleteDataPoliciesDialogOpen.value = false
+    return
+  }
+
+  deletingSelectedDataPolicies.value = true
+  submitError.value = ''
+  let successCount = 0
+  let failureCount = 0
+
+  for (const policy of selectedDataPoliciesForDelete.value) {
+    try {
+      await accessControlStore.deleteDataPolicy(policy.id)
+      successCount += 1
+      if (selectedDataPolicyId.value === policy.id) {
+        selectedDataPolicyId.value = ''
+      }
+    } catch {
+      failureCount += 1
+    }
+  }
+
+  deletingSelectedDataPolicies.value = false
+  bulkDeleteDataPoliciesDialogOpen.value = false
+  dataPolicySelection.setSelection(
+    dataPolicySelection.selectedIds.value.filter(id =>
+      accessControlStore.dataPolicies.some(policy => policy.id === id),
+    ),
+  )
+  await notifyBulkDeleteResult(successCount, failureCount, 0, () => dataPolicySelection.clearSelection())
+}
+
+async function handleCreateResourcePolicy() {
+  submitError.value = validateResourcePolicyForm(createResourcePolicyForm)
+  if (submitError.value) {
+    return
+  }
+
+  savingResourcePolicy.value = true
+  try {
+    const record = await accessControlStore.createResourcePolicy(toResourcePolicyPayload(createResourcePolicyForm))
+    selectedResourcePolicyId.value = record.id
+    createResourcePolicyDialogOpen.value = false
+    await notifySuccess(t('accessControl.policies.feedback.toastResourceSaved'), record.action)
+  } catch (error) {
+    submitError.value = error instanceof Error ? error.message : t('accessControl.policies.feedback.saveResourceFailed')
+  } finally {
+    savingResourcePolicy.value = false
+  }
+}
+
+async function handleSaveResourcePolicy() {
   if (!selectedResourcePolicy.value) {
     return
   }
 
-  deletingResourcePolicyId.value = selectedResourcePolicy.value.id
+  submitError.value = validateResourcePolicyForm(editResourcePolicyForm)
+  if (submitError.value) {
+    return
+  }
+
+  savingResourcePolicy.value = true
+  try {
+    const payload = toResourcePolicyPayload(editResourcePolicyForm)
+    await accessControlStore.updateResourcePolicy(selectedResourcePolicy.value.id, payload)
+    await notifySuccess(t('accessControl.policies.feedback.toastResourceSaved'), payload.action)
+  } catch (error) {
+    submitError.value = error instanceof Error ? error.message : t('accessControl.policies.feedback.saveResourceFailed')
+  } finally {
+    savingResourcePolicy.value = false
+  }
+}
+
+async function handleDeleteResourcePolicy() {
+  if (!selectedResourcePolicy.value) {
+    return
+  }
+
   submitError.value = ''
   try {
     const label = selectedResourcePolicy.value.action
     await accessControlStore.deleteResourcePolicy(selectedResourcePolicy.value.id)
     selectedResourcePolicyId.value = ''
-    successMessage.value = `已删除资源策略 ${label}`
+    await notifySuccess(t('accessControl.policies.feedback.toastResourceDeleted'), label)
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '删除资源策略失败。'
-  } finally {
-    deletingResourcePolicyId.value = ''
+    submitError.value = error instanceof Error ? error.message : t('accessControl.policies.feedback.deleteResourceFailed')
   }
+}
+
+async function handleBulkDeleteResourcePolicies() {
+  if (!selectedResourcePoliciesForDelete.value.length) {
+    bulkDeleteResourcePoliciesDialogOpen.value = false
+    return
+  }
+
+  deletingSelectedResourcePolicies.value = true
+  submitError.value = ''
+  let successCount = 0
+  let failureCount = 0
+
+  for (const policy of selectedResourcePoliciesForDelete.value) {
+    try {
+      await accessControlStore.deleteResourcePolicy(policy.id)
+      successCount += 1
+      if (selectedResourcePolicyId.value === policy.id) {
+        selectedResourcePolicyId.value = ''
+      }
+    } catch {
+      failureCount += 1
+    }
+  }
+
+  deletingSelectedResourcePolicies.value = false
+  bulkDeleteResourcePoliciesDialogOpen.value = false
+  resourcePolicySelection.setSelection(
+    resourcePolicySelection.selectedIds.value.filter(id =>
+      accessControlStore.resourcePolicies.some(policy => policy.id === id),
+    ),
+  )
+  await notifyBulkDeleteResult(successCount, failureCount, 0, () => resourcePolicySelection.clearSelection())
 }
 </script>
 
 <template>
   <div class="space-y-4" data-testid="access-control-policies-shell">
-    <section class="grid gap-4 md:grid-cols-4">
-      <UiStatTile label="权限目录" :value="String(metrics.permissions)" />
-      <UiStatTile label="角色绑定" :value="String(metrics.bindings)" />
-      <UiStatTile label="数据策略" :value="String(metrics.dataPolicies)" />
-      <UiStatTile label="资源策略" :value="String(metrics.resourcePolicies)" />
-    </section>
-
     <UiStatusCallout v-if="submitError" tone="error" :description="submitError" />
-    <UiStatusCallout v-if="successMessage" tone="success" :description="successMessage" />
 
     <UiTabs v-model="activeSection" :tabs="sectionTabs" data-testid="access-control-policies-section-tabs" />
 
@@ -593,62 +958,91 @@ async function deleteResourcePolicy() {
       v-if="activeSection === 'permissions'"
       :has-selection="Boolean(selectedPermission)"
       :detail-title="selectedPermission ? selectedPermission.name : ''"
-      detail-subtitle="权限目录只读，提供 capability 参考和资源类型映射。"
-      empty-detail-title="请选择权限"
-      empty-detail-description="从左侧权限目录中选择一项后即可查看详情。"
+      :detail-subtitle="t('accessControl.policies.permissions.detailSubtitle')"
+      :empty-detail-title="t('accessControl.policies.permissions.emptyTitle')"
+      :empty-detail-description="t('accessControl.policies.permissions.emptyDescription')"
     >
       <template #toolbar>
         <UiToolbarRow>
           <template #search>
-            <UiInput v-model="permissionQuery" placeholder="搜索权限名称、code 或资源类型" />
+            <UiInput v-model="permissionQuery" :placeholder="t('accessControl.policies.permissions.toolbarSearch')" />
           </template>
         </UiToolbarRow>
       </template>
 
       <template #list>
-        <UiPanelFrame variant="panel" padding="md" title="权限目录" :subtitle="`共 ${filteredPermissions.length} 项 capability`">
-          <div v-if="filteredPermissions.length" class="space-y-2">
-            <button
-              v-for="permission in filteredPermissions"
-              :key="permission.code"
-              type="button"
-              class="w-full rounded-[var(--radius-l)] border px-4 py-3 text-left transition-colors"
-              :class="selectedPermissionCode === permission.code ? 'border-primary bg-accent/40' : 'border-border bg-card hover:bg-subtle/60'"
-              @click="selectPermission(permission)"
-            >
-              <div class="space-y-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-sm font-semibold text-foreground">{{ permission.name }}</span>
-                  <UiBadge :label="permission.resourceType" subtle />
+        <UiPanelFrame
+          variant="panel"
+          padding="md"
+          :title="t('accessControl.policies.permissions.listTitle')"
+          :subtitle="t('accessControl.common.list.totalPermissions', { count: filteredPermissions.length })"
+        >
+          <UiHierarchyList
+            v-if="visiblePermissionTreeItems.length"
+            :items="visiblePermissionTreeItems"
+            :selected-id="selectedPermissionCode"
+            @select="selectPermissionCode"
+            @toggle="togglePermissionModule"
+          >
+            <template #default="{ item }">
+              <div class="min-w-0">
+                <div class="truncate text-sm font-medium text-text-primary">
+                  {{ item.label }}
                 </div>
-                <div class="text-xs text-muted-foreground">{{ permission.code }}</div>
+                <div class="truncate pt-0.5 text-xs text-text-secondary">
+                  {{ item.description }}
+                </div>
               </div>
-            </button>
+            </template>
+
+            <template #badges="{ item }">
+              <UiBadge
+                v-if="getPermissionDefinitionByCode(item.id)"
+                :label="getResourceTypeLabel(t, getPermissionDefinitionByCode(item.id)?.resourceType ?? '')"
+                subtle
+              />
+            </template>
+          </UiHierarchyList>
+          <UiEmptyState
+            v-else
+            :title="t('accessControl.policies.permissions.noListTitle')"
+            :description="t('accessControl.policies.permissions.noListDescription')"
+          />
+
+          <div class="mt-3 pt-2">
+            <UiPagination
+              v-model:page="permissionsPagination.currentPage.value"
+              :page-count="permissionsPagination.pageCount.value"
+              :previous-label="t('accessControl.common.pagination.previous')"
+              :next-label="t('accessControl.common.pagination.next')"
+              :summary-label="t('accessControl.common.pagination.summary', { count: permissionsPagination.totalItems.value })"
+            />
           </div>
-          <UiEmptyState v-else title="暂无权限目录" description="当前筛选条件下没有权限定义。" />
         </UiPanelFrame>
       </template>
 
       <template #detail>
         <div v-if="selectedPermission" class="space-y-4">
-          <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="text-sm font-semibold text-foreground">{{ selectedPermission.name }}</div>
-              <UiBadge :label="selectedPermission.resourceType" subtle />
-            </div>
+            <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="text-sm font-semibold text-foreground">{{ selectedPermission.name }}</div>
+                <UiBadge :label="getResourceTypeLabel(t, selectedPermission.resourceType)" subtle />
+              </div>
             <div class="mt-2 text-xs text-muted-foreground">{{ selectedPermission.code }}</div>
-            <div class="mt-3 text-sm text-muted-foreground">{{ selectedPermission.description }}</div>
+            <div class="mt-3 text-sm text-text-secondary">{{ selectedPermission.description }}</div>
           </div>
 
           <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
-            <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">当前主体动作矩阵</div>
+            <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">
+              {{ t('accessControl.policies.permissions.grantMatrix') }}
+            </div>
             <div v-if="accessControlStore.currentResourceActionGrants.length" class="mt-3 space-y-3">
               <div
                 v-for="grant in accessControlStore.currentResourceActionGrants"
                 :key="grant.resourceType"
                 class="rounded-[var(--radius-m)] border border-border bg-muted/30 p-3"
               >
-                <div class="text-sm font-medium text-foreground">{{ grant.resourceType }}</div>
+                <div class="text-sm font-medium text-foreground">{{ getResourceTypeLabel(t, grant.resourceType) }}</div>
                 <div class="mt-2 flex flex-wrap gap-2">
                   <UiBadge
                     v-for="action in grant.actions"
@@ -659,7 +1053,9 @@ async function deleteResourcePolicy() {
                 </div>
               </div>
             </div>
-            <p v-else class="mt-2 text-sm text-muted-foreground">当前主体没有生效的资源动作授权。</p>
+            <p v-else class="mt-2 text-sm text-text-secondary">
+              {{ t('accessControl.policies.permissions.grantMatrixEmpty') }}
+            </p>
           </div>
         </div>
       </template>
@@ -668,44 +1064,102 @@ async function deleteResourcePolicy() {
     <UiListDetailWorkspace
       v-else-if="activeSection === 'bindings'"
       :has-selection="Boolean(selectedRoleBinding)"
-      :detail-title="selectedRoleBinding ? (roleMap.get(selectedRoleBinding.roleId) ?? selectedRoleBinding.roleId) : ''"
-      detail-subtitle="主体通过角色绑定获得 capability 集合。"
-      empty-detail-title="请选择角色绑定"
-      empty-detail-description="从左侧绑定列表中选择一项后即可查看详情，或在右上角新建绑定。"
+      :detail-title="selectedRoleBinding ? bindingTitle(selectedRoleBinding) : ''"
+      :detail-subtitle="t('accessControl.policies.bindings.detailSubtitle')"
+      :empty-detail-title="t('accessControl.policies.bindings.emptyTitle')"
+      :empty-detail-description="t('accessControl.policies.bindings.emptyDescription')"
     >
-      <template #toolbar>
-        <UiToolbarRow>
-          <template #search>
-            <UiInput v-model="bindingQuery" placeholder="搜索角色、主体或效果" />
-          </template>
-          <template #actions>
-            <UiButton @click="openCreateRoleBindingDialog">新建绑定</UiButton>
-          </template>
-        </UiToolbarRow>
+        <template #toolbar>
+          <UiToolbarRow>
+            <template #search>
+              <UiInput v-model="bindingQuery" :placeholder="t('accessControl.policies.bindings.toolbarSearch')" />
+            </template>
+            <template #actions>
+              <span
+                v-if="bindingSelection.hasSelection.value"
+                class="text-xs text-text-secondary"
+              >
+                {{ t('accessControl.common.selection.selectedCount', { count: bindingSelection.selectedCount.value }) }}
+              </span>
+              <UiButton
+                v-if="bindingsPagination.pagedItems.value.length"
+                variant="ghost"
+                size="sm"
+                @click="toggleVisibleBindings(!allVisibleBindingsSelected)"
+              >
+                {{ t('accessControl.common.selection.selectPage') }}
+              </UiButton>
+              <UiButton
+                v-if="bindingSelection.hasSelection.value"
+                variant="ghost"
+                size="sm"
+                @click="bindingSelection.clearSelection"
+              >
+                {{ t('accessControl.common.selection.clear') }}
+              </UiButton>
+              <UiButton
+                v-if="bindingSelection.hasSelection.value"
+                variant="destructive"
+                size="sm"
+                data-testid="access-control-policies-bindings-bulk-delete-button"
+                @click="bulkDeleteBindingsDialogOpen = true"
+              >
+                {{ t('accessControl.common.bulk.delete') }}
+              </UiButton>
+              <UiButton size="sm" @click="openCreateRoleBindingDialog">
+                {{ t('accessControl.policies.bindings.create') }}
+              </UiButton>
+            </template>
+          </UiToolbarRow>
       </template>
 
       <template #list>
-        <UiPanelFrame variant="panel" padding="md" title="角色绑定" :subtitle="`共 ${filteredRoleBindings.length} 条绑定`">
-          <div v-if="filteredRoleBindings.length" class="space-y-2">
-            <button
-              v-for="binding in filteredRoleBindings"
+        <UiPanelFrame
+          variant="panel"
+          padding="md"
+          :title="t('accessControl.policies.bindings.listTitle')"
+          :subtitle="t('accessControl.common.list.totalBindings', { count: bindingsPagination.totalItems.value })"
+        >
+          <div v-if="bindingsPagination.pagedItems.value.length" class="space-y-2">
+            <UiRecordCard
+              v-for="binding in bindingsPagination.pagedItems.value"
               :key="binding.id"
-              type="button"
-              class="w-full rounded-[var(--radius-l)] border px-4 py-3 text-left transition-colors"
-              :class="selectedRoleBindingId === binding.id ? 'border-primary bg-accent/40' : 'border-border bg-card hover:bg-subtle/60'"
+              layout="compact"
+              interactive
+              :active="selectedRoleBindingId === binding.id"
+              :title="bindingTitle(binding)"
+              :description="bindingSubjectLabel(binding)"
               @click="selectRoleBinding(binding.id)"
             >
-              <div class="space-y-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-sm font-semibold text-foreground">{{ roleMap.get(binding.roleId) ?? binding.roleId }}</span>
-                  <UiBadge :label="binding.effect" subtle />
-                </div>
-                <div class="text-xs text-muted-foreground">{{ binding.subjectType }}</div>
-                <div class="text-xs text-muted-foreground">{{ resolveSubjectLabel(binding.subjectType, binding.subjectId) }}</div>
-              </div>
-            </button>
+              <template #secondary>
+                <UiBadge :label="getPolicyEffectLabel(t, binding.effect)" subtle />
+              </template>
+              <template #badges>
+                <UiCheckbox
+                  :model-value="bindingSelection.isSelected(binding.id)"
+                  :data-testid="`access-control-policies-binding-select-${binding.id}`"
+                  @click.stop
+                  @update:model-value="toggleBindingSelection(binding.id, Boolean($event))"
+                />
+                <UiBadge :label="getSubjectTypeLabel(t, binding.subjectType)" subtle />
+              </template>
+            </UiRecordCard>
           </div>
-          <UiEmptyState v-else title="暂无角色绑定" description="当前筛选条件下没有角色绑定记录。" />
+          <UiEmptyState
+            v-else
+            :title="t('accessControl.policies.bindings.noListTitle')"
+            :description="t('accessControl.policies.bindings.noListDescription')"
+          />
+
+          <div class="mt-3 pt-2">
+            <UiPagination
+              v-model:page="bindingsPagination.currentPage.value"
+              :page-count="bindingsPagination.pageCount.value"
+              :previous-label="t('accessControl.common.pagination.previous')"
+              :next-label="t('accessControl.common.pagination.next')"
+              :summary-label="t('accessControl.common.pagination.summary', { count: bindingsPagination.totalItems.value })"
+            />
+          </div>
         </UiPanelFrame>
       </template>
 
@@ -713,40 +1167,38 @@ async function deleteResourcePolicy() {
         <div v-if="selectedRoleBinding" class="space-y-4">
           <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
-              <div class="text-sm font-semibold text-foreground">{{ roleMap.get(selectedRoleBinding.roleId) ?? selectedRoleBinding.roleId }}</div>
-              <UiBadge :label="selectedRoleBinding.effect" subtle />
+              <div class="text-sm font-semibold text-foreground">{{ bindingTitle(selectedRoleBinding) }}</div>
+              <UiBadge :label="getPolicyEffectLabel(t, selectedRoleBinding.effect)" subtle />
             </div>
             <div class="mt-2 text-xs text-muted-foreground">
-              {{ selectedRoleBinding.subjectType }} / {{ resolveSubjectLabel(selectedRoleBinding.subjectType, selectedRoleBinding.subjectId) }}
+              {{ getSubjectTypeLabel(t, selectedRoleBinding.subjectType) }} / {{ bindingSubjectLabel(selectedRoleBinding) }}
             </div>
           </div>
 
-          <div class="grid gap-3">
-            <UiField label="角色">
-              <UiSelect v-model="roleBindingForm.roleId" :options="roleOptions" data-testid="access-control-role-binding-role" />
+          <div class="grid gap-3 md:grid-cols-2">
+            <UiField :label="t('accessControl.policies.bindings.fields.role')">
+              <UiSelect
+                v-model="editRoleBindingForm.roleId"
+                :options="accessControlStore.roles.map(role => ({ label: role.name, value: role.id }))"
+              />
             </UiField>
-            <UiField label="主体类型">
-              <UiSelect v-model="roleBindingForm.subjectType" :options="subjectTypeOptions" data-testid="access-control-role-binding-subject-type" />
+            <UiField :label="t('accessControl.policies.bindings.fields.subjectType')">
+              <UiSelect v-model="editRoleBindingForm.subjectType" :options="subjectTypeOptions" />
             </UiField>
-            <UiField label="主体">
-              <UiSelect v-model="roleBindingForm.subjectId" :options="roleBindingSubjectOptions" data-testid="access-control-role-binding-subject-id" />
+            <UiField :label="t('accessControl.policies.bindings.fields.subject')">
+              <UiSelect v-model="editRoleBindingForm.subjectId" :options="editRoleBindingSubjectOptions" />
             </UiField>
-            <UiField label="效果">
-              <UiSelect v-model="roleBindingForm.effect" :options="policyEffectOptions" data-testid="access-control-role-binding-effect" />
+            <UiField :label="t('accessControl.policies.bindings.fields.effect')">
+              <UiSelect v-model="editRoleBindingForm.effect" :options="policyEffectOptions" />
             </UiField>
           </div>
 
           <div class="flex flex-wrap justify-between gap-2">
-            <UiButton
-              variant="ghost"
-              class="text-destructive"
-              :loading="deletingRoleBindingId === selectedRoleBinding.id"
-              @click="deleteRoleBinding"
-            >
-              删除绑定
+            <UiButton variant="ghost" class="text-destructive" @click="handleDeleteRoleBinding">
+              {{ t('accessControl.policies.bindings.actions.delete') }}
             </UiButton>
-            <UiButton :loading="savingRoleBinding" data-testid="access-control-role-binding-save" @click="saveRoleBinding()">
-              保存绑定
+            <UiButton :loading="savingRoleBinding" @click="handleSaveRoleBinding">
+              {{ t('accessControl.policies.bindings.actions.save') }}
             </UiButton>
           </div>
         </div>
@@ -757,43 +1209,101 @@ async function deleteResourcePolicy() {
       v-else-if="activeSection === 'data'"
       :has-selection="Boolean(selectedDataPolicy)"
       :detail-title="selectedDataPolicy ? selectedDataPolicy.name : ''"
-      detail-subtitle="通过项目、标签和密级定义数据访问范围。"
-      empty-detail-title="请选择数据策略"
-      empty-detail-description="从左侧策略列表中选择一项后即可查看详情，或在右上角新建策略。"
+      :detail-subtitle="t('accessControl.policies.data.detailSubtitle')"
+      :empty-detail-title="t('accessControl.policies.data.emptyTitle')"
+      :empty-detail-description="t('accessControl.policies.data.emptyDescription')"
     >
-      <template #toolbar>
-        <UiToolbarRow>
-          <template #search>
-            <UiInput v-model="dataPolicyQuery" placeholder="搜索策略名称、主体、资源类型或范围" />
-          </template>
-          <template #actions>
-            <UiButton @click="openCreateDataPolicyDialog">新建策略</UiButton>
-          </template>
-        </UiToolbarRow>
+        <template #toolbar>
+          <UiToolbarRow>
+            <template #search>
+              <UiInput v-model="dataPolicyQuery" :placeholder="t('accessControl.policies.data.toolbarSearch')" />
+            </template>
+            <template #actions>
+              <span
+                v-if="dataPolicySelection.hasSelection.value"
+                class="text-xs text-text-secondary"
+              >
+                {{ t('accessControl.common.selection.selectedCount', { count: dataPolicySelection.selectedCount.value }) }}
+              </span>
+              <UiButton
+                v-if="dataPoliciesPagination.pagedItems.value.length"
+                variant="ghost"
+                size="sm"
+                @click="toggleVisibleDataPolicies(!allVisibleDataPoliciesSelected)"
+              >
+                {{ t('accessControl.common.selection.selectPage') }}
+              </UiButton>
+              <UiButton
+                v-if="dataPolicySelection.hasSelection.value"
+                variant="ghost"
+                size="sm"
+                @click="dataPolicySelection.clearSelection"
+              >
+                {{ t('accessControl.common.selection.clear') }}
+              </UiButton>
+              <UiButton
+                v-if="dataPolicySelection.hasSelection.value"
+                variant="destructive"
+                size="sm"
+                data-testid="access-control-policies-data-bulk-delete-button"
+                @click="bulkDeleteDataPoliciesDialogOpen = true"
+              >
+                {{ t('accessControl.common.bulk.delete') }}
+              </UiButton>
+              <UiButton size="sm" @click="openCreateDataPolicyDialog">
+                {{ t('accessControl.policies.data.create') }}
+              </UiButton>
+            </template>
+          </UiToolbarRow>
       </template>
 
       <template #list>
-        <UiPanelFrame variant="panel" padding="md" title="数据策略" :subtitle="`共 ${filteredDataPolicies.length} 条策略`">
-          <div v-if="filteredDataPolicies.length" class="space-y-2">
-            <button
-              v-for="policy in filteredDataPolicies"
+        <UiPanelFrame
+          variant="panel"
+          padding="md"
+          :title="t('accessControl.policies.data.listTitle')"
+          :subtitle="t('accessControl.common.list.totalDataPolicies', { count: dataPoliciesPagination.totalItems.value })"
+        >
+          <div v-if="dataPoliciesPagination.pagedItems.value.length" class="space-y-2">
+            <UiRecordCard
+              v-for="policy in dataPoliciesPagination.pagedItems.value"
               :key="policy.id"
-              type="button"
-              class="w-full rounded-[var(--radius-l)] border px-4 py-3 text-left transition-colors"
-              :class="selectedDataPolicyId === policy.id ? 'border-primary bg-accent/40' : 'border-border bg-card hover:bg-subtle/60'"
+              layout="compact"
+              interactive
+              :active="selectedDataPolicyId === policy.id"
+              :title="policy.name"
+              :description="resolveSubjectLabel(policy.subjectType, policy.subjectId)"
               @click="selectDataPolicy(policy.id)"
             >
-              <div class="space-y-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-sm font-semibold text-foreground">{{ policy.name }}</span>
-                  <UiBadge :label="policy.effect" subtle />
-                </div>
-                <div class="text-xs text-muted-foreground">{{ resolveSubjectLabel(policy.subjectType, policy.subjectId) }}</div>
-                <div class="text-xs text-muted-foreground">{{ policy.resourceType }} / {{ policy.scopeType }}</div>
-              </div>
-            </button>
+              <template #secondary>
+                <UiBadge :label="getDataResourceTypeLabel(t, policy.resourceType)" subtle />
+                <UiBadge :label="getScopeTypeLabel(t, policy.scopeType)" subtle />
+              </template>
+              <template #badges>
+                <UiCheckbox
+                  :model-value="dataPolicySelection.isSelected(policy.id)"
+                  :data-testid="`access-control-policies-data-select-${policy.id}`"
+                  @click.stop
+                  @update:model-value="toggleDataPolicySelection(policy.id, Boolean($event))"
+                />
+              </template>
+            </UiRecordCard>
           </div>
-          <UiEmptyState v-else title="暂无数据策略" description="当前筛选条件下没有数据策略记录。" />
+          <UiEmptyState
+            v-else
+            :title="t('accessControl.policies.data.noListTitle')"
+            :description="t('accessControl.policies.data.noListDescription')"
+          />
+
+          <div class="mt-3 pt-2">
+            <UiPagination
+              v-model:page="dataPoliciesPagination.currentPage.value"
+              :page-count="dataPoliciesPagination.pageCount.value"
+              :previous-label="t('accessControl.common.pagination.previous')"
+              :next-label="t('accessControl.common.pagination.next')"
+              :summary-label="t('accessControl.common.pagination.summary', { count: dataPoliciesPagination.totalItems.value })"
+            />
+          </div>
         </UiPanelFrame>
       </template>
 
@@ -802,54 +1312,53 @@ async function deleteResourcePolicy() {
           <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
               <div class="text-sm font-semibold text-foreground">{{ selectedDataPolicy.name }}</div>
-              <UiBadge :label="selectedDataPolicy.effect" subtle />
+              <UiBadge :label="getDataResourceTypeLabel(t, selectedDataPolicy.resourceType)" subtle />
+              <UiBadge :label="getPolicyEffectLabel(t, selectedDataPolicy.effect)" subtle />
             </div>
             <div class="mt-2 text-xs text-muted-foreground">
-              {{ selectedDataPolicy.resourceType }} / {{ selectedDataPolicy.scopeType }}
+              {{ resolveSubjectLabel(selectedDataPolicy.subjectType, selectedDataPolicy.subjectId) }}
             </div>
           </div>
 
-          <div class="grid gap-3">
-            <UiField label="策略名称">
-              <UiInput v-model="dataPolicyForm.name" data-testid="access-control-data-policy-name" />
+          <div class="grid gap-3 md:grid-cols-2">
+            <UiField :label="t('accessControl.policies.data.fields.name')">
+              <UiInput v-model="editDataPolicyForm.name" />
             </UiField>
-            <UiField label="主体类型">
-              <UiSelect v-model="dataPolicyForm.subjectType" :options="subjectTypeOptions" data-testid="access-control-data-policy-subject-type" />
+            <UiField :label="t('accessControl.policies.data.fields.subjectType')">
+              <UiSelect v-model="editDataPolicyForm.subjectType" :options="subjectTypeOptions" />
             </UiField>
-            <UiField label="主体">
-              <UiSelect v-model="dataPolicyForm.subjectId" :options="dataPolicySubjectOptions" data-testid="access-control-data-policy-subject-id" />
+            <UiField :label="t('accessControl.policies.data.fields.subject')">
+              <UiSelect v-model="editDataPolicyForm.subjectId" :options="editDataPolicySubjectOptions" />
             </UiField>
-            <UiField label="资源类型">
-              <UiSelect v-model="dataPolicyForm.resourceType" :options="dataResourceTypeOptions" data-testid="access-control-data-policy-resource-type" />
+            <UiField :label="t('accessControl.policies.data.fields.resourceType')">
+              <UiSelect v-model="editDataPolicyForm.resourceType" :options="dataResourceTypeOptions" />
             </UiField>
-            <UiField label="范围类型">
-              <UiSelect v-model="dataPolicyForm.scopeType" :options="scopeTypeOptions" data-testid="access-control-data-policy-scope-type" />
+            <UiField :label="t('accessControl.policies.data.fields.scopeType')">
+              <UiSelect v-model="editDataPolicyForm.scopeType" :options="scopeTypeOptions" />
             </UiField>
-            <UiField label="项目范围" hint="多个项目 ID 用逗号分隔。">
-              <UiInput v-model="dataPolicyForm.projectIdsText" data-testid="access-control-data-policy-projects" />
+            <UiField :label="t('accessControl.policies.data.fields.effect')">
+              <UiSelect v-model="editDataPolicyForm.effect" :options="policyEffectOptions" />
             </UiField>
-            <UiField label="标签范围" hint="多个标签用逗号分隔。">
-              <UiInput v-model="dataPolicyForm.tagsText" data-testid="access-control-data-policy-tags" />
+          </div>
+
+          <div class="grid gap-3 md:grid-cols-3">
+            <UiField :label="t('accessControl.policies.data.fields.projectIds')" :hint="t('accessControl.policies.data.hints.projectIds')">
+              <UiInput v-model="editDataPolicyForm.projectIdsText" />
             </UiField>
-            <UiField label="密级范围" hint="多个密级用逗号分隔。">
-              <UiInput v-model="dataPolicyForm.classificationsText" data-testid="access-control-data-policy-classifications" />
+            <UiField :label="t('accessControl.policies.data.fields.tags')" :hint="t('accessControl.policies.data.hints.tags')">
+              <UiInput v-model="editDataPolicyForm.tagsText" />
             </UiField>
-            <UiField label="效果">
-              <UiSelect v-model="dataPolicyForm.effect" :options="policyEffectOptions" data-testid="access-control-data-policy-effect" />
+            <UiField :label="t('accessControl.policies.data.fields.classifications')" :hint="t('accessControl.policies.data.hints.classifications')">
+              <UiInput v-model="editDataPolicyForm.classificationsText" />
             </UiField>
           </div>
 
           <div class="flex flex-wrap justify-between gap-2">
-            <UiButton
-              variant="ghost"
-              class="text-destructive"
-              :loading="deletingDataPolicyId === selectedDataPolicy.id"
-              @click="deleteDataPolicy"
-            >
-              删除策略
+            <UiButton variant="ghost" class="text-destructive" @click="handleDeleteDataPolicy">
+              {{ t('accessControl.policies.data.actions.delete') }}
             </UiButton>
-            <UiButton :loading="savingDataPolicy" data-testid="access-control-data-policy-save" @click="saveDataPolicy()">
-              保存策略
+            <UiButton :loading="savingDataPolicy" @click="handleSaveDataPolicy">
+              {{ t('accessControl.policies.data.actions.save') }}
             </UiButton>
           </div>
         </div>
@@ -860,48 +1369,111 @@ async function deleteResourcePolicy() {
       v-else
       :has-selection="Boolean(selectedResourcePolicy)"
       :detail-title="selectedResourcePolicy ? selectedResourcePolicy.action : ''"
-      detail-subtitle="对象级策略用于控制具体资源和工具动作。"
-      empty-detail-title="请选择资源策略"
-      empty-detail-description="从左侧策略列表中选择一项后即可查看详情，或在右上角新建策略。"
+      :detail-subtitle="t('accessControl.policies.resources.detailSubtitle')"
+      :empty-detail-title="t('accessControl.policies.resources.emptyTitle')"
+      :empty-detail-description="t('accessControl.policies.resources.emptyDescription')"
     >
-      <template #toolbar>
-        <UiToolbarRow>
-          <template #search>
-            <UiInput v-model="resourcePolicyQuery" placeholder="搜索动作、主体或资源对象" />
-          </template>
+        <template #toolbar>
+          <UiToolbarRow>
+            <template #search>
+              <UiInput v-model="resourcePolicyQuery" :placeholder="t('accessControl.policies.resources.toolbarSearch')" />
+            </template>
           <template #filters>
-            <UiField label="资源类型" class="w-full md:w-[220px]">
-              <UiSelect v-model="resourcePolicyTypeFilter" :options="[{ label: '全部类型', value: '' }, ...resourceTypeOptions]" />
+            <UiField :label="t('accessControl.policies.resources.filter')" class="w-full md:w-[220px]">
+              <UiSelect v-model="resourcePolicyTypeFilter" :options="resourcePolicyFilterOptions" />
             </UiField>
           </template>
           <template #actions>
-            <UiButton @click="openCreateResourcePolicyDialog">新建策略</UiButton>
+            <span
+              v-if="resourcePolicySelection.hasSelection.value"
+              class="text-xs text-text-secondary"
+            >
+              {{ t('accessControl.common.selection.selectedCount', { count: resourcePolicySelection.selectedCount.value }) }}
+            </span>
+            <UiButton
+              v-if="resourcePoliciesPagination.pagedItems.value.length"
+              variant="ghost"
+              size="sm"
+              @click="toggleVisibleResourcePolicies(!allVisibleResourcePoliciesSelected)"
+            >
+              {{ t('accessControl.common.selection.selectPage') }}
+            </UiButton>
+            <UiButton
+              v-if="resourcePolicySelection.hasSelection.value"
+              variant="ghost"
+              size="sm"
+              @click="resourcePolicySelection.clearSelection"
+            >
+              {{ t('accessControl.common.selection.clear') }}
+            </UiButton>
+            <UiButton
+              v-if="resourcePolicySelection.hasSelection.value"
+              variant="destructive"
+              size="sm"
+              data-testid="access-control-policies-resources-bulk-delete-button"
+              @click="bulkDeleteResourcePoliciesDialogOpen = true"
+            >
+              {{ t('accessControl.common.bulk.delete') }}
+            </UiButton>
+            <UiButton size="sm" @click="openCreateResourcePolicyDialog">
+              {{ t('accessControl.policies.resources.create') }}
+            </UiButton>
           </template>
         </UiToolbarRow>
       </template>
 
       <template #list>
-        <UiPanelFrame variant="panel" padding="md" title="资源策略" :subtitle="`共 ${filteredResourcePolicies.length} 条策略`">
-          <div v-if="filteredResourcePolicies.length" class="space-y-2">
-            <button
-              v-for="policy in filteredResourcePolicies"
+        <UiPanelFrame
+          variant="panel"
+          padding="md"
+          :title="t('accessControl.policies.resources.listTitle')"
+          :subtitle="t('accessControl.common.list.totalResourcePolicies', { count: resourcePoliciesPagination.totalItems.value })"
+        >
+          <div v-if="resourcePoliciesPagination.pagedItems.value.length" class="space-y-2">
+            <UiRecordCard
+              v-for="policy in resourcePoliciesPagination.pagedItems.value"
               :key="policy.id"
-              type="button"
-              class="w-full rounded-[var(--radius-l)] border px-4 py-3 text-left transition-colors"
-              :class="selectedResourcePolicyId === policy.id ? 'border-primary bg-accent/40' : 'border-border bg-card hover:bg-subtle/60'"
+              layout="compact"
+              interactive
+              :active="selectedResourcePolicyId === policy.id"
+              :title="policy.action"
+              :description="resolveResourceLabel(policy.resourceType, policy.resourceId)"
               @click="selectResourcePolicy(policy.id)"
             >
-              <div class="space-y-1">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="text-sm font-semibold text-foreground">{{ policy.action }}</span>
-                  <UiBadge :label="policy.effect" subtle />
-                </div>
-                <div class="text-xs text-muted-foreground">{{ resolveSubjectLabel(policy.subjectType, policy.subjectId) }}</div>
-                <div class="text-xs text-muted-foreground">{{ resolveResourceLabel(policy.resourceType, policy.resourceId) }}</div>
-              </div>
-            </button>
+              <template #secondary>
+                <UiBadge :label="getResourceTypeLabel(t, policy.resourceType)" subtle />
+                <UiBadge :label="getPolicyEffectLabel(t, policy.effect)" subtle />
+              </template>
+              <template #badges>
+                <UiCheckbox
+                  :model-value="resourcePolicySelection.isSelected(policy.id)"
+                  :data-testid="`access-control-policies-resource-select-${policy.id}`"
+                  @click.stop
+                  @update:model-value="toggleResourcePolicySelection(policy.id, Boolean($event))"
+                />
+              </template>
+              <template #meta>
+                <span class="truncate text-xs text-text-secondary">
+                  {{ resolveSubjectLabel(policy.subjectType, policy.subjectId) }}
+                </span>
+              </template>
+            </UiRecordCard>
           </div>
-          <UiEmptyState v-else title="暂无资源策略" description="当前筛选条件下没有资源策略记录。" />
+          <UiEmptyState
+            v-else
+            :title="t('accessControl.policies.resources.noListTitle')"
+            :description="t('accessControl.policies.resources.noListDescription')"
+          />
+
+          <div class="mt-3 pt-2">
+            <UiPagination
+              v-model:page="resourcePoliciesPagination.currentPage.value"
+              :page-count="resourcePoliciesPagination.pageCount.value"
+              :previous-label="t('accessControl.common.pagination.previous')"
+              :next-label="t('accessControl.common.pagination.next')"
+              :summary-label="t('accessControl.common.pagination.summary', { count: resourcePoliciesPagination.totalItems.value })"
+            />
+          </div>
         </UiPanelFrame>
       </template>
 
@@ -910,45 +1482,41 @@ async function deleteResourcePolicy() {
           <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
               <div class="text-sm font-semibold text-foreground">{{ selectedResourcePolicy.action }}</div>
-              <UiBadge :label="selectedResourcePolicy.effect" subtle />
+              <UiBadge :label="getResourceTypeLabel(t, selectedResourcePolicy.resourceType)" subtle />
+              <UiBadge :label="getPolicyEffectLabel(t, selectedResourcePolicy.effect)" subtle />
             </div>
             <div class="mt-2 text-xs text-muted-foreground">
-              {{ resolveResourceLabel(selectedResourcePolicy.resourceType, selectedResourcePolicy.resourceId) }}
+              {{ selectedResourcePolicy.resourceId }}
             </div>
           </div>
 
-          <div class="grid gap-3">
-            <UiField label="主体类型">
-              <UiSelect v-model="resourcePolicyForm.subjectType" :options="subjectTypeOptions" data-testid="access-control-resource-policy-subject-type" />
+          <div class="grid gap-3 md:grid-cols-2">
+            <UiField :label="t('accessControl.policies.resources.fields.subjectType')">
+              <UiSelect v-model="editResourcePolicyForm.subjectType" :options="subjectTypeOptions" />
             </UiField>
-            <UiField label="主体">
-              <UiSelect v-model="resourcePolicyForm.subjectId" :options="resourcePolicySubjectOptions" data-testid="access-control-resource-policy-subject-id" />
+            <UiField :label="t('accessControl.policies.resources.fields.subject')">
+              <UiSelect v-model="editResourcePolicyForm.subjectId" :options="editResourcePolicySubjectOptions" />
             </UiField>
-            <UiField label="资源类型">
-              <UiSelect v-model="resourcePolicyForm.resourceType" :options="resourceTypeOptions" data-testid="access-control-resource-policy-resource-type" />
+            <UiField :label="t('accessControl.policies.resources.fields.resourceType')">
+              <UiSelect v-model="editResourcePolicyForm.resourceType" :options="resourceTypeOptions" />
             </UiField>
-            <UiField label="资源对象">
-              <UiSelect v-model="resourcePolicyForm.resourceId" :options="filteredProtectedResourceOptions" data-testid="access-control-resource-policy-resource-id" />
+            <UiField :label="t('accessControl.policies.resources.fields.resource')">
+              <UiSelect v-model="editResourcePolicyForm.resourceId" :options="editResourceChoices" />
             </UiField>
-            <UiField label="动作">
-              <UiInput v-model="resourcePolicyForm.action" data-testid="access-control-resource-policy-action" />
+            <UiField :label="t('accessControl.policies.resources.fields.action')">
+              <UiInput v-model="editResourcePolicyForm.action" />
             </UiField>
-            <UiField label="效果">
-              <UiSelect v-model="resourcePolicyForm.effect" :options="policyEffectOptions" data-testid="access-control-resource-policy-effect" />
+            <UiField :label="t('accessControl.policies.resources.fields.effect')">
+              <UiSelect v-model="editResourcePolicyForm.effect" :options="policyEffectOptions" />
             </UiField>
           </div>
 
           <div class="flex flex-wrap justify-between gap-2">
-            <UiButton
-              variant="ghost"
-              class="text-destructive"
-              :loading="deletingResourcePolicyId === selectedResourcePolicy.id"
-              @click="deleteResourcePolicy"
-            >
-              删除策略
+            <UiButton variant="ghost" class="text-destructive" @click="handleDeleteResourcePolicy">
+              {{ t('accessControl.policies.resources.actions.delete') }}
             </UiButton>
-            <UiButton :loading="savingResourcePolicy" data-testid="access-control-resource-policy-save" @click="saveResourcePolicy()">
-              保存策略
+            <UiButton :loading="savingResourcePolicy" @click="handleSaveResourcePolicy">
+              {{ t('accessControl.policies.resources.actions.save') }}
             </UiButton>
           </div>
         </div>
@@ -956,109 +1524,207 @@ async function deleteResourcePolicy() {
     </UiListDetailWorkspace>
 
     <UiDialog
+      :open="bulkDeleteBindingsDialogOpen"
+      :title="t('accessControl.common.bulk.dialogTitle', { entity: t('accessControl.common.entities.bindings') })"
+      :description="t('accessControl.common.bulk.dialogDescription')"
+      @update:open="bulkDeleteBindingsDialogOpen = $event"
+    >
+      <p class="text-sm text-text-secondary">
+        {{ t('accessControl.common.bulk.dialogConfirm', {
+          count: selectedBindingsForDelete.length,
+          entity: t('accessControl.common.entities.bindings'),
+        }) }}
+      </p>
+
+      <template #footer>
+        <UiButton variant="ghost" @click="bulkDeleteBindingsDialogOpen = false">
+          {{ t('common.cancel') }}
+        </UiButton>
+        <UiButton
+          variant="destructive"
+          :loading="deletingSelectedBindings"
+          data-testid="access-control-policies-bindings-bulk-delete-confirm"
+          @click="handleBulkDeleteBindings"
+        >
+          {{ t('accessControl.common.bulk.delete') }}
+        </UiButton>
+      </template>
+    </UiDialog>
+
+    <UiDialog
       :open="createBindingDialogOpen"
-      title="新建角色绑定"
-      description="为主体绑定角色，并设置 allow / deny 效果。"
+      :title="t('accessControl.policies.bindings.dialogTitle')"
+      :description="t('accessControl.policies.bindings.dialogDescription')"
       @update:open="createBindingDialogOpen = $event"
     >
-      <div class="grid gap-3">
-        <UiField label="角色">
-          <UiSelect v-model="roleBindingForm.roleId" :options="roleOptions" data-testid="access-control-role-binding-role" />
+      <div class="grid gap-3 md:grid-cols-2">
+        <UiField :label="t('accessControl.policies.bindings.fields.role')">
+          <UiSelect
+            v-model="createRoleBindingForm.roleId"
+            :options="accessControlStore.roles.map(role => ({ label: role.name, value: role.id }))"
+          />
         </UiField>
-        <UiField label="主体类型">
-          <UiSelect v-model="roleBindingForm.subjectType" :options="subjectTypeOptions" data-testid="access-control-role-binding-subject-type" />
+        <UiField :label="t('accessControl.policies.bindings.fields.subjectType')">
+          <UiSelect v-model="createRoleBindingForm.subjectType" :options="subjectTypeOptions" />
         </UiField>
-        <UiField label="主体">
-          <UiSelect v-model="roleBindingForm.subjectId" :options="roleBindingSubjectOptions" data-testid="access-control-role-binding-subject-id" />
+        <UiField :label="t('accessControl.policies.bindings.fields.subject')">
+          <UiSelect v-model="createRoleBindingForm.subjectId" :options="createRoleBindingSubjectOptions" />
         </UiField>
-        <UiField label="效果">
-          <UiSelect v-model="roleBindingForm.effect" :options="policyEffectOptions" data-testid="access-control-role-binding-effect" />
+        <UiField :label="t('accessControl.policies.bindings.fields.effect')">
+          <UiSelect v-model="createRoleBindingForm.effect" :options="policyEffectOptions" />
         </UiField>
       </div>
 
       <template #footer>
-        <UiButton variant="ghost" @click="createBindingDialogOpen = false">取消</UiButton>
-        <UiButton :loading="savingRoleBinding" data-testid="access-control-role-binding-save" @click="handleCreateRoleBinding">
-          创建绑定
+        <UiButton variant="ghost" @click="createBindingDialogOpen = false">
+          {{ t('common.cancel') }}
+        </UiButton>
+        <UiButton :loading="savingRoleBinding" @click="handleCreateRoleBinding">
+          {{ t('accessControl.policies.bindings.actions.create') }}
+        </UiButton>
+      </template>
+    </UiDialog>
+
+    <UiDialog
+      :open="bulkDeleteDataPoliciesDialogOpen"
+      :title="t('accessControl.common.bulk.dialogTitle', { entity: t('accessControl.common.entities.dataPolicies') })"
+      :description="t('accessControl.common.bulk.dialogDescription')"
+      @update:open="bulkDeleteDataPoliciesDialogOpen = $event"
+    >
+      <p class="text-sm text-text-secondary">
+        {{ t('accessControl.common.bulk.dialogConfirm', {
+          count: selectedDataPoliciesForDelete.length,
+          entity: t('accessControl.common.entities.dataPolicies'),
+        }) }}
+      </p>
+
+      <template #footer>
+        <UiButton variant="ghost" @click="bulkDeleteDataPoliciesDialogOpen = false">
+          {{ t('common.cancel') }}
+        </UiButton>
+        <UiButton
+          variant="destructive"
+          :loading="deletingSelectedDataPolicies"
+          data-testid="access-control-policies-data-bulk-delete-confirm"
+          @click="handleBulkDeleteDataPolicies"
+        >
+          {{ t('accessControl.common.bulk.delete') }}
         </UiButton>
       </template>
     </UiDialog>
 
     <UiDialog
       :open="createDataPolicyDialogOpen"
-      title="新建数据策略"
-      description="通过主体、资源类型和范围条件定义数据访问边界。"
+      :title="t('accessControl.policies.data.dialogTitle')"
+      :description="t('accessControl.policies.data.dialogDescription')"
       @update:open="createDataPolicyDialogOpen = $event"
     >
-      <div class="grid gap-3">
-        <UiField label="策略名称">
-          <UiInput v-model="dataPolicyForm.name" data-testid="access-control-data-policy-name" />
-        </UiField>
-        <UiField label="主体类型">
-          <UiSelect v-model="dataPolicyForm.subjectType" :options="subjectTypeOptions" data-testid="access-control-data-policy-subject-type" />
-        </UiField>
-        <UiField label="主体">
-          <UiSelect v-model="dataPolicyForm.subjectId" :options="dataPolicySubjectOptions" data-testid="access-control-data-policy-subject-id" />
-        </UiField>
-        <UiField label="资源类型">
-          <UiSelect v-model="dataPolicyForm.resourceType" :options="dataResourceTypeOptions" data-testid="access-control-data-policy-resource-type" />
-        </UiField>
-        <UiField label="范围类型">
-          <UiSelect v-model="dataPolicyForm.scopeType" :options="scopeTypeOptions" data-testid="access-control-data-policy-scope-type" />
-        </UiField>
-        <UiField label="项目范围" hint="多个项目 ID 用逗号分隔。">
-          <UiInput v-model="dataPolicyForm.projectIdsText" data-testid="access-control-data-policy-projects" />
-        </UiField>
-        <UiField label="标签范围" hint="多个标签用逗号分隔。">
-          <UiInput v-model="dataPolicyForm.tagsText" data-testid="access-control-data-policy-tags" />
-        </UiField>
-        <UiField label="密级范围" hint="多个密级用逗号分隔。">
-          <UiInput v-model="dataPolicyForm.classificationsText" data-testid="access-control-data-policy-classifications" />
-        </UiField>
-        <UiField label="效果">
-          <UiSelect v-model="dataPolicyForm.effect" :options="policyEffectOptions" data-testid="access-control-data-policy-effect" />
-        </UiField>
+      <div class="space-y-4">
+        <div class="grid gap-3 md:grid-cols-2">
+          <UiField :label="t('accessControl.policies.data.fields.name')">
+            <UiInput v-model="createDataPolicyForm.name" />
+          </UiField>
+          <UiField :label="t('accessControl.policies.data.fields.subjectType')">
+            <UiSelect v-model="createDataPolicyForm.subjectType" :options="subjectTypeOptions" />
+          </UiField>
+          <UiField :label="t('accessControl.policies.data.fields.subject')">
+            <UiSelect v-model="createDataPolicyForm.subjectId" :options="createDataPolicySubjectOptions" />
+          </UiField>
+          <UiField :label="t('accessControl.policies.data.fields.resourceType')">
+            <UiSelect v-model="createDataPolicyForm.resourceType" :options="dataResourceTypeOptions" />
+          </UiField>
+          <UiField :label="t('accessControl.policies.data.fields.scopeType')">
+            <UiSelect v-model="createDataPolicyForm.scopeType" :options="scopeTypeOptions" />
+          </UiField>
+          <UiField :label="t('accessControl.policies.data.fields.effect')">
+            <UiSelect v-model="createDataPolicyForm.effect" :options="policyEffectOptions" />
+          </UiField>
+        </div>
+
+        <div class="grid gap-3 md:grid-cols-3">
+          <UiField :label="t('accessControl.policies.data.fields.projectIds')" :hint="t('accessControl.policies.data.hints.projectIds')">
+            <UiInput v-model="createDataPolicyForm.projectIdsText" />
+          </UiField>
+          <UiField :label="t('accessControl.policies.data.fields.tags')" :hint="t('accessControl.policies.data.hints.tags')">
+            <UiInput v-model="createDataPolicyForm.tagsText" />
+          </UiField>
+          <UiField :label="t('accessControl.policies.data.fields.classifications')" :hint="t('accessControl.policies.data.hints.classifications')">
+            <UiInput v-model="createDataPolicyForm.classificationsText" />
+          </UiField>
+        </div>
       </div>
 
       <template #footer>
-        <UiButton variant="ghost" @click="createDataPolicyDialogOpen = false">取消</UiButton>
-        <UiButton :loading="savingDataPolicy" data-testid="access-control-data-policy-save" @click="handleCreateDataPolicy">
-          创建策略
+        <UiButton variant="ghost" @click="createDataPolicyDialogOpen = false">
+          {{ t('common.cancel') }}
+        </UiButton>
+        <UiButton :loading="savingDataPolicy" @click="handleCreateDataPolicy">
+          {{ t('accessControl.policies.data.actions.create') }}
+        </UiButton>
+      </template>
+    </UiDialog>
+
+    <UiDialog
+      :open="bulkDeleteResourcePoliciesDialogOpen"
+      :title="t('accessControl.common.bulk.dialogTitle', { entity: t('accessControl.common.entities.resourcePolicies') })"
+      :description="t('accessControl.common.bulk.dialogDescription')"
+      @update:open="bulkDeleteResourcePoliciesDialogOpen = $event"
+    >
+      <p class="text-sm text-text-secondary">
+        {{ t('accessControl.common.bulk.dialogConfirm', {
+          count: selectedResourcePoliciesForDelete.length,
+          entity: t('accessControl.common.entities.resourcePolicies'),
+        }) }}
+      </p>
+
+      <template #footer>
+        <UiButton variant="ghost" @click="bulkDeleteResourcePoliciesDialogOpen = false">
+          {{ t('common.cancel') }}
+        </UiButton>
+        <UiButton
+          variant="destructive"
+          :loading="deletingSelectedResourcePolicies"
+          data-testid="access-control-policies-resources-bulk-delete-confirm"
+          @click="handleBulkDeleteResourcePolicies"
+        >
+          {{ t('accessControl.common.bulk.delete') }}
         </UiButton>
       </template>
     </UiDialog>
 
     <UiDialog
       :open="createResourcePolicyDialogOpen"
-      title="新建资源策略"
-      description="为具体资源对象设置动作级 allow / deny 策略。"
+      :title="t('accessControl.policies.resources.dialogTitle')"
+      :description="t('accessControl.policies.resources.dialogDescription')"
       @update:open="createResourcePolicyDialogOpen = $event"
     >
-      <div class="grid gap-3">
-        <UiField label="主体类型">
-          <UiSelect v-model="resourcePolicyForm.subjectType" :options="subjectTypeOptions" data-testid="access-control-resource-policy-subject-type" />
+      <div class="grid gap-3 md:grid-cols-2">
+        <UiField :label="t('accessControl.policies.resources.fields.subjectType')">
+          <UiSelect v-model="createResourcePolicyForm.subjectType" :options="subjectTypeOptions" />
         </UiField>
-        <UiField label="主体">
-          <UiSelect v-model="resourcePolicyForm.subjectId" :options="resourcePolicySubjectOptions" data-testid="access-control-resource-policy-subject-id" />
+        <UiField :label="t('accessControl.policies.resources.fields.subject')">
+          <UiSelect v-model="createResourcePolicyForm.subjectId" :options="createResourcePolicySubjectOptions" />
         </UiField>
-        <UiField label="资源类型">
-          <UiSelect v-model="resourcePolicyForm.resourceType" :options="resourceTypeOptions" data-testid="access-control-resource-policy-resource-type" />
+        <UiField :label="t('accessControl.policies.resources.fields.resourceType')">
+          <UiSelect v-model="createResourcePolicyForm.resourceType" :options="resourceTypeOptions" />
         </UiField>
-        <UiField label="资源对象">
-          <UiSelect v-model="resourcePolicyForm.resourceId" :options="filteredProtectedResourceOptions" data-testid="access-control-resource-policy-resource-id" />
+        <UiField :label="t('accessControl.policies.resources.fields.resource')">
+          <UiSelect v-model="createResourcePolicyForm.resourceId" :options="createResourceChoices" />
         </UiField>
-        <UiField label="动作">
-          <UiInput v-model="resourcePolicyForm.action" data-testid="access-control-resource-policy-action" />
+        <UiField :label="t('accessControl.policies.resources.fields.action')">
+          <UiInput v-model="createResourcePolicyForm.action" />
         </UiField>
-        <UiField label="效果">
-          <UiSelect v-model="resourcePolicyForm.effect" :options="policyEffectOptions" data-testid="access-control-resource-policy-effect" />
+        <UiField :label="t('accessControl.policies.resources.fields.effect')">
+          <UiSelect v-model="createResourcePolicyForm.effect" :options="policyEffectOptions" />
         </UiField>
       </div>
 
       <template #footer>
-        <UiButton variant="ghost" @click="createResourcePolicyDialogOpen = false">取消</UiButton>
-        <UiButton :loading="savingResourcePolicy" data-testid="access-control-resource-policy-save" @click="handleCreateResourcePolicy">
-          创建策略
+        <UiButton variant="ghost" @click="createResourcePolicyDialogOpen = false">
+          {{ t('common.cancel') }}
+        </UiButton>
+        <UiButton :loading="savingResourcePolicy" @click="handleCreateResourcePolicy">
+          {{ t('accessControl.policies.resources.actions.create') }}
         </UiButton>
       </template>
     </UiDialog>

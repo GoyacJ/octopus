@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import {
   UiBadge,
@@ -7,8 +8,10 @@ import {
   UiCheckbox,
   UiEmptyState,
   UiField,
+  UiHierarchyList,
   UiInput,
   UiListDetailWorkspace,
+  UiPagination,
   UiPanelFrame,
   UiSelect,
   UiStatusCallout,
@@ -17,12 +20,16 @@ import {
 
 import type { CreateMenuPolicyRequest, MenuDefinition, MenuPolicyUpsertRequest } from '@octopus/schema'
 
+import { usePagination } from '@/composables/usePagination'
 import { getMenuDefinition } from '@/navigation/menuRegistry'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 
-import { menuVisibilityOptions, normalizeOrderInput } from './helpers'
+import { createMenuVisibilityOptions, getMenuSourceLabel, normalizeOrderInput } from './helpers'
+import { useAccessControlNotifications } from './useAccessControlNotifications'
 
+const { t } = useI18n()
 const accessControlStore = useWorkspaceAccessControlStore()
+const { notifySuccess } = useAccessControlNotifications('access-control.menus')
 
 const query = ref('')
 const configuredFilter = ref('')
@@ -30,7 +37,7 @@ const selectedMenuId = ref('')
 const saving = ref(false)
 const deleting = ref(false)
 const submitError = ref('')
-const successMessage = ref('')
+const expandedMenuIds = ref<string[]>([])
 
 const form = reactive({
   enabled: true,
@@ -42,15 +49,16 @@ const form = reactive({
 const gateMap = computed(() => new Map(accessControlStore.menuGates.map(gate => [gate.menuId, gate])))
 const policyMap = computed(() => new Map(accessControlStore.menuPolicies.map(policy => [policy.menuId, policy])))
 
-const configuredFilterOptions = [
-  { label: '全部菜单', value: '' },
-  { label: '仅已配置', value: 'configured' },
-  { label: '仅未配置', value: 'unconfigured' },
-]
+const menuVisibilityOptions = computed(() => createMenuVisibilityOptions(t))
+const configuredFilterOptions = computed(() => [
+  { label: t('accessControl.common.filters.allMenus'), value: '' },
+  { label: t('accessControl.common.filters.configuredOnly'), value: 'configured' },
+  { label: t('accessControl.common.filters.unconfiguredOnly'), value: 'unconfigured' },
+])
 
 const filteredMenus = computed(() => {
   const normalizedQuery = query.value.trim().toLowerCase()
-  return [...accessControlStore.menuDefinitions]
+  const configuredMenus = [...accessControlStore.menuDefinitions]
     .sort((left, right) => left.order - right.order)
     .filter((menu) => {
       const matchesConfigured = configuredFilter.value === ''
@@ -65,20 +73,111 @@ const filteredMenus = computed(() => {
         return true
       }
 
-      const definition = getMenuDefinition(menu.id)
-      return [
-        definition?.defaultLabel ?? menu.label,
-        menu.routeName ?? '',
-        menu.id,
-        menu.featureCode,
-        menu.source,
-      ].join(' ').toLowerCase().includes(normalizedQuery)
+      return true
     })
+
+  if (!normalizedQuery) {
+    return configuredMenus
+  }
+
+  const configuredMenuMap = new Map(configuredMenus.map(menu => [menu.id, menu]))
+  const matchedIds = new Set(
+    configuredMenus
+      .filter((menu) => {
+        const definition = getMenuDefinition(menu.id)
+        return [
+          definition?.defaultLabel ?? menu.label,
+          menu.routeName ?? '',
+          menu.id,
+          menu.featureCode,
+          menu.source,
+        ].join(' ').toLowerCase().includes(normalizedQuery)
+      })
+      .map(menu => menu.id),
+  )
+
+  const visibleIds = new Set<string>()
+  for (const menuId of matchedIds) {
+    let current = configuredMenuMap.get(menuId)
+    while (current) {
+      visibleIds.add(current.id)
+      current = current.parentId ? configuredMenuMap.get(current.parentId) : undefined
+    }
+  }
+
+  return configuredMenus.filter(menu => visibleIds.has(menu.id))
+})
+
+interface MenuHierarchyItem {
+  id: string
+  label: string
+  description?: string
+  depth: number
+  expandable?: boolean
+  expanded?: boolean
+  selectable?: boolean
+  testId: string
+  contentTestId?: string
+  menu: MenuDefinition
+}
+
+const filteredMenuIdSet = computed(() => new Set(filteredMenus.value.map(menu => menu.id)))
+const filteredMenuMap = computed(() => new Map(filteredMenus.value.map(menu => [menu.id, menu])))
+const filteredMenuChildrenMap = computed(() => {
+  const grouped = new Map<string, MenuDefinition[]>()
+  for (const menu of filteredMenus.value) {
+    const parentId = menu.parentId && filteredMenuIdSet.value.has(menu.parentId) ? menu.parentId : ''
+    const items = grouped.get(parentId) ?? []
+    items.push(menu)
+    grouped.set(parentId, items)
+  }
+  for (const [key, items] of grouped) {
+    grouped.set(key, [...items].sort((left, right) => left.order - right.order))
+  }
+  return grouped
+})
+const menuRootIds = computed(() =>
+  (filteredMenuChildrenMap.value.get('') ?? []).map(menu => menu.id),
+)
+const visibleMenuTreeItems = computed<MenuHierarchyItem[]>(() => {
+  const items: MenuHierarchyItem[] = []
+  const normalizedQuery = query.value.trim().toLowerCase()
+
+  for (const rootId of pagination.pagedItems.value) {
+    appendMenuItems(items, rootId, 0, normalizedQuery)
+  }
+
+  return items
 })
 
 const selectedMenu = computed(() =>
   accessControlStore.menuDefinitions.find(menu => menu.id === selectedMenuId.value) ?? null,
 )
+
+const pagination = usePagination(menuRootIds, {
+  pageSize: 8,
+  resetOn: [query, configuredFilter],
+})
+
+watch(visibleMenuTreeItems, (items) => {
+  if (selectedMenuId.value && !items.some(item => item.id === selectedMenuId.value)) {
+    selectedMenuId.value = ''
+  }
+}, { immediate: true })
+
+watch(filteredMenuChildrenMap, (childrenMap) => {
+  const parentIds = Array.from(childrenMap.entries())
+    .filter(([, items]) => items.length > 0)
+    .map(([parentId]) => parentId)
+    .filter(Boolean)
+  const knownIds = new Set(filteredMenus.value.map(menu => menu.id))
+  const next = expandedMenuIds.value.filter(id => knownIds.has(id))
+  if (!expandedMenuIds.value.length) {
+    expandedMenuIds.value = [...parentIds]
+    return
+  }
+  expandedMenuIds.value = next
+}, { immediate: true })
 
 function resetForm(menu?: MenuDefinition | null) {
   const record = menu ? policyMap.value.get(menu.id) : undefined
@@ -93,14 +192,81 @@ function resetForm(menu?: MenuDefinition | null) {
 
 function selectMenu(menu: MenuDefinition) {
   selectedMenuId.value = menu.id
-  successMessage.value = ''
   resetForm(menu)
+}
+
+function selectMenuById(menuId: string) {
+  const menu = filteredMenuMap.value.get(menuId)
+  if (!menu) {
+    return
+  }
+  selectMenu(menu)
+}
+
+function toggleMenuExpanded(menuId: string) {
+  const next = new Set(expandedMenuIds.value)
+  if (next.has(menuId)) {
+    next.delete(menuId)
+  } else {
+    next.add(menuId)
+  }
+  expandedMenuIds.value = Array.from(next)
+}
+
+function menuLabel(menu: MenuDefinition) {
+  return getMenuDefinition(menu.id)?.defaultLabel ?? menu.label
+}
+
+function menuDescription(menu: MenuDefinition) {
+  return menu.routeName ?? menu.id
+}
+
+function menuSourceLabel(menuId: string) {
+  const menu = filteredMenuMap.value.get(menuId)
+  return menu ? getMenuSourceLabel(t, menu.source) : ''
+}
+
+function appendMenuItems(
+  items: MenuHierarchyItem[],
+  menuId: string,
+  depth: number,
+  normalizedQuery: string,
+) {
+  const menu = filteredMenuMap.value.get(menuId)
+  if (!menu) {
+    return
+  }
+
+  const children = filteredMenuChildrenMap.value.get(menu.id) ?? []
+  const expanded = normalizedQuery
+    ? true
+    : expandedMenuIds.value.includes(menu.id)
+  items.push({
+    id: menu.id,
+    label: menuLabel(menu),
+    description: menuDescription(menu),
+    depth,
+    expandable: children.length > 0,
+    expanded,
+    selectable: true,
+    testId: 'access-control-menu-select',
+    contentTestId: `access-control-menu-node-${menu.id}`,
+    menu,
+  })
+
+  if (!children.length || !expanded) {
+    return
+  }
+
+  for (const child of children) {
+    appendMenuItems(items, child.id, depth + 1, normalizedQuery)
+  }
 }
 
 async function handleSave() {
   submitError.value = ''
   if (!selectedMenu.value) {
-    submitError.value = '请先选择一个菜单。'
+    submitError.value = t('accessControl.menus.feedback.selectRequired')
     return
   }
 
@@ -122,10 +288,13 @@ async function handleSave() {
       }
       await accessControlStore.createMenuPolicy(createPayload)
     }
-    successMessage.value = '已配置策略'
     resetForm(selectedMenu.value)
+    await notifySuccess(
+      t('accessControl.menus.feedback.toastSaved'),
+      getMenuDefinition(selectedMenu.value.id)?.defaultLabel ?? selectedMenu.value.label,
+    )
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '保存菜单策略失败。'
+    submitError.value = error instanceof Error ? error.message : t('accessControl.menus.feedback.saveFailed')
   } finally {
     saving.value = false
   }
@@ -134,17 +303,18 @@ async function handleSave() {
 async function handleDelete() {
   submitError.value = ''
   if (!selectedMenu.value) {
-    submitError.value = '请先选择一个菜单。'
+    submitError.value = t('accessControl.menus.feedback.selectRequired')
     return
   }
 
   deleting.value = true
   try {
+    const label = getMenuDefinition(selectedMenu.value.id)?.defaultLabel ?? selectedMenu.value.label
     await accessControlStore.deleteMenuPolicy(selectedMenu.value.id)
-    successMessage.value = '已删除菜单策略'
     resetForm(selectedMenu.value)
+    await notifySuccess(t('accessControl.menus.feedback.toastDeleted'), label)
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '删除菜单策略失败。'
+    submitError.value = error instanceof Error ? error.message : t('accessControl.menus.feedback.deleteFailed')
   } finally {
     deleting.value = false
   }
@@ -154,22 +324,21 @@ async function handleDelete() {
 <template>
   <div class="space-y-4" data-testid="access-control-menus-shell">
     <UiStatusCallout v-if="submitError" tone="error" :description="submitError" />
-    <UiStatusCallout v-if="successMessage" tone="success" :description="successMessage" />
 
     <UiListDetailWorkspace
       :has-selection="Boolean(selectedMenu)"
-      :detail-title="selectedMenu ? '菜单策略' : ''"
-      detail-subtitle="系统预置 menu code，管理员只维护策略，不新增菜单目录。"
-      empty-detail-title="请选择菜单"
-      empty-detail-description="从左侧菜单列表中选择一项后即可查看或编辑策略。"
+      :detail-title="selectedMenu ? t('accessControl.menus.detail.title') : ''"
+      :detail-subtitle="t('accessControl.menus.detail.subtitle')"
+      :empty-detail-title="t('accessControl.menus.detail.emptyTitle')"
+      :empty-detail-description="t('accessControl.menus.detail.emptyDescription')"
     >
       <template #toolbar>
         <UiToolbarRow test-id="access-control-menus-toolbar">
           <template #search>
-            <UiInput v-model="query" placeholder="搜索菜单名称、路由或 feature code" />
+            <UiInput v-model="query" :placeholder="t('accessControl.menus.toolbar.search')" />
           </template>
           <template #filters>
-            <UiField label="配置状态" class="w-full md:w-[180px]">
+            <UiField :label="t('accessControl.menus.toolbar.configured')" class="w-full md:w-[180px]">
               <UiSelect v-model="configuredFilter" :options="configuredFilterOptions" />
             </UiField>
           </template>
@@ -177,33 +346,56 @@ async function handleDelete() {
       </template>
 
       <template #list>
-        <UiPanelFrame variant="panel" padding="md" title="菜单列表" :subtitle="`共 ${filteredMenus.length} 项菜单`">
-          <div v-if="filteredMenus.length" class="space-y-2">
-            <button
-              v-for="menu in filteredMenus"
-              :key="menu.id"
-              type="button"
-              class="w-full rounded-[var(--radius-l)] border px-4 py-3 text-left transition-colors"
-              :class="selectedMenuId === menu.id ? 'border-primary bg-accent/40' : 'border-border bg-card hover:bg-subtle/60'"
-              data-testid="access-control-menu-select"
-              @click="selectMenu(menu)"
-            >
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0 space-y-1">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-sm font-semibold text-foreground">{{ getMenuDefinition(menu.id)?.defaultLabel ?? menu.label }}</span>
-                    <UiBadge :label="gateMap.get(menu.id)?.allowed ? 'allow' : 'deny'" :tone="gateMap.get(menu.id)?.allowed ? 'success' : 'warning'" subtle />
-                  </div>
-                  <p class="text-xs text-muted-foreground">{{ menu.routeName ?? menu.id }}</p>
+        <UiPanelFrame
+          variant="panel"
+          padding="md"
+          :title="t('accessControl.menus.list.title')"
+          :subtitle="t('accessControl.common.list.totalMenus', { count: pagination.totalItems.value })"
+        >
+          <UiHierarchyList
+            v-if="visibleMenuTreeItems.length"
+            :items="visibleMenuTreeItems"
+            :selected-id="selectedMenuId"
+            class="space-y-2"
+            @select="selectMenuById"
+            @toggle="toggleMenuExpanded"
+          >
+            <template #default="{ item }">
+              <div class="min-w-0">
+                <div class="truncate text-sm font-medium text-text-primary">
+                  {{ item.label }}
                 </div>
-                <div class="flex flex-wrap gap-2">
-                  <UiBadge :label="menu.source" subtle />
-                  <UiBadge v-if="policyMap.get(menu.id)" label="已配置策略" subtle />
+                <div class="truncate pt-0.5 text-xs text-text-secondary">
+                  {{ item.description }}
                 </div>
               </div>
-            </button>
+            </template>
+
+            <template #badges="{ item }">
+              <UiBadge
+                :label="gateMap.get(item.id)?.allowed ? t('accessControl.menus.badges.gateAllow') : t('accessControl.menus.badges.gateDeny')"
+                :tone="gateMap.get(item.id)?.allowed ? 'success' : 'warning'"
+                subtle
+              />
+              <UiBadge :label="menuSourceLabel(item.id)" subtle />
+              <UiBadge v-if="policyMap.get(item.id)" :label="t('accessControl.common.list.configured')" subtle />
+            </template>
+          </UiHierarchyList>
+          <UiEmptyState
+            v-else
+            :title="t('accessControl.menus.list.emptyTitle')"
+            :description="t('accessControl.menus.list.emptyDescription')"
+          />
+
+          <div class="mt-3 pt-2">
+            <UiPagination
+              v-model:page="pagination.currentPage.value"
+              :page-count="pagination.pageCount.value"
+              :previous-label="t('accessControl.common.pagination.previous')"
+              :next-label="t('accessControl.common.pagination.next')"
+              :summary-label="t('accessControl.common.pagination.summary', { count: pagination.totalItems.value })"
+            />
           </div>
-          <UiEmptyState v-else title="暂无菜单定义" description="当前筛选条件下没有可显示的菜单。" />
         </UiPanelFrame>
       </template>
 
@@ -212,32 +404,34 @@ async function handleDelete() {
           <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
               <div class="text-sm font-semibold text-foreground">{{ getMenuDefinition(selectedMenu.id)?.defaultLabel ?? selectedMenu.label }}</div>
-              <UiBadge :label="selectedMenu.source" subtle />
-              <UiBadge :label="gateMap.get(selectedMenu.id)?.allowed ? 'Feature gate allow' : 'Feature gate deny'" :tone="gateMap.get(selectedMenu.id)?.allowed ? 'success' : 'warning'" subtle />
+              <UiBadge :label="getMenuSourceLabel(t, selectedMenu.source)" subtle />
+              <UiBadge :label="gateMap.get(selectedMenu.id)?.allowed ? t('accessControl.menus.badges.gateAllow') : t('accessControl.menus.badges.gateDeny')" :tone="gateMap.get(selectedMenu.id)?.allowed ? 'success' : 'warning'" subtle />
             </div>
             <div class="mt-2 text-xs text-muted-foreground">{{ selectedMenu.featureCode }}</div>
           </div>
 
-          <UiField label="是否启用">
-            <UiCheckbox v-model="form.enabled">启用菜单策略</UiCheckbox>
+          <UiField :label="t('accessControl.menus.fields.enabled')">
+            <UiCheckbox v-model="form.enabled">
+              {{ t('accessControl.menus.fields.enabledCheckbox') }}
+            </UiCheckbox>
           </UiField>
 
           <div class="grid gap-3 md:grid-cols-2">
-            <UiField label="排序">
+            <UiField :label="t('accessControl.menus.fields.order')">
               <UiInput v-model="form.orderText" data-testid="access-control-menu-order" />
             </UiField>
-            <UiField label="分组">
+            <UiField :label="t('accessControl.menus.fields.group')">
               <UiInput v-model="form.group" data-testid="access-control-menu-group" />
             </UiField>
           </div>
 
-          <UiField label="可见性">
+          <UiField :label="t('accessControl.menus.fields.visibility')">
             <UiSelect v-model="form.visibility" :options="menuVisibilityOptions" data-testid="access-control-menu-visibility" />
           </UiField>
 
           <div class="flex flex-wrap justify-between gap-2">
             <UiButton variant="ghost" @click="resetForm(selectedMenu)">
-              重置
+              {{ t('common.reset') }}
             </UiButton>
             <div class="flex flex-wrap gap-2">
               <UiButton
@@ -248,14 +442,14 @@ async function handleDelete() {
                 data-testid="access-control-menu-delete-policy"
                 @click="handleDelete"
               >
-                删除策略
+                {{ t('accessControl.menus.actions.delete') }}
               </UiButton>
               <UiButton
                 :loading="saving"
                 data-testid="access-control-menu-save-policy"
                 @click="handleSave"
               >
-                {{ policyMap.get(selectedMenu.id) ? '保存策略' : '创建策略' }}
+                {{ policyMap.get(selectedMenu.id) ? t('accessControl.menus.actions.save') : t('accessControl.menus.actions.create') }}
               </UiButton>
             </div>
           </div>

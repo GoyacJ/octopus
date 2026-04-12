@@ -2,21 +2,24 @@ use async_trait::async_trait;
 use octopus_core::{
     AgentRecord, AppError, AutomationRecord, BindPetConversationInput,
     ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse,
-    CopyWorkspaceSkillToManagedInput, CreateProjectRequest, CreateWorkspaceResourceFolderInput,
-    CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, ExportWorkspaceAgentBundleInput,
-    ExportWorkspaceAgentBundleResult, ImportWorkspaceAgentBundleInput,
-    ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
-    ImportWorkspaceAgentBundleResult, ImportWorkspaceSkillArchiveInput,
-    ImportWorkspaceSkillFolderInput, KnowledgeRecord, ModelCatalogRecord, PetConversationBinding,
-    PetPresenceState, PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord,
-    ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord, ProviderCredentialRecord,
-    SavePetPresenceInput, SystemBootstrapStatus, TeamRecord, ToolRecord,
-    UpdateCurrentUserProfileRequest, UpdateProjectRequest, UpdateWorkspaceResourceInput,
-    UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput, UpsertAgentInput, UpsertTeamInput,
-    UpsertWorkspaceMcpServerInput, UserRecordSummary, WorkspaceMcpServerDocument,
-    WorkspaceResourceRecord, WorkspaceSkillDocument, WorkspaceSkillFileDocument,
-    WorkspaceSkillTreeDocument, WorkspaceSummary, WorkspaceToolCatalogSnapshot,
-    WorkspaceToolDisablePatch,
+    CopyWorkspaceSkillToManagedInput, CreateProjectPromotionRequestInput, CreateProjectRequest,
+    CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput, CreateWorkspaceSkillInput,
+    ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
+    ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
+    ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
+    ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, KnowledgeRecord,
+    ModelCatalogRecord, PetConversationBinding, PetPresenceState, PetWorkspaceSnapshot,
+    ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectPromotionRequest, ProjectRecord,
+    ProjectTeamLinkInput, ProjectTeamLinkRecord, PromoteWorkspaceResourceInput,
+    ProviderCredentialRecord, ReviewProjectPromotionRequestInput, SavePetPresenceInput,
+    SystemBootstrapStatus, TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest,
+    UpdateProjectRequest, UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput,
+    UpdateWorkspaceSkillInput, UpsertAgentInput, UpsertTeamInput,
+    UpsertWorkspaceMcpServerInput, UserRecordSummary, WorkspaceDirectoryBrowserResponse,
+    WorkspaceMcpServerDocument, WorkspaceResourceChildrenRecord, WorkspaceResourceContentDocument,
+    WorkspaceResourceImportInput, WorkspaceResourceRecord, WorkspaceSkillDocument,
+    WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceSummary,
+    WorkspaceToolCatalogSnapshot, WorkspaceToolDisablePatch,
 };
 
 #[async_trait]
@@ -33,6 +36,23 @@ pub trait WorkspaceService: Send + Sync {
         project_id: &str,
         request: UpdateProjectRequest,
     ) -> Result<ProjectRecord, AppError>;
+    async fn list_project_promotion_requests(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectPromotionRequest>, AppError>;
+    async fn list_workspace_promotion_requests(&self) -> Result<Vec<ProjectPromotionRequest>, AppError>;
+    async fn create_project_promotion_request(
+        &self,
+        project_id: &str,
+        requested_by_user_id: &str,
+        input: CreateProjectPromotionRequestInput,
+    ) -> Result<ProjectPromotionRequest, AppError>;
+    async fn review_project_promotion_request(
+        &self,
+        request_id: &str,
+        reviewed_by_user_id: &str,
+        input: ReviewProjectPromotionRequestInput,
+    ) -> Result<ProjectPromotionRequest, AppError>;
     async fn list_workspace_resources(&self) -> Result<Vec<WorkspaceResourceRecord>, AppError>;
     async fn list_project_resources(
         &self,
@@ -41,18 +61,54 @@ pub trait WorkspaceService: Send + Sync {
     async fn create_workspace_resource(
         &self,
         workspace_id: &str,
+        owner_user_id: &str,
         input: CreateWorkspaceResourceInput,
     ) -> Result<WorkspaceResourceRecord, AppError>;
     async fn create_project_resource(
         &self,
         project_id: &str,
+        owner_user_id: &str,
         input: CreateWorkspaceResourceInput,
     ) -> Result<WorkspaceResourceRecord, AppError>;
     async fn create_project_resource_folder(
         &self,
         project_id: &str,
+        owner_user_id: &str,
         input: CreateWorkspaceResourceFolderInput,
     ) -> Result<Vec<WorkspaceResourceRecord>, AppError>;
+    async fn import_workspace_resource(
+        &self,
+        workspace_id: &str,
+        owner_user_id: &str,
+        input: WorkspaceResourceImportInput,
+    ) -> Result<WorkspaceResourceRecord, AppError>;
+    async fn import_project_resource(
+        &self,
+        project_id: &str,
+        owner_user_id: &str,
+        input: WorkspaceResourceImportInput,
+    ) -> Result<WorkspaceResourceRecord, AppError>;
+    async fn get_resource_detail(
+        &self,
+        resource_id: &str,
+    ) -> Result<WorkspaceResourceRecord, AppError>;
+    async fn get_resource_content(
+        &self,
+        resource_id: &str,
+    ) -> Result<WorkspaceResourceContentDocument, AppError>;
+    async fn list_resource_children(
+        &self,
+        resource_id: &str,
+    ) -> Result<Vec<WorkspaceResourceChildrenRecord>, AppError>;
+    async fn promote_resource(
+        &self,
+        resource_id: &str,
+        input: PromoteWorkspaceResourceInput,
+    ) -> Result<WorkspaceResourceRecord, AppError>;
+    async fn list_directories(
+        &self,
+        path: Option<&str>,
+    ) -> Result<WorkspaceDirectoryBrowserResponse, AppError>;
     async fn delete_workspace_resource(
         &self,
         workspace_id: &str,

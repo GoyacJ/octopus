@@ -40,9 +40,9 @@ function emitClick(event: MouseEvent | KeyboardEvent) {
     :class="cn(
       'flex min-w-0 flex-col gap-2 rounded-[var(--radius-l)] border border-border bg-surface p-3 shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
       props.layout === 'tile' && 'gap-3 p-4',
-      props.layout === 'compact' && 'gap-1.5 p-2',
+      props.layout === 'compact' && 'gap-1 p-2',
       props.active
-        ? 'is-active border-border-strong bg-accent shadow-xs'
+        ? 'is-active border-border-strong bg-subtle shadow-xs'
         : 'border-border bg-surface',
       props.interactive && !props.active && 'cursor-pointer hover:bg-subtle hover:border-border-strong',
       props.class,
@@ -63,20 +63,32 @@ function emitClick(event: MouseEvent | KeyboardEvent) {
         <div v-if="$slots.eyebrow" class="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-tertiary">
           <slot name="eyebrow" />
         </div>
-        <strong class="block text-[15px] font-semibold leading-tight text-text-primary">
+        <strong :class="cn(
+          'block font-semibold leading-tight text-text-primary',
+          props.layout === 'compact' ? 'text-[14px]' : 'text-[15px]',
+        )">
           {{ props.title }}
         </strong>
-        <p v-if="props.description" class="text-[13px] leading-relaxed text-text-secondary line-clamp-2">
+        <p :class="cn(
+          'text-text-secondary line-clamp-2',
+          props.layout === 'compact' ? 'text-[12px] leading-5' : 'text-[13px] leading-relaxed',
+        )" v-if="props.description">
           {{ props.description }}
         </p>
         <slot />
 
-        <div v-if="$slots.secondary" class="flex min-w-0 flex-wrap items-center gap-2 pt-1">
+        <div :class="cn(
+          'flex min-w-0 flex-wrap items-center',
+          props.layout === 'compact' ? 'gap-1.5 pt-0.5' : 'gap-2 pt-1',
+        )" v-if="$slots.secondary">
           <slot name="secondary" />
         </div>
       </div>
 
-      <div v-if="$slots.badges" class="flex shrink-0 flex-wrap items-start justify-end gap-1.5">
+      <div :class="cn(
+        'flex shrink-0 flex-wrap justify-end',
+        props.layout === 'compact' ? 'items-center gap-1' : 'items-start gap-1.5',
+      )" v-if="$slots.badges">
         <slot name="badges" />
       </div>
     </div>
@@ -90,7 +102,12 @@ function emitClick(event: MouseEvent | KeyboardEvent) {
 
     <div
       v-if="$slots.meta || $slots.actions"
-      class="mt-auto flex flex-col gap-2 border-t border-border/70 pt-2 sm:flex-row sm:items-center sm:justify-between"
+      :class="cn(
+        'flex flex-col sm:flex-row sm:items-center sm:justify-between',
+        props.layout === 'compact'
+          ? 'mt-1 gap-1.5 pt-1.5'
+          : 'mt-auto gap-2 border-t border-border/55 pt-2',
+      )"
     >
       <div v-if="$slots.meta" class="flex min-w-0 flex-wrap items-center gap-2">
         <slot name="meta" />

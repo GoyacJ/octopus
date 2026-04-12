@@ -585,7 +585,7 @@
     },
     "users": {
       "title": "项目成员",
-      "description": "通过用户的项目作用域关系，维护当前项目的成员名单。",
+      "description": "维护当前项目的负责人和成员名单。",
       "saveError": "保存项目成员失败。",
       "emptyTitle": "当前工作区还没有可分配成员",
       "emptyDescription": "请先在权限中心创建用户，再把用户加入当前项目。"
@@ -862,7 +862,19 @@
       "subtitle": "管理文件、链接与生成产物。"
     },
     "filters": {
-      "searchPlaceholder": "按名称、路径、类型或标签搜索…"
+      "searchPlaceholder": "按名称、路径、类型或标签搜索…",
+      "allScopes": "全部范围",
+      "allVisibility": "全部可见性"
+    },
+    "mappingDirectory": {
+      "label": "当前项目资源映射目录"
+    },
+    "list": {
+      "toggleStatus": "切换 {name} 的启用状态"
+    },
+    "views": {
+      "list": "列表",
+      "card": "卡片"
     },
     "search": {
       "placeholder": "搜索名称、标签或路径…"
@@ -892,7 +904,19 @@
       "cancel": "取消",
       "delete": "删除",
       "deactivate": "停用",
-      "confirmDelete": "确定要删除此资源吗？"
+      "confirmDelete": "确定要删除此资源吗？",
+      "promoteTo": {
+        "project": "升级为项目资源",
+        "workspace": "升级为工作区资源"
+      }
+    },
+    "workspaceSections": {
+      "workspace": "工作区资源",
+      "workspaceDescription": "展示挂载在工作区层级的共享资源。",
+      "personal": "我的个人资源",
+      "personalDescription": "仅当前账号可见的个人资源。",
+      "projectGroups": "项目资源",
+      "projectGroupsDescription": "按项目容器分组展示各项目资源。"
     },
     "kinds": {
       "file": "文件",
@@ -911,10 +935,102 @@
       "description": "此操作不可逆，将移除所有关联引用。",
       "confirm": "确定删除"
     },
+    "notifications": {
+      "fallbackError": "操作失败，请稍后重试。",
+      "status": {
+        "enabled": {
+          "title": "资源已启用",
+          "body": "{name} 已恢复可用。"
+        },
+        "disabled": {
+          "title": "资源已停用",
+          "body": "{name} 已标记为停用。"
+        },
+        "errorTitle": "资源状态更新失败",
+        "errorBody": "{name} 状态更新失败：{message}"
+      },
+      "visibility": {
+        "successTitle": "可见性已更新",
+        "successBody": "{name} 已切换为{visibility}。",
+        "errorTitle": "可见性更新失败",
+        "errorBody": "{name} 可见性更新失败：{message}"
+      },
+      "delete": {
+        "successTitle": "资源已删除",
+        "successBody": "{name} 已从项目资源中移除。",
+        "errorTitle": "资源删除失败",
+        "errorBody": "{name} 删除失败：{message}"
+      },
+      "promote": {
+        "successTitle": "资源已升级",
+        "successBody": "{name} 已升级为{scope}。",
+        "submittedTitle": "资源提升申请已提交",
+        "submittedBody": "{name} 已提交到工作区审批队列。",
+        "errorTitle": "资源升级失败",
+        "errorBody": "{name} 升级失败：{message}"
+      },
+      "upload": {
+        "fileTitle": "文件上传完成",
+        "fileBody": "{name} 已写入 {destination}。",
+        "fileErrorTitle": "文件上传失败",
+        "fileErrorBody": "文件上传失败：{message}",
+        "folderTitle": "文件夹上传完成",
+        "folderBody": "{name} 已写入 {destination}。",
+        "folderErrorTitle": "文件夹上传失败",
+        "folderErrorBody": "文件夹上传失败：{message}"
+      }
+    },
+    "detail": {
+      "emptyTitle": "选择一项资源以查看详情",
+      "emptyDescription": "在左侧选择文件、文件夹或链接后，这里会展示元数据与预览。",
+      "actions": "资源操作",
+      "visibility": "可见性",
+      "location": "位置",
+      "owner": "所有者",
+      "updatedAt": "更新时间",
+      "byteSize": "大小",
+      "contentType": "内容类型"
+    },
+    "preview": {
+      "loading": "正在加载资源预览…",
+      "text": "文本",
+      "code": "代码",
+      "markdown": "Markdown",
+      "image": "图片",
+      "pdf": "PDF",
+      "audio": "音频",
+      "video": "视频",
+      "folder": "文件夹",
+      "binary": "二进制",
+      "url": "外部链接",
+      "folderEmptyTitle": "文件夹内暂无内容",
+      "folderEmptyDescription": "当前文件夹还没有可展示的子项。",
+      "unavailable": "当前资源暂不支持在线预览。"
+    },
+    "remoteBrowser": {
+      "title": "选择远程资源目录",
+      "description": "浏览远程工作区目录，并将当前路径设置为项目资源目录。",
+      "currentPath": "当前路径",
+      "rootLabel": "远程根目录",
+      "loading": "正在加载远程目录…",
+      "actions": {
+        "goParent": "上一级",
+        "chooseCurrent": "选择当前目录"
+      },
+      "empty": {
+        "title": "当前目录下没有可选子目录",
+        "description": "可以直接选择当前目录，或返回上一级继续浏览。"
+      },
+      "errors": {
+        "unavailable": "当前没有可用的工作区连接，无法浏览远程目录。",
+        "loadFailed": "加载远程目录失败。"
+      }
+    },
     "pagination": {
       "previous": "上一页",
       "next": "下一页",
-      "summary": "第 {page} / {total} 页"
+      "summary": "第 {page} / {total} 页",
+      "meta": "共 {count} 项"
     }
   },
   "models": {
@@ -1453,11 +1569,13 @@
       "create": "新建项目",
       "edit": "编辑项目",
       "archive": "归档项目",
-      "restore": "恢复项目"
+      "restore": "恢复项目",
+      "pickResourceDirectory": "选择目录"
     },
     "fields": {
       "name": "项目名称",
       "description": "项目说明",
+      "resourceDirectory": "资源目录",
       "models": "已分配模型",
       "defaultModel": "默认模型",
       "tools": "已分配工具",
@@ -1465,11 +1583,16 @@
       "teams": "已分配数字员工团队"
     },
     "hints": {
+      "resourceDirectoryLocal": "本地连接时可通过系统文件管理器选择项目资源目录。",
+      "resourceDirectoryRemote": "远程连接时必须通过远程目录浏览器选择项目资源目录。",
       "models": "项目配置页只能在这里选中的模型范围内继续细化。",
       "defaultModel": "这里的默认模型会作为项目级默认模型的初始范围。",
       "tools": "从工作区工具目录中选择 builtin、skill、mcp 工具。",
       "agents": "选择当前项目可使用的工作区个人数字员工。",
       "teams": "选择当前项目可使用的工作区数字员工团队。"
+    },
+    "placeholders": {
+      "resourceDirectory": "请选择项目资源目录"
     },
     "emptyAssignments": {
       "models": "当前还没有可用的工作区模型。",
@@ -1478,8 +1601,8 @@
       "teams": "当前还没有可用的工作区数字员工团队。"
     },
     "status": {
-      "active": "active",
-      "archived": "archived"
+      "active": "活跃",
+      "archived": "已归档"
     },
     "errors": {
       "lastActiveProject": "至少保留一个活跃项目，无法归档最后一个活跃项目。"
@@ -1549,6 +1672,42 @@
       "source": "原始",
       "generated": "生成"
     },
+    "resourceKind": {
+      "file": "文件",
+      "folder": "文件夹",
+      "url": "外部链接",
+      "artifact": "产物"
+    },
+    "resourceOrigin": {
+      "source": "原始资料",
+      "generated": "生成内容"
+    },
+    "resourceStatus": {
+      "healthy": "正常",
+      "attention": "已停用",
+      "configured": "已配置"
+    },
+    "resourceScope": {
+      "personal": "个人",
+      "project": "项目",
+      "workspace": "工作区"
+    },
+    "resourceVisibility": {
+      "private": "私有",
+      "public": "公开"
+    },
+    "resourcePreviewKind": {
+      "text": "文本",
+      "code": "代码",
+      "markdown": "Markdown",
+      "image": "图片",
+      "pdf": "PDF",
+      "audio": "音频",
+      "video": "视频",
+      "folder": "文件夹",
+      "binary": "二进制",
+      "url": "外部链接"
+    },
     "riskLevel": {
       "low": "低风险",
       "medium": "中风险",
@@ -1601,7 +1760,8 @@
   "accessControl": {
     "header": {
       "eyebrow": "访问控制",
-      "title": "访问控制"
+      "title": "访问控制",
+      "description": "在统一工作台中审查工作区身份、访问绑定、策略与审计态势。"
     },
     "nav": {
       "users": "用户管理",
@@ -1609,8 +1769,714 @@
       "roles": "角色管理",
       "policies": "权限与策略",
       "menus": "菜单管理",
-      "resources": "资源授权",
+      "resources": "资源与授权",
       "sessions": "会话与审计"
+    },
+    "common": {
+      "pagination": {
+        "previous": "上一页",
+        "next": "下一页",
+        "summary": "共 {count} 项"
+      },
+      "list": {
+        "configured": "已配置策略",
+        "notConfigured": "未配置策略",
+        "notSet": "未设置",
+        "none": "无",
+        "noRoles": "未绑定角色",
+        "noPositions": "未绑定岗位",
+        "noGroups": "未绑定用户组",
+        "noDirectProjects": "未设置直接项目策略",
+        "rootUnit": "根部门",
+        "parentUnit": "上级：{name}",
+        "defaultSubtype": "default",
+        "currentSession": "当前会话",
+        "primaryAssignment": "主归属",
+        "secondaryAssignment": "附属归属",
+        "unsetOwner": "未设置",
+        "totalUsers": "共 {count} 位用户",
+        "totalRoles": "共 {count} 个角色",
+        "totalMenus": "共 {count} 项菜单",
+        "totalResources": "共 {count} 项受保护资源",
+        "totalSessions": "共 {count} 条会话记录",
+        "loadedAudit": "已加载 {count} 条记录",
+        "totalBindings": "共 {count} 条绑定",
+        "totalDataPolicies": "共 {count} 条策略",
+        "totalResourcePolicies": "共 {count} 条策略",
+        "totalPermissions": "共 {count} 项 capability",
+        "totalUnits": "共 {count} 个部门",
+        "totalPositions": "共 {count} 个岗位",
+        "totalGroups": "共 {count} 个用户组",
+        "totalAssignments": "共 {count} 条归属记录"
+      },
+      "options": {
+        "status": {
+          "active": "启用",
+          "disabled": "禁用",
+          "revoked": "已撤销",
+          "expired": "已过期"
+        },
+        "policyEffect": {
+          "allow": "允许",
+          "deny": "拒绝"
+        },
+        "subjectType": {
+          "user": "用户",
+          "org_unit": "部门",
+          "position": "岗位",
+          "user_group": "用户组"
+        },
+        "scopeType": {
+          "all": "全部范围",
+          "selected-projects": "选定项目",
+          "org-unit-self": "直属部门",
+          "org-unit-subtree": "部门及子部门",
+          "tag-match": "标签匹配"
+        },
+        "menuVisibility": {
+          "inherit": "跟随授权",
+          "visible": "始终显示",
+          "hidden": "始终隐藏"
+        },
+        "classification": {
+          "internal": "内部",
+          "confidential": "机密",
+          "restricted": "限制",
+          "secret": "绝密"
+        },
+        "dataResourceType": {
+          "project": "项目",
+          "agent": "Agent",
+          "resource": "资源",
+          "knowledge": "知识",
+          "tool": "工具"
+        },
+        "resourceType": {
+          "project": "项目",
+          "access": "访问控制",
+          "agent": "Agent",
+          "resource": "资源",
+          "knowledge": "知识",
+          "workspace": "工作区",
+          "team": "团队",
+          "artifact": "制品",
+          "automation": "自动化",
+          "inbox": "收件箱",
+          "pet": "宠物",
+          "provider-credential": "提供商凭证",
+          "runtime": {
+            "approval": "运行时审批",
+            "session": "运行时会话",
+            "config": {
+              "project": "项目运行时配置",
+              "user": "用户运行时配置",
+              "workspace": "工作区运行时配置"
+            }
+          },
+          "tool": {
+            "catalog": "工具目录"
+          },
+          "toolBuiltin": "内置工具",
+          "toolSkill": "Skill 工具",
+          "toolMcp": "MCP 工具"
+        },
+        "auditOutcome": {
+          "success": "成功",
+          "denied": "拒绝",
+          "failure": "失败",
+          "locked": "锁定"
+        }
+      },
+      "filters": {
+        "allStatuses": "全部状态",
+        "allTypes": "全部类型",
+        "allResults": "全部结果",
+        "allMenus": "全部菜单",
+        "configuredOnly": "仅已配置",
+        "unconfiguredOnly": "仅未配置"
+      },
+      "selection": {
+        "selectedCount": "已选 {count} 项",
+        "selectPage": "全选当前页",
+        "clear": "清空选择"
+      },
+      "bulk": {
+        "delete": "批量删除",
+        "dialogTitle": "批量删除{entity}",
+        "dialogDescription": "仅删除当前已选记录，此操作不可撤销。",
+        "dialogConfirm": "确认删除已选的 {count} 项{entity}吗？",
+        "resultAllSuccessTitle": "批量删除完成",
+        "resultPartialTitle": "批量删除部分完成",
+        "resultFailureTitle": "批量删除失败",
+        "resultBody": "成功 {success} / 失败 {failure} / 已跳过 {skipped}"
+      },
+      "entities": {
+        "users": "用户",
+        "roles": "角色",
+        "units": "部门",
+        "positions": "岗位",
+        "groups": "用户组",
+        "assignments": "归属",
+        "bindings": "角色绑定",
+        "dataPolicies": "数据策略",
+        "resourcePolicies": "资源策略"
+      },
+      "menuSources": {
+        "console": "控制台",
+        "accessControl": "访问控制",
+        "mainSidebar": "主侧边栏"
+      },
+      "capabilityModules": {
+        "workspace": "工作区",
+        "project": "项目",
+        "access": "访问控制",
+        "team": "团队",
+        "runtime": "运行时",
+        "agent": "Agent",
+        "resource": "资源",
+        "knowledge": "知识",
+        "tool": "工具",
+        "automation": "自动化",
+        "pet": "宠物",
+        "artifact": "制品",
+        "inbox": "收件箱",
+        "providerCredential": "提供商凭证"
+      },
+      "metrics": {
+        "permissions": "权限目录",
+        "bindings": "角色绑定",
+        "dataPolicies": "数据策略",
+        "resourcePolicies": "资源策略",
+        "units": "部门",
+        "roleAndGroups": "岗位 / 用户组",
+        "assignments": "组织归属",
+        "deniedAudit": "拒绝事件 {count}",
+        "sensitiveAudit": "敏感动作 {count}"
+      }
+    },
+    "users": {
+      "toolbar": {
+        "search": "搜索姓名、账号、角色或组织",
+        "status": "状态",
+        "create": "新建用户"
+      },
+      "list": {
+        "title": "用户列表",
+        "emptyTitle": "暂无用户",
+        "emptyDescription": "当前筛选条件下没有用户记录。",
+        "toggleStatus": "切换 {name} 的启用状态"
+      },
+      "detail": {
+        "subtitle": "维护当前用户的身份信息、密码生命周期与访问摘要。",
+        "emptyTitle": "请选择用户",
+        "emptyDescription": "从左侧用户列表中选择一项后即可查看详情，或点击右上角新建用户。",
+        "orgSummary": "组织归属",
+        "positionGroupSummary": "岗位 / 用户组",
+        "projectSummary": "直接项目范围"
+      },
+      "fields": {
+        "username": "账号名",
+        "displayName": "显示名称",
+        "status": "状态",
+        "password": "密码",
+        "confirmPassword": "确认密码",
+        "newPassword": "新密码",
+        "confirmNewPassword": "确认新密码",
+        "resetPassword": "下次登录重置密码"
+      },
+      "actions": {
+        "save": "保存用户",
+        "delete": "删除用户",
+        "create": "创建用户"
+      },
+      "dialogs": {
+        "createTitle": "新建用户",
+        "createDescription": "创建用户身份并设置初始密码。组织归属和角色绑定在其它页面维护。",
+        "deleteTitle": "删除用户",
+        "deleteDescription": "删除后该用户在当前工作区的身份记录会被移除，此操作不可撤销。",
+        "deleteConfirm": "确认删除 {name} 吗？"
+      },
+      "validation": {
+        "usernameRequired": "请输入账号名。",
+        "displayNameRequired": "请输入显示名称。",
+        "passwordRequired": "新建用户时必须设置密码。",
+        "passwordMismatch": "两次输入的密码不一致。"
+      },
+      "feedback": {
+        "saveFailed": "保存用户失败。",
+        "deleteFailed": "删除用户失败。",
+        "statusUpdateFailed": "更新用户状态失败。",
+        "toastSavedTitle": "用户已保存",
+        "toastDeletedTitle": "用户已删除",
+        "toastEnabledTitle": "用户已启用",
+        "toastDisabledTitle": "用户已停用",
+        "toastUserLabel": "{displayName}（{username}）",
+        "toastDeletedBody": "{displayName}"
+      }
+    },
+    "roles": {
+      "toolbar": {
+        "search": "搜索角色名称、编码或权限",
+        "create": "新建角色"
+      },
+      "list": {
+        "title": "角色列表",
+        "emptyTitle": "暂无角色",
+        "emptyDescription": "当前筛选条件下没有角色记录。",
+        "permissionCount": "{count} 个 capability",
+        "toggleStatus": "切换 {name} 的启用状态"
+      },
+      "detail": {
+        "subtitle": "编辑角色定义与 capability 绑定；主体绑定在权限与策略页维护。",
+        "emptyTitle": "请选择角色",
+        "emptyDescription": "从左侧角色列表中选择一项后即可查看详情，或点击右上角创建角色。"
+      },
+      "fields": {
+        "code": "角色编码",
+        "name": "角色名称",
+        "description": "角色描述",
+        "status": "状态",
+        "permissions": "权限目录绑定"
+      },
+      "actions": {
+        "create": "创建角色",
+        "save": "保存角色",
+        "delete": "删除角色"
+      },
+      "dialogs": {
+        "createTitle": "新建角色",
+        "createDescription": "创建角色定义并绑定 capability，主体绑定放到权限与策略页维护。",
+        "deleteTitle": "删除角色",
+        "deleteDescription": "删除后主体与角色的关联将失去目标角色，请谨慎操作。",
+        "deleteConfirm": "确认删除 {name} 吗？"
+      },
+      "validation": {
+        "required": "请填写完整的角色编码和名称。"
+      },
+      "feedback": {
+        "saveFailed": "保存角色失败。",
+        "deleteFailed": "删除角色失败。",
+        "statusUpdateFailed": "更新角色状态失败。",
+        "toastSavedTitle": "角色已保存",
+        "toastDeletedTitle": "角色已删除",
+        "toastEnabledTitle": "角色已启用",
+        "toastDisabledTitle": "角色已停用"
+      }
+    },
+    "org": {
+      "sections": {
+        "units": "部门",
+        "roles": "岗位与用户组",
+        "assignments": "用户归属",
+        "positions": "岗位",
+        "groups": "用户组"
+      },
+      "units": {
+        "toolbarSearch": "搜索部门名称、编码或上级部门",
+        "create": "新建部门",
+        "listTitle": "部门目录",
+        "list": {
+          "toggleStatus": "切换 {name} 的启用状态"
+        },
+        "detailSubtitle": "编辑部门编码、层级和状态。",
+        "emptyTitle": "请选择部门",
+        "emptyDescription": "从左侧部门列表中选择一项后即可查看详情，或在右上角新建部门。",
+        "noListTitle": "暂无组织单元",
+        "noListDescription": "当前筛选条件下没有部门记录。",
+        "dialogTitle": "新建部门",
+        "dialogDescription": "创建组织单元并设置层级与状态。",
+        "save": "保存部门",
+        "delete": "删除部门",
+        "createAction": "创建部门",
+        "fields": {
+          "code": "部门编码",
+          "name": "部门名称",
+          "parent": "上级部门",
+          "status": "状态"
+        }
+      },
+      "positions": {
+        "toolbarSearch": "搜索岗位名称或编码",
+        "create": "新建岗位",
+        "listTitle": "岗位列表",
+        "list": {
+          "toggleStatus": "切换 {name} 的启用状态"
+        },
+        "detailSubtitle": "岗位用于组织归属和角色绑定扩展。",
+        "emptyTitle": "请选择岗位",
+        "emptyDescription": "从左侧岗位列表中选择一项后即可查看详情，或在右上角新建岗位。",
+        "noListTitle": "暂无岗位",
+        "noListDescription": "当前筛选条件下没有岗位记录。",
+        "dialogTitle": "新建岗位",
+        "dialogDescription": "创建岗位定义，用于组织归属扩展。",
+        "save": "保存岗位",
+        "delete": "删除岗位",
+        "createAction": "创建岗位",
+        "fields": {
+          "code": "岗位编码",
+          "name": "岗位名称",
+          "status": "状态"
+        }
+      },
+      "groups": {
+        "toolbarSearch": "搜索用户组名称或编码",
+        "create": "新建用户组",
+        "listTitle": "用户组列表",
+        "list": {
+          "toggleStatus": "切换 {name} 的启用状态"
+        },
+        "detailSubtitle": "用户组用于补充主体归属和授权范围。",
+        "emptyTitle": "请选择用户组",
+        "emptyDescription": "从左侧用户组列表中选择一项后即可查看详情，或在右上角新建用户组。",
+        "noListTitle": "暂无用户组",
+        "noListDescription": "当前筛选条件下没有用户组记录。",
+        "dialogTitle": "新建用户组",
+        "dialogDescription": "创建用户组，用于组织和授权聚合。",
+        "save": "保存用户组",
+        "delete": "删除用户组",
+        "createAction": "创建用户组",
+        "fields": {
+          "code": "用户组编码",
+          "name": "用户组名称",
+          "status": "状态"
+        }
+      },
+      "assignments": {
+        "toolbarSearch": "搜索用户、部门、岗位或用户组",
+        "create": "新建归属",
+        "listTitle": "用户归属",
+        "detailSubtitle": "维护用户主归属、附属归属、岗位和用户组。",
+        "emptyTitle": "请选择归属记录",
+        "emptyDescription": "从左侧归属列表中选择一项后即可查看详情，或在右上角新建归属。",
+        "noListTitle": "暂无归属记录",
+        "noListDescription": "当前筛选条件下没有归属记录。",
+        "dialogTitle": "新建归属",
+        "dialogDescription": "为用户设置部门、岗位和用户组归属。",
+        "save": "保存归属",
+        "delete": "删除归属",
+        "createAction": "创建归属",
+        "summaryPositions": "岗位摘要",
+        "summaryGroups": "用户组摘要",
+        "fields": {
+          "user": "用户",
+          "orgUnit": "部门",
+          "positions": "岗位",
+          "groups": "用户组",
+          "isPrimary": "设为主归属"
+        }
+      },
+      "validation": {
+        "unitRequired": "请填写完整的部门编码和名称。",
+        "positionRequired": "请填写完整的岗位编码和名称。",
+        "groupRequired": "请填写完整的用户组编码和名称。",
+        "assignmentRequired": "请选择用户和部门。"
+      },
+      "feedback": {
+        "saveUnitFailed": "保存部门失败。",
+        "savePositionFailed": "保存岗位失败。",
+        "saveGroupFailed": "保存用户组失败。",
+        "saveAssignmentFailed": "保存用户归属失败。",
+        "updateUnitStatusFailed": "更新部门状态失败。",
+        "updatePositionStatusFailed": "更新岗位状态失败。",
+        "updateGroupStatusFailed": "更新用户组状态失败。",
+        "deleteUnitFailed": "删除部门失败。",
+        "deletePositionFailed": "删除岗位失败。",
+        "deleteGroupFailed": "删除用户组失败。",
+        "deleteAssignmentFailed": "删除用户归属失败。",
+        "rootUnitDeleteBlockedTitle": "根部门不可删除",
+        "rootUnitDeleteBlockedBody": "根部门是组织树的固定起点，不能删除。",
+        "parentUnitDeleteBlockedTitle": "父部门不可删除",
+        "parentUnitDeleteBlockedBody": "{name} 仍包含子部门，请先删除下级部门。",
+        "toastUnitSaved": "部门已保存",
+        "toastUnitDeleted": "部门已删除",
+        "toastUnitEnabled": "部门已启用",
+        "toastUnitDisabled": "部门已停用",
+        "toastPositionSaved": "岗位已保存",
+        "toastPositionDeleted": "岗位已删除",
+        "toastPositionEnabled": "岗位已启用",
+        "toastPositionDisabled": "岗位已停用",
+        "toastGroupSaved": "用户组已保存",
+        "toastGroupDeleted": "用户组已删除",
+        "toastGroupEnabled": "用户组已启用",
+        "toastGroupDisabled": "用户组已停用",
+        "toastAssignmentSaved": "归属已保存",
+        "toastAssignmentDeleted": "归属已删除"
+      }
+    },
+    "policies": {
+      "sections": {
+        "permissions": "权限目录",
+        "bindings": "角色绑定",
+        "data": "数据策略",
+        "resources": "资源策略"
+      },
+      "permissions": {
+        "toolbarSearch": "搜索权限名称、code 或资源类型",
+        "detailSubtitle": "权限目录只读，提供 capability 参考和资源类型映射。",
+        "emptyTitle": "请选择权限",
+        "emptyDescription": "从左侧权限目录中选择一项后即可查看详情。",
+        "listTitle": "权限目录",
+        "noListTitle": "暂无权限目录",
+        "noListDescription": "当前筛选条件下没有权限定义。",
+        "moduleCount": "{count} 项权限",
+        "grantMatrix": "当前主体动作矩阵",
+        "grantMatrixEmpty": "当前主体没有生效的资源动作授权。"
+      },
+      "bindings": {
+        "toolbarSearch": "搜索角色、主体或效果",
+        "create": "新建绑定",
+        "detailSubtitle": "主体通过角色绑定获得 capability 集合。",
+        "emptyTitle": "请选择角色绑定",
+        "emptyDescription": "从左侧绑定列表中选择一项后即可查看详情，或在右上角新建绑定。",
+        "listTitle": "角色绑定",
+        "noListTitle": "暂无角色绑定",
+        "noListDescription": "当前筛选条件下没有角色绑定记录。",
+        "dialogTitle": "新建角色绑定",
+        "dialogDescription": "为主体绑定角色，并设置 allow / deny 效果。",
+        "fields": {
+          "role": "角色",
+          "subjectType": "主体类型",
+          "subject": "主体",
+          "effect": "效果"
+        },
+        "actions": {
+          "create": "创建绑定",
+          "save": "保存绑定",
+          "delete": "删除绑定"
+        }
+      },
+      "data": {
+        "toolbarSearch": "搜索策略名称、主体、资源类型或范围",
+        "create": "新建策略",
+        "detailSubtitle": "通过项目、标签和密级定义数据访问范围。",
+        "emptyTitle": "请选择数据策略",
+        "emptyDescription": "从左侧策略列表中选择一项后即可查看详情，或在右上角新建策略。",
+        "listTitle": "数据策略",
+        "noListTitle": "暂无数据策略",
+        "noListDescription": "当前筛选条件下没有数据策略记录。",
+        "dialogTitle": "新建数据策略",
+        "dialogDescription": "通过主体、资源类型和范围条件定义数据访问边界。",
+        "fields": {
+          "name": "策略名称",
+          "subjectType": "主体类型",
+          "subject": "主体",
+          "resourceType": "资源类型",
+          "scopeType": "范围类型",
+          "projectIds": "项目范围",
+          "tags": "标签范围",
+          "classifications": "密级范围",
+          "effect": "效果"
+        },
+        "hints": {
+          "projectIds": "多个项目 ID 用逗号分隔。",
+          "tags": "多个标签用逗号分隔。",
+          "classifications": "多个密级用逗号分隔。"
+        },
+        "actions": {
+          "create": "创建策略",
+          "save": "保存策略",
+          "delete": "删除策略"
+        }
+      },
+      "resources": {
+        "toolbarSearch": "搜索动作、主体或资源对象",
+        "filter": "资源类型",
+        "create": "新建策略",
+        "detailSubtitle": "对象级策略用于控制具体资源和工具动作。",
+        "emptyTitle": "请选择资源策略",
+        "emptyDescription": "从左侧策略列表中选择一项后即可查看详情，或在右上角新建策略。",
+        "listTitle": "资源策略",
+        "noListTitle": "暂无资源策略",
+        "noListDescription": "当前筛选条件下没有资源策略记录。",
+        "dialogTitle": "新建资源策略",
+        "dialogDescription": "为具体资源对象设置动作级 allow / deny 策略。",
+        "fields": {
+          "subjectType": "主体类型",
+          "subject": "主体",
+          "resourceType": "资源类型",
+          "resource": "资源对象",
+          "action": "动作",
+          "effect": "效果"
+        },
+        "actions": {
+          "create": "创建策略",
+          "save": "保存策略",
+          "delete": "删除策略"
+        }
+      },
+      "validation": {
+        "bindingRequired": "请选择角色和绑定主体。",
+        "dataRequired": "请填写策略名称并选择主体。",
+        "resourceRequired": "请选择主体、资源并填写动作。"
+      },
+      "feedback": {
+        "saveBindingFailed": "保存角色绑定失败。",
+        "saveDataFailed": "保存数据策略失败。",
+        "saveResourceFailed": "保存资源策略失败。",
+        "deleteBindingFailed": "删除角色绑定失败。",
+        "deleteDataFailed": "删除数据策略失败。",
+        "deleteResourceFailed": "删除资源策略失败。",
+        "toastBindingSaved": "角色绑定已保存",
+        "toastBindingDeleted": "角色绑定已删除",
+        "toastDataSaved": "数据策略已保存",
+        "toastDataDeleted": "数据策略已删除",
+        "toastResourceSaved": "资源策略已保存",
+        "toastResourceDeleted": "资源策略已删除"
+      }
+    },
+    "menus": {
+      "toolbar": {
+        "search": "搜索菜单名称、路由或 feature code",
+        "configured": "配置状态"
+      },
+      "detail": {
+        "title": "菜单策略",
+        "subtitle": "系统预置 menu code，管理员只维护策略，不新增菜单目录。",
+        "emptyTitle": "请选择菜单",
+        "emptyDescription": "从左侧菜单列表中选择一项后即可查看或编辑策略。"
+      },
+      "list": {
+        "title": "菜单列表",
+        "emptyTitle": "暂无菜单定义",
+        "emptyDescription": "当前筛选条件下没有可显示的菜单。"
+      },
+      "fields": {
+        "enabled": "是否启用",
+        "enabledCheckbox": "启用菜单策略",
+        "order": "排序",
+        "group": "分组",
+        "visibility": "可见性"
+      },
+      "badges": {
+        "gateAllow": "Feature gate allow",
+        "gateDeny": "Feature gate deny"
+      },
+      "actions": {
+        "save": "保存策略",
+        "create": "创建策略",
+        "delete": "删除策略"
+      },
+      "feedback": {
+        "saveFailed": "保存菜单策略失败。",
+        "deleteFailed": "删除菜单策略失败。",
+        "selectRequired": "请先选择一个菜单。",
+        "toastSaved": "菜单策略已保存",
+        "toastDeleted": "菜单策略已删除"
+      }
+    },
+    "resources": {
+      "toolbar": {
+        "search": "搜索资源名称、ID、标签或项目",
+        "resourceType": "资源类型"
+      },
+      "list": {
+        "title": "资源目录",
+        "emptyTitle": "暂无资源目录",
+        "emptyDescription": "当前筛选条件下没有资源记录。"
+      },
+      "detail": {
+        "subtitle": "先维护元数据，再配置对象级 allow / deny 策略。",
+        "emptyTitle": "请选择资源",
+        "emptyDescription": "从左侧资源目录中选择一项后即可查看详情和对象策略。",
+        "tabs": {
+          "metadata": "元数据",
+          "policies": "对象策略"
+        },
+        "policyEmptyTitle": "暂无对象策略",
+        "policyEmptyDescription": "当前对象还没有资源策略。"
+      },
+      "fields": {
+        "resourceSubtype": "资源子类型",
+        "projectId": "项目 ID",
+        "tags": "标签",
+        "classification": "密级",
+        "ownerType": "Owner 类型",
+        "ownerId": "Owner 主体",
+        "subjectType": "主体类型",
+        "subject": "主体",
+        "action": "动作",
+        "effect": "效果"
+      },
+      "hints": {
+        "tags": "多个标签用逗号分隔。"
+      },
+      "actions": {
+        "saveMetadata": "保存资源元数据",
+        "createPolicy": "添加对象策略",
+        "deletePolicy": "删除"
+      },
+      "feedback": {
+        "selectRequired": "请先选择一个受保护资源。",
+        "policyRequired": "请选择主体并填写动作。",
+        "createPolicyFailed": "创建资源策略失败。",
+        "saveMetadataFailed": "保存资源元数据失败。",
+        "deletePolicyFailed": "删除资源策略失败。",
+        "toastPolicySaved": "对象策略已保存",
+        "toastMetadataSaved": "资源元数据已保存",
+        "toastPolicyDeleted": "对象策略已删除"
+      }
+    },
+    "sessions": {
+      "tabs": {
+        "sessions": "会话",
+        "audit": "审计"
+      },
+      "sessions": {
+        "toolbarStatus": "会话状态",
+        "listTitle": "会话管理",
+        "emptyTitle": "请选择会话",
+        "emptyDescription": "从左侧会话列表中选择一项后即可查看详情并执行撤销操作。",
+        "noListTitle": "暂无会话",
+        "noListDescription": "当前筛选条件下没有会话记录。",
+        "detailSubtitle": "会话撤销会在下一次请求生效。",
+        "columns": {
+          "session": "会话",
+          "createdAt": "创建时间",
+          "status": "状态"
+        },
+        "actions": {
+          "revokeSession": "撤销当前会话",
+          "revokeUserSessions": "撤销该用户全部会话"
+        }
+      },
+      "audit": {
+        "detailSubtitle": "查看事件主体、资源和结果，用于排查授权与审计问题。",
+        "emptyTitle": "请选择审计记录",
+        "emptyDescription": "从左侧审计结果中选择一项后即可查看详情。",
+        "listTitle": "审计日志",
+        "noListTitle": "暂无审计记录",
+        "noListDescription": "当前筛选条件下没有命中的审计事件。",
+        "fields": {
+          "actorId": "Actor ID",
+          "action": "动作",
+          "resourceType": "资源类型",
+          "outcome": "结果",
+          "from": "开始时间",
+          "to": "结束时间"
+        },
+        "columns": {
+          "action": "动作",
+          "resource": "资源",
+          "createdAt": "时间",
+          "outcome": "结果"
+        },
+        "actions": {
+          "reset": "重置",
+          "search": "查询审计",
+          "loadMore": "加载更多"
+        },
+        "detailBlocks": {
+          "actor": "主体",
+          "resource": "资源",
+          "recordId": "记录 ID"
+        }
+      },
+      "feedback": {
+        "searchFailed": "加载审计日志失败。",
+        "loadMoreFailed": "加载更多审计日志失败。",
+        "toastSessionRevoked": "会话已撤销",
+        "toastUserSessionsRevoked": "用户会话已撤销"
+      }
     }
   },
   "personalCenter": {

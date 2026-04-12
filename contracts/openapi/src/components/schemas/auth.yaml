@@ -218,6 +218,8 @@ WorkspaceSummary:
       type: string
     ownerUserId:
       type: string
+    projectDefaultPermissions:
+      $ref: "#/components/schemas/ProjectDefaultPermissions"
     slug:
       type: string
   required:
@@ -229,4 +231,5 @@ WorkspaceSummary:
     - host
     - listenAddress
     - defaultProjectId
+    - projectDefaultPermissions
   type: object

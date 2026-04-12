@@ -1870,6 +1870,57 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/projects/{projectId}/promotion-requests:
+    get:
+      operationId: listProjectPromotionRequests
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ProjectPromotionRequest"
+                type: array
+          description: Project promotion request payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+    post:
+      operationId: createProjectPromotionRequest
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectPromotionRequestInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectPromotionRequest"
+          description: Created project promotion request payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/projects/{projectId}/resources:
     get:
       operationId: listProjectResources
@@ -2000,6 +2051,34 @@ paths:
                   $ref: "#/components/schemas/WorkspaceResourceRecord"
                 type: array
           description: Created project folder resource payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/projects/{projectId}/resources/import:
+    post:
+      operationId: importProjectResource
+      parameters:
+        - in: path
+          name: projectId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceResourceImportInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResourceRecord"
+          description: Imported project resource payload.
         default:
           content:
             application/json:
@@ -2178,6 +2257,102 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImportWorkspaceAgentBundleResult"
           description: Builtin team template copied into project scope.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/resources/{resourceId}:
+    get:
+      operationId: getWorkspaceResourceDetail
+      parameters:
+        - in: path
+          name: resourceId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResourceRecord"
+          description: Workspace resource detail payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/resources/{resourceId}/children:
+    get:
+      operationId: listWorkspaceResourceChildren
+      parameters:
+        - in: path
+          name: resourceId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/WorkspaceResourceChildrenRecord"
+                type: array
+          description: Workspace resource child listing payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/resources/{resourceId}/content:
+    get:
+      operationId: getWorkspaceResourceContent
+      parameters:
+        - in: path
+          name: resourceId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResourceContentDocument"
+          description: Workspace resource content payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/resources/{resourceId}/promote:
+    post:
+      operationId: promoteWorkspaceResource
+      parameters:
+        - in: path
+          name: resourceId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PromoteWorkspaceResourceInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResourceRecord"
+          description: Promoted workspace resource payload.
         default:
           content:
             application/json:
@@ -3346,6 +3521,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/workspace/filesystem/directories:
+    get:
+      operationId: listWorkspaceFilesystemDirectories
+      parameters:
+        - in: query
+          name: path
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceDirectoryBrowserResponse"
+          description: Workspace filesystem directory listing payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/workspace/knowledge:
     get:
       operationId: listWorkspaceKnowledge
@@ -3543,6 +3740,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/workspace/promotion-requests:
+    get:
+      operationId: listWorkspacePromotionRequests
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                items:
+                  $ref: "#/components/schemas/ProjectPromotionRequest"
+                type: array
+          description: Workspace promotion request payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/promotion-requests/{requestId}/review:
+    post:
+      operationId: reviewProjectPromotionRequest
+      parameters:
+        - in: path
+          name: requestId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReviewProjectPromotionRequestInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectPromotionRequest"
+          description: Reviewed project promotion request payload.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/workspace/resources:
     get:
       operationId: listWorkspaceResources
@@ -3621,6 +3864,28 @@ paths:
       responses:
         "204":
           description: Workspace resource deleted.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
+  /api/v1/workspace/resources/import:
+    post:
+      operationId: importWorkspaceResource
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceResourceImportInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResourceRecord"
+          description: Imported workspace resource payload.
         default:
           content:
             application/json:
@@ -4378,6 +4643,17 @@ components:
       required:
         - scopeKind
       type: object
+    CreateProjectPromotionRequestInput:
+      additionalProperties: false
+      properties:
+        assetId:
+          type: string
+        assetType:
+          $ref: "#/components/schemas/ProjectAssetType"
+      required:
+        - assetType
+        - assetId
+      type: object
     CreateProjectRequest:
       additionalProperties: false
       properties:
@@ -4385,11 +4661,24 @@ components:
           $ref: "#/components/schemas/ProjectWorkspaceAssignments"
         description:
           type: string
+        linkedWorkspaceAssets:
+          $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+        memberUserIds:
+          items:
+            type: string
+          type: array
         name:
+          type: string
+        ownerUserId:
+          type: string
+        permissionOverrides:
+          $ref: "#/components/schemas/ProjectPermissionOverrides"
+        resourceDirectory:
           type: string
       required:
         - name
         - description
+        - resourceDirectory
       type: object
     CreateRuntimeSessionInput:
       additionalProperties: false
@@ -4430,12 +4719,16 @@ components:
           type: string
         projectId:
           type: string
+        scope:
+          $ref: "#/components/schemas/WorkspaceResourceScope"
         sourceArtifactId:
           type: string
         tags:
           items:
             type: string
           type: array
+        visibility:
+          $ref: "#/components/schemas/WorkspaceResourceVisibility"
       required:
         - kind
         - name
@@ -6035,6 +6328,14 @@ components:
         - agentId
         - linkedAt
       type: object
+    ProjectAssetType:
+      enum:
+        - agent
+        - resource
+        - knowledge
+        - tool.skill
+        - tool.mcp
+      type: string
     ProjectDashboardSnapshot:
       additionalProperties: false
       properties:
@@ -6058,6 +6359,53 @@ components:
         - recentConversations
         - recentActivity
       type: object
+    ProjectDefaultPermissions:
+      additionalProperties: false
+      properties:
+        agents:
+          $ref: "#/components/schemas/ProjectDefaultPermissionValue"
+        knowledge:
+          $ref: "#/components/schemas/ProjectDefaultPermissionValue"
+        resources:
+          $ref: "#/components/schemas/ProjectDefaultPermissionValue"
+        tools:
+          $ref: "#/components/schemas/ProjectDefaultPermissionValue"
+      required:
+        - agents
+        - resources
+        - tools
+        - knowledge
+      type: object
+    ProjectDefaultPermissionValue:
+      enum:
+        - allow
+        - deny
+      type: string
+    ProjectLinkedWorkspaceAssets:
+      additionalProperties: false
+      properties:
+        agentIds:
+          items:
+            type: string
+          type: array
+        knowledgeIds:
+          items:
+            type: string
+          type: array
+        resourceIds:
+          items:
+            type: string
+          type: array
+        toolSourceKeys:
+          items:
+            type: string
+          type: array
+      required:
+        - agentIds
+        - resourceIds
+        - toolSourceKeys
+        - knowledgeIds
+      type: object
     ProjectModelAssignments:
       additionalProperties: false
       properties:
@@ -6071,6 +6419,79 @@ components:
         - configuredModelIds
         - defaultConfiguredModelId
       type: object
+    ProjectPermissionOverrides:
+      additionalProperties: false
+      properties:
+        agents:
+          $ref: "#/components/schemas/ProjectPermissionOverrideValue"
+        knowledge:
+          $ref: "#/components/schemas/ProjectPermissionOverrideValue"
+        resources:
+          $ref: "#/components/schemas/ProjectPermissionOverrideValue"
+        tools:
+          $ref: "#/components/schemas/ProjectPermissionOverrideValue"
+      required:
+        - agents
+        - resources
+        - tools
+        - knowledge
+      type: object
+    ProjectPermissionOverrideValue:
+      enum:
+        - inherit
+        - allow
+        - deny
+      type: string
+    ProjectPromotionRequest:
+      additionalProperties: false
+      properties:
+        assetId:
+          type: string
+        assetType:
+          $ref: "#/components/schemas/ProjectAssetType"
+        createdAt:
+          type: integer
+        id:
+          type: string
+        projectId:
+          type: string
+        requestedByUserId:
+          type: string
+        requiredWorkspaceCapability:
+          type: string
+        reviewComment:
+          type: string
+        reviewedAt:
+          type: integer
+        reviewedByUserId:
+          type: string
+        status:
+          $ref: "#/components/schemas/ProjectPromotionRequestStatus"
+        submittedByOwnerUserId:
+          type: string
+        updatedAt:
+          type: integer
+        workspaceId:
+          type: string
+      required:
+        - id
+        - workspaceId
+        - projectId
+        - assetType
+        - assetId
+        - requestedByUserId
+        - submittedByOwnerUserId
+        - requiredWorkspaceCapability
+        - status
+        - createdAt
+        - updatedAt
+      type: object
+    ProjectPromotionRequestStatus:
+      enum:
+        - pending
+        - approved
+        - rejected
+      type: string
     ProjectRecord:
       additionalProperties: false
       properties:
@@ -6080,7 +6501,19 @@ components:
           type: string
         id:
           type: string
+        linkedWorkspaceAssets:
+          $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+        memberUserIds:
+          items:
+            type: string
+          type: array
         name:
+          type: string
+        ownerUserId:
+          type: string
+        permissionOverrides:
+          $ref: "#/components/schemas/ProjectPermissionOverrides"
+        resourceDirectory:
           type: string
         status:
           enum:
@@ -6095,6 +6528,11 @@ components:
         - name
         - status
         - description
+        - resourceDirectory
+        - ownerUserId
+        - memberUserIds
+        - permissionOverrides
+        - linkedWorkspaceAssets
       type: object
     ProjectResourceKind:
       enum:
@@ -6155,6 +6593,14 @@ components:
           $ref: "#/components/schemas/ProjectModelAssignments"
         tools:
           $ref: "#/components/schemas/ProjectToolAssignments"
+      type: object
+    PromoteWorkspaceResourceInput:
+      additionalProperties: false
+      properties:
+        scope:
+          $ref: "#/components/schemas/WorkspaceResourceScope"
+      required:
+        - scope
       type: object
     ProtectedResourceDescriptor:
       additionalProperties: false
@@ -6354,6 +6800,29 @@ components:
         - resourceId
         - action
         - effect
+      type: object
+    ResourcePreviewKind:
+      enum:
+        - text
+        - code
+        - markdown
+        - image
+        - pdf
+        - audio
+        - video
+        - folder
+        - binary
+        - url
+      type: string
+    ReviewProjectPromotionRequestInput:
+      additionalProperties: false
+      properties:
+        approved:
+          type: boolean
+        reviewComment:
+          type: string
+      required:
+        - approved
       type: object
     RiskLevel:
       enum:
@@ -7313,7 +7782,19 @@ components:
           $ref: "#/components/schemas/ProjectWorkspaceAssignments"
         description:
           type: string
+        linkedWorkspaceAssets:
+          $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+        memberUserIds:
+          items:
+            type: string
+          type: array
         name:
+          type: string
+        ownerUserId:
+          type: string
+        permissionOverrides:
+          $ref: "#/components/schemas/ProjectPermissionOverrides"
+        resourceDirectory:
           type: string
         status:
           enum:
@@ -7323,6 +7804,7 @@ components:
       required:
         - name
         - description
+        - resourceDirectory
         - status
       type: object
     UpdateWorkspaceResourceInput:
@@ -7338,6 +7820,8 @@ components:
           items:
             type: string
           type: array
+        visibility:
+          $ref: "#/components/schemas/WorkspaceResourceVisibility"
       type: object
     UpdateWorkspaceSkillFileInput:
       additionalProperties: false
@@ -7713,6 +8197,32 @@ components:
         - expired
         - unreachable
       type: string
+    WorkspaceDirectoryBrowserEntry:
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+      required:
+        - name
+        - path
+      type: object
+    WorkspaceDirectoryBrowserResponse:
+      additionalProperties: false
+      properties:
+        currentPath:
+          type: string
+        entries:
+          items:
+            $ref: "#/components/schemas/WorkspaceDirectoryBrowserEntry"
+          type: array
+        parentPath:
+          type: string
+      required:
+        - currentPath
+        - entries
+      type: object
     WorkspaceDirectoryUploadEntry:
       allOf:
         - $ref: "#/components/schemas/WorkspaceFileUploadPayload"
@@ -7886,6 +8396,53 @@ components:
         - recentConversations
         - recentActivity
       type: object
+    WorkspaceResourceChildrenRecord:
+      additionalProperties: false
+      properties:
+        byteSize:
+          type: integer
+        contentType:
+          type: string
+        kind:
+          $ref: "#/components/schemas/ProjectResourceKind"
+        name:
+          type: string
+        previewKind:
+          $ref: "#/components/schemas/ResourcePreviewKind"
+        relativePath:
+          type: string
+        updatedAt:
+          type: integer
+      required:
+        - kind
+        - name
+        - previewKind
+        - relativePath
+        - updatedAt
+      type: object
+    WorkspaceResourceContentDocument:
+      additionalProperties: false
+      properties:
+        byteSize:
+          type: integer
+        contentType:
+          type: string
+        dataBase64:
+          type: string
+        externalUrl:
+          type: string
+        fileName:
+          type: string
+        previewKind:
+          $ref: "#/components/schemas/ResourcePreviewKind"
+        resourceId:
+          type: string
+        textContent:
+          type: string
+      required:
+        - resourceId
+        - previewKind
+      type: object
     WorkspaceResourceFolderUploadEntry:
       additionalProperties: false
       properties:
@@ -7906,9 +8463,38 @@ components:
         - byteSize
         - relativePath
       type: object
+    WorkspaceResourceImportInput:
+      additionalProperties: false
+      properties:
+        files:
+          items:
+            $ref: "#/components/schemas/WorkspaceResourceFolderUploadEntry"
+          type: array
+        name:
+          type: string
+        rootDirName:
+          type: string
+        scope:
+          $ref: "#/components/schemas/WorkspaceResourceScope"
+        tags:
+          items:
+            type: string
+          type: array
+        visibility:
+          $ref: "#/components/schemas/WorkspaceResourceVisibility"
+      required:
+        - files
+        - name
+        - scope
+        - visibility
+      type: object
     WorkspaceResourceRecord:
       additionalProperties: false
       properties:
+        byteSize:
+          type: integer
+        contentType:
+          type: string
         id:
           type: string
         kind:
@@ -7919,18 +8505,28 @@ components:
           type: string
         origin:
           $ref: "#/components/schemas/ProjectResourceOrigin"
+        ownerUserId:
+          type: string
+        previewKind:
+          $ref: "#/components/schemas/ResourcePreviewKind"
         projectId:
           type: string
+        scope:
+          $ref: "#/components/schemas/WorkspaceResourceScope"
         sourceArtifactId:
           type: string
         status:
           $ref: "#/components/schemas/ViewStatus"
+        storagePath:
+          type: string
         tags:
           items:
             type: string
           type: array
         updatedAt:
           type: integer
+        visibility:
+          $ref: "#/components/schemas/WorkspaceResourceVisibility"
         workspaceId:
           type: string
       required:
@@ -7939,10 +8535,25 @@ components:
         - kind
         - name
         - origin
+        - scope
+        - visibility
+        - ownerUserId
+        - previewKind
         - status
         - updatedAt
         - tags
       type: object
+    WorkspaceResourceScope:
+      enum:
+        - personal
+        - project
+        - workspace
+      type: string
+    WorkspaceResourceVisibility:
+      enum:
+        - private
+        - public
+      type: string
     WorkspaceSessionTokenEnvelope:
       additionalProperties: false
       properties:
@@ -8170,6 +8781,8 @@ components:
           type: string
         ownerUserId:
           type: string
+        projectDefaultPermissions:
+          $ref: "#/components/schemas/ProjectDefaultPermissions"
         slug:
           type: string
       required:
@@ -8181,6 +8794,7 @@ components:
         - host
         - listenAddress
         - defaultProjectId
+        - projectDefaultPermissions
       type: object
     WorkspaceToolCatalogEntry:
       oneOf:

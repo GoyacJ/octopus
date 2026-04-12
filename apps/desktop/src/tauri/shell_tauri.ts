@@ -119,6 +119,21 @@ async function pickAvatarImage(): Promise<AvatarUploadPayload | null> {
   return await invoke<AvatarUploadPayload | null>('pick_avatar_image')
 }
 
+async function pickResourceDirectory(): Promise<string | null> {
+  assertTauriHostAvailable()
+  return await invoke<string | null>('pick_resource_directory')
+}
+
+async function pickResourceFile(): Promise<WorkspaceFileUploadPayload | null> {
+  assertTauriHostAvailable()
+  return await invoke<WorkspaceFileUploadPayload | null>('pick_resource_file')
+}
+
+async function pickResourceFolder(): Promise<WorkspaceDirectoryUploadEntry[] | null> {
+  assertTauriHostAvailable()
+  return await invoke<WorkspaceDirectoryUploadEntry[] | null>('pick_resource_folder')
+}
+
 async function pickSkillArchive(): Promise<WorkspaceFileUploadPayload[] | null> {
   assertTauriHostAvailable()
   return await invoke<WorkspaceFileUploadPayload[] | null>('pick_skill_archive')
@@ -217,6 +232,9 @@ export const tauriShellClient = {
   restartDesktopBackend,
   resolveDesktopBackendConnection,
   pickAvatarImage,
+  pickResourceDirectory,
+  pickResourceFile,
+  pickResourceFolder,
   pickAgentBundleArchive,
   pickSkillArchive,
   pickSkillFolder,

@@ -322,6 +322,7 @@ default_project_id = "proj-redesign"
             .block_on(bundle.workspace.create_project(CreateProjectRequest {
                 name: "Assigned Project".into(),
                 description: "Project assignment persistence coverage.".into(),
+                resource_directory: "data/projects/assigned-project/resources".into(),
                 assignments: Some(octopus_core::ProjectWorkspaceAssignments {
                     models: Some(octopus_core::ProjectModelAssignments {
                         configured_model_ids: vec!["anthropic-primary".into()],
@@ -354,6 +355,7 @@ default_project_id = "proj-redesign"
                     name: "Assigned Project".into(),
                     description: "Updated assignment persistence coverage.".into(),
                     status: "active".into(),
+                    resource_directory: created.resource_directory.clone(),
                     assignments: Some(octopus_core::ProjectWorkspaceAssignments {
                         models: Some(octopus_core::ProjectModelAssignments {
                             configured_model_ids: vec!["anthropic-alt".into()],

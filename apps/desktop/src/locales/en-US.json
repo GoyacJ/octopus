@@ -585,7 +585,7 @@
     },
     "users": {
       "title": "Project Members",
-      "description": "Manage project membership by updating each user's scoped project assignments.",
+      "description": "Manage the project owner and member roster for this project.",
       "saveError": "Failed to save project members.",
       "emptyTitle": "No workspace users are available",
       "emptyDescription": "Create users in Permission Center first, then assign them to this project."
@@ -862,7 +862,19 @@
       "subtitle": "Manage files, links, and generated outputs."
     },
     "filters": {
-      "searchPlaceholder": "Search by name, path, type, or tag…"
+      "searchPlaceholder": "Search by name, path, type, or tag…",
+      "allScopes": "All scopes",
+      "allVisibility": "All visibility"
+    },
+    "mappingDirectory": {
+      "label": "Current project resource directory"
+    },
+    "list": {
+      "toggleStatus": "Toggle {name} status"
+    },
+    "views": {
+      "list": "List",
+      "card": "Cards"
     },
     "search": {
       "placeholder": "Search name, tag, or path…"
@@ -892,7 +904,19 @@
       "cancel": "Cancel",
       "delete": "Delete",
       "deactivate": "Deactivate",
-      "confirmDelete": "Are you sure you want to delete this resource?"
+      "confirmDelete": "Are you sure you want to delete this resource?",
+      "promoteTo": {
+        "project": "Promote to project resource",
+        "workspace": "Promote to workspace resource"
+      }
+    },
+    "workspaceSections": {
+      "workspace": "Workspace resources",
+      "workspaceDescription": "Shared resources mounted at the workspace level.",
+      "personal": "My personal resources",
+      "personalDescription": "Resources visible only to you across this workspace.",
+      "projectGroups": "Project resources",
+      "projectGroupsDescription": "Project-owned resources grouped by project container."
     },
     "kinds": {
       "file": "File",
@@ -911,10 +935,102 @@
       "description": "This action is irreversible and will remove all associated references.",
       "confirm": "Confirm Delete"
     },
+    "notifications": {
+      "fallbackError": "The action failed. Try again.",
+      "status": {
+        "enabled": {
+          "title": "Resource enabled",
+          "body": "{name} is available again."
+        },
+        "disabled": {
+          "title": "Resource disabled",
+          "body": "{name} was marked as disabled."
+        },
+        "errorTitle": "Failed to update resource status",
+        "errorBody": "Failed to update {name}: {message}"
+      },
+      "visibility": {
+        "successTitle": "Visibility updated",
+        "successBody": "{name} is now {visibility}.",
+        "errorTitle": "Failed to update visibility",
+        "errorBody": "Failed to update visibility for {name}: {message}"
+      },
+      "delete": {
+        "successTitle": "Resource deleted",
+        "successBody": "{name} was removed from project resources.",
+        "errorTitle": "Failed to delete resource",
+        "errorBody": "Failed to delete {name}: {message}"
+      },
+      "promote": {
+        "successTitle": "Resource promoted",
+        "successBody": "{name} is now a {scope} resource.",
+        "submittedTitle": "Promotion request submitted",
+        "submittedBody": "{name} was sent to the workspace review queue.",
+        "errorTitle": "Failed to promote resource",
+        "errorBody": "Failed to promote {name}: {message}"
+      },
+      "upload": {
+        "fileTitle": "File upload complete",
+        "fileBody": "{name} was written to {destination}.",
+        "fileErrorTitle": "File upload failed",
+        "fileErrorBody": "File upload failed: {message}",
+        "folderTitle": "Folder upload complete",
+        "folderBody": "{name} was written to {destination}.",
+        "folderErrorTitle": "Folder upload failed",
+        "folderErrorBody": "Folder upload failed: {message}"
+      }
+    },
+    "detail": {
+      "emptyTitle": "Select a resource to inspect",
+      "emptyDescription": "Choose a file, folder, or link from the list to view metadata and preview content.",
+      "actions": "Resource actions",
+      "visibility": "Visibility",
+      "location": "Location",
+      "owner": "Owner",
+      "updatedAt": "Updated",
+      "byteSize": "Size",
+      "contentType": "Content type"
+    },
+    "preview": {
+      "loading": "Loading resource preview…",
+      "text": "Text",
+      "code": "Code",
+      "markdown": "Markdown",
+      "image": "Image",
+      "pdf": "PDF",
+      "audio": "Audio",
+      "video": "Video",
+      "folder": "Folder",
+      "binary": "Binary",
+      "url": "External link",
+      "folderEmptyTitle": "This folder is empty",
+      "folderEmptyDescription": "No child items are available in this folder yet.",
+      "unavailable": "This resource cannot be previewed inline."
+    },
+    "remoteBrowser": {
+      "title": "Choose remote resource directory",
+      "description": "Browse the remote workspace and choose the directory that will back this project's resources.",
+      "currentPath": "Current path",
+      "rootLabel": "Remote root",
+      "loading": "Loading remote directories…",
+      "actions": {
+        "goParent": "Up one level",
+        "chooseCurrent": "Choose current directory"
+      },
+      "empty": {
+        "title": "No child directories here",
+        "description": "Choose the current directory or go back up to continue browsing."
+      },
+      "errors": {
+        "unavailable": "No active workspace connection is available for browsing remote directories.",
+        "loadFailed": "Failed to load remote directories."
+      }
+    },
     "pagination": {
       "previous": "Previous",
       "next": "Next",
-      "summary": "Page {page} / {total}"
+      "summary": "Page {page} / {total}",
+      "meta": "{count} total"
     }
   },
   "models": {
@@ -1453,11 +1569,13 @@
       "create": "Create project",
       "edit": "Edit project",
       "archive": "Archive project",
-      "restore": "Restore project"
+      "restore": "Restore project",
+      "pickResourceDirectory": "Choose directory"
     },
     "fields": {
       "name": "Project name",
       "description": "Description",
+      "resourceDirectory": "Resource directory",
       "models": "Assigned models",
       "defaultModel": "Default model",
       "tools": "Assigned tools",
@@ -1465,11 +1583,16 @@
       "teams": "Assigned teams"
     },
     "hints": {
+      "resourceDirectoryLocal": "For local connections, choose the project's resource directory from the system file picker.",
+      "resourceDirectoryRemote": "For remote connections, choose the project's resource directory from the remote directory browser.",
       "models": "Projects can only refine models selected here.",
       "defaultModel": "This default seeds the project-level default model selection.",
       "tools": "Choose builtin, skill, and mcp tools from the workspace catalog.",
       "agents": "Choose workspace agents that this project can use.",
       "teams": "Choose workspace agent teams that this project can use."
+    },
+    "placeholders": {
+      "resourceDirectory": "Choose a project resource directory"
     },
     "emptyAssignments": {
       "models": "No workspace models are available yet.",
@@ -1549,6 +1672,42 @@
       "source": "Original",
       "generated": "Generated"
     },
+    "resourceKind": {
+      "file": "File",
+      "folder": "Folder",
+      "url": "External link",
+      "artifact": "Artifact"
+    },
+    "resourceOrigin": {
+      "source": "Source",
+      "generated": "Generated"
+    },
+    "resourceStatus": {
+      "healthy": "Healthy",
+      "attention": "Inactive",
+      "configured": "Configured"
+    },
+    "resourceScope": {
+      "personal": "Personal",
+      "project": "Project",
+      "workspace": "Workspace"
+    },
+    "resourceVisibility": {
+      "private": "Private",
+      "public": "Public"
+    },
+    "resourcePreviewKind": {
+      "text": "Text",
+      "code": "Code",
+      "markdown": "Markdown",
+      "image": "Image",
+      "pdf": "PDF",
+      "audio": "Audio",
+      "video": "Video",
+      "folder": "Folder",
+      "binary": "Binary",
+      "url": "External link"
+    },
     "riskLevel": {
       "low": "Low Risk",
       "medium": "Medium Risk",
@@ -1601,7 +1760,8 @@
   "accessControl": {
     "header": {
       "eyebrow": "Access Control",
-      "title": "Access Control"
+      "title": "Access Control",
+      "description": "Review workspace identities, access bindings, policies, and audit posture from one workbench."
     },
     "nav": {
       "users": "Users",
@@ -1609,8 +1769,714 @@
       "roles": "Roles",
       "policies": "Permissions & Policies",
       "menus": "Menus",
-      "resources": "Resource Access",
+      "resources": "Resources & Authorization",
       "sessions": "Sessions & Audit"
+    },
+    "common": {
+      "pagination": {
+        "previous": "Previous",
+        "next": "Next",
+        "summary": "{count} items"
+      },
+      "list": {
+        "configured": "Policy configured",
+        "notConfigured": "Policy not configured",
+        "notSet": "Not set",
+        "none": "None",
+        "noRoles": "No roles assigned",
+        "noPositions": "No positions assigned",
+        "noGroups": "No groups assigned",
+        "noDirectProjects": "No direct project policy",
+        "rootUnit": "Root unit",
+        "parentUnit": "Parent: {name}",
+        "defaultSubtype": "default",
+        "currentSession": "Current session",
+        "primaryAssignment": "Primary assignment",
+        "secondaryAssignment": "Secondary assignment",
+        "unsetOwner": "Not set",
+        "totalUsers": "{count} users",
+        "totalRoles": "{count} roles",
+        "totalMenus": "{count} menus",
+        "totalResources": "{count} protected resources",
+        "totalSessions": "{count} sessions",
+        "loadedAudit": "{count} records loaded",
+        "totalBindings": "{count} bindings",
+        "totalDataPolicies": "{count} policies",
+        "totalResourcePolicies": "{count} policies",
+        "totalPermissions": "{count} capabilities",
+        "totalUnits": "{count} units",
+        "totalPositions": "{count} positions",
+        "totalGroups": "{count} groups",
+        "totalAssignments": "{count} assignments"
+      },
+      "options": {
+        "status": {
+          "active": "Active",
+          "disabled": "Disabled",
+          "revoked": "Revoked",
+          "expired": "Expired"
+        },
+        "policyEffect": {
+          "allow": "Allow",
+          "deny": "Deny"
+        },
+        "subjectType": {
+          "user": "User",
+          "org_unit": "Org unit",
+          "position": "Position",
+          "user_group": "User group"
+        },
+        "scopeType": {
+          "all": "All scope",
+          "selected-projects": "Selected projects",
+          "org-unit-self": "Direct org unit",
+          "org-unit-subtree": "Org unit subtree",
+          "tag-match": "Tag match"
+        },
+        "menuVisibility": {
+          "inherit": "Follow authorization",
+          "visible": "Always visible",
+          "hidden": "Always hidden"
+        },
+        "classification": {
+          "internal": "Internal",
+          "confidential": "Confidential",
+          "restricted": "Restricted",
+          "secret": "Secret"
+        },
+        "dataResourceType": {
+          "project": "Project",
+          "agent": "Agent",
+          "resource": "Resource",
+          "knowledge": "Knowledge",
+          "tool": "Tool"
+        },
+        "resourceType": {
+          "project": "Project",
+          "access": "Access",
+          "agent": "Agent",
+          "resource": "Resource",
+          "knowledge": "Knowledge",
+          "workspace": "Workspace",
+          "team": "Team",
+          "artifact": "Artifact",
+          "automation": "Automation",
+          "inbox": "Inbox",
+          "pet": "Pet",
+          "provider-credential": "Provider credentials",
+          "runtime": {
+            "approval": "Runtime approval",
+            "session": "Runtime session",
+            "config": {
+              "project": "Project runtime config",
+              "user": "User runtime config",
+              "workspace": "Workspace runtime config"
+            }
+          },
+          "tool": {
+            "catalog": "Tool catalog"
+          },
+          "toolBuiltin": "Built-in tool",
+          "toolSkill": "Skill tool",
+          "toolMcp": "MCP tool"
+        },
+        "auditOutcome": {
+          "success": "Success",
+          "denied": "Denied",
+          "failure": "Failure",
+          "locked": "Locked"
+        }
+      },
+      "filters": {
+        "allStatuses": "All statuses",
+        "allTypes": "All types",
+        "allResults": "All outcomes",
+        "allMenus": "All menus",
+        "configuredOnly": "Configured only",
+        "unconfiguredOnly": "Unconfigured only"
+      },
+      "selection": {
+        "selectedCount": "{count} selected",
+        "selectPage": "Select current page",
+        "clear": "Clear selection"
+      },
+      "bulk": {
+        "delete": "Bulk delete",
+        "dialogTitle": "Bulk delete {entity}",
+        "dialogDescription": "Only the currently selected records will be deleted. This cannot be undone.",
+        "dialogConfirm": "Delete {count} selected {entity}?",
+        "resultAllSuccessTitle": "Bulk delete complete",
+        "resultPartialTitle": "Bulk delete partially complete",
+        "resultFailureTitle": "Bulk delete failed",
+        "resultBody": "Succeeded {success} / Failed {failure} / Skipped {skipped}"
+      },
+      "entities": {
+        "users": "users",
+        "roles": "roles",
+        "units": "units",
+        "positions": "positions",
+        "groups": "groups",
+        "assignments": "assignments",
+        "bindings": "role bindings",
+        "dataPolicies": "data policies",
+        "resourcePolicies": "resource policies"
+      },
+      "menuSources": {
+        "console": "Console",
+        "accessControl": "Access Control",
+        "mainSidebar": "Main Sidebar"
+      },
+      "capabilityModules": {
+        "workspace": "Workspace",
+        "project": "Project",
+        "access": "Access",
+        "team": "Team",
+        "runtime": "Runtime",
+        "agent": "Agent",
+        "resource": "Resource",
+        "knowledge": "Knowledge",
+        "tool": "Tool",
+        "automation": "Automation",
+        "pet": "Pet",
+        "artifact": "Artifact",
+        "inbox": "Inbox",
+        "providerCredential": "Provider Credentials"
+      },
+      "metrics": {
+        "permissions": "Permissions",
+        "bindings": "Bindings",
+        "dataPolicies": "Data policies",
+        "resourcePolicies": "Resource policies",
+        "units": "Units",
+        "roleAndGroups": "Positions / Groups",
+        "assignments": "Assignments",
+        "deniedAudit": "Denied {count}",
+        "sensitiveAudit": "Sensitive {count}"
+      }
+    },
+    "users": {
+      "toolbar": {
+        "search": "Search names, usernames, roles, or org units",
+        "status": "Status",
+        "create": "Create user"
+      },
+      "list": {
+        "title": "Users",
+        "emptyTitle": "No users",
+        "emptyDescription": "No user records match the current filters.",
+        "toggleStatus": "Toggle {name} status"
+      },
+      "detail": {
+        "subtitle": "Maintain the selected user's identity, password lifecycle, and access summary.",
+        "emptyTitle": "Select a user",
+        "emptyDescription": "Choose a user from the list to review details, or create one from the toolbar.",
+        "orgSummary": "Org assignment",
+        "positionGroupSummary": "Positions / Groups",
+        "projectSummary": "Direct project scope"
+      },
+      "fields": {
+        "username": "Username",
+        "displayName": "Display name",
+        "status": "Status",
+        "password": "Password",
+        "confirmPassword": "Confirm password",
+        "newPassword": "New password",
+        "confirmNewPassword": "Confirm new password",
+        "resetPassword": "Require password reset on next sign-in"
+      },
+      "actions": {
+        "save": "Save user",
+        "delete": "Delete user",
+        "create": "Create user"
+      },
+      "dialogs": {
+        "createTitle": "Create user",
+        "createDescription": "Create the identity and set the initial password. Org assignments and role bindings are maintained on other pages.",
+        "deleteTitle": "Delete user",
+        "deleteDescription": "This removes the user's identity record from the current workspace and cannot be undone.",
+        "deleteConfirm": "Delete {name}?"
+      },
+      "validation": {
+        "usernameRequired": "Enter a username.",
+        "displayNameRequired": "Enter a display name.",
+        "passwordRequired": "An initial password is required when creating a user.",
+        "passwordMismatch": "The passwords do not match."
+      },
+      "feedback": {
+        "saveFailed": "Failed to save user.",
+        "deleteFailed": "Failed to delete user.",
+        "statusUpdateFailed": "Failed to update user status.",
+        "toastSavedTitle": "User saved",
+        "toastDeletedTitle": "User deleted",
+        "toastEnabledTitle": "User enabled",
+        "toastDisabledTitle": "User disabled",
+        "toastUserLabel": "{displayName} ({username})",
+        "toastDeletedBody": "{displayName}"
+      }
+    },
+    "roles": {
+      "toolbar": {
+        "search": "Search role name, code, or permissions",
+        "create": "Create role"
+      },
+      "list": {
+        "title": "Roles",
+        "emptyTitle": "No roles",
+        "emptyDescription": "No role records match the current filters.",
+        "permissionCount": "{count} capabilities",
+        "toggleStatus": "Toggle {name} status"
+      },
+      "detail": {
+        "subtitle": "Edit role definitions and capability bindings. Subject bindings stay in Permissions & Policies.",
+        "emptyTitle": "Select a role",
+        "emptyDescription": "Choose a role from the list to review details, or create one from the toolbar."
+      },
+      "fields": {
+        "code": "Role code",
+        "name": "Role name",
+        "description": "Role description",
+        "status": "Status",
+        "permissions": "Capability bindings"
+      },
+      "actions": {
+        "create": "Create role",
+        "save": "Save role",
+        "delete": "Delete role"
+      },
+      "dialogs": {
+        "createTitle": "Create role",
+        "createDescription": "Create the role definition and bind capabilities here. Subject bindings stay on Permissions & Policies.",
+        "deleteTitle": "Delete role",
+        "deleteDescription": "Deleting the role removes the target from existing subject-role relationships.",
+        "deleteConfirm": "Delete {name}?"
+      },
+      "validation": {
+        "required": "Enter both the role code and role name."
+      },
+      "feedback": {
+        "saveFailed": "Failed to save role.",
+        "deleteFailed": "Failed to delete role.",
+        "statusUpdateFailed": "Failed to update role status.",
+        "toastSavedTitle": "Role saved",
+        "toastDeletedTitle": "Role deleted",
+        "toastEnabledTitle": "Role enabled",
+        "toastDisabledTitle": "Role disabled"
+      }
+    },
+    "org": {
+      "sections": {
+        "units": "Units",
+        "roles": "Positions & Groups",
+        "assignments": "Assignments",
+        "positions": "Positions",
+        "groups": "User groups"
+      },
+      "units": {
+        "toolbarSearch": "Search unit name, code, or parent",
+        "create": "Create unit",
+        "listTitle": "Unit directory",
+        "list": {
+          "toggleStatus": "Toggle {name} status"
+        },
+        "detailSubtitle": "Edit unit code, hierarchy, and status.",
+        "emptyTitle": "Select a unit",
+        "emptyDescription": "Choose a unit from the list to review details, or create one from the toolbar.",
+        "noListTitle": "No org units",
+        "noListDescription": "No unit records match the current filters.",
+        "dialogTitle": "Create unit",
+        "dialogDescription": "Create an org unit and define its hierarchy and status.",
+        "save": "Save unit",
+        "delete": "Delete unit",
+        "createAction": "Create unit",
+        "fields": {
+          "code": "Unit code",
+          "name": "Unit name",
+          "parent": "Parent unit",
+          "status": "Status"
+        }
+      },
+      "positions": {
+        "toolbarSearch": "Search position name or code",
+        "create": "Create position",
+        "listTitle": "Positions",
+        "list": {
+          "toggleStatus": "Toggle {name} status"
+        },
+        "detailSubtitle": "Positions extend org assignments and role binding scope.",
+        "emptyTitle": "Select a position",
+        "emptyDescription": "Choose a position from the list to review details, or create one from the toolbar.",
+        "noListTitle": "No positions",
+        "noListDescription": "No position records match the current filters.",
+        "dialogTitle": "Create position",
+        "dialogDescription": "Create a position definition for org assignments.",
+        "save": "Save position",
+        "delete": "Delete position",
+        "createAction": "Create position",
+        "fields": {
+          "code": "Position code",
+          "name": "Position name",
+          "status": "Status"
+        }
+      },
+      "groups": {
+        "toolbarSearch": "Search group name or code",
+        "create": "Create group",
+        "listTitle": "User groups",
+        "list": {
+          "toggleStatus": "Toggle {name} status"
+        },
+        "detailSubtitle": "User groups extend subject grouping and authorization range.",
+        "emptyTitle": "Select a group",
+        "emptyDescription": "Choose a group from the list to review details, or create one from the toolbar.",
+        "noListTitle": "No user groups",
+        "noListDescription": "No group records match the current filters.",
+        "dialogTitle": "Create user group",
+        "dialogDescription": "Create a user group for organizational and authorization aggregation.",
+        "save": "Save group",
+        "delete": "Delete group",
+        "createAction": "Create group",
+        "fields": {
+          "code": "Group code",
+          "name": "Group name",
+          "status": "Status"
+        }
+      },
+      "assignments": {
+        "toolbarSearch": "Search users, units, positions, or groups",
+        "create": "Create assignment",
+        "listTitle": "User assignments",
+        "detailSubtitle": "Maintain each user's primary or secondary unit, positions, and groups.",
+        "emptyTitle": "Select an assignment",
+        "emptyDescription": "Choose an assignment from the list to review details, or create one from the toolbar.",
+        "noListTitle": "No assignments",
+        "noListDescription": "No assignments match the current filters.",
+        "dialogTitle": "Create assignment",
+        "dialogDescription": "Assign a user to an org unit with optional positions and groups.",
+        "save": "Save assignment",
+        "delete": "Delete assignment",
+        "createAction": "Create assignment",
+        "summaryPositions": "Position summary",
+        "summaryGroups": "Group summary",
+        "fields": {
+          "user": "User",
+          "orgUnit": "Org unit",
+          "positions": "Positions",
+          "groups": "Groups",
+          "isPrimary": "Mark as primary assignment"
+        }
+      },
+      "validation": {
+        "unitRequired": "Enter both the unit code and unit name.",
+        "positionRequired": "Enter both the position code and position name.",
+        "groupRequired": "Enter both the user group code and user group name.",
+        "assignmentRequired": "Choose both a user and an org unit."
+      },
+      "feedback": {
+        "saveUnitFailed": "Failed to save unit.",
+        "savePositionFailed": "Failed to save position.",
+        "saveGroupFailed": "Failed to save group.",
+        "saveAssignmentFailed": "Failed to save assignment.",
+        "updateUnitStatusFailed": "Failed to update unit status.",
+        "updatePositionStatusFailed": "Failed to update position status.",
+        "updateGroupStatusFailed": "Failed to update group status.",
+        "deleteUnitFailed": "Failed to delete unit.",
+        "deletePositionFailed": "Failed to delete position.",
+        "deleteGroupFailed": "Failed to delete group.",
+        "deleteAssignmentFailed": "Failed to delete assignment.",
+        "rootUnitDeleteBlockedTitle": "Root unit cannot be deleted",
+        "rootUnitDeleteBlockedBody": "The root unit is the fixed starting point of the org tree and cannot be removed.",
+        "parentUnitDeleteBlockedTitle": "Parent unit cannot be deleted",
+        "parentUnitDeleteBlockedBody": "{name} still has child units. Remove the descendants first.",
+        "toastUnitSaved": "Unit saved",
+        "toastUnitDeleted": "Unit deleted",
+        "toastUnitEnabled": "Unit enabled",
+        "toastUnitDisabled": "Unit disabled",
+        "toastPositionSaved": "Position saved",
+        "toastPositionDeleted": "Position deleted",
+        "toastPositionEnabled": "Position enabled",
+        "toastPositionDisabled": "Position disabled",
+        "toastGroupSaved": "Group saved",
+        "toastGroupDeleted": "Group deleted",
+        "toastGroupEnabled": "Group enabled",
+        "toastGroupDisabled": "Group disabled",
+        "toastAssignmentSaved": "Assignment saved",
+        "toastAssignmentDeleted": "Assignment deleted"
+      }
+    },
+    "policies": {
+      "sections": {
+        "permissions": "Permission directory",
+        "bindings": "Role bindings",
+        "data": "Data policies",
+        "resources": "Resource policies"
+      },
+      "permissions": {
+        "toolbarSearch": "Search permission name, code, or resource type",
+        "detailSubtitle": "The directory is read-only and shows capability references and resource mappings.",
+        "emptyTitle": "Select a permission",
+        "emptyDescription": "Choose a permission from the list to review details.",
+        "listTitle": "Permission directory",
+        "noListTitle": "No permissions",
+        "noListDescription": "No permission definitions match the current filters.",
+        "moduleCount": "{count} permissions",
+        "grantMatrix": "Current subject action matrix",
+        "grantMatrixEmpty": "The current subject has no effective resource action grants."
+      },
+      "bindings": {
+        "toolbarSearch": "Search roles, subjects, or effect",
+        "create": "Create binding",
+        "detailSubtitle": "Subjects inherit capability sets through role bindings.",
+        "emptyTitle": "Select a role binding",
+        "emptyDescription": "Choose a binding from the list to review details, or create one from the toolbar.",
+        "listTitle": "Role bindings",
+        "noListTitle": "No role bindings",
+        "noListDescription": "No role bindings match the current filters.",
+        "dialogTitle": "Create role binding",
+        "dialogDescription": "Bind a role to a subject and define the allow or deny effect.",
+        "fields": {
+          "role": "Role",
+          "subjectType": "Subject type",
+          "subject": "Subject",
+          "effect": "Effect"
+        },
+        "actions": {
+          "create": "Create binding",
+          "save": "Save binding",
+          "delete": "Delete binding"
+        }
+      },
+      "data": {
+        "toolbarSearch": "Search policy name, subject, resource type, or scope",
+        "create": "Create policy",
+        "detailSubtitle": "Define data access boundaries with projects, tags, and classifications.",
+        "emptyTitle": "Select a data policy",
+        "emptyDescription": "Choose a policy from the list to review details, or create one from the toolbar.",
+        "listTitle": "Data policies",
+        "noListTitle": "No data policies",
+        "noListDescription": "No data policies match the current filters.",
+        "dialogTitle": "Create data policy",
+        "dialogDescription": "Define data access boundaries with subject, resource type, and scope conditions.",
+        "fields": {
+          "name": "Policy name",
+          "subjectType": "Subject type",
+          "subject": "Subject",
+          "resourceType": "Resource type",
+          "scopeType": "Scope type",
+          "projectIds": "Project scope",
+          "tags": "Tag scope",
+          "classifications": "Classification scope",
+          "effect": "Effect"
+        },
+        "hints": {
+          "projectIds": "Separate multiple project IDs with commas.",
+          "tags": "Separate multiple tags with commas.",
+          "classifications": "Separate multiple classifications with commas."
+        },
+        "actions": {
+          "create": "Create policy",
+          "save": "Save policy",
+          "delete": "Delete policy"
+        }
+      },
+      "resources": {
+        "toolbarSearch": "Search actions, subjects, or resources",
+        "filter": "Resource type",
+        "create": "Create policy",
+        "detailSubtitle": "Object-level policies control actions on concrete resources and tools.",
+        "emptyTitle": "Select a resource policy",
+        "emptyDescription": "Choose a policy from the list to review details, or create one from the toolbar.",
+        "listTitle": "Resource policies",
+        "noListTitle": "No resource policies",
+        "noListDescription": "No resource policies match the current filters.",
+        "dialogTitle": "Create resource policy",
+        "dialogDescription": "Define allow or deny behavior for a concrete resource object.",
+        "fields": {
+          "subjectType": "Subject type",
+          "subject": "Subject",
+          "resourceType": "Resource type",
+          "resource": "Resource",
+          "action": "Action",
+          "effect": "Effect"
+        },
+        "actions": {
+          "create": "Create policy",
+          "save": "Save policy",
+          "delete": "Delete policy"
+        }
+      },
+      "validation": {
+        "bindingRequired": "Choose both a role and a subject.",
+        "dataRequired": "Enter a policy name and choose a subject.",
+        "resourceRequired": "Choose a subject, choose a resource, and enter an action."
+      },
+      "feedback": {
+        "saveBindingFailed": "Failed to save role binding.",
+        "saveDataFailed": "Failed to save data policy.",
+        "saveResourceFailed": "Failed to save resource policy.",
+        "deleteBindingFailed": "Failed to delete role binding.",
+        "deleteDataFailed": "Failed to delete data policy.",
+        "deleteResourceFailed": "Failed to delete resource policy.",
+        "toastBindingSaved": "Role binding saved",
+        "toastBindingDeleted": "Role binding deleted",
+        "toastDataSaved": "Data policy saved",
+        "toastDataDeleted": "Data policy deleted",
+        "toastResourceSaved": "Resource policy saved",
+        "toastResourceDeleted": "Resource policy deleted"
+      }
+    },
+    "menus": {
+      "toolbar": {
+        "search": "Search menu name, route, or feature code",
+        "configured": "Configuration"
+      },
+      "detail": {
+        "title": "Menu policy",
+        "subtitle": "Menu codes are system-defined. Administrators only maintain policy, not the menu catalog.",
+        "emptyTitle": "Select a menu",
+        "emptyDescription": "Choose a menu from the list to review or edit policy."
+      },
+      "list": {
+        "title": "Menus",
+        "emptyTitle": "No menu definitions",
+        "emptyDescription": "No menu definitions match the current filters."
+      },
+      "fields": {
+        "enabled": "Enabled",
+        "enabledCheckbox": "Enable menu policy",
+        "order": "Order",
+        "group": "Group",
+        "visibility": "Visibility"
+      },
+      "badges": {
+        "gateAllow": "Feature gate allow",
+        "gateDeny": "Feature gate deny"
+      },
+      "actions": {
+        "save": "Save policy",
+        "create": "Create policy",
+        "delete": "Delete policy"
+      },
+      "feedback": {
+        "saveFailed": "Failed to save menu policy.",
+        "deleteFailed": "Failed to delete menu policy.",
+        "selectRequired": "Select a menu first.",
+        "toastSaved": "Menu policy saved",
+        "toastDeleted": "Menu policy deleted"
+      }
+    },
+    "resources": {
+      "toolbar": {
+        "search": "Search resource name, ID, tags, or project",
+        "resourceType": "Resource type"
+      },
+      "list": {
+        "title": "Resource directory",
+        "emptyTitle": "No resources",
+        "emptyDescription": "No resource records match the current filters."
+      },
+      "detail": {
+        "subtitle": "Maintain metadata first, then define object-level allow or deny policies.",
+        "emptyTitle": "Select a resource",
+        "emptyDescription": "Choose a resource from the list to review metadata and object policies.",
+        "tabs": {
+          "metadata": "Metadata",
+          "policies": "Object policies"
+        },
+        "policyEmptyTitle": "No object policies",
+        "policyEmptyDescription": "This resource does not have any object policies yet."
+      },
+      "fields": {
+        "resourceSubtype": "Resource subtype",
+        "projectId": "Project ID",
+        "tags": "Tags",
+        "classification": "Classification",
+        "ownerType": "Owner type",
+        "ownerId": "Owner subject",
+        "subjectType": "Subject type",
+        "subject": "Subject",
+        "action": "Action",
+        "effect": "Effect"
+      },
+      "hints": {
+        "tags": "Separate multiple tags with commas."
+      },
+      "actions": {
+        "saveMetadata": "Save metadata",
+        "createPolicy": "Add object policy",
+        "deletePolicy": "Delete"
+      },
+      "feedback": {
+        "selectRequired": "Select a protected resource first.",
+        "policyRequired": "Choose a subject and enter an action.",
+        "createPolicyFailed": "Failed to create the resource policy.",
+        "saveMetadataFailed": "Failed to save resource metadata.",
+        "deletePolicyFailed": "Failed to delete the resource policy.",
+        "toastPolicySaved": "Object policy saved",
+        "toastMetadataSaved": "Resource metadata saved",
+        "toastPolicyDeleted": "Object policy deleted"
+      }
+    },
+    "sessions": {
+      "tabs": {
+        "sessions": "Sessions",
+        "audit": "Audit"
+      },
+      "sessions": {
+        "toolbarStatus": "Session status",
+        "listTitle": "Sessions",
+        "emptyTitle": "Select a session",
+        "emptyDescription": "Choose a session from the list to review details and revoke it.",
+        "noListTitle": "No sessions",
+        "noListDescription": "No sessions match the current filters.",
+        "detailSubtitle": "Revocation takes effect on the next request made by the session.",
+        "columns": {
+          "session": "Session",
+          "createdAt": "Created",
+          "status": "Status"
+        },
+        "actions": {
+          "revokeSession": "Revoke this session",
+          "revokeUserSessions": "Revoke all sessions for this user"
+        }
+      },
+      "audit": {
+        "detailSubtitle": "Inspect actor, resource, and result details when tracing authorization or audit issues.",
+        "emptyTitle": "Select an audit record",
+        "emptyDescription": "Choose a record from the list to review details.",
+        "listTitle": "Audit log",
+        "noListTitle": "No audit records",
+        "noListDescription": "No audit events match the current filters.",
+        "fields": {
+          "actorId": "Actor ID",
+          "action": "Action",
+          "resourceType": "Resource type",
+          "outcome": "Outcome",
+          "from": "From",
+          "to": "To"
+        },
+        "columns": {
+          "action": "Action",
+          "resource": "Resource",
+          "createdAt": "Time",
+          "outcome": "Outcome"
+        },
+        "actions": {
+          "reset": "Reset",
+          "search": "Search audit",
+          "loadMore": "Load more"
+        },
+        "detailBlocks": {
+          "actor": "Actor",
+          "resource": "Resource",
+          "recordId": "Record ID"
+        }
+      },
+      "feedback": {
+        "searchFailed": "Failed to load audit records.",
+        "loadMoreFailed": "Failed to load more audit records.",
+        "toastSessionRevoked": "Session revoked",
+        "toastUserSessionsRevoked": "User sessions revoked"
+      }
     }
   },
   "personalCenter": {

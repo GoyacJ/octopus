@@ -7,6 +7,7 @@ import { createApp, nextTick } from 'vue'
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import * as tauriClient from '@/tauri/client'
 import ProjectsView from '@/views/workspace/ProjectsView.vue'
 import { useShellStore } from '@/stores/shell'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -47,7 +48,11 @@ function mountApp() {
   }
 }
 
-async function mountProjectsView(props?: Record<string, unknown>) {
+async function mountProjectsView(
+  props?: Record<string, unknown>,
+  workspaceId = 'ws-local',
+  projectId = 'proj-redesign',
+) {
   const pinia = createPinia()
   setActivePinia(pinia)
   const container = document.createElement('div')
@@ -59,7 +64,7 @@ async function mountProjectsView(props?: Record<string, unknown>) {
   app.mount(container)
 
   const shellStore = useShellStore()
-  await shellStore.bootstrap('ws-local', 'proj-redesign')
+  await shellStore.bootstrap(workspaceId, projectId)
   await nextTick()
 
   return {
@@ -124,6 +129,9 @@ describe('Workspace project management view', () => {
   })
 
   it('creates a new active project and persists workspace assignments', async () => {
+    vi.spyOn(tauriClient as unknown as { pickResourceDirectory: () => Promise<string | null> }, 'pickResourceDirectory')
+      .mockResolvedValue('/workspace/projects/agent-studio/resources')
+
     const mounted = mountApp()
     const workspaceStore = useWorkspaceStore()
 
@@ -135,11 +143,17 @@ describe('Workspace project management view', () => {
     expect(nameInput).not.toBeNull()
     expect(descriptionInput).not.toBeNull()
     expect(defaultModelSelect).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="projects-resource-directory-pick"]')).not.toBeNull()
 
     nameInput!.value = 'Agent Studio'
     nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
     descriptionInput!.value = 'Project management workspace surface.'
     descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-resource-directory-pick"]')?.click()
+    await waitFor(() =>
+      mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-resource-directory-path"]')?.value
+        === '/workspace/projects/agent-studio/resources',
+    )
 
     mounted.container.querySelector<HTMLElement>('[aria-label="Claude Primary"]')?.click()
     await nextTick()
@@ -176,6 +190,113 @@ describe('Workspace project management view', () => {
     mounted.destroy()
   })
 
+  it('requires selecting a resource directory when creating a project', async () => {
+    vi.spyOn(tauriClient as unknown as { pickResourceDirectory: () => Promise<string | null> }, 'pickResourceDirectory')
+      .mockResolvedValue('/workspace/projects/agent-studio/resources')
+
+    const mounted = mountApp()
+    const workspaceStore = useWorkspaceStore()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-resource-directory-pick"]') !== null)
+
+    const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-name-input"]')
+    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="projects-description-input"]')
+    const resourceDirectoryPath = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-resource-directory-path"]')
+    const pickButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-resource-directory-pick"]')
+
+    expect(resourceDirectoryPath).not.toBeNull()
+    expect(pickButton).not.toBeNull()
+
+    nameInput!.value = 'Agent Studio'
+    nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    descriptionInput!.value = 'Project management workspace surface.'
+    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
+
+    pickButton!.click()
+    await waitFor(() => resourceDirectoryPath!.value === '/workspace/projects/agent-studio/resources')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-create-button"]')?.click()
+
+    await waitFor(() => workspaceStore.projects.some(project => project.name === 'Agent Studio'))
+
+    const created = workspaceStore.projects.find(project => project.name === 'Agent Studio')
+    expect(created?.resourceDirectory).toBe('/workspace/projects/agent-studio/resources')
+
+    mounted.destroy()
+  })
+
+  it('creates a project with a remotely selected resource directory', async () => {
+    const pickResourceDirectorySpy = vi.spyOn(
+      tauriClient as unknown as { pickResourceDirectory: () => Promise<string | null> },
+      'pickResourceDirectory',
+    ).mockResolvedValue('/local/path/should/not/be/used')
+
+    const mounted = await mountProjectsView(undefined, 'ws-enterprise', 'proj-launch')
+    const shellStore = useShellStore()
+    const workspaceStore = useWorkspaceStore()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-resource-directory-pick"]') !== null)
+
+    expect(shellStore.activeWorkspaceConnection?.workspaceId).toBe('ws-enterprise')
+    expect(shellStore.activeWorkspaceConnection?.transportSecurity).toBe('trusted')
+
+    const nameInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-name-input"]')
+    const descriptionInput = mounted.container.querySelector<HTMLTextAreaElement>('[data-testid="projects-description-input"]')
+    const resourceDirectoryPath = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-resource-directory-path"]')
+
+    nameInput!.value = 'Remote Studio'
+    nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    descriptionInput!.value = 'Remote project resource directory selection.'
+    descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-resource-directory-pick"]')?.click()
+
+    await waitFor(() => document.body.querySelector('[data-testid="remote-resource-directory-dialog"]') !== null)
+
+    const waitForDialogPath = async (path: string) => {
+      await waitFor(() =>
+        document.body.querySelector('[data-testid="remote-resource-directory-dialog"]')?.textContent?.includes(path) ?? false,
+      )
+    }
+
+    const clickDialogEntry = async (label: string, expectedPath: string) => {
+      await waitFor(() => {
+        const dialog = document.body.querySelector('[data-testid="remote-resource-directory-dialog"]')
+        return Array.from(dialog?.querySelectorAll('button') ?? [])
+          .some(item => item.textContent?.includes(label))
+      })
+
+      const dialog = document.body.querySelector('[data-testid="remote-resource-directory-dialog"]')
+      const button = Array.from(dialog?.querySelectorAll('button') ?? [])
+        .find(item => item.textContent?.includes(label))
+      button?.click()
+      await waitForDialogPath(expectedPath)
+    }
+
+    await waitForDialogPath('/remote')
+    await clickDialogEntry('projects', '/remote/projects')
+    await clickDialogEntry('launch-readiness', '/remote/projects/launch-readiness')
+    await clickDialogEntry('resources', '/remote/projects/launch-readiness/resources')
+
+    Array.from(document.body.querySelectorAll('button'))
+      .find(button => button.textContent?.includes(String(i18n.global.t('resources.remoteBrowser.actions.chooseCurrent'))))
+      ?.click()
+
+    await waitFor(() =>
+      resourceDirectoryPath?.value === '/remote/projects/launch-readiness/resources',
+    )
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-create-button"]')?.click()
+
+    await waitFor(() => workspaceStore.projects.some(project => project.name === 'Remote Studio'))
+
+    const created = workspaceStore.projects.find(project => project.name === 'Remote Studio')
+    expect(created?.resourceDirectory).toBe('/remote/projects/launch-readiness/resources')
+    expect(pickResourceDirectorySpy).not.toHaveBeenCalled()
+
+    mounted.destroy()
+  })
+
   it('selects the edited project as the active project scope for downstream project surfaces', async () => {
     const mounted = mountApp()
     const workspaceStore = useWorkspaceStore()
@@ -204,13 +325,13 @@ describe('Workspace project management view', () => {
     await waitFor(() =>
       workspaceStore.currentProjectId === 'proj-governance'
       && mounted.container.textContent?.includes('Workspace Governance')
-      && mounted.container.textContent?.includes('archived'),
+      && mounted.container.textContent?.includes(String(i18n.global.t('projects.status.archived'))),
     )
 
     expect(workspaceStore.currentProjectId).toBe('proj-governance')
     expect(mounted.container.querySelector('[data-testid="sidebar-project-proj-redesign"]')).toBeNull()
     expect(mounted.container.textContent).toContain('Desktop Redesign')
-    expect(mounted.container.textContent).toContain('archived')
+    expect(mounted.container.textContent).toContain(String(i18n.global.t('projects.status.archived')))
 
     mounted.destroy()
   })
@@ -223,7 +344,9 @@ describe('Workspace project management view', () => {
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-select-proj-redesign"]')?.click()
     await nextTick()
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-archive-button"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes('archived') ?? false)
+    await waitFor(() =>
+      mounted.container.textContent?.includes(String(i18n.global.t('projects.status.archived'))) ?? false,
+    )
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-select-proj-governance"]')?.click()
     await nextTick()

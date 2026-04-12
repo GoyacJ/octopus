@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { enumLabel, resolveCopy, translate } from '@/i18n/copy'
+import { enumLabel, formatList, resolveCopy, translate } from '@/i18n/copy'
 import i18n from '@/plugins/i18n'
 
 const originalLocale = i18n.global.locale.value
@@ -36,7 +36,7 @@ describe('desktop i18n smoke coverage', () => {
     expect(translate('accessControl.nav.roles')).toBe('角色管理')
     expect(translate('accessControl.nav.policies')).toBe('权限与策略')
     expect(translate('accessControl.nav.menus')).toBe('菜单管理')
-    expect(translate('accessControl.nav.resources')).toBe('资源授权')
+    expect(translate('accessControl.nav.resources')).toBe('资源与授权')
     expect(translate('accessControl.nav.sessions')).toBe('会话与审计')
     expect(translate('personalCenter.profile.edit.title')).toBe('编辑个人资料')
     expect(translate('personalCenter.profile.access.title')).toBe('访问概览')
@@ -84,7 +84,7 @@ describe('desktop i18n smoke coverage', () => {
     expect(translate('accessControl.nav.roles')).toBe('Roles')
     expect(translate('accessControl.nav.policies')).toBe('Permissions & Policies')
     expect(translate('accessControl.nav.menus')).toBe('Menus')
-    expect(translate('accessControl.nav.resources')).toBe('Resource Access')
+    expect(translate('accessControl.nav.resources')).toBe('Resources & Authorization')
     expect(translate('accessControl.nav.sessions')).toBe('Sessions & Audit')
     expect(translate('personalCenter.profile.edit.title')).toBe('Edit Profile')
     expect(translate('personalCenter.profile.access.title')).toBe('Access Overview')
@@ -106,5 +106,15 @@ describe('desktop i18n smoke coverage', () => {
     expect(translate('tools.ownerScopes.builtin')).toBe('Built-in')
     expect(translate('tools.ownerScopes.workspace')).toBe('Workspace')
     expect(translate('tools.ownerScopes.project')).toBe('Project')
+    expect(translate('accessControl.common.capabilityModules.workspace')).toBe('Workspace')
+    expect(translate('accessControl.common.capabilityModules.providerCredential')).toBe('Provider Credentials')
+  })
+
+  it('formats localized list separators for access-control summaries', () => {
+    i18n.global.locale.value = 'zh-CN'
+    expect(formatList(['项目一', '项目二', '项目三'])).toBe('项目一、项目二、项目三')
+
+    i18n.global.locale.value = 'en-US'
+    expect(formatList(['Project One', 'Project Two', 'Project Three'])).toBe('Project One, Project Two, and Project Three')
   })
 })

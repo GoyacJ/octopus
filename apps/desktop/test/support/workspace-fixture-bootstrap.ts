@@ -41,11 +41,32 @@ export const WORKSPACE_SESSIONS: WorkspaceSessionTokenEnvelope[] = WORKSPACE_CON
   },
 }))
 
+export function createWorkspaceSessionEnvelope(
+  connection: WorkspaceConnectionRecord,
+  userId = 'user-owner',
+): WorkspaceSessionTokenEnvelope {
+  return {
+    workspaceConnectionId: connection.workspaceConnectionId,
+    token: `token-${connection.workspaceId}-${userId}`,
+    issuedAt: 1,
+    session: {
+      id: `sess-${connection.workspaceId}-${userId}`,
+      workspaceId: connection.workspaceId,
+      userId,
+      clientAppId: 'octopus-desktop',
+      token: `token-${connection.workspaceId}-${userId}`,
+      status: 'active',
+      createdAt: 1,
+      expiresAt: undefined,
+    },
+  }
+}
+
 export function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
 }
 
-export function createHostBootstrap(): ShellBootstrap {
+export function createHostBootstrap(locale = 'zh-CN'): ShellBootstrap {
   return {
     hostState: {
       platform: 'tauri',
@@ -56,7 +77,7 @@ export function createHostBootstrap(): ShellBootstrap {
     },
     preferences: {
       theme: 'system',
-      locale: 'zh-CN',
+      locale,
       compactSidebar: false,
       leftSidebarCollapsed: false,
       rightSidebarCollapsed: false,

@@ -474,6 +474,7 @@ pub(crate) fn default_owner_permission_codes() -> Vec<String> {
         "resource.upload",
         "resource.update",
         "resource.delete",
+        "resource.publish",
         "resource.export",
         "resource.grant",
         "knowledge.view",

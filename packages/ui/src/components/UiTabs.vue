@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import { cn } from '../lib/utils'
 
@@ -20,13 +21,29 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [value: string]
 }>()
+
+const pendingValue = ref<string | null>(null)
+
+function emitValue(value: string) {
+  if (pendingValue.value === value) {
+    return
+  }
+
+  pendingValue.value = value
+  emit('update:modelValue', value)
+  queueMicrotask(() => {
+    if (pendingValue.value === value) {
+      pendingValue.value = null
+    }
+  })
+}
 </script>
 
 <template>
   <TabsRoot
     :model-value="props.modelValue"
     :data-testid="props.testId || undefined"
-    @update:model-value="emit('update:modelValue', $event)"
+    @update:model-value="emitValue"
   >
     <TabsList
       data-testid="ui-tabs-list"
@@ -51,7 +68,7 @@ const emit = defineEmits<{
           'data-[state=inactive]:text-text-tertiary data-[state=inactive]:hover:text-text-secondary'
         )"
         :data-testid="`ui-tabs-trigger-${tab.value}`"
-        @click="emit('update:modelValue', tab.value)"
+        @click="emitValue(tab.value)"
       >
         {{ tab.label }}
       </TabsTrigger>

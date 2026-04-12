@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 248650492ba57367e5f30a5d9531908b110b9b76392b88e5b5a754ec4128ec26
+// Source hash: 4842ab9309c7b26af58d21e28628c35fc3a19ac135074e6d321f06e179c20bdf
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "248650492ba57367e5f30a5d9531908b110b9b76392b88e5b5a754ec4128ec26"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "4842ab9309c7b26af58d21e28628c35fc3a19ac135074e6d321f06e179c20bdf"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -246,10 +246,20 @@ export interface CreateNotificationInput {
   toastDurationMs?: number
 }
 
+export interface CreateProjectPromotionRequestInput {
+  assetId: string
+  assetType: ProjectAssetType
+}
+
 export interface CreateProjectRequest {
   assignments?: ProjectWorkspaceAssignments
   description: string
+  linkedWorkspaceAssets?: ProjectLinkedWorkspaceAssets
+  memberUserIds?: string[]
   name: string
+  ownerUserId?: string
+  permissionOverrides?: ProjectPermissionOverrides
+  resourceDirectory: string
 }
 
 export interface CreateRuntimeSessionInput {
@@ -269,8 +279,10 @@ export interface CreateWorkspaceResourceInput {
   location?: string
   name: string
   projectId?: string
+  scope?: WorkspaceResourceScope
   sourceArtifactId?: string
   tags?: string[]
+  visibility?: WorkspaceResourceVisibility
 }
 
 export interface CreateWorkspaceSkillInput {
@@ -849,6 +861,8 @@ export interface ProjectAgentLinkRecord {
   workspaceId: string
 }
 
+export type ProjectAssetType = "agent" | "resource" | "knowledge" | "tool.skill" | "tool.mcp"
+
 export interface ProjectDashboardSnapshot {
   metrics: WorkspaceMetricRecord[]
   project: ProjectRecord
@@ -856,16 +870,65 @@ export interface ProjectDashboardSnapshot {
   recentConversations: ConversationRecord[]
 }
 
+export interface ProjectDefaultPermissions {
+  agents: ProjectDefaultPermissionValue
+  knowledge: ProjectDefaultPermissionValue
+  resources: ProjectDefaultPermissionValue
+  tools: ProjectDefaultPermissionValue
+}
+
+export type ProjectDefaultPermissionValue = "allow" | "deny"
+
+export interface ProjectLinkedWorkspaceAssets {
+  agentIds: string[]
+  knowledgeIds: string[]
+  resourceIds: string[]
+  toolSourceKeys: string[]
+}
+
 export interface ProjectModelAssignments {
   configuredModelIds: string[]
   defaultConfiguredModelId: string
 }
 
+export interface ProjectPermissionOverrides {
+  agents: ProjectPermissionOverrideValue
+  knowledge: ProjectPermissionOverrideValue
+  resources: ProjectPermissionOverrideValue
+  tools: ProjectPermissionOverrideValue
+}
+
+export type ProjectPermissionOverrideValue = "inherit" | "allow" | "deny"
+
+export interface ProjectPromotionRequest {
+  assetId: string
+  assetType: ProjectAssetType
+  createdAt: number
+  id: string
+  projectId: string
+  requestedByUserId: string
+  requiredWorkspaceCapability: string
+  reviewComment?: string
+  reviewedAt?: number
+  reviewedByUserId?: string
+  status: ProjectPromotionRequestStatus
+  submittedByOwnerUserId: string
+  updatedAt: number
+  workspaceId: string
+}
+
+export type ProjectPromotionRequestStatus = "pending" | "approved" | "rejected"
+
 export interface ProjectRecord {
   assignments?: ProjectWorkspaceAssignments
   description: string
   id: string
+  linkedWorkspaceAssets: ProjectLinkedWorkspaceAssets
+  memberUserIds: string[]
   name: string
+  ownerUserId: string
+  permissionOverrides: ProjectPermissionOverrides
+  resourceDirectory: string
   status: "active" | "archived"
   workspaceId: string
 }
@@ -894,6 +957,10 @@ export interface ProjectWorkspaceAssignments {
   agents?: ProjectAgentAssignments
   models?: ProjectModelAssignments
   tools?: ProjectToolAssignments
+}
+
+export interface PromoteWorkspaceResourceInput {
+  scope: WorkspaceResourceScope
 }
 
 export interface ProtectedResourceDescriptor {
@@ -975,6 +1042,13 @@ export interface ResourcePolicyUpsertRequest {
   resourceType: string
   subjectId: string
   subjectType: string
+}
+
+export type ResourcePreviewKind = "text" | "code" | "markdown" | "image" | "pdf" | "audio" | "video" | "folder" | "binary" | "url"
+
+export interface ReviewProjectPromotionRequestInput {
+  approved: boolean
+  reviewComment?: string
 }
 
 export type RiskLevel = "low" | "medium" | "high"
@@ -1332,7 +1406,12 @@ export interface UpdateCurrentUserProfileRequest {
 export interface UpdateProjectRequest {
   assignments?: ProjectWorkspaceAssignments
   description: string
+  linkedWorkspaceAssets?: ProjectLinkedWorkspaceAssets
+  memberUserIds?: string[]
   name: string
+  ownerUserId?: string
+  permissionOverrides?: ProjectPermissionOverrides
+  resourceDirectory: string
   status: "active" | "archived"
 }
 
@@ -1341,6 +1420,7 @@ export interface UpdateWorkspaceResourceInput {
   name?: string
   status?: ViewStatus
   tags?: string[]
+  visibility?: WorkspaceResourceVisibility
 }
 
 export interface UpdateWorkspaceSkillFileInput {
@@ -1479,6 +1559,17 @@ export interface WorkspaceConnectionRecord {
 
 export type WorkspaceConnectionStatus = "connected" | "disconnected" | "expired" | "unreachable"
 
+export interface WorkspaceDirectoryBrowserEntry {
+  name: string
+  path: string
+}
+
+export interface WorkspaceDirectoryBrowserResponse {
+  currentPath: string
+  entries: WorkspaceDirectoryBrowserEntry[]
+  parentPath?: string
+}
+
 export type WorkspaceDirectoryUploadEntry = WorkspaceFileUploadPayload & {
   relativePath: string
 }
@@ -1535,6 +1626,27 @@ export interface WorkspaceOverviewSnapshot {
   workspace: WorkspaceSummary
 }
 
+export interface WorkspaceResourceChildrenRecord {
+  byteSize?: number
+  contentType?: string
+  kind: ProjectResourceKind
+  name: string
+  previewKind: ResourcePreviewKind
+  relativePath: string
+  updatedAt: number
+}
+
+export interface WorkspaceResourceContentDocument {
+  byteSize?: number
+  contentType?: string
+  dataBase64?: string
+  externalUrl?: string
+  fileName?: string
+  previewKind: ResourcePreviewKind
+  resourceId: string
+  textContent?: string
+}
+
 export interface WorkspaceResourceFolderUploadEntry {
   byteSize: number
   contentType: string
@@ -1543,19 +1655,39 @@ export interface WorkspaceResourceFolderUploadEntry {
   relativePath: string
 }
 
+export interface WorkspaceResourceImportInput {
+  files: WorkspaceResourceFolderUploadEntry[]
+  name: string
+  rootDirName?: string
+  scope: WorkspaceResourceScope
+  tags?: string[]
+  visibility: WorkspaceResourceVisibility
+}
+
 export interface WorkspaceResourceRecord {
+  byteSize?: number
+  contentType?: string
   id: string
   kind: ProjectResourceKind
   location?: string
   name: string
   origin: ProjectResourceOrigin
+  ownerUserId: string
+  previewKind: ResourcePreviewKind
   projectId?: string
+  scope: WorkspaceResourceScope
   sourceArtifactId?: string
   status: ViewStatus
+  storagePath?: string
   tags: string[]
   updatedAt: number
+  visibility: WorkspaceResourceVisibility
   workspaceId: string
 }
+
+export type WorkspaceResourceScope = "personal" | "project" | "workspace"
+
+export type WorkspaceResourceVisibility = "private" | "public"
 
 export interface WorkspaceSessionTokenEnvelope {
   expiresAt?: number
@@ -1637,6 +1769,7 @@ export interface WorkspaceSummary {
   listenAddress: string
   name: string
   ownerUserId?: string
+  projectDefaultPermissions: ProjectDefaultPermissions
   slug: string
 }
 
@@ -1877,6 +2010,10 @@ export interface OctopusApiPaths {
   "/api/v1/projects/{projectId}/pet/presence": {
     patch: { operationId: "saveProjectPetPresence"; response: PetPresenceState; error: ApiErrorEnvelope }
   }
+  "/api/v1/projects/{projectId}/promotion-requests": {
+    get: { operationId: "listProjectPromotionRequests"; response: ProjectPromotionRequest[]; error: ApiErrorEnvelope }
+    post: { operationId: "createProjectPromotionRequest"; response: ProjectPromotionRequest; error: ApiErrorEnvelope }
+  }
   "/api/v1/projects/{projectId}/resources": {
     get: { operationId: "listProjectResources"; response: WorkspaceResourceRecord[]; error: ApiErrorEnvelope }
     post: { operationId: "createProjectResource"; response: WorkspaceResourceRecord; error: ApiErrorEnvelope }
@@ -1887,6 +2024,9 @@ export interface OctopusApiPaths {
   }
   "/api/v1/projects/{projectId}/resources/folder": {
     post: { operationId: "createProjectResourceFolder"; response: WorkspaceResourceRecord[]; error: ApiErrorEnvelope }
+  }
+  "/api/v1/projects/{projectId}/resources/import": {
+    post: { operationId: "importProjectResource"; response: WorkspaceResourceRecord; error: ApiErrorEnvelope }
   }
   "/api/v1/projects/{projectId}/runtime-config": {
     get: { operationId: "getProjectRuntimeConfig"; response: RuntimeEffectiveConfig; error: ApiErrorEnvelope }
@@ -1904,6 +2044,18 @@ export interface OctopusApiPaths {
   }
   "/api/v1/projects/{projectId}/teams/{teamId}/copy-to-project": {
     post: { operationId: "copyProjectTeamToProject"; response: ImportWorkspaceAgentBundleResult; error: ApiErrorEnvelope }
+  }
+  "/api/v1/resources/{resourceId}": {
+    get: { operationId: "getWorkspaceResourceDetail"; response: WorkspaceResourceRecord; error: ApiErrorEnvelope }
+  }
+  "/api/v1/resources/{resourceId}/children": {
+    get: { operationId: "listWorkspaceResourceChildren"; response: WorkspaceResourceChildrenRecord[]; error: ApiErrorEnvelope }
+  }
+  "/api/v1/resources/{resourceId}/content": {
+    get: { operationId: "getWorkspaceResourceContent"; response: WorkspaceResourceContentDocument; error: ApiErrorEnvelope }
+  }
+  "/api/v1/resources/{resourceId}/promote": {
+    post: { operationId: "promoteWorkspaceResource"; response: WorkspaceResourceRecord; error: ApiErrorEnvelope }
   }
   "/api/v1/runtime/bootstrap": {
     get: { operationId: "getRuntimeBootstrap"; response: RuntimeBootstrap; error: ApiErrorEnvelope }
@@ -2041,6 +2193,9 @@ export interface OctopusApiPaths {
     patch: { operationId: "updateWorkspaceTool"; response: ToolRecord; error: ApiErrorEnvelope }
     delete: { operationId: "deleteWorkspaceTool"; response: void; error: ApiErrorEnvelope }
   }
+  "/api/v1/workspace/filesystem/directories": {
+    get: { operationId: "listWorkspaceFilesystemDirectories"; response: WorkspaceDirectoryBrowserResponse; error: ApiErrorEnvelope }
+  }
   "/api/v1/workspace/knowledge": {
     get: { operationId: "listWorkspaceKnowledge"; response: KnowledgeRecord[]; error: ApiErrorEnvelope }
   }
@@ -2069,6 +2224,12 @@ export interface OctopusApiPaths {
   "/api/v1/workspace/pet/presence": {
     patch: { operationId: "saveWorkspacePetPresence"; response: PetPresenceState; error: ApiErrorEnvelope }
   }
+  "/api/v1/workspace/promotion-requests": {
+    get: { operationId: "listWorkspacePromotionRequests"; response: ProjectPromotionRequest[]; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/promotion-requests/{requestId}/review": {
+    post: { operationId: "reviewProjectPromotionRequest"; response: ProjectPromotionRequest; error: ApiErrorEnvelope }
+  }
   "/api/v1/workspace/resources": {
     get: { operationId: "listWorkspaceResources"; response: WorkspaceResourceRecord[]; error: ApiErrorEnvelope }
     post: { operationId: "createWorkspaceResource"; response: WorkspaceResourceRecord; error: ApiErrorEnvelope }
@@ -2076,6 +2237,9 @@ export interface OctopusApiPaths {
   "/api/v1/workspace/resources/{resourceId}": {
     patch: { operationId: "updateWorkspaceResource"; response: WorkspaceResourceRecord; error: ApiErrorEnvelope }
     delete: { operationId: "deleteWorkspaceResource"; response: void; error: ApiErrorEnvelope }
+  }
+  "/api/v1/workspace/resources/import": {
+    post: { operationId: "importWorkspaceResource"; response: WorkspaceResourceRecord; error: ApiErrorEnvelope }
   }
   "/api/v1/workspace/teams": {
     get: { operationId: "listWorkspaceTeams"; response: TeamRecord[]; error: ApiErrorEnvelope }

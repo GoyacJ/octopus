@@ -4,60 +4,175 @@ export interface UiSelectOption {
   disabled?: boolean
 }
 
-export const statusOptions: UiSelectOption[] = [
-  { label: '启用', value: 'active' },
-  { label: '禁用', value: 'disabled' },
-]
+type Translate = (key: string, params?: Record<string, unknown>) => string
 
-export const policyEffectOptions: UiSelectOption[] = [
-  { label: '允许', value: 'allow' },
-  { label: '拒绝', value: 'deny' },
-]
+function translated(t: Translate, key: string, fallback: string) {
+  const label = t(key)
+  return label === key ? fallback : label
+}
 
-export const subjectTypeOptions: UiSelectOption[] = [
-  { label: '用户', value: 'user' },
-  { label: '部门', value: 'org_unit' },
-  { label: '岗位', value: 'position' },
-  { label: '用户组', value: 'user_group' },
-]
+function optionLabel(t: Translate, namespace: string, value: string) {
+  return translated(t, `accessControl.common.options.${namespace}.${value}`, value)
+}
 
-export const scopeTypeOptions: UiSelectOption[] = [
-  { label: '全部范围', value: 'all' },
-  { label: '选定项目', value: 'selected-projects' },
-  { label: '直属部门', value: 'org-unit-self' },
-  { label: '部门及子部门', value: 'org-unit-subtree' },
-  { label: '标签匹配', value: 'tag-match' },
-]
+function resourceTypeOptionKey(value: string) {
+  switch (value) {
+    case 'tool.builtin':
+      return 'toolBuiltin'
+    case 'tool.skill':
+      return 'toolSkill'
+    case 'tool.mcp':
+      return 'toolMcp'
+    default:
+      return value
+  }
+}
 
-export const menuVisibilityOptions: UiSelectOption[] = [
-  { label: '跟随授权', value: 'inherit' },
-  { label: '始终显示', value: 'visible' },
-  { label: '始终隐藏', value: 'hidden' },
-]
+function capabilityModuleKey(value: string) {
+  const [rawPrefix = value] = value.split('.')
+  if (rawPrefix === 'provider-credential') {
+    return 'providerCredential'
+  }
+  return rawPrefix
+}
 
-export const classificationOptions: UiSelectOption[] = [
-  { label: '内部', value: 'internal' },
-  { label: '机密', value: 'confidential' },
-  { label: '限制', value: 'restricted' },
-  { label: '绝密', value: 'secret' },
-]
+function menuSourceOptionKey(value: string) {
+  switch (value) {
+    case 'access-control':
+      return 'accessControl'
+    case 'main-sidebar':
+      return 'mainSidebar'
+    default:
+      return value
+  }
+}
 
-export const dataResourceTypeOptions: UiSelectOption[] = [
-  { label: '项目', value: 'project' },
-  { label: 'Agent', value: 'agent' },
-  { label: '资源', value: 'resource' },
-  { label: '知识', value: 'knowledge' },
-  { label: '工具', value: 'tool' },
-]
+export function createStatusOptions(t: Translate): UiSelectOption[] {
+  return [
+    { label: optionLabel(t, 'status', 'active'), value: 'active' },
+    { label: optionLabel(t, 'status', 'disabled'), value: 'disabled' },
+  ]
+}
 
-export const resourceTypeOptions: UiSelectOption[] = [
-  { label: 'Agent', value: 'agent' },
-  { label: '资源', value: 'resource' },
-  { label: '知识', value: 'knowledge' },
-  { label: '内置工具', value: 'tool.builtin' },
-  { label: 'Skill 工具', value: 'tool.skill' },
-  { label: 'MCP 工具', value: 'tool.mcp' },
-]
+export function createPolicyEffectOptions(t: Translate): UiSelectOption[] {
+  return [
+    { label: optionLabel(t, 'policyEffect', 'allow'), value: 'allow' },
+    { label: optionLabel(t, 'policyEffect', 'deny'), value: 'deny' },
+  ]
+}
+
+export function createSubjectTypeOptions(t: Translate): UiSelectOption[] {
+  return [
+    { label: optionLabel(t, 'subjectType', 'user'), value: 'user' },
+    { label: optionLabel(t, 'subjectType', 'org_unit'), value: 'org_unit' },
+    { label: optionLabel(t, 'subjectType', 'position'), value: 'position' },
+    { label: optionLabel(t, 'subjectType', 'user_group'), value: 'user_group' },
+  ]
+}
+
+export function createScopeTypeOptions(t: Translate): UiSelectOption[] {
+  return [
+    { label: optionLabel(t, 'scopeType', 'all'), value: 'all' },
+    { label: optionLabel(t, 'scopeType', 'selected-projects'), value: 'selected-projects' },
+    { label: optionLabel(t, 'scopeType', 'org-unit-self'), value: 'org-unit-self' },
+    { label: optionLabel(t, 'scopeType', 'org-unit-subtree'), value: 'org-unit-subtree' },
+    { label: optionLabel(t, 'scopeType', 'tag-match'), value: 'tag-match' },
+  ]
+}
+
+export function createMenuVisibilityOptions(t: Translate): UiSelectOption[] {
+  return [
+    { label: optionLabel(t, 'menuVisibility', 'inherit'), value: 'inherit' },
+    { label: optionLabel(t, 'menuVisibility', 'visible'), value: 'visible' },
+    { label: optionLabel(t, 'menuVisibility', 'hidden'), value: 'hidden' },
+  ]
+}
+
+export function createClassificationOptions(t: Translate): UiSelectOption[] {
+  return [
+    { label: optionLabel(t, 'classification', 'internal'), value: 'internal' },
+    { label: optionLabel(t, 'classification', 'confidential'), value: 'confidential' },
+    { label: optionLabel(t, 'classification', 'restricted'), value: 'restricted' },
+    { label: optionLabel(t, 'classification', 'secret'), value: 'secret' },
+  ]
+}
+
+export function createDataResourceTypeOptions(t: Translate): UiSelectOption[] {
+  return [
+    { label: optionLabel(t, 'dataResourceType', 'project'), value: 'project' },
+    { label: optionLabel(t, 'dataResourceType', 'agent'), value: 'agent' },
+    { label: optionLabel(t, 'dataResourceType', 'resource'), value: 'resource' },
+    { label: optionLabel(t, 'dataResourceType', 'knowledge'), value: 'knowledge' },
+    { label: optionLabel(t, 'dataResourceType', 'tool'), value: 'tool' },
+  ]
+}
+
+export function createResourceTypeOptions(t: Translate): UiSelectOption[] {
+  return [
+    { label: optionLabel(t, 'resourceType', resourceTypeOptionKey('agent')), value: 'agent' },
+    { label: optionLabel(t, 'resourceType', resourceTypeOptionKey('resource')), value: 'resource' },
+    { label: optionLabel(t, 'resourceType', resourceTypeOptionKey('knowledge')), value: 'knowledge' },
+    { label: optionLabel(t, 'resourceType', resourceTypeOptionKey('tool.builtin')), value: 'tool.builtin' },
+    { label: optionLabel(t, 'resourceType', resourceTypeOptionKey('tool.skill')), value: 'tool.skill' },
+    { label: optionLabel(t, 'resourceType', resourceTypeOptionKey('tool.mcp')), value: 'tool.mcp' },
+  ]
+}
+
+export function createAuditOutcomeOptions(t: Translate): UiSelectOption[] {
+  return [
+    { label: optionLabel(t, 'auditOutcome', 'success'), value: 'success' },
+    { label: optionLabel(t, 'auditOutcome', 'denied'), value: 'denied' },
+    { label: optionLabel(t, 'auditOutcome', 'failure'), value: 'failure' },
+    { label: optionLabel(t, 'auditOutcome', 'locked'), value: 'locked' },
+  ]
+}
+
+export function getStatusLabel(t: Translate, value: string): string {
+  return optionLabel(t, 'status', value)
+}
+
+export function getPolicyEffectLabel(t: Translate, value: string): string {
+  return optionLabel(t, 'policyEffect', value)
+}
+
+export function getSubjectTypeLabel(t: Translate, value: string): string {
+  return optionLabel(t, 'subjectType', value)
+}
+
+export function getScopeTypeLabel(t: Translate, value: string): string {
+  return optionLabel(t, 'scopeType', value)
+}
+
+export function getMenuVisibilityLabel(t: Translate, value: string): string {
+  return optionLabel(t, 'menuVisibility', value)
+}
+
+export function getClassificationLabel(t: Translate, value: string): string {
+  return optionLabel(t, 'classification', value)
+}
+
+export function getDataResourceTypeLabel(t: Translate, value: string): string {
+  return optionLabel(t, 'dataResourceType', value)
+}
+
+export function getResourceTypeLabel(t: Translate, value: string): string {
+  if (value.startsWith('access.')) {
+    return value
+  }
+  return optionLabel(t, 'resourceType', resourceTypeOptionKey(value))
+}
+
+export function getCapabilityModuleLabel(t: Translate, value: string): string {
+  return translated(t, `accessControl.common.capabilityModules.${capabilityModuleKey(value)}`, value)
+}
+
+export function getMenuSourceLabel(t: Translate, value: string): string {
+  return translated(t, `accessControl.common.menuSources.${menuSourceOptionKey(value)}`, value)
+}
+
+export function getAuditOutcomeLabel(t: Translate, value: string): string {
+  return optionLabel(t, 'auditOutcome', value)
+}
 
 export function parseListInput(value: string): string[] {
   return Array.from(

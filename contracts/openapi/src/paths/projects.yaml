@@ -83,6 +83,57 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/projects/{projectId}/promotion-requests:
+  get:
+    operationId: listProjectPromotionRequests
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              items:
+                $ref: "#/components/schemas/ProjectPromotionRequest"
+              type: array
+        description: Project promotion request payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+  post:
+    operationId: createProjectPromotionRequest
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CreateProjectPromotionRequestInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectPromotionRequest"
+        description: Created project promotion request payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/projects/{projectId}/agent-links:
   get:
     operationId: listProjectAgentLinks
@@ -494,6 +545,34 @@
                 $ref: "#/components/schemas/WorkspaceResourceRecord"
               type: array
         description: Created project folder resource payload.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
+/api/v1/projects/{projectId}/resources/import:
+  post:
+    operationId: importProjectResource
+    parameters:
+      - in: path
+        name: projectId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/WorkspaceResourceImportInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkspaceResourceRecord"
+        description: Imported project resource payload.
       default:
         content:
           application/json:

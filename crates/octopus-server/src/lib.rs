@@ -34,8 +34,9 @@ use octopus_core::{
     ClientAppRecord, ConnectionProfile, ConversationRecord, CopyWorkspaceSkillToManagedInput,
     CreateHostWorkspaceConnectionInput, CreateMenuPolicyRequest, CreateNotificationInput,
     CreateProjectRequest, CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput,
-    CreateWorkspaceSkillInput, DataPolicyRecord, DataPolicyUpsertRequest, DesktopBackendConnection,
-    FeatureDefinition, HealthcheckBackendStatus, HealthcheckStatus, HostReleaseSummary, HostState,
+    CreateWorkspaceSkillInput, DataPolicyRecord,
+    DataPolicyUpsertRequest, DesktopBackendConnection, FeatureDefinition,
+    HealthcheckBackendStatus, HealthcheckStatus, HostReleaseSummary, HostState,
     HostUpdateStatus, HostWorkspaceConnectionRecord, ImportWorkspaceAgentBundleInput,
     ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
     ImportWorkspaceAgentBundleResult, ImportWorkspaceSkillArchiveInput,
@@ -45,19 +46,23 @@ use octopus_core::{
     OrgUnitUpsertRequest, PermissionDefinition, PetConversationBinding, PetPresenceState,
     PetWorkspaceSnapshot, PositionRecord, PositionUpsertRequest, ProjectAgentLinkInput,
     ProjectAgentLinkRecord, ProjectDashboardSnapshot, ProjectRecord, ProjectTeamLinkInput,
-    ProjectTeamLinkRecord, ProtectedResourceDescriptor, ProtectedResourceMetadataUpsertRequest,
-    ProviderCredentialRecord, RegisterBootstrapAdminRequest, ResolveRuntimeApprovalInput,
-    ResourceActionGrant, ResourcePolicyRecord, ResourcePolicyUpsertRequest, RoleBindingRecord,
-    RoleBindingUpsertRequest, RoleUpsertRequest, RuntimeConfigPatch, RuntimeConfigValidationResult,
-    RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
-    SavePetPresenceInput, SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput,
-    TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
+    ProjectTeamLinkRecord, PromoteWorkspaceResourceInput, ProtectedResourceDescriptor,
+    ProtectedResourceMetadataUpsertRequest, ProviderCredentialRecord,
+    RegisterBootstrapAdminRequest, ResolveRuntimeApprovalInput, ResourceActionGrant,
+    ResourcePolicyRecord, ResourcePolicyUpsertRequest, RoleBindingRecord,
+    RoleBindingUpsertRequest, RoleUpsertRequest, RuntimeConfigPatch,
+    RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
+    RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, SavePetPresenceInput,
+    SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput, TeamRecord,
+    ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
     UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput,
     UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput, UserGroupRecord,
     UserGroupUpsertRequest, UserOrgAssignmentRecord, UserOrgAssignmentUpsertRequest,
-    UserRecordSummary, WorkspaceActivityRecord, WorkspaceMcpServerDocument, WorkspaceMetricRecord,
-    WorkspaceOverviewSnapshot, WorkspaceResourceRecord, WorkspaceSkillDocument,
-    WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceToolCatalogSnapshot,
+    UserRecordSummary, WorkspaceActivityRecord, WorkspaceDirectoryBrowserResponse,
+    WorkspaceMcpServerDocument, WorkspaceMetricRecord, WorkspaceOverviewSnapshot,
+    WorkspaceResourceChildrenRecord, WorkspaceResourceContentDocument, WorkspaceResourceImportInput,
+    WorkspaceResourceRecord, WorkspaceSkillDocument, WorkspaceSkillFileDocument,
+    WorkspaceSkillTreeDocument, WorkspaceSummary, WorkspaceToolCatalogSnapshot,
     WorkspaceToolDisablePatch,
 };
 use octopus_platform::PlatformServices;
@@ -455,11 +460,22 @@ async fn authorize_request(
     authorization_request: &AuthorizationRequest,
     request_id: &str,
 ) -> Result<(), ApiError> {
-    let decision = state
+    let mut decision = state
         .services
         .authorization
         .authorize_request(session, authorization_request)
         .await?;
+    if decision.allowed {
+        if let Some(project_id) = authorization_request.project_id.as_deref() {
+            if let Some(reason) =
+                evaluate_project_authorization_denial(state, session, authorization_request, project_id)
+                    .await?
+            {
+                decision.allowed = false;
+                decision.reason = Some(reason);
+            }
+        }
+    }
     if is_sensitive_capability(&authorization_request.capability) {
         let resource_type = authorization_request
             .resource_type
@@ -495,6 +511,90 @@ async fn authorize_request(
         ));
     }
     Ok(())
+}
+
+async fn evaluate_project_authorization_denial(
+    state: &ServerState,
+    session: &SessionRecord,
+    authorization_request: &AuthorizationRequest,
+    project_id: &str,
+) -> Result<Option<String>, ApiError> {
+    let project = state
+        .services
+        .workspace
+        .list_projects()
+        .await?
+        .into_iter()
+        .find(|record| record.id == project_id)
+        .ok_or_else(|| ApiError::from(AppError::not_found(format!("project {project_id}"))))?;
+
+    if !project.member_user_ids.iter().any(|user_id| user_id == &session.user_id) {
+        return Ok(Some("project membership is required".into()));
+    }
+
+    let Some(module) = project_module_for_request(authorization_request) else {
+        return Ok(None);
+    };
+    let workspace = state.services.workspace.workspace_summary().await?;
+    if resolve_project_module_permission(&workspace, &project, module) == "deny" {
+        return Ok(Some(format!(
+            "project module {module} is not available for this project"
+        )));
+    }
+    Ok(None)
+}
+
+fn project_module_for_request(
+    authorization_request: &AuthorizationRequest,
+) -> Option<&'static str> {
+    if authorization_request.capability.starts_with("agent.")
+        || authorization_request.capability.starts_with("team.")
+    {
+        return Some("agents");
+    }
+    if authorization_request.capability.starts_with("resource.") {
+        return Some("resources");
+    }
+    if authorization_request.capability.starts_with("knowledge.") {
+        return Some("knowledge");
+    }
+    if authorization_request.capability.starts_with("tool.") {
+        return Some("tools");
+    }
+
+    match authorization_request.resource_type.as_deref() {
+        Some("agent") | Some("team") => Some("agents"),
+        Some("resource") => Some("resources"),
+        Some("knowledge") => Some("knowledge"),
+        Some(resource_type) if resource_type.starts_with("tool.") => Some("tools"),
+        _ => None,
+    }
+}
+
+fn resolve_project_module_permission<'a>(
+    workspace: &'a WorkspaceSummary,
+    project: &'a ProjectRecord,
+    module: &'a str,
+) -> &'a str {
+    let default_value = match module {
+        "agents" => workspace.project_default_permissions.agents.as_str(),
+        "resources" => workspace.project_default_permissions.resources.as_str(),
+        "tools" => workspace.project_default_permissions.tools.as_str(),
+        "knowledge" => workspace.project_default_permissions.knowledge.as_str(),
+        _ => "allow",
+    };
+    let override_value = match module {
+        "agents" => project.permission_overrides.agents.as_str(),
+        "resources" => project.permission_overrides.resources.as_str(),
+        "tools" => project.permission_overrides.tools.as_str(),
+        "knowledge" => project.permission_overrides.knowledge.as_str(),
+        _ => "inherit",
+    };
+    if override_value == "inherit" {
+        default_value
+    } else {
+        override_value
+    }
 }
 
 async fn ensure_runtime_submit(

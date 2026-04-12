@@ -128,6 +128,48 @@ describe('Project settings view', () => {
     mounted.destroy()
   })
 
+  it('reads project members from project governance fields instead of selected-projects data policies', async () => {
+    vi.restoreAllMocks()
+    window.localStorage.clear()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project) {
+          throw new Error('Expected proj-redesign fixture project')
+        }
+
+        ;(project as any).ownerUserId = 'user-owner'
+        ;(project as any).memberUserIds = ['user-owner']
+      },
+    })
+
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-users"]')?.click()
+    await waitFor(() => mounted.container.textContent?.includes('Octopus Owner') ?? false)
+
+    expect(mounted.container.textContent).toContain('Octopus Owner')
+    expect(
+      mounted.container
+        .querySelector<HTMLInputElement>('[data-testid="project-member-option-user-owner"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(true)
+    expect(
+      mounted.container
+        .querySelector<HTMLInputElement>('[data-testid="project-member-option-user-operator"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(false)
+    expect(mounted.container.textContent).toContain('项目成员数1')
+
+    mounted.destroy()
+  })
+
   it('shows project refinement limited to assigned workspace scope', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
     const workspaceStore = useWorkspaceStore()

@@ -58,3 +58,23 @@ export function formatDateTime(timestamp?: number): string {
 export function countLabel(key: string, count: number): string {
   return translate(key, { count })
 }
+
+export function formatList(values: Array<string | null | undefined>): string {
+  const items = values.filter((value): value is string => Boolean(value?.trim())).map(value => value.trim())
+  if (!items.length) {
+    return ''
+  }
+
+  if (i18n.global.locale.value.startsWith('zh')) {
+    return items.join('、')
+  }
+
+  if (typeof Intl !== 'undefined' && typeof Intl.ListFormat === 'function') {
+    return new Intl.ListFormat(i18n.global.locale.value, {
+      style: 'long',
+      type: 'conjunction',
+    }).format(items)
+  }
+
+  return items.join(', ')
+}

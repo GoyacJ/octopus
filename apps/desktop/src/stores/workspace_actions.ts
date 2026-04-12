@@ -317,6 +317,7 @@ export function createWorkspaceActions(context: WorkspaceActionContext) {
     const updated = await updateProject(projectId, {
       name: target.name,
       description: target.description,
+      resourceDirectory: target.resourceDirectory,
       status: 'archived',
       assignments: target.assignments,
     }, connectionId)
@@ -348,6 +349,7 @@ export function createWorkspaceActions(context: WorkspaceActionContext) {
     const updated = await updateProject(projectId, {
       name: target.name,
       description: target.description,
+      resourceDirectory: target.resourceDirectory,
       status: 'active',
       assignments: target.assignments,
     }, connectionId)

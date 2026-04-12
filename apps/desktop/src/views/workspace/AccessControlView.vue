@@ -6,12 +6,14 @@ import { RouterView, useRoute, useRouter } from 'vue-router'
 import { UiPageHeader, UiPageShell, UiPanelFrame, UiTabs } from '@octopus/ui'
 
 import { getMenuDefinition, getRouteMenuId } from '@/navigation/menuRegistry'
+import { useShellStore } from '@/stores/shell'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
 
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const shellStore = useShellStore()
 const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 const workspaceStore = useWorkspaceStore()
 
@@ -37,6 +39,18 @@ watch(
     }
 
     activeTab.value = currentMenuId.value ?? ''
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [route.name, shellStore.activeWorkspaceConnectionId] as const,
+  async ([routeName, workspaceConnectionId]) => {
+    if (!workspaceConnectionId || typeof routeName !== 'string' || !routeName.startsWith('workspace-access-control')) {
+      return
+    }
+
+    await workspaceAccessControlStore.load(workspaceConnectionId)
   },
   { immediate: true },
 )
@@ -75,7 +89,7 @@ function handleTabChange(menuId: string) {
     <UiPageHeader
       :eyebrow="t('accessControl.header.eyebrow')"
       :title="t('accessControl.header.title')"
-      :description="workspaceAccessControlStore.currentUser?.displayName ?? t('common.na')"
+      :description="t('accessControl.header.description')"
     />
 
     <UiPanelFrame variant="subtle" padding="sm">

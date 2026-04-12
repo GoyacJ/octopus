@@ -174,17 +174,7 @@ export function useProjectSettings() {
       .filter(section => section.entries.length > 0),
   )
 
-  const currentMemberUserIds = computed(() =>
-    workspaceAccessControlStore.dataPolicies
-      .filter(policy =>
-        policy.subjectType === 'user'
-        && policy.resourceType === 'project'
-        && policy.scopeType === 'selected-projects'
-        && policy.effect === 'allow'
-        && policy.projectIds.includes(projectId.value),
-      )
-      .map(policy => policy.subjectId),
-  )
+  const currentMemberUserIds = computed(() => project.value?.memberUserIds ?? [])
 
   const summaryAllowedModels = computed(() =>
     allowedWorkspaceConfiguredModels.value.filter(item => modelsForm.allowedConfiguredModelIds.includes(item.value)),
@@ -275,7 +265,7 @@ export function useProjectSettings() {
   )
 
   watch(
-    () => `${projectId.value}|${workspaceAccessControlStore.dataPolicies.map(policy => `${policy.id}:${policy.subjectType}:${policy.subjectId}:${policy.projectIds.join(',')}`).join('|')}`,
+    () => `${projectId.value}|${currentMemberUserIds.value.join(',')}`,
     () => {
       selectedMemberUserIds.value = [...currentMemberUserIds.value]
       usersError.value = ''
@@ -383,6 +373,24 @@ export function useProjectSettings() {
     usersError.value = ''
   }
 
+  function buildProjectUpdateInput(overrides: Partial<ProjectRecord>) {
+    if (!project.value) {
+      return null
+    }
+
+    return {
+      name: overrides.name ?? project.value.name,
+      description: overrides.description ?? project.value.description,
+      resourceDirectory: overrides.resourceDirectory ?? project.value.resourceDirectory,
+      status: overrides.status ?? project.value.status,
+      ownerUserId: overrides.ownerUserId ?? project.value.ownerUserId,
+      memberUserIds: overrides.memberUserIds ?? project.value.memberUserIds,
+      permissionOverrides: overrides.permissionOverrides ?? project.value.permissionOverrides,
+      linkedWorkspaceAssets: overrides.linkedWorkspaceAssets ?? project.value.linkedWorkspaceAssets,
+      assignments: overrides.assignments ?? project.value.assignments,
+    }
+  }
+
   async function submitBasics() {
     if (!project.value || !basicsForm.name.trim() || savingBasics.value) {
       return
@@ -392,12 +400,14 @@ export function useProjectSettings() {
     savingBasics.value = true
 
     try {
-      const updated = await workspaceStore.updateProject(project.value.id, {
+      const input = buildProjectUpdateInput({
         name: basicsForm.name,
         description: basicsForm.description,
-        status: project.value.status,
-        assignments: project.value.assignments,
       })
+      if (!input) {
+        return
+      }
+      const updated = await workspaceStore.updateProject(project.value.id, input)
       if (!updated) {
         basicsError.value = workspaceStore.error || t('projectSettings.basics.saveError')
       }
@@ -503,7 +513,15 @@ export function useProjectSettings() {
     savingUsers.value = true
 
     try {
-      await workspaceAccessControlStore.setProjectMembers(project.value.id, selectedMemberUserIds.value)
+      const updated = await workspaceStore.updateProject(
+        project.value.id,
+        buildProjectUpdateInput({
+          memberUserIds: [...new Set(selectedMemberUserIds.value)],
+        })!,
+      )
+      if (!updated) {
+        usersError.value = workspaceStore.error || t('projectSettings.users.saveError')
+      }
     } catch (cause) {
       usersError.value = cause instanceof Error ? cause.message : t('projectSettings.users.saveError')
     } finally {

@@ -1149,6 +1149,14 @@ fn default_permission_definitions() -> Vec<PermissionDefinition> {
             actions: vec!["delete".into()],
         },
         PermissionDefinition {
+            code: "resource.publish".into(),
+            name: "Resource Publish".into(),
+            description: "Publish project resources to the workspace catalog.".into(),
+            category: "resource".into(),
+            resource_type: "resource".into(),
+            actions: vec!["publish".into()],
+        },
+        PermissionDefinition {
             code: "resource.export".into(),
             name: "Resource Export".into(),
             description: "Export protected resources.".into(),

@@ -495,6 +495,9 @@ describe('Workbench shell layout', () => {
   })
 
   it('creates a project from the sidebar quick-create popover and lands on project settings', async () => {
+    vi.spyOn(tauriClient as unknown as { pickResourceDirectory: () => Promise<string | null> }, 'pickResourceDirectory')
+      .mockResolvedValue('/workspace/projects/strategy-launch/resources')
+
     await router.push('/workspaces/ws-local/overview?project=proj-redesign')
     await router.isReady()
 
@@ -513,7 +516,11 @@ describe('Workbench shell layout', () => {
     nameInput!.dispatchEvent(new Event('input', { bubbles: true }))
     descriptionInput!.value = 'Launch checklist and delivery alignment.'
     descriptionInput!.dispatchEvent(new Event('input', { bubbles: true }))
-    await nextTick()
+    document.body.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-create-resource-directory-pick"]')?.click()
+    await waitFor(() =>
+      document.body.querySelector<HTMLInputElement>('[data-testid="sidebar-project-create-resource-directory-path"]')?.value
+        === '/workspace/projects/strategy-launch/resources',
+    )
 
     document.body.querySelector<HTMLButtonElement>('[data-testid="sidebar-project-create-submit"]')?.click()
 

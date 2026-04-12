@@ -116,6 +116,97 @@ describe('desktop router contract', () => {
     expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
   })
 
+  it('redirects non-members away from project routes', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.currentUserId = 'user-operator'
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project) {
+          throw new Error('Expected proj-redesign fixture project')
+        }
+
+        ;(project as any).ownerUserId = 'user-owner'
+        ;(project as any).memberUserIds = ['user-owner']
+      },
+    })
+
+    const shell = useShellStore()
+    await shell.bootstrap('ws-local', 'proj-redesign')
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/settings')
+
+    expect(router.currentRoute.value.name).toBe('workspace-overview')
+    expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
+  })
+
+  it('redirects non-owners away from project governance routes', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        state.currentUserId = 'user-operator'
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project) {
+          throw new Error('Expected proj-redesign fixture project')
+        }
+
+        ;(project as any).ownerUserId = 'user-owner'
+        ;(project as any).memberUserIds = ['user-owner', 'user-operator']
+      },
+    })
+
+    const shell = useShellStore()
+    await shell.bootstrap('ws-local', 'proj-redesign')
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/runtime')
+
+    expect(router.currentRoute.value.name).toBe('project-dashboard')
+    expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
+    expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
+  })
+
+  it('redirects denied project modules back to the project dashboard', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project) {
+          throw new Error('Expected proj-redesign fixture project')
+        }
+
+        ;(project as any).ownerUserId = 'user-owner'
+        ;(project as any).memberUserIds = ['user-owner']
+        ;(project as any).permissionOverrides = {
+          agents: 'inherit',
+          resources: 'deny',
+          tools: 'inherit',
+          knowledge: 'inherit',
+        }
+      },
+    })
+
+    const shell = useShellStore()
+    await shell.bootstrap('ws-local', 'proj-redesign')
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/resources')
+
+    expect(router.currentRoute.value.name).toBe('project-dashboard')
+    expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
+    expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
+  })
+
   it('redirects the access control root to the first authorized child route', async () => {
     const shell = useShellStore()
     const workspaceAccessControlStore = useWorkspaceAccessControlStore()

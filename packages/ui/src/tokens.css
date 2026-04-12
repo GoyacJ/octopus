@@ -61,6 +61,9 @@
   --color-accent-hover: #095fb3;
   --color-accent-soft: #eef5fd;
   --color-ring: rgba(11, 110, 208, 0.22);
+  --color-toggle-off-bg: #ebe6de;
+  --color-toggle-off-border: rgba(31, 30, 29, 0.14);
+  --color-toggle-thumb-border: rgba(31, 30, 29, 0.08);
 
   --color-status-success: #0f7b6c;
   --color-status-success-soft: rgba(15, 123, 108, 0.12);
@@ -101,6 +104,9 @@
   --color-accent-hover: #6aabee;
   --color-accent-soft: rgba(79, 154, 230, 0.16);
   --color-ring: rgba(79, 154, 230, 0.3);
+  --color-toggle-off-bg: #474039;
+  --color-toggle-off-border: rgba(255, 252, 248, 0.3);
+  --color-toggle-thumb-border: rgba(31, 30, 29, 0.2);
 
   --color-status-success: #41a996;
   --color-status-success-soft: rgba(65, 169, 150, 0.18);
@@ -151,6 +157,9 @@
   --brand-primary: var(--color-accent);
   --brand-primary-hover: var(--color-accent-hover);
   --brand-ring: var(--color-ring);
+  --control-toggle-off-bg: var(--color-toggle-off-bg);
+  --control-toggle-off-border: var(--color-toggle-off-border);
+  --control-toggle-thumb-border: var(--color-toggle-thumb-border);
   --ring: var(--color-ring);
   --primary: var(--color-accent);
   --background: var(--color-canvas);

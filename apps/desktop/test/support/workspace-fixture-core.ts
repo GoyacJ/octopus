@@ -2,7 +2,12 @@ import { vi } from 'vitest'
 
 import * as tauriClient from '@/tauri/client'
 
-import { WORKSPACE_CONNECTIONS, WORKSPACE_SESSIONS, clone, createHostBootstrap } from './workspace-fixture-bootstrap'
+import {
+  WORKSPACE_CONNECTIONS,
+  clone,
+  createHostBootstrap,
+  createWorkspaceSessionEnvelope,
+} from './workspace-fixture-bootstrap'
 import { createWorkspaceClientFixture } from './workspace-fixture-client'
 import { createWorkspaceFixtureState, type FixtureOptions } from './workspace-fixture-state'
 import {
@@ -12,7 +17,7 @@ import {
 import type { RuntimeSessionState } from './workspace-fixture-runtime'
 
 export function installWorkspaceApiFixture(options: FixtureOptions = {}): void {
-  const hostBootstrap = createHostBootstrap()
+  const hostBootstrap = createHostBootstrap(options.locale)
   const workspaceStates = new Map(
     WORKSPACE_CONNECTIONS.map(connection => [connection.workspaceConnectionId, createWorkspaceFixtureState(connection, options)]),
   )
@@ -28,7 +33,16 @@ export function installWorkspaceApiFixture(options: FixtureOptions = {}): void {
     }
 
     window.localStorage.setItem('octopus-workspace-sessions', JSON.stringify(
-      Object.fromEntries(WORKSPACE_SESSIONS.map(session => [session.workspaceConnectionId, session])),
+      Object.fromEntries(
+        WORKSPACE_CONNECTIONS.map((connection) => {
+          const workspaceState = workspaceStates.get(connection.workspaceConnectionId)
+          const session = createWorkspaceSessionEnvelope(
+            connection,
+            workspaceState?.currentUserId || 'user-owner',
+          )
+          return [session.workspaceConnectionId, session]
+        }),
+      ),
     ))
   }
 
@@ -78,9 +92,12 @@ export function installWorkspaceApiFixture(options: FixtureOptions = {}): void {
 
   syncStoredSessions()
 
-  vi.spyOn(tauriClient, 'bootstrapShellHost').mockImplementation(async () => {
+  vi.spyOn(tauriClient, 'bootstrapShellHost').mockImplementation(async (defaultWorkspaceId, defaultProjectId) => {
     syncStoredSessions()
-    return clone(hostBootstrap)
+    const bootstrap = clone(hostBootstrap)
+    bootstrap.preferences.defaultWorkspaceId = defaultWorkspaceId
+    bootstrap.preferences.lastVisitedRoute = `/workspaces/${defaultWorkspaceId}/overview?project=${defaultProjectId}`
+    return bootstrap
   })
   vi.spyOn(tauriClient, 'savePreferences').mockImplementation(async preferences => clone(preferences))
   vi.spyOn(tauriClient, 'getHostUpdateStatus').mockResolvedValue({
@@ -178,6 +195,9 @@ export function installWorkspaceApiFixture(options: FixtureOptions = {}): void {
   })
   vi.spyOn(tauriClient, 'pickAgentBundleArchive').mockResolvedValue(null)
   vi.spyOn(tauriClient, 'pickAgentBundleFolder').mockResolvedValue(null)
+  vi.spyOn(tauriClient, 'pickResourceDirectory').mockResolvedValue(null)
+  vi.spyOn(tauriClient, 'pickResourceFile').mockResolvedValue(null)
+  vi.spyOn(tauriClient, 'pickResourceFolder').mockResolvedValue(null)
   vi.spyOn(tauriClient, 'pickSkillArchive').mockResolvedValue(null)
   vi.spyOn(tauriClient, 'pickSkillFolder').mockResolvedValue(null)
   vi.spyOn(tauriClient, 'saveAgentBundleExport').mockResolvedValue()

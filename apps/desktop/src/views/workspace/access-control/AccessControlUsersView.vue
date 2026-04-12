@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import {
   UiBadge,
@@ -10,17 +11,24 @@ import {
   UiField,
   UiInput,
   UiListDetailWorkspace,
+  UiPagination,
   UiPanelFrame,
+  UiRecordCard,
   UiSelect,
+  UiSwitch,
   UiStatusCallout,
   UiToolbarRow,
 } from '@octopus/ui'
 
-import type { AccessUserRecord, AccessUserUpsertRequest } from '@octopus/schema'
+import type { AccessUserUpsertRequest } from '@octopus/schema'
 
+import { usePagination } from '@/composables/usePagination'
+import { formatList } from '@/i18n/copy'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 
-import { statusOptions } from './helpers'
+import { createStatusOptions, getScopeTypeLabel, getStatusLabel } from './helpers'
+import { useAccessControlNotifications } from './useAccessControlNotifications'
+import { useAccessControlSelection } from './useAccessControlSelection'
 
 interface UserFormState {
   username: string
@@ -31,18 +39,24 @@ interface UserFormState {
   resetPassword: boolean
 }
 
+const { t } = useI18n()
 const accessControlStore = useWorkspaceAccessControlStore()
+const { notifyError, notifySuccess, notifyWarning } = useAccessControlNotifications('access-control.users')
 
 const selectedUserId = ref('')
 const query = ref('')
 const statusFilter = ref('')
 const createDialogOpen = ref(false)
 const deleteDialogOpen = ref(false)
+const bulkDeleteDialogOpen = ref(false)
 const submitError = ref('')
-const successMessage = ref('')
 const savingCreate = ref(false)
 const savingEdit = ref(false)
 const deletingUserId = ref('')
+const deletingSelectedUsers = ref(false)
+const togglingUserIds = ref<string[]>([])
+const userStatusOverrides = ref<Record<string, string>>({})
+const hiddenUserIds = ref<string[]>([])
 
 const createForm = reactive<UserFormState>(createEmptyForm())
 const editForm = reactive<UserFormState>(createEmptyForm())
@@ -82,7 +96,7 @@ const directProjectPoliciesByUserId = computed(() => {
       continue
     }
     const labels = grouped.get(policy.subjectId) ?? []
-    labels.push(policy.scopeType === 'selected-projects' ? (policy.projectIds.join('、') || policy.name) : policy.scopeType)
+    labels.push(policy.scopeType === 'selected-projects' ? (policy.projectIds.join('、') || policy.name) : getScopeTypeLabel(t, policy.scopeType))
     grouped.set(policy.subjectId, labels)
   }
   return grouped
@@ -90,6 +104,7 @@ const directProjectPoliciesByUserId = computed(() => {
 
 const users = computed(() =>
   [...accessControlStore.users]
+    .filter(user => !hiddenUserIds.value.includes(user.id))
     .sort((left, right) => left.displayName.localeCompare(right.displayName))
     .filter((user) => {
       const matchesStatus = !statusFilter.value || user.status === statusFilter.value
@@ -116,6 +131,26 @@ const selectedUser = computed(() =>
   accessControlStore.users.find(user => user.id === selectedUserId.value) ?? null,
 )
 
+const statusOptions = computed(() => createStatusOptions(t))
+const statusFilterOptions = computed(() => [
+  { label: t('accessControl.common.filters.allStatuses'), value: '' },
+  ...statusOptions.value,
+])
+
+const pagination = usePagination(users, {
+  pageSize: 8,
+  resetOn: [query, statusFilter],
+})
+const selection = useAccessControlSelection(() => accessControlStore.users, {
+  getId: user => user.id,
+})
+const allPageSelected = computed(() => selection.isPageSelected(pagination.pagedItems.value))
+const selectedUsersForDelete = computed(() =>
+  selection.selectedIds.value
+    .map(id => accessControlStore.users.find(user => user.id === id) ?? null)
+    .filter((user): user is NonNullable<typeof user> => Boolean(user)),
+)
+
 watch(selectedUser, (user) => {
   if (!user) {
     Object.assign(editForm, createEmptyForm())
@@ -132,11 +167,28 @@ watch(selectedUser, (user) => {
   } satisfies UserFormState)
 }, { immediate: true })
 
-watch(users, (records) => {
+watch(pagination.pagedItems, (records) => {
   if (selectedUserId.value && !records.some(user => user.id === selectedUserId.value)) {
     selectedUserId.value = ''
   }
-})
+}, { immediate: true })
+
+watch(() => accessControlStore.users.map(user => [user.id, user.status] as const), (records) => {
+  const nextOverrides = { ...userStatusOverrides.value }
+  let changed = false
+
+  for (const [userId, status] of Object.entries(userStatusOverrides.value)) {
+    const matched = records.find(([recordId]) => recordId === userId)
+    if (!matched || matched[1] === status) {
+      delete nextOverrides[userId]
+      changed = true
+    }
+  }
+
+  if (changed) {
+    userStatusOverrides.value = nextOverrides
+  }
+}, { immediate: true })
 
 function createEmptyForm(): UserFormState {
   return {
@@ -156,18 +208,24 @@ function resetCreateForm() {
 function selectUser(userId: string) {
   selectedUserId.value = userId
   submitError.value = ''
-  successMessage.value = ''
 }
 
 function openCreateDialog() {
   resetCreateForm()
   submitError.value = ''
-  successMessage.value = ''
   createDialogOpen.value = true
 }
 
 function closeDeleteDialog() {
   deleteDialogOpen.value = false
+}
+
+function toggleUserSelection(userId: string, value: boolean) {
+  selection.toggleSelection(userId, value)
+}
+
+function togglePageSelection(value: boolean) {
+  selection.selectPage(pagination.pagedItems.value, value)
 }
 
 function toRequest(form: UserFormState): AccessUserUpsertRequest {
@@ -183,18 +241,76 @@ function toRequest(form: UserFormState): AccessUserUpsertRequest {
 
 function validateForm(form: UserFormState, requirePassword: boolean) {
   if (!form.username.trim()) {
-    return '请输入账号名。'
+    return t('accessControl.users.validation.usernameRequired')
   }
   if (!form.displayName.trim()) {
-    return '请输入显示名称。'
+    return t('accessControl.users.validation.displayNameRequired')
   }
   if (requirePassword && !form.password) {
-    return '新建用户时必须设置密码。'
+    return t('accessControl.users.validation.passwordRequired')
   }
   if ((form.password || form.confirmPassword) && form.password !== form.confirmPassword) {
-    return '两次输入的密码不一致。'
+    return t('accessControl.users.validation.passwordMismatch')
   }
   return ''
+}
+
+function formatUserLabel(displayName: string, username: string) {
+  return t('accessControl.users.feedback.toastUserLabel', { displayName, username })
+}
+
+function isUserStatusSaving(userId: string) {
+  return togglingUserIds.value.includes(userId)
+}
+
+function userListStatus(userId: string, fallbackStatus: string) {
+  return userStatusOverrides.value[userId] ?? fallbackStatus
+}
+
+function setUserStatusOverride(userId: string, status: string) {
+  userStatusOverrides.value = {
+    ...userStatusOverrides.value,
+    [userId]: status,
+  }
+}
+
+function clearUserStatusOverride(userId: string) {
+  const { [userId]: _ignored, ...rest } = userStatusOverrides.value
+  userStatusOverrides.value = rest
+}
+
+function hideUser(userId: string) {
+  if (!hiddenUserIds.value.includes(userId)) {
+    hiddenUserIds.value = [...hiddenUserIds.value, userId]
+  }
+}
+
+async function toggleUserStatus(user: { id: string, username: string, displayName: string, status: string }, enabled: boolean) {
+  const nextStatus = enabled ? 'active' : 'disabled'
+  if (isUserStatusSaving(user.id) || nextStatus === user.status) {
+    return
+  }
+
+  submitError.value = ''
+  setUserStatusOverride(user.id, nextStatus)
+  togglingUserIds.value = [...togglingUserIds.value, user.id]
+
+  try {
+    await accessControlStore.updateUser(user.id, {
+      username: user.username,
+      displayName: user.displayName,
+      status: nextStatus,
+    })
+    await notifySuccess(
+      t(enabled ? 'accessControl.users.feedback.toastEnabledTitle' : 'accessControl.users.feedback.toastDisabledTitle'),
+      formatUserLabel(user.displayName, user.username),
+    )
+  } catch (error) {
+    clearUserStatusOverride(user.id)
+    submitError.value = error instanceof Error ? error.message : t('accessControl.users.feedback.statusUpdateFailed')
+  } finally {
+    togglingUserIds.value = togglingUserIds.value.filter(id => id !== user.id)
+  }
 }
 
 async function handleCreate() {
@@ -207,11 +323,14 @@ async function handleCreate() {
   try {
     const record = await accessControlStore.createUser(toRequest(createForm))
     selectedUserId.value = record.id
-    successMessage.value = `已保存用户 ${record.displayName}（${record.username}）`
     createDialogOpen.value = false
     resetCreateForm()
+    await notifySuccess(
+      t('accessControl.users.feedback.toastSavedTitle'),
+      formatUserLabel(record.displayName, record.username),
+    )
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '保存用户失败。'
+    submitError.value = error instanceof Error ? error.message : t('accessControl.users.feedback.saveFailed')
   } finally {
     savingCreate.value = false
   }
@@ -231,9 +350,12 @@ async function handleUpdate() {
   try {
     const payload = toRequest(editForm)
     await accessControlStore.updateUser(selectedUser.value.id, payload)
-    successMessage.value = `已保存用户 ${payload.displayName}（${payload.username}）`
+    await notifySuccess(
+      t('accessControl.users.feedback.toastSavedTitle'),
+      formatUserLabel(payload.displayName, payload.username),
+    )
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '保存用户失败。'
+    submitError.value = error instanceof Error ? error.message : t('accessControl.users.feedback.saveFailed')
   } finally {
     savingEdit.value = false
   }
@@ -249,14 +371,73 @@ async function handleDelete() {
   try {
     const label = selectedUser.value.displayName
     await accessControlStore.deleteUser(selectedUser.value.id)
+    hideUser(selectedUser.value.id)
     selectedUserId.value = ''
     deleteDialogOpen.value = false
-    successMessage.value = `已删除用户 ${label}`
+    await notifySuccess(
+      t('accessControl.users.feedback.toastDeletedTitle'),
+      t('accessControl.users.feedback.toastDeletedBody', { displayName: label }),
+    )
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '删除用户失败。'
+    submitError.value = error instanceof Error ? error.message : t('accessControl.users.feedback.deleteFailed')
   } finally {
     deletingUserId.value = ''
   }
+}
+
+async function handleBulkDelete() {
+  if (!selectedUsersForDelete.value.length) {
+    bulkDeleteDialogOpen.value = false
+    return
+  }
+
+  deletingSelectedUsers.value = true
+  submitError.value = ''
+  let successCount = 0
+  let failureCount = 0
+
+  for (const user of selectedUsersForDelete.value) {
+    try {
+      await accessControlStore.deleteUser(user.id)
+      hideUser(user.id)
+      successCount += 1
+      if (selectedUserId.value === user.id) {
+        selectedUserId.value = ''
+      }
+    } catch {
+      failureCount += 1
+    }
+  }
+
+  deletingSelectedUsers.value = false
+  bulkDeleteDialogOpen.value = false
+  await accessControlStore.reloadAll()
+  selection.setSelection(
+    selection.selectedIds.value.filter(id =>
+      accessControlStore.users.some(user => user.id === id) && !hiddenUserIds.value.includes(id),
+    ),
+  )
+  await nextTick()
+  await new Promise(resolve => window.setTimeout(resolve, 0))
+
+  const body = t('accessControl.common.bulk.resultBody', {
+    success: successCount,
+    failure: failureCount,
+    skipped: 0,
+  })
+
+  if (successCount > 0 && failureCount === 0) {
+    selection.clearSelection()
+    await notifySuccess(t('accessControl.common.bulk.resultAllSuccessTitle'), body)
+    return
+  }
+
+  if (successCount > 0) {
+    await notifyWarning(t('accessControl.common.bulk.resultPartialTitle'), body)
+    return
+  }
+
+  await notifyError(t('accessControl.common.bulk.resultFailureTitle'), body)
 }
 
 function labelValues(ids: string[], labelMap: Map<string, string>) {
@@ -275,11 +456,6 @@ function userPositionAndGroupLabels(userId: string) {
     ...labelValues(assignment.userGroupIds, groupMap.value),
   ])
 }
-
-const statusFilterOptions = computed(() => [
-  { label: '全部状态', value: '' },
-  ...statusOptions,
-])
 </script>
 
 <template>
@@ -289,35 +465,63 @@ const statusFilterOptions = computed(() => [
       tone="error"
       :description="submitError"
     />
-    <UiStatusCallout
-      v-if="successMessage"
-      tone="success"
-      :description="successMessage"
-    />
 
     <UiListDetailWorkspace
       :has-selection="Boolean(selectedUser)"
       :detail-title="selectedUser ? selectedUser.displayName : ''"
-      detail-subtitle="维护当前用户的身份信息、密码生命周期与访问摘要。"
-      empty-detail-title="请选择用户"
-      empty-detail-description="从左侧用户列表中选择一项后即可查看详情，或点击右上角新建用户。"
+      :detail-subtitle="t('accessControl.users.detail.subtitle')"
+      :empty-detail-title="t('accessControl.users.detail.emptyTitle')"
+      :empty-detail-description="t('accessControl.users.detail.emptyDescription')"
     >
       <template #toolbar>
         <UiToolbarRow test-id="access-control-users-toolbar">
           <template #search>
             <UiInput
               v-model="query"
-              placeholder="搜索姓名、账号、角色或组织"
+              :placeholder="t('accessControl.users.toolbar.search')"
             />
           </template>
           <template #filters>
-            <UiField label="状态" class="w-full md:w-[180px]">
+              <UiField :label="t('accessControl.users.toolbar.status')" class="w-full md:w-[180px]">
               <UiSelect v-model="statusFilter" :options="statusFilterOptions" />
             </UiField>
           </template>
           <template #actions>
+            <span
+              v-if="selection.hasSelection.value"
+              class="text-xs text-text-secondary"
+            >
+              {{ t('accessControl.common.selection.selectedCount', { count: selection.selectedCount.value }) }}
+            </span>
+            <UiButton
+              v-if="pagination.pagedItems.value.length"
+              variant="ghost"
+              size="sm"
+              data-testid="access-control-user-select-page-button"
+              @click="togglePageSelection(!allPageSelected)"
+            >
+              {{ t('accessControl.common.selection.selectPage') }}
+            </UiButton>
+            <UiButton
+              v-if="selection.hasSelection.value"
+              variant="ghost"
+              size="sm"
+              data-testid="access-control-user-clear-selection-button"
+              @click="selection.clearSelection"
+            >
+              {{ t('accessControl.common.selection.clear') }}
+            </UiButton>
+            <UiButton
+              v-if="selection.hasSelection.value"
+              variant="destructive"
+              size="sm"
+              data-testid="access-control-user-bulk-delete-button"
+              @click="bulkDeleteDialogOpen = true"
+            >
+              {{ t('accessControl.common.bulk.delete') }}
+            </UiButton>
             <UiButton data-testid="access-control-user-create-button" size="sm" @click="openCreateDialog">
-              新建用户
+              {{ t('accessControl.users.toolbar.create') }}
             </UiButton>
           </template>
         </UiToolbarRow>
@@ -327,34 +531,61 @@ const statusFilterOptions = computed(() => [
         <UiPanelFrame
           variant="panel"
           padding="md"
-          title="用户列表"
-          :subtitle="`共 ${users.length} 位用户`"
+          :title="t('accessControl.users.list.title')"
+          :subtitle="t('accessControl.common.list.totalUsers', { count: pagination.totalItems.value })"
         >
-          <div v-if="users.length" class="space-y-2">
-            <button
-              v-for="user in users"
+          <div v-if="pagination.pagedItems.value.length" class="space-y-2">
+            <UiRecordCard
+              v-for="user in pagination.pagedItems.value"
               :key="user.id"
-              type="button"
-              class="w-full rounded-[var(--radius-l)] border px-4 py-3 text-left transition-colors"
-              :class="selectedUserId === user.id ? 'border-primary bg-accent/40' : 'border-border bg-card hover:bg-subtle/60'"
+              layout="compact"
+              interactive
+              :active="selectedUserId === user.id"
+              :title="user.displayName"
+              :description="user.username"
+              :test-id="`access-control-user-record-${user.id}`"
               @click="selectUser(user.id)"
             >
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0 space-y-1">
-                  <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-sm font-semibold text-foreground">{{ user.displayName }}</span>
-                    <UiBadge :label="user.status" :tone="user.status === 'active' ? 'success' : 'default'" subtle />
-                  </div>
-                  <p class="truncate text-xs text-muted-foreground">{{ user.username }}</p>
-                  <p class="truncate text-xs text-muted-foreground">
-                    {{ (roleNamesByUserId.get(user.id) ?? []).join('、') || '未绑定角色' }}
-                  </p>
+              <template #badges>
+                <div class="flex items-center gap-2" @click.stop>
+                  <UiCheckbox
+                    :model-value="selection.isSelected(user.id)"
+                    :data-testid="`access-control-user-select-${user.id}`"
+                    @update:model-value="toggleUserSelection(user.id, Boolean($event))"
+                  />
+                  <UiSwitch
+                    :model-value="userListStatus(user.id, user.status) === 'active'"
+                    :disabled="isUserStatusSaving(user.id)"
+                    @update:model-value="toggleUserStatus(user, $event)"
+                  >
+                    <span class="sr-only">
+                      {{ t('accessControl.users.list.toggleStatus', { name: user.displayName }) }}
+                    </span>
+                  </UiSwitch>
                 </div>
-                <UiBadge :label="user.passwordState" subtle />
-              </div>
-            </button>
+              </template>
+              <template #meta>
+                <span class="truncate text-xs text-text-secondary">
+                  {{ formatList(roleNamesByUserId.get(user.id) ?? []) || t('accessControl.common.list.noRoles') }}
+                </span>
+              </template>
+            </UiRecordCard>
           </div>
-          <UiEmptyState v-else title="暂无用户" description="当前筛选条件下没有用户记录。" />
+          <UiEmptyState
+            v-else
+            :title="t('accessControl.users.list.emptyTitle')"
+            :description="t('accessControl.users.list.emptyDescription')"
+          />
+
+          <div class="mt-3 pt-2">
+            <UiPagination
+              v-model:page="pagination.currentPage.value"
+              :page-count="pagination.pageCount.value"
+              :previous-label="t('accessControl.common.pagination.previous')"
+              :next-label="t('accessControl.common.pagination.next')"
+              :summary-label="t('accessControl.common.pagination.summary', { count: pagination.totalItems.value })"
+            />
+          </div>
         </UiPanelFrame>
       </template>
 
@@ -363,44 +594,43 @@ const statusFilterOptions = computed(() => [
           <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
             <div class="flex flex-wrap items-center gap-2">
               <div class="text-sm font-semibold text-foreground">{{ selectedUser.displayName }}</div>
-              <UiBadge :label="selectedUser.status" :tone="selectedUser.status === 'active' ? 'success' : 'default'" subtle />
-              <UiBadge :label="selectedUser.passwordState" subtle />
+              <UiBadge :label="getStatusLabel(t, selectedUser.status)" :tone="selectedUser.status === 'active' ? 'success' : 'default'" subtle />
             </div>
             <div class="mt-2 text-xs text-muted-foreground">{{ selectedUser.username }}</div>
           </div>
 
           <div class="grid gap-3 md:grid-cols-2">
             <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
-              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">组织归属</div>
-              <div class="mt-2 text-sm text-foreground">{{ userOrgLabels(selectedUser.id).join('、') || '未设置' }}</div>
+              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">{{ t('accessControl.users.detail.orgSummary') }}</div>
+              <div class="mt-2 text-sm text-foreground">{{ formatList(userOrgLabels(selectedUser.id)) || t('accessControl.common.list.notSet') }}</div>
             </div>
             <div class="rounded-[var(--radius-l)] border border-border bg-card p-4">
-              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">岗位 / 用户组</div>
-              <div class="mt-2 text-sm text-foreground">{{ userPositionAndGroupLabels(selectedUser.id).join('、') || '未设置' }}</div>
+              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">{{ t('accessControl.users.detail.positionGroupSummary') }}</div>
+              <div class="mt-2 text-sm text-foreground">{{ formatList(userPositionAndGroupLabels(selectedUser.id)) || t('accessControl.common.list.notSet') }}</div>
             </div>
             <div class="rounded-[var(--radius-l)] border border-border bg-card p-4 md:col-span-2">
-              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">直接项目范围</div>
-              <div class="mt-2 text-sm text-foreground">{{ (directProjectPoliciesByUserId.get(selectedUser.id) ?? []).join('；') || '未设置直接项目策略' }}</div>
+              <div class="text-xs font-semibold uppercase tracking-[0.08em] text-text-tertiary">{{ t('accessControl.users.detail.projectSummary') }}</div>
+              <div class="mt-2 text-sm text-foreground">{{ formatList(directProjectPoliciesByUserId.get(selectedUser.id) ?? []) || t('accessControl.common.list.noDirectProjects') }}</div>
             </div>
           </div>
 
           <div class="grid gap-3 md:grid-cols-2">
-            <UiField label="账号名">
+            <UiField :label="t('accessControl.users.fields.username')">
               <UiInput v-model="editForm.username" data-testid="access-control-user-form-username" />
             </UiField>
-            <UiField label="显示名称">
+            <UiField :label="t('accessControl.users.fields.displayName')">
               <UiInput v-model="editForm.displayName" data-testid="access-control-user-form-display-name" />
             </UiField>
-            <UiField label="状态">
+            <UiField :label="t('accessControl.users.fields.status')">
               <UiSelect v-model="editForm.status" :options="statusOptions" data-testid="access-control-user-form-status" />
             </UiField>
           </div>
 
           <div class="grid gap-3 md:grid-cols-2">
-            <UiField label="新密码">
+            <UiField :label="t('accessControl.users.fields.newPassword')">
               <UiInput v-model="editForm.password" type="password" data-testid="access-control-user-form-password" />
             </UiField>
-            <UiField label="确认新密码">
+            <UiField :label="t('accessControl.users.fields.confirmNewPassword')">
               <UiInput v-model="editForm.confirmPassword" type="password" data-testid="access-control-user-form-confirm-password" />
             </UiField>
           </div>
@@ -410,7 +640,7 @@ const statusFilterOptions = computed(() => [
               v-model="editForm.resetPassword"
               data-testid="access-control-user-form-reset-password"
             >
-              下次登录重置密码
+              {{ t('accessControl.users.fields.resetPassword') }}
             </UiCheckbox>
           </div>
 
@@ -420,14 +650,14 @@ const statusFilterOptions = computed(() => [
               class="text-destructive"
               @click="deleteDialogOpen = true"
             >
-              删除用户
+              {{ t('accessControl.users.actions.delete') }}
             </UiButton>
             <UiButton
               :loading="savingEdit"
               data-testid="access-control-user-form-save"
               @click="handleUpdate"
             >
-              保存用户
+              {{ t('accessControl.users.actions.save') }}
             </UiButton>
           </div>
         </div>
@@ -436,28 +666,28 @@ const statusFilterOptions = computed(() => [
 
     <UiDialog
       :open="createDialogOpen"
-      title="新建用户"
-      description="创建用户身份并设置初始密码。组织归属和角色绑定在其它页面维护。"
+      :title="t('accessControl.users.dialogs.createTitle')"
+      :description="t('accessControl.users.dialogs.createDescription')"
       @update:open="createDialogOpen = $event"
     >
       <div class="space-y-4">
         <div class="grid gap-3 md:grid-cols-2">
-          <UiField label="账号名">
+          <UiField :label="t('accessControl.users.fields.username')">
             <UiInput v-model="createForm.username" data-testid="access-control-user-form-username" />
           </UiField>
-          <UiField label="显示名称">
+          <UiField :label="t('accessControl.users.fields.displayName')">
             <UiInput v-model="createForm.displayName" data-testid="access-control-user-form-display-name" />
           </UiField>
-          <UiField label="状态">
+          <UiField :label="t('accessControl.users.fields.status')">
             <UiSelect v-model="createForm.status" :options="statusOptions" data-testid="access-control-user-form-status" />
           </UiField>
         </div>
 
         <div class="grid gap-3 md:grid-cols-2">
-          <UiField label="密码">
+          <UiField :label="t('accessControl.users.fields.password')">
             <UiInput v-model="createForm.password" type="password" data-testid="access-control-user-form-password" />
           </UiField>
-          <UiField label="确认密码">
+          <UiField :label="t('accessControl.users.fields.confirmPassword')">
             <UiInput v-model="createForm.confirmPassword" type="password" data-testid="access-control-user-form-confirm-password" />
           </UiField>
         </div>
@@ -465,33 +695,59 @@ const statusFilterOptions = computed(() => [
 
       <template #footer>
         <UiButton variant="ghost" @click="createDialogOpen = false">
-          取消
+          {{ t('common.cancel') }}
         </UiButton>
         <UiButton
           :loading="savingCreate"
           data-testid="access-control-user-form-save"
           @click="handleCreate"
         >
-          创建用户
+          {{ t('accessControl.users.actions.create') }}
+        </UiButton>
+      </template>
+    </UiDialog>
+
+    <UiDialog
+      :open="bulkDeleteDialogOpen"
+      :title="t('accessControl.common.bulk.dialogTitle', { entity: t('accessControl.common.entities.users') })"
+      :description="t('accessControl.common.bulk.dialogDescription')"
+      @update:open="bulkDeleteDialogOpen = $event"
+    >
+      <p class="text-sm text-text-secondary">
+        {{ t('accessControl.common.bulk.dialogConfirm', {
+          count: selectedUsersForDelete.length,
+          entity: t('accessControl.common.entities.users'),
+        }) }}
+      </p>
+
+      <template #footer>
+        <UiButton variant="ghost" @click="bulkDeleteDialogOpen = false">
+          {{ t('common.cancel') }}
+        </UiButton>
+        <UiButton
+          variant="destructive"
+          :loading="deletingSelectedUsers"
+          data-testid="access-control-user-bulk-delete-confirm"
+          @click="handleBulkDelete"
+        >
+          {{ t('accessControl.common.bulk.delete') }}
         </UiButton>
       </template>
     </UiDialog>
 
     <UiDialog
       :open="deleteDialogOpen"
-      title="删除用户"
-      description="删除后该用户在当前工作区的身份记录会被移除，此操作不可撤销。"
+      :title="t('accessControl.users.dialogs.deleteTitle')"
+      :description="t('accessControl.users.dialogs.deleteDescription')"
       @update:open="deleteDialogOpen = $event"
     >
       <p class="text-sm text-text-secondary">
-        确认删除
-        <span class="font-semibold text-text-primary">{{ selectedUser?.displayName ?? '当前用户' }}</span>
-        吗？
+        {{ t('accessControl.users.dialogs.deleteConfirm', { name: selectedUser?.displayName ?? t('common.na') }) }}
       </p>
 
       <template #footer>
         <UiButton variant="ghost" @click="closeDeleteDialog">
-          取消
+          {{ t('common.cancel') }}
         </UiButton>
         <UiButton
           variant="destructive"
@@ -499,7 +755,7 @@ const statusFilterOptions = computed(() => [
           data-testid="access-control-user-delete-confirm"
           @click="handleDelete"
         >
-          删除
+          {{ t('common.delete') }}
         </UiButton>
       </template>
     </UiDialog>

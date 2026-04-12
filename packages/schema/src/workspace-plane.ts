@@ -5,6 +5,7 @@ import type {
   CreateWorkspaceResourceInput as OpenApiCreateWorkspaceResourceInput,
   ConversationRecord as OpenApiConversationRecord,
   KnowledgeRecord as OpenApiKnowledgeRecord,
+  PromoteWorkspaceResourceInput as OpenApiPromoteWorkspaceResourceInput,
   ProjectTeamLinkInput as OpenApiProjectTeamLinkInput,
   ProjectTeamLinkRecord as OpenApiProjectTeamLinkRecord,
   ProjectDashboardSnapshot as OpenApiProjectDashboardSnapshot,
@@ -13,11 +14,18 @@ import type {
   UpsertTeamInput as OpenApiUpsertTeamInput,
   UpdateWorkspaceResourceInput as OpenApiUpdateWorkspaceResourceInput,
   UserRecordSummary as OpenApiUserRecordSummary,
+  WorkspaceDirectoryBrowserResponse as OpenApiWorkspaceDirectoryBrowserResponse,
+  WorkspaceResourceChildrenRecord as OpenApiWorkspaceResourceChildrenRecord,
+  WorkspaceResourceContentDocument as OpenApiWorkspaceResourceContentDocument,
   WorkspaceResourceFolderUploadEntry as OpenApiWorkspaceResourceFolderUploadEntry,
+  WorkspaceResourceImportInput as OpenApiWorkspaceResourceImportInput,
   WorkspaceResourceRecord as OpenApiWorkspaceResourceRecord,
+  WorkspaceResourceScope as OpenApiWorkspaceResourceScope,
+  WorkspaceResourceVisibility as OpenApiWorkspaceResourceVisibility,
   WorkspaceActivityRecord as OpenApiWorkspaceActivityRecord,
   WorkspaceMetricRecord as OpenApiWorkspaceMetricRecord,
   WorkspaceOverviewSnapshot as OpenApiWorkspaceOverviewSnapshot,
+  ResourcePreviewKind as OpenApiResourcePreviewKind,
 } from './generated'
 import type {
   AvatarUploadPayload,
@@ -47,6 +55,14 @@ export type ProjectDashboardSnapshot = OpenApiProjectDashboardSnapshot
 export type WorkspaceResourceRecord = OpenApiWorkspaceResourceRecord
 export type CreateWorkspaceResourceInput = OpenApiCreateWorkspaceResourceInput
 export type UpdateWorkspaceResourceInput = OpenApiUpdateWorkspaceResourceInput
+export type WorkspaceResourceImportInput = OpenApiWorkspaceResourceImportInput
+export type WorkspaceResourceContentDocument = OpenApiWorkspaceResourceContentDocument
+export type WorkspaceResourceChildrenRecord = OpenApiWorkspaceResourceChildrenRecord
+export type WorkspaceDirectoryBrowserResponse = OpenApiWorkspaceDirectoryBrowserResponse
+export type WorkspaceResourceScope = OpenApiWorkspaceResourceScope
+export type WorkspaceResourceVisibility = OpenApiWorkspaceResourceVisibility
+export type ResourcePreviewKind = OpenApiResourcePreviewKind
+export type PromoteWorkspaceResourceInput = OpenApiPromoteWorkspaceResourceInput
 
 export interface WorkspaceResourceUploadPayload {
   fileName: string

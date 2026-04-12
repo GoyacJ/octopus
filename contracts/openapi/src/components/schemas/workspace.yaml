@@ -84,15 +84,66 @@ CreateWorkspaceResourceInput:
       type: string
     projectId:
       type: string
+    scope:
+      $ref: "#/components/schemas/WorkspaceResourceScope"
     sourceArtifactId:
       type: string
     tags:
       items:
         type: string
       type: array
+    visibility:
+      $ref: "#/components/schemas/WorkspaceResourceVisibility"
   required:
     - kind
     - name
+  type: object
+PromoteWorkspaceResourceInput:
+  additionalProperties: false
+  properties:
+    scope:
+      $ref: "#/components/schemas/WorkspaceResourceScope"
+  required:
+    - scope
+  type: object
+ResourcePreviewKind:
+  enum:
+    - text
+    - code
+    - markdown
+    - image
+    - pdf
+    - audio
+    - video
+    - folder
+    - binary
+    - url
+  type: string
+WorkspaceDirectoryBrowserEntry:
+  additionalProperties: false
+  properties:
+    name:
+      type: string
+    path:
+      type: string
+  required:
+    - name
+    - path
+  type: object
+WorkspaceDirectoryBrowserResponse:
+  additionalProperties: false
+  properties:
+    currentPath:
+      type: string
+    entries:
+      items:
+        $ref: "#/components/schemas/WorkspaceDirectoryBrowserEntry"
+      type: array
+    parentPath:
+      type: string
+  required:
+    - currentPath
+    - entries
   type: object
 KnowledgeKind:
   enum:
@@ -484,6 +535,8 @@ UpdateWorkspaceResourceInput:
       items:
         type: string
       type: array
+    visibility:
+      $ref: "#/components/schemas/WorkspaceResourceVisibility"
   type: object
 UpsertTeamInput:
   additionalProperties: false
@@ -674,9 +727,85 @@ WorkspaceResourceFolderUploadEntry:
     - byteSize
     - relativePath
   type: object
+WorkspaceResourceChildrenRecord:
+  additionalProperties: false
+  properties:
+    byteSize:
+      type: integer
+    contentType:
+      type: string
+    kind:
+      $ref: "#/components/schemas/ProjectResourceKind"
+    name:
+      type: string
+    previewKind:
+      $ref: "#/components/schemas/ResourcePreviewKind"
+    relativePath:
+      type: string
+    updatedAt:
+      type: integer
+  required:
+    - kind
+    - name
+    - previewKind
+    - relativePath
+    - updatedAt
+  type: object
+WorkspaceResourceContentDocument:
+  additionalProperties: false
+  properties:
+    byteSize:
+      type: integer
+    contentType:
+      type: string
+    dataBase64:
+      type: string
+    externalUrl:
+      type: string
+    fileName:
+      type: string
+    previewKind:
+      $ref: "#/components/schemas/ResourcePreviewKind"
+    resourceId:
+      type: string
+    textContent:
+      type: string
+  required:
+    - resourceId
+    - previewKind
+  type: object
+WorkspaceResourceImportInput:
+  additionalProperties: false
+  properties:
+    files:
+      items:
+        $ref: "#/components/schemas/WorkspaceResourceFolderUploadEntry"
+      type: array
+    name:
+      type: string
+    rootDirName:
+      type: string
+    scope:
+      $ref: "#/components/schemas/WorkspaceResourceScope"
+    tags:
+      items:
+        type: string
+      type: array
+    visibility:
+      $ref: "#/components/schemas/WorkspaceResourceVisibility"
+  required:
+    - files
+    - name
+    - scope
+    - visibility
+  type: object
 WorkspaceResourceRecord:
   additionalProperties: false
   properties:
+    byteSize:
+      type: integer
+    contentType:
+      type: string
     id:
       type: string
     kind:
@@ -687,9 +816,17 @@ WorkspaceResourceRecord:
       type: string
     origin:
       $ref: "#/components/schemas/ProjectResourceOrigin"
+    ownerUserId:
+      type: string
+    previewKind:
+      $ref: "#/components/schemas/ResourcePreviewKind"
     projectId:
       type: string
+    scope:
+      $ref: "#/components/schemas/WorkspaceResourceScope"
     sourceArtifactId:
+      type: string
+    storagePath:
       type: string
     status:
       $ref: "#/components/schemas/ViewStatus"
@@ -699,6 +836,8 @@ WorkspaceResourceRecord:
       type: array
     updatedAt:
       type: integer
+    visibility:
+      $ref: "#/components/schemas/WorkspaceResourceVisibility"
     workspaceId:
       type: string
   required:
@@ -707,7 +846,22 @@ WorkspaceResourceRecord:
     - kind
     - name
     - origin
+    - scope
+    - visibility
+    - ownerUserId
+    - previewKind
     - status
     - updatedAt
     - tags
   type: object
+WorkspaceResourceScope:
+  enum:
+    - personal
+    - project
+    - workspace
+  type: string
+WorkspaceResourceVisibility:
+  enum:
+    - private
+    - public
+  type: string

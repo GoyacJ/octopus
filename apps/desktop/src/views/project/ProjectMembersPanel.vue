@@ -45,6 +45,7 @@ const selectedMemberUserIdsModel = computed({
       <label
         v-for="user in workspaceUsers"
         :key="user.id"
+        :data-testid="`project-member-option-${user.id}`"
         class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
       >
         <div class="min-w-0 space-y-1">

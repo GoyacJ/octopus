@@ -141,6 +141,21 @@ export function createProjectRecord(
     name: input.name.trim(),
     status: 'active',
     description: input.description.trim(),
+    resourceDirectory: input.resourceDirectory.trim(),
+    ownerUserId: input.ownerUserId?.trim() || 'user-owner',
+    memberUserIds: [...new Set([input.ownerUserId?.trim() || 'user-owner', ...(input.memberUserIds ?? [])].filter(Boolean))],
+    permissionOverrides: input.permissionOverrides ?? {
+      agents: 'inherit',
+      resources: 'inherit',
+      tools: 'inherit',
+      knowledge: 'inherit',
+    },
+    linkedWorkspaceAssets: input.linkedWorkspaceAssets ?? {
+      agentIds: [],
+      resourceIds: [],
+      toolSourceKeys: [],
+      knowledgeIds: [],
+    },
     assignments: input.assignments ? clone(input.assignments) : undefined,
   }
 }
@@ -153,7 +168,17 @@ export function updateProjectRecord(
     ...current,
     name: input.name.trim(),
     description: input.description.trim(),
+    resourceDirectory: input.resourceDirectory.trim(),
     status: input.status,
+    ownerUserId: input.ownerUserId?.trim() || current.ownerUserId,
+    memberUserIds: [...new Set(
+      [
+        input.ownerUserId?.trim() || current.ownerUserId,
+        ...(input.memberUserIds ?? current.memberUserIds ?? []),
+      ].filter(Boolean),
+    )],
+    permissionOverrides: input.permissionOverrides ? clone(input.permissionOverrides) : current.permissionOverrides,
+    linkedWorkspaceAssets: input.linkedWorkspaceAssets ? clone(input.linkedWorkspaceAssets) : current.linkedWorkspaceAssets,
     assignments: input.assignments ? clone(input.assignments) : undefined,
   }
 }

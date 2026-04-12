@@ -1,9 +1,15 @@
 import type {
+  CreateProjectPromotionRequestInput as OpenApiCreateProjectPromotionRequestInput,
   CreateProjectRequest as OpenApiCreateProjectRequest,
   ProjectAgentAssignments as OpenApiProjectAgentAssignments,
+  ProjectDefaultPermissions as OpenApiProjectDefaultPermissions,
+  ProjectLinkedWorkspaceAssets as OpenApiProjectLinkedWorkspaceAssets,
   ProjectModelAssignments as OpenApiProjectModelAssignments,
+  ProjectPermissionOverrides as OpenApiProjectPermissionOverrides,
+  ProjectPromotionRequest as OpenApiProjectPromotionRequest,
   ProjectRecord as OpenApiProjectRecord,
   ProjectToolAssignments as OpenApiProjectToolAssignments,
+  ReviewProjectPromotionRequestInput as OpenApiReviewProjectPromotionRequestInput,
   UpdateProjectRequest as OpenApiUpdateProjectRequest,
   ProjectWorkspaceAssignments as OpenApiProjectWorkspaceAssignments,
   SystemBootstrapStatus as OpenApiSystemBootstrapStatus,
@@ -15,8 +21,14 @@ export type ProjectModelAssignments = OpenApiProjectModelAssignments
 export type ProjectToolAssignments = OpenApiProjectToolAssignments
 export type ProjectAgentAssignments = OpenApiProjectAgentAssignments
 export type ProjectWorkspaceAssignments = OpenApiProjectWorkspaceAssignments
+export type ProjectDefaultPermissions = OpenApiProjectDefaultPermissions
+export type ProjectLinkedWorkspaceAssets = OpenApiProjectLinkedWorkspaceAssets
+export type ProjectPermissionOverrides = OpenApiProjectPermissionOverrides
+export type ProjectPromotionRequest = OpenApiProjectPromotionRequest
 export type ProjectRecord = OpenApiProjectRecord
 export type CreateProjectRequest = OpenApiCreateProjectRequest
 export type UpdateProjectRequest = OpenApiUpdateProjectRequest
+export type CreateProjectPromotionRequestInput = OpenApiCreateProjectPromotionRequestInput
+export type ReviewProjectPromotionRequestInput = OpenApiReviewProjectPromotionRequestInput
 
 export type SystemBootstrapStatus = OpenApiSystemBootstrapStatus

@@ -58,6 +58,7 @@ pub(super) fn save_workspace_config_file(
         host: workspace.host.clone(),
         listen_address: workspace.listen_address.clone(),
         default_project_id: workspace.default_project_id.clone(),
+        project_default_permissions: workspace.project_default_permissions.clone(),
     };
     fs::write(path, toml::to_string_pretty(&config)?)?;
     Ok(())

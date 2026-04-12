@@ -45,15 +45,21 @@ function onChange() {
 </script>
 
 <template>
-  <label 
+  <label
     :class="cn(
       'inline-flex items-center gap-2 min-w-0 select-none cursor-pointer text-sm leading-none transition-opacity',
       props.disabled && 'opacity-50 cursor-not-allowed',
       props.class
     )"
-    @click.prevent="onChange"
   >
-    <div 
+    <input
+      type="checkbox"
+      class="sr-only"
+      :checked="checked"
+      :disabled="props.disabled"
+      @change.stop="onChange"
+    >
+    <div
       class="flex size-[14px] shrink-0 items-center justify-center rounded-sm border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       :class="[
         checked ? 'border-primary bg-primary text-primary-foreground' : 'border-border/70 bg-transparent hover:border-text-tertiary'

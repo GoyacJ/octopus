@@ -8,6 +8,7 @@ import type {
   AutomationRecord,
   AuthorizationSnapshot,
   ChangeCurrentUserPasswordResponse,
+  CreateProjectPromotionRequestInput,
   CredentialBinding,
   DataPolicyRecord,
   EnterpriseAuthSuccess,
@@ -24,10 +25,12 @@ import type {
   PermissionDefinition,
   PositionRecord,
   ProjectAgentLinkRecord,
+  ProjectPromotionRequest,
   ProjectTeamLinkRecord,
   ProtectedResourceDescriptor,
   ProtectedResourceMetadataUpsertRequest,
   ResourcePolicyRecord,
+  ReviewProjectPromotionRequestInput,
   RoleBindingRecord,
   SystemAuthStatus,
   ToolRecord,
@@ -125,6 +128,30 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
           session: assertWorkspaceRequestReady(context),
         })
       },
+      async listPromotionRequests() {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/promotion-requests',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+          },
+        ) as ProjectPromotionRequest[]
+      },
+      async reviewPromotionRequest(requestId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/promotion-requests/{requestId}/review',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input satisfies ReviewProjectPromotionRequestInput),
+            pathParams: {
+              requestId,
+            },
+          },
+        ) as ProjectPromotionRequest
+      },
     },
     projects: {
       async list() {
@@ -159,6 +186,33 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
             },
           },
         )
+      },
+      async listPromotionRequests(projectId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/promotion-requests',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              projectId,
+            },
+          },
+        ) as ProjectPromotionRequest[]
+      },
+      async createPromotionRequest(projectId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/promotion-requests',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input satisfies CreateProjectPromotionRequestInput),
+            pathParams: {
+              projectId,
+            },
+          },
+        ) as ProjectPromotionRequest
       },
     },
     resources: {
@@ -214,6 +268,84 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
           },
         )
       },
+      async importWorkspace(input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/resources/import',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input),
+          },
+        )
+      },
+      async importProject(projectId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/projects/{projectId}/resources/import',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input),
+            pathParams: {
+              projectId,
+            },
+          },
+        )
+      },
+      async getDetail(resourceId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/resources/{resourceId}',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              resourceId,
+            },
+          },
+        )
+      },
+      async getContent(resourceId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/resources/{resourceId}/content',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              resourceId,
+            },
+          },
+        )
+      },
+      async listChildren(resourceId) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/resources/{resourceId}/children',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            pathParams: {
+              resourceId,
+            },
+          },
+        )
+      },
+      async promote(resourceId, input) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/resources/{resourceId}/promote',
+          'post',
+          {
+            session: assertWorkspaceRequestReady(context),
+            body: JSON.stringify(input),
+            pathParams: {
+              resourceId,
+            },
+          },
+        )
+      },
       async updateWorkspace(resourceId, input) {
         return await fetchWorkspaceOpenApi(
           context.connection,
@@ -259,6 +391,21 @@ export function createWorkspaceApi(context: WorkspaceClientContext): Omit<Worksp
             resourceId,
           },
         })
+      },
+    },
+    filesystem: {
+      async listDirectories(path) {
+        return await fetchWorkspaceOpenApi(
+          context.connection,
+          '/api/v1/workspace/filesystem/directories',
+          'get',
+          {
+            session: assertWorkspaceRequestReady(context),
+            queryParams: {
+              path,
+            },
+          },
+        )
       },
     },
     artifacts: {

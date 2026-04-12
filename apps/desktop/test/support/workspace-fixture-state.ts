@@ -5,6 +5,7 @@ import type {
   AutomationRecord,
   CredentialBinding,
   DataPolicyRecord,
+  InboxItemRecord,
   KnowledgeRecord,
   MenuDefinition,
   MenuPolicyRecord,
@@ -17,6 +18,7 @@ import type {
   PositionRecord,
   ProjectAgentLinkRecord,
   ProjectDashboardSnapshot,
+  ProjectPromotionRequest,
   ProjectRecord,
   ProjectTeamLinkRecord,
   RoleBindingRecord,
@@ -28,8 +30,11 @@ import type {
   UserOrgAssignmentRecord,
   UserRecordSummary,
   WorkspaceConnectionRecord,
+  WorkspaceDirectoryBrowserResponse,
   WorkspaceMcpServerDocument,
   WorkspaceOverviewSnapshot,
+  WorkspaceResourceChildrenRecord,
+  WorkspaceResourceContentDocument,
   WorkspaceResourceRecord,
   WorkspaceSkillDocument,
   WorkspaceSkillFileDocument,
@@ -61,6 +66,13 @@ export interface FixtureOptions {
   localSetupRequired?: boolean
   preloadWorkspaceSessions?: boolean
   localSessionValid?: boolean
+  extraAccessUsersCount?: number
+  includeAccessOrgHierarchy?: boolean
+  locale?: string
+  stateTransform?: (
+    state: WorkspaceFixtureState,
+    connection: WorkspaceConnectionRecord,
+  ) => void
 }
 
 export interface WorkspaceFixtureState {
@@ -68,10 +80,15 @@ export interface WorkspaceFixtureState {
   workspace: WorkspaceOverviewSnapshot['workspace']
   overview: WorkspaceOverviewSnapshot
   projects: ProjectRecord[]
+  projectPromotionRequests: ProjectPromotionRequest[]
   dashboards: Record<string, ProjectDashboardSnapshot>
   workspaceResources: WorkspaceResourceRecord[]
   projectResources: Record<string, WorkspaceResourceRecord[]>
+  resourceContents: Record<string, WorkspaceResourceContentDocument>
+  resourceChildren: Record<string, WorkspaceResourceChildrenRecord[]>
+  remoteDirectories: Record<string, WorkspaceDirectoryBrowserResponse>
   artifacts: ArtifactRecord[]
+  inboxItems: InboxItemRecord[]
   workspaceKnowledge: KnowledgeRecord[]
   projectKnowledge: Record<string, KnowledgeRecord[]>
   agents: AgentRecord[]
@@ -199,6 +216,12 @@ export function createWorkspaceFixtureState(
     deployment: local ? 'local' : 'remote',
     bootstrapStatus: setupRequired ? 'setup_required' : 'ready',
     ownerUserId: ownerReady ? 'user-owner' : undefined,
+    projectDefaultPermissions: {
+      agents: 'allow',
+      resources: 'allow',
+      tools: local ? 'allow' : 'deny',
+      knowledge: 'allow',
+    },
     host: local ? '127.0.0.1' : 'enterprise.example.test',
     listenAddress: connection.baseUrl,
     defaultProjectId: local ? 'proj-redesign' : 'proj-launch',
@@ -212,6 +235,21 @@ export function createWorkspaceFixtureState(
           name: 'Desktop Redesign',
           status: 'active',
           description: 'Real workspace API migration for the desktop surface.',
+          resourceDirectory: 'data/projects/proj-redesign/resources',
+          ownerUserId: 'user-owner',
+          memberUserIds: ['user-owner', 'user-operator'],
+          permissionOverrides: {
+            agents: 'inherit',
+            resources: 'inherit',
+            tools: 'inherit',
+            knowledge: 'inherit',
+          },
+          linkedWorkspaceAssets: {
+            agentIds: ['agent-architect'],
+            resourceIds: [`${workspace.id}-res-workspace-1`],
+            toolSourceKeys: ['builtin:bash', 'mcp:ops'],
+            knowledgeIds: ['knowledge-workspace-1'],
+          },
           assignments: {
             models: {
               configuredModelIds: ['anthropic-primary', 'anthropic-alt'],
@@ -232,6 +270,21 @@ export function createWorkspaceFixtureState(
           name: 'Workspace Governance',
           status: 'active',
           description: 'RBAC, menu policies, and audit automation.',
+          resourceDirectory: 'data/projects/proj-governance/resources',
+          ownerUserId: 'user-owner',
+          memberUserIds: ['user-owner'],
+          permissionOverrides: {
+            agents: 'inherit',
+            resources: 'inherit',
+            tools: 'inherit',
+            knowledge: 'inherit',
+          },
+          linkedWorkspaceAssets: {
+            agentIds: [],
+            resourceIds: [],
+            toolSourceKeys: [],
+            knowledgeIds: [],
+          },
         },
       ]
     : [
@@ -241,8 +294,41 @@ export function createWorkspaceFixtureState(
           name: 'Launch Readiness',
           status: 'active',
           description: 'Enterprise launch planning and cutover execution.',
+          resourceDirectory: '/remote/projects/launch-readiness/resources',
+          ownerUserId: 'user-owner',
+          memberUserIds: ['user-owner'],
+          permissionOverrides: {
+            agents: 'inherit',
+            resources: 'inherit',
+            tools: 'inherit',
+            knowledge: 'inherit',
+          },
+          linkedWorkspaceAssets: {
+            agentIds: [],
+            resourceIds: [],
+            toolSourceKeys: [],
+            knowledgeIds: [],
+          },
         },
       ]
+
+  const projectPromotionRequests: ProjectPromotionRequest[] = local
+    ? [
+        {
+          id: 'promotion-proj-redesign-res-4',
+          workspaceId: workspace.id,
+          projectId: 'proj-redesign',
+          assetType: 'resource',
+          assetId: 'proj-redesign-res-4',
+          requestedByUserId: 'user-owner',
+          submittedByOwnerUserId: 'user-owner',
+          requiredWorkspaceCapability: 'resource.publish',
+          status: 'pending',
+          createdAt: 105,
+          updatedAt: 105,
+        },
+      ]
+    : []
 
   const recentConversations = local
     ? [
@@ -323,9 +409,32 @@ export function createWorkspaceFixtureState(
       name: local ? 'Shared Specs' : 'Launch Runbooks',
       location: local ? '/workspace/specs' : 's3://launch/runbooks',
       origin: 'source',
+      scope: 'workspace',
+      visibility: 'public',
+      ownerUserId: 'user-owner',
+      storagePath: local ? 'data/resources/workspace/shared-specs' : '/remote/shared/runbooks',
+      previewKind: 'folder',
       status: 'healthy',
       updatedAt: 100,
       tags: ['docs', 'shared'],
+    },
+    {
+      id: `${workspace.id}-res-workspace-2`,
+      workspaceId: workspace.id,
+      kind: 'file',
+      name: local ? 'Personal Scratchpad' : 'My Checklist',
+      location: local ? '/workspace/personal/scratchpad.md' : '/remote/users/user-owner/checklist.md',
+      origin: 'source',
+      scope: 'personal',
+      visibility: 'private',
+      ownerUserId: 'user-owner',
+      storagePath: local ? 'data/resources/workspace/personal/scratchpad.md' : '/remote/users/user-owner/checklist.md',
+      contentType: 'text/markdown',
+      byteSize: 96,
+      previewKind: 'markdown',
+      status: 'healthy',
+      updatedAt: 99,
+      tags: ['personal', 'notes'],
     },
   ]
 
@@ -340,6 +449,13 @@ export function createWorkspaceFixtureState(
         name: `${project.name} Brief`,
         location: `/projects/${project.id}/brief.md`,
         origin: 'source',
+        scope: 'project',
+        visibility: 'public',
+        ownerUserId: 'user-owner',
+        storagePath: `${project.resourceDirectory}/brief.md`,
+        contentType: 'text/markdown',
+        byteSize: 148,
+        previewKind: 'markdown',
         status: 'healthy',
         updatedAt: 101,
         tags: ['brief'],
@@ -352,13 +468,224 @@ export function createWorkspaceFixtureState(
         name: `${project.name} API`,
         location: `https://example.test/${project.id}/api`,
         origin: 'generated',
+        scope: 'project',
+        visibility: 'public',
+        ownerUserId: 'user-owner',
+        previewKind: 'url',
         sourceArtifactId: project.id === 'proj-redesign' ? 'artifact-run-conv-redesign' : undefined,
-        status: 'configured',
+        status: 'healthy',
         updatedAt: 102,
         tags: ['api'],
       },
+      {
+        id: `${project.id}-res-3`,
+        workspaceId: workspace.id,
+        projectId: project.id,
+        kind: 'folder',
+        name: `${project.name} Personal Notes`,
+        location: `${project.resourceDirectory}/personal-notes`,
+        origin: 'source',
+        scope: 'personal',
+        visibility: 'private',
+        ownerUserId: 'user-owner',
+        storagePath: `${project.resourceDirectory}/personal-notes`,
+        previewKind: 'folder',
+        status: 'healthy',
+        updatedAt: 103,
+        tags: ['notes', 'personal'],
+      },
+      {
+        id: `${project.id}-res-4`,
+        workspaceId: workspace.id,
+        projectId: project.id,
+        kind: 'folder',
+        name: `${project.name} Shared Assets`,
+        location: `${project.resourceDirectory}/shared-assets`,
+        origin: 'source',
+        scope: 'workspace',
+        visibility: 'public',
+        ownerUserId: 'user-owner',
+        storagePath: `${project.resourceDirectory}/shared-assets`,
+        previewKind: 'folder',
+        status: 'healthy',
+        updatedAt: 104,
+        tags: ['shared', 'assets'],
+      },
     ],
   ]))
+
+  const resourceContents: Record<string, WorkspaceResourceContentDocument> = {
+    [`${workspace.id}-res-workspace-2`]: {
+      resourceId: `${workspace.id}-res-workspace-2`,
+      previewKind: 'markdown',
+      fileName: 'scratchpad.md',
+      contentType: 'text/markdown',
+      byteSize: 96,
+      textContent: '# Scratchpad\n\n- Review resource preview\n- Verify remote directory selection',
+    },
+    'proj-redesign-res-1': {
+      resourceId: 'proj-redesign-res-1',
+      previewKind: 'markdown',
+      fileName: 'brief.md',
+      contentType: 'text/markdown',
+      byteSize: 148,
+      textContent: '# Desktop Redesign Brief\n\n- Rebuild the project resources workbench.\n- Align resource import with the project directory.\n',
+    },
+    'proj-redesign-res-2': {
+      resourceId: 'proj-redesign-res-2',
+      previewKind: 'url',
+      externalUrl: 'https://example.test/proj-redesign/api',
+    },
+    'proj-governance-res-1': {
+      resourceId: 'proj-governance-res-1',
+      previewKind: 'markdown',
+      fileName: 'brief.md',
+      contentType: 'text/markdown',
+      byteSize: 132,
+      textContent: '# Workspace Governance Brief\n\n- Audit roles, policies, and resources.\n',
+    },
+    'proj-launch-res-1': {
+      resourceId: 'proj-launch-res-1',
+      previewKind: 'markdown',
+      fileName: 'brief.md',
+      contentType: 'text/markdown',
+      byteSize: 128,
+      textContent: '# Launch Readiness Brief\n\n- Validate the release runway and checkpoints.\n',
+    },
+  }
+
+  const resourceChildren: Record<string, WorkspaceResourceChildrenRecord[]> = {
+    [`${workspace.id}-res-workspace-1`]: [
+      {
+        name: 'design-system',
+        relativePath: 'design-system',
+        kind: 'folder',
+        previewKind: 'folder',
+        updatedAt: 100,
+      },
+      {
+        name: 'workspace-resources.pdf',
+        relativePath: 'workspace-resources.pdf',
+        kind: 'file',
+        previewKind: 'pdf',
+        contentType: 'application/pdf',
+        byteSize: 4096,
+        updatedAt: 100,
+      },
+    ],
+    'proj-redesign-res-3': [
+      {
+        name: 'ideas.md',
+        relativePath: 'ideas.md',
+        kind: 'file',
+        previewKind: 'markdown',
+        contentType: 'text/markdown',
+        byteSize: 84,
+        updatedAt: 103,
+      },
+    ],
+    'proj-redesign-res-4': [
+      {
+        name: 'hero.png',
+        relativePath: 'hero.png',
+        kind: 'file',
+        previewKind: 'image',
+        contentType: 'image/png',
+        byteSize: 2048,
+        updatedAt: 104,
+      },
+      {
+        name: 'handoff.pdf',
+        relativePath: 'handoff.pdf',
+        kind: 'file',
+        previewKind: 'pdf',
+        contentType: 'application/pdf',
+        byteSize: 8192,
+        updatedAt: 104,
+      },
+    ],
+    'proj-governance-res-3': [
+      {
+        name: 'policy-drafts',
+        relativePath: 'policy-drafts',
+        kind: 'folder',
+        previewKind: 'folder',
+        updatedAt: 103,
+      },
+    ],
+    'proj-governance-res-4': [
+      {
+        name: 'rbac-matrix.csv',
+        relativePath: 'rbac-matrix.csv',
+        kind: 'file',
+        previewKind: 'text',
+        contentType: 'text/csv',
+        byteSize: 512,
+        updatedAt: 104,
+      },
+    ],
+    'proj-launch-res-3': [
+      {
+        name: 'checklist.md',
+        relativePath: 'checklist.md',
+        kind: 'file',
+        previewKind: 'markdown',
+        contentType: 'text/markdown',
+        byteSize: 120,
+        updatedAt: 103,
+      },
+    ],
+    'proj-launch-res-4': [
+      {
+        name: 'cutover.mp4',
+        relativePath: 'cutover.mp4',
+        kind: 'file',
+        previewKind: 'video',
+        contentType: 'video/mp4',
+        byteSize: 12_000,
+        updatedAt: 104,
+      },
+    ],
+  }
+
+  const remoteDirectories: Record<string, WorkspaceDirectoryBrowserResponse> = {
+    '': {
+      currentPath: '/remote',
+      entries: [
+        { name: 'projects', path: '/remote/projects' },
+        { name: 'shared', path: '/remote/shared' },
+      ],
+    },
+    '/remote': {
+      currentPath: '/remote',
+      entries: [
+        { name: 'projects', path: '/remote/projects' },
+        { name: 'shared', path: '/remote/shared' },
+      ],
+    },
+    '/remote/projects': {
+      currentPath: '/remote/projects',
+      parentPath: '/remote',
+      entries: [
+        { name: 'launch-readiness', path: '/remote/projects/launch-readiness' },
+        { name: 'agent-studio', path: '/remote/projects/agent-studio' },
+      ],
+    },
+    '/remote/projects/launch-readiness': {
+      currentPath: '/remote/projects/launch-readiness',
+      parentPath: '/remote/projects',
+      entries: [
+        { name: 'resources', path: '/remote/projects/launch-readiness/resources' },
+      ],
+    },
+    '/remote/projects/launch-readiness/resources': {
+      currentPath: '/remote/projects/launch-readiness/resources',
+      parentPath: '/remote/projects/launch-readiness',
+      entries: [
+        { name: 'design-assets', path: '/remote/projects/launch-readiness/resources/design-assets' },
+      ],
+    },
+  }
 
   const artifacts: ArtifactRecord[] = [
     {
@@ -392,6 +719,52 @@ export function createWorkspaceFixtureState(
       contentType: 'text/markdown',
     },
   ]
+
+  const inboxItems: InboxItemRecord[] = local
+    ? [
+        {
+          id: 'inbox-approval-runtime',
+          workspaceId: workspace.id,
+          projectId: 'proj-redesign',
+          itemType: 'approval',
+          title: 'Runtime approval pending',
+          description: 'A runtime command is waiting for approval before execution can continue.',
+          status: 'pending',
+          priority: 'high',
+          actionable: true,
+          routeTo: `/workspaces/${workspace.id}/projects/proj-redesign/runtime`,
+          actionLabel: 'Review approval',
+          createdAt: 105,
+        },
+        {
+          id: 'inbox-note-governance',
+          workspaceId: workspace.id,
+          projectId: 'proj-governance',
+          itemType: 'follow_up',
+          title: 'Governance review completed',
+          description: 'The latest governance review has been recorded for audit reference.',
+          status: 'completed',
+          priority: 'medium',
+          actionable: false,
+          createdAt: 99,
+        },
+      ]
+    : [
+        {
+          id: 'inbox-enterprise-review',
+          workspaceId: workspace.id,
+          projectId: 'proj-launch',
+          itemType: 'approval',
+          title: 'Launch review pending',
+          description: 'The launch checklist needs operator approval.',
+          status: 'pending',
+          priority: 'high',
+          actionable: true,
+          routeTo: `/workspaces/${workspace.id}/projects/proj-launch/dashboard`,
+          actionLabel: 'Open checklist',
+          createdAt: 105,
+        },
+      ]
 
   const workspaceKnowledge: KnowledgeRecord[] = [
     {
@@ -1383,6 +1756,17 @@ export function createWorkspaceFixtureState(
       status: 'active',
       passwordState: 'set',
     },
+    ...Array.from({ length: options.extraAccessUsersCount ?? 0 }, (_, index) => {
+      const suffix = String(index + 1).padStart(2, '0')
+      return {
+        id: `user-extra-${suffix}`,
+        username: `extra-${suffix}`,
+        displayName: `Access User ${suffix}`,
+        avatar: 'data:image/png;base64,iVBORw0KGgo=',
+        status: 'active' as const,
+        passwordState: 'set' as const,
+      }
+    }),
   ]
 
   const orgUnits: OrgUnitRecord[] = [{
@@ -1393,12 +1777,40 @@ export function createWorkspaceFixtureState(
     status: 'active',
   }]
 
+  if (options.includeAccessOrgHierarchy) {
+    orgUnits.push(
+      {
+        id: 'org-engineering',
+        parentId: 'org-root',
+        code: 'engineering',
+        name: 'Engineering',
+        status: 'active',
+      },
+      {
+        id: 'org-platform',
+        parentId: 'org-engineering',
+        code: 'platform',
+        name: 'Platform',
+        status: 'active',
+      },
+      {
+        id: 'org-design',
+        parentId: 'org-root',
+        code: 'design',
+        name: 'Design',
+        status: 'disabled',
+      },
+    )
+  }
+
   const positions: PositionRecord[] = []
   const userGroups: UserGroupRecord[] = []
 
-  const userOrgAssignments: UserOrgAssignmentRecord[] = users.map(user => ({
+  const userOrgAssignments: UserOrgAssignmentRecord[] = users.map((user, index) => ({
     userId: user.id,
-    orgUnitId: 'org-root',
+    orgUnitId: options.includeAccessOrgHierarchy
+      ? (index % 3 === 0 ? 'org-platform' : index % 3 === 1 ? 'org-engineering' : 'org-design')
+      : 'org-root',
     isPrimary: true,
     positionIds: [],
     userGroupIds: [],
@@ -1664,7 +2076,7 @@ export function createWorkspaceFixtureState(
   const workspacePetPresence = createPetPresenceState(petProfile.id)
   const projectPetPresences = Object.fromEntries(projects.map(project => [project.id, createPetPresenceState(petProfile.id)]))
 
-  return {
+  const state: WorkspaceFixtureState = {
     systemBootstrap: {
       workspace,
       setupRequired,
@@ -1684,10 +2096,15 @@ export function createWorkspaceFixtureState(
     workspace,
     overview,
     projects,
+    projectPromotionRequests,
     dashboards,
     workspaceResources,
     projectResources,
+    resourceContents,
+    resourceChildren,
+    remoteDirectories,
     artifacts,
+    inboxItems,
     workspaceKnowledge,
     projectKnowledge,
     agents,
@@ -1724,4 +2141,8 @@ export function createWorkspaceFixtureState(
     workspacePetBinding: undefined,
     projectPetBindings: {},
   }
+
+  options.stateTransform?.(state, connection)
+
+  return state
 }

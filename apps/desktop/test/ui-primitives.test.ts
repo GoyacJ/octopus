@@ -29,6 +29,7 @@ import {
   UiSelectionMenu,
   UiConversationComposerShell,
   UiInspectorPanel,
+  UiHierarchyList,
   UiListRow,
   UiListDetailShell,
   UiListDetailWorkspace,
@@ -37,6 +38,7 @@ import {
   UiNotificationRow,
   UiStatusCallout,
   UiStatTile,
+  UiSwitch,
   UiToastItem,
   UiToastViewport,
   UiTraceBlock,
@@ -111,6 +113,41 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('Save')
     expect(wrapper.classes().join(' ')).toContain('bg-surface')
     expect(wrapper.classes().join(' ')).toContain('border-border-subtle')
+  })
+
+  it('renders UiHierarchyList with expandable branches and selectable leaf nodes', async () => {
+    const wrapper = mount(UiHierarchyList, {
+      props: {
+        items: [
+          {
+            id: 'workspace',
+            label: 'Workspace',
+            depth: 0,
+            expandable: true,
+            expanded: true,
+          },
+          {
+            id: 'workspace.overview.read',
+            label: 'workspace.overview.read',
+            depth: 1,
+          },
+        ],
+        selectedId: 'workspace.overview.read',
+      },
+      slots: {
+        default: ({ item }: { item: { label: string } }) => h('span', { 'data-testid': 'hierarchy-label' }, item.label),
+      },
+    })
+
+    expect(wrapper.get('[data-testid="ui-hierarchy-list"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="ui-hierarchy-item-workspace"]').attributes('data-depth')).toBe('0')
+    expect(wrapper.get('[data-testid="ui-hierarchy-item-workspace.overview.read"]').attributes('data-depth')).toBe('1')
+
+    await wrapper.get('[data-testid="ui-hierarchy-toggle-workspace"]').trigger('click')
+    expect(wrapper.emitted('toggle')).toEqual([['workspace']])
+
+    await wrapper.get('[data-testid="ui-hierarchy-item-workspace.overview.read"]').trigger('click')
+    expect(wrapper.emitted('select')).toEqual([['workspace.overview.read']])
   })
 
   it('renders a loading UiButton with disabled semantics and loading label', () => {
@@ -571,6 +608,8 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('Name')
     expect(wrapper.text()).toContain('Architect')
     expect(wrapper.text()).toContain('Support')
+    expect(wrapper.html()).toContain('border-[color-mix(in_srgb,var(--border)_42%,transparent)]')
+    expect(wrapper.html()).toContain('border-[color-mix(in_srgb,var(--border)_28%,transparent)]')
   })
 
   it('keeps UiCodeEditor controlled via modelValue', async () => {
@@ -693,6 +732,7 @@ describe('Shared UI primitives', () => {
     expect(wrapper.text()).toContain('Panel title')
     expect(wrapper.classes().join(' ')).toContain('w-full')
     expect(wrapper.classes().join(' ')).toContain('transition-all')
+    expect(wrapper.html()).toContain('border-[color-mix(in_srgb,var(--border)_84%,transparent)]')
   })
 
   it('renders UiMetricCard with helper text and progress state', () => {
@@ -775,6 +815,26 @@ describe('Shared UI primitives', () => {
     await nav.get('[data-testid="ui-nav-card-action-roles"]').trigger('click')
 
     expect(nav.emitted('select')).toEqual([['roles']])
+  })
+
+  it('renders UiToolbarRow inline layout without dropping shared slots', () => {
+    const toolbar = mount(UiToolbarRow, {
+      props: {
+        layout: 'inline',
+        testId: 'toolbar-inline',
+      },
+      slots: {
+        search: '<input data-testid="toolbar-inline-search" />',
+        filters: '<div data-testid="toolbar-inline-filters">filters</div>',
+        actions: '<button data-testid="toolbar-inline-action">Upload</button>',
+      },
+    })
+
+    expect(toolbar.find('[data-testid="toolbar-inline"]').exists()).toBe(true)
+    expect(toolbar.find('[data-testid="toolbar-inline-search"]').exists()).toBe(true)
+    expect(toolbar.find('[data-testid="toolbar-inline-filters"]').exists()).toBe(true)
+    expect(toolbar.find('[data-testid="toolbar-inline-action"]').exists()).toBe(true)
+    expect(toolbar.html()).toContain('xl:flex-row')
   })
 
   it('renders UiSelectionMenu with grouped items', () => {
@@ -946,6 +1006,69 @@ describe('Shared UI primitives', () => {
     expect(wrapper.find('[data-testid="record-meta"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="record-action"]').exists()).toBe(true)
     expect(wrapper.emitted('click')).toHaveLength(1)
+  })
+
+  it('keeps UiRecordCard active state neutral instead of blue-filled', () => {
+    const wrapper = mount(UiRecordCard, {
+      props: {
+        title: 'Active row',
+        active: true,
+        testId: 'active-record-card',
+      },
+    })
+
+    const classes = wrapper.get('[data-testid="active-record-card"]').classes().join(' ')
+
+    expect(classes).toContain('is-active')
+    expect(classes).toContain('bg-subtle')
+    expect(classes).not.toContain('bg-accent')
+  })
+
+  it('renders UiRecordCard compact layout with tightened spacing and low-contrast footer', () => {
+    const wrapper = mount(UiRecordCard, {
+      props: {
+        title: 'Lin Zhou',
+        description: 'operator',
+        layout: 'compact',
+        testId: 'compact-record-card',
+      },
+      slots: {
+        secondary: '<span data-testid="record-secondary">Password set</span>',
+        meta: '<span data-testid="record-meta">Operator</span>',
+        actions: '<button data-testid="record-action" type="button">Edit</button>',
+      },
+    })
+
+    const classes = wrapper.get('[data-testid="compact-record-card"]').classes().join(' ')
+
+    expect(wrapper.get('[data-testid="compact-record-card"]').attributes('data-ui-record-layout')).toBe('compact')
+    expect(classes).toContain('gap-1')
+    expect(classes).toContain('p-2')
+    expect(wrapper.html()).not.toContain('border-t border-border/70')
+    expect(wrapper.html()).toContain('pt-1.5')
+    expect(wrapper.find('[data-testid="record-secondary"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="record-meta"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="record-action"]').exists()).toBe(true)
+  })
+
+  it('renders UiSwitch with clear off-state track contrast', () => {
+    const wrapper = mount(UiSwitch, {
+      props: {
+        modelValue: false,
+      },
+    })
+
+    const switchButton = wrapper.get('[role="switch"]')
+    const switchHtml = wrapper.html()
+    const switchClasses = switchButton.classes().join(' ')
+
+    expect(switchButton.attributes('aria-checked')).toBe('false')
+    expect(switchClasses).toContain('border-[var(--control-toggle-off-border)]')
+    expect(switchClasses).toContain('bg-[var(--control-toggle-off-bg)]')
+    expect(switchClasses).toContain('shadow-xs')
+    expect(switchClasses).not.toContain('bg-border-strong/60')
+    expect(switchClasses).not.toContain('shadow-inner')
+    expect(switchHtml).toContain('border-[var(--control-toggle-thumb-border)]')
   })
 
   it('renders UiNotificationRow and emits read and select actions', async () => {

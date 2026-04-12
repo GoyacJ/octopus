@@ -18,6 +18,7 @@ pub struct WorkspacePaths {
     pub db_path: PathBuf,
     pub blobs_dir: PathBuf,
     pub user_avatars_dir: PathBuf,
+    pub workspace_resources_dir: PathBuf,
     pub artifacts_dir: PathBuf,
     pub knowledge_dir: PathBuf,
     pub inbox_dir: PathBuf,
@@ -45,6 +46,7 @@ impl WorkspacePaths {
         let runtime_user_config_dir = runtime_config_dir.join("users");
         let blobs_dir = data_dir.join("blobs");
         let user_avatars_dir = blobs_dir.join("avatars");
+        let workspace_resources_dir = data_dir.join("resources").join("workspace");
         let artifacts_dir = data_dir.join("artifacts");
         let knowledge_dir = data_dir.join("knowledge");
         let inbox_dir = data_dir.join("inbox");
@@ -73,6 +75,7 @@ impl WorkspacePaths {
             tmp_dir,
             blobs_dir,
             user_avatars_dir,
+            workspace_resources_dir,
             artifacts_dir,
             knowledge_dir,
             inbox_dir,
@@ -101,6 +104,7 @@ impl WorkspacePaths {
             &self.tmp_dir,
             &self.blobs_dir,
             &self.user_avatars_dir,
+            &self.workspace_resources_dir,
             &self.artifacts_dir,
             &self.knowledge_dir,
             &self.inbox_dir,
@@ -126,5 +130,17 @@ impl WorkspacePaths {
 
     pub fn project_skills_root(&self, project_id: &str) -> PathBuf {
         self.project_dir(project_id).join("skills")
+    }
+
+    pub fn project_resources_dir(&self, project_id: &str) -> PathBuf {
+        self.project_dir(project_id).join("resources")
+    }
+
+    pub fn default_project_resource_directory(&self, project_id: &str) -> String {
+        format!("data/projects/{project_id}/resources")
+    }
+
+    pub fn workspace_resources_display_path(&self) -> String {
+        "data/resources/workspace".into()
     }
 }

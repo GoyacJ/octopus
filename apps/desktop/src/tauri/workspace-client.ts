@@ -13,6 +13,7 @@ import type {
   ChangeCurrentUserPasswordResponse,
   CopyWorkspaceSkillToManagedInput,
   CreateProjectRequest,
+  CreateProjectPromotionRequestInput,
   CreateRuntimeSessionInput,
   CreateWorkspaceResourceFolderInput,
   CreateWorkspaceResourceInput,
@@ -48,15 +49,18 @@ import type {
   PetWorkspaceSnapshot,
   PositionRecord,
   PositionUpsertRequest,
+  PromoteWorkspaceResourceInput,
   ProtectedResourceDescriptor,
   ProtectedResourceMetadataUpsertRequest,
   ProjectAgentLinkInput,
   ProjectAgentLinkRecord,
   ProjectDashboardSnapshot,
+  ProjectPromotionRequest,
   ProjectRecord,
   ProjectTeamLinkInput,
   ProjectTeamLinkRecord,
   RegisterBootstrapAdminRequest,
+  ReviewProjectPromotionRequestInput,
   ResolveRuntimeApprovalInput,
   ResourcePolicyRecord,
   ResourcePolicyUpsertRequest,
@@ -93,8 +97,12 @@ import type {
   UserOrgAssignmentUpsertRequest,
   UserRecordSummary,
   WorkspaceConnectionRecord,
+  WorkspaceDirectoryBrowserResponse,
   WorkspaceMcpServerDocument,
   WorkspaceOverviewSnapshot,
+  WorkspaceResourceChildrenRecord,
+  WorkspaceResourceContentDocument,
+  WorkspaceResourceImportInput,
   WorkspaceResourceRecord,
   WorkspaceSessionTokenEnvelope,
   WorkspaceSkillDocument,
@@ -141,12 +149,22 @@ export interface WorkspaceClient {
   workspace: {
     get: () => Promise<WorkspaceOverviewSnapshot['workspace']>
     getOverview: () => Promise<WorkspaceOverviewSnapshot>
+    listPromotionRequests: () => Promise<ProjectPromotionRequest[]>
+    reviewPromotionRequest: (
+      requestId: string,
+      input: ReviewProjectPromotionRequestInput,
+    ) => Promise<ProjectPromotionRequest>
   }
   projects: {
     list: () => Promise<ProjectRecord[]>
     create: (input: CreateProjectRequest) => Promise<ProjectRecord>
     update: (projectId: string, input: UpdateProjectRequest) => Promise<ProjectRecord>
     getDashboard: (projectId: string) => Promise<ProjectDashboardSnapshot>
+    listPromotionRequests: (projectId: string) => Promise<ProjectPromotionRequest[]>
+    createPromotionRequest: (
+      projectId: string,
+      input: CreateProjectPromotionRequestInput,
+    ) => Promise<ProjectPromotionRequest>
   }
   resources: {
     listWorkspace: () => Promise<WorkspaceResourceRecord[]>
@@ -154,10 +172,19 @@ export interface WorkspaceClient {
     createWorkspace: (input: CreateWorkspaceResourceInput) => Promise<WorkspaceResourceRecord>
     createProject: (projectId: string, input: CreateWorkspaceResourceInput) => Promise<WorkspaceResourceRecord>
     createProjectFolder: (projectId: string, input: CreateWorkspaceResourceFolderInput) => Promise<WorkspaceResourceRecord[]>
+    importWorkspace: (input: WorkspaceResourceImportInput) => Promise<WorkspaceResourceRecord>
+    importProject: (projectId: string, input: WorkspaceResourceImportInput) => Promise<WorkspaceResourceRecord>
+    getDetail: (resourceId: string) => Promise<WorkspaceResourceRecord>
+    getContent: (resourceId: string) => Promise<WorkspaceResourceContentDocument>
+    listChildren: (resourceId: string) => Promise<WorkspaceResourceChildrenRecord[]>
+    promote: (resourceId: string, input: PromoteWorkspaceResourceInput) => Promise<WorkspaceResourceRecord>
     updateWorkspace: (resourceId: string, input: UpdateWorkspaceResourceInput) => Promise<WorkspaceResourceRecord>
     updateProject: (projectId: string, resourceId: string, input: UpdateWorkspaceResourceInput) => Promise<WorkspaceResourceRecord>
     deleteWorkspace: (resourceId: string) => Promise<void>
     deleteProject: (projectId: string, resourceId: string) => Promise<void>
+  }
+  filesystem: {
+    listDirectories: (path?: string) => Promise<WorkspaceDirectoryBrowserResponse>
   }
   artifacts: {
     listWorkspace: () => Promise<ArtifactRecord[]>

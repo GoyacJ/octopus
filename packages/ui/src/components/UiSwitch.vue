@@ -15,7 +15,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <label 
+  <label
     class="inline-flex items-center gap-2.5 min-w-0 cursor-pointer"
     :class="{ 'opacity-50 cursor-not-allowed': props.disabled }"
   >
@@ -24,14 +24,16 @@ const emit = defineEmits<{
       role="switch"
       :aria-checked="props.modelValue"
       :disabled="props.disabled"
-      class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border border-transparent transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed"
+      class="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-all duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 disabled:cursor-not-allowed"
       :class="[
-        props.modelValue ? 'border-primary bg-primary' : 'border-border bg-border-strong/60'
+        props.modelValue
+          ? 'border-primary bg-primary shadow-xs'
+          : 'border-[var(--control-toggle-off-border)] bg-[var(--control-toggle-off-bg)] shadow-xs'
       ]"
       @click="emit('update:modelValue', !props.modelValue)"
     >
-      <span 
-        class="pointer-events-none block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-fast"
+      <span
+        class="pointer-events-none block h-3.5 w-3.5 rounded-full border bg-white shadow-sm transition-transform duration-fast border-[var(--control-toggle-thumb-border)]"
         :class="[
           props.modelValue ? 'translate-x-[18px]' : 'translate-x-0.5'
         ]"

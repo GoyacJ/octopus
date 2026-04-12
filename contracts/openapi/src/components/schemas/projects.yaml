@@ -38,11 +38,24 @@ CreateProjectRequest:
       $ref: "#/components/schemas/ProjectWorkspaceAssignments"
     description:
       type: string
+    linkedWorkspaceAssets:
+      $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+    memberUserIds:
+      items:
+        type: string
+      type: array
     name:
+      type: string
+    ownerUserId:
+      type: string
+    permissionOverrides:
+      $ref: "#/components/schemas/ProjectPermissionOverrides"
+    resourceDirectory:
       type: string
   required:
     - name
     - description
+    - resourceDirectory
   type: object
 ProjectAgentAssignments:
   additionalProperties: false
@@ -123,6 +136,134 @@ ProjectModelAssignments:
     - configuredModelIds
     - defaultConfiguredModelId
   type: object
+ProjectAssetType:
+  enum:
+    - agent
+    - resource
+    - knowledge
+    - tool.skill
+    - tool.mcp
+  type: string
+ProjectDefaultPermissionValue:
+  enum:
+    - allow
+    - deny
+  type: string
+ProjectDefaultPermissions:
+  additionalProperties: false
+  properties:
+    agents:
+      $ref: "#/components/schemas/ProjectDefaultPermissionValue"
+    knowledge:
+      $ref: "#/components/schemas/ProjectDefaultPermissionValue"
+    resources:
+      $ref: "#/components/schemas/ProjectDefaultPermissionValue"
+    tools:
+      $ref: "#/components/schemas/ProjectDefaultPermissionValue"
+  required:
+    - agents
+    - resources
+    - tools
+    - knowledge
+  type: object
+ProjectLinkedWorkspaceAssets:
+  additionalProperties: false
+  properties:
+    agentIds:
+      items:
+        type: string
+      type: array
+    knowledgeIds:
+      items:
+        type: string
+      type: array
+    resourceIds:
+      items:
+        type: string
+      type: array
+    toolSourceKeys:
+      items:
+        type: string
+      type: array
+  required:
+    - agentIds
+    - resourceIds
+    - toolSourceKeys
+    - knowledgeIds
+  type: object
+ProjectPermissionOverrideValue:
+  enum:
+    - inherit
+    - allow
+    - deny
+  type: string
+ProjectPermissionOverrides:
+  additionalProperties: false
+  properties:
+    agents:
+      $ref: "#/components/schemas/ProjectPermissionOverrideValue"
+    knowledge:
+      $ref: "#/components/schemas/ProjectPermissionOverrideValue"
+    resources:
+      $ref: "#/components/schemas/ProjectPermissionOverrideValue"
+    tools:
+      $ref: "#/components/schemas/ProjectPermissionOverrideValue"
+  required:
+    - agents
+    - resources
+    - tools
+    - knowledge
+  type: object
+ProjectPromotionRequest:
+  additionalProperties: false
+  properties:
+    assetId:
+      type: string
+    assetType:
+      $ref: "#/components/schemas/ProjectAssetType"
+    createdAt:
+      type: integer
+    id:
+      type: string
+    projectId:
+      type: string
+    requestedByUserId:
+      type: string
+    requiredWorkspaceCapability:
+      type: string
+    reviewComment:
+      type: string
+    reviewedAt:
+      type: integer
+    reviewedByUserId:
+      type: string
+    status:
+      $ref: "#/components/schemas/ProjectPromotionRequestStatus"
+    submittedByOwnerUserId:
+      type: string
+    updatedAt:
+      type: integer
+    workspaceId:
+      type: string
+  required:
+    - id
+    - workspaceId
+    - projectId
+    - assetType
+    - assetId
+    - requestedByUserId
+    - submittedByOwnerUserId
+    - requiredWorkspaceCapability
+    - status
+    - createdAt
+    - updatedAt
+  type: object
+ProjectPromotionRequestStatus:
+  enum:
+    - pending
+    - approved
+    - rejected
+  type: string
 ProjectRecord:
   additionalProperties: false
   properties:
@@ -132,7 +273,19 @@ ProjectRecord:
       type: string
     id:
       type: string
+    linkedWorkspaceAssets:
+      $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+    memberUserIds:
+      items:
+        type: string
+      type: array
     name:
+      type: string
+    ownerUserId:
+      type: string
+    permissionOverrides:
+      $ref: "#/components/schemas/ProjectPermissionOverrides"
+    resourceDirectory:
       type: string
     status:
       enum:
@@ -147,6 +300,11 @@ ProjectRecord:
     - name
     - status
     - description
+    - resourceDirectory
+    - ownerUserId
+    - memberUserIds
+    - permissionOverrides
+    - linkedWorkspaceAssets
   type: object
 ProjectResourceKind:
   enum:
@@ -213,9 +371,21 @@ UpdateProjectRequest:
   properties:
     assignments:
       $ref: "#/components/schemas/ProjectWorkspaceAssignments"
+    linkedWorkspaceAssets:
+      $ref: "#/components/schemas/ProjectLinkedWorkspaceAssets"
+    memberUserIds:
+      items:
+        type: string
+      type: array
     description:
       type: string
     name:
+      type: string
+    ownerUserId:
+      type: string
+    permissionOverrides:
+      $ref: "#/components/schemas/ProjectPermissionOverrides"
+    resourceDirectory:
       type: string
     status:
       enum:
@@ -225,5 +395,27 @@ UpdateProjectRequest:
   required:
     - name
     - description
+    - resourceDirectory
     - status
+  type: object
+CreateProjectPromotionRequestInput:
+  additionalProperties: false
+  properties:
+    assetId:
+      type: string
+    assetType:
+      $ref: "#/components/schemas/ProjectAssetType"
+  required:
+    - assetType
+    - assetId
+  type: object
+ReviewProjectPromotionRequestInput:
+  additionalProperties: false
+  properties:
+    approved:
+      type: boolean
+    reviewComment:
+      type: string
+  required:
+    - approved
   type: object

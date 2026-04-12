@@ -1,5 +1,6 @@
 import { getActivePinia } from 'pinia'
 import { createMemoryHistory, createRouter, createWebHashHistory } from 'vue-router'
+import type { Router, RouteRecordRaw } from 'vue-router'
 
 import AuthLoginView from '@/views/auth/AuthLoginView.vue'
 import ConnectionsView from '@/views/app/ConnectionsView.vue'
@@ -32,6 +33,14 @@ import AccessControlSessionsView from '@/views/workspace/access-control/AccessCo
 import AccessControlUsersView from '@/views/workspace/access-control/AccessControlUsersView.vue'
 import PersonalCenterPetView from '@/views/workspace/personal-center/PersonalCenterPetView.vue'
 import PersonalCenterProfileView from '@/views/workspace/personal-center/PersonalCenterProfileView.vue'
+import {
+  isProjectMember,
+  isProjectModuleAllowed,
+  isProjectOwner,
+  isProjectOwnerOnlyRoute,
+  projectModuleForRouteName,
+  resolveProjectActorUserId,
+} from '@/composables/project-governance'
 import { ACCESS_CONTROL_MENU_IDS, CONSOLE_MENU_IDS, getRouteMenuId } from '@/navigation/menuRegistry'
 import { useAuthStore } from '@/stores/auth'
 import { useShellStore } from '@/stores/shell'
@@ -85,6 +94,13 @@ function resolveWorkspaceOverviewTarget(workspaceId: string) {
   } as const
 }
 
+function resolveProjectDashboardTarget(workspaceId: string, projectId: string) {
+  return {
+    name: 'project-dashboard',
+    params: { workspaceId, projectId },
+  } as const
+}
+
 function resolveAccessControlEntry(workspaceId: string) {
   const workspaceAccessControlStore = resolveWorkspaceAccessControlStore()
   const routeName = workspaceAccessControlStore?.firstAccessibleAccessControlRouteName
@@ -127,6 +143,35 @@ function resolveConsoleFallback(workspaceId: string) {
   } as const
 }
 
+async function ensureProjectGuardContext(workspaceId: string, projectId: string) {
+  const shell = resolveShellStore()
+  const workspaceStore = resolveWorkspaceStore()
+  const workspaceAccessControlStore = resolveWorkspaceAccessControlStore()
+
+  if (!shell || !workspaceStore || !workspaceAccessControlStore) {
+    return null
+  }
+
+  if (!shell.workspaceConnections.length || !shell.workspaceConnections.some(item => item.workspaceId === workspaceId)) {
+    await shell.bootstrap(workspaceId, projectId)
+  } else {
+    await shell.activateWorkspaceByWorkspaceId(workspaceId)
+  }
+
+  if (!shell.activeWorkspaceConnectionId) {
+    return null
+  }
+
+  await workspaceStore.bootstrap(shell.activeWorkspaceConnectionId)
+  await workspaceAccessControlStore.load(shell.activeWorkspaceConnectionId)
+
+  return {
+    shell,
+    workspaceStore,
+    workspaceAccessControlStore,
+  }
+}
+
 function resolveBrowserLoginTarget(redirect?: string | null) {
   if (redirect && redirect !== '/login') {
     return redirect
@@ -136,9 +181,8 @@ function resolveBrowserLoginTarget(redirect?: string | null) {
   return resolveConsoleFallback(workspaceId)
 }
 
-export const router = createRouter({
-  history: typeof window === 'undefined' ? createMemoryHistory() : createWebHashHistory(),
-  routes: [
+function createRoutes(): RouteRecordRaw[] {
+  return [
     {
       path: '/',
       redirect: () => {
@@ -496,59 +540,101 @@ export const router = createRouter({
         }
       },
     },
-  ],
-})
+  ]
+}
 
-router.beforeEach((to) => {
-  const authStore = resolveAuthStore()
-  if (isBrowserHostRuntime && authStore?.isReady) {
-    if (!authStore.isAuthenticated && to.name !== 'auth-login') {
-      return {
-        name: 'auth-login',
-        query: {
-          redirect: to.fullPath,
-        },
+function installRouterGuards(router: Router) {
+  router.beforeEach(async (to) => {
+    const authStore = resolveAuthStore()
+    if (isBrowserHostRuntime && authStore?.isReady) {
+      if (!authStore.isAuthenticated && to.name !== 'auth-login') {
+        return {
+          name: 'auth-login',
+          query: {
+            redirect: to.fullPath,
+          },
+        }
+      }
+
+      if (authStore.isAuthenticated && to.name === 'auth-login') {
+        return resolveBrowserLoginTarget(
+          typeof to.query.redirect === 'string' ? to.query.redirect : null,
+        )
       }
     }
 
-    if (authStore.isAuthenticated && to.name === 'auth-login') {
-      return resolveBrowserLoginTarget(
-        typeof to.query.redirect === 'string' ? to.query.redirect : null,
-      )
+    const workspaceId = typeof to.params.workspaceId === 'string' ? to.params.workspaceId : undefined
+    const projectId = typeof to.params.projectId === 'string' ? to.params.projectId : undefined
+    const routeMenuId = getRouteMenuId(typeof to.name === 'string' ? to.name : undefined)
+
+    if (workspaceId && projectId) {
+      const context = await ensureProjectGuardContext(workspaceId, projectId)
+      if (context) {
+        const { shell, workspaceStore, workspaceAccessControlStore } = context
+        const project = workspaceStore.projects.find(item => item.id === projectId) ?? null
+        const actorUserId = resolveProjectActorUserId(
+          workspaceAccessControlStore.currentUser?.id,
+          shell.activeWorkspaceSession?.session.userId,
+        )
+
+        if (!project || !isProjectMember(project, actorUserId)) {
+          return resolveWorkspaceOverviewTarget(workspaceId)
+        }
+
+        const routeName = typeof to.name === 'string' ? to.name : null
+        if (isProjectOwnerOnlyRoute(routeName) && !isProjectOwner(project, actorUserId)) {
+          return resolveProjectDashboardTarget(workspaceId, projectId)
+        }
+
+        const module = projectModuleForRouteName(routeName)
+        if (module && !isProjectModuleAllowed(workspaceStore.activeWorkspace, project, module)) {
+          return resolveProjectDashboardTarget(workspaceId, projectId)
+        }
+      }
     }
-  }
 
-  const workspaceId = typeof to.params.workspaceId === 'string' ? to.params.workspaceId : undefined
-  const routeMenuId = getRouteMenuId(typeof to.name === 'string' ? to.name : undefined)
-
-  if (!workspaceId || !routeMenuId) {
-    return true
-  }
-
-  const workspaceAccessControlStore = resolveWorkspaceAccessControlStore()
-  if (!workspaceAccessControlStore) {
-    return true
-  }
-
-  if (!workspaceAccessControlStore.menuDefinitions.length && !workspaceAccessControlStore.roles.length && !workspaceAccessControlStore.currentUser) {
-    return true
-  }
-
-  if (ACCESS_CONTROL_MENU_IDS.includes(routeMenuId)) {
-    if (workspaceAccessControlStore.currentEffectiveMenuIds.includes(routeMenuId)) {
+    if (!workspaceId || !routeMenuId) {
       return true
     }
 
-    return resolveAccessControlEntry(workspaceId)
-  }
-
-  if (CONSOLE_MENU_IDS.includes(routeMenuId)) {
-    if (workspaceAccessControlStore.currentEffectiveMenuIds.includes(routeMenuId)) {
+    const workspaceAccessControlStore = resolveWorkspaceAccessControlStore()
+    if (!workspaceAccessControlStore) {
       return true
     }
 
-    return resolveConsoleFallback(workspaceId)
-  }
+    if (!workspaceAccessControlStore.menuDefinitions.length && !workspaceAccessControlStore.roles.length && !workspaceAccessControlStore.currentUser) {
+      return true
+    }
 
-  return true
-})
+    if (ACCESS_CONTROL_MENU_IDS.includes(routeMenuId)) {
+      if (workspaceAccessControlStore.currentEffectiveMenuIds.includes(routeMenuId)) {
+        return true
+      }
+
+      return resolveAccessControlEntry(workspaceId)
+    }
+
+    if (CONSOLE_MENU_IDS.includes(routeMenuId)) {
+      if (workspaceAccessControlStore.currentEffectiveMenuIds.includes(routeMenuId)) {
+        return true
+      }
+
+      return resolveConsoleFallback(workspaceId)
+    }
+
+    return true
+  })
+}
+
+export function createAppRouter() {
+  const router = createRouter({
+    history: typeof window === 'undefined' ? createMemoryHistory() : createWebHashHistory(),
+    routes: createRoutes(),
+  })
+
+  installRouterGuards(router)
+
+  return router
+}
+
+export const router = createAppRouter()

@@ -231,6 +231,15 @@ pub fn pick_avatar_image() -> Result<Option<AvatarUploadPayload>, String> {
     }))
 }
 
+#[tauri::command]
+pub fn pick_resource_directory() -> Result<Option<String>, String> {
+    let Some(path) = FileDialog::new().pick_folder() else {
+        return Ok(None);
+    };
+
+    Ok(Some(path.to_string_lossy().to_string()))
+}
+
 fn generic_file_payload(
     path: &Path,
     content_type: &str,
@@ -248,6 +257,19 @@ fn generic_file_payload(
         data_base64: STANDARD.encode(bytes),
         byte_size: metadata.len(),
     })
+}
+
+#[tauri::command]
+pub fn pick_resource_file() -> Result<Option<WorkspaceFileUploadPayload>, String> {
+    let Some(path) = FileDialog::new().pick_file() else {
+        return Ok(None);
+    };
+
+    let path_label = path.to_string_lossy().to_string();
+    Ok(Some(generic_file_payload(
+        &path,
+        content_type_for_path(&path_label),
+    )?))
 }
 
 fn generic_directory_payload(
@@ -354,6 +376,15 @@ fn read_folder_entries(
         });
     }
     Ok(entries)
+}
+
+#[tauri::command]
+pub fn pick_resource_folder() -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, String> {
+    let Some(path) = FileDialog::new().pick_folder() else {
+        return Ok(None);
+    };
+    let root = path.parent().unwrap_or(path.as_path());
+    Ok(Some(read_folder_entries(root, &path)?))
 }
 
 #[tauri::command]

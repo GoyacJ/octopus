@@ -11,11 +11,61 @@ pub(super) struct WorkspaceConfigFile {
     pub(super) host: String,
     pub(super) listen_address: String,
     pub(super) default_project_id: String,
+    #[serde(default = "default_project_default_permissions")]
+    pub(super) project_default_permissions: ProjectDefaultPermissions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct AppRegistryFile {
     pub(super) apps: Vec<ClientAppRecord>,
+}
+
+pub(super) fn default_project_default_permissions() -> ProjectDefaultPermissions {
+    ProjectDefaultPermissions {
+        agents: "allow".into(),
+        resources: "allow".into(),
+        tools: "allow".into(),
+        knowledge: "allow".into(),
+    }
+}
+
+pub(super) fn default_project_permission_overrides() -> ProjectPermissionOverrides {
+    ProjectPermissionOverrides {
+        agents: "inherit".into(),
+        resources: "inherit".into(),
+        tools: "inherit".into(),
+        knowledge: "inherit".into(),
+    }
+}
+
+pub(super) fn empty_project_linked_workspace_assets() -> ProjectLinkedWorkspaceAssets {
+    ProjectLinkedWorkspaceAssets {
+        agent_ids: Vec::new(),
+        resource_ids: Vec::new(),
+        tool_source_keys: Vec::new(),
+        knowledge_ids: Vec::new(),
+    }
+}
+
+pub(super) fn normalized_project_member_user_ids(
+    owner_user_id: &str,
+    member_user_ids: Vec<String>,
+) -> Vec<String> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut normalized = Vec::new();
+
+    if !owner_user_id.trim().is_empty() && seen.insert(owner_user_id.to_string()) {
+        normalized.push(owner_user_id.to_string());
+    }
+
+    for user_id in member_user_ids.into_iter().map(|value| value.trim().to_string()) {
+        if user_id.is_empty() || !seen.insert(user_id.clone()) {
+            continue;
+        }
+        normalized.push(user_id);
+    }
+
+    normalized
 }
 
 #[derive(Debug, Clone)]
@@ -32,6 +82,7 @@ pub(super) struct InfraState {
     pub(super) apps: Mutex<Vec<ClientAppRecord>>,
     pub(super) sessions: Mutex<Vec<SessionRecord>>,
     pub(super) projects: Mutex<Vec<ProjectRecord>>,
+    pub(super) project_promotion_requests: Mutex<Vec<ProjectPromotionRequest>>,
     pub(super) resources: Mutex<Vec<WorkspaceResourceRecord>>,
     pub(super) knowledge_records: Mutex<Vec<KnowledgeRecord>>,
     pub(super) agents: Mutex<Vec<AgentRecord>>,
@@ -90,6 +141,12 @@ pub(super) fn initialize_workspace_config(paths: &WorkspacePaths) -> Result<(), 
         host: "127.0.0.1".into(),
         listen_address: "127.0.0.1".into(),
         default_project_id: DEFAULT_PROJECT_ID.into(),
+        project_default_permissions: ProjectDefaultPermissions {
+            agents: "allow".into(),
+            resources: "allow".into(),
+            tools: "allow".into(),
+            knowledge: "allow".into(),
+        },
     };
     fs::write(&paths.workspace_config, toml::to_string_pretty(&config)?)?;
     Ok(())
@@ -160,7 +217,28 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               name TEXT NOT NULL,
               status TEXT NOT NULL,
               description TEXT NOT NULL,
-              assignments_json TEXT
+              resource_directory TEXT NOT NULL,
+              assignments_json TEXT,
+              owner_user_id TEXT,
+              member_user_ids_json TEXT,
+              permission_overrides_json TEXT,
+              linked_workspace_assets_json TEXT
+            );
+            CREATE TABLE IF NOT EXISTS project_promotion_requests (
+              id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              project_id TEXT NOT NULL,
+              asset_type TEXT NOT NULL,
+              asset_id TEXT NOT NULL,
+              requested_by_user_id TEXT NOT NULL,
+              submitted_by_owner_user_id TEXT NOT NULL,
+              required_workspace_capability TEXT NOT NULL,
+              status TEXT NOT NULL,
+              reviewed_by_user_id TEXT,
+              review_comment TEXT,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              reviewed_at INTEGER
             );
             CREATE TABLE IF NOT EXISTS resources (
               id TEXT PRIMARY KEY,
@@ -170,6 +248,13 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               name TEXT NOT NULL,
               location TEXT,
               origin TEXT NOT NULL,
+              scope TEXT NOT NULL,
+              visibility TEXT NOT NULL,
+              owner_user_id TEXT NOT NULL,
+              storage_path TEXT,
+              content_type TEXT,
+              byte_size INTEGER,
+              preview_kind TEXT NOT NULL,
               status TEXT NOT NULL,
               updated_at INTEGER NOT NULL,
               tags TEXT NOT NULL,
@@ -477,6 +562,7 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
     ensure_agent_record_columns(&connection)?;
     ensure_team_record_columns(&connection)?;
     ensure_project_assignment_columns(&connection)?;
+    ensure_project_promotion_request_table(&connection)?;
     ensure_project_agent_link_table(&connection)?;
     ensure_project_team_link_table(&connection)?;
     ensure_runtime_config_snapshot_columns(&connection)?;
@@ -501,17 +587,39 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
         .optional()
         .map_err(|error| AppError::database(error.to_string()))?;
     if project_exists.is_none() {
+        let default_project_resource_directory =
+            paths.default_project_resource_directory(DEFAULT_PROJECT_ID);
+        let default_permission_overrides =
+            serde_json::to_string(&ProjectPermissionOverrides {
+                agents: "inherit".into(),
+                resources: "inherit".into(),
+                tools: "inherit".into(),
+                knowledge: "inherit".into(),
+            })?;
+        let default_linked_assets = serde_json::to_string(&ProjectLinkedWorkspaceAssets {
+            agent_ids: Vec::new(),
+            resource_ids: Vec::new(),
+            tool_source_keys: Vec::new(),
+            knowledge_ids: Vec::new(),
+        })?;
+        let default_member_user_ids = serde_json::to_string(&vec!["user-owner".to_string()])?;
         connection
             .execute(
-                "INSERT INTO projects (id, workspace_id, name, status, description, assignments_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO projects
+                 (id, workspace_id, name, status, description, resource_directory, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     DEFAULT_PROJECT_ID,
                     DEFAULT_WORKSPACE_ID,
                     "Default Project",
                     "active",
                     "Bootstrap project for the local workspace.",
+                    default_project_resource_directory,
                     Option::<String>::None,
+                    "user-owner",
+                    default_member_user_ids,
+                    default_permission_overrides,
+                    default_linked_assets,
                 ],
             )
             .map_err(|error| AppError::database(error.to_string()))?;
@@ -525,8 +633,8 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
         for record in default_workspace_resources() {
             connection
                 .execute(
-                    "INSERT INTO resources (id, workspace_id, project_id, kind, name, location, origin, status, updated_at, tags, source_artifact_id)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    "INSERT INTO resources (id, workspace_id, project_id, kind, name, location, origin, scope, visibility, owner_user_id, storage_path, content_type, byte_size, preview_kind, status, updated_at, tags, source_artifact_id)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                     params![
                         record.id,
                         record.workspace_id,
@@ -535,6 +643,13 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
                         record.name,
                         record.location,
                         record.origin,
+                        record.scope,
+                        record.visibility,
+                        record.owner_user_id,
+                        record.storage_path,
+                        record.content_type,
+                        record.byte_size.map(|value| value as i64),
+                        record.preview_kind,
                         record.status,
                         record.updated_at as i64,
                         serde_json::to_string(&record.tags)?,
@@ -543,6 +658,13 @@ pub(super) fn seed_defaults(paths: &WorkspacePaths) -> Result<(), AppError> {
                 )
                 .map_err(|error| AppError::database(error.to_string()))?;
         }
+
+        fs::create_dir_all(&paths.workspace_resources_dir)?;
+        fs::write(
+            paths.workspace_resources_dir.join("workspace-handbook.md"),
+            "# Workspace Handbook\n\nShared operating rules for this workspace.\n",
+        )?;
+        fs::create_dir_all(paths.project_resources_dir(DEFAULT_PROJECT_ID).join("delivery-board"))?;
     }
 
     let knowledge_exists: Option<String> = connection
@@ -863,7 +985,43 @@ pub(super) fn write_team_record(
 }
 
 pub(super) fn ensure_project_assignment_columns(connection: &Connection) -> Result<(), AppError> {
-    ensure_columns(connection, "projects", &[("assignments_json", "TEXT")])
+    ensure_columns(
+        connection,
+        "projects",
+        &[
+            ("assignments_json", "TEXT"),
+            ("resource_directory", "TEXT"),
+            ("owner_user_id", "TEXT"),
+            ("member_user_ids_json", "TEXT"),
+            ("permission_overrides_json", "TEXT"),
+            ("linked_workspace_assets_json", "TEXT"),
+        ],
+    )
+}
+
+pub(super) fn ensure_project_promotion_request_table(connection: &Connection) -> Result<(), AppError> {
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS project_promotion_requests (
+              id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              project_id TEXT NOT NULL,
+              asset_type TEXT NOT NULL,
+              asset_id TEXT NOT NULL,
+              requested_by_user_id TEXT NOT NULL,
+              submitted_by_owner_user_id TEXT NOT NULL,
+              required_workspace_capability TEXT NOT NULL,
+              status TEXT NOT NULL,
+              reviewed_by_user_id TEXT,
+              review_comment TEXT,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              reviewed_at INTEGER
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    Ok(())
 }
 
 pub(super) fn ensure_project_agent_link_table(connection: &Connection) -> Result<(), AppError> {
@@ -981,7 +1139,306 @@ pub(super) fn ensure_cost_entry_columns(connection: &Connection) -> Result<(), A
 }
 
 pub(super) fn ensure_resource_columns(connection: &Connection) -> Result<(), AppError> {
-    ensure_columns(connection, "resources", &[("source_artifact_id", "TEXT")])
+    ensure_columns(
+        connection,
+        "resources",
+        &[
+            ("scope", "TEXT"),
+            ("visibility", "TEXT"),
+            ("owner_user_id", "TEXT"),
+            ("storage_path", "TEXT"),
+            ("content_type", "TEXT"),
+            ("byte_size", "INTEGER"),
+            ("preview_kind", "TEXT"),
+            ("source_artifact_id", "TEXT"),
+        ],
+    )
+}
+
+fn infer_resource_preview_kind(
+    kind: &str,
+    name: &str,
+    location: Option<&str>,
+    content_type: Option<&str>,
+) -> String {
+    if kind == "folder" {
+        return "folder".into();
+    }
+    if kind == "url" {
+        return "url".into();
+    }
+
+    let content_type = content_type.unwrap_or_default().to_ascii_lowercase();
+    if content_type.starts_with("image/") {
+        return "image".into();
+    }
+    if content_type == "application/pdf" {
+        return "pdf".into();
+    }
+    if content_type.starts_with("audio/") {
+        return "audio".into();
+    }
+    if content_type.starts_with("video/") {
+        return "video".into();
+    }
+    if content_type == "text/markdown" {
+        return "markdown".into();
+    }
+    if content_type.starts_with("text/") || content_type == "application/json" {
+        let extension = Path::new(name)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(|extension| extension.to_ascii_lowercase())
+            .or_else(|| {
+                location.and_then(|value| {
+                    Path::new(value)
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                        .map(|extension| extension.to_ascii_lowercase())
+                })
+            });
+        if matches!(
+            extension.as_deref(),
+            Some("rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt" | "swift" | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "json" | "yaml" | "yml" | "toml" | "md" | "sql" | "sh")
+        ) {
+            return if extension.as_deref() == Some("md") {
+                "markdown".into()
+            } else if extension.as_deref() == Some("json") {
+                "code".into()
+            } else {
+                "code".into()
+            };
+        }
+        return if content_type == "text/markdown" {
+            "markdown".into()
+        } else {
+            "text".into()
+        };
+    }
+
+    let lower_name = name.to_ascii_lowercase();
+    if lower_name.ends_with(".md") {
+        return "markdown".into();
+    }
+    if lower_name.ends_with(".pdf") {
+        return "pdf".into();
+    }
+    if matches!(
+        lower_name.rsplit('.').next(),
+        Some("png" | "jpg" | "jpeg" | "webp" | "gif" | "svg")
+    ) {
+        return "image".into();
+    }
+    if matches!(
+        lower_name.rsplit('.').next(),
+        Some("mp3" | "wav" | "ogg" | "m4a")
+    ) {
+        return "audio".into();
+    }
+    if matches!(
+        lower_name.rsplit('.').next(),
+        Some("mp4" | "mov" | "webm" | "avi" | "mkv")
+    ) {
+        return "video".into();
+    }
+    if matches!(
+        lower_name.rsplit('.').next(),
+        Some("rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt" | "swift" | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "json" | "yaml" | "yml" | "toml" | "sql" | "sh")
+    ) {
+        return "code".into();
+    }
+
+    "binary".into()
+}
+
+fn infer_resource_content_type(name: &str, location: Option<&str>) -> Option<String> {
+    let extension = Path::new(name)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .or_else(|| {
+            location.and_then(|value| Path::new(value).extension().and_then(|extension| extension.to_str()))
+        })?
+        .to_ascii_lowercase();
+
+    let content_type = match extension.as_str() {
+        "md" => "text/markdown",
+        "txt" | "csv" => "text/plain",
+        "json" => "application/json",
+        "pdf" => "application/pdf",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "svg" => "image/svg+xml",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "m4a" => "audio/mp4",
+        "mp4" => "video/mp4",
+        "mov" => "video/quicktime",
+        "webm" => "video/webm",
+        "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt" | "swift"
+        | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "yaml" | "yml" | "toml"
+        | "sql" | "sh" => "text/plain",
+        _ => "application/octet-stream",
+    };
+
+    Some(content_type.into())
+}
+
+fn backfill_project_resource_directories(
+    connection: &Connection,
+    paths: &WorkspacePaths,
+) -> Result<(), AppError> {
+    let mut stmt = connection
+        .prepare("SELECT id, resource_directory FROM projects")
+        .map_err(|error| AppError::database(error.to_string()))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?))
+        })
+        .map_err(|error| AppError::database(error.to_string()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| AppError::database(error.to_string()))?;
+
+    for (project_id, stored_directory) in rows {
+        let resource_directory = stored_directory
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| paths.default_project_resource_directory(&project_id));
+        connection
+            .execute(
+                "UPDATE projects SET resource_directory = ?2 WHERE id = ?1",
+                params![project_id, resource_directory],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        fs::create_dir_all(paths.root.join(&resource_directory))?;
+    }
+
+    fs::create_dir_all(&paths.workspace_resources_dir)?;
+    Ok(())
+}
+
+fn backfill_project_governance(
+    connection: &Connection,
+    workspace_owner_user_id: Option<&str>,
+) -> Result<(), AppError> {
+    let fallback_owner_user_id = workspace_owner_user_id
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("user-owner")
+        .to_string();
+    let data_policies = load_data_policies(connection)?;
+    let selected_project_members = data_policies
+        .into_iter()
+        .filter(|policy| {
+            policy.subject_type == "user"
+                && policy.resource_type == "project"
+                && policy.scope_type == "selected-projects"
+                && policy.effect == "allow"
+        })
+        .fold(
+            std::collections::BTreeMap::<String, Vec<String>>::new(),
+            |mut acc, policy| {
+                for project_id in policy.project_ids {
+                    acc.entry(project_id).or_default().push(policy.subject_id.clone());
+                }
+                acc
+            },
+        );
+
+    let mut stmt = connection
+        .prepare(
+            "SELECT id, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json FROM projects",
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+            ))
+        })
+        .map_err(|error| AppError::database(error.to_string()))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| AppError::database(error.to_string()))?;
+
+    for (
+        project_id,
+        assignments_json,
+        stored_owner_user_id,
+        stored_member_user_ids_json,
+        stored_permission_overrides_json,
+        stored_linked_workspace_assets_json,
+    ) in rows
+    {
+        let owner_user_id = stored_owner_user_id
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| fallback_owner_user_id.clone());
+        let member_user_ids = stored_member_user_ids_json
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .map(serde_json::from_str::<Vec<String>>)
+            .transpose()?
+            .unwrap_or_else(|| selected_project_members.get(&project_id).cloned().unwrap_or_default());
+        let permission_overrides = stored_permission_overrides_json
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .map(serde_json::from_str::<ProjectPermissionOverrides>)
+            .transpose()?
+            .unwrap_or_else(default_project_permission_overrides);
+        let linked_workspace_assets = stored_linked_workspace_assets_json
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .map(serde_json::from_str::<ProjectLinkedWorkspaceAssets>)
+            .transpose()?
+            .unwrap_or_else(|| {
+                let assignments = assignments_json
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(serde_json::from_str::<ProjectWorkspaceAssignments>)
+                    .transpose()
+                    .ok()
+                    .flatten();
+                ProjectLinkedWorkspaceAssets {
+                    agent_ids: assignments
+                        .as_ref()
+                        .and_then(|value| value.agents.as_ref())
+                        .map(|value| value.agent_ids.clone())
+                        .unwrap_or_default(),
+                    resource_ids: Vec::new(),
+                    tool_source_keys: assignments
+                        .as_ref()
+                        .and_then(|value| value.tools.as_ref())
+                        .map(|value| value.source_keys.clone())
+                        .unwrap_or_default(),
+                    knowledge_ids: Vec::new(),
+                }
+            });
+        let normalized_members = normalized_project_member_user_ids(&owner_user_id, member_user_ids);
+
+        connection
+            .execute(
+                "UPDATE projects
+                 SET owner_user_id = ?2,
+                     member_user_ids_json = ?3,
+                     permission_overrides_json = ?4,
+                     linked_workspace_assets_json = ?5
+                 WHERE id = ?1",
+                params![
+                    project_id,
+                    owner_user_id,
+                    serde_json::to_string(&normalized_members)?,
+                    serde_json::to_string(&permission_overrides)?,
+                    serde_json::to_string(&linked_workspace_assets)?,
+                ],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+    }
+
+    Ok(())
 }
 
 pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> {
@@ -997,12 +1454,14 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         host: workspace_file.host,
         listen_address: workspace_file.listen_address,
         default_project_id: workspace_file.default_project_id,
+        project_default_permissions: workspace_file.project_default_permissions,
     };
 
     let app_registry: AppRegistryFile =
         toml::from_str(&fs::read_to_string(&paths.app_registry_config)?)?;
     let connection =
         Connection::open(&paths.db_path).map_err(|error| AppError::database(error.to_string()))?;
+    backfill_project_resource_directories(&connection, &paths)?;
     let users = load_users(&connection)?;
     let owner_user_id = users
         .iter()
@@ -1024,7 +1483,9 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         workspace.owner_user_id = owner_user_id;
         bootstrap::save_workspace_config_file(&paths.workspace_config, &workspace)?;
     }
+    backfill_project_governance(&connection, workspace.owner_user_id.as_deref())?;
     let projects = load_projects(&connection)?;
+    let project_promotion_requests = load_project_promotion_requests(&connection)?;
     let sessions = load_sessions(&connection)?;
     let resources = load_resources(&connection)?;
     let knowledge_records = load_knowledge_records(&connection)?;
@@ -1052,6 +1513,7 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         apps: Mutex::new(app_registry.apps),
         sessions: Mutex::new(sessions),
         projects: Mutex::new(projects),
+        project_promotion_requests: Mutex::new(project_promotion_requests),
         resources: Mutex::new(resources),
         knowledge_records: Mutex::new(knowledge_records),
         agents: Mutex::new(agents),
@@ -1161,12 +1623,12 @@ fn reset_legacy_sessions_table(connection: &Connection) -> Result<(), AppError> 
 pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord>, AppError> {
     let mut stmt = connection
         .prepare(
-            "SELECT id, workspace_id, name, status, description, assignments_json FROM projects",
+            "SELECT id, workspace_id, name, status, description, resource_directory, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json FROM projects",
         )
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
-            let assignments_json: Option<String> = row.get(5)?;
+            let assignments_json: Option<String> = row.get(6)?;
             let assignments = assignments_json
                 .as_deref()
                 .filter(|value| !value.trim().is_empty())
@@ -1174,18 +1636,104 @@ pub(super) fn load_projects(connection: &Connection) -> Result<Vec<ProjectRecord
                 .transpose()
                 .map_err(|error| {
                     rusqlite::Error::FromSqlConversionFailure(
-                        5,
+                        6,
                         rusqlite::types::Type::Text,
                         Box::new(error),
                     )
                 })?;
+            let owner_user_id: Option<String> = row.get(7)?;
+            let member_user_ids_json: Option<String> = row.get(8)?;
+            let member_user_ids = member_user_ids_json
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .map(serde_json::from_str::<Vec<String>>)
+                .transpose()
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        8,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?
+                .unwrap_or_default();
+            let permission_overrides_json: Option<String> = row.get(9)?;
+            let permission_overrides = permission_overrides_json
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .map(serde_json::from_str::<ProjectPermissionOverrides>)
+                .transpose()
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        9,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?
+                .unwrap_or_else(default_project_permission_overrides);
+            let linked_workspace_assets_json: Option<String> = row.get(10)?;
+            let linked_workspace_assets = linked_workspace_assets_json
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+                .map(serde_json::from_str::<ProjectLinkedWorkspaceAssets>)
+                .transpose()
+                .map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        10,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?
+                .unwrap_or_else(empty_project_linked_workspace_assets);
+            let owner_user_id = owner_user_id.unwrap_or_else(|| "user-owner".into());
             Ok(ProjectRecord {
                 id: row.get(0)?,
                 workspace_id: row.get(1)?,
                 name: row.get(2)?,
                 status: row.get(3)?,
                 description: row.get(4)?,
+                resource_directory: row.get(5)?,
+                owner_user_id: owner_user_id.clone(),
+                member_user_ids: normalized_project_member_user_ids(
+                    &owner_user_id,
+                    member_user_ids,
+                ),
+                permission_overrides,
+                linked_workspace_assets,
                 assignments,
+            })
+        })
+        .map_err(|error| AppError::database(error.to_string()))?;
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|error| AppError::database(error.to_string()))
+}
+
+pub(super) fn load_project_promotion_requests(
+    connection: &Connection,
+) -> Result<Vec<ProjectPromotionRequest>, AppError> {
+    let mut stmt = connection
+        .prepare(
+            "SELECT id, workspace_id, project_id, asset_type, asset_id, requested_by_user_id, submitted_by_owner_user_id, required_workspace_capability, status, reviewed_by_user_id, review_comment, created_at, updated_at, reviewed_at
+             FROM project_promotion_requests
+             ORDER BY created_at DESC, id DESC",
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ProjectPromotionRequest {
+                id: row.get(0)?,
+                workspace_id: row.get(1)?,
+                project_id: row.get(2)?,
+                asset_type: row.get(3)?,
+                asset_id: row.get(4)?,
+                requested_by_user_id: row.get(5)?,
+                submitted_by_owner_user_id: row.get(6)?,
+                required_workspace_capability: row.get(7)?,
+                status: row.get(8)?,
+                reviewed_by_user_id: row.get(9)?,
+                review_comment: row.get(10)?,
+                created_at: row.get::<_, i64>(11)? as u64,
+                updated_at: row.get::<_, i64>(12)? as u64,
+                reviewed_at: row.get::<_, Option<i64>>(13)?.map(|value| value as u64),
             })
         })
         .map_err(|error| AppError::database(error.to_string()))?;
@@ -1362,24 +1910,55 @@ pub(super) fn load_resources(
 ) -> Result<Vec<WorkspaceResourceRecord>, AppError> {
     let mut stmt = connection
         .prepare(
-            "SELECT id, workspace_id, project_id, kind, name, location, origin, status, updated_at, tags, source_artifact_id FROM resources",
+            "SELECT id, workspace_id, project_id, kind, name, location, origin, scope, visibility, owner_user_id, storage_path, content_type, byte_size, preview_kind, status, updated_at, tags, source_artifact_id FROM resources",
         )
         .map_err(|error| AppError::database(error.to_string()))?;
     let rows = stmt
         .query_map([], |row| {
-            let tags_raw: String = row.get(9)?;
+            let kind: String = row.get(3)?;
+            let name: String = row.get(4)?;
+            let location: Option<String> = row.get(5)?;
+            let content_type = row.get::<_, Option<String>>(11)?.or_else(|| {
+                infer_resource_content_type(&name, location.as_deref())
+            });
+            let preview_kind = row.get::<_, Option<String>>(13)?.unwrap_or_else(|| {
+                infer_resource_preview_kind(&kind, &name, location.as_deref(), content_type.as_deref())
+            });
+            let tags_raw: String = row.get(16)?;
             Ok(WorkspaceResourceRecord {
                 id: row.get(0)?,
                 workspace_id: row.get(1)?,
                 project_id: row.get(2)?,
-                kind: row.get(3)?,
-                name: row.get(4)?,
-                location: row.get(5)?,
+                kind: kind.clone(),
+                name: name.clone(),
+                location,
                 origin: row.get(6)?,
-                status: row.get(7)?,
-                updated_at: row.get::<_, i64>(8)? as u64,
+                scope: row
+                    .get::<_, Option<String>>(7)?
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or_else(|| {
+                        if row.get::<_, Option<String>>(2).ok().flatten().is_some() {
+                            "project".into()
+                        } else {
+                            "workspace".into()
+                        }
+                    }),
+                visibility: row
+                    .get::<_, Option<String>>(8)?
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or_else(|| "public".into()),
+                owner_user_id: row
+                    .get::<_, Option<String>>(9)?
+                    .filter(|value| !value.trim().is_empty())
+                    .unwrap_or_else(|| "user-owner".into()),
+                storage_path: row.get(10)?,
+                content_type,
+                byte_size: row.get::<_, Option<i64>>(12)?.map(|value| value as u64),
+                preview_kind,
+                status: row.get(14)?,
+                updated_at: row.get::<_, i64>(15)? as u64,
                 tags: serde_json::from_str(&tags_raw).unwrap_or_default(),
-                source_artifact_id: row.get(10)?,
+                source_artifact_id: row.get(17)?,
             })
         })
         .map_err(|error| AppError::database(error.to_string()))?;
@@ -1789,6 +2368,13 @@ pub(super) fn default_workspace_resources() -> Vec<WorkspaceResourceRecord> {
             name: "Workspace Handbook".into(),
             location: Some("/docs/workspace-handbook.md".into()),
             origin: "source".into(),
+            scope: "workspace".into(),
+            visibility: "public".into(),
+            owner_user_id: "user-owner".into(),
+            storage_path: Some("data/resources/workspace/workspace-handbook.md".into()),
+            content_type: Some("text/markdown".into()),
+            byte_size: Some(63),
+            preview_kind: "markdown".into(),
             status: "healthy".into(),
             updated_at: now,
             tags: vec!["workspace".into(), "handbook".into()],
@@ -1802,6 +2388,13 @@ pub(super) fn default_workspace_resources() -> Vec<WorkspaceResourceRecord> {
             name: "Project Delivery Board".into(),
             location: Some("/projects/default".into()),
             origin: "generated".into(),
+            scope: "project".into(),
+            visibility: "public".into(),
+            owner_user_id: "user-owner".into(),
+            storage_path: Some(format!("data/projects/{DEFAULT_PROJECT_ID}/resources/delivery-board")),
+            content_type: None,
+            byte_size: None,
+            preview_kind: "folder".into(),
             status: "configured".into(),
             updated_at: now,
             tags: vec!["project".into(), "delivery".into()],

@@ -1,9 +1,16 @@
 use super::*;
 use crate::dto_mapping::metric_record;
 use octopus_core::{
-    AuthorizationRequest, ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
-    ProtectedResourceDescriptor,
+    AuthorizationRequest, CreateProjectPromotionRequestInput,
+    ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult, ProjectPromotionRequest,
+    ProtectedResourceDescriptor, ReviewProjectPromotionRequestInput,
 };
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceDirectoryBrowserQuery {
+    path: Option<String>,
+}
 
 fn capability_authorization_request(
     subject_id: &str,
@@ -124,8 +131,8 @@ async fn resource_authorization_request(
             project_id: record.project_id.clone(),
             tags: record.tags.clone(),
             classification: "internal".into(),
-            owner_subject_type: None,
-            owner_subject_id: None,
+            owner_subject_type: Some("user".into()),
+            owner_subject_id: Some(record.owner_user_id.clone()),
         },
         protected_resource_metadata(state, "resource", &record.id)
             .await?
@@ -154,6 +161,34 @@ fn resource_input_authorization_request(
         None,
         None,
     )
+}
+
+fn resource_visibility_allows(session: &SessionRecord, record: &WorkspaceResourceRecord) -> bool {
+    match record.visibility.as_str() {
+        "private" => record.owner_user_id == session.user_id,
+        _ => true,
+    }
+}
+
+async fn ensure_visible_resource(
+    state: &ServerState,
+    headers: &HeaderMap,
+    session: &SessionRecord,
+    capability: &str,
+    record: &WorkspaceResourceRecord,
+) -> Result<(), ApiError> {
+    authorize_request(
+        state,
+        session,
+        &resource_authorization_request(state, session, capability, record).await?,
+        &request_id(headers),
+    )
+    .await?;
+    if resource_visibility_allows(session, record) {
+        Ok(())
+    } else {
+        Err(AppError::not_found("resource not found").into())
+    }
 }
 
 async fn knowledge_authorization_request(
@@ -447,10 +482,28 @@ pub(crate) fn validate_create_project_request(
     if name.is_empty() {
         return Err(AppError::invalid_input("project name is required").into());
     }
+    let resource_directory = request.resource_directory.trim();
+    if resource_directory.is_empty() {
+        return Err(AppError::invalid_input("project resource directory is required").into());
+    }
 
     Ok(CreateProjectRequest {
         name: name.into(),
         description: request.description.trim().into(),
+        resource_directory: resource_directory.into(),
+        owner_user_id: request
+            .owner_user_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        member_user_ids: request.member_user_ids.map(|values| {
+            values
+                .into_iter()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect()
+        }),
+        permission_overrides: request.permission_overrides,
+        linked_workspace_assets: request.linked_workspace_assets,
         assignments: request.assignments,
     })
 }
@@ -467,11 +520,29 @@ pub(crate) fn validate_update_project_request(
     if status != "active" && status != "archived" {
         return Err(AppError::invalid_input("project status must be active or archived").into());
     }
+    let resource_directory = request.resource_directory.trim();
+    if resource_directory.is_empty() {
+        return Err(AppError::invalid_input("project resource directory is required").into());
+    }
 
     Ok(UpdateProjectRequest {
         name: name.into(),
         description: request.description.trim().into(),
         status: status.into(),
+        resource_directory: resource_directory.into(),
+        owner_user_id: request
+            .owner_user_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
+        member_user_ids: request.member_user_ids.map(|values| {
+            values
+                .into_iter()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect()
+        }),
+        permission_overrides: request.permission_overrides,
+        linked_workspace_assets: request.linked_workspace_assets,
         assignments: request.assignments,
     })
 }
@@ -511,12 +582,62 @@ pub(crate) async fn update_project(
         Some(&project_id),
     )
     .await?;
+    ensure_project_owner_session(&state, &headers, &project_id).await?;
     let request = validate_update_project_request(request)?;
     Ok(Json(
         state
             .services
             .workspace
             .update_project(&project_id, request)
+            .await?,
+    ))
+}
+
+pub(crate) async fn list_project_promotion_requests(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+) -> Result<Json<Vec<ProjectPromotionRequest>>, ApiError> {
+    ensure_capability_session(
+        &state,
+        &headers,
+        "project.manage",
+        Some(&project_id),
+        Some("project"),
+        Some(&project_id),
+    )
+    .await?;
+    ensure_project_owner_session(&state, &headers, &project_id).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .list_project_promotion_requests(&project_id)
+            .await?,
+    ))
+}
+
+pub(crate) async fn create_project_promotion_request(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+    Json(input): Json<CreateProjectPromotionRequestInput>,
+) -> Result<Json<ProjectPromotionRequest>, ApiError> {
+    let session = ensure_capability_session(
+        &state,
+        &headers,
+        "project.manage",
+        Some(&project_id),
+        Some("project"),
+        Some(&project_id),
+    )
+    .await?;
+    ensure_project_owner(&state, &session, &project_id).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .create_project_promotion_request(&project_id, &session.user_id, input)
             .await?,
     ))
 }
@@ -593,16 +714,18 @@ pub(crate) async fn workspace_resources(
     )
     .await?;
     let resources = state.services.workspace.list_workspace_resources().await?;
+    let request_id = request_id(&headers);
     let mut visible = Vec::new();
     for record in resources {
         if authorize_request(
             &state,
             &session,
             &resource_authorization_request(&state, &session, "resource.view", &record).await?,
-            &request_id(&headers),
+            &request_id,
         )
         .await
         .is_ok()
+            && resource_visibility_allows(&session, &record)
         {
             visible.push(record);
         }
@@ -637,16 +760,18 @@ pub(crate) async fn project_resources(
         .workspace
         .list_project_resources(&project_id)
         .await?;
+    let request_id = request_id(&headers);
     let mut visible = Vec::new();
     for record in resources {
         if authorize_request(
             &state,
             &session,
             &resource_authorization_request(&state, &session, "resource.view", &record).await?,
-            &request_id(&headers),
+            &request_id,
         )
         .await
         .is_ok()
+            && resource_visibility_allows(&session, &record)
         {
             visible.push(record);
         }
@@ -676,9 +801,146 @@ pub(crate) async fn create_workspace_resource(
     let record = state
         .services
         .workspace
-        .create_workspace_resource(&workspace_id, input)
+        .create_workspace_resource(&workspace_id, &session.user_id, input)
         .await?;
     Ok(Json(record))
+}
+
+pub(crate) async fn import_workspace_resource(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Json(input): Json<WorkspaceResourceImportInput>,
+) -> Result<Json<WorkspaceResourceRecord>, ApiError> {
+    let session = authenticate_session(&state, &headers).await?;
+    let tags = input.tags.clone().unwrap_or_default();
+    authorize_request(
+        &state,
+        &session,
+        &resource_input_authorization_request(&session, "resource.upload", None, &tags),
+        &request_id(&headers),
+    )
+    .await?;
+    let workspace_id = state.services.workspace.workspace_summary().await?.id;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .import_workspace_resource(&workspace_id, &session.user_id, input)
+            .await?,
+    ))
+}
+
+pub(crate) async fn get_resource_detail(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(resource_id): Path<String>,
+) -> Result<Json<WorkspaceResourceRecord>, ApiError> {
+    let session = authenticate_session(&state, &headers).await?;
+    let record = state
+        .services
+        .workspace
+        .get_resource_detail(&resource_id)
+        .await?;
+    ensure_visible_resource(&state, &headers, &session, "resource.view", &record).await?;
+    Ok(Json(record))
+}
+
+pub(crate) async fn get_resource_content(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(resource_id): Path<String>,
+) -> Result<Json<WorkspaceResourceContentDocument>, ApiError> {
+    let session = authenticate_session(&state, &headers).await?;
+    let record = state
+        .services
+        .workspace
+        .get_resource_detail(&resource_id)
+        .await?;
+    ensure_visible_resource(&state, &headers, &session, "resource.view", &record).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .get_resource_content(&resource_id)
+            .await?,
+    ))
+}
+
+pub(crate) async fn list_resource_children(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(resource_id): Path<String>,
+) -> Result<Json<Vec<WorkspaceResourceChildrenRecord>>, ApiError> {
+    let session = authenticate_session(&state, &headers).await?;
+    let record = state
+        .services
+        .workspace
+        .get_resource_detail(&resource_id)
+        .await?;
+    ensure_visible_resource(&state, &headers, &session, "resource.view", &record).await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .list_resource_children(&resource_id)
+            .await?,
+    ))
+}
+
+pub(crate) async fn promote_resource(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(resource_id): Path<String>,
+    Json(input): Json<PromoteWorkspaceResourceInput>,
+) -> Result<Json<WorkspaceResourceRecord>, ApiError> {
+    let session = authenticate_session(&state, &headers).await?;
+    let record = state
+        .services
+        .workspace
+        .get_resource_detail(&resource_id)
+        .await?;
+    let capability = if input.scope == "workspace" {
+        "resource.publish"
+    } else {
+        "resource.update"
+    };
+    authorize_request(
+        &state,
+        &session,
+        &resource_authorization_request(&state, &session, capability, &record).await?,
+        &request_id(&headers),
+    )
+    .await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .promote_resource(&resource_id, input)
+            .await?,
+    ))
+}
+
+pub(crate) async fn list_workspace_filesystem_directories(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Query(query): Query<WorkspaceDirectoryBrowserQuery>,
+) -> Result<Json<WorkspaceDirectoryBrowserResponse>, ApiError> {
+    ensure_capability_session(
+        &state,
+        &headers,
+        "project.manage",
+        None,
+        Some("project"),
+        None,
+    )
+    .await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .list_directories(query.path.as_deref())
+            .await?,
+    ))
 }
 
 pub(crate) async fn update_workspace_resource(
@@ -776,7 +1038,7 @@ pub(crate) async fn create_project_resource(
     let record = state
         .services
         .workspace
-        .create_project_resource(&project_id, input)
+        .create_project_resource(&project_id, &session.user_id, input)
         .await?;
     Ok(Json(record))
 }
@@ -798,9 +1060,33 @@ pub(crate) async fn create_project_resource_folder(
     let records = state
         .services
         .workspace
-        .create_project_resource_folder(&project_id, input)
+        .create_project_resource_folder(&project_id, &session.user_id, input)
         .await?;
     Ok(Json(records))
+}
+
+pub(crate) async fn import_project_resource(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+    Json(input): Json<WorkspaceResourceImportInput>,
+) -> Result<Json<WorkspaceResourceRecord>, ApiError> {
+    let session = authenticate_session(&state, &headers).await?;
+    let tags = input.tags.clone().unwrap_or_default();
+    authorize_request(
+        &state,
+        &session,
+        &resource_input_authorization_request(&session, "resource.upload", Some(&project_id), &tags),
+        &request_id(&headers),
+    )
+    .await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .import_project_resource(&project_id, &session.user_id, input)
+            .await?,
+    ))
 }
 
 pub(crate) async fn update_project_resource(
@@ -2412,6 +2698,7 @@ pub(crate) async fn get_project_runtime_config_route(
         Some(&project_id),
     )
     .await?;
+    ensure_project_owner(&state, &session, &project_id).await?;
     Ok(Json(
         state
             .services
@@ -2436,6 +2723,7 @@ pub(crate) async fn validate_project_runtime_config_route(
         Some(&project_id),
     )
     .await?;
+    ensure_project_owner(&state, &session, &project_id).await?;
     Ok(Json(
         state
             .services
@@ -2460,11 +2748,58 @@ pub(crate) async fn save_project_runtime_config_route(
         Some(&project_id),
     )
     .await?;
+    ensure_project_owner(&state, &session, &project_id).await?;
     Ok(Json(
         state
             .services
             .runtime_config
             .save_project_config(&project_id, &session.user_id, patch)
+            .await?,
+    ))
+}
+
+pub(crate) async fn list_workspace_promotion_requests(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ProjectPromotionRequest>>, ApiError> {
+    ensure_capability_session(
+        &state,
+        &headers,
+        "resource.publish",
+        None,
+        Some("resource"),
+        None,
+    )
+    .await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .list_workspace_promotion_requests()
+            .await?,
+    ))
+}
+
+pub(crate) async fn review_project_promotion_request(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path(request_id): Path<String>,
+    Json(input): Json<ReviewProjectPromotionRequestInput>,
+) -> Result<Json<ProjectPromotionRequest>, ApiError> {
+    let session = ensure_capability_session(
+        &state,
+        &headers,
+        "resource.publish",
+        None,
+        Some("resource"),
+        None,
+    )
+    .await?;
+    Ok(Json(
+        state
+            .services
+            .workspace
+            .review_project_promotion_request(&request_id, &session.user_id, input)
             .await?,
     ))
 }
@@ -2549,6 +2884,29 @@ pub(crate) async fn lookup_project(
         .into_iter()
         .find(|record| record.id == project_id)
         .ok_or_else(|| ApiError::from(AppError::not_found(format!("project {project_id}"))))
+}
+
+pub(crate) async fn ensure_project_owner(
+    state: &ServerState,
+    session: &SessionRecord,
+    project_id: &str,
+) -> Result<ProjectRecord, ApiError> {
+    let project = lookup_project(state, project_id).await?;
+    if project.owner_user_id != session.user_id {
+        return Err(ApiError::from(AppError::auth(
+            "project owner access is required",
+        )));
+    }
+    Ok(project)
+}
+
+pub(crate) async fn ensure_project_owner_session(
+    state: &ServerState,
+    headers: &HeaderMap,
+    project_id: &str,
+) -> Result<ProjectRecord, ApiError> {
+    let session = authenticate_session(state, headers).await?;
+    ensure_project_owner(state, &session, project_id).await
 }
 
 pub(crate) async fn list_conversation_records(
@@ -2865,4 +3223,126 @@ pub(crate) async fn runtime_events(
         .into_response();
     insert_request_id(&mut response, &request_id);
     Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sample_session() -> SessionRecord {
+        SessionRecord {
+            id: "sess-1".into(),
+            workspace_id: "ws-local".into(),
+            user_id: "user-owner".into(),
+            client_app_id: "octopus-desktop".into(),
+            token: "token".into(),
+            status: "active".into(),
+            created_at: 1,
+            expires_at: None,
+        }
+    }
+
+    fn sample_resource(visibility: &str, owner_user_id: &str) -> WorkspaceResourceRecord {
+        WorkspaceResourceRecord {
+            id: "res-1".into(),
+            workspace_id: "ws-local".into(),
+            project_id: Some("proj-redesign".into()),
+            kind: "file".into(),
+            name: "brief.md".into(),
+            location: Some("data/projects/proj-redesign/resources/brief.md".into()),
+            origin: "source".into(),
+            scope: "project".into(),
+            visibility: visibility.into(),
+            owner_user_id: owner_user_id.into(),
+            storage_path: Some("data/projects/proj-redesign/resources/brief.md".into()),
+            content_type: Some("text/markdown".into()),
+            byte_size: Some(12),
+            preview_kind: "markdown".into(),
+            status: "healthy".into(),
+            updated_at: 1,
+            tags: Vec::new(),
+            source_artifact_id: None,
+        }
+    }
+
+    #[test]
+    fn validate_create_project_request_requires_and_trims_resource_directory() {
+        let validated = validate_create_project_request(CreateProjectRequest {
+            name: "  Resource Project  ".into(),
+            description: "  Resource import coverage.  ".into(),
+            resource_directory: "  data/projects/resource-project/resources  ".into(),
+            assignments: None,
+        })
+        .expect("validated request");
+
+        assert_eq!(validated.name, "Resource Project");
+        assert_eq!(validated.description, "Resource import coverage.");
+        assert_eq!(
+            validated.resource_directory,
+            "data/projects/resource-project/resources"
+        );
+
+        assert!(validate_create_project_request(CreateProjectRequest {
+            name: "Project".into(),
+            description: String::new(),
+            resource_directory: "   ".into(),
+            assignments: None,
+        })
+        .is_err());
+    }
+
+    #[test]
+    fn validate_update_project_request_requires_status_and_resource_directory() {
+        let validated = validate_update_project_request(UpdateProjectRequest {
+            name: "  Resource Project  ".into(),
+            description: "  Updated description.  ".into(),
+            status: " archived ".into(),
+            resource_directory: "  data/projects/resource-project/resources  ".into(),
+            assignments: None,
+        })
+        .expect("validated update");
+
+        assert_eq!(validated.name, "Resource Project");
+        assert_eq!(validated.description, "Updated description.");
+        assert_eq!(validated.status, "archived");
+        assert_eq!(
+            validated.resource_directory,
+            "data/projects/resource-project/resources"
+        );
+
+        assert!(validate_update_project_request(UpdateProjectRequest {
+            name: "Project".into(),
+            description: String::new(),
+            status: "disabled".into(),
+            resource_directory: "data/projects/resource-project/resources".into(),
+            assignments: None,
+        })
+        .is_err());
+        assert!(validate_update_project_request(UpdateProjectRequest {
+            name: "Project".into(),
+            description: String::new(),
+            status: "active".into(),
+            resource_directory: " ".into(),
+            assignments: None,
+        })
+        .is_err());
+    }
+
+    #[test]
+    fn resource_visibility_allows_private_resources_only_for_the_owner() {
+        let session = sample_session();
+
+        assert!(resource_visibility_allows(
+            &session,
+            &sample_resource("public", "another-user")
+        ));
+        assert!(resource_visibility_allows(
+            &session,
+            &sample_resource("private", "user-owner")
+        ));
+        assert!(!resource_visibility_allows(
+            &session,
+            &sample_resource("private", "another-user")
+        ));
+    }
 }

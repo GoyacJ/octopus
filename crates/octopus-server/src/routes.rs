@@ -193,8 +193,29 @@ pub fn build_router(state: ServerState) -> Router {
             get(workspace_resources).post(create_workspace_resource),
         )
         .route(
+            "/api/v1/workspace/resources/import",
+            post(import_workspace_resource),
+        )
+        .route(
             "/api/v1/workspace/resources/:resource_id",
             patch(update_workspace_resource).delete(delete_workspace_resource),
+        )
+        .route(
+            "/api/v1/workspace/filesystem/directories",
+            get(list_workspace_filesystem_directories),
+        )
+        .route("/api/v1/resources/:resource_id", get(get_resource_detail))
+        .route(
+            "/api/v1/resources/:resource_id/content",
+            get(get_resource_content),
+        )
+        .route(
+            "/api/v1/resources/:resource_id/children",
+            get(list_resource_children),
+        )
+        .route(
+            "/api/v1/resources/:resource_id/promote",
+            post(promote_resource),
         )
         .route("/api/v1/workspace/knowledge", get(workspace_knowledge))
         .route("/api/v1/workspace/pet", get(workspace_pet_snapshot))
@@ -334,6 +355,10 @@ pub fn build_router(state: ServerState) -> Router {
         .route("/api/v1/projects", get(projects).post(create_project))
         .route("/api/v1/projects/:project_id", patch(update_project))
         .route(
+            "/api/v1/projects/:project_id/promotion-requests",
+            get(list_project_promotion_requests).post(create_project_promotion_request),
+        )
+        .route(
             "/api/v1/projects/:project_id/dashboard",
             get(project_dashboard),
         )
@@ -348,6 +373,10 @@ pub fn build_router(state: ServerState) -> Router {
         .route(
             "/api/v1/projects/:project_id/resources",
             get(project_resources).post(create_project_resource),
+        )
+        .route(
+            "/api/v1/projects/:project_id/resources/import",
+            post(import_project_resource),
         )
         .route(
             "/api/v1/projects/:project_id/resources/folder",
@@ -412,6 +441,14 @@ pub fn build_router(state: ServerState) -> Router {
         .route("/api/v1/inbox", get(inbox))
         .route("/api/v1/artifacts", get(artifacts))
         .route("/api/v1/knowledge", get(knowledge))
+        .route(
+            "/api/v1/workspace/promotion-requests",
+            get(list_workspace_promotion_requests),
+        )
+        .route(
+            "/api/v1/workspace/promotion-requests/:request_id/review",
+            post(review_project_promotion_request),
+        )
         .nest("/api/v1/runtime", runtime_routes())
         .layer(cors_layer)
         .with_state(state)

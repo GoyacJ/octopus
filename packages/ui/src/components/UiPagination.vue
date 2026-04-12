@@ -12,6 +12,7 @@ const props = withDefaults(defineProps<{
   metaLabel?: string
   pageInfoLabel?: string
   rootTestId?: string
+  hidePageInfo?: boolean
 }>(), {
   previousLabel: 'Prev',
   nextLabel: 'Next',
@@ -19,6 +20,7 @@ const props = withDefaults(defineProps<{
   metaLabel: '',
   pageInfoLabel: '',
   rootTestId: 'ui-pagination',
+  hidePageInfo: false,
 })
 
 const emit = defineEmits<{
@@ -52,6 +54,7 @@ function goNext() {
         variant="ghost"
         size="sm"
         class="h-8 gap-1 text-text-secondary"
+        :data-testid="`${rootTestId}-previous`"
         :disabled="!canGoPrevious"
         @click="goPrevious"
       >
@@ -59,7 +62,7 @@ function goNext() {
         <span class="hidden sm:inline">{{ previousLabel }}</span>
       </UiButton>
 
-      <span class="px-2 text-text-secondary font-medium">
+      <span v-if="!hidePageInfo" class="px-2 text-text-secondary font-medium">
         {{ resolvedPageInfoLabel }}
       </span>
 
@@ -67,6 +70,7 @@ function goNext() {
         variant="ghost"
         size="sm"
         class="h-8 gap-1 text-text-secondary"
+        :data-testid="`${rootTestId}-next`"
         :disabled="!canGoNext"
         @click="goNext"
       >

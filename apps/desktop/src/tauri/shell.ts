@@ -84,6 +84,18 @@ export async function pickAvatarImage(): Promise<AvatarUploadPayload | null> {
   return await resolveShellClient().pickAvatarImage()
 }
 
+export async function pickResourceDirectory(): Promise<string | null> {
+  return await resolveShellClient().pickResourceDirectory()
+}
+
+export async function pickResourceFile(): Promise<WorkspaceFileUploadPayload | null> {
+  return await resolveShellClient().pickResourceFile()
+}
+
+export async function pickResourceFolder(): Promise<WorkspaceDirectoryUploadEntry[] | null> {
+  return await resolveShellClient().pickResourceFolder()
+}
+
 export async function pickSkillArchive(): Promise<WorkspaceFileUploadPayload[] | null> {
   return await resolveShellClient().pickSkillArchive()
 }
@@ -165,6 +177,9 @@ export const hostClient = {
   restartDesktopBackend,
   resolveDesktopBackendConnection: resolveDesktopBackendConnectionForHost,
   pickAvatarImage,
+  pickResourceDirectory,
+  pickResourceFile,
+  pickResourceFolder,
   pickAgentBundleArchive,
   pickAgentBundleFolder,
   pickSkillArchive,

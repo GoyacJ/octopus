@@ -83,6 +83,280 @@ describe('workspace client transport', () => {
     expect(headers.get('X-Request-Id')).toMatch(/^req-/)
   })
 
+  it('calls resource import, detail, content, children, promote, and remote directory endpoints through the workspace client adapter', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'res-folder-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          kind: 'folder',
+          name: 'design-assets',
+          origin: 'source',
+          status: 'healthy',
+          updatedAt: 1,
+          tags: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'res-folder-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          kind: 'folder',
+          name: 'design-assets',
+          origin: 'source',
+          status: 'healthy',
+          scope: 'project',
+          visibility: 'public',
+          ownerUserId: 'user-owner',
+          storagePath: 'data/projects/proj-redesign/resources/design-assets',
+          previewKind: 'folder',
+          updatedAt: 1,
+          tags: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          resourceId: 'res-folder-1',
+          previewKind: 'folder',
+          fileName: 'design-assets',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ([
+          {
+            name: 'brief.md',
+            relativePath: 'brief.md',
+            kind: 'file',
+            previewKind: 'markdown',
+            contentType: 'text/markdown',
+            byteSize: 7,
+            updatedAt: 1,
+          },
+        ]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'res-folder-1',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          kind: 'folder',
+          name: 'design-assets',
+          origin: 'source',
+          status: 'healthy',
+          scope: 'workspace',
+          visibility: 'public',
+          ownerUserId: 'user-owner',
+          storagePath: 'data/projects/proj-redesign/resources/design-assets',
+          previewKind: 'folder',
+          updatedAt: 2,
+          tags: [],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          currentPath: '/remote/projects',
+          parentPath: '/remote',
+          entries: [
+            {
+              name: 'design-assets',
+              path: '/remote/projects/design-assets',
+            },
+          ],
+        }),
+      })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const session = createWorkspaceSession(connection!)
+    const workspaceClient = client.createWorkspaceClient({ connection: connection!, session })
+
+    await (workspaceClient.resources as any).importProject('proj-redesign', {
+      name: 'design-assets',
+      rootDirName: 'design-assets',
+      scope: 'project',
+      visibility: 'public',
+      files: [
+        {
+          fileName: 'brief.md',
+          contentType: 'text/markdown',
+          dataBase64: 'IyBCcmllZg==',
+          byteSize: 7,
+          relativePath: 'brief.md',
+        },
+      ],
+    })
+    await (workspaceClient.resources as any).getDetail('res-folder-1')
+    await (workspaceClient.resources as any).getContent('res-folder-1')
+    await (workspaceClient.resources as any).listChildren('res-folder-1')
+    await (workspaceClient.resources as any).promote('res-folder-1', { scope: 'workspace' })
+    await (workspaceClient.filesystem as any).listDirectories('/remote/projects')
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/resources/import',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:43127/api/v1/resources/res-folder-1',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      3,
+      'http://127.0.0.1:43127/api/v1/resources/res-folder-1/content',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      4,
+      'http://127.0.0.1:43127/api/v1/resources/res-folder-1/children',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      5,
+      'http://127.0.0.1:43127/api/v1/resources/res-folder-1/promote',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      6,
+      'http://127.0.0.1:43127/api/v1/workspace/filesystem/directories?path=%2Fremote%2Fprojects',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+  })
+
+  it('calls project promotion request endpoints through the workspace client adapter', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ([
+          {
+            id: 'promotion-1',
+            workspaceId: 'ws-local',
+            projectId: 'proj-redesign',
+            assetType: 'resource',
+            assetId: 'proj-redesign-res-3',
+            requestedByUserId: 'user-owner',
+            submittedByOwnerUserId: 'user-owner',
+            requiredWorkspaceCapability: 'resource.publish',
+            status: 'pending',
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'promotion-2',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          assetType: 'resource',
+          assetId: 'proj-redesign-res-3',
+          requestedByUserId: 'user-owner',
+          submittedByOwnerUserId: 'user-owner',
+          requiredWorkspaceCapability: 'resource.publish',
+          status: 'pending',
+          createdAt: 2,
+          updatedAt: 2,
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ([
+          {
+            id: 'promotion-2',
+            workspaceId: 'ws-local',
+            projectId: 'proj-redesign',
+            assetType: 'resource',
+            assetId: 'proj-redesign-res-3',
+            requestedByUserId: 'user-owner',
+            submittedByOwnerUserId: 'user-owner',
+            requiredWorkspaceCapability: 'resource.publish',
+            status: 'pending',
+            createdAt: 2,
+            updatedAt: 2,
+          },
+        ]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async () => ({
+          id: 'promotion-2',
+          workspaceId: 'ws-local',
+          projectId: 'proj-redesign',
+          assetType: 'resource',
+          assetId: 'proj-redesign-res-3',
+          requestedByUserId: 'user-owner',
+          submittedByOwnerUserId: 'user-owner',
+          requiredWorkspaceCapability: 'resource.publish',
+          status: 'approved',
+          reviewedByUserId: 'user-owner',
+          reviewComment: 'Looks good.',
+          createdAt: 2,
+          updatedAt: 3,
+          reviewedAt: 3,
+        }),
+      })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const session = createWorkspaceSession(connection!)
+    const workspaceClient = client.createWorkspaceClient({ connection: connection!, session })
+
+    await (workspaceClient.projects as any).listPromotionRequests('proj-redesign')
+    await (workspaceClient.projects as any).createPromotionRequest('proj-redesign', {
+      assetType: 'resource',
+      assetId: 'proj-redesign-res-3',
+    })
+    await (workspaceClient.workspace as any).listPromotionRequests()
+    await (workspaceClient.workspace as any).reviewPromotionRequest('promotion-2', {
+      approved: true,
+      reviewComment: 'Looks good.',
+    })
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      1,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/promotion-requests',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      2,
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/promotion-requests',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      3,
+      'http://127.0.0.1:43127/api/v1/workspace/promotion-requests',
+      expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      4,
+      'http://127.0.0.1:43127/api/v1/workspace/promotion-requests/promotion-2/review',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+  })
+
   it('calls workspace pet endpoints through the workspace client adapter', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy

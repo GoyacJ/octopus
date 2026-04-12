@@ -240,6 +240,115 @@ describe('OpenAPI transport helpers', () => {
     expect(payload.id).toBe('proj-redesign')
   })
 
+  it('builds project resource import requests with path params and JSON bodies', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'res-imported-folder',
+        workspaceId: 'ws-local',
+        projectId: 'proj-redesign',
+        kind: 'folder',
+        name: 'design-assets',
+        origin: 'source',
+        status: 'healthy',
+        updatedAt: 1,
+        tags: [],
+      }),
+    })
+
+    const connection = createWorkspaceConnection()
+    const session = createWorkspaceSession(connection)
+    await (fetchWorkspaceOpenApi as any)(
+      connection,
+      '/api/v1/projects/{projectId}/resources/import',
+      'post',
+      {
+        session,
+        pathParams: {
+          projectId: 'proj-redesign',
+        },
+        body: JSON.stringify({
+          name: 'design-assets',
+          rootDirName: 'design-assets',
+          scope: 'project',
+          visibility: 'public',
+          files: [
+            {
+              fileName: 'brief.md',
+              contentType: 'text/markdown',
+              dataBase64: 'IyBCcmllZg==',
+              byteSize: 7,
+              relativePath: 'brief.md',
+            },
+          ],
+        }),
+      },
+    )
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/projects/proj-redesign/resources/import',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+        body: JSON.stringify({
+          name: 'design-assets',
+          rootDirName: 'design-assets',
+          scope: 'project',
+          visibility: 'public',
+          files: [
+            {
+              fileName: 'brief.md',
+              contentType: 'text/markdown',
+              dataBase64: 'IyBCcmllZg==',
+              byteSize: 7,
+              relativePath: 'brief.md',
+            },
+          ],
+        }),
+      }),
+    )
+  })
+
+  it('builds workspace filesystem directory requests with query params', async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        currentPath: '/remote/projects',
+        parentPath: '/remote',
+        entries: [
+          {
+            name: 'design',
+            path: '/remote/projects/design',
+          },
+        ],
+      }),
+    })
+
+    const connection = createWorkspaceConnection()
+    const session = createWorkspaceSession(connection)
+    await (fetchWorkspaceOpenApi as any)(
+      connection,
+      '/api/v1/workspace/filesystem/directories',
+      'get',
+      {
+        session,
+        queryParams: {
+          path: '/remote/projects',
+        },
+      },
+    )
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/workspace/filesystem/directories?path=%2Fremote%2Fprojects',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.any(Headers),
+      }),
+    )
+  })
+
   it('encodes nested relativePath params for generated workspace skill file routes', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,

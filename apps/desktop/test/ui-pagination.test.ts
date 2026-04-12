@@ -67,4 +67,18 @@ describe('UiPagination', () => {
 
     expect(wrapper.emitted('update:page')).toBeUndefined()
   })
+
+  it('hides the page info label when hidePageInfo is enabled', () => {
+    const wrapper = mount(UiPagination, {
+      props: {
+        page: 2,
+        pageCount: 4,
+        summaryLabel: '4 total',
+        hidePageInfo: true,
+      },
+    })
+
+    expect(wrapper.text()).toContain('4 total')
+    expect(wrapper.text()).not.toContain('2 / 4')
+  })
 })

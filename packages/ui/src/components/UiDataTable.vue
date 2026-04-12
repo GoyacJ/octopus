@@ -53,13 +53,13 @@ function resolveCellRender(cell: {
       <slot name="toolbar" />
     </div>
 
-    <div v-if="table.getRowModel().rows.length" class="overflow-x-auto border-t border-border/50">
+    <div v-if="table.getRowModel().rows.length" class="overflow-x-auto">
       <table class="w-full min-w-0 border-collapse text-left">
-        <thead class="bg-subtle/20 text-text-tertiary">
+        <thead class="bg-subtle/12 text-text-tertiary">
         <tr
           v-for="headerGroup in table.getHeaderGroups()"
           :key="headerGroup.id"
-          class="border-b border-border/50"
+          class="border-b border-[color-mix(in_srgb,var(--border)_42%,transparent)]"
         >
           <th
             v-for="header in headerGroup.headers"
@@ -79,7 +79,7 @@ function resolveCellRender(cell: {
           v-for="row in table.getRowModel().rows"
           :key="row.id"
           :class="cn(
-            'group border-b border-border/40 last:border-0 hover:bg-accent/40 transition-colors',
+            'group border-b border-[color-mix(in_srgb,var(--border)_28%,transparent)] last:border-0 hover:bg-accent/40 transition-colors',
             props.onRowClick && 'cursor-pointer',
           )"
           :data-testid="props.rowTestId ? `${props.rowTestId}-${row.id}` : undefined"

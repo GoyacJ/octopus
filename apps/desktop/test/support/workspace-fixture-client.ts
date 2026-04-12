@@ -4,6 +4,9 @@ import type {
   ChangeCurrentUserPasswordRequest,
   ChangeCurrentUserPasswordResponse,
   CopyWorkspaceSkillToManagedInput,
+  CreateProjectPromotionRequestInput,
+  CreateWorkspaceResourceFolderInput,
+  CreateWorkspaceResourceInput,
   CreateWorkspaceSkillInput,
   ExportWorkspaceAgentBundleInput,
   ExportWorkspaceAgentBundleResult,
@@ -13,7 +16,11 @@ import type {
   ImportWorkspaceAgentBundleResult,
   PetConversationBinding,
   ProjectAgentLinkRecord,
+  ProjectPromotionRequest,
+  ProjectResourceKind,
   ProjectTeamLinkRecord,
+  PromoteWorkspaceResourceInput,
+  ResourcePreviewKind,
   RuntimeApprovalRequest,
   RuntimeBootstrap,
   RuntimeConfigPatch,
@@ -26,11 +33,19 @@ import type {
   UpsertTeamInput,
   UpdateCurrentUserProfileRequest,
   UpdateProjectRequest,
+  UpdateWorkspaceResourceInput,
   UpdateWorkspaceSkillFileInput,
   UpdateWorkspaceSkillInput,
   UserRecordSummary,
   WorkspaceConnectionRecord,
+  WorkspaceDirectoryBrowserResponse,
   WorkspaceMcpServerDocument,
+  WorkspaceResourceChildrenRecord,
+  WorkspaceResourceContentDocument,
+  WorkspaceResourceImportInput,
+  WorkspaceResourceRecord,
+  WorkspaceResourceScope,
+  WorkspaceResourceVisibility,
   WorkspaceSessionTokenEnvelope,
   WorkspaceSkillDocument,
   WorkspaceSkillFileDocument,
@@ -39,13 +54,14 @@ import type {
   WorkspaceToolDisablePatch,
   WorkspaceDirectoryUploadEntry,
   ProtectedResourceMetadataUpsertRequest,
+  ReviewProjectPromotionRequestInput,
 } from '@octopus/schema'
 import { resolveRuntimePermissionMode } from '@octopus/schema'
 
 import type { WorkspaceClient } from '@/tauri/workspace-client'
 import { WorkspaceApiError } from '@/tauri/shared'
 
-import { WORKSPACE_SESSIONS, clone } from './workspace-fixture-bootstrap'
+import { clone, createWorkspaceSessionEnvelope } from './workspace-fixture-bootstrap'
 import type { FixtureOptions, WorkspaceFixtureState } from './workspace-fixture-state'
 import {
   cloneSkillFiles,
@@ -95,16 +111,30 @@ export function createWorkspaceClientFixture(
     return state
   }
 
-  const defaultSession = clone(WORKSPACE_SESSIONS.find(item => item.workspaceConnectionId === connection.workspaceConnectionId)!)
-  const fixtureSessions = workspaceState.users.map((user, index) => ({
-    sessionId: index === 0 ? defaultSession.session.id : `sess-${connection.workspaceId}-${user.id}`,
-    token: index === 0 ? defaultSession.token : `token-${connection.workspaceId}-${user.id}`,
-    userId: user.id,
-    clientAppId: index === 0 ? defaultSession.session.clientAppId : 'octopus-web',
-    status: 'active' as const,
-    createdAt: defaultSession.session.createdAt + index,
-    expiresAt: defaultSession.session.expiresAt,
-  }))
+  const defaultSession = clone(
+    session
+    ?? createWorkspaceSessionEnvelope(
+      connection,
+      workspaceState.workspace.ownerUserId ?? workspaceState.users[0]?.id ?? 'user-owner',
+    ),
+  )
+  const fixtureSessions = workspaceState.users.map((user, index) => {
+    const nextSession = clone(
+      session?.session.userId === user.id
+        ? session
+        : createWorkspaceSessionEnvelope(connection, user.id),
+    )
+
+    return {
+      sessionId: nextSession.session.id,
+      token: nextSession.token,
+      userId: user.id,
+      clientAppId: nextSession.session.clientAppId || (index === 0 ? 'octopus-desktop' : 'octopus-web'),
+      status: 'active' as const,
+      createdAt: nextSession.session.createdAt + index,
+      expiresAt: nextSession.session.expiresAt,
+    }
+  })
 
   let accessUsers = workspaceState.users.map(user => ({
     id: user.id,
@@ -150,11 +180,28 @@ export function createWorkspaceClientFixture(
     },
   ]
 
-  const buildSession = (userId: string, token = defaultSession.token): WorkspaceSessionTokenEnvelope['session'] => ({
-    ...clone(defaultSession.session),
-    userId,
-    token,
-  })
+  const findFixtureSession = (userId: string) =>
+    fixtureSessions.find(record => record.userId === userId)
+    ?? fixtureSessions.find(record => record.token === activeSessionToken)
+    ?? fixtureSessions[0]
+
+  const buildSession = (
+    userId: string,
+    token = findFixtureSession(userId)?.token ?? defaultSession.token,
+  ): WorkspaceSessionTokenEnvelope['session'] => {
+    const baseSession = findFixtureSession(userId)
+
+    return {
+      ...clone(defaultSession.session),
+      id: baseSession?.sessionId ?? defaultSession.session.id,
+      userId,
+      clientAppId: baseSession?.clientAppId ?? defaultSession.session.clientAppId,
+      token,
+      status: baseSession?.status ?? defaultSession.session.status,
+      createdAt: baseSession?.createdAt ?? defaultSession.session.createdAt,
+      expiresAt: baseSession?.expiresAt ?? defaultSession.session.expiresAt,
+    }
+  }
 
   const buildEnterpriseSession = (userId: string, token = defaultSession.token) => {
     const session = buildSession(userId, token)
@@ -215,6 +262,344 @@ export function createWorkspaceClientFixture(
       projectId,
       createdAt: Date.now(),
     })
+  }
+
+  const workspaceResourceBaseDirectory = () =>
+    workspaceState.workspace.deployment === 'local'
+      ? 'data/resources/workspace'
+      : '/remote/workspace/resources'
+
+  const decodeBase64Text = (value: string) => {
+    if (typeof globalThis.atob === 'function') {
+      return globalThis.atob(value)
+    }
+    return Buffer.from(value, 'base64').toString('utf-8')
+  }
+
+  const inferPreviewKind = (
+    kind: ProjectResourceKind,
+    contentType?: string,
+    nameOrPath?: string,
+  ): ResourcePreviewKind => {
+    if (kind === 'folder') {
+      return 'folder'
+    }
+    if (kind === 'url') {
+      return 'url'
+    }
+
+    const lowerContentType = contentType?.toLowerCase() ?? ''
+    const lowerName = nameOrPath?.toLowerCase() ?? ''
+
+    if (lowerContentType.includes('markdown') || lowerName.endsWith('.md')) {
+      return 'markdown'
+    }
+    if (
+      lowerContentType.includes('json')
+      || lowerContentType.includes('javascript')
+      || lowerContentType.includes('typescript')
+      || lowerName.endsWith('.json')
+      || lowerName.endsWith('.js')
+      || lowerName.endsWith('.ts')
+      || lowerName.endsWith('.vue')
+      || lowerName.endsWith('.rs')
+      || lowerName.endsWith('.yaml')
+      || lowerName.endsWith('.yml')
+    ) {
+      return 'code'
+    }
+    if (lowerContentType.startsWith('image/') || /\.(png|jpe?g|webp|gif|svg)$/.test(lowerName)) {
+      return 'image'
+    }
+    if (lowerContentType === 'application/pdf' || lowerName.endsWith('.pdf')) {
+      return 'pdf'
+    }
+    if (lowerContentType.startsWith('audio/')) {
+      return 'audio'
+    }
+    if (lowerContentType.startsWith('video/')) {
+      return 'video'
+    }
+    if (lowerContentType.startsWith('text/') || lowerContentType === 'application/xml' || lowerName.endsWith('.csv')) {
+      return 'text'
+    }
+    return 'binary'
+  }
+
+  const normalizeImportedFiles = (input: WorkspaceResourceImportInput) => {
+    let rootDirName = input.rootDirName?.trim() ?? ''
+    let files = input.files.map(file => ({ ...file, relativePath: file.relativePath.replace(/\\/g, '/') }))
+
+    if (!rootDirName) {
+      const topLevelNames = Array.from(new Set(
+        files
+          .map(file => file.relativePath.split('/')[0])
+          .filter((value): value is string => Boolean(value)),
+      ))
+      if (topLevelNames.length === 1 && files.some(file => file.relativePath.includes('/'))) {
+        rootDirName = topLevelNames[0] ?? ''
+      }
+    }
+
+    if (rootDirName) {
+      const rootPrefix = `${rootDirName}/`
+      files = files.map((file) => ({
+        ...file,
+        relativePath: file.relativePath.startsWith(rootPrefix)
+          ? file.relativePath.slice(rootPrefix.length)
+          : file.relativePath,
+      }))
+    }
+
+    return {
+      rootDirName,
+      files,
+    }
+  }
+
+  const findProjectRecord = (projectId: string) => {
+    const project = workspaceState.projects.find(record => record.id === projectId)
+    if (!project) {
+      throw new WorkspaceApiError({
+        message: 'project not found',
+        status: 404,
+        requestId: 'req-project-not-found',
+        retryable: false,
+        code: 'NOT_FOUND',
+      })
+    }
+    return project
+  }
+
+  const ensureProjectOwner = (projectId: string) => {
+    const project = findProjectRecord(projectId)
+    if (project.ownerUserId !== getCurrentUserId()) {
+      throw new WorkspaceApiError({
+        message: 'project owner required',
+        status: 403,
+        requestId: 'req-project-owner-required',
+        retryable: false,
+        code: 'FORBIDDEN',
+      })
+    }
+    return project
+  }
+
+  const listWorkspaceResources = () => [
+    ...workspaceState.workspaceResources,
+    ...Object.values(workspaceState.projectResources).flat(),
+  ]
+
+  const findResourceLocation = (resourceId: string) => {
+    const workspaceIndex = workspaceState.workspaceResources.findIndex(record => record.id === resourceId)
+    if (workspaceIndex >= 0) {
+      return {
+        container: 'workspace' as const,
+        index: workspaceIndex,
+        record: workspaceState.workspaceResources[workspaceIndex]!,
+      }
+    }
+
+    for (const [projectId, resources] of Object.entries(workspaceState.projectResources)) {
+      const index = resources.findIndex(record => record.id === resourceId)
+      if (index >= 0) {
+        return {
+          container: 'project' as const,
+          projectId,
+          index,
+          record: resources[index]!,
+        }
+      }
+    }
+
+    return null
+  }
+
+  const storeResourceRecord = (record: WorkspaceResourceRecord) => {
+    const located = findResourceLocation(record.id)
+    if (!located) {
+      if (record.projectId) {
+        workspaceState.projectResources[record.projectId] = [
+          ...(workspaceState.projectResources[record.projectId] ?? []),
+          record,
+        ]
+      } else {
+        workspaceState.workspaceResources = [...workspaceState.workspaceResources, record]
+      }
+      return
+    }
+
+    if (located.container === 'workspace') {
+      workspaceState.workspaceResources = workspaceState.workspaceResources.map((item, index) =>
+        index === located.index ? record : item)
+      return
+    }
+
+    workspaceState.projectResources[located.projectId] =
+      (workspaceState.projectResources[located.projectId] ?? []).map((item, index) =>
+        index === located.index ? record : item)
+  }
+
+  const removeResourceRecord = (resourceId: string) => {
+    const located = findResourceLocation(resourceId)
+    if (!located) {
+      return
+    }
+
+    if (located.container === 'workspace') {
+      workspaceState.workspaceResources = workspaceState.workspaceResources.filter(record => record.id !== resourceId)
+    } else {
+      workspaceState.projectResources[located.projectId] =
+        (workspaceState.projectResources[located.projectId] ?? []).filter(record => record.id !== resourceId)
+    }
+
+    delete workspaceState.resourceContents[resourceId]
+    delete workspaceState.resourceChildren[resourceId]
+  }
+
+  const buildResourceContent = (
+    resourceId: string,
+    payload: {
+      fileName?: string
+      contentType?: string
+      dataBase64?: string
+      externalUrl?: string
+      previewKind: ResourcePreviewKind
+    },
+  ): WorkspaceResourceContentDocument => {
+    const content: WorkspaceResourceContentDocument = {
+      resourceId,
+      previewKind: payload.previewKind,
+      fileName: payload.fileName,
+      contentType: payload.contentType,
+      externalUrl: payload.externalUrl,
+    }
+
+    if (!payload.dataBase64) {
+      return content
+    }
+
+    if (payload.previewKind === 'markdown' || payload.previewKind === 'code' || payload.previewKind === 'text') {
+      content.textContent = decodeBase64Text(payload.dataBase64)
+      content.byteSize = payload.dataBase64.length
+      return content
+    }
+
+    content.dataBase64 = payload.dataBase64
+    content.byteSize = payload.dataBase64.length
+    return content
+  }
+
+  const createResourceRecord = (
+    input: {
+      projectId?: string
+      kind: ProjectResourceKind
+      name: string
+      origin?: WorkspaceResourceRecord['origin']
+      location?: string
+      scope?: WorkspaceResourceScope
+      visibility?: WorkspaceResourceVisibility
+      sourceArtifactId?: string
+      tags?: string[]
+      storagePath?: string
+      contentType?: string
+      byteSize?: number
+      previewKind?: ResourcePreviewKind
+      status?: WorkspaceResourceRecord['status']
+    },
+  ): WorkspaceResourceRecord => {
+    const project = input.projectId ? findProjectRecord(input.projectId) : null
+    const previewKind = input.previewKind ?? inferPreviewKind(input.kind, input.contentType, input.location || input.name)
+    const storagePath = input.storagePath
+      ?? (input.kind === 'url'
+        ? undefined
+        : `${project?.resourceDirectory ?? workspaceResourceBaseDirectory()}/${input.name}`)
+
+    return {
+      id: `res-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+      workspaceId: workspaceState.workspace.id,
+      projectId: input.projectId,
+      kind: input.kind,
+      name: input.name,
+      location: input.location ?? storagePath,
+      origin: input.origin ?? 'source',
+      scope: input.scope ?? (input.projectId ? 'project' : 'workspace'),
+      visibility: input.visibility ?? 'public',
+      ownerUserId: getCurrentUserId(),
+      storagePath,
+      contentType: input.contentType,
+      byteSize: input.byteSize,
+      previewKind,
+      sourceArtifactId: input.sourceArtifactId,
+      status: input.status ?? 'healthy',
+      updatedAt: Date.now(),
+      tags: [...(input.tags ?? [])],
+    }
+  }
+
+  const importResourceRecord = (
+    input: WorkspaceResourceImportInput,
+    projectId?: string,
+  ) => {
+    const { rootDirName, files } = normalizeImportedFiles(input)
+    const isFolder = Boolean(rootDirName) || files.length > 1 || files.some(file => file.relativePath.includes('/'))
+    const project = projectId ? findProjectRecord(projectId) : null
+    const baseDirectory = project?.resourceDirectory ?? workspaceResourceBaseDirectory()
+
+    if (isFolder) {
+      const folderName = input.name.trim() || rootDirName || 'imported-folder'
+      const record = createResourceRecord({
+        projectId,
+        kind: 'folder',
+        name: folderName,
+        scope: input.scope,
+        visibility: input.visibility,
+        tags: input.tags,
+        storagePath: `${baseDirectory}/${rootDirName || folderName}`,
+        previewKind: 'folder',
+      })
+      workspaceState.resourceChildren[record.id] = files.map((file) => ({
+        name: file.fileName,
+        relativePath: file.relativePath,
+        kind: 'file',
+        previewKind: inferPreviewKind('file', file.contentType, file.relativePath),
+        contentType: file.contentType,
+        byteSize: file.byteSize,
+        updatedAt: record.updatedAt,
+      }))
+      return record
+    }
+
+    const file = files[0]
+    if (!file) {
+      throw new WorkspaceApiError({
+        message: 'resource import files are required',
+        status: 400,
+        requestId: 'req-resource-import-files',
+        retryable: false,
+        code: 'INVALID_INPUT',
+      })
+    }
+
+    const record = createResourceRecord({
+      projectId,
+      kind: 'file',
+      name: input.name.trim() || file.fileName,
+      scope: input.scope,
+      visibility: input.visibility,
+      tags: input.tags,
+      storagePath: `${baseDirectory}/${file.relativePath}`,
+      contentType: file.contentType,
+      byteSize: file.byteSize,
+      previewKind: inferPreviewKind('file', file.contentType, file.fileName),
+    })
+    workspaceState.resourceContents[record.id] = buildResourceContent(record.id, {
+      fileName: file.fileName,
+      contentType: file.contentType,
+      dataBase64: file.dataBase64,
+      previewKind: record.previewKind,
+    })
+    return record
   }
 
   const getMenuRequiredPermissionCodes = (menuId: string) => {
@@ -602,7 +987,7 @@ export function createWorkspaceClientFixture(
     ]
 
     return {
-      session: buildEnterpriseSession(ownerId, 'token-owner'),
+      session: buildEnterpriseSession(ownerId),
       workspace: clone(workspaceState.workspace),
     }
   }
@@ -1083,8 +1468,12 @@ export function createWorkspaceClientFixture(
           })
         }
 
-        const user = workspaceState.users.find(record => record.id === workspaceState.workspace.ownerUserId) ?? workspaceState.users[0]
-        return buildEnterpriseSession(user?.id ?? 'user-owner')
+        const currentSession = activeSessionToken
+          ? fixtureSessions.find(record => record.token === activeSessionToken)
+          : findFixtureSession(getCurrentUserId())
+        const nextUserId = currentSession?.userId ?? getCurrentUserId()
+        workspaceState.currentUserId = nextUserId
+        return buildEnterpriseSession(nextUserId, currentSession?.token)
       },
     },
     workspace: {
@@ -1093,6 +1482,45 @@ export function createWorkspaceClientFixture(
       },
       async getOverview() {
         return clone(workspaceState.overview)
+      },
+      async listPromotionRequests() {
+        return clone(workspaceState.projectPromotionRequests)
+      },
+      async reviewPromotionRequest(requestId: string, input: ReviewProjectPromotionRequestInput) {
+        const existing = workspaceState.projectPromotionRequests.find(record => record.id === requestId)
+        if (!existing) {
+          throw new WorkspaceApiError({
+            message: 'promotion request not found',
+            status: 404,
+            requestId: 'req-promotion-request-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+
+        const updated: ProjectPromotionRequest = {
+          ...existing,
+          status: input.approved ? 'approved' : 'rejected',
+          reviewedByUserId: getCurrentUserId(),
+          reviewComment: input.reviewComment?.trim() || undefined,
+          reviewedAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+        workspaceState.projectPromotionRequests = workspaceState.projectPromotionRequests
+          .map(record => record.id === requestId ? updated : record)
+
+        if (input.approved && existing.assetType === 'resource') {
+          const located = findResourceLocation(existing.assetId)
+          if (located) {
+            storeResourceRecord({
+              ...located.record,
+              scope: 'workspace',
+              updatedAt: Date.now(),
+            })
+          }
+        }
+
+        return clone(updated)
       },
     },
     projects: {
@@ -1168,18 +1596,237 @@ export function createWorkspaceClientFixture(
       async getDashboard(projectId) {
         return clone(workspaceState.dashboards[projectId])
       },
+      async listPromotionRequests(projectId) {
+        findProjectRecord(projectId)
+        return clone(
+          workspaceState.projectPromotionRequests.filter(record => record.projectId === projectId),
+        )
+      },
+      async createPromotionRequest(projectId, input: CreateProjectPromotionRequestInput) {
+        const project = ensureProjectOwner(projectId)
+        const record: ProjectPromotionRequest = {
+          id: `promotion-${projectId}-${Date.now()}`,
+          workspaceId: workspaceState.workspace.id,
+          projectId,
+          assetType: input.assetType,
+          assetId: input.assetId,
+          requestedByUserId: getCurrentUserId(),
+          submittedByOwnerUserId: project.ownerUserId,
+          requiredWorkspaceCapability: input.assetType === 'resource' ? 'resource.publish' : `${input.assetType}.publish`,
+          status: 'pending',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+        workspaceState.projectPromotionRequests = [record, ...workspaceState.projectPromotionRequests]
+        return clone(record)
+      },
     },
     resources: {
       async listWorkspace() {
-        return clone(workspaceState.workspaceResources)
+        return clone(listWorkspaceResources())
       },
       async listProject(projectId) {
         return clone(workspaceState.projectResources[projectId] ?? [])
+      },
+      async createWorkspace(input: CreateWorkspaceResourceInput) {
+        const record = createResourceRecord({
+          kind: input.kind,
+          name: input.name.trim(),
+          location: input.location,
+          scope: input.scope ?? 'workspace',
+          visibility: input.visibility ?? 'public',
+          sourceArtifactId: input.sourceArtifactId,
+          tags: input.tags,
+          origin: input.kind === 'url' ? 'generated' : 'source',
+        })
+        if (record.previewKind === 'url' && record.location) {
+          workspaceState.resourceContents[record.id] = buildResourceContent(record.id, {
+            previewKind: 'url',
+            externalUrl: record.location,
+          })
+        }
+        storeResourceRecord(record)
+        return clone(record)
+      },
+      async createProject(projectId: string, input: CreateWorkspaceResourceInput) {
+        const record = createResourceRecord({
+          projectId,
+          kind: input.kind,
+          name: input.name.trim(),
+          location: input.location,
+          scope: input.scope ?? 'project',
+          visibility: input.visibility ?? 'public',
+          sourceArtifactId: input.sourceArtifactId,
+          tags: input.tags,
+          origin: input.kind === 'url' ? 'generated' : 'source',
+        })
+        if (record.previewKind === 'url' && record.location) {
+          workspaceState.resourceContents[record.id] = buildResourceContent(record.id, {
+            previewKind: 'url',
+            externalUrl: record.location,
+          })
+        }
+        storeResourceRecord(record)
+        return clone(record)
+      },
+      async createProjectFolder(projectId: string, input: CreateWorkspaceResourceFolderInput) {
+        const record = importResourceRecord({
+          name: 'uploaded-folder',
+          rootDirName: input.files[0]?.relativePath.split('/')[0] || 'uploaded-folder',
+          scope: 'project',
+          visibility: 'public',
+          files: input.files,
+        }, projectId)
+        storeResourceRecord(record)
+        return clone([record])
+      },
+      async importWorkspace(input: WorkspaceResourceImportInput) {
+        const record = importResourceRecord(input)
+        storeResourceRecord(record)
+        return clone(record)
+      },
+      async importProject(projectId: string, input: WorkspaceResourceImportInput) {
+        const record = importResourceRecord(input, projectId)
+        storeResourceRecord(record)
+        return clone(record)
+      },
+      async getDetail(resourceId: string) {
+        const located = findResourceLocation(resourceId)
+        if (!located) {
+          throw new WorkspaceApiError({
+            message: 'resource not found',
+            status: 404,
+            requestId: 'req-resource-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+        return clone(located.record)
+      },
+      async getContent(resourceId: string) {
+        const located = findResourceLocation(resourceId)
+        if (!located) {
+          throw new WorkspaceApiError({
+            message: 'resource not found',
+            status: 404,
+            requestId: 'req-resource-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+        const content = workspaceState.resourceContents[resourceId]
+          ?? (located.record.previewKind === 'url' && located.record.location
+            ? buildResourceContent(resourceId, {
+                previewKind: 'url',
+                externalUrl: located.record.location,
+              })
+            : {
+                resourceId,
+                previewKind: located.record.previewKind,
+                fileName: located.record.name,
+                contentType: located.record.contentType,
+                byteSize: located.record.byteSize,
+              })
+        return clone(content)
+      },
+      async listChildren(resourceId: string) {
+        return clone(workspaceState.resourceChildren[resourceId] ?? [])
+      },
+      async promote(resourceId: string, input: PromoteWorkspaceResourceInput) {
+        const located = findResourceLocation(resourceId)
+        if (!located) {
+          throw new WorkspaceApiError({
+            message: 'resource not found',
+            status: 404,
+            requestId: 'req-resource-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+        const updated: WorkspaceResourceRecord = {
+          ...located.record,
+          scope: input.scope,
+          updatedAt: Date.now(),
+        }
+        storeResourceRecord(updated)
+        return clone(updated)
+      },
+      async updateWorkspace(resourceId: string, input: UpdateWorkspaceResourceInput) {
+        const located = findResourceLocation(resourceId)
+        if (!located || located.container !== 'workspace') {
+          throw new WorkspaceApiError({
+            message: 'workspace resource not found',
+            status: 404,
+            requestId: 'req-workspace-resource-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+        const updated: WorkspaceResourceRecord = {
+          ...located.record,
+          name: input.name ?? located.record.name,
+          location: input.location ?? located.record.location,
+          visibility: input.visibility ?? located.record.visibility,
+          status: input.status ?? located.record.status,
+          tags: input.tags ?? located.record.tags,
+          updatedAt: Date.now(),
+        }
+        storeResourceRecord(updated)
+        return clone(updated)
+      },
+      async updateProject(projectId: string, resourceId: string, input: UpdateWorkspaceResourceInput) {
+        const located = findResourceLocation(resourceId)
+        if (!located || located.container !== 'project' || located.projectId !== projectId) {
+          throw new WorkspaceApiError({
+            message: 'project resource not found',
+            status: 404,
+            requestId: 'req-project-resource-not-found',
+            retryable: false,
+            code: 'NOT_FOUND',
+          })
+        }
+        const updated: WorkspaceResourceRecord = {
+          ...located.record,
+          name: input.name ?? located.record.name,
+          location: input.location ?? located.record.location,
+          visibility: input.visibility ?? located.record.visibility,
+          status: input.status ?? located.record.status,
+          tags: input.tags ?? located.record.tags,
+          updatedAt: Date.now(),
+        }
+        storeResourceRecord(updated)
+        return clone(updated)
+      },
+      async deleteWorkspace(resourceId: string) {
+        removeResourceRecord(resourceId)
+      },
+      async deleteProject(projectId: string, resourceId: string) {
+        const located = findResourceLocation(resourceId)
+        if (located?.container === 'project' && located.projectId === projectId) {
+          removeResourceRecord(resourceId)
+        }
+      },
+    },
+    filesystem: {
+      async listDirectories(path?: string) {
+        const key = path?.trim() || ''
+        const payload = workspaceState.remoteDirectories[key]
+          ?? workspaceState.remoteDirectories['']
+          ?? {
+            currentPath: key || '/remote',
+            entries: [],
+          } satisfies WorkspaceDirectoryBrowserResponse
+        return clone(payload)
       },
     },
     artifacts: {
       async listWorkspace() {
         return clone(workspaceState.artifacts)
+      },
+    },
+    inbox: {
+      async list() {
+        return clone(workspaceState.inboxItems)
       },
     },
     knowledge: {

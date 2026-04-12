@@ -422,6 +422,7 @@ pub struct WorkspaceSummary {
     pub host: String,
     pub listen_address: String,
     pub default_project_id: String,
+    pub project_default_permissions: ProjectDefaultPermissions,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -454,12 +455,44 @@ pub struct ProjectWorkspaceAssignments {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectDefaultPermissions {
+    pub agents: String,
+    pub resources: String,
+    pub tools: String,
+    pub knowledge: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectPermissionOverrides {
+    pub agents: String,
+    pub resources: String,
+    pub tools: String,
+    pub knowledge: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectLinkedWorkspaceAssets {
+    pub agent_ids: Vec<String>,
+    pub resource_ids: Vec<String>,
+    pub tool_source_keys: Vec<String>,
+    pub knowledge_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectRecord {
     pub id: String,
     pub workspace_id: String,
     pub name: String,
     pub status: String,
     pub description: String,
+    pub resource_directory: String,
+    pub owner_user_id: String,
+    pub member_user_ids: Vec<String>,
+    pub permission_overrides: ProjectPermissionOverrides,
+    pub linked_workspace_assets: ProjectLinkedWorkspaceAssets,
     pub assignments: Option<ProjectWorkspaceAssignments>,
 }
 
@@ -468,6 +501,11 @@ pub struct ProjectRecord {
 pub struct CreateProjectRequest {
     pub name: String,
     pub description: String,
+    pub resource_directory: String,
+    pub owner_user_id: Option<String>,
+    pub member_user_ids: Option<Vec<String>>,
+    pub permission_overrides: Option<ProjectPermissionOverrides>,
+    pub linked_workspace_assets: Option<ProjectLinkedWorkspaceAssets>,
     pub assignments: Option<ProjectWorkspaceAssignments>,
 }
 
@@ -477,7 +515,45 @@ pub struct UpdateProjectRequest {
     pub name: String,
     pub description: String,
     pub status: String,
+    pub resource_directory: String,
+    pub owner_user_id: Option<String>,
+    pub member_user_ids: Option<Vec<String>>,
+    pub permission_overrides: Option<ProjectPermissionOverrides>,
+    pub linked_workspace_assets: Option<ProjectLinkedWorkspaceAssets>,
     pub assignments: Option<ProjectWorkspaceAssignments>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectPromotionRequest {
+    pub id: String,
+    pub workspace_id: String,
+    pub project_id: String,
+    pub asset_type: String,
+    pub asset_id: String,
+    pub requested_by_user_id: String,
+    pub submitted_by_owner_user_id: String,
+    pub required_workspace_capability: String,
+    pub status: String,
+    pub reviewed_by_user_id: Option<String>,
+    pub review_comment: Option<String>,
+    pub created_at: u64,
+    pub updated_at: u64,
+    pub reviewed_at: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProjectPromotionRequestInput {
+    pub asset_type: String,
+    pub asset_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReviewProjectPromotionRequestInput {
+    pub approved: bool,
+    pub review_comment: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -628,6 +704,13 @@ pub struct WorkspaceResourceRecord {
     pub name: String,
     pub location: Option<String>,
     pub origin: String,
+    pub scope: String,
+    pub visibility: String,
+    pub owner_user_id: String,
+    pub storage_path: Option<String>,
+    pub content_type: Option<String>,
+    pub byte_size: Option<u64>,
+    pub preview_kind: String,
     pub status: String,
     pub updated_at: u64,
     pub tags: Vec<String>,
@@ -642,6 +725,10 @@ pub struct CreateWorkspaceResourceInput {
     pub kind: String,
     pub name: String,
     pub location: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<String>,
     pub tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_artifact_id: Option<String>,
@@ -655,6 +742,8 @@ pub struct UpdateWorkspaceResourceInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
@@ -662,7 +751,7 @@ pub struct UpdateWorkspaceResourceInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct WorkspaceResourceFileUploadEntry {
+pub struct WorkspaceResourceFolderUploadEntry {
     pub file_name: String,
     pub content_type: String,
     pub data_base64: String,
@@ -674,7 +763,75 @@ pub struct WorkspaceResourceFileUploadEntry {
 #[serde(rename_all = "camelCase")]
 pub struct CreateWorkspaceResourceFolderInput {
     pub project_id: Option<String>,
-    pub files: Vec<WorkspaceResourceFileUploadEntry>,
+    pub files: Vec<WorkspaceResourceFolderUploadEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceResourceImportInput {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root_dir_name: Option<String>,
+    pub scope: String,
+    pub visibility: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+    pub files: Vec<WorkspaceResourceFolderUploadEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceResourceContentDocument {
+    pub resource_id: String,
+    pub preview_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_content: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_base64: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub byte_size: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceResourceChildrenRecord {
+    pub name: String,
+    pub relative_path: String,
+    pub kind: String,
+    pub preview_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub byte_size: Option<u64>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PromoteWorkspaceResourceInput {
+    pub scope: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceDirectoryBrowserEntry {
+    pub name: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceDirectoryBrowserResponse {
+    pub current_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_path: Option<String>,
+    pub entries: Vec<WorkspaceDirectoryBrowserEntry>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

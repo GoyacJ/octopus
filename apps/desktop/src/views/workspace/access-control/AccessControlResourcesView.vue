@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 import {
   UiBadge,
@@ -8,7 +9,9 @@ import {
   UiField,
   UiInput,
   UiListDetailWorkspace,
+  UiPagination,
   UiPanelFrame,
+  UiRecordCard,
   UiSelect,
   UiStatusCallout,
   UiTabs,
@@ -17,18 +20,32 @@ import {
 
 import type { ProtectedResourceMetadataUpsertRequest, ResourcePolicyUpsertRequest } from '@octopus/schema'
 
+import { usePagination } from '@/composables/usePagination'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 
-import { classificationOptions, parseListInput, policyEffectOptions, resourceTypeOptions, stringifyListInput, subjectTypeOptions } from './helpers'
+import {
+  createClassificationOptions,
+  createPolicyEffectOptions,
+  createResourceTypeOptions,
+  createSubjectTypeOptions,
+  getClassificationLabel,
+  getPolicyEffectLabel,
+  getResourceTypeLabel,
+  getSubjectTypeLabel,
+  parseListInput,
+  stringifyListInput,
+} from './helpers'
+import { useAccessControlNotifications } from './useAccessControlNotifications'
 
+const { t } = useI18n()
 const accessControlStore = useWorkspaceAccessControlStore()
+const { notifySuccess } = useAccessControlNotifications('access-control.resources')
 
 const query = ref('')
 const resourceTypeFilter = ref('')
 const selectedResourceKey = ref('')
 const detailTab = ref('metadata')
 const submitError = ref('')
-const successMessage = ref('')
 const saving = ref(false)
 const savingMetadata = ref(false)
 
@@ -47,6 +64,11 @@ const metadataForm = reactive({
   ownerSubjectId: '',
 })
 
+const subjectTypeOptions = computed(() => createSubjectTypeOptions(t))
+const policyEffectOptions = computed(() => createPolicyEffectOptions(t))
+const resourceTypeOptions = computed(() => createResourceTypeOptions(t))
+const classificationOptions = computed(() => createClassificationOptions(t))
+
 const subjectOptions = computed(() => ({
   user: accessControlStore.users.map(user => ({ label: user.displayName, value: user.id })),
   org_unit: accessControlStore.orgUnits.map(unit => ({ label: unit.name, value: unit.id })),
@@ -54,8 +76,8 @@ const subjectOptions = computed(() => ({
   user_group: accessControlStore.userGroups.map(group => ({ label: group.name, value: group.id })),
 }))
 const ownerSubjectTypeOptions = computed(() => ([
-  { label: '未设置', value: '' },
-  ...subjectTypeOptions,
+  { label: t('accessControl.common.list.unsetOwner'), value: '' },
+  ...subjectTypeOptions.value,
 ]))
 
 const filteredSubjectOptions = computed(() =>
@@ -92,16 +114,26 @@ const selectedResourcePolicies = computed(() =>
   ),
 )
 
-const detailTabs = [
-  { value: 'metadata', label: '元数据' },
-  { value: 'policies', label: '对象策略' },
-]
+const detailTabs = computed(() => [
+  { value: 'metadata', label: t('accessControl.resources.detail.tabs.metadata') },
+  { value: 'policies', label: t('accessControl.resources.detail.tabs.policies') },
+])
 
 const resourceTypeFilterOptions = computed(() => [
-  { label: '全部类型', value: '' },
-  ...resourceTypeOptions,
-  { label: '资源', value: 'resource' },
+  { label: t('accessControl.common.filters.allTypes'), value: '' },
+  ...resourceTypeOptions.value,
 ])
+
+const pagination = usePagination(filteredResources, {
+  pageSize: 8,
+  resetOn: [query, resourceTypeFilter],
+})
+
+watch(pagination.pagedItems, (resources) => {
+  if (selectedResourceKey.value && !resources.some(resource => `${resource.resourceType}:${resource.id}` === selectedResourceKey.value)) {
+    selectedResourceKey.value = ''
+  }
+}, { immediate: true })
 
 function syncMetadataForm() {
   Object.assign(metadataForm, {
@@ -124,14 +156,27 @@ function selectResource(resourceType: string, resourceId: string) {
   }
 }
 
+function resolveSubjectLabel(subjectType: string, subjectId: string) {
+  return subjectOptions.value[subjectType as keyof typeof subjectOptions.value]
+    ?.find(option => option.value === subjectId)
+    ?.label ?? subjectId
+}
+
+function resourceDescriptor(resource: {
+  resourceType: string
+  resourceSubtype?: string | null
+}) {
+  return [resource.resourceType, resource.resourceSubtype || t('accessControl.common.list.defaultSubtype')].join(' / ')
+}
+
 async function createPolicy() {
   submitError.value = ''
   if (!selectedResource.value) {
-    submitError.value = '请先选择一个受保护资源。'
+    submitError.value = t('accessControl.resources.feedback.selectRequired')
     return
   }
   if (!policyForm.subjectId || !policyForm.action.trim()) {
-    submitError.value = '请选择主体并填写动作。'
+    submitError.value = t('accessControl.resources.feedback.policyRequired')
     return
   }
 
@@ -146,9 +191,9 @@ async function createPolicy() {
       effect: policyForm.effect,
     }
     await accessControlStore.createResourcePolicy(payload)
-    successMessage.value = '已添加对象策略'
+    await notifySuccess(t('accessControl.resources.feedback.toastPolicySaved'), payload.action)
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '创建资源策略失败。'
+    submitError.value = error instanceof Error ? error.message : t('accessControl.resources.feedback.createPolicyFailed')
   } finally {
     saving.value = false
   }
@@ -157,7 +202,7 @@ async function createPolicy() {
 async function saveMetadata() {
   submitError.value = ''
   if (!selectedResource.value) {
-    submitError.value = '请先选择一个受保护资源。'
+    submitError.value = t('accessControl.resources.feedback.selectRequired')
     return
   }
 
@@ -176,10 +221,10 @@ async function saveMetadata() {
       selectedResource.value.id,
       payload,
     )
-    successMessage.value = '已保存资源元数据'
     syncMetadataForm()
+    await notifySuccess(t('accessControl.resources.feedback.toastMetadataSaved'), selectedResource.value.name)
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '保存资源元数据失败。'
+    submitError.value = error instanceof Error ? error.message : t('accessControl.resources.feedback.saveMetadataFailed')
   } finally {
     savingMetadata.value = false
   }
@@ -188,10 +233,11 @@ async function saveMetadata() {
 async function deletePolicy(policyId: string) {
   submitError.value = ''
   try {
+    const label = selectedResourcePolicies.value.find(policy => policy.id === policyId)?.action ?? policyId
     await accessControlStore.deleteResourcePolicy(policyId)
-    successMessage.value = '已删除对象策略'
+    await notifySuccess(t('accessControl.resources.feedback.toastPolicyDeleted'), label)
   } catch (error) {
-    submitError.value = error instanceof Error ? error.message : '删除资源策略失败。'
+    submitError.value = error instanceof Error ? error.message : t('accessControl.resources.feedback.deletePolicyFailed')
   }
 }
 </script>
@@ -199,22 +245,21 @@ async function deletePolicy(policyId: string) {
 <template>
   <div class="space-y-4" data-testid="access-control-resources-shell">
     <UiStatusCallout v-if="submitError" tone="error" :description="submitError" />
-    <UiStatusCallout v-if="successMessage" tone="success" :description="successMessage" />
 
     <UiListDetailWorkspace
       :has-selection="Boolean(selectedResource)"
       :detail-title="selectedResource ? selectedResource.name : ''"
-      detail-subtitle="先维护元数据，再配置对象级 allow / deny 策略。"
-      empty-detail-title="请选择资源"
-      empty-detail-description="从左侧资源目录中选择一项后即可查看详情和对象策略。"
+      :detail-subtitle="t('accessControl.resources.detail.subtitle')"
+      :empty-detail-title="t('accessControl.resources.detail.emptyTitle')"
+      :empty-detail-description="t('accessControl.resources.detail.emptyDescription')"
     >
       <template #toolbar>
         <UiToolbarRow test-id="access-control-resources-toolbar">
           <template #search>
-            <UiInput v-model="query" placeholder="搜索资源名称、ID、标签或项目" />
+            <UiInput v-model="query" :placeholder="t('accessControl.resources.toolbar.search')" />
           </template>
           <template #filters>
-            <UiField label="资源类型" class="w-full md:w-[220px]">
+            <UiField :label="t('accessControl.resources.toolbar.resourceType')" class="w-full md:w-[220px]">
               <UiSelect v-model="resourceTypeFilter" :options="resourceTypeFilterOptions" />
             </UiField>
           </template>
@@ -222,94 +267,109 @@ async function deletePolicy(policyId: string) {
       </template>
 
       <template #list>
-        <UiPanelFrame variant="panel" padding="md" title="资源目录" :subtitle="`共 ${filteredResources.length} 项受保护资源`">
-          <div v-if="filteredResources.length" class="space-y-2">
-            <button
-              v-for="resource in filteredResources"
+        <UiPanelFrame
+          variant="panel"
+          padding="md"
+          :title="t('accessControl.resources.list.title')"
+          :subtitle="t('accessControl.common.list.totalResources', { count: pagination.totalItems.value })"
+        >
+          <div v-if="pagination.pagedItems.value.length" class="space-y-2">
+            <UiRecordCard
+              v-for="resource in pagination.pagedItems.value"
               :key="`${resource.resourceType}:${resource.id}`"
-              type="button"
-              class="w-full rounded-[var(--radius-l)] border px-4 py-3 text-left transition-colors"
-              :class="selectedResourceKey === `${resource.resourceType}:${resource.id}` ? 'border-primary bg-accent/40' : 'border-border bg-card hover:bg-subtle/60'"
-              data-testid="access-control-resource-select"
+              layout="compact"
+              interactive
+              :active="selectedResourceKey === `${resource.resourceType}:${resource.id}`"
+              :title="resource.name"
+              :description="resourceDescriptor(resource)"
+              test-id="access-control-resource-select"
               @click="selectResource(resource.resourceType, resource.id)"
             >
-              <div class="flex items-start justify-between gap-3">
-                <div class="min-w-0 space-y-1">
-                  <div class="text-sm font-semibold text-foreground">{{ resource.name }}</div>
-                  <div class="text-xs text-muted-foreground">{{ resource.resourceType }} / {{ resource.resourceSubtype ?? 'default' }}</div>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                  <UiBadge :label="resource.classification" subtle />
-                  <UiBadge v-if="resource.projectId" :label="resource.projectId" subtle />
-                </div>
-              </div>
-            </button>
+              <template #secondary>
+                <UiBadge :label="getClassificationLabel(t, resource.classification)" subtle />
+                <UiBadge v-if="resource.projectId" :label="resource.projectId" subtle />
+              </template>
+            </UiRecordCard>
           </div>
-          <UiEmptyState v-else title="暂无资源目录" description="当前筛选条件下没有资源记录。" />
+          <UiEmptyState
+            v-else
+            :title="t('accessControl.resources.list.emptyTitle')"
+            :description="t('accessControl.resources.list.emptyDescription')"
+          />
+
+          <div class="mt-3 pt-2">
+            <UiPagination
+              v-model:page="pagination.currentPage.value"
+              :page-count="pagination.pageCount.value"
+              :previous-label="t('accessControl.common.pagination.previous')"
+              :next-label="t('accessControl.common.pagination.next')"
+              :summary-label="t('accessControl.common.pagination.summary', { count: pagination.totalItems.value })"
+            />
+          </div>
         </UiPanelFrame>
       </template>
 
       <template #detail>
-        <div v-if="selectedResource" class="space-y-4">
-          <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="text-sm font-semibold text-foreground">{{ selectedResource.name }}</div>
-              <UiBadge :label="selectedResource.resourceType" subtle />
-              <UiBadge :label="selectedResource.classification" subtle />
-            </div>
-            <div class="mt-2 text-xs text-muted-foreground">{{ selectedResource.id }}</div>
+          <div v-if="selectedResource" class="space-y-4">
+            <div class="rounded-[var(--radius-l)] border border-border bg-muted/35 p-4">
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="text-sm font-semibold text-foreground">{{ selectedResource.name }}</div>
+                <UiBadge :label="getResourceTypeLabel(t, selectedResource.resourceType)" subtle />
+              <UiBadge :label="getClassificationLabel(t, selectedResource.classification)" subtle />
+              </div>
+              <div class="mt-2 text-xs text-muted-foreground">{{ selectedResource.id }}</div>
           </div>
 
           <UiTabs v-model="detailTab" :tabs="detailTabs" />
 
           <div v-if="detailTab === 'metadata'" class="space-y-4">
             <div class="grid gap-3 md:grid-cols-2">
-              <UiField label="资源子类型">
+              <UiField :label="t('accessControl.resources.fields.resourceSubtype')">
                 <UiInput v-model="metadataForm.resourceSubtype" data-testid="access-control-resource-subtype" />
               </UiField>
-              <UiField label="项目 ID">
+              <UiField :label="t('accessControl.resources.fields.projectId')">
                 <UiInput v-model="metadataForm.projectId" data-testid="access-control-resource-project-id" />
               </UiField>
-              <UiField label="标签" hint="多个标签用逗号分隔。">
+              <UiField :label="t('accessControl.resources.fields.tags')" :hint="t('accessControl.resources.hints.tags')">
                 <UiInput v-model="metadataForm.tagsText" data-testid="access-control-resource-tags" />
               </UiField>
-              <UiField label="密级">
+              <UiField :label="t('accessControl.resources.fields.classification')">
                 <UiSelect v-model="metadataForm.classification" :options="classificationOptions" data-testid="access-control-resource-classification" />
               </UiField>
-              <UiField label="Owner 类型">
+              <UiField :label="t('accessControl.resources.fields.ownerType')">
                 <UiSelect v-model="metadataForm.ownerSubjectType" :options="ownerSubjectTypeOptions" data-testid="access-control-resource-owner-type" />
               </UiField>
-              <UiField label="Owner 主体">
+              <UiField :label="t('accessControl.resources.fields.ownerId')">
                 <UiSelect v-model="metadataForm.ownerSubjectId" :options="filteredOwnerSubjectOptions" data-testid="access-control-resource-owner-id" />
               </UiField>
             </div>
 
             <div class="flex justify-end">
               <UiButton :loading="savingMetadata" data-testid="access-control-resource-metadata-save" @click="saveMetadata">
-                保存资源元数据
+                {{ t('accessControl.resources.actions.saveMetadata') }}
               </UiButton>
             </div>
           </div>
 
           <div v-else class="space-y-4">
             <div class="grid gap-3">
-              <UiField label="主体类型">
+              <UiField :label="t('accessControl.resources.fields.subjectType')">
                 <UiSelect v-model="policyForm.subjectType" :options="subjectTypeOptions" data-testid="access-control-resource-subject-type" />
               </UiField>
-              <UiField label="主体">
+              <UiField :label="t('accessControl.resources.fields.subject')">
                 <UiSelect v-model="policyForm.subjectId" :options="filteredSubjectOptions" data-testid="access-control-resource-subject-id" />
               </UiField>
-              <UiField label="动作">
+              <UiField :label="t('accessControl.resources.fields.action')">
                 <UiInput v-model="policyForm.action" data-testid="access-control-resource-action" />
               </UiField>
-              <UiField label="效果">
+              <UiField :label="t('accessControl.resources.fields.effect')">
                 <UiSelect v-model="policyForm.effect" :options="policyEffectOptions" data-testid="access-control-resource-effect" />
               </UiField>
             </div>
 
             <div class="flex justify-end">
               <UiButton :loading="saving" data-testid="access-control-resource-policy-save" @click="createPolicy">
-                添加对象策略
+                {{ t('accessControl.resources.actions.createPolicy') }}
               </UiButton>
             </div>
 
@@ -322,16 +382,22 @@ async function deletePolicy(policyId: string) {
                 <div class="flex items-start justify-between gap-2">
                   <div>
                     <div class="text-sm font-medium text-foreground">{{ policy.action }}</div>
-                    <div class="text-xs text-muted-foreground">{{ policy.subjectType }} / {{ policy.subjectId }}</div>
+                    <div class="text-xs text-muted-foreground">
+                      {{ getSubjectTypeLabel(t, policy.subjectType) }} / {{ resolveSubjectLabel(policy.subjectType, policy.subjectId) }}
+                    </div>
                   </div>
                   <div class="flex gap-2">
-                    <UiBadge :label="policy.effect" subtle />
-                    <UiButton size="sm" variant="ghost" class="text-destructive" @click="deletePolicy(policy.id)">删除</UiButton>
+                    <UiBadge :label="getPolicyEffectLabel(t, policy.effect)" subtle />
+                    <UiButton size="sm" variant="ghost" class="text-destructive" @click="deletePolicy(policy.id)">{{ t('accessControl.resources.actions.deletePolicy') }}</UiButton>
                   </div>
                 </div>
               </article>
             </div>
-            <UiEmptyState v-else title="暂无对象策略" description="当前对象还没有资源策略。" />
+            <UiEmptyState
+              v-else
+              :title="t('accessControl.resources.detail.policyEmptyTitle')"
+              :description="t('accessControl.resources.detail.policyEmptyDescription')"
+            />
           </div>
         </div>
       </template>

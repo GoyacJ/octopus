@@ -20,6 +20,7 @@ import {
   UiTextarea,
 } from '@octopus/ui'
 
+import ProjectResourceDirectoryField from '@/components/projects/ProjectResourceDirectoryField.vue'
 import { formatDateTime } from '@/i18n/copy'
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
@@ -44,6 +45,7 @@ const selectedProjectId = ref('')
 const form = reactive({
   name: '',
   description: '',
+  resourceDirectory: '',
   configuredModelIds: [] as string[],
   defaultConfiguredModelId: '',
   toolSourceKeys: [] as string[],
@@ -144,6 +146,7 @@ function applyProject(projectId?: string) {
   workspaceStore.syncRouteScope(undefined, project?.id ?? '')
   form.name = project?.name ?? ''
   form.description = project?.description ?? ''
+  form.resourceDirectory = project?.resourceDirectory ?? ''
   form.configuredModelIds = [...(project?.assignments?.models?.configuredModelIds ?? [])]
   form.defaultConfiguredModelId = project?.assignments?.models?.defaultConfiguredModelId ?? ''
   form.toolSourceKeys = [...(project?.assignments?.tools?.sourceKeys ?? [])]
@@ -176,7 +179,7 @@ function buildAssignments() {
 }
 
 async function submitProject() {
-  if (!form.name.trim()) {
+  if (!form.name.trim() || !form.resourceDirectory.trim()) {
     return
   }
 
@@ -186,6 +189,7 @@ async function submitProject() {
     const updated = await workspaceStore.updateProject(selectedProject.value.id, {
       name: form.name,
       description: form.description,
+      resourceDirectory: form.resourceDirectory,
       status: selectedProject.value.status,
       assignments,
     })
@@ -198,6 +202,7 @@ async function submitProject() {
   const created = await workspaceStore.createProject({
     name: form.name,
     description: form.description,
+    resourceDirectory: form.resourceDirectory,
     assignments,
   })
   if (created) {
@@ -315,6 +320,11 @@ function statusLabel(status: ProjectRecord['status']) {
         <UiField :label="t('projects.fields.description')">
           <UiTextarea v-model="form.description" data-testid="projects-description-input" :rows="8" />
         </UiField>
+        <ProjectResourceDirectoryField
+          v-model="form.resourceDirectory"
+          path-test-id="projects-resource-directory-path"
+          pick-test-id="projects-resource-directory-pick"
+        />
 
         <UiField
           :label="t('projects.fields.models')"
@@ -469,7 +479,11 @@ function statusLabel(status: ProjectRecord['status']) {
         </UiField>
 
         <div class="flex flex-wrap gap-3">
-          <UiButton :data-testid="isCreateMode ? 'projects-create-button' : 'projects-save-button'" @click="submitProject">
+          <UiButton
+            :data-testid="isCreateMode ? 'projects-create-button' : 'projects-save-button'"
+            :disabled="!form.name.trim() || !form.resourceDirectory.trim()"
+            @click="submitProject"
+          >
             {{ isCreateMode ? t('projects.actions.create') : t('common.save') }}
           </UiButton>
           <UiButton variant="ghost" @click="applyProject()">
