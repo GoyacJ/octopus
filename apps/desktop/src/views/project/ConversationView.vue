@@ -82,17 +82,19 @@ const modelOptions = computed(() => {
 const actorOptions = computed<ActorOption[]>(() => {
   const enabledAgentIds = projectSettings.value.agents?.enabledAgentIds ?? []
   const enabledTeamIds = projectSettings.value.agents?.enabledTeamIds ?? []
+  const visibleAgents = agentStore.effectiveProjectAgents
+    .filter(agent => agent.projectId === projectId.value || enabledAgentIds.includes(agent.id))
+  const visibleTeams = teamStore.effectiveProjectTeams
+    .filter(team => team.projectId === projectId.value || enabledTeamIds.includes(team.id))
 
   return [
-    ...agentStore.workspaceAgents
-      .filter(agent => enabledAgentIds.includes(agent.id))
+    ...visibleAgents
       .map(agent => ({
         value: `agent:${agent.id}`,
         label: agent.name,
         kind: 'agent' as const,
       })),
-    ...teamStore.workspaceTeams
-      .filter(team => enabledTeamIds.includes(team.id))
+    ...visibleTeams
       .map(team => ({
         value: `team:${team.id}`,
         label: team.name,
@@ -103,10 +105,8 @@ const actorOptions = computed<ActorOption[]>(() => {
 const selectedActor = computed(() => actorOptions.value.find(option => option.value === selectedActorValue.value) ?? null)
 const actorLabelMap = computed<Map<string, string>>(() => new Map(actorOptions.value.map(option => [`${option.kind}:${option.value.split(':')[1]}`, option.label])))
 const actorAvatarMap = computed<Map<string, string>>(() => new Map([
-  ...agentStore.workspaceAgents.map(agent => [`agent:${agent.id}`, agent.avatar ?? ''] as const),
-  ...agentStore.projectAgents.map(agent => [`agent:${agent.id}`, agent.avatar ?? ''] as const),
-  ...teamStore.workspaceTeams.map(team => [`team:${team.id}`, team.avatar ?? ''] as const),
-  ...teamStore.projectTeams.map(team => [`team:${team.id}`, team.avatar ?? ''] as const),
+  ...agentStore.agents.map(agent => [`agent:${agent.id}`, agent.avatar ?? ''] as const),
+  ...teamStore.teams.map(team => [`team:${team.id}`, team.avatar ?? ''] as const),
 ]))
 const currentUserAvatar = computed(() => userProfileStore.currentUser?.avatar ?? '')
 const currentUserLabel = computed(() => userProfileStore.currentUser?.displayName || 'You')
@@ -158,8 +158,6 @@ async function ensureRuntimeSession() {
     teamStore.load(),
     resourceStore.loadProjectResources(projectId.value),
     artifactStore.loadWorkspaceArtifacts(),
-    agentStore.loadProjectLinks(projectId.value),
-    teamStore.loadProjectLinks(projectId.value),
   ])
 
   if (!modelOptions.value.some(option => option.value === selectedModelId.value)) {

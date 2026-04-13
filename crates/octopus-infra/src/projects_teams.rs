@@ -1001,19 +1001,7 @@ impl WorkspaceService for InfraWorkspaceService {
         &self,
         agent_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_bundle::extract_builtin_agent_template_files(agent_id)?
-            .ok_or_else(|| AppError::not_found("builtin agent template"))?;
-        let connection = self.state.open_db()?;
-        let workspace_id = self.state.workspace_id()?;
-        let result = agent_bundle::execute_import(
-            &connection,
-            &self.state.paths,
-            &workspace_id,
-            agent_bundle::BundleTarget::Workspace,
-            ImportWorkspaceAgentBundleInput { files },
-        )?;
-        self.refresh_agent_and_team_caches(&connection)?;
-        Ok(result)
+        self.copy_agent_asset(agent_assets::AssetTargetScope::Workspace, agent_id)
     }
 
     async fn export_agent_bundle(
@@ -1070,19 +1058,10 @@ impl WorkspaceService for InfraWorkspaceService {
         project_id: &str,
         agent_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_bundle::extract_builtin_agent_template_files(agent_id)?
-            .ok_or_else(|| AppError::not_found("builtin agent template"))?;
-        let connection = self.state.open_db()?;
-        let workspace_id = self.state.workspace_id()?;
-        let result = agent_bundle::execute_import(
-            &connection,
-            &self.state.paths,
-            &workspace_id,
-            agent_bundle::BundleTarget::Project(project_id),
-            ImportWorkspaceAgentBundleInput { files },
-        )?;
-        self.refresh_agent_and_team_caches(&connection)?;
-        Ok(result)
+        self.copy_agent_asset(
+            agent_assets::AssetTargetScope::Project(project_id),
+            agent_id,
+        )
     }
 
     async fn export_project_agent_bundle(
@@ -1260,19 +1239,7 @@ impl WorkspaceService for InfraWorkspaceService {
         &self,
         team_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_bundle::extract_builtin_team_template_files(team_id)?
-            .ok_or_else(|| AppError::not_found("builtin team template"))?;
-        let connection = self.state.open_db()?;
-        let workspace_id = self.state.workspace_id()?;
-        let result = agent_bundle::execute_import(
-            &connection,
-            &self.state.paths,
-            &workspace_id,
-            agent_bundle::BundleTarget::Workspace,
-            ImportWorkspaceAgentBundleInput { files },
-        )?;
-        self.refresh_agent_and_team_caches(&connection)?;
-        Ok(result)
+        self.copy_team_asset(agent_assets::AssetTargetScope::Workspace, team_id)
     }
 
     async fn copy_project_team_from_builtin(
@@ -1280,19 +1247,7 @@ impl WorkspaceService for InfraWorkspaceService {
         project_id: &str,
         team_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_bundle::extract_builtin_team_template_files(team_id)?
-            .ok_or_else(|| AppError::not_found("builtin team template"))?;
-        let connection = self.state.open_db()?;
-        let workspace_id = self.state.workspace_id()?;
-        let result = agent_bundle::execute_import(
-            &connection,
-            &self.state.paths,
-            &workspace_id,
-            agent_bundle::BundleTarget::Project(project_id),
-            ImportWorkspaceAgentBundleInput { files },
-        )?;
-        self.refresh_agent_and_team_caches(&connection)?;
-        Ok(result)
+        self.copy_team_asset(agent_assets::AssetTargetScope::Project(project_id), team_id)
     }
 
     async fn list_project_team_links(
@@ -2121,6 +2076,124 @@ impl InfraWorkspaceService {
                 "resource promotion scope is invalid",
             )),
         }
+    }
+
+    fn copy_agent_asset(
+        &self,
+        target: agent_assets::AssetTargetScope<'_>,
+        agent_id: &str,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        let files = if let Some(files) =
+            crate::agent_bundle::extract_builtin_agent_template_files(agent_id)?
+        {
+            files
+        } else {
+            let source = load_agents(&connection)?
+                .into_iter()
+                .find(|record| record.id == agent_id)
+                .ok_or_else(|| AppError::not_found("agent not found"))?;
+            let source_scope = match source.project_id.as_deref() {
+                Some(project_id) => agent_assets::AssetTargetScope::Project(project_id),
+                None => agent_assets::AssetTargetScope::Workspace,
+            };
+            crate::agent_bundle::export_assets(
+                &connection,
+                &self.state.paths,
+                &workspace_id,
+                match source_scope {
+                    agent_assets::AssetTargetScope::Workspace => {
+                        crate::agent_bundle::BundleTarget::Workspace
+                    }
+                    agent_assets::AssetTargetScope::Project(project_id) => {
+                        crate::agent_bundle::BundleTarget::Project(project_id)
+                    }
+                },
+                ExportWorkspaceAgentBundleInput {
+                    mode: "single".into(),
+                    agent_ids: vec![agent_id.into()],
+                    team_ids: Vec::new(),
+                },
+            )?
+            .files
+        };
+
+        let result = crate::agent_bundle::execute_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            match target {
+                agent_assets::AssetTargetScope::Workspace => {
+                    crate::agent_bundle::BundleTarget::Workspace
+                }
+                agent_assets::AssetTargetScope::Project(project_id) => {
+                    crate::agent_bundle::BundleTarget::Project(project_id)
+                }
+            },
+            ImportWorkspaceAgentBundleInput { files },
+        )?;
+        self.refresh_agent_and_team_caches(&connection)?;
+        Ok(result)
+    }
+
+    fn copy_team_asset(
+        &self,
+        target: agent_assets::AssetTargetScope<'_>,
+        team_id: &str,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        let files = if let Some(files) =
+            crate::agent_bundle::extract_builtin_team_template_files(team_id)?
+        {
+            files
+        } else {
+            let source = load_teams(&connection)?
+                .into_iter()
+                .find(|record| record.id == team_id)
+                .ok_or_else(|| AppError::not_found("team not found"))?;
+            let source_scope = match source.project_id.as_deref() {
+                Some(project_id) => agent_assets::AssetTargetScope::Project(project_id),
+                None => agent_assets::AssetTargetScope::Workspace,
+            };
+            crate::agent_bundle::export_assets(
+                &connection,
+                &self.state.paths,
+                &workspace_id,
+                match source_scope {
+                    agent_assets::AssetTargetScope::Workspace => {
+                        crate::agent_bundle::BundleTarget::Workspace
+                    }
+                    agent_assets::AssetTargetScope::Project(project_id) => {
+                        crate::agent_bundle::BundleTarget::Project(project_id)
+                    }
+                },
+                ExportWorkspaceAgentBundleInput {
+                    mode: "single".into(),
+                    agent_ids: Vec::new(),
+                    team_ids: vec![team_id.into()],
+                },
+            )?
+            .files
+        };
+
+        let result = crate::agent_bundle::execute_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            match target {
+                agent_assets::AssetTargetScope::Workspace => {
+                    crate::agent_bundle::BundleTarget::Workspace
+                }
+                agent_assets::AssetTargetScope::Project(project_id) => {
+                    crate::agent_bundle::BundleTarget::Project(project_id)
+                }
+            },
+            ImportWorkspaceAgentBundleInput { files },
+        )?;
+        self.refresh_agent_and_team_caches(&connection)?;
+        Ok(result)
     }
 
     fn normalize_resource_status(status: &str) -> Result<String, AppError> {
@@ -3219,6 +3292,131 @@ mod tests {
             .root
             .join("data/projects/resource-project/resources")
             .exists());
+    }
+
+    #[test]
+    fn project_owned_agents_and_teams_can_be_promoted_to_workspace() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+        let project = runtime
+            .block_on(bundle.workspace.create_project(CreateProjectRequest {
+                name: "Promotion Agents".into(),
+                description: "Agent/team promotion coverage.".into(),
+                resource_directory: "data/projects/promotion-agents/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                assignments: None,
+            }))
+            .expect("created project");
+
+        let project_agent = runtime
+            .block_on(bundle.workspace.create_agent(UpsertAgentInput {
+                workspace_id: project.workspace_id.clone(),
+                project_id: Some(project.id.clone()),
+                scope: "project".into(),
+                name: "Promotion Analyst".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Project-only analyst".into(),
+                tags: vec!["promotion".into()],
+                prompt: "Promote this agent into the workspace.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["promotion".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                description: "Project-owned agent".into(),
+                status: "active".into(),
+            }))
+            .expect("created project agent");
+
+        let project_team = runtime
+            .block_on(bundle.workspace.create_team(UpsertTeamInput {
+                workspace_id: project.workspace_id.clone(),
+                project_id: Some(project.id.clone()),
+                scope: "project".into(),
+                name: "Promotion Strike Team".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Project-only team".into(),
+                tags: vec!["promotion".into()],
+                prompt: "Promote this team into the workspace.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                task_domains: vec!["promotion".into()],
+                default_model_strategy: None,
+                capability_policy: None,
+                permission_envelope: None,
+                memory_policy: None,
+                delegation_policy: None,
+                approval_preference: None,
+                output_contract: None,
+                shared_capability_policy: None,
+                leader_agent_id: Some(project_agent.id.clone()),
+                member_agent_ids: vec![project_agent.id.clone()],
+                leader_ref: None,
+                member_refs: Vec::new(),
+                team_topology: None,
+                shared_memory_policy: None,
+                mailbox_policy: None,
+                artifact_handoff_policy: None,
+                workflow_affordance: None,
+                worker_concurrency_limit: None,
+                description: "Project-owned team".into(),
+                status: "active".into(),
+            }))
+            .expect("created project team");
+
+        let promoted_agent = runtime
+            .block_on(
+                bundle
+                    .workspace
+                    .copy_workspace_agent_from_builtin(&project_agent.id),
+            )
+            .expect("promoted project agent");
+        assert_eq!(promoted_agent.failure_count, 0);
+        assert_eq!(promoted_agent.agent_count, 1);
+
+        let promoted_team = runtime
+            .block_on(
+                bundle
+                    .workspace
+                    .copy_workspace_team_from_builtin(&project_team.id),
+            )
+            .expect("promoted project team");
+        assert_eq!(promoted_team.failure_count, 0);
+        assert_eq!(promoted_team.team_count, 1);
+        assert_eq!(promoted_team.agent_count, 1);
+
+        let agents = runtime
+            .block_on(bundle.workspace.list_agents())
+            .expect("list agents");
+        assert!(agents.iter().any(|agent| agent.id == project_agent.id
+            && agent.project_id.as_deref() == Some(project.id.as_str())));
+        assert!(agents
+            .iter()
+            .any(|agent| agent.name == "Promotion Analyst" && agent.project_id.is_none()));
+
+        let teams = runtime
+            .block_on(bundle.workspace.list_teams())
+            .expect("list teams");
+        assert!(teams.iter().any(|team| team.id == project_team.id
+            && team.project_id.as_deref() == Some(project.id.as_str())));
+        assert!(teams
+            .iter()
+            .any(|team| team.name == "Promotion Strike Team" && team.project_id.is_none()));
     }
 
     #[test]

@@ -94,13 +94,21 @@ export function useProjectSettings() {
   const allowedToolEntries = computed(() =>
     catalogStore.managementProjection.assets.filter(entry => allowedToolSourceKeys.value.includes(entry.sourceKey) && entry.enabled),
   )
+  const actorCandidateAgents = computed<AgentRecord[]>(() => [
+    ...agentStore.workspaceOwnedAgents,
+    ...agentStore.builtinTemplateAgents,
+  ])
+  const actorCandidateTeams = computed<TeamRecord[]>(() => [
+    ...teamStore.workspaceOwnedTeams,
+    ...teamStore.builtinTemplateTeams,
+  ])
   const workspaceAssignedAgents = computed<AgentRecord[]>(() => {
     const assignedIds = workspaceAssignments.value?.agents?.agentIds ?? []
-    return agentStore.workspaceAgents.filter(agent => assignedIds.includes(agent.id))
+    return actorCandidateAgents.value.filter(agent => assignedIds.includes(agent.id))
   })
   const workspaceAssignedTeams = computed<TeamRecord[]>(() => {
     const assignedIds = workspaceAssignments.value?.agents?.teamIds ?? []
-    return teamStore.workspaceTeams.filter(team => assignedIds.includes(team.id))
+    return actorCandidateTeams.value.filter(team => assignedIds.includes(team.id))
   })
   const workspaceUsers = computed(() =>
     [...workspaceAccessControlStore.users].sort((left, right) =>
@@ -151,8 +159,8 @@ export function useProjectSettings() {
   })
 
   const resolvedAgentSettings = computed(() => {
-    const assignedAgentIds = workspaceAssignedAgents.value.map(agent => agent.id)
-    const assignedTeamIds = workspaceAssignedTeams.value.map(team => team.id)
+    const assignedAgentIds = workspaceAssignments.value?.agents?.agentIds ?? []
+    const assignedTeamIds = workspaceAssignments.value?.agents?.teamIds ?? []
     const saved = projectSettings.value.agents
 
     return {
@@ -182,7 +190,12 @@ export function useProjectSettings() {
   const summaryOverrideCount = computed(() =>
     Object.values(toolPermissionDraft.value).filter(value => value !== 'inherit').length,
   )
-  const summaryActorCount = computed(() => enabledAgentIds.value.length + enabledTeamIds.value.length)
+  const summaryActorCount = computed(() =>
+    agentStore.projectOwnedAgents.length
+    + teamStore.projectOwnedTeams.length
+    + enabledAgentIds.value.length
+    + enabledTeamIds.value.length,
+  )
   const summaryMemberCount = computed(() => selectedMemberUserIds.value.length)
 
   const toolPermissionOptions = computed(() =>
@@ -490,9 +503,27 @@ export function useProjectSettings() {
     savingAgents.value = true
 
     try {
+      const nextAgentIds = [...new Set(enabledAgentIds.value)]
+      const nextTeamIds = [...new Set(enabledTeamIds.value)]
+      const updated = await workspaceStore.updateProject(
+        project.value.id,
+        buildProjectUpdateInput({
+          assignments: {
+            ...(project.value.assignments ?? {}),
+            agents: {
+              agentIds: nextAgentIds,
+              teamIds: nextTeamIds,
+            },
+          },
+        })!,
+      )
+      if (!updated) {
+        agentsError.value = workspaceStore.error || t('projectSettings.agents.saveError')
+        return
+      }
       const saved = await workspaceStore.saveProjectAgentSettings(project.value.id, {
-        enabledAgentIds: [...new Set(enabledAgentIds.value)],
-        enabledTeamIds: [...new Set(enabledTeamIds.value)],
+        enabledAgentIds: nextAgentIds,
+        enabledTeamIds: nextTeamIds,
       })
       if (!saved) {
         agentsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
@@ -541,6 +572,8 @@ export function useProjectSettings() {
     tabs,
     project,
     allowedWorkspaceConfiguredModels,
+    actorCandidateAgents,
+    actorCandidateTeams,
     workspaceAssignedAgents,
     workspaceAssignedTeams,
     workspaceUsers,

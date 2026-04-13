@@ -8,11 +8,12 @@ use crate::{agent_assets, WorkspacePaths};
 pub(crate) fn export_assets(
     connection: &Connection,
     paths: &WorkspacePaths,
-    _workspace_id: &str,
+    workspace_id: &str,
     target: agent_assets::AssetTargetScope<'_>,
     input: ExportWorkspaceAgentBundleInput,
 ) -> Result<ExportWorkspaceAgentBundleResult, AppError> {
-    let context = agent_assets::build_export_context(connection, paths, target, input)?;
+    let context =
+        agent_assets::build_export_context(connection, paths, workspace_id, target, input)?;
     let root_dir_name = context.root_dir_name.clone();
     let mut files = Vec::new();
 

@@ -46,8 +46,8 @@ function teamOriginLabel(team: TeamRecord) {
   if (team.integrationSource?.kind === 'builtin-template') {
     return '内置模板'
   }
-  if (team.integrationSource?.kind === 'workspace-link') {
-    return '工作区接入'
+  if (props.isProjectScope && !isProjectOwnedTeam(team)) {
+    return '工作区'
   }
   return undefined
 }
@@ -60,7 +60,26 @@ function isWorkspaceLinkedTeam(team: TeamRecord) {
   return team.integrationSource?.kind === 'workspace-link'
 }
 
+function isProjectOwnedTeam(team: TeamRecord) {
+  return Boolean(props.isProjectScope && team.projectId)
+}
+
+function canSelectTeam(team: TeamRecord) {
+  return props.isProjectScope || !isBuiltinTemplateTeam(team)
+}
+
+function canExportTeam(team: TeamRecord) {
+  return props.isProjectScope || !isBuiltinTemplateTeam(team)
+}
+
+function canRemoveTeam(team: TeamRecord) {
+  return props.isProjectScope ? isProjectOwnedTeam(team) : !isBuiltinTemplateTeam(team)
+}
+
 function openLabel(team: TeamRecord) {
+  if (props.isProjectScope && !isProjectOwnedTeam(team)) {
+    return '复制到项目'
+  }
   if (isBuiltinTemplateTeam(team)) {
     return props.isProjectScope ? '复制到项目' : '复制到工作区'
   }
@@ -216,9 +235,9 @@ function updateSelectedTeams(teamId: string, nextSelected: boolean) {
           :remove-test-id="`agent-center-remove-team-${team.id}`"
           :selected="selectedTeamIds.includes(team.id)"
           :selection-test-id="`agent-center-select-team-${team.id}`"
-          :selectable="!isBuiltinTemplateTeam(team)"
-          :exportable="!isBuiltinTemplateTeam(team)"
-          :removable="!isBuiltinTemplateTeam(team)"
+          :selectable="canSelectTeam(team)"
+          :exportable="canExportTeam(team)"
+          :removable="canRemoveTeam(team)"
           @open="emit('open-team', team)"
           @update:selected="updateSelectedTeams(team.id, $event)"
           @export="handleExportTeam(team, $event)"
@@ -274,7 +293,7 @@ function updateSelectedTeams(teamId: string, nextSelected: boolean) {
           <template #actions>
             <div class="flex items-center gap-1" @click.stop @keydown.stop>
               <UiCheckbox
-                v-if="!isBuiltinTemplateTeam(team)"
+                v-if="canSelectTeam(team)"
                 :model-value="selectedTeamIds"
                 :value="team.id"
                 :data-testid="`agent-center-select-team-${team.id}`"
@@ -283,7 +302,7 @@ function updateSelectedTeams(teamId: string, nextSelected: boolean) {
               <UiButton size="sm" variant="ghost" class="h-8 px-3 text-[11px] font-semibold" @click.stop="emit('open-team', team)">
                 {{ openLabel(team) }}
               </UiButton>
-              <UiDropdownMenu v-if="!isBuiltinTemplateTeam(team)" :items="rowExportMenuItems" @select="handleExportTeam(team, $event)">
+              <UiDropdownMenu v-if="canExportTeam(team)" :items="rowExportMenuItems" @select="handleExportTeam(team, $event)">
                 <template #trigger>
                   <UiButton
                     size="sm"
@@ -297,7 +316,7 @@ function updateSelectedTeams(teamId: string, nextSelected: boolean) {
                 </template>
               </UiDropdownMenu>
               <UiButton
-                v-if="!isBuiltinTemplateTeam(team)"
+                v-if="canRemoveTeam(team)"
                 variant="ghost"
                 size="icon"
                 class="size-8 rounded-full text-text-tertiary/40 hover:bg-error/10 hover:text-error"

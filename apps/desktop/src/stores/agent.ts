@@ -45,7 +45,19 @@ export const useAgentStore = defineStore('agent', () => {
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
   const agents = computed(() => agentsByConnection.value[activeConnectionId.value] ?? [])
   const workspaceAgents = computed(() => agents.value.filter(record => !record.projectId))
+  const workspaceOwnedAgents = computed(() =>
+    workspaceAgents.value.filter(record => record.integrationSource?.kind !== 'builtin-template'),
+  )
+  const builtinTemplateAgents = computed(() =>
+    workspaceAgents.value.filter(record => record.integrationSource?.kind === 'builtin-template'),
+  )
   const projectOwnedAgents = computed(() => agents.value.filter(record => record.projectId === workspaceStore.currentProjectId))
+  const currentProject = computed(() =>
+    workspaceStore.projects.find(project => project.id === workspaceStore.currentProjectId) ?? null,
+  )
+  const assignedProjectAgentIds = computed(() =>
+    currentProject.value?.assignments?.agents?.agentIds ?? [],
+  )
   const projectLinks = computed<Record<string, ProjectAgentLinkRecord[]>>(
     () => projectLinksByConnection.value[activeConnectionId.value] ?? {},
   )
@@ -54,14 +66,30 @@ export const useAgentStore = defineStore('agent', () => {
   )
   const integratedProjectAgents = computed(() => {
     const linkMap = new Map(currentProjectLinks.value.map(link => [link.agentId, link]))
-    return workspaceAgents.value
-      .filter(record => linkMap.has(record.id))
-      .map(record => withIntegrationSource(record, linkMap.get(record.id)!))
+    return workspaceOwnedAgents.value
+      .filter(record => assignedProjectAgentIds.value.includes(record.id) || linkMap.has(record.id))
+      .map(record => withIntegrationSource(record, linkMap.get(record.id) ?? {
+        workspaceId: record.workspaceId,
+        projectId: workspaceStore.currentProjectId,
+        agentId: record.id,
+        linkedAt: 0,
+      }))
   })
-  const projectAgents = computed(() => [
-    ...projectOwnedAgents.value,
-    ...integratedProjectAgents.value,
-  ])
+  const assignedWorkspaceAgents = computed(() =>
+    workspaceOwnedAgents.value.filter(record => assignedProjectAgentIds.value.includes(record.id)),
+  )
+  const assignedBuiltinAgents = computed(() =>
+    builtinTemplateAgents.value.filter(record => assignedProjectAgentIds.value.includes(record.id)),
+  )
+  const effectiveProjectAgents = computed(() => {
+    const merged = [
+      ...projectOwnedAgents.value,
+      ...assignedWorkspaceAgents.value,
+      ...assignedBuiltinAgents.value,
+    ]
+    return merged.filter((record, index) => merged.findIndex(item => item.id === record.id) === index)
+  })
+  const projectAgents = computed(() => effectiveProjectAgents.value)
   const error = computed(() => errors.value[activeConnectionId.value] ?? '')
 
   async function load(workspaceConnectionId?: string) {
@@ -235,8 +263,13 @@ export const useAgentStore = defineStore('agent', () => {
   return {
     agents,
     workspaceAgents,
+    workspaceOwnedAgents,
+    builtinTemplateAgents,
     projectOwnedAgents,
     integratedProjectAgents,
+    assignedWorkspaceAgents,
+    assignedBuiltinAgents,
+    effectiveProjectAgents,
     projectAgents,
     currentProjectLinks,
     error,

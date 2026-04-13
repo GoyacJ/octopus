@@ -41,7 +41,19 @@ export const useTeamStore = defineStore('team', () => {
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
   const teams = computed(() => teamsByConnection.value[activeConnectionId.value] ?? [])
   const workspaceTeams = computed(() => teams.value.filter(record => !record.projectId))
+  const workspaceOwnedTeams = computed(() =>
+    workspaceTeams.value.filter(record => record.integrationSource?.kind !== 'builtin-template'),
+  )
+  const builtinTemplateTeams = computed(() =>
+    workspaceTeams.value.filter(record => record.integrationSource?.kind === 'builtin-template'),
+  )
   const projectOwnedTeams = computed(() => teams.value.filter(record => record.projectId === workspaceStore.currentProjectId))
+  const currentProject = computed(() =>
+    workspaceStore.projects.find(project => project.id === workspaceStore.currentProjectId) ?? null,
+  )
+  const assignedProjectTeamIds = computed(() =>
+    currentProject.value?.assignments?.agents?.teamIds ?? [],
+  )
   const projectLinks = computed<Record<string, ProjectTeamLinkRecord[]>>(
     () => projectLinksByConnection.value[activeConnectionId.value] ?? {},
   )
@@ -50,14 +62,30 @@ export const useTeamStore = defineStore('team', () => {
   )
   const integratedProjectTeams = computed(() => {
     const linkMap = new Map(currentProjectLinks.value.map(link => [link.teamId, link]))
-    return workspaceTeams.value
-      .filter(record => linkMap.has(record.id))
-      .map(record => withIntegrationSource(record, linkMap.get(record.id)!))
+    return workspaceOwnedTeams.value
+      .filter(record => assignedProjectTeamIds.value.includes(record.id) || linkMap.has(record.id))
+      .map(record => withIntegrationSource(record, linkMap.get(record.id) ?? {
+        workspaceId: record.workspaceId,
+        projectId: workspaceStore.currentProjectId,
+        teamId: record.id,
+        linkedAt: 0,
+      }))
   })
-  const projectTeams = computed(() => [
-    ...projectOwnedTeams.value,
-    ...integratedProjectTeams.value,
-  ])
+  const assignedWorkspaceTeams = computed(() =>
+    workspaceOwnedTeams.value.filter(record => assignedProjectTeamIds.value.includes(record.id)),
+  )
+  const assignedBuiltinTeams = computed(() =>
+    builtinTemplateTeams.value.filter(record => assignedProjectTeamIds.value.includes(record.id)),
+  )
+  const effectiveProjectTeams = computed(() => {
+    const merged = [
+      ...projectOwnedTeams.value,
+      ...assignedWorkspaceTeams.value,
+      ...assignedBuiltinTeams.value,
+    ]
+    return merged.filter((record, index) => merged.findIndex(item => item.id === record.id) === index)
+  })
+  const projectTeams = computed(() => effectiveProjectTeams.value)
   const error = computed(() => errors.value[activeConnectionId.value] ?? '')
 
   async function load(workspaceConnectionId?: string) {
@@ -211,8 +239,13 @@ export const useTeamStore = defineStore('team', () => {
   return {
     teams,
     workspaceTeams,
+    workspaceOwnedTeams,
+    builtinTemplateTeams,
     projectOwnedTeams,
     integratedProjectTeams,
+    assignedWorkspaceTeams,
+    assignedBuiltinTeams,
+    effectiveProjectTeams,
     projectTeams,
     currentProjectLinks,
     error,

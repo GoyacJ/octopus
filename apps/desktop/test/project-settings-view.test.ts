@@ -118,7 +118,10 @@ describe('Project settings view', () => {
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-agents"]')?.click()
     await waitFor(() => mounted.container.textContent?.includes('Architect Agent') ?? false)
     expect(mounted.container.textContent).toContain('Architect Agent')
+    expect(mounted.container.textContent).toContain('Coder Agent')
+    expect(mounted.container.textContent).toContain('Finance Planner Template')
     expect(mounted.container.textContent).toContain('Studio Direction Team')
+    expect(mounted.container.textContent).toContain('Finance Ops Template')
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-users"]')?.click()
     await waitFor(() => mounted.container.textContent?.includes('Lin Zhou') ?? false)
@@ -189,13 +192,70 @@ describe('Project settings view', () => {
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-agents"]')?.click()
     await waitFor(() => mounted.container.textContent?.includes('Architect Agent') ?? false)
+    expect(
+      mounted.container
+        .querySelector<HTMLInputElement>('[data-testid="project-agent-option-agent-architect"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(true)
+    expect(
+      mounted.container
+        .querySelector<HTMLInputElement>('[data-testid="project-agent-option-agent-coder"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(false)
+    expect(
+      mounted.container
+        .querySelector<HTMLInputElement>('[data-testid="project-team-option-team-studio"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(true)
+    expect(
+      mounted.container
+        .querySelector<HTMLInputElement>('[data-testid="project-team-option-team-template-finance"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(false)
     expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledAgentIds).toEqual(['agent-architect'])
     expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledTeamIds).toEqual(['team-studio'])
 
     mounted.destroy()
   })
 
-  it('shows empty project refinement states when no workspace assignments exist', async () => {
+  it('saves workspace and builtin actor selections back into project assignments and runtime settings', async () => {
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
+    const workspaceStore = useWorkspaceStore()
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-agents"]')?.click()
+    await waitFor(() => mounted.container.textContent?.includes('Finance Planner Template') ?? false)
+
+    const builtinAgent = mounted.container.querySelector<HTMLLabelElement>('[data-testid="project-agent-option-agent-template-finance"]')
+    const builtinTeam = mounted.container.querySelector<HTMLLabelElement>('[data-testid="project-team-option-team-template-finance"]')
+    const saveButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-agents-save-button"]')
+
+    expect(builtinAgent).not.toBeNull()
+    expect(builtinTeam).not.toBeNull()
+    expect(saveButton).not.toBeNull()
+
+    builtinAgent?.click()
+    builtinTeam?.click()
+    await nextTick()
+    saveButton?.click()
+
+    await waitFor(() => {
+      const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
+      const assignments = project?.assignments?.agents
+      return assignments?.agentIds.includes('agent-template-finance') && assignments?.teamIds.includes('team-template-finance')
+    })
+
+    const project = workspaceStore.projects.find(item => item.id === 'proj-redesign')
+    expect(project?.assignments?.agents?.agentIds).toEqual(['agent-architect', 'agent-template-finance'])
+    expect(project?.assignments?.agents?.teamIds).toEqual(['team-studio', 'team-template-finance'])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledAgentIds).toEqual(['agent-architect', 'agent-template-finance'])
+    expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledTeamIds).toEqual(['team-studio', 'team-template-finance'])
+
+    mounted.destroy()
+  })
+
+  it('shows project actor candidates but keeps them unchecked when no assignments exist', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-governance/settings')
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
@@ -215,11 +275,15 @@ describe('Project settings view', () => {
     expect(mounted.container.textContent).not.toContain('ops')
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-agents"]')?.click()
-    await waitFor(() => mounted.container.textContent?.includes(String(i18n.global.t('projectSettings.agents.emptyTitle'))) ?? false)
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.agents.emptyTitle')))
-    expect(mounted.container.textContent).toContain(String(i18n.global.t('projectSettings.agents.emptyDescription')))
-    expect(mounted.container.textContent).not.toContain('Architect Agent')
-    expect(mounted.container.textContent).not.toContain('Studio Direction Team')
+    await waitFor(() => mounted.container.textContent?.includes('Architect Agent') ?? false)
+    expect(mounted.container.textContent).toContain('Architect Agent')
+    expect(
+      mounted.container
+        .querySelector<HTMLInputElement>('[data-testid="project-agent-option-agent-architect"] input[type="checkbox"]')
+        ?.checked,
+    ).toBe(false)
+    expect(mounted.container.textContent).toContain('Finance Planner Template')
+    expect(mounted.container.textContent).toContain('工作区')
 
     mounted.destroy()
   })
