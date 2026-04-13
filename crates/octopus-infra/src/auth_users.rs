@@ -768,12 +768,7 @@ impl AuthService for InfraAuthService {
             params![workspace.slug, workspace.name,],
         )
         .map_err(|error| AppError::database(error.to_string()))?;
-        db.execute(
-            "INSERT OR IGNORE INTO access_roles (id, code, name, description, status, permission_codes)
-             VALUES ('owner', 'owner', 'Owner', 'Full enterprise workspace access.', 'active', ?1)",
-            params![serde_json::to_string(&default_owner_permission_codes())?],
-        )
-        .map_err(|error| AppError::database(error.to_string()))?;
+        ensure_default_owner_role_permissions(&db)?;
         db.execute(
             "INSERT OR REPLACE INTO user_org_assignments (user_id, org_unit_id, is_primary, position_ids, user_group_ids)
              VALUES (?1, 'org-root', 1, '[]', '[]')",
@@ -1414,5 +1409,79 @@ mod tests {
                 "resource-scoped data policies should require an allow match when the domain is policy-controlled"
             );
         });
+    }
+
+    #[test]
+    fn bootstrap_admin_backfills_missing_default_owner_permissions() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("bundle");
+        let db = bundle.auth.state.open_db().expect("db");
+        db.execute(
+            "UPDATE access_roles SET permission_codes = ?1 WHERE id = 'owner'",
+            params![serde_json::to_string(&vec![
+                "runtime.session.read",
+                "custom.permission",
+            ])
+            .expect("owner permissions json")],
+        )
+        .expect("downgrade owner role");
+
+        let _owner_session = bootstrap_admin(&bundle);
+
+        let permission_codes_raw: String = db
+            .query_row(
+                "SELECT permission_codes FROM access_roles WHERE id = 'owner'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("load owner role permissions");
+        let permission_codes: Vec<String> =
+            serde_json::from_str(&permission_codes_raw).expect("parse owner role permissions");
+
+        assert!(
+            permission_codes
+                .iter()
+                .any(|code| code == "runtime.submit_turn"),
+            "bootstrap should backfill missing runtime submit permission"
+        );
+        assert!(
+            permission_codes.iter().any(|code| code == "custom.permission"),
+            "bootstrap should preserve existing custom owner permissions"
+        );
+    }
+
+    #[test]
+    fn loading_existing_workspace_backfills_missing_default_owner_permissions() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("bundle");
+        let _owner_session = bootstrap_admin(&bundle);
+        let db = bundle.auth.state.open_db().expect("db");
+        db.execute(
+            "UPDATE access_roles SET permission_codes = ?1 WHERE id = 'owner'",
+            params![serde_json::to_string(&vec!["runtime.session.read"])
+                .expect("legacy owner permissions json")],
+        )
+        .expect("downgrade owner role");
+        drop(db);
+        drop(bundle);
+
+        let reloaded_bundle = build_infra_bundle(temp.path()).expect("reloaded bundle");
+        let reloaded_db = reloaded_bundle.auth.state.open_db().expect("reloaded db");
+        let permission_codes_raw: String = reloaded_db
+            .query_row(
+                "SELECT permission_codes FROM access_roles WHERE id = 'owner'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("load reloaded owner role permissions");
+        let permission_codes: Vec<String> =
+            serde_json::from_str(&permission_codes_raw).expect("parse reloaded owner permissions");
+
+        assert!(
+            permission_codes
+                .iter()
+                .any(|code| code == "runtime.submit_turn"),
+            "loading an existing workspace should backfill missing runtime submit permission"
+        );
     }
 }

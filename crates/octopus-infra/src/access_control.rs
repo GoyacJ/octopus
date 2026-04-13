@@ -441,6 +441,46 @@ pub(super) fn resolve_effective_permission_codes(
     Ok((permission_codes, bindings))
 }
 
+pub(super) fn ensure_default_owner_role_permissions(connection: &Connection) -> Result<(), AppError> {
+    let default_permissions = default_owner_permission_codes();
+    let existing_role = connection
+        .query_row(
+            "SELECT id, permission_codes FROM access_roles WHERE code = 'owner' ORDER BY id ASC LIMIT 1",
+            [],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(|error| AppError::database(error.to_string()))?;
+
+    if let Some((role_id, permission_codes_raw)) = existing_role {
+        let mut merged_permissions = read_json_vec(&permission_codes_raw);
+        let original_len = merged_permissions.len();
+        for permission in default_permissions {
+            if !merged_permissions.iter().any(|code| code == &permission) {
+                merged_permissions.push(permission);
+            }
+        }
+        if merged_permissions.len() != original_len {
+            connection
+                .execute(
+                    "UPDATE access_roles SET permission_codes = ?2 WHERE id = ?1",
+                    params![role_id, serde_json::to_string(&merged_permissions)?],
+                )
+                .map_err(|error| AppError::database(error.to_string()))?;
+        }
+        return Ok(());
+    }
+
+    connection
+        .execute(
+            "INSERT INTO access_roles (id, code, name, description, status, permission_codes)
+             VALUES ('owner', 'owner', 'Owner', 'Full enterprise workspace access.', 'active', ?1)",
+            params![serde_json::to_string(&default_permissions)?],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    Ok(())
+}
+
 pub(crate) fn default_owner_permission_codes() -> Vec<String> {
     vec![
         "workspace.overview.read",
@@ -522,6 +562,7 @@ pub(crate) fn default_owner_permission_codes() -> Vec<String> {
         "runtime.config.user.read",
         "runtime.config.user.manage",
         "runtime.session.read",
+        "runtime.submit_turn",
         "runtime.approval.resolve",
         "audit.read",
     ]
@@ -1334,6 +1375,7 @@ mod tests {
             "tool.mcp.bind-credential",
             "tool.mcp.publish",
             "tool.mcp.grant",
+            "runtime.submit_turn",
         ] {
             assert!(
                 permissions.iter().any(|permission| permission == code),

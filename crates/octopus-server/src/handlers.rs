@@ -1533,6 +1533,14 @@ fn default_permission_definitions() -> Vec<PermissionDefinition> {
             actions: vec!["read".into()],
         },
         PermissionDefinition {
+            code: "runtime.submit_turn".into(),
+            name: "Runtime Submit Turn".into(),
+            description: "Submit new turns to a runtime session.".into(),
+            category: "runtime".into(),
+            resource_type: "runtime".into(),
+            actions: vec!["submit_turn".into()],
+        },
+        PermissionDefinition {
             code: "runtime.approval.resolve".into(),
             name: "Runtime Approval Resolve".into(),
             description: "Resolve runtime approvals.".into(),

@@ -1549,10 +1549,7 @@ pub(super) fn ensure_runtime_session_projection_columns(
             ("capability_state_ref", "TEXT"),
             ("last_execution_outcome_json", "TEXT"),
             ("granted_tool_count", "INTEGER NOT NULL DEFAULT 0"),
-            (
-                "injected_skill_message_count",
-                "INTEGER NOT NULL DEFAULT 0",
-            ),
+            ("injected_skill_message_count", "INTEGER NOT NULL DEFAULT 0"),
             ("deferred_capability_count", "INTEGER NOT NULL DEFAULT 0"),
             ("hidden_capability_count", "INTEGER NOT NULL DEFAULT 0"),
             ("degraded_provider_count", "INTEGER NOT NULL DEFAULT 0"),
@@ -1584,10 +1581,7 @@ pub(super) fn ensure_runtime_run_projection_columns(
             ("capability_state_ref", "TEXT"),
             ("last_execution_outcome_json", "TEXT"),
             ("granted_tool_count", "INTEGER NOT NULL DEFAULT 0"),
-            (
-                "injected_skill_message_count",
-                "INTEGER NOT NULL DEFAULT 0",
-            ),
+            ("injected_skill_message_count", "INTEGER NOT NULL DEFAULT 0"),
             ("deferred_capability_count", "INTEGER NOT NULL DEFAULT 0"),
             ("hidden_capability_count", "INTEGER NOT NULL DEFAULT 0"),
             ("degraded_provider_count", "INTEGER NOT NULL DEFAULT 0"),
@@ -2016,6 +2010,7 @@ pub(super) fn load_state(paths: WorkspacePaths) -> Result<InfraState, AppError> 
         toml::from_str(&fs::read_to_string(&paths.app_registry_config)?)?;
     let connection =
         Connection::open(&paths.db_path).map_err(|error| AppError::database(error.to_string()))?;
+    ensure_default_owner_role_permissions(&connection)?;
     backfill_project_resource_directories(&connection, &paths)?;
     let users = load_users(&connection)?;
     let owner_user_id = users
