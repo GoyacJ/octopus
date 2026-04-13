@@ -58,6 +58,18 @@ pub(super) fn sync_runtime_session_detail(detail: &mut RuntimeSessionDetail) {
     {
         detail.memory_summary = detail.summary.memory_summary.clone();
     }
+    if detail.memory_selection_summary.selected_count == 0
+        && detail.summary.memory_selection_summary.selected_count > 0
+    {
+        detail.memory_selection_summary = detail.summary.memory_selection_summary.clone();
+    }
+    if detail.pending_memory_proposal_count == 0 && detail.summary.pending_memory_proposal_count > 0
+    {
+        detail.pending_memory_proposal_count = detail.summary.pending_memory_proposal_count;
+    }
+    if detail.memory_state_ref.is_empty() && !detail.summary.memory_state_ref.is_empty() {
+        detail.memory_state_ref = detail.summary.memory_state_ref.clone();
+    }
     if detail.capability_summary.visible_tools.is_empty()
         && !detail.summary.capability_summary.visible_tools.is_empty()
     {
@@ -73,6 +85,9 @@ pub(super) fn sync_runtime_session_detail(detail: &mut RuntimeSessionDetail) {
     detail.summary.pending_mailbox = detail.pending_mailbox.clone();
     detail.summary.background_run = detail.background_run.clone();
     detail.summary.memory_summary = detail.memory_summary.clone();
+    detail.summary.memory_selection_summary = detail.memory_selection_summary.clone();
+    detail.summary.pending_memory_proposal_count = detail.pending_memory_proposal_count;
+    detail.summary.memory_state_ref = detail.memory_state_ref.clone();
     detail.summary.capability_summary = detail.capability_summary.clone();
     detail.summary.provider_state_summary = detail.provider_state_summary.clone();
     detail.summary.pending_mediation = detail.pending_mediation.clone();

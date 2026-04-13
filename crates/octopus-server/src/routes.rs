@@ -477,5 +477,9 @@ pub(crate) fn runtime_routes() -> Router<ServerState> {
             "/sessions/:session_id/approvals/:approval_id",
             post(resolve_runtime_approval),
         )
+        .route(
+            "/sessions/:session_id/memory-proposals/:proposal_id",
+            post(resolve_runtime_memory_proposal),
+        )
         .route("/sessions/:session_id/events", get(runtime_events))
 }

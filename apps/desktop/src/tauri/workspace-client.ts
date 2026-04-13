@@ -64,6 +64,7 @@ import type {
   RegisterBootstrapAdminRequest,
   ReviewProjectPromotionRequestInput,
   ResolveRuntimeApprovalInput,
+  ResolveRuntimeMemoryProposalInput,
   ResourcePolicyRecord,
   ResourcePolicyUpsertRequest,
   RoleBindingRecord,
@@ -371,6 +372,12 @@ export interface WorkspaceClient {
       sessionId: string,
       approvalId: string,
       input: ResolveRuntimeApprovalInput,
+      idempotencyKey?: string,
+    ) => Promise<void>
+    resolveMemoryProposal: (
+      sessionId: string,
+      proposalId: string,
+      input: ResolveRuntimeMemoryProposalInput,
       idempotencyKey?: string,
     ) => Promise<void>
   }

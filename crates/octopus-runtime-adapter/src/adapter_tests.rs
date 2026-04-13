@@ -4,7 +4,10 @@ use std::{fs, path::Path};
 
 use async_trait::async_trait;
 use octopus_core::CreateRuntimeSessionInput;
-use octopus_core::{RuntimeCapabilityExecutionOutcome, RuntimePendingMediationSummary};
+use octopus_core::{
+    ResolveRuntimeMemoryProposalInput, RuntimeCapabilityExecutionOutcome,
+    RuntimePendingMediationSummary,
+};
 use octopus_infra::build_infra_bundle;
 use octopus_platform::{
     ModelRegistryService, RuntimeConfigService, RuntimeExecutionService, RuntimeSessionService,
@@ -126,7 +129,41 @@ fn turn_input(content: &str, permission_mode: Option<&str>) -> SubmitRuntimeTurn
     SubmitRuntimeTurnInput {
         content: content.into(),
         permission_mode: permission_mode.map(str::to_string),
+        recall_mode: None,
+        ignored_memory_ids: Vec::new(),
+        memory_intent: None,
     }
+}
+
+fn persist_memory_record(
+    adapter: &RuntimeAdapter,
+    project_id: &str,
+    memory_id: &str,
+    kind: &str,
+    scope: &str,
+    summary: &str,
+) {
+    adapter
+        .persist_runtime_memory_record(
+            &memory_runtime::PersistedRuntimeMemoryRecord {
+                memory_id: memory_id.into(),
+                project_id: Some(project_id.into()),
+                owner_ref: Some(format!("project:{project_id}")),
+                source_run_id: Some("seed-run".into()),
+                kind: kind.into(),
+                scope: scope.into(),
+                title: format!("{kind} memory"),
+                summary: summary.into(),
+                freshness_state: "fresh".into(),
+                last_validated_at: Some(1),
+                proposal_state: "approved".into(),
+                storage_path: None,
+                content_hash: None,
+                updated_at: 1,
+            },
+            &json!({ "summary": summary }),
+        )
+        .expect("persist runtime memory");
 }
 
 #[derive(Debug, Clone)]
@@ -1072,7 +1109,10 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
     assert_eq!(run.actor_ref, "team:team-workspace-core");
     assert!(run.workflow_run.is_some());
     assert!(run.worker_dispatch.is_some());
-    assert!(run.worker_dispatch.as_ref().is_some_and(|dispatch| dispatch.total_subruns >= 2));
+    assert!(run
+        .worker_dispatch
+        .as_ref()
+        .is_some_and(|dispatch| dispatch.total_subruns >= 2));
     assert!(run.mailbox_ref.is_some());
     assert!(run.background_state.is_some());
 
@@ -1104,7 +1144,10 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
 
     let background = detail.background_run.as_ref().expect("background summary");
     assert_eq!(background.status, "completed");
-    assert_eq!(background.workflow_run_id.as_deref(), run.workflow_run.as_deref());
+    assert_eq!(
+        background.workflow_run_id.as_deref(),
+        run.workflow_run.as_deref()
+    );
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
     let session_projection: (
@@ -1141,7 +1184,13 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
     assert_eq!(session_projection.1.as_deref(), Some("completed"));
     assert!(session_projection.2 >= 3);
     assert!(session_projection.3 >= 3);
-    assert_eq!(session_projection.4.as_deref(), detail.pending_mailbox.as_ref().map(|mailbox| mailbox.mailbox_ref.as_str()));
+    assert_eq!(
+        session_projection.4.as_deref(),
+        detail
+            .pending_mailbox
+            .as_ref()
+            .map(|mailbox| mailbox.mailbox_ref.as_str())
+    );
     assert_eq!(session_projection.5, mailbox.pending_count as i64);
     assert!(session_projection.6 >= 2);
     assert_eq!(session_projection.7.as_deref(), Some("completed"));
@@ -1231,12 +1280,30 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
         .expect("background projection");
     assert!(subrun_projection_count >= 2);
     assert!(handoff_projection_count >= 2);
-    assert!(workflow_projection.0.as_deref().is_some_and(|path| root.join(path).exists()));
-    assert!(workflow_projection.1.as_deref().is_some_and(|hash| hash.starts_with("sha256-")));
-    assert!(mailbox_projection.0.as_deref().is_some_and(|path| root.join(path).exists()));
-    assert!(mailbox_projection.1.as_deref().is_some_and(|hash| hash.starts_with("sha256-")));
-    assert!(background_projection.0.as_deref().is_some_and(|path| root.join(path).exists()));
-    assert!(background_projection.1.as_deref().is_some_and(|hash| hash.starts_with("sha256-")));
+    assert!(workflow_projection
+        .0
+        .as_deref()
+        .is_some_and(|path| root.join(path).exists()));
+    assert!(workflow_projection
+        .1
+        .as_deref()
+        .is_some_and(|hash| hash.starts_with("sha256-")));
+    assert!(mailbox_projection
+        .0
+        .as_deref()
+        .is_some_and(|path| root.join(path).exists()));
+    assert!(mailbox_projection
+        .1
+        .as_deref()
+        .is_some_and(|hash| hash.starts_with("sha256-")));
+    assert!(background_projection
+        .0
+        .as_deref()
+        .is_some_and(|path| root.join(path).exists()));
+    assert!(background_projection
+        .1
+        .as_deref()
+        .is_some_and(|hash| hash.starts_with("sha256-")));
 
     let workflow_events = adapter
         .list_events(&session.summary.id, None)
@@ -1246,14 +1313,18 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
         .filter_map(|event| event.kind)
         .filter(|kind| kind.starts_with("workflow."))
         .collect::<Vec<_>>();
-    assert!(workflow_events.iter().any(|kind| kind == "workflow.started"));
+    assert!(workflow_events
+        .iter()
+        .any(|kind| kind == "workflow.started"));
     assert!(workflow_events
         .iter()
         .any(|kind| kind == "workflow.step.started"));
     assert!(workflow_events
         .iter()
         .any(|kind| kind == "workflow.step.completed"));
-    assert!(workflow_events.iter().any(|kind| kind == "workflow.completed"));
+    assert!(workflow_events
+        .iter()
+        .any(|kind| kind == "workflow.completed"));
 
     let reloaded = RuntimeAdapter::new_with_executor(
         octopus_core::DEFAULT_WORKSPACE_ID,
@@ -1410,7 +1481,7 @@ async fn runtime_session_public_contract_and_projection_fields_match_phase_two_s
 }
 
 #[tokio::test]
-async fn runtime_events_only_emit_declared_phase_two_event_kinds() {
+async fn runtime_events_only_emit_declared_runtime_event_kinds() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
     write_workspace_config(
@@ -1485,14 +1556,197 @@ async fn runtime_events_only_emit_declared_phase_two_event_kinds() {
         "runtime.approval.resolved",
         "runtime.session.updated",
         "runtime.error",
+        "memory.selected",
+        "memory.proposed",
+        "memory.approved",
+        "memory.rejected",
+        "memory.revalidated",
     ];
     for event in &events {
         let kind = event.kind.as_deref().unwrap_or(event.event_type.as_str());
         assert!(
             allowed.contains(&kind),
-            "unexpected phase two event kind: {kind}"
+            "unexpected runtime event kind: {kind}"
         );
     }
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn submit_turn_selects_runtime_memory_and_emits_memory_events() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        Arc::new(FixedTokenRuntimeModelExecutor {
+            total_tokens: Some(12),
+        }),
+    );
+    persist_memory_record(
+        &adapter,
+        octopus_core::DEFAULT_PROJECT_ID,
+        "mem-user-preference",
+        "user",
+        "user",
+        "Remember the user's approval preference.",
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-memory-events",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Memory Events",
+                "agent:agent-project-delivery",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(
+            &session.summary.id,
+            SubmitRuntimeTurnInput {
+                content: "Remember this explicit feedback for later turns.".into(),
+                permission_mode: None,
+                recall_mode: Some("default".into()),
+                ignored_memory_ids: Vec::new(),
+                memory_intent: Some("feedback".into()),
+            },
+        )
+        .await
+        .expect("run");
+
+    assert_eq!(run.selected_memory.len(), 1);
+    assert_eq!(run.selected_memory[0].memory_id, "mem-user-preference");
+    assert_eq!(run.freshness_summary.as_ref().map(|value| value.fresh_count), Some(1));
+    assert_eq!(
+        run.pending_memory_proposal
+            .as_ref()
+            .map(|proposal| proposal.proposal_state.as_str()),
+        Some("pending")
+    );
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("detail");
+    assert_eq!(detail.memory_selection_summary.selected_count, 1);
+    assert_eq!(detail.pending_memory_proposal_count, 1);
+
+    let events = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("events");
+    assert!(events.iter().any(|event| event.event_type == "memory.selected"));
+    assert!(events.iter().any(|event| event.event_type == "memory.proposed"));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        Arc::new(FixedTokenRuntimeModelExecutor {
+            total_tokens: Some(12),
+        }),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-memory-resolution",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Memory Resolution",
+                "agent:agent-project-delivery",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let submitted = adapter
+        .submit_turn(
+            &session.summary.id,
+            SubmitRuntimeTurnInput {
+                content: "Please remember that approval reviews need the finance tag.".into(),
+                permission_mode: None,
+                recall_mode: Some("default".into()),
+                ignored_memory_ids: Vec::new(),
+                memory_intent: Some("feedback".into()),
+            },
+        )
+        .await
+        .expect("submitted");
+    let proposal_id = submitted
+        .pending_memory_proposal
+        .as_ref()
+        .map(|proposal| proposal.proposal_id.clone())
+        .expect("pending proposal");
+
+    let resolved = adapter
+        .resolve_memory_proposal(
+            &session.summary.id,
+            &proposal_id,
+            ResolveRuntimeMemoryProposalInput {
+                decision: "approve".into(),
+                note: Some("validated".into()),
+            },
+        )
+        .await
+        .expect("resolved");
+
+    let proposal = resolved
+        .pending_memory_proposal
+        .as_ref()
+        .expect("resolved proposal");
+    assert_eq!(proposal.proposal_state, "approved");
+    assert_eq!(
+        proposal.review.as_ref().and_then(|review| review.note.as_deref()),
+        Some("validated")
+    );
+
+    let records = adapter
+        .load_runtime_memory_records(octopus_core::DEFAULT_PROJECT_ID)
+        .expect("memory records");
+    assert!(records.iter().any(|record| {
+        record.memory_id == proposal.memory_id
+            && record.proposal_state == "approved"
+            && record.freshness_state == "fresh"
+    }));
+    assert!(
+        adapter.runtime_memory_body_path(&proposal.memory_id).exists(),
+        "memory body should be persisted under data/knowledge"
+    );
+
+    let events = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("events");
+    assert!(events.iter().any(|event| event.event_type == "memory.approved"));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }

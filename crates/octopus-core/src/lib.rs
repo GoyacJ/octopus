@@ -1860,6 +1860,97 @@ pub struct RuntimeMemorySummary {
     pub selected_memory_ids: Vec<String>,
 }
 
+fn default_runtime_memory_recall_mode() -> String {
+    "default".into()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeMemorySelectionSummary {
+    pub total_candidate_count: u64,
+    pub selected_count: u64,
+    pub ignored_count: u64,
+    #[serde(default = "default_runtime_memory_recall_mode")]
+    pub recall_mode: String,
+    #[serde(default)]
+    pub selected_memory_ids: Vec<String>,
+}
+
+impl Default for RuntimeMemorySelectionSummary {
+    fn default() -> Self {
+        Self {
+            total_candidate_count: 0,
+            selected_count: 0,
+            ignored_count: 0,
+            recall_mode: default_runtime_memory_recall_mode(),
+            selected_memory_ids: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSelectedMemoryItem {
+    pub memory_id: String,
+    pub title: String,
+    pub summary: String,
+    pub kind: String,
+    pub scope: String,
+    #[serde(default)]
+    pub owner_ref: Option<String>,
+    #[serde(default)]
+    pub source_run_id: Option<String>,
+    pub freshness_state: String,
+    #[serde(default)]
+    pub last_validated_at: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeMemoryProposalReview {
+    pub decision: String,
+    pub reviewed_at: u64,
+    #[serde(default)]
+    pub reviewer_ref: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeMemoryProposal {
+    pub proposal_id: String,
+    pub session_id: String,
+    pub source_run_id: String,
+    pub memory_id: String,
+    pub title: String,
+    pub summary: String,
+    pub kind: String,
+    pub scope: String,
+    pub proposal_state: String,
+    pub proposal_reason: String,
+    #[serde(default)]
+    pub review: Option<RuntimeMemoryProposalReview>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeMemoryFreshnessSummary {
+    pub freshness_required: bool,
+    pub fresh_count: u64,
+    pub stale_count: u64,
+}
+
+impl Default for RuntimeMemoryFreshnessSummary {
+    fn default() -> Self {
+        Self {
+            freshness_required: false,
+            fresh_count: 0,
+            stale_count: 0,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeCapabilityProviderState {
@@ -2194,6 +2285,12 @@ pub struct RuntimeSessionSummary {
     #[serde(default)]
     pub memory_summary: RuntimeMemorySummary,
     #[serde(default)]
+    pub memory_selection_summary: RuntimeMemorySelectionSummary,
+    #[serde(default)]
+    pub pending_memory_proposal_count: u64,
+    #[serde(default)]
+    pub memory_state_ref: String,
+    #[serde(default)]
     pub capability_summary: RuntimeCapabilityPlanSummary,
     #[serde(default)]
     pub provider_state_summary: Vec<RuntimeCapabilityProviderState>,
@@ -2215,6 +2312,14 @@ pub struct RuntimeRunSnapshot {
     pub current_step: String,
     pub started_at: u64,
     pub updated_at: u64,
+    #[serde(default)]
+    pub selected_memory: Vec<RuntimeSelectedMemoryItem>,
+    #[serde(default)]
+    pub freshness_summary: Option<RuntimeMemoryFreshnessSummary>,
+    #[serde(default)]
+    pub pending_memory_proposal: Option<RuntimeMemoryProposal>,
+    #[serde(default)]
+    pub memory_state_ref: String,
     pub configured_model_id: Option<String>,
     pub configured_model_name: Option<String>,
     pub model_id: Option<String>,
@@ -2360,6 +2465,14 @@ pub struct RuntimeEventEnvelope {
     pub payload: Option<serde_json::Value>,
     pub run: Option<RuntimeRunSnapshot>,
     pub message: Option<RuntimeMessage>,
+    #[serde(default)]
+    pub memory_proposal: Option<RuntimeMemoryProposal>,
+    #[serde(default)]
+    pub memory_selection_summary: Option<RuntimeMemorySelectionSummary>,
+    #[serde(default)]
+    pub freshness_summary: Option<RuntimeMemoryFreshnessSummary>,
+    #[serde(default)]
+    pub selected_memory: Option<Vec<RuntimeSelectedMemoryItem>>,
     pub trace: Option<RuntimeTraceItem>,
     pub approval: Option<ApprovalRequestRecord>,
     pub decision: Option<String>,
@@ -2399,6 +2512,12 @@ pub struct RuntimeSessionDetail {
     pub background_run: Option<RuntimeBackgroundRunSummary>,
     #[serde(default)]
     pub memory_summary: RuntimeMemorySummary,
+    #[serde(default)]
+    pub memory_selection_summary: RuntimeMemorySelectionSummary,
+    #[serde(default)]
+    pub pending_memory_proposal_count: u64,
+    #[serde(default)]
+    pub memory_state_ref: String,
     #[serde(default)]
     pub capability_summary: RuntimeCapabilityPlanSummary,
     #[serde(default)]
@@ -2470,12 +2589,26 @@ pub struct CreateRuntimeSessionInput {
 pub struct SubmitRuntimeTurnInput {
     pub content: String,
     pub permission_mode: Option<String>,
+    #[serde(default)]
+    pub recall_mode: Option<String>,
+    #[serde(default)]
+    pub ignored_memory_ids: Vec<String>,
+    #[serde(default)]
+    pub memory_intent: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ResolveRuntimeApprovalInput {
     pub decision: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveRuntimeMemoryProposalInput {
+    pub decision: String,
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

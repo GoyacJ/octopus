@@ -10,6 +10,10 @@ pub(crate) fn approval_decision_status(decision: &str) -> Result<&'static str, A
     }
 }
 
+pub(crate) fn memory_proposal_decision_status(decision: &str) -> Result<&'static str, AppError> {
+    memory_runtime::memory_proposal_state_from_decision(decision)
+}
+
 pub(super) async fn resolve_approval(
     adapter: &RuntimeAdapter,
     session_id: &str,
@@ -20,6 +24,21 @@ pub(super) async fn resolve_approval(
         adapter,
         session_id,
         approval_id,
+        input,
+    )
+    .await
+}
+
+pub(super) async fn resolve_memory_proposal(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    proposal_id: &str,
+    input: ResolveRuntimeMemoryProposalInput,
+) -> Result<RuntimeRunSnapshot, AppError> {
+    agent_runtime_core::AgentRuntimeCore::resolve_memory_proposal(
+        adapter,
+        session_id,
+        proposal_id,
         input,
     )
     .await

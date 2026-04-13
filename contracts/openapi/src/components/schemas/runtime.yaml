@@ -478,6 +478,169 @@ RuntimeMemorySummary:
     - durableMemoryCount
     - selectedMemoryIds
   type: object
+RuntimeMemoryRecallMode:
+  enum:
+    - default
+    - skip
+  type: string
+RuntimeMemoryIntent:
+  enum:
+    - user
+    - feedback
+    - project
+    - reference
+  type: string
+RuntimeMemoryKind:
+  enum:
+    - user
+    - feedback
+    - project
+    - reference
+  type: string
+RuntimeMemoryScope:
+  enum:
+    - user
+    - project
+    - workspace
+    - team
+  type: string
+RuntimeMemoryFreshnessState:
+  enum:
+    - fresh
+    - stale
+    - unknown
+  type: string
+RuntimeMemoryProposalState:
+  enum:
+    - pending
+    - approved
+    - rejected
+    - ignored
+    - revalidated
+  type: string
+RuntimeMemoryProposalDecisionAction:
+  enum:
+    - approve
+    - reject
+    - ignore
+    - revalidate
+  type: string
+RuntimeMemorySelectionSummary:
+  additionalProperties: false
+  properties:
+    ignoredCount:
+      type: integer
+    recallMode:
+      $ref: "#/components/schemas/RuntimeMemoryRecallMode"
+    selectedCount:
+      type: integer
+    selectedMemoryIds:
+      items:
+        type: string
+      type: array
+    totalCandidateCount:
+      type: integer
+  required:
+    - totalCandidateCount
+    - selectedCount
+    - ignoredCount
+    - recallMode
+    - selectedMemoryIds
+  type: object
+RuntimeSelectedMemoryItem:
+  additionalProperties: false
+  properties:
+    freshnessState:
+      $ref: "#/components/schemas/RuntimeMemoryFreshnessState"
+    kind:
+      $ref: "#/components/schemas/RuntimeMemoryKind"
+    lastValidatedAt:
+      type: integer
+    memoryId:
+      type: string
+    ownerRef:
+      type: string
+    scope:
+      $ref: "#/components/schemas/RuntimeMemoryScope"
+    sourceRunId:
+      type: string
+    summary:
+      type: string
+    title:
+      type: string
+  required:
+    - memoryId
+    - title
+    - summary
+    - kind
+    - scope
+    - freshnessState
+  type: object
+RuntimeMemoryProposalReview:
+  additionalProperties: false
+  properties:
+    decision:
+      $ref: "#/components/schemas/RuntimeMemoryProposalDecisionAction"
+    note:
+      type: string
+    reviewedAt:
+      type: integer
+    reviewerRef:
+      type: string
+  required:
+    - decision
+    - reviewedAt
+  type: object
+RuntimeMemoryProposal:
+  additionalProperties: false
+  properties:
+    kind:
+      $ref: "#/components/schemas/RuntimeMemoryKind"
+    memoryId:
+      type: string
+    proposalId:
+      type: string
+    proposalReason:
+      type: string
+    proposalState:
+      $ref: "#/components/schemas/RuntimeMemoryProposalState"
+    review:
+      $ref: "#/components/schemas/RuntimeMemoryProposalReview"
+    scope:
+      $ref: "#/components/schemas/RuntimeMemoryScope"
+    sessionId:
+      type: string
+    sourceRunId:
+      type: string
+    summary:
+      type: string
+    title:
+      type: string
+  required:
+    - proposalId
+    - sessionId
+    - sourceRunId
+    - title
+    - summary
+    - kind
+    - scope
+    - proposalState
+    - proposalReason
+  type: object
+RuntimeMemoryFreshnessSummary:
+  additionalProperties: false
+  properties:
+    freshCount:
+      type: integer
+    freshnessRequired:
+      type: boolean
+    staleCount:
+      type: integer
+  required:
+    - freshnessRequired
+    - freshCount
+    - staleCount
+  type: object
 RuntimePermissionEnvelope:
   additionalProperties: true
   type: object
@@ -923,6 +1086,12 @@ RuntimeEventEnvelope:
       type: integer
     message:
       $ref: "#/components/schemas/RuntimeMessage"
+    memoryProposal:
+      $ref: "#/components/schemas/RuntimeMemoryProposal"
+    memorySelectionSummary:
+      $ref: "#/components/schemas/RuntimeMemorySelectionSummary"
+    freshnessSummary:
+      $ref: "#/components/schemas/RuntimeMemoryFreshnessSummary"
     pendingMediation:
       $ref: "#/components/schemas/RuntimePendingMediationSummary"
     payload:
@@ -950,6 +1119,10 @@ RuntimeEventEnvelope:
       type: string
     summary:
       $ref: "#/components/schemas/RuntimeSessionSummary"
+    selectedMemory:
+      items:
+        $ref: "#/components/schemas/RuntimeSelectedMemoryItem"
+      type: array
     toolUseId:
       type: string
     trace:
@@ -1005,6 +1178,11 @@ RuntimeEventKind:
     - runtime.trace.emitted
     - runtime.approval.requested
     - runtime.approval.resolved
+    - memory.selected
+    - memory.proposed
+    - memory.approved
+    - memory.rejected
+    - memory.revalidated
     - runtime.session.updated
     - runtime.error
   type: string
@@ -1118,6 +1296,10 @@ RuntimeRunSnapshot:
       type: string
     lastExecutionOutcome:
       $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+    freshnessSummary:
+      $ref: "#/components/schemas/RuntimeMemoryFreshnessSummary"
+    memoryStateRef:
+      type: string
     modelId:
       type: string
     backgroundState:
@@ -1130,6 +1312,8 @@ RuntimeRunSnapshot:
       type: string
     pendingMediation:
       $ref: "#/components/schemas/RuntimePendingMediationSummary"
+    pendingMemoryProposal:
+      $ref: "#/components/schemas/RuntimeMemoryProposal"
     nextAction:
       type: string
     providerStateSummary:
@@ -1160,6 +1344,10 @@ RuntimeRunSnapshot:
       type: array
     status:
       $ref: "#/components/schemas/RunStatus"
+    selectedMemory:
+      items:
+        $ref: "#/components/schemas/RuntimeSelectedMemoryItem"
+      type: array
     traceContext:
       $ref: "#/components/schemas/RuntimeTraceContext"
     updatedAt:
@@ -1191,8 +1379,19 @@ RuntimeRunSnapshot:
     - artifactRefs
     - traceContext
     - checkpoint
+    - selectedMemory
     - capabilityPlanSummary
     - providerStateSummary
+  type: object
+ResolveRuntimeMemoryProposalInput:
+  additionalProperties: false
+  properties:
+    decision:
+      $ref: "#/components/schemas/RuntimeMemoryProposalDecisionAction"
+    note:
+      type: string
+  required:
+    - decision
   type: object
 RuntimeSecretReferenceState:
   enum:
@@ -1239,8 +1438,14 @@ RuntimeSessionDetail:
       $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
     manifestRevision:
       type: string
+    memorySelectionSummary:
+      $ref: "#/components/schemas/RuntimeMemorySelectionSummary"
+    memoryStateRef:
+      type: string
     memorySummary:
       $ref: "#/components/schemas/RuntimeMemorySummary"
+    pendingMemoryProposalCount:
+      type: integer
     pendingMailbox:
       $ref: "#/components/schemas/RuntimeMailboxSummary"
     pendingApproval:
@@ -1284,6 +1489,9 @@ RuntimeSessionDetail:
     - activeRunId
     - subrunCount
     - memorySummary
+    - memorySelectionSummary
+    - pendingMemoryProposalCount
+    - memoryStateRef
     - capabilityPlanSummary
     - providerStateSummary
   type: object
@@ -1311,8 +1519,14 @@ RuntimeSessionSummary:
       type: string
     manifestRevision:
       type: string
+    memorySelectionSummary:
+      $ref: "#/components/schemas/RuntimeMemorySelectionSummary"
+    memoryStateRef:
+      type: string
     memorySummary:
       $ref: "#/components/schemas/RuntimeMemorySummary"
+    pendingMemoryProposalCount:
+      type: integer
     pendingMailbox:
       $ref: "#/components/schemas/RuntimeMailboxSummary"
     projectId:
@@ -1366,6 +1580,9 @@ RuntimeSessionSummary:
     - activeRunId
     - subrunCount
     - memorySummary
+    - memorySelectionSummary
+    - pendingMemoryProposalCount
+    - memoryStateRef
     - capabilityPlanSummary
     - providerStateSummary
   type: object
@@ -1417,8 +1634,16 @@ SubmitRuntimeTurnInput:
   properties:
     content:
       type: string
+    ignoredMemoryIds:
+      items:
+        type: string
+      type: array
+    memoryIntent:
+      $ref: "#/components/schemas/RuntimeMemoryIntent"
     permissionMode:
       $ref: "#/components/schemas/RuntimePermissionMode"
+    recallMode:
+      $ref: "#/components/schemas/RuntimeMemoryRecallMode"
   required:
     - content
   type: object

@@ -23,6 +23,13 @@ type ApprovalResolutionState = (
     String,
 );
 
+type MemoryProposalResolutionState = (
+    RuntimeMemoryProposal,
+    RuntimeRunSnapshot,
+    String,
+    String,
+);
+
 fn usage_summary_from_tokens(total_tokens: Option<u32>) -> RuntimeUsageSummary {
     RuntimeUsageSummary {
         input_tokens: 0,
@@ -319,6 +326,48 @@ impl AgentRuntimeCore {
 
         Ok(run)
     }
+
+    pub(crate) async fn resolve_memory_proposal(
+        adapter: &RuntimeAdapter,
+        session_id: &str,
+        proposal_id: &str,
+        input: ResolveRuntimeMemoryProposalInput,
+    ) -> Result<RuntimeRunSnapshot, AppError> {
+        let now = timestamp_now();
+        let decision_status = approval_flow::memory_proposal_decision_status(&input.decision)?;
+        let (proposal, run, conversation_id, project_id) = apply_memory_proposal_resolution_state(
+            adapter,
+            session_id,
+            proposal_id,
+            now,
+            decision_status,
+            &input,
+        )?;
+
+        execution_events::record_memory_proposal_resolution_activity(
+            adapter,
+            session_id,
+            now,
+            &project_id,
+            &run,
+            &proposal,
+            &input.decision,
+        )
+        .await?;
+        execution_events::emit_memory_proposal_resolution_events(
+            adapter,
+            session_id,
+            now,
+            conversation_id,
+            project_id,
+            run.clone(),
+            proposal,
+            input.decision,
+        )
+        .await?;
+
+        Ok(run)
+    }
 }
 
 fn load_pending_checkpoint(
@@ -602,7 +651,12 @@ fn apply_submit_state(
     );
     aggregate.detail.summary.active_run_id = aggregate.detail.run.id.clone();
     aggregate.detail.summary.capability_summary = run_context.capability_plan_summary.clone();
-    aggregate.detail.summary.memory_summary = run_context.actor_manifest.memory_summary();
+    aggregate.detail.summary.memory_summary = run_context.memory_selection.summary.clone();
+    aggregate.detail.summary.memory_selection_summary =
+        run_context.memory_selection.selection_summary.clone();
+    aggregate.detail.summary.pending_memory_proposal_count =
+        u64::from(run_context.pending_memory_proposal.is_some());
+    aggregate.detail.summary.memory_state_ref = run_context.memory_selection.memory_state_ref.clone();
     aggregate.detail.summary.provider_state_summary = run_context.provider_state_summary.clone();
     aggregate.detail.summary.pending_mediation = pending_mediation.clone();
     aggregate.detail.summary.capability_state_ref = Some(run_context.capability_state_ref.clone());
@@ -630,6 +684,11 @@ fn apply_submit_state(
     } else {
         "idle".into()
     });
+    aggregate.detail.run.selected_memory = run_context.memory_selection.selected_memory.clone();
+    aggregate.detail.run.freshness_summary =
+        Some(run_context.memory_selection.freshness_summary.clone());
+    aggregate.detail.run.pending_memory_proposal = run_context.pending_memory_proposal.clone();
+    aggregate.detail.run.memory_state_ref = run_context.memory_selection.memory_state_ref.clone();
     aggregate.detail.run.actor_ref = actor_ref.clone();
     aggregate.detail.run.approval_state = if requires_approval {
         "pending".into()
@@ -654,12 +713,18 @@ fn apply_submit_state(
     aggregate.detail.run.resolved_actor_kind = requested_actor_kind;
     aggregate.detail.run.resolved_actor_id = requested_actor_id;
     aggregate.detail.run.resolved_actor_label = Some(actor_label);
+    aggregate.detail.memory_summary = run_context.memory_selection.summary.clone();
+    aggregate.detail.memory_selection_summary = run_context.memory_selection.selection_summary.clone();
+    aggregate.detail.pending_memory_proposal_count =
+        u64::from(run_context.pending_memory_proposal.is_some());
+    aggregate.detail.memory_state_ref = run_context.memory_selection.memory_state_ref.clone();
     aggregate.detail.capability_summary = run_context.capability_plan_summary.clone();
     aggregate.detail.provider_state_summary = run_context.provider_state_summary.clone();
     aggregate.detail.pending_mediation = pending_mediation;
     aggregate.detail.capability_state_ref = Some(run_context.capability_state_ref.clone());
     aggregate.detail.last_execution_outcome = last_execution_outcome;
-    if let actor_manifest::CompiledActorManifest::Team(team_manifest) = &run_context.actor_manifest {
+    if let actor_manifest::CompiledActorManifest::Team(team_manifest) = &run_context.actor_manifest
+    {
         team_runtime::apply_team_runtime_projection(
             &mut aggregate.detail,
             team_manifest,
@@ -857,7 +922,11 @@ fn apply_approval_resolution_state(
     );
     aggregate.detail.summary.session_policy = session_policy.contract_snapshot();
     aggregate.detail.summary.capability_summary = capability_projection.plan_summary.clone();
-    aggregate.detail.summary.memory_summary = actor_manifest.memory_summary();
+    aggregate.detail.summary.memory_summary = aggregate.detail.memory_summary.clone();
+    aggregate.detail.summary.memory_selection_summary = aggregate.detail.memory_selection_summary.clone();
+    aggregate.detail.summary.pending_memory_proposal_count =
+        aggregate.detail.pending_memory_proposal_count;
+    aggregate.detail.summary.memory_state_ref = aggregate.detail.memory_state_ref.clone();
     aggregate.detail.summary.provider_state_summary =
         capability_projection.provider_state_summary.clone();
     aggregate.detail.summary.pending_mediation = pending_mediation.clone();
@@ -894,4 +963,112 @@ fn apply_approval_resolution_state(
         conversation_id,
         project_id,
     ))
+}
+
+fn apply_memory_proposal_resolution_state(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    proposal_id: &str,
+    now: u64,
+    decision_status: &str,
+    input: &ResolveRuntimeMemoryProposalInput,
+) -> Result<MemoryProposalResolutionState, AppError> {
+    let mut sessions = adapter
+        .state
+        .sessions
+        .lock()
+        .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+    let aggregate = sessions
+        .get_mut(session_id)
+        .ok_or_else(|| AppError::not_found("runtime session"))?;
+    let proposal = aggregate
+        .detail
+        .run
+        .pending_memory_proposal
+        .as_mut()
+        .ok_or_else(|| AppError::not_found("runtime memory proposal"))?;
+    if proposal.proposal_id != proposal_id {
+        return Err(AppError::not_found("runtime memory proposal"));
+    }
+    if proposal.proposal_state != "pending" {
+        return Err(AppError::invalid_input(format!(
+            "runtime memory proposal `{proposal_id}` is already {}",
+            proposal.proposal_state
+        )));
+    }
+
+    proposal.proposal_state = decision_status.into();
+    proposal.review = Some(RuntimeMemoryProposalReview {
+        decision: input.decision.clone(),
+        reviewed_at: now,
+        reviewer_ref: Some(format!("session:{session_id}")),
+        note: input.note.clone(),
+    });
+    let resolved_proposal = proposal.clone();
+
+    if matches!(decision_status, "approved" | "revalidated") {
+        let record = memory_writer::build_persisted_memory_record(
+            &resolved_proposal,
+            &aggregate.detail.summary.project_id,
+            now,
+        );
+        let body = memory_writer::build_persisted_memory_body(
+            &resolved_proposal,
+            input.note.as_deref(),
+            now,
+        );
+        adapter.persist_runtime_memory_record(&record, &body)?;
+    }
+
+    aggregate.detail.summary.updated_at = now;
+    aggregate.detail.run.updated_at = now;
+    aggregate.detail.summary.pending_memory_proposal_count = 0;
+    aggregate.detail.pending_memory_proposal_count = 0;
+    let next_memory_state_ref =
+        memory_runtime::runtime_memory_state_ref(&aggregate.detail.run.id, now);
+    aggregate.detail.summary.memory_state_ref = next_memory_state_ref.clone();
+    aggregate.detail.memory_state_ref = next_memory_state_ref.clone();
+    aggregate.detail.run.memory_state_ref = next_memory_state_ref;
+
+    if matches!(decision_status, "approved" | "revalidated") {
+        aggregate.detail.memory_summary.durable_memory_count += 1;
+        aggregate.detail.summary.memory_summary.durable_memory_count += 1;
+        if let Some(item) = aggregate
+            .detail
+            .run
+            .selected_memory
+            .iter_mut()
+            .find(|item| item.memory_id == resolved_proposal.memory_id)
+        {
+            item.title = resolved_proposal.title.clone();
+            item.summary = resolved_proposal.summary.clone();
+            item.kind = resolved_proposal.kind.clone();
+            item.scope = resolved_proposal.scope.clone();
+            item.freshness_state = if decision_status == "revalidated" {
+                "revalidated".into()
+            } else {
+                "fresh".into()
+            };
+            item.last_validated_at = Some(now);
+        }
+        if let Some(freshness_summary) = aggregate.detail.run.freshness_summary.as_mut() {
+            freshness_summary.fresh_count = aggregate
+                .detail
+                .run
+                .selected_memory
+                .iter()
+                .filter(|item| matches!(item.freshness_state.as_str(), "fresh" | "revalidated"))
+                .count() as u64;
+            freshness_summary.stale_count =
+                aggregate.detail.run.selected_memory.len() as u64 - freshness_summary.fresh_count;
+        }
+    }
+
+    sync_runtime_session_detail(&mut aggregate.detail);
+    let run = aggregate.detail.run.clone();
+    let conversation_id = aggregate.detail.summary.conversation_id.clone();
+    let project_id = aggregate.detail.summary.project_id.clone();
+    adapter.persist_session(session_id, aggregate)?;
+
+    Ok((resolved_proposal, run, conversation_id, project_id))
 }

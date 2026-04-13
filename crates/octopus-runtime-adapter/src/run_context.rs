@@ -11,6 +11,8 @@ pub(crate) struct RunContext {
     pub(crate) capability_plan_summary: RuntimeCapabilityPlanSummary,
     pub(crate) provider_state_summary: Vec<RuntimeCapabilityProviderState>,
     pub(crate) capability_state_ref: String,
+    pub(crate) memory_selection: memory_selector::RuntimeMemorySelection,
+    pub(crate) pending_memory_proposal: Option<RuntimeMemoryProposal>,
     pub(crate) trace_context: RuntimeTraceContext,
     pub(crate) now: u64,
 }
@@ -22,7 +24,7 @@ impl RuntimeAdapter {
         input: &SubmitRuntimeTurnInput,
         now: u64,
     ) -> Result<RunContext, AppError> {
-        let (conversation_id, session_policy_snapshot_ref, run_id, capability_state_ref) = {
+        let (conversation_id, project_id, session_policy_snapshot_ref, run_id, capability_state_ref) = {
             let sessions = self
                 .state
                 .sessions
@@ -33,6 +35,7 @@ impl RuntimeAdapter {
                 .ok_or_else(|| AppError::not_found("runtime session"))?;
             (
                 aggregate.detail.summary.conversation_id.clone(),
+                aggregate.detail.summary.project_id.clone(),
                 aggregate.metadata.session_policy_snapshot_ref.clone(),
                 aggregate.detail.run.id.clone(),
                 aggregate
@@ -62,6 +65,16 @@ impl RuntimeAdapter {
                 &capability_store,
             )
             .await?;
+        let memory_selection =
+            self.select_runtime_memory(&session_policy, &project_id, &run_id, now, input)?;
+        let pending_memory_proposal = memory_writer::build_memory_proposal(
+            session_id,
+            &run_id,
+            &project_id,
+            &memory_runtime::parse_memory_policy(&session_policy.memory_policy),
+            input,
+            &memory_selection.selected_memory,
+        );
 
         Ok(RunContext {
             session_id: session_id.to_string(),
@@ -73,6 +86,8 @@ impl RuntimeAdapter {
             capability_plan_summary: capability_projection.plan_summary,
             provider_state_summary: capability_projection.provider_state_summary,
             capability_state_ref: capability_projection.capability_state_ref,
+            memory_selection,
+            pending_memory_proposal,
             trace_context: trace_context::runtime_trace_context(session_id, None),
             now,
         })

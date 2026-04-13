@@ -77,6 +77,8 @@ impl RuntimeSessionService for RuntimeAdapter {
             )
             .await?;
         let capability_summary = capability_projection.plan_summary.clone();
+        let memory_selection_summary = RuntimeMemorySelectionSummary::default();
+        let memory_state_ref = memory_runtime::runtime_memory_state_ref(&run_id, now);
 
         let mut detail = RuntimeSessionDetail {
             summary: RuntimeSessionSummary {
@@ -100,6 +102,9 @@ impl RuntimeSessionService for RuntimeAdapter {
                 pending_mailbox: None,
                 background_run: None,
                 memory_summary,
+                memory_selection_summary: memory_selection_summary.clone(),
+                pending_memory_proposal_count: 0,
+                memory_state_ref: memory_state_ref.clone(),
                 capability_summary: capability_summary.clone(),
                 provider_state_summary: capability_projection.provider_state_summary.clone(),
                 pending_mediation: None,
@@ -115,6 +120,9 @@ impl RuntimeSessionService for RuntimeAdapter {
             pending_mailbox: None,
             background_run: None,
             memory_summary: manifest.memory_summary(),
+            memory_selection_summary,
+            pending_memory_proposal_count: 0,
+            memory_state_ref: memory_state_ref.clone(),
             capability_summary: capability_summary.clone(),
             provider_state_summary: capability_projection.provider_state_summary.clone(),
             pending_mediation: None,
@@ -128,6 +136,10 @@ impl RuntimeSessionService for RuntimeAdapter {
                 current_step: "ready".into(),
                 started_at: now,
                 updated_at: now,
+                selected_memory: Vec::new(),
+                freshness_summary: Some(RuntimeMemoryFreshnessSummary::default()),
+                pending_memory_proposal: None,
+                memory_state_ref: memory_state_ref.clone(),
                 configured_model_id: None,
                 configured_model_name: None,
                 model_id: None,
@@ -225,6 +237,10 @@ impl RuntimeSessionService for RuntimeAdapter {
             })),
             run: Some(detail.run.clone()),
             message: None,
+            memory_proposal: None,
+            memory_selection_summary: Some(detail.summary.memory_selection_summary.clone()),
+            freshness_summary: detail.run.freshness_summary.clone(),
+            selected_memory: Some(detail.run.selected_memory.clone()),
             trace: None,
             approval: None,
             decision: None,

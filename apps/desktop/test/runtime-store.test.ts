@@ -8,6 +8,7 @@ import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 import * as tauriClient from '@/tauri/client'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
+import { createSessionDetail } from './support/workspace-fixture-runtime'
 
 async function waitFor(predicate: () => boolean, timeoutMs = 2000) {
   const startedAt = Date.now()
@@ -350,6 +351,127 @@ describe('useRuntimeStore', () => {
       && runtime.activeRun?.status === 'completed'
       && runtime.activeMessages.some((message) => message.content === 'Then summarize the output.'),
     )
+
+    runtime.dispose()
+  })
+
+  it('resolves pending memory proposals through the runtime client and refreshes the active session', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    const detail = createSessionDetail(
+      'conv-memory-proposal',
+      'proj-redesign',
+      'Memory Proposal Session',
+    ) as RuntimeSessionDetail & {
+      summary: RuntimeSessionDetail['summary'] & {
+        memorySelectionSummary: {
+          totalCandidateCount: number
+          selectedCount: number
+          ignoredCount: number
+          recallMode: 'default'
+          selectedMemoryIds: string[]
+        }
+        pendingMemoryProposalCount: number
+        memoryStateRef: string
+      }
+      run: RuntimeSessionDetail['run'] & {
+        selectedMemory: Array<{
+          memoryId: string
+          title: string
+          summary: string
+          kind: string
+          scope: string
+          freshnessState: string
+        }>
+        freshnessSummary: {
+          freshnessRequired: boolean
+          staleCount: number
+          freshCount: number
+        }
+        pendingMemoryProposal: {
+          proposalId: string
+          status: string
+          reason: string
+          targetScope: string
+          review: {
+            status: string
+            requiresApproval: boolean
+          }
+        }
+        memoryStateRef: string
+      }
+    }
+
+    detail.summary.memorySelectionSummary = {
+      totalCandidateCount: 1,
+      selectedCount: 1,
+      ignoredCount: 0,
+      recallMode: 'default',
+      selectedMemoryIds: ['mem-1'],
+    }
+    detail.summary.pendingMemoryProposalCount = 1
+    detail.summary.memoryStateRef = 'memory-state-conv-memory-proposal'
+    ;(detail.run as any).selectedMemory = [
+      {
+        memoryId: 'mem-1',
+        title: 'Preferred delivery style',
+        summary: 'User prefers concise implementation summaries.',
+        kind: 'user',
+        scope: 'user-private',
+        freshnessState: 'fresh',
+      },
+    ]
+    ;(detail.run as any).freshnessSummary = {
+      freshnessRequired: true,
+      staleCount: 0,
+      freshCount: 1,
+    }
+    ;(detail.run as any).pendingMemoryProposal = {
+      proposalId: 'memory-proposal-1',
+      status: 'pending-review',
+      reason: 'Validated explicit user preference from latest turn.',
+      targetScope: 'user-private',
+      review: {
+        status: 'pending-review',
+        requiresApproval: false,
+      },
+    }
+    ;(detail.run as any).memoryStateRef = 'memory-state-conv-memory-proposal'
+
+    const resolvedDetail = structuredClone(detail) as typeof detail
+    resolvedDetail.summary.pendingMemoryProposalCount = 0
+    ;(resolvedDetail.run as any).pendingMemoryProposal = undefined
+
+    const resolveMemoryProposalSpy = vi.fn(async () => resolvedDetail.run)
+    const baseImplementation = vi.mocked(tauriClient.createWorkspaceClient).getMockImplementation()
+    expect(baseImplementation).toBeTypeOf('function')
+
+    vi.spyOn(tauriClient, 'createWorkspaceClient').mockImplementation((context) => {
+      const baseClient = baseImplementation!(context)
+      return {
+        ...baseClient,
+        runtime: {
+          ...baseClient.runtime,
+          loadSession: async () => structuredClone(resolvedDetail),
+          resolveMemoryProposal: resolveMemoryProposalSpy,
+        },
+      } as ReturnType<typeof tauriClient.createWorkspaceClient>
+    })
+
+    runtime.setActiveSession(detail)
+
+    await (runtime as any).resolveMemoryProposal('approve')
+
+    expect(resolveMemoryProposalSpy).toHaveBeenCalledWith(
+      detail.summary.id,
+      'memory-proposal-1',
+      {
+        decision: 'approve',
+      },
+      expect.any(String),
+    )
+    expect((runtime.activeSession?.run as any).pendingMemoryProposal).toBeUndefined()
+    expect((runtime.activeSession?.summary as any).pendingMemoryProposalCount).toBe(0)
 
     runtime.dispose()
   })
@@ -942,6 +1064,7 @@ describe('useRuntimeStore', () => {
         }),
         submitUserTurn: async () => connection.workspaceId === 'ws-local' ? localDetail.run : enterpriseDetail.run,
         resolveApproval: async () => {},
+        resolveMemoryProposal: async () => {},
       },
     }) as ReturnType<typeof tauriClient.createWorkspaceClient>)
 

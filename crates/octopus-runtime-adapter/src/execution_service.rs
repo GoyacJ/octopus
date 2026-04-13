@@ -29,6 +29,15 @@ impl RuntimeExecutionService for RuntimeAdapter {
         approval_flow::resolve_approval(self, session_id, approval_id, input).await
     }
 
+    async fn resolve_memory_proposal(
+        &self,
+        session_id: &str,
+        proposal_id: &str,
+        input: ResolveRuntimeMemoryProposalInput,
+    ) -> Result<RuntimeRunSnapshot, AppError> {
+        approval_flow::resolve_memory_proposal(self, session_id, proposal_id, input).await
+    }
+
     async fn subscribe_events(
         &self,
         session_id: &str,

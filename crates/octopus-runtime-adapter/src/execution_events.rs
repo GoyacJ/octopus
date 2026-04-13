@@ -346,6 +346,92 @@ pub(super) async fn emit_submit_turn_events(
         });
     }
 
+    if !run.selected_memory.is_empty() {
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "memory.selected".into(),
+            kind: Some("memory.selected".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            payload: Some(json!({
+                "selectedMemory": run.selected_memory.clone(),
+                "memorySelectionSummary": {
+                    "selectedCount": run.selected_memory.len(),
+                },
+                "freshnessSummary": run.freshness_summary.clone(),
+                "run": run.clone(),
+            })),
+            run: Some(run.clone()),
+            message: None,
+            memory_proposal: None,
+            memory_selection_summary: Some(RuntimeMemorySelectionSummary {
+                total_candidate_count: run.selected_memory.len() as u64,
+                selected_count: run.selected_memory.len() as u64,
+                ignored_count: 0,
+                recall_mode: "default".into(),
+                selected_memory_ids: run
+                    .selected_memory
+                    .iter()
+                    .map(|item| item.memory_id.clone())
+                    .collect(),
+            }),
+            freshness_summary: run.freshness_summary.clone(),
+            selected_memory: Some(run.selected_memory.clone()),
+            trace: None,
+            approval: None,
+            decision: None,
+            summary: None,
+            error: None,
+            capability_plan_summary: Some(run.capability_plan_summary.clone()),
+            provider_state_summary: Some(run.provider_state_summary.clone()),
+            pending_mediation: run.pending_mediation.clone(),
+            capability_state_ref: run.capability_state_ref.clone(),
+            last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
+        });
+    }
+
+    if let Some(memory_proposal) = run.pending_memory_proposal.clone() {
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "memory.proposed".into(),
+            kind: Some("memory.proposed".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            payload: Some(json!({
+                "memoryProposal": memory_proposal.clone(),
+                "run": run.clone(),
+            })),
+            run: Some(run.clone()),
+            message: None,
+            memory_proposal: Some(memory_proposal),
+            memory_selection_summary: None,
+            freshness_summary: run.freshness_summary.clone(),
+            selected_memory: Some(run.selected_memory.clone()),
+            trace: None,
+            approval: None,
+            decision: None,
+            summary: None,
+            error: None,
+            capability_plan_summary: Some(run.capability_plan_summary.clone()),
+            provider_state_summary: Some(run.provider_state_summary.clone()),
+            pending_mediation: run.pending_mediation.clone(),
+            capability_state_ref: run.capability_state_ref.clone(),
+            last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
+        });
+    }
+
     if let (Some(workflow_run_id), Some(workflow_detail)) =
         (run.workflow_run.clone(), run.workflow_run_detail.clone())
     {
@@ -480,6 +566,140 @@ pub(super) async fn emit_submit_turn_events(
         adapter.emit_event(session_id, event).await?;
     }
 
+    Ok(())
+}
+
+pub(super) async fn record_memory_proposal_resolution_activity(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    now: u64,
+    project_id: &str,
+    run: &RuntimeRunSnapshot,
+    proposal: &RuntimeMemoryProposal,
+    decision: &str,
+) -> Result<(), AppError> {
+    adapter
+        .state
+        .observation
+        .append_trace(TraceEventRecord {
+            id: format!("trace-{}", Uuid::new_v4()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: Some(project_id.to_string()),
+            run_id: Some(run.id.clone()),
+            session_id: Some(session_id.into()),
+            event_kind: "memory_proposal_resolved".into(),
+            title: "Runtime memory proposal resolved".into(),
+            detail: format!("{} -> {}", proposal.proposal_id, decision),
+            created_at: now,
+        })
+        .await?;
+    adapter
+        .state
+        .observation
+        .append_audit(AuditRecord {
+            id: format!("audit-{}", Uuid::new_v4()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: Some(project_id.to_string()),
+            actor_type: "session".into(),
+            actor_id: session_id.into(),
+            action: "runtime.resolve_memory_proposal".into(),
+            resource: proposal.proposal_id.clone(),
+            outcome: decision.to_string(),
+            created_at: now,
+        })
+        .await?;
+    Ok(())
+}
+
+pub(super) async fn emit_memory_proposal_resolution_events(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    now: u64,
+    conversation_id: String,
+    project_id: String,
+    run: RuntimeRunSnapshot,
+    proposal: RuntimeMemoryProposal,
+    decision: String,
+) -> Result<(), AppError> {
+    let event_type = match decision.as_str() {
+        "approve" => "memory.approved",
+        "revalidate" => "memory.revalidated",
+        _ => "memory.rejected",
+    };
+    let events = vec![
+        RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: event_type.into(),
+            kind: Some(event_type.into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            payload: Some(json!({
+                "memoryProposal": proposal.clone(),
+                "decision": decision.clone(),
+                "run": run.clone(),
+            })),
+            run: Some(run.clone()),
+            message: None,
+            memory_proposal: Some(proposal.clone()),
+            memory_selection_summary: None,
+            freshness_summary: run.freshness_summary.clone(),
+            selected_memory: Some(run.selected_memory.clone()),
+            trace: None,
+            approval: None,
+            decision: Some(decision.clone()),
+            summary: None,
+            error: None,
+            capability_plan_summary: Some(run.capability_plan_summary.clone()),
+            provider_state_summary: Some(run.provider_state_summary.clone()),
+            pending_mediation: run.pending_mediation.clone(),
+            capability_state_ref: run.capability_state_ref.clone(),
+            last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
+        },
+        RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "runtime.run.updated".into(),
+            kind: Some("runtime.run.updated".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id,
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            payload: Some(json!({
+                "memoryProposal": proposal,
+                "decision": decision,
+                "run": run.clone(),
+            })),
+            run: Some(run),
+            message: None,
+            memory_proposal: None,
+            memory_selection_summary: None,
+            freshness_summary: None,
+            selected_memory: None,
+            trace: None,
+            approval: None,
+            decision: None,
+            summary: None,
+            error: None,
+            capability_plan_summary: None,
+            provider_state_summary: None,
+            pending_mediation: None,
+            capability_state_ref: None,
+            last_execution_outcome: None,
+            ..Default::default()
+        },
+    ];
+
+    for event in events {
+        adapter.emit_event(session_id, event).await?;
+    }
     Ok(())
 }
 

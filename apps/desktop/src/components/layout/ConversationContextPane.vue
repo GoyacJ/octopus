@@ -116,17 +116,10 @@ const summaryCards = computed(() => [
     value: String(conversationResources.value.length),
   },
 ])
-const memoryEntries = computed(() =>
-  runtime.activeMessages
-    .filter(message => message.senderType === 'agent')
-    .slice(-4)
-    .map(message => ({
-      id: message.id,
-      title: message.actorId ?? message.senderId,
-      detail: message.content,
-      source: message.actorKind === 'team' ? t('conversation.detail.memories.agentSource') : t('conversation.detail.memories.conversationSource'),
-    })),
-)
+const memorySelectionSummary = computed(() => runtime.activeSession?.memorySelectionSummary ?? runtime.activeSession?.summary.memorySelectionSummary ?? null)
+const selectedMemory = computed(() => runtime.activeRun?.selectedMemory ?? [])
+const freshnessSummary = computed(() => runtime.activeRun?.freshnessSummary ?? null)
+const pendingMemoryProposal = computed(() => runtime.activeRun?.pendingMemoryProposal ?? null)
 const toolEntries = computed(() => {
   const entries = new Map<string, { toolId: string, label: string, kind: string, count: number }>()
 
@@ -267,20 +260,48 @@ function setDetail(detail: string) {
         </div>
 
         <div v-else-if="shell.detailFocus === 'memories'" class="space-y-4">
-          <div v-if="memoryEntries.length" class="space-y-2">
+          <div v-if="memorySelectionSummary" class="grid grid-cols-2 gap-3">
+            <UiStatTile label="Selected" :value="String(memorySelectionSummary.selectedCount)" />
+            <UiStatTile label="Ignored" :value="String(memorySelectionSummary.ignoredCount)" />
+          </div>
+          <UiPanelFrame v-if="freshnessSummary" variant="subtle" padding="md" class="space-y-2">
+            <div class="flex items-center justify-between gap-3">
+              <div class="text-xs text-text-secondary">Freshness</div>
+              <UiBadge :label="freshnessSummary.freshnessRequired ? 'Required' : 'Optional'" subtle />
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <UiStatTile label="Fresh" :value="String(freshnessSummary.freshCount)" />
+              <UiStatTile label="Stale" :value="String(freshnessSummary.staleCount)" />
+            </div>
+          </UiPanelFrame>
+          <UiPanelFrame v-if="pendingMemoryProposal" variant="subtle" padding="md" class="space-y-2">
+            <div class="flex items-start justify-between gap-3">
+              <div>
+                <div class="text-sm font-semibold text-text-primary">{{ pendingMemoryProposal.title }}</div>
+                <div class="mt-1 text-xs text-text-secondary">{{ pendingMemoryProposal.summary }}</div>
+              </div>
+              <UiBadge :label="pendingMemoryProposal.proposalState" subtle />
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <UiBadge :label="pendingMemoryProposal.kind" subtle />
+              <UiBadge :label="pendingMemoryProposal.scope" subtle />
+            </div>
+          </UiPanelFrame>
+          <div v-if="selectedMemory.length" class="space-y-2">
             <UiListRow
-              v-for="entry in memoryEntries"
-              :key="entry.id"
+              v-for="entry in selectedMemory"
+              :key="entry.memoryId"
               :title="entry.title"
-              :subtitle="entry.detail"
+              :subtitle="entry.summary"
             >
               <template #meta>
-                <UiBadge :label="entry.source" subtle />
+                <UiBadge :label="entry.kind" subtle />
+                <UiBadge :label="entry.freshnessState" subtle />
               </template>
             </UiListRow>
           </div>
           <UiEmptyState
-            v-else
+            v-else-if="!pendingMemoryProposal"
             :title="t('conversation.detail.memories.emptyTitle')"
             :description="t('conversation.detail.memories.emptyDescription')"
           />

@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 443be449350c0c5f01a2510ed4e3648bf0cb8a894b0b4f3152313553cb48275f
+// Source hash: 95634dc5bc4a73ad15b842f67db96b518dc446c632ea4f3e1f19d5dbbde6bafa
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "443be449350c0c5f01a2510ed4e3648bf0cb8a894b0b4f3152313553cb48275f"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "95634dc5bc4a73ad15b842f67db96b518dc446c632ea4f3e1f19d5dbbde6bafa"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -1311,6 +1311,11 @@ export interface ResolveRuntimeApprovalInput {
   decision: DecisionAction
 }
 
+export interface ResolveRuntimeMemoryProposalInput {
+  decision: RuntimeMemoryProposalDecisionAction
+  note?: string
+}
+
 export interface ResourceActionGrant {
   actions: string[]
   resourceType: string
@@ -1528,10 +1533,13 @@ export interface RuntimeEventEnvelope {
   emittedAt: number
   error?: string
   eventType: RuntimeEventKind
+  freshnessSummary?: RuntimeMemoryFreshnessSummary
   id: string
   iteration?: number
   kind?: RuntimeEventKind
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
+  memoryProposal?: RuntimeMemoryProposal
+  memorySelectionSummary?: RuntimeMemorySelectionSummary
   message?: RuntimeMessage
   outcome?: string
   parentRunId?: string
@@ -1541,6 +1549,7 @@ export interface RuntimeEventEnvelope {
   providerStateSummary?: RuntimeCapabilityProviderState[]
   run?: RuntimeRunSnapshot
   runId?: string
+  selectedMemory?: RuntimeSelectedMemoryItem[]
   sequence: number
   sessionId: string
   summary?: RuntimeSessionSummary
@@ -1551,7 +1560,7 @@ export interface RuntimeEventEnvelope {
   workspaceId: string
 }
 
-export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "trace.emitted" | "subrun.spawned" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "runtime.session.updated" | "runtime.error"
+export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "trace.emitted" | "subrun.spawned" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "memory.selected" | "memory.proposed" | "memory.approved" | "memory.rejected" | "memory.revalidated" | "runtime.session.updated" | "runtime.error"
 
 export interface RuntimeHandoffSummary {
   artifactRefs: string[]
@@ -1570,6 +1579,55 @@ export interface RuntimeMailboxSummary {
   status: string
   totalMessages: number
   updatedAt: number
+}
+
+export type RuntimeMemoryFreshnessState = "fresh" | "stale" | "unknown"
+
+export interface RuntimeMemoryFreshnessSummary {
+  freshCount: number
+  freshnessRequired: boolean
+  staleCount: number
+}
+
+export type RuntimeMemoryIntent = "user" | "feedback" | "project" | "reference"
+
+export type RuntimeMemoryKind = "user" | "feedback" | "project" | "reference"
+
+export interface RuntimeMemoryProposal {
+  kind: RuntimeMemoryKind
+  memoryId?: string
+  proposalId: string
+  proposalReason: string
+  proposalState: RuntimeMemoryProposalState
+  review?: RuntimeMemoryProposalReview
+  scope: RuntimeMemoryScope
+  sessionId: string
+  sourceRunId: string
+  summary: string
+  title: string
+}
+
+export type RuntimeMemoryProposalDecisionAction = "approve" | "reject" | "ignore" | "revalidate"
+
+export interface RuntimeMemoryProposalReview {
+  decision: RuntimeMemoryProposalDecisionAction
+  note?: string
+  reviewedAt: number
+  reviewerRef?: string
+}
+
+export type RuntimeMemoryProposalState = "pending" | "approved" | "rejected" | "ignored" | "revalidated"
+
+export type RuntimeMemoryRecallMode = "default" | "skip"
+
+export type RuntimeMemoryScope = "user" | "project" | "workspace" | "team"
+
+export interface RuntimeMemorySelectionSummary {
+  ignoredCount: number
+  recallMode: RuntimeMemoryRecallMode
+  selectedCount: number
+  selectedMemoryIds: string[]
+  totalCandidateCount: number
 }
 
 export interface RuntimeMemorySummary {
@@ -1658,14 +1716,17 @@ export interface RuntimeRunSnapshot {
   currentStep: string
   delegatedByToolCallId?: string
   effectiveConfigHash: string
+  freshnessSummary?: RuntimeMemoryFreshnessSummary
   handoffRef?: string
   id: string
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
   mailboxRef?: string
+  memoryStateRef?: string
   modelId?: string
   nextAction?: string
   parentRunId?: string
   pendingMediation?: RuntimePendingMediationSummary
+  pendingMemoryProposal?: RuntimeMemoryProposal
   providerStateSummary: RuntimeCapabilityProviderState[]
   requestedActorId?: string
   requestedActorKind?: ConversationActorKind
@@ -1674,6 +1735,7 @@ export interface RuntimeRunSnapshot {
   resolvedActorLabel?: string
   resolvedTarget?: ResolvedExecutionTarget
   runKind: RuntimeRunKind
+  selectedMemory: RuntimeSelectedMemoryItem[]
   sessionId: string
   startedAt: number
   startedFromScopeSet: RuntimeConfigScope[]
@@ -1695,6 +1757,18 @@ export interface RuntimeSecretReferenceStatus {
   status: RuntimeSecretReferenceState
 }
 
+export interface RuntimeSelectedMemoryItem {
+  freshnessState: RuntimeMemoryFreshnessState
+  kind: RuntimeMemoryKind
+  lastValidatedAt?: number
+  memoryId: string
+  ownerRef?: string
+  scope: RuntimeMemoryScope
+  sourceRunId?: string
+  summary: string
+  title: string
+}
+
 export interface RuntimeSessionDetail {
   activeRunId: string
   backgroundRun?: RuntimeBackgroundRunSummary
@@ -1703,11 +1777,14 @@ export interface RuntimeSessionDetail {
   handoffs: RuntimeHandoffSummary[]
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
   manifestRevision: string
+  memorySelectionSummary: RuntimeMemorySelectionSummary
+  memoryStateRef: string
   memorySummary: RuntimeMemorySummary
   messages: RuntimeMessage[]
   pendingApproval?: RuntimeApprovalRequest
   pendingMailbox?: RuntimeMailboxSummary
   pendingMediation?: RuntimePendingMediationSummary
+  pendingMemoryProposalCount: number
   providerStateSummary: RuntimeCapabilityProviderState[]
   run: RuntimeRunSnapshot
   selectedActorRef: string
@@ -1733,9 +1810,12 @@ export interface RuntimeSessionSummary {
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
   lastMessagePreview?: string
   manifestRevision: string
+  memorySelectionSummary: RuntimeMemorySelectionSummary
+  memoryStateRef: string
   memorySummary: RuntimeMemorySummary
   pendingMailbox?: RuntimeMailboxSummary
   pendingMediation?: RuntimePendingMediationSummary
+  pendingMemoryProposalCount: number
   projectId: string
   providerStateSummary: RuntimeCapabilityProviderState[]
   selectedActorRef: string
@@ -1885,7 +1965,10 @@ export type SkillPackageManifest = CapabilityAssetManifest & unknown
 
 export interface SubmitRuntimeTurnInput {
   content: string
+  ignoredMemoryIds?: string[]
+  memoryIntent?: RuntimeMemoryIntent
   permissionMode?: RuntimePermissionMode
+  recallMode?: RuntimeMemoryRecallMode
 }
 
 export interface SystemAuthStatus {
@@ -2718,6 +2801,9 @@ export interface OctopusApiPaths {
   }
   "/api/v1/runtime/sessions/{sessionId}/events": {
     get: { operationId: "listRuntimeSessionEvents"; response: RuntimeEventEnvelope[]; error: ApiErrorEnvelope }
+  }
+  "/api/v1/runtime/sessions/{sessionId}/memory-proposals/{proposalId}": {
+    post: { operationId: "resolveRuntimeMemoryProposal"; response: RuntimeRunSnapshot; error: ApiErrorEnvelope }
   }
   "/api/v1/runtime/sessions/{sessionId}/turns": {
     post: { operationId: "submitRuntimeTurn"; response: RuntimeRunSnapshot; error: ApiErrorEnvelope }

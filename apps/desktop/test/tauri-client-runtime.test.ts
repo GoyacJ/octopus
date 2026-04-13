@@ -103,18 +103,123 @@ describe('runtime client transport', () => {
     const run = await workspaceClient.runtime.submitUserTurn('runtime-session-conv-1', {
       content: 'hello',
       permissionMode: 'auto',
-    }, 'idem-turn-1')
+      recallMode: 'skip',
+      ignoredMemoryIds: ['mem-1', 'mem-2'],
+      memoryIntent: 'feedback',
+    } as any, 'idem-turn-1')
 
     const request = firstRequest()
     const headers = request.headers as Headers
     expect(JSON.parse(String(request.body))).toMatchObject({
       content: 'hello',
       permissionMode: 'workspace-write',
+      recallMode: 'skip',
+      ignoredMemoryIds: ['mem-1', 'mem-2'],
+      memoryIntent: 'feedback',
     })
     expect(headers.get('Idempotency-Key')).toBe('idem-turn-1')
     expect(run.workflowRun).toBe('wf-run-1')
     expect(run.mailboxRef).toBe('mailbox-1')
     expect(run.workerDispatch?.totalSubruns).toBe(2)
+  })
+
+  it('posts memory proposal review decisions to the runtime memory proposal endpoint', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'runtime-run-conv-memory-1',
+        sessionId: 'runtime-session-conv-memory-1',
+        conversationId: 'conv-memory-1',
+        status: 'completed',
+        currentStep: 'runtime.run.completed',
+        startedAt: 1,
+        updatedAt: 2,
+        runKind: 'primary',
+        actorRef: 'agent:agent-architect',
+        usageSummary: {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        },
+        artifactRefs: [],
+        traceContext: {
+          sessionId: 'runtime-session-conv-memory-1',
+          traceId: 'trace-memory-1',
+          turnId: 'turn-memory-1',
+        },
+        checkpoint: {
+          serializedSession: {},
+          currentIterationIndex: 0,
+          usageSummary: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+          },
+          capabilityPlanSummary: {
+            activatedTools: [],
+            approvedTools: [],
+            authResolvedTools: [],
+            availableResources: [],
+            deferredTools: [],
+            discoverableSkills: [],
+            grantedTools: [],
+            hiddenCapabilities: [],
+            pendingTools: [],
+            providerFallbacks: [],
+            visibleTools: [],
+          },
+        },
+        capabilityPlanSummary: {
+          activatedTools: [],
+          approvedTools: [],
+          authResolvedTools: [],
+          availableResources: [],
+          deferredTools: [],
+          discoverableSkills: [],
+          grantedTools: [],
+          hiddenCapabilities: [],
+          pendingTools: [],
+          providerFallbacks: [],
+          visibleTools: [],
+        },
+        providerStateSummary: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await (workspaceClient.runtime as any).resolveMemoryProposal(
+      'runtime-session-conv-memory-1',
+      'memory-proposal-1',
+      {
+        decision: 'approve',
+        note: 'Approved for durable reuse.',
+      },
+      'idem-memory-proposal-1',
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/sessions/runtime-session-conv-memory-1/memory-proposals/memory-proposal-1',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    )
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      decision: 'approve',
+      note: 'Approved for durable reuse.',
+    })
+    expect(headers.get('Idempotency-Key')).toBe('idem-memory-proposal-1')
   })
 
   it('preserves danger-full-access for authenticated runtime requests', async () => {

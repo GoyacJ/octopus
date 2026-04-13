@@ -1,3 +1,31 @@
-import type { RuntimeMemorySummary as OpenApiRuntimeMemorySummary } from './generated'
+import type {
+  ResolveRuntimeMemoryProposalInput as OpenApiResolveRuntimeMemoryProposalInput,
+  RuntimeMemoryFreshnessState as OpenApiRuntimeMemoryFreshnessState,
+  RuntimeMemoryFreshnessSummary as OpenApiRuntimeMemoryFreshnessSummary,
+  RuntimeMemoryIntent as OpenApiRuntimeMemoryIntent,
+  RuntimeMemoryKind as OpenApiRuntimeMemoryKind,
+  RuntimeMemoryProposal as OpenApiRuntimeMemoryProposal,
+  RuntimeMemoryProposalDecisionAction as OpenApiRuntimeMemoryProposalDecisionAction,
+  RuntimeMemoryProposalReview as OpenApiRuntimeMemoryProposalReview,
+  RuntimeMemoryProposalState as OpenApiRuntimeMemoryProposalState,
+  RuntimeMemoryRecallMode as OpenApiRuntimeMemoryRecallMode,
+  RuntimeMemoryScope as OpenApiRuntimeMemoryScope,
+  RuntimeMemorySelectionSummary as OpenApiRuntimeMemorySelectionSummary,
+  RuntimeMemorySummary as OpenApiRuntimeMemorySummary,
+  RuntimeSelectedMemoryItem as OpenApiRuntimeSelectedMemoryItem,
+} from './generated'
 
 export type RuntimeMemorySummary = OpenApiRuntimeMemorySummary
+export type RuntimeMemorySelectionSummary = OpenApiRuntimeMemorySelectionSummary
+export type RuntimeSelectedMemoryItem = OpenApiRuntimeSelectedMemoryItem
+export type RuntimeMemoryProposal = OpenApiRuntimeMemoryProposal
+export type RuntimeMemoryProposalReview = OpenApiRuntimeMemoryProposalReview
+export type RuntimeMemoryFreshnessSummary = OpenApiRuntimeMemoryFreshnessSummary
+export type RuntimeMemoryRecallMode = OpenApiRuntimeMemoryRecallMode
+export type RuntimeMemoryIntent = OpenApiRuntimeMemoryIntent
+export type RuntimeMemoryKind = OpenApiRuntimeMemoryKind
+export type RuntimeMemoryScope = OpenApiRuntimeMemoryScope
+export type RuntimeMemoryFreshnessState = OpenApiRuntimeMemoryFreshnessState
+export type RuntimeMemoryProposalState = OpenApiRuntimeMemoryProposalState
+export type RuntimeMemoryProposalDecisionAction = OpenApiRuntimeMemoryProposalDecisionAction
+export type ResolveRuntimeMemoryProposalInput = OpenApiResolveRuntimeMemoryProposalInput

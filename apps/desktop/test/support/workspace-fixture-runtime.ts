@@ -240,7 +240,45 @@ export function createSessionDetail(
   const runId = `run-${conversationId}`
   const workflowRunId = `workflow-${runId}`
   const mailboxRef = `mailbox-${runId}`
+  const memoryStateRef = `memstate-${runId}`
   const resolvedSelectedActorRef = selectedActorRef ?? (sessionKind === 'pet' ? 'team:pet-runtime' : 'agent:agent-architect')
+  const selectedMemory = [
+    {
+      memoryId: `mem-${conversationId}-project-context`,
+      title: 'Project context',
+      summary: `Remember the active project scope for ${projectId}.`,
+      kind: 'project',
+      scope: 'project',
+      ownerRef: `project:${projectId}`,
+      sourceRunId: `source-${runId}`,
+      freshnessState: 'fresh',
+      lastValidatedAt: 1,
+    },
+  ]
+  const memorySelectionSummary = {
+    totalCandidateCount: selectedMemory.length,
+    selectedCount: selectedMemory.length,
+    ignoredCount: 0,
+    recallMode: 'default',
+    selectedMemoryIds: selectedMemory.map(item => item.memoryId),
+  }
+  const freshnessSummary = {
+    freshnessRequired: true,
+    staleCount: 0,
+    freshCount: selectedMemory.length,
+  }
+  const pendingMemoryProposal = {
+    proposalId: `memory-proposal-${conversationId}`,
+    sessionId,
+    sourceRunId: runId,
+    memoryId: `mem-${conversationId}-feedback`,
+    title: 'User feedback preference',
+    summary: 'Capture the latest feedback so future turns can reuse it.',
+    kind: 'feedback',
+    scope: 'project',
+    proposalState: 'pending',
+    proposalReason: 'user-feedback',
+  }
   const sessionPolicy = {
     selectedActorRef: resolvedSelectedActorRef,
     selectedConfiguredModelId,
@@ -276,10 +314,13 @@ export function createSessionDetail(
       capabilityPlanSummary: createCapabilityPlanSummary(),
       capabilityStateRef: 'capstate-fixture',
       memorySummary: {
-        summary: 'No durable memories selected.',
-        durableMemoryCount: 0,
-        selectedMemoryIds: [],
+        summary: '1 durable memory selected with fresh validation.',
+        durableMemoryCount: selectedMemory.length,
+        selectedMemoryIds: selectedMemory.map(item => item.memoryId),
       },
+      memorySelectionSummary,
+      pendingMemoryProposalCount: 1,
+      memoryStateRef,
       pendingMediation: createPendingMediationSummary(),
       providerStateSummary: createProviderStateSummary(),
       lastExecutionOutcome: {
@@ -319,6 +360,10 @@ export function createSessionDetail(
       configuredModelName: 'Claude Sonnet 4.5',
       modelId: 'claude-sonnet-4-5',
       nextAction: 'runtime.run.awaitingInput',
+      selectedMemory,
+      freshnessSummary,
+      pendingMemoryProposal,
+      memoryStateRef,
       configSnapshotId: 'cfgsnap-fixture',
       effectiveConfigHash: 'cfg-hash-fixture',
       startedFromScopeSet: ['project'],
@@ -424,10 +469,13 @@ export function createSessionDetail(
     capabilityPlanSummary: createCapabilityPlanSummary(),
     capabilityStateRef: 'capstate-fixture',
     memorySummary: {
-      summary: 'No durable memories selected.',
-      durableMemoryCount: 0,
-      selectedMemoryIds: [],
+      summary: '1 durable memory selected with fresh validation.',
+      durableMemoryCount: selectedMemory.length,
+      selectedMemoryIds: selectedMemory.map(item => item.memoryId),
     },
+    memorySelectionSummary,
+    pendingMemoryProposalCount: 1,
+    memoryStateRef,
     pendingMediation: createPendingMediationSummary(),
     providerStateSummary: createProviderStateSummary(),
     lastExecutionOutcome: {

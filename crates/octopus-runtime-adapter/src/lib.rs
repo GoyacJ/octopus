@@ -14,21 +14,24 @@ mod execution_events;
 mod execution_service;
 mod execution_target;
 mod executor;
+mod handoff_runtime;
+mod mailbox_runtime;
+mod memory_runtime;
+mod memory_selector;
+mod memory_writer;
 mod model_usage;
 mod persistence;
 mod registry;
 mod run_context;
-mod subrun_orchestrator;
-mod team_runtime;
 mod runtime_config;
 mod session_policy;
 mod session_service;
 mod snapshot_store;
+mod subrun_orchestrator;
+mod team_runtime;
 mod trace_context;
 mod turn_submit;
 mod worker_runtime;
-mod mailbox_runtime;
-mod handoff_runtime;
 mod workflow_runtime;
 
 #[cfg(test)]
@@ -46,18 +49,22 @@ use async_trait::async_trait;
 use octopus_core::{
     timestamp_now, AgentRecord, AppError, ApprovalRequestRecord, AuditRecord,
     ConfiguredModelRecord, CostLedgerEntry, CreateRuntimeSessionInput, ModelCatalogSnapshot,
-    ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput, ResolvedExecutionTarget,
+    ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput, ResolveRuntimeMemoryProposalInput,
+    ResolvedExecutionTarget,
     RuntimeBackgroundRunSummary, RuntimeBootstrap, RuntimeCapabilityExecutionOutcome,
     RuntimeCapabilityPlanSummary, RuntimeCapabilityProviderState, RuntimeCapabilityStateSnapshot,
     RuntimeConfigPatch, RuntimeConfigSnapshotSummary, RuntimeConfigSource,
     RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
     RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
     RuntimeHandoffSummary, RuntimeMailboxSummary, RuntimeMemorySummary, RuntimeMessage,
+    RuntimeMemoryFreshnessSummary, RuntimeMemoryProposal, RuntimeMemoryProposalReview,
+    RuntimeMemorySelectionSummary,
     RuntimePendingMediationSummary, RuntimeRunCheckpoint, RuntimeRunSnapshot,
     RuntimeSecretReferenceStatus, RuntimeSessionDetail, RuntimeSessionPolicySnapshot,
-    RuntimeSessionSummary, RuntimeSubrunSummary, RuntimeTraceContext, RuntimeTraceItem,
-    RuntimeUsageSummary, RuntimeWorkerDispatchSummary, RuntimeWorkflowRunDetail,
-    RuntimeWorkflowSummary, SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord,
+    RuntimeSessionSummary, RuntimeSelectedMemoryItem, RuntimeSubrunSummary,
+    RuntimeTraceContext, RuntimeTraceItem, RuntimeUsageSummary,
+    RuntimeWorkerDispatchSummary, RuntimeWorkflowRunDetail, RuntimeWorkflowSummary,
+    SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord,
     RUNTIME_PERMISSION_DANGER_FULL_ACCESS, RUNTIME_PERMISSION_READ_ONLY,
     RUNTIME_PERMISSION_WORKSPACE_WRITE,
 };

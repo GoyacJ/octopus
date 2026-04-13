@@ -3,7 +3,8 @@ use crate::dto_mapping::metric_record;
 use octopus_core::{
     AuthorizationRequest, CapabilityManagementProjection, CreateProjectPromotionRequestInput,
     ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult, ProjectPromotionRequest,
-    ProtectedResourceDescriptor, ReviewProjectPromotionRequestInput,
+    ProtectedResourceDescriptor, ResolveRuntimeMemoryProposalInput,
+    ReviewProjectPromotionRequestInput,
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -3141,6 +3142,50 @@ pub(crate) async fn resolve_runtime_approval(
         .services
         .runtime_execution
         .resolve_approval(&session_id, &approval_id, input)
+        .await?;
+    if let Some(scope) = idempotency_scope.as_deref() {
+        store_idempotent_response(&state, scope, &run, &request_id)?;
+    }
+
+    let mut response = Json(run).into_response();
+    insert_request_id(&mut response, &request_id);
+    Ok(response)
+}
+
+pub(crate) async fn resolve_runtime_memory_proposal(
+    State(state): State<ServerState>,
+    headers: HeaderMap,
+    Path((session_id, proposal_id)): Path<(String, String)>,
+    Json(input): Json<ResolveRuntimeMemoryProposalInput>,
+) -> Result<Response, ApiError> {
+    let request_id = request_id(&headers);
+    let project_id = runtime_project_scope(&state, &session_id).await?;
+    let session = ensure_authorized_session_with_request_id(
+        &state,
+        &headers,
+        "runtime.approval.resolve",
+        project_id.as_deref(),
+        &request_id,
+    )
+    .await?;
+    let idempotency_scope = idempotency_key(&headers).map(|key| {
+        idempotency_scope(
+            &session,
+            "runtime.resolve_memory_proposal",
+            &proposal_id,
+            &key,
+        )
+    });
+    if let Some(scope) = idempotency_scope.as_deref() {
+        if let Some(response) = load_idempotent_response(&state, scope, &request_id)? {
+            return Ok(response);
+        }
+    }
+
+    let run = state
+        .services
+        .runtime_execution
+        .resolve_memory_proposal(&session_id, &proposal_id, input)
         .await?;
     if let Some(scope) = idempotency_scope.as_deref() {
         store_idempotent_response(&state, scope, &run, &request_id)?;

@@ -153,5 +153,21 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
         idempotencyKey,
       })
     },
+    async resolveMemoryProposal(sessionId, proposalId, input, idempotencyKey) {
+      await fetchWorkspaceOpenApi(
+        context.connection,
+        '/api/v1/runtime/sessions/{sessionId}/memory-proposals/{proposalId}',
+        'post',
+        {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            sessionId,
+            proposalId,
+          },
+          body: JSON.stringify(input),
+          idempotencyKey,
+        },
+      )
+    },
   }
 }

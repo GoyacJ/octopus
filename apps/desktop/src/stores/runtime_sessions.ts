@@ -7,6 +7,7 @@ import type {
   RuntimeEffectiveConfig,
   RuntimeSessionDetail,
   RuntimeSessionSummary,
+  SubmitRuntimeTurnInput,
 } from '@octopus/schema'
 
 import * as tauriClient from '@/tauri/client'
@@ -20,8 +21,7 @@ import {
 } from './runtime-config'
 import { createPendingApprovalAssistantMessage } from './runtime_messages'
 
-export interface RuntimeTurnDraftInput {
-  content: string
+export interface RuntimeTurnDraftInput extends Omit<SubmitRuntimeTurnInput, 'permissionMode'> {
   permissionMode?: PermissionMode | RuntimePermissionMode
 }
 

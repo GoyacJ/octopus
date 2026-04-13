@@ -51,7 +51,11 @@ struct PersistedBackgroundState {
 }
 
 fn bool_to_sql(value: bool) -> i64 {
-    if value { 1 } else { 0 }
+    if value {
+        1
+    } else {
+        0
+    }
 }
 
 fn hash_bytes(bytes: &[u8]) -> String {
@@ -112,6 +116,22 @@ impl RuntimeAdapter {
             .runtime_sessions_dir
             .join("background")
             .join(format!("{run_id}.json"))
+    }
+
+    pub(super) fn runtime_memory_body_path(&self, memory_id: &str) -> PathBuf {
+        self.state
+            .paths
+            .knowledge_dir
+            .join("runtime-memory")
+            .join(format!("{memory_id}.json"))
+    }
+
+    fn runtime_memory_proposal_artifact_path(&self, proposal_id: &str) -> PathBuf {
+        self.state
+            .paths
+            .runtime_sessions_dir
+            .join("memory-proposals")
+            .join(format!("{proposal_id}.json"))
     }
 
     fn relative_storage_path(&self, path: &Path) -> String {
@@ -184,7 +204,9 @@ impl RuntimeAdapter {
             )
             .map_err(|error| AppError::database(error.to_string()))?;
         let subruns = subrun_stmt
-            .query_map(params![detail.summary.id, detail.run.id], |row| row.get::<_, String>(0))
+            .query_map(params![detail.summary.id, detail.run.id], |row| {
+                row.get::<_, String>(0)
+            })
             .map_err(|error| AppError::database(error.to_string()))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| AppError::database(error.to_string()))?
@@ -201,7 +223,9 @@ impl RuntimeAdapter {
             )
             .map_err(|error| AppError::database(error.to_string()))?;
         let handoffs = handoff_stmt
-            .query_map(params![detail.summary.id, detail.run.id], |row| row.get::<_, String>(0))
+            .query_map(params![detail.summary.id, detail.run.id], |row| {
+                row.get::<_, String>(0)
+            })
             .map_err(|error| AppError::database(error.to_string()))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| AppError::database(error.to_string()))?
@@ -247,12 +271,13 @@ impl RuntimeAdapter {
         let (workflow, workflow_detail) =
             if let Some((summary_json, detail_json, detail_storage_path)) = workflow_projection {
                 let summary = serde_json::from_str::<RuntimeWorkflowSummary>(&summary_json).ok();
-                let detail_value = serde_json::from_str::<RuntimeWorkflowRunDetail>(&detail_json).ok();
+                let detail_value =
+                    serde_json::from_str::<RuntimeWorkflowRunDetail>(&detail_json).ok();
                 if let (Some(summary), Some(detail_value)) = (summary, detail_value) {
                     (Some(summary), Some(detail_value))
-                } else if let Some(record) =
-                    self.load_runtime_artifact::<PersistedWorkflowState>(detail_storage_path.as_deref())?
-                {
+                } else if let Some(record) = self.load_runtime_artifact::<PersistedWorkflowState>(
+                    detail_storage_path.as_deref(),
+                )? {
                     (Some(record.summary), Some(record.detail))
                 } else {
                     (None, None)
@@ -277,7 +302,9 @@ impl RuntimeAdapter {
             match serde_json::from_str::<RuntimeBackgroundRunSummary>(&summary_json) {
                 Ok(summary) => Some(summary),
                 Err(_) => self
-                    .load_runtime_artifact::<PersistedBackgroundState>(state_storage_path.as_deref())?
+                    .load_runtime_artifact::<PersistedBackgroundState>(
+                        state_storage_path.as_deref(),
+                    )?
                     .map(|record| record.summary),
             }
         } else {
@@ -407,6 +434,125 @@ impl RuntimeAdapter {
         Ok(Vec::new())
     }
 
+    pub(super) fn load_runtime_memory_records(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<memory_runtime::PersistedRuntimeMemoryRecord>, AppError> {
+        let connection = self.open_db()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT memory_id, project_id, owner_ref, source_run_id, kind, scope, title, summary,
+                        freshness_state, last_validated_at, proposal_state, storage_path,
+                        content_hash, updated_at
+                 FROM runtime_memory_records
+                 WHERE project_id = ?1 OR project_id IS NULL
+                 ORDER BY updated_at DESC, memory_id ASC",
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        let rows = statement
+            .query_map(params![project_id], |row| {
+                Ok(memory_runtime::PersistedRuntimeMemoryRecord {
+                    memory_id: row.get(0)?,
+                    project_id: row.get(1)?,
+                    owner_ref: row.get(2)?,
+                    source_run_id: row.get(3)?,
+                    kind: row.get(4)?,
+                    scope: row.get(5)?,
+                    title: row.get(6)?,
+                    summary: row.get(7)?,
+                    freshness_state: row.get(8)?,
+                    last_validated_at: row.get(9)?,
+                    proposal_state: row.get(10)?,
+                    storage_path: row.get(11)?,
+                    content_hash: row.get(12)?,
+                    updated_at: row.get::<_, i64>(13)? as u64,
+                })
+            })
+            .map_err(|error| AppError::database(error.to_string()))?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| AppError::database(error.to_string()))
+    }
+
+    pub(super) fn persist_runtime_memory_record(
+        &self,
+        record: &memory_runtime::PersistedRuntimeMemoryRecord,
+        body: &serde_json::Value,
+    ) -> Result<(), AppError> {
+        let connection = self.open_db()?;
+        let (storage_path, content_hash) =
+            self.persist_runtime_artifact(self.runtime_memory_body_path(&record.memory_id), body)?;
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO runtime_memory_records
+                 (memory_id, workspace_id, project_id, owner_ref, source_run_id, kind, scope,
+                  title, summary, freshness_state, last_validated_at, proposal_state, storage_path,
+                  content_hash, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![
+                    record.memory_id,
+                    self.state.workspace_id,
+                    record.project_id,
+                    record.owner_ref,
+                    record.source_run_id,
+                    record.kind,
+                    record.scope,
+                    record.title,
+                    record.summary,
+                    record.freshness_state,
+                    record.last_validated_at.map(|value| value as i64),
+                    record.proposal_state,
+                    storage_path,
+                    content_hash,
+                    record.updated_at as i64,
+                ],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        Ok(())
+    }
+
+    pub(super) fn persist_runtime_memory_proposal(
+        &self,
+        proposal: &RuntimeMemoryProposal,
+        updated_at: u64,
+    ) -> Result<(), AppError> {
+        let connection = self.open_db()?;
+        let artifact = memory_runtime::PersistedRuntimeMemoryProposalArtifact {
+            proposal: proposal.clone(),
+            updated_at,
+        };
+        let (artifact_storage_path, artifact_content_hash) = self.persist_runtime_artifact(
+            self.runtime_memory_proposal_artifact_path(&proposal.proposal_id),
+            &artifact,
+        )?;
+        connection
+            .execute(
+                "INSERT OR REPLACE INTO runtime_memory_proposals
+                 (proposal_id, session_id, run_id, memory_id, kind, scope, title, summary,
+                  proposal_state, proposal_reason, review_json, artifact_storage_path,
+                  artifact_content_hash, updated_at, proposal_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![
+                    proposal.proposal_id,
+                    proposal.session_id,
+                    proposal.source_run_id,
+                    proposal.memory_id,
+                    proposal.kind,
+                    proposal.scope,
+                    proposal.title,
+                    proposal.summary,
+                    proposal.proposal_state,
+                    proposal.proposal_reason,
+                    proposal.review.as_ref().map(serde_json::to_string).transpose()?,
+                    artifact_storage_path,
+                    artifact_content_hash,
+                    updated_at as i64,
+                    serde_json::to_string(proposal)?,
+                ],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        Ok(())
+    }
+
     pub(super) fn persist_session(
         &self,
         session_id: &str,
@@ -494,10 +640,18 @@ impl RuntimeAdapter {
             .iter()
             .filter(|provider| provider.degraded)
             .count() as i64;
-        let workflow_run_id = summary.workflow.as_ref().map(|workflow| workflow.workflow_run_id.clone());
-        let workflow_status = summary.workflow.as_ref().map(|workflow| workflow.status.clone());
-        let workflow_total_steps =
-            summary.workflow.as_ref().map_or(0_i64, |workflow| workflow.total_steps as i64);
+        let workflow_run_id = summary
+            .workflow
+            .as_ref()
+            .map(|workflow| workflow.workflow_run_id.clone());
+        let workflow_status = summary
+            .workflow
+            .as_ref()
+            .map(|workflow| workflow.status.clone());
+        let workflow_total_steps = summary
+            .workflow
+            .as_ref()
+            .map_or(0_i64, |workflow| workflow.total_steps as i64);
         let workflow_completed_steps = summary
             .workflow
             .as_ref()
@@ -510,8 +664,12 @@ impl RuntimeAdapter {
             .workflow
             .as_ref()
             .and_then(|workflow| workflow.current_step_label.clone());
-        let workflow_background_capable =
-            bool_to_sql(summary.workflow.as_ref().is_some_and(|workflow| workflow.background_capable));
+        let workflow_background_capable = bool_to_sql(
+            summary
+                .workflow
+                .as_ref()
+                .is_some_and(|workflow| workflow.background_capable),
+        );
         let pending_mailbox_ref = summary
             .pending_mailbox
             .as_ref()
@@ -748,8 +906,10 @@ impl RuntimeAdapter {
                     .map(|handoff| handoff.handoff_ref.clone())
                     .collect(),
             };
-            let (body_storage_path, body_content_hash) =
-                self.persist_runtime_artifact(self.runtime_mailbox_body_path(&mailbox.mailbox_ref), &mailbox_body)?;
+            let (body_storage_path, body_content_hash) = self.persist_runtime_artifact(
+                self.runtime_mailbox_body_path(&mailbox.mailbox_ref),
+                &mailbox_body,
+            )?;
             connection
                 .execute(
                     "INSERT OR REPLACE INTO runtime_mailbox_projections
@@ -942,6 +1102,16 @@ impl RuntimeAdapter {
                     ],
                 )
                 .map_err(|error| AppError::database(error.to_string()))?;
+        }
+
+        connection
+            .execute(
+                "DELETE FROM runtime_memory_proposals WHERE session_id = ?1",
+                [summary.id.as_str()],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        if let Some(proposal) = run.pending_memory_proposal.as_ref() {
+            self.persist_runtime_memory_proposal(proposal, run.updated_at)?;
         }
 
         Ok(())

@@ -1,5 +1,6 @@
 import type {
   ResolveRuntimeApprovalInput,
+  ResolveRuntimeMemoryProposalInput,
   RuntimeConfigScope,
   RuntimeConfigValidationResult,
   RuntimeConfiguredModelProbeResult,
@@ -449,6 +450,9 @@ export const runtimeStoreActions = {
       const run = await client.runtime.submitUserTurn(this.activeSessionId, {
         content: trimmed,
         permissionMode: input.permissionMode,
+        recallMode: input.recallMode,
+        ignoredMemoryIds: input.ignoredMemoryIds,
+        memoryIntent: input.memoryIntent,
       }, tauriClient.createIdempotencyKey(`runtime-turn-${connectionId}-${this.activeSessionId}`))
       if (this.activeWorkspaceConnectionId !== connectionId) {
         return false
@@ -534,6 +538,50 @@ export const runtimeStoreActions = {
       this.saveActiveWorkspaceSnapshot()
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to resolve runtime approval'
+    }
+  },
+  async resolveMemoryProposal(this: any, decision: string, note?: string) {
+    const proposalId = this.activeRun?.pendingMemoryProposal?.proposalId
+    if (!this.activeSessionId || !proposalId) {
+      return
+    }
+
+    this.error = ''
+    const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+    if (!resolvedClient) {
+      return
+    }
+    const { connectionId, client } = resolvedClient
+
+    try {
+      const input: ResolveRuntimeMemoryProposalInput = {
+        decision: decision as ResolveRuntimeMemoryProposalInput['decision'],
+        note,
+      }
+      await client.runtime.resolveMemoryProposal(
+        this.activeSessionId,
+        proposalId,
+        input,
+        tauriClient.createIdempotencyKey(`runtime-memory-proposal-${connectionId}-${proposalId}`),
+      )
+      if (this.activeWorkspaceConnectionId !== connectionId) {
+        return
+      }
+
+      const detail = await client.runtime.loadSession(this.activeSessionId)
+      if (this.activeWorkspaceConnectionId !== connectionId) {
+        return
+      }
+
+      this.setActiveSession(detail)
+      if (isBusyStatus(detail.run.status)) {
+        await this.startEventTransport(this.activeSessionId)
+      } else {
+        await this.finishTransportCycle(this.activeSessionId, connectionId)
+      }
+      this.saveActiveWorkspaceSnapshot()
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : 'Failed to resolve runtime memory proposal'
     }
   },
   dispose(this: any) {

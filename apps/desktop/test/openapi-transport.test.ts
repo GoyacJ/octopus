@@ -926,6 +926,97 @@ describe('OpenAPI transport helpers', () => {
       .mockResolvedValueOnce({
         ok: true,
         headers: new Headers({ 'Content-Type': 'application/json' }),
+        json: async (): Promise<RuntimeRunSnapshot> => ({
+          id: 'run-1',
+          sessionId: 'rt-1',
+          conversationId: 'conv-1',
+          status: 'completed',
+          currentStep: 'runtime.run.completed',
+          startedAt: 1,
+          updatedAt: 3,
+          actorRef: 'agent:agent-architect',
+          runKind: 'primary',
+          workflowRun: 'wf-run-1',
+          mailboxRef: 'mailbox-1',
+          backgroundState: 'completed',
+          workerDispatch: {
+            totalSubruns: 2,
+            activeSubruns: 0,
+            completedSubruns: 2,
+            failedSubruns: 0,
+          },
+          capabilityPlanSummary: {
+            activatedTools: [],
+            approvedTools: [],
+            authResolvedTools: [],
+            availableResources: [],
+            deferredTools: [],
+            discoverableSkills: [],
+            grantedTools: [],
+            hiddenCapabilities: [],
+            pendingTools: [],
+            providerFallbacks: [],
+            visibleTools: [],
+          },
+          capabilityStateRef: 'capstate-1',
+          configSnapshotId: 'cfg-1',
+          effectiveConfigHash: 'hash-1',
+          startedFromScopeSet: ['workspace'],
+          pendingMediation: {
+            mediationKind: 'none',
+          },
+          providerStateSummary: [],
+          lastExecutionOutcome: {
+            outcome: 'success',
+          },
+          usageSummary: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+          },
+          artifactRefs: [],
+          traceContext: {
+            sessionId: 'rt-1',
+            traceId: 'trace-1',
+            turnId: 'turn-1',
+          },
+          checkpoint: {
+            serializedSession: {
+              sessionId: 'rt-1',
+              runId: 'run-1',
+            },
+            capabilityPlanSummary: {
+              activatedTools: [],
+              approvedTools: [],
+              authResolvedTools: [],
+              availableResources: [],
+              deferredTools: [],
+              discoverableSkills: [],
+              grantedTools: [],
+              hiddenCapabilities: [],
+              pendingTools: [],
+              providerFallbacks: [],
+              visibleTools: [],
+            },
+            capabilityStateRef: 'capstate-1',
+            currentIterationIndex: 0,
+            pendingMediation: {
+              mediationKind: 'none',
+            },
+            lastExecutionOutcome: {
+              outcome: 'success',
+            },
+            usageSummary: {
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+            },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: new Headers({ 'Content-Type': 'application/json' }),
         json: async () => [],
       })
 
@@ -957,6 +1048,18 @@ describe('OpenAPI transport helpers', () => {
         decision: 'approve',
       }),
     })
+    await fetchWorkspaceOpenApi(connection, '/api/v1/runtime/sessions/{sessionId}/memory-proposals/{proposalId}', 'post', {
+      session,
+      pathParams: {
+        sessionId: 'rt-1',
+        proposalId: 'memory-proposal-1',
+      },
+      idempotencyKey: 'idem-memory-proposal-1',
+      body: JSON.stringify({
+        decision: 'approve',
+        note: 'Approved durable memory candidate.',
+      }),
+    })
     await fetchWorkspaceOpenApi(connection, '/api/v1/runtime/sessions/{sessionId}/events', 'get', {
       session,
       pathParams: { sessionId: 'rt-1' },
@@ -985,6 +1088,11 @@ describe('OpenAPI transport helpers', () => {
     )
     expect(fetchSpy).toHaveBeenNthCalledWith(
       5,
+      'http://127.0.0.1:43127/api/v1/runtime/sessions/rt-1/memory-proposals/memory-proposal-1',
+      expect.objectContaining({ method: 'POST', headers: expect.any(Headers) }),
+    )
+    expect(fetchSpy).toHaveBeenNthCalledWith(
+      6,
       'http://127.0.0.1:43127/api/v1/runtime/sessions/rt-1/events?after=evt-1',
       expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),
     )
@@ -993,6 +1101,8 @@ describe('OpenAPI transport helpers', () => {
     expect(turnHeaders.get('Idempotency-Key')).toBe('idem-turn-1')
     const approvalHeaders = fetchSpy.mock.calls[3]?.[1]?.headers as Headers
     expect(approvalHeaders.get('Idempotency-Key')).toBe('idem-approval-1')
+    const memoryProposalHeaders = fetchSpy.mock.calls[4]?.[1]?.headers as Headers
+    expect(memoryProposalHeaders.get('Idempotency-Key')).toBe('idem-memory-proposal-1')
     expect(runtimeDetailPayload.workflow?.workflowRunId).toBe('wf-run-1')
     expect(runtimeDetailPayload.pendingMailbox?.mailboxRef).toBe('mailbox-1')
     expect(runtimeDetailPayload.backgroundRun?.workflowRunId).toBe('wf-run-1')
@@ -1070,7 +1180,7 @@ describe('OpenAPI transport helpers', () => {
             status: 'pending',
             priority: 'high',
             actionable: true,
-            routeTo: '/workspaces/ws-local/projects/proj-redesign/runtime',
+            routeTo: '/workspaces/ws-local/projects/proj-redesign/settings',
             actionLabel: 'Review approval',
             createdAt: 1,
           },

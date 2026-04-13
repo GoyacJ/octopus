@@ -245,6 +245,39 @@
             schema:
               $ref: "#/components/schemas/ApiErrorEnvelope"
         description: API error envelope.
+/api/v1/runtime/sessions/{sessionId}/memory-proposals/{proposalId}:
+  post:
+    operationId: resolveRuntimeMemoryProposal
+    parameters:
+      - in: path
+        name: sessionId
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: proposalId
+        required: true
+        schema:
+          type: string
+    requestBody:
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ResolveRuntimeMemoryProposalInput"
+      required: true
+    responses:
+      "200":
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RuntimeRunSnapshot"
+        description: Runtime run snapshot payload after memory proposal resolution.
+      default:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApiErrorEnvelope"
+        description: API error envelope.
 /api/v1/runtime/sessions/{sessionId}/turns:
   post:
     operationId: submitRuntimeTurn

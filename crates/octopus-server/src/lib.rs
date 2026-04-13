@@ -646,6 +646,29 @@ fn normalize_runtime_submit_input(input: &mut SubmitRuntimeTurnInput) -> Result<
             })?;
         input.permission_mode = Some(normalized.to_string());
     }
+    input.recall_mode = input
+        .recall_mode
+        .take()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
+    if let Some(recall_mode) = input.recall_mode.as_deref() {
+        if !matches!(recall_mode, "default" | "skip") {
+            return Err(ApiError::from(AppError::invalid_input(format!(
+                "unsupported recall mode: {recall_mode}"
+            ))));
+        }
+    }
+    input.ignored_memory_ids = input
+        .ignored_memory_ids
+        .drain(..)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .collect();
+    input.memory_intent = input
+        .memory_intent
+        .take()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty());
     Ok(())
 }
 
