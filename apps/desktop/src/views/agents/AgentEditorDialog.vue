@@ -14,6 +14,8 @@ const props = defineProps<{
   mcpOptions: SelectOption[]
   avatarPreview: string
   scope: string
+  canPromote: boolean
+  promoting: boolean
 }>()
 
 const emit = defineEmits<{
@@ -21,6 +23,7 @@ const emit = defineEmits<{
   'pick-avatar': []
   'remove-avatar': []
   'save': []
+  'promote': []
 }>()
 
 const openModel = computed({
@@ -120,7 +123,20 @@ function initials(name: string) {
     </div>
     <template #footer>
       <div class="flex w-full items-center justify-between">
-        <span class="text-xs text-text-tertiary">所有更改将立即同步至 {{ scope }}</span>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-text-tertiary">所有更改将立即同步至 {{ scope }}</span>
+          <UiButton
+            v-if="canPromote"
+            data-testid="agent-center-promote-agent-button"
+            variant="outline"
+            size="sm"
+            :loading="promoting"
+            loading-label="Promoting"
+            @click="emit('promote')"
+          >
+            提升到工作区
+          </UiButton>
+        </div>
         <div class="flex items-center gap-2">
           <UiButton variant="ghost" @click="emit('update:open', false)">取消</UiButton>
           <UiButton class="px-6" @click="emit('save')">保存配置</UiButton>

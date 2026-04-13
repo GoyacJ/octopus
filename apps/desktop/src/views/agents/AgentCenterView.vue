@@ -37,6 +37,8 @@ const {
   agentImportLoading,
   agentExportLoading,
   teamExportLoading,
+  promoteAgentLoading,
+  promoteTeamLoading,
   agentForm,
   teamForm,
   isProjectScope,
@@ -96,6 +98,8 @@ const {
   clearTeamAvatar,
   saveAgent,
   saveTeam,
+  promoteAgentToWorkspace,
+  promoteTeamToWorkspace,
   removeAgent,
   removeTeam,
   confirmDelete,
@@ -200,10 +204,13 @@ const {
       :mcp-options="mcpOptions"
       :avatar-preview="agentAvatarPreview(currentEditingAgent())"
       :scope="props.scope"
+      :can-promote="Boolean(isProjectScope && currentEditingAgent()?.projectId)"
+      :promoting="promoteAgentLoading"
       @update:open="agentDialogOpen = $event"
       @pick-avatar="pickAgentAvatar"
       @remove-avatar="clearAgentAvatar"
       @save="saveAgent"
+      @promote="promoteAgentToWorkspace"
     />
 
     <TeamEditorDialog
@@ -218,10 +225,13 @@ const {
       :avatar-preview="teamAvatarPreview(currentEditingTeam())"
       :dialog-team-leader="dialogTeamLeader"
       :dialog-team-members="dialogTeamMembers"
+      :can-promote="Boolean(isProjectScope && currentEditingTeam()?.projectId)"
+      :promoting="promoteTeamLoading"
       @update:open="teamDialogOpen = $event"
       @pick-avatar="pickTeamAvatar"
       @remove-avatar="clearTeamAvatar"
       @save="saveTeam"
+      @promote="promoteTeamToWorkspace"
     />
 
     <UiDialog

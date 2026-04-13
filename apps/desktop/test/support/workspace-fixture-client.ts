@@ -1359,21 +1359,61 @@ export function createWorkspaceClientFixture(
     }
   }
 
-  const copyBuiltinAgentTemplate = (agentId: string, projectId?: string) => {
+  const normalizeCopySlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+
+  const upsertCopiedAgent = (record: ReturnType<typeof normalizeAgentRecord>) => {
+    workspaceState.agents = [...workspaceState.agents.filter(item => item.id !== record.id), record]
+  }
+
+  const upsertCopiedTeam = (record: ReturnType<typeof normalizeTeamRecord>) => {
+    workspaceState.teams = [...workspaceState.teams.filter(item => item.id !== record.id), record]
+  }
+
+  const buildCopyResult = (
+    agentIds: string[],
+    teamIds: string[],
+  ): ImportWorkspaceAgentBundleResult => ({
+    departments: [],
+    departmentCount: 0,
+    detectedAgentCount: agentIds.length,
+    importableAgentCount: agentIds.length,
+    detectedTeamCount: teamIds.length,
+    importableTeamCount: teamIds.length,
+    createCount: agentIds.length + teamIds.length,
+    updateCount: 0,
+    skipCount: 0,
+    failureCount: 0,
+    uniqueSkillCount: 0,
+    uniqueMcpCount: 0,
+    agentCount: agentIds.length,
+    teamCount: teamIds.length,
+    skillCount: 0,
+    mcpCount: 0,
+    avatarCount: agentIds.length + teamIds.length,
+    filteredFileCount: 0,
+    agents: [],
+    teams: [],
+    skills: [],
+    mcps: [],
+    avatars: [],
+    issues: [],
+  })
+
+  const copyAgentToScope = (agentId: string, projectId?: string) => {
     const source = workspaceState.agents.find(record => record.id === agentId)
-    if (!source?.integrationSource || source.integrationSource.kind !== 'builtin-template') {
+    if (!source) {
       throw new WorkspaceApiError({
-        message: 'builtin agent template not found',
+        message: 'agent not found',
         status: 404,
-        requestId: 'req-builtin-agent-template-not-found',
+        requestId: 'req-agent-not-found',
         retryable: false,
         code: 'NOT_FOUND',
       })
     }
 
     const copiedId = projectId
-      ? `agent-project-${source.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-copy`
-      : `agent-workspace-${source.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-copy`
+      ? `agent-project-${normalizeCopySlug(source.name)}-copy`
+      : `agent-workspace-${normalizeCopySlug(source.name)}-copy`
     const copied = normalizeAgentRecord(
       {
         workspaceId: workspaceState.workspace.id,
@@ -1394,25 +1434,35 @@ export function createWorkspaceClientFixture(
       undefined,
       copiedId,
     )
-    workspaceState.agents = [...workspaceState.agents.filter(record => record.id !== copiedId), copied]
+    upsertCopiedAgent(copied)
     return copied
   }
 
-  const copyBuiltinTeamTemplate = (teamId: string, projectId?: string) => {
+  const copyTeamToScope = (teamId: string, projectId?: string) => {
     const source = workspaceState.teams.find(record => record.id === teamId)
-    if (!source?.integrationSource || source.integrationSource.kind !== 'builtin-template') {
+    if (!source) {
       throw new WorkspaceApiError({
-        message: 'builtin team template not found',
+        message: 'team not found',
         status: 404,
-        requestId: 'req-builtin-team-template-not-found',
+        requestId: 'req-team-not-found',
         retryable: false,
         code: 'NOT_FOUND',
       })
     }
 
+    const referencedAgentIds = Array.from(new Set([
+      ...(source.leaderAgentId ? [source.leaderAgentId] : []),
+      ...source.memberAgentIds,
+    ]))
+    const agentIdMap = new Map<string, string>()
+    for (const referencedAgentId of referencedAgentIds) {
+      const copiedAgent = copyAgentToScope(referencedAgentId, projectId)
+      agentIdMap.set(referencedAgentId, copiedAgent.id)
+    }
+
     const copiedId = projectId
-      ? `team-project-${source.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-copy`
-      : `team-workspace-${source.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-copy`
+      ? `team-project-${normalizeCopySlug(source.name)}-copy`
+      : `team-workspace-${normalizeCopySlug(source.name)}-copy`
     const copied = normalizeTeamRecord(
       {
         workspaceId: workspaceState.workspace.id,
@@ -1427,16 +1477,21 @@ export function createWorkspaceClientFixture(
         builtinToolKeys: clone(source.builtinToolKeys),
         skillIds: clone(source.skillIds),
         mcpServerNames: clone(source.mcpServerNames),
-        leaderAgentId: source.leaderAgentId,
-        memberAgentIds: clone(source.memberAgentIds),
+        leaderAgentId: source.leaderAgentId ? agentIdMap.get(source.leaderAgentId) : undefined,
+        memberAgentIds: source.memberAgentIds
+          .map(agentId => agentIdMap.get(agentId) ?? agentId)
+          .filter((agentId, index, list) => list.indexOf(agentId) === index),
         description: source.description,
         status: source.status,
       },
       undefined,
       copiedId,
     )
-    workspaceState.teams = [...workspaceState.teams.filter(record => record.id !== copiedId), copied]
-    return copied
+    upsertCopiedTeam(copied)
+    return {
+      copied,
+      copiedAgentIds: Array.from(agentIdMap.values()),
+    }
   }
 
   const client: WorkspaceClient = {
@@ -1893,12 +1948,12 @@ export function createWorkspaceClientFixture(
         return clone(workspaceState.agents)
       },
       async copyToWorkspace(agentId) {
-        copyBuiltinAgentTemplate(agentId)
-        return clone(buildAgentBundlePreview({ files: [] }, undefined)) as ImportWorkspaceAgentBundleResult
+        const copied = copyAgentToScope(agentId)
+        return clone(buildCopyResult([copied.id], []))
       },
       async copyToProject(projectId, agentId) {
-        copyBuiltinAgentTemplate(agentId, projectId)
-        return clone(buildAgentBundlePreview({ files: [] }, projectId)) as ImportWorkspaceAgentBundleResult
+        const copied = copyAgentToScope(agentId, projectId)
+        return clone(buildCopyResult([copied.id], []))
       },
       async previewImportBundle(input, projectId) {
         return clone(buildAgentBundlePreview(input, projectId))
@@ -2000,12 +2055,12 @@ export function createWorkspaceClientFixture(
         return clone(workspaceState.teams)
       },
       async copyToWorkspace(teamId) {
-        copyBuiltinTeamTemplate(teamId)
-        return clone(buildAgentBundlePreview({ files: [] }, undefined)) as ImportWorkspaceAgentBundleResult
+        const copied = copyTeamToScope(teamId)
+        return clone(buildCopyResult(copied.copiedAgentIds, [copied.copied.id]))
       },
       async copyToProject(projectId, teamId) {
-        copyBuiltinTeamTemplate(teamId, projectId)
-        return clone(buildAgentBundlePreview({ files: [] }, projectId)) as ImportWorkspaceAgentBundleResult
+        const copied = copyTeamToScope(teamId, projectId)
+        return clone(buildCopyResult(copied.copiedAgentIds, [copied.copied.id]))
       },
       async create(input) {
         const id = `team-${Date.now()}`

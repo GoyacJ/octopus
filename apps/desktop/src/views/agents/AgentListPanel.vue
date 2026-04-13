@@ -69,7 +69,26 @@ function isWorkspaceLinkedAgent(agent: AgentRecord) {
   return agent.integrationSource?.kind === 'workspace-link'
 }
 
+function isProjectOwnedAgent(agent: AgentRecord) {
+  return Boolean(props.isProjectScope && agent.projectId)
+}
+
+function canSelectAgent(agent: AgentRecord) {
+  return props.isProjectScope || !isBuiltinTemplateAgent(agent)
+}
+
+function canExportAgent(agent: AgentRecord) {
+  return props.isProjectScope || !isBuiltinTemplateAgent(agent)
+}
+
+function canRemoveAgent(agent: AgentRecord) {
+  return props.isProjectScope ? isProjectOwnedAgent(agent) : !isBuiltinTemplateAgent(agent)
+}
+
 function openLabel(agent: AgentRecord) {
+  if (props.isProjectScope && !isProjectOwnedAgent(agent)) {
+    return '复制到项目'
+  }
   if (isBuiltinTemplateAgent(agent)) {
     return props.isProjectScope ? '复制到项目' : '复制到工作区'
   }
@@ -80,7 +99,7 @@ function originLabel(agent: AgentRecord) {
   if (isBuiltinTemplateAgent(agent)) {
     return '内置模板'
   }
-  return isWorkspaceLinkedAgent(agent) ? '工作区' : undefined
+  return props.isProjectScope && !isProjectOwnedAgent(agent) ? '工作区' : undefined
 }
 
 const importMenuItems = [
@@ -230,9 +249,9 @@ function updateSelectedAgents(agentId: string, nextSelected: boolean) {
           :remove-test-id="`agent-center-remove-agent-${agent.id}`"
           :selected="selectedAgentIds.includes(agent.id)"
           :selection-test-id="`agent-center-select-agent-${agent.id}`"
-          :selectable="!isBuiltinTemplateAgent(agent)"
-          :exportable="!isBuiltinTemplateAgent(agent)"
-          :removable="!isBuiltinTemplateAgent(agent)"
+          :selectable="canSelectAgent(agent)"
+          :exportable="canExportAgent(agent)"
+          :removable="canRemoveAgent(agent)"
           @open="emit('open-agent', agent)"
           @update:selected="updateSelectedAgents(agent.id, $event)"
           @export="handleExportAgent(agent, $event)"
@@ -287,7 +306,7 @@ function updateSelectedAgents(agentId: string, nextSelected: boolean) {
           <template #actions>
             <div class="flex items-center gap-1" @click.stop @keydown.stop>
               <UiCheckbox
-                v-if="!isBuiltinTemplateAgent(agent)"
+                v-if="canSelectAgent(agent)"
                 :model-value="selectedAgentIds"
                 :value="agent.id"
                 :data-testid="`agent-center-select-agent-${agent.id}`"
@@ -296,7 +315,7 @@ function updateSelectedAgents(agentId: string, nextSelected: boolean) {
               <UiButton size="sm" variant="ghost" class="h-8 px-3 text-[11px] font-semibold" @click.stop="emit('open-agent', agent)">
                 {{ openLabel(agent) }}
               </UiButton>
-              <UiDropdownMenu v-if="!isBuiltinTemplateAgent(agent)" :items="rowExportMenuItems" @select="handleExportAgent(agent, $event)">
+              <UiDropdownMenu v-if="canExportAgent(agent)" :items="rowExportMenuItems" @select="handleExportAgent(agent, $event)">
                 <template #trigger>
                   <UiButton
                     size="sm"
@@ -310,7 +329,7 @@ function updateSelectedAgents(agentId: string, nextSelected: boolean) {
                 </template>
               </UiDropdownMenu>
               <UiButton
-                v-if="!isBuiltinTemplateAgent(agent)"
+                v-if="canRemoveAgent(agent)"
                 variant="ghost"
                 size="icon"
                 class="size-8 rounded-full text-text-tertiary/40 hover:bg-error/10 hover:text-error"

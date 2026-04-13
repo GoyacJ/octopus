@@ -70,9 +70,9 @@ impl WorkspaceService for InfraWorkspaceService {
             permission_overrides: request
                 .permission_overrides
                 .unwrap_or_else(default_project_permission_overrides),
-            linked_workspace_assets: request
-                .linked_workspace_assets
-                .unwrap_or_else(|| Self::linked_workspace_assets_from_assignments(assignments.as_ref())),
+            linked_workspace_assets: request.linked_workspace_assets.unwrap_or_else(|| {
+                Self::linked_workspace_assets_from_assignments(assignments.as_ref())
+            }),
             assignments,
         };
 
@@ -191,7 +191,9 @@ impl WorkspaceService for InfraWorkspaceService {
             .collect())
     }
 
-    async fn list_workspace_promotion_requests(&self) -> Result<Vec<ProjectPromotionRequest>, AppError> {
+    async fn list_workspace_promotion_requests(
+        &self,
+    ) -> Result<Vec<ProjectPromotionRequest>, AppError> {
         Ok(self
             .state
             .project_promotion_requests
@@ -228,8 +230,9 @@ impl WorkspaceService for InfraWorkspaceService {
             asset_id: input.asset_id.clone(),
             requested_by_user_id: requested_by_user_id.into(),
             submitted_by_owner_user_id: project.owner_user_id.clone(),
-            required_workspace_capability:
-                Self::required_workspace_capability_for_project_asset(&input.asset_type)?,
+            required_workspace_capability: Self::required_workspace_capability_for_project_asset(
+                &input.asset_type,
+            )?,
             status: "pending".into(),
             reviewed_by_user_id: None,
             review_comment: None,
@@ -1038,19 +1041,7 @@ impl WorkspaceService for InfraWorkspaceService {
         &self,
         agent_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_assets::extract_builtin_agent_template_files(agent_id)?
-            .ok_or_else(|| AppError::not_found("builtin agent template"))?;
-        let connection = self.state.open_db()?;
-        let workspace_id = self.state.workspace_id()?;
-        let result = agent_assets::execute_import(
-            &connection,
-            &self.state.paths,
-            &workspace_id,
-            agent_assets::AssetTargetScope::Workspace,
-            ImportWorkspaceAgentBundleInput { files },
-        )?;
-        self.refresh_agent_and_team_caches(&connection)?;
-        Ok(result)
+        self.copy_agent_asset(agent_assets::AssetTargetScope::Workspace, agent_id)
     }
 
     async fn export_agent_bundle(
@@ -1107,19 +1098,10 @@ impl WorkspaceService for InfraWorkspaceService {
         project_id: &str,
         agent_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_assets::extract_builtin_agent_template_files(agent_id)?
-            .ok_or_else(|| AppError::not_found("builtin agent template"))?;
-        let connection = self.state.open_db()?;
-        let workspace_id = self.state.workspace_id()?;
-        let result = agent_assets::execute_import(
-            &connection,
-            &self.state.paths,
-            &workspace_id,
+        self.copy_agent_asset(
             agent_assets::AssetTargetScope::Project(project_id),
-            ImportWorkspaceAgentBundleInput { files },
-        )?;
-        self.refresh_agent_and_team_caches(&connection)?;
-        Ok(result)
+            agent_id,
+        )
     }
 
     async fn export_project_agent_bundle(
@@ -1297,19 +1279,7 @@ impl WorkspaceService for InfraWorkspaceService {
         &self,
         team_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_assets::extract_builtin_team_template_files(team_id)?
-            .ok_or_else(|| AppError::not_found("builtin team template"))?;
-        let connection = self.state.open_db()?;
-        let workspace_id = self.state.workspace_id()?;
-        let result = agent_assets::execute_import(
-            &connection,
-            &self.state.paths,
-            &workspace_id,
-            agent_assets::AssetTargetScope::Workspace,
-            ImportWorkspaceAgentBundleInput { files },
-        )?;
-        self.refresh_agent_and_team_caches(&connection)?;
-        Ok(result)
+        self.copy_team_asset(agent_assets::AssetTargetScope::Workspace, team_id)
     }
 
     async fn copy_project_team_from_builtin(
@@ -1317,19 +1287,7 @@ impl WorkspaceService for InfraWorkspaceService {
         project_id: &str,
         team_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_assets::extract_builtin_team_template_files(team_id)?
-            .ok_or_else(|| AppError::not_found("builtin team template"))?;
-        let connection = self.state.open_db()?;
-        let workspace_id = self.state.workspace_id()?;
-        let result = agent_assets::execute_import(
-            &connection,
-            &self.state.paths,
-            &workspace_id,
-            agent_assets::AssetTargetScope::Project(project_id),
-            ImportWorkspaceAgentBundleInput { files },
-        )?;
-        self.refresh_agent_and_team_caches(&connection)?;
-        Ok(result)
+        self.copy_team_asset(agent_assets::AssetTargetScope::Project(project_id), team_id)
     }
 
     async fn list_project_team_links(
@@ -2068,7 +2026,9 @@ impl InfraWorkspaceService {
     fn normalize_resource_directory(&self, value: &str) -> Result<String, AppError> {
         let normalized = value.trim();
         if normalized.is_empty() {
-            return Err(AppError::invalid_input("project resource directory is required"));
+            return Err(AppError::invalid_input(
+                "project resource directory is required",
+            ));
         }
         let path = PathBuf::from(normalized);
         if path.is_absolute() {
@@ -2141,15 +2101,111 @@ impl InfraWorkspaceService {
             return Ok(record.scope.clone());
         }
 
-        match (record.scope.as_str(), requested, record.project_id.is_some()) {
+        match (
+            record.scope.as_str(),
+            requested,
+            record.project_id.is_some(),
+        ) {
             ("personal", "project", true) => Ok("project".into()),
             ("personal", "workspace", false) => Ok("workspace".into()),
             ("project", "workspace", _) => Ok("workspace".into()),
             ("workspace", _, _) => Err(AppError::invalid_input(
                 "workspace resources cannot be promoted further",
             )),
-            _ => Err(AppError::invalid_input("resource promotion scope is invalid")),
+            _ => Err(AppError::invalid_input(
+                "resource promotion scope is invalid",
+            )),
         }
+    }
+
+    fn copy_agent_asset(
+        &self,
+        target: agent_assets::AssetTargetScope<'_>,
+        agent_id: &str,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        let files = if let Some(files) =
+            crate::agent_assets::extract_builtin_agent_template_files(agent_id)?
+        {
+            files
+        } else {
+            let source = load_agents(&connection)?
+                .into_iter()
+                .find(|record| record.id == agent_id)
+                .ok_or_else(|| AppError::not_found("agent not found"))?;
+            let source_scope = match source.project_id.as_deref() {
+                Some(project_id) => agent_assets::AssetTargetScope::Project(project_id),
+                None => agent_assets::AssetTargetScope::Workspace,
+            };
+            agent_assets::export_assets(
+                &connection,
+                &self.state.paths,
+                &workspace_id,
+                source_scope,
+                ExportWorkspaceAgentBundleInput {
+                    mode: "single".into(),
+                    agent_ids: vec![agent_id.into()],
+                    team_ids: Vec::new(),
+                },
+            )?
+            .files
+        };
+
+        let result = agent_assets::execute_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            target,
+            ImportWorkspaceAgentBundleInput { files },
+        )?;
+        self.refresh_agent_and_team_caches(&connection)?;
+        Ok(result)
+    }
+
+    fn copy_team_asset(
+        &self,
+        target: agent_assets::AssetTargetScope<'_>,
+        team_id: &str,
+    ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
+        let connection = self.state.open_db()?;
+        let workspace_id = self.state.workspace_id()?;
+        let files = if let Some(files) =
+            crate::agent_assets::extract_builtin_team_template_files(team_id)?
+        {
+            files
+        } else {
+            let source = load_teams(&connection)?
+                .into_iter()
+                .find(|record| record.id == team_id)
+                .ok_or_else(|| AppError::not_found("team not found"))?;
+            let source_scope = match source.project_id.as_deref() {
+                Some(project_id) => agent_assets::AssetTargetScope::Project(project_id),
+                None => agent_assets::AssetTargetScope::Workspace,
+            };
+            agent_assets::export_assets(
+                &connection,
+                &self.state.paths,
+                &workspace_id,
+                source_scope,
+                ExportWorkspaceAgentBundleInput {
+                    mode: "single".into(),
+                    agent_ids: Vec::new(),
+                    team_ids: vec![team_id.into()],
+                },
+            )?
+            .files
+        };
+
+        let result = agent_assets::execute_import(
+            &connection,
+            &self.state.paths,
+            &workspace_id,
+            target,
+            ImportWorkspaceAgentBundleInput { files },
+        )?;
+        self.refresh_agent_and_team_caches(&connection)?;
+        Ok(result)
     }
 
     fn normalize_resource_status(status: &str) -> Result<String, AppError> {
@@ -2238,8 +2294,16 @@ impl InfraWorkspaceService {
         Ok(())
     }
 
-    fn persist_project_record(&self, record: &ProjectRecord, replace: bool) -> Result<(), AppError> {
-        let verb = if replace { "INSERT OR REPLACE" } else { "INSERT" };
+    fn persist_project_record(
+        &self,
+        record: &ProjectRecord,
+        replace: bool,
+    ) -> Result<(), AppError> {
+        let verb = if replace {
+            "INSERT OR REPLACE"
+        } else {
+            "INSERT"
+        };
         let sql = format!(
             "{verb} INTO projects (id, workspace_id, name, status, description, resource_directory, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
@@ -2277,7 +2341,11 @@ impl InfraWorkspaceService {
         record: &ProjectPromotionRequest,
         replace: bool,
     ) -> Result<(), AppError> {
-        let verb = if replace { "INSERT OR REPLACE" } else { "INSERT" };
+        let verb = if replace {
+            "INSERT OR REPLACE"
+        } else {
+            "INSERT"
+        };
         let sql = format!(
             "{verb} INTO project_promotion_requests (id, workspace_id, project_id, asset_type, asset_id, requested_by_user_id, submitted_by_owner_user_id, required_workspace_capability, status, reviewed_by_user_id, review_comment, created_at, updated_at, reviewed_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)"
@@ -2313,7 +2381,11 @@ impl InfraWorkspaceService {
         record: &WorkspaceResourceRecord,
         replace: bool,
     ) -> Result<(), AppError> {
-        let verb = if replace { "INSERT OR REPLACE" } else { "INSERT" };
+        let verb = if replace {
+            "INSERT OR REPLACE"
+        } else {
+            "INSERT"
+        };
         let sql = format!(
             "{verb} INTO resources (id, workspace_id, project_id, kind, name, location, origin, scope, visibility, owner_user_id, storage_path, content_type, byte_size, preview_kind, status, updated_at, tags, source_artifact_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)"
@@ -2371,7 +2443,11 @@ impl InfraWorkspaceService {
             .extension()
             .and_then(|extension| extension.to_str())
             .or_else(|| {
-                location.and_then(|value| Path::new(value).extension().and_then(|extension| extension.to_str()))
+                location.and_then(|value| {
+                    Path::new(value)
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                })
             })?
             .to_ascii_lowercase();
 
@@ -2392,9 +2468,9 @@ impl InfraWorkspaceService {
             "mp4" => "video/mp4",
             "mov" => "video/quicktime",
             "webm" => "video/webm",
-            "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt"
-            | "swift" | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "yaml"
-            | "yml" | "toml" | "sql" | "sh" => "text/plain",
+            "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt" | "swift"
+            | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "yaml" | "yml" | "toml"
+            | "sql" | "sh" => "text/plain",
             _ => "application/octet-stream",
         };
 
@@ -2448,9 +2524,29 @@ impl InfraWorkspaceService {
             if matches!(
                 extension.as_deref(),
                 Some(
-                    "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt"
-                        | "swift" | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css"
-                        | "json" | "yaml" | "yml" | "toml" | "sql" | "sh"
+                    "rs" | "ts"
+                        | "tsx"
+                        | "js"
+                        | "jsx"
+                        | "vue"
+                        | "py"
+                        | "go"
+                        | "java"
+                        | "kt"
+                        | "swift"
+                        | "c"
+                        | "cc"
+                        | "cpp"
+                        | "h"
+                        | "hpp"
+                        | "html"
+                        | "css"
+                        | "json"
+                        | "yaml"
+                        | "yml"
+                        | "toml"
+                        | "sql"
+                        | "sh"
                 )
             ) {
                 return "code".into();
@@ -2471,7 +2567,10 @@ impl InfraWorkspaceService {
         ) {
             return "image".into();
         }
-        if matches!(lower.rsplit('.').next(), Some("mp3" | "wav" | "ogg" | "m4a")) {
+        if matches!(
+            lower.rsplit('.').next(),
+            Some("mp3" | "wav" | "ogg" | "m4a")
+        ) {
             return "audio".into();
         }
         if matches!(lower.rsplit('.').next(), Some("mp4" | "mov" | "webm")) {
@@ -2480,9 +2579,29 @@ impl InfraWorkspaceService {
         if matches!(
             lower.rsplit('.').next(),
             Some(
-                "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt"
-                    | "swift" | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "json"
-                    | "yaml" | "yml" | "toml" | "sql" | "sh"
+                "rs" | "ts"
+                    | "tsx"
+                    | "js"
+                    | "jsx"
+                    | "vue"
+                    | "py"
+                    | "go"
+                    | "java"
+                    | "kt"
+                    | "swift"
+                    | "c"
+                    | "cc"
+                    | "cpp"
+                    | "h"
+                    | "hpp"
+                    | "html"
+                    | "css"
+                    | "json"
+                    | "yaml"
+                    | "yml"
+                    | "toml"
+                    | "sql"
+                    | "sh"
             )
         ) {
             return "code".into();
@@ -2500,14 +2619,19 @@ impl InfraWorkspaceService {
         let kind = input.kind.trim().to_string();
         let name = Self::normalize_resource_name(&input.name)?;
         let location = Self::normalize_resource_location(input.location);
-        let scope = self.normalize_resource_scope(input.project_id.as_deref(), input.scope.as_deref().unwrap_or_default())?;
-        let visibility = self.normalize_resource_visibility(input.visibility.as_deref().unwrap_or("public"))?;
+        let scope = self.normalize_resource_scope(
+            input.project_id.as_deref(),
+            input.scope.as_deref().unwrap_or_default(),
+        )?;
+        let visibility =
+            self.normalize_resource_visibility(input.visibility.as_deref().unwrap_or("public"))?;
         let content_type = if kind == "url" {
             None
         } else {
             Self::resource_content_type(&name, location.as_deref())
         };
-        let preview_kind = Self::resource_preview_kind(&kind, &name, location.as_deref(), content_type.as_deref());
+        let preview_kind =
+            Self::resource_preview_kind(&kind, &name, location.as_deref(), content_type.as_deref());
 
         Ok(WorkspaceResourceRecord {
             id: format!("res-{}", Uuid::new_v4()),
@@ -2540,7 +2664,9 @@ impl InfraWorkspaceService {
         files: &[WorkspaceResourceFolderUploadEntry],
     ) -> Result<(), AppError> {
         if files.is_empty() {
-            Err(AppError::invalid_input("resource import requires at least one file"))
+            Err(AppError::invalid_input(
+                "resource import requires at least one file",
+            ))
         } else {
             Ok(())
         }
@@ -2571,7 +2697,8 @@ impl InfraWorkspaceService {
         root_dir_name: Option<&str>,
         files: Vec<WorkspaceResourceFolderUploadEntry>,
     ) -> Result<Vec<WorkspaceResourceFolderUploadEntry>, AppError> {
-        let Some(root_dir_name) = root_dir_name.filter(|value: &&str| !value.trim().is_empty()) else {
+        let Some(root_dir_name) = root_dir_name.filter(|value: &&str| !value.trim().is_empty())
+        else {
             return Ok(files);
         };
 
@@ -2598,7 +2725,9 @@ impl InfraWorkspaceService {
         }
         let path = Path::new(&normalized);
         if path.is_absolute() {
-            return Err(AppError::invalid_input("resource file path must be relative"));
+            return Err(AppError::invalid_input(
+                "resource file path must be relative",
+            ));
         }
 
         let mut safe = PathBuf::new();
@@ -2647,7 +2776,10 @@ impl InfraWorkspaceService {
             .file_stem()
             .and_then(|name| name.to_str())
             .unwrap_or("resource");
-        match candidate.extension().and_then(|extension| extension.to_str()) {
+        match candidate
+            .extension()
+            .and_then(|extension| extension.to_str())
+        {
             Some(extension) => candidate.with_file_name(format!("{stem}-{suffix}.{extension}")),
             None => candidate.with_file_name(format!("{stem}-{suffix}")),
         }
@@ -2899,13 +3031,110 @@ mod tests {
             created.resource_directory,
             "data/projects/resource-project/resources"
         );
-        assert!(
-            bundle
-                .paths
-                .root
-                .join("data/projects/resource-project/resources")
-                .exists()
-        );
+        assert!(bundle
+            .paths
+            .root
+            .join("data/projects/resource-project/resources")
+            .exists());
+    }
+
+    #[test]
+    fn project_owned_agents_and_teams_can_be_promoted_to_workspace() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+        let project = runtime
+            .block_on(bundle.workspace.create_project(CreateProjectRequest {
+                name: "Promotion Agents".into(),
+                description: "Agent/team promotion coverage.".into(),
+                resource_directory: "data/projects/promotion-agents/resources".into(),
+                owner_user_id: None,
+                member_user_ids: None,
+                permission_overrides: None,
+                linked_workspace_assets: None,
+                assignments: None,
+            }))
+            .expect("created project");
+
+        let project_agent = runtime
+            .block_on(bundle.workspace.create_agent(UpsertAgentInput {
+                workspace_id: project.workspace_id.clone(),
+                project_id: Some(project.id.clone()),
+                scope: "project".into(),
+                name: "Promotion Analyst".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Project-only analyst".into(),
+                tags: vec!["promotion".into()],
+                prompt: "Promote this agent into the workspace.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                description: "Project-owned agent".into(),
+                status: "active".into(),
+            }))
+            .expect("created project agent");
+
+        let project_team = runtime
+            .block_on(bundle.workspace.create_team(UpsertTeamInput {
+                workspace_id: project.workspace_id.clone(),
+                project_id: Some(project.id.clone()),
+                scope: "project".into(),
+                name: "Promotion Strike Team".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Project-only team".into(),
+                tags: vec!["promotion".into()],
+                prompt: "Promote this team into the workspace.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: Vec::new(),
+                mcp_server_names: Vec::new(),
+                leader_agent_id: Some(project_agent.id.clone()),
+                member_agent_ids: vec![project_agent.id.clone()],
+                description: "Project-owned team".into(),
+                status: "active".into(),
+            }))
+            .expect("created project team");
+
+        let promoted_agent = runtime
+            .block_on(
+                bundle
+                    .workspace
+                    .copy_workspace_agent_from_builtin(&project_agent.id),
+            )
+            .expect("promoted project agent");
+        assert_eq!(promoted_agent.failure_count, 0);
+        assert_eq!(promoted_agent.agent_count, 1);
+
+        let promoted_team = runtime
+            .block_on(
+                bundle
+                    .workspace
+                    .copy_workspace_team_from_builtin(&project_team.id),
+            )
+            .expect("promoted project team");
+        assert_eq!(promoted_team.failure_count, 0);
+        assert_eq!(promoted_team.team_count, 1);
+        assert_eq!(promoted_team.agent_count, 1);
+
+        let agents = runtime
+            .block_on(bundle.workspace.list_agents())
+            .expect("list agents");
+        assert!(agents.iter().any(|agent| agent.id == project_agent.id
+            && agent.project_id.as_deref() == Some(project.id.as_str())));
+        assert!(agents
+            .iter()
+            .any(|agent| agent.name == "Promotion Analyst" && agent.project_id.is_none()));
+
+        let teams = runtime
+            .block_on(bundle.workspace.list_teams())
+            .expect("list teams");
+        assert!(teams.iter().any(|team| team.id == project_team.id
+            && team.project_id.as_deref() == Some(project.id.as_str())));
+        assert!(teams
+            .iter()
+            .any(|team| team.name == "Promotion Strike Team" && team.project_id.is_none()));
     }
 
     #[test]
@@ -2961,11 +3190,9 @@ mod tests {
             .block_on(bundle.workspace.list_resource_children(&imported.id))
             .expect("children");
         assert_eq!(children.len(), 2);
-        assert!(
-            children
-                .iter()
-                .any(|entry| entry.relative_path == "nested/spec.json")
-        );
+        assert!(children
+            .iter()
+            .any(|entry| entry.relative_path == "nested/spec.json"));
 
         let promoted = tokio::runtime::Runtime::new()
             .expect("runtime")
@@ -2984,15 +3211,19 @@ mod tests {
 
         tokio::runtime::Runtime::new()
             .expect("runtime")
-            .block_on(bundle.workspace.delete_project_resource(&created.id, &imported.id))
+            .block_on(
+                bundle
+                    .workspace
+                    .delete_project_resource(&created.id, &imported.id),
+            )
             .expect("deleted");
 
         assert!(!absolute_storage_path.exists());
     }
 
     #[test]
-    fn workspace_import_writes_into_workspace_resources_and_supports_content_and_directory_browsing()
-    {
+    fn workspace_import_writes_into_workspace_resources_and_supports_content_and_directory_browsing(
+    ) {
         let temp = tempfile::tempdir().expect("tempdir");
         let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
 
@@ -3043,12 +3274,10 @@ mod tests {
             .block_on(bundle.workspace.list_directories(Some("data/resources")))
             .expect("directories");
         assert_eq!(directories.current_path, "data/resources");
-        assert!(
-            directories
-                .entries
-                .iter()
-                .any(|entry| entry.path == "data/resources/workspace")
-        );
+        assert!(directories
+            .entries
+            .iter()
+            .any(|entry| entry.path == "data/resources/workspace"));
     }
 
     #[test]
@@ -3093,14 +3322,14 @@ mod tests {
         assert_eq!(imported.scope, "personal");
         assert_eq!(imported.visibility, "private");
 
-        let invalid_direct_promotion = tokio::runtime::Runtime::new()
-            .expect("runtime")
-            .block_on(bundle.workspace.promote_resource(
+        let invalid_direct_promotion = tokio::runtime::Runtime::new().expect("runtime").block_on(
+            bundle.workspace.promote_resource(
                 &imported.id,
                 octopus_core::PromoteWorkspaceResourceInput {
                     scope: "workspace".into(),
                 },
-            ));
+            ),
+        );
         assert!(invalid_direct_promotion.is_err());
 
         let promoted_to_project = tokio::runtime::Runtime::new()

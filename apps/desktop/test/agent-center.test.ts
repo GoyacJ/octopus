@@ -120,17 +120,41 @@ describe('workspace and project agents pages', () => {
     mounted.destroy()
   })
 
-  it('renders project-scoped agents and teams together with linked workspace entries', async () => {
+  it('renders project-scoped effective agents and teams from project assignments instead of project links', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project?.assignments?.agents) {
+          throw new Error('Expected proj-redesign agent assignments')
+        }
+
+        project.assignments.agents.agentIds = ['agent-architect', 'agent-template-finance']
+        project.assignments.agents.teamIds = ['team-studio', 'team-template-finance']
+        state.projectAgentLinks['proj-redesign'] = []
+        state.projectTeamLinks['proj-redesign'] = []
+      },
+    })
+
     await router.push('/workspaces/ws-local/projects/proj-redesign/agents')
     await router.isReady()
 
     const mounted = mountApp()
     await waitForText(mounted.container, 'Redesign Copilot')
     await waitForText(mounted.container, 'Architect Agent')
+    await waitForText(mounted.container, 'Finance Planner Template')
 
     expect(mounted.container.textContent).toContain('Desktop Redesign')
     expect(mounted.container.textContent).toContain('Redesign Copilot')
     expect(mounted.container.textContent).toContain('Architect Agent')
+    expect(mounted.container.textContent).toContain('Finance Planner Template')
+    expect(mounted.container.querySelector('[data-testid="agent-center-remove-agent-agent-redesign"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="agent-center-remove-agent-agent-architect"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="agent-center-remove-agent-agent-template-finance"]')).toBeNull()
     expect(mounted.container.textContent).not.toContain('管理分配给当前项目的数字员工。')
     expect(mounted.container.textContent).not.toContain('DIGITAL WORKFORCE')
     expect(mounted.container.querySelector('[data-testid="agent-center-hero"]')).toBeNull()
@@ -141,9 +165,14 @@ describe('workspace and project agents pages', () => {
     teamTab?.click()
     await waitForCondition(() => router.currentRoute.value.query.tab === 'team')
 
+    await waitForText(mounted.container, 'Finance Ops Template')
     expect(mounted.container.textContent).not.toContain('接入工作区 Team')
     expect(mounted.container.textContent).toContain('Studio Direction Team')
     expect(mounted.container.textContent).toContain('Redesign Tiger Team')
+    expect(mounted.container.textContent).toContain('Finance Ops Template')
+    expect(mounted.container.querySelector('[data-testid="agent-center-remove-team-team-redesign"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="agent-center-remove-team-team-studio"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="agent-center-remove-team-team-template-finance"]')).toBeNull()
 
     mounted.destroy()
   })
@@ -178,7 +207,7 @@ describe('workspace and project agents pages', () => {
     mounted.destroy()
   })
 
-  it('unlinks a linked project team without deleting the workspace digital team', async () => {
+  it('keeps assigned workspace teams readonly inside the project scope', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/agents?tab=team')
     await router.isReady()
 
@@ -186,16 +215,8 @@ describe('workspace and project agents pages', () => {
     await waitForText(mounted.container, 'Studio Direction Team')
 
     const removeButton = mounted.container.querySelector('[data-testid="agent-center-remove-team-team-studio"]') as HTMLButtonElement | null
-    expect(removeButton).not.toBeNull()
-    removeButton?.click()
-    await waitForText(document.body, '确认删除')
-
-    const confirmButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('button'))
-      .find(button => button.textContent?.includes('确认删除'))
-    expect(confirmButton).not.toBeNull()
-    confirmButton?.click()
-
-    await waitForCondition(() => !mounted.container.textContent?.includes('Studio Direction Team'))
+    expect(removeButton).toBeNull()
+    expect(mounted.container.textContent).toContain('Studio Direction Team')
 
     await router.push('/workspaces/ws-local/agents?tab=team')
     await waitForText(mounted.container, 'Studio Direction Team')
@@ -285,13 +306,29 @@ describe('workspace and project agents pages', () => {
   })
 
   it('copies builtin digital team templates into the project scope', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project?.assignments?.agents) {
+          throw new Error('Expected proj-redesign agent assignments')
+        }
+
+        project.assignments.agents.teamIds = ['team-studio', 'team-template-finance']
+      },
+    })
+
     await router.push('/workspaces/ws-local/projects/proj-redesign/agents?tab=team')
     await router.isReady()
 
     const mounted = mountApp()
     await waitForText(mounted.container, 'Finance Ops Template')
 
-    expect(mounted.container.querySelector('[data-testid="agent-center-select-team-team-template-finance"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="agent-center-select-team-team-template-finance"]')).not.toBeNull()
 
     const copyButton = mounted.container.querySelector('[data-testid="agent-center-open-team-team-template-finance"]') as HTMLButtonElement | null
     expect(copyButton).not.toBeNull()
@@ -300,6 +337,57 @@ describe('workspace and project agents pages', () => {
     await waitForCondition(() =>
       mounted.container.querySelector('[data-testid="agent-center-remove-team-team-project-finance-ops-template-copy"]') !== null,
     )
+
+    mounted.destroy()
+  })
+
+  it('promotes project-owned agents and teams into the workspace without removing the project assets', async () => {
+    await router.push('/workspaces/ws-local/projects/proj-redesign/agents')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitForText(mounted.container, 'Redesign Copilot')
+
+    const agentOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-agent-agent-redesign"]') as HTMLButtonElement | null
+    expect(agentOpenButton).not.toBeNull()
+    agentOpenButton?.click()
+    await waitForText(document.body, '员工配置')
+
+    const promoteAgentButton = document.body.querySelector('[data-testid="agent-center-promote-agent-button"]') as HTMLButtonElement | null
+    expect(promoteAgentButton).not.toBeNull()
+    promoteAgentButton?.click()
+
+    await waitForCondition(() =>
+      mounted.container.querySelector('[data-testid="agent-center-remove-agent-agent-redesign"]') !== null,
+    )
+
+    const teamTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-team"]') as HTMLButtonElement | null
+    expect(teamTab).not.toBeNull()
+    teamTab?.click()
+    await waitForText(mounted.container, 'Redesign Tiger Team')
+
+    const teamOpenButton = mounted.container.querySelector('[data-testid="agent-center-open-team-team-redesign"]') as HTMLButtonElement | null
+    expect(teamOpenButton).not.toBeNull()
+    teamOpenButton?.click()
+    await waitForText(document.body, '数字团队配置')
+
+    const promoteTeamButton = document.body.querySelector('[data-testid="agent-center-promote-team-button"]') as HTMLButtonElement | null
+    expect(promoteTeamButton).not.toBeNull()
+    promoteTeamButton?.click()
+
+    await waitForCondition(() =>
+      mounted.container.querySelector('[data-testid="agent-center-remove-team-team-redesign"]') !== null,
+    )
+
+    await router.push('/workspaces/ws-local/agents')
+    await waitForText(mounted.container, 'Redesign Copilot')
+    expect(mounted.container.querySelector('[data-testid="agent-center-remove-agent-agent-workspace-redesign-copilot-copy"]')).not.toBeNull()
+
+    const workspaceTeamTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-team"]') as HTMLButtonElement | null
+    expect(workspaceTeamTab).not.toBeNull()
+    workspaceTeamTab?.click()
+    await waitForText(mounted.container, 'Redesign Tiger Team')
+    expect(mounted.container.querySelector('[data-testid="agent-center-remove-team-team-workspace-redesign-tiger-team-copy"]')).not.toBeNull()
 
     mounted.destroy()
   })

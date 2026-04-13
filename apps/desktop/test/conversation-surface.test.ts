@@ -386,6 +386,58 @@ describe('Conversation surfaces', () => {
   })
 
   it('scopes the composer model and actor selectors to the project settings assignments', async () => {
+    vi.restoreAllMocks()
+    installWorkspaceApiFixture({
+      preloadConversationMessages: true,
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const project = state.projects.find(item => item.id === 'proj-redesign')
+        if (!project?.assignments?.agents) {
+          throw new Error('Expected proj-redesign agent assignments')
+        }
+
+        project.assignments.agents.agentIds = ['agent-architect', 'agent-template-finance']
+        project.assignments.agents.teamIds = ['team-studio', 'team-template-finance']
+        const projectConfig = state.runtimeProjectConfigs['proj-redesign']
+        const projectSource = projectConfig?.sources.find(source => source.scope === 'project')
+        if (
+          projectSource
+          && projectSource.document
+          && typeof projectSource.document === 'object'
+          && !Array.isArray(projectSource.document)
+        ) {
+          ;(projectSource.document as Record<string, any>).projectSettings = {
+            ...((projectSource.document as Record<string, any>).projectSettings ?? {}),
+            agents: {
+              enabledAgentIds: ['agent-architect', 'agent-template-finance'],
+              enabledTeamIds: ['team-studio', 'team-template-finance'],
+            },
+          }
+        }
+        if (projectConfig) {
+          const effectiveConfig = projectConfig.effectiveConfig as Record<string, any>
+          state.runtimeProjectConfigs['proj-redesign'] = {
+            ...projectConfig,
+            effectiveConfig: {
+              ...effectiveConfig,
+              projectSettings: {
+                ...(effectiveConfig.projectSettings ?? {}),
+                agents: {
+                  enabledAgentIds: ['agent-architect', 'agent-template-finance'],
+                  enabledTeamIds: ['team-studio', 'team-template-finance'],
+                },
+              },
+            },
+          }
+        }
+        state.projectAgentLinks['proj-redesign'] = []
+        state.projectTeamLinks['proj-redesign'] = []
+      },
+    })
+
     configureWorkspaceClient((client) => ({
       ...client,
       catalog: {
@@ -434,7 +486,6 @@ describe('Conversation surfaces', () => {
         },
       },
     }))
-
     await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
     await router.isReady()
 
@@ -453,10 +504,12 @@ describe('Conversation surfaces', () => {
     expect(actorSelect).not.toBeNull()
     const actorOptionLabels = Array.from(actorSelect?.querySelectorAll('option') ?? []).map(option => option.textContent?.trim())
     expect(actorOptionLabels).toContain('Architect Agent')
+    expect(actorOptionLabels).toContain('Redesign Copilot')
+    expect(actorOptionLabels).toContain('Finance Planner Template')
     expect(actorOptionLabels).toContain('Studio Direction Team')
+    expect(actorOptionLabels).toContain('Redesign Tiger Team')
+    expect(actorOptionLabels).toContain('Finance Ops Template')
     expect(actorOptionLabels).not.toContain('Coder Agent')
-    expect(actorOptionLabels).not.toContain('Redesign Copilot')
-    expect(actorOptionLabels).not.toContain('Redesign Tiger Team')
 
     mounted.destroy()
   })

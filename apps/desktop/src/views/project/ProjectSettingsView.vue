@@ -20,6 +20,8 @@ const {
   tabs,
   project,
   allowedWorkspaceConfiguredModels,
+  actorCandidateAgents,
+  actorCandidateTeams,
   workspaceAssignedAgents,
   workspaceAssignedTeams,
   workspaceUsers,
@@ -126,6 +128,8 @@ const {
 
           <ProjectActorsPanel
             v-else-if="activeTab === 'agents'"
+            :candidate-agents="actorCandidateAgents"
+            :candidate-teams="actorCandidateTeams"
             :workspace-assigned-agents="workspaceAssignedAgents"
             :workspace-assigned-teams="workspaceAssignedTeams"
             :enabled-agent-ids="enabledAgentIds"
