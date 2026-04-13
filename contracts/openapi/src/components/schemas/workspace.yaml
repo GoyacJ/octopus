@@ -421,6 +421,10 @@ SavePetPresenceInput:
 TeamRecord:
   additionalProperties: false
   properties:
+    approvalPreference:
+      $ref: "#/components/schemas/ApprovalPreference"
+    artifactHandoffPolicy:
+      $ref: "#/components/schemas/ArtifactHandoffPolicy"
     avatar:
       type: string
     avatarPath:
@@ -429,10 +433,20 @@ TeamRecord:
       items:
         type: string
       type: array
+    capabilityPolicy:
+      $ref: "#/components/schemas/CapabilityPolicy"
+    defaultModelStrategy:
+      $ref: "#/components/schemas/DefaultModelStrategy"
+    dependencyResolution:
+      items:
+        $ref: "#/components/schemas/AssetDependencyResolution"
+      type: array
     description:
       type: string
     id:
       type: string
+    importMetadata:
+      $ref: "#/components/schemas/AssetImportMetadata"
     integrationSource:
       additionalProperties: false
       properties:
@@ -449,6 +463,12 @@ TeamRecord:
       type: object
     leaderAgentId:
       type: string
+    leaderRef:
+      type: string
+    mailboxPolicy:
+      $ref: "#/components/schemas/MailboxPolicy"
+    manifestRevision:
+      type: string
     mcpServerNames:
       items:
         type: string
@@ -457,14 +477,28 @@ TeamRecord:
       items:
         type: string
       type: array
+    memberRefs:
+      items:
+        type: string
+      type: array
+    memoryPolicy:
+      $ref: "#/components/schemas/MemoryPolicy"
     name:
       type: string
+    outputContract:
+      $ref: "#/components/schemas/OutputContract"
     personality:
       type: string
+    permissionEnvelope:
+      $ref: "#/components/schemas/PermissionEnvelope"
     projectId:
       type: string
     prompt:
       type: string
+    sharedCapabilityPolicy:
+      $ref: "#/components/schemas/SharedCapabilityPolicy"
+    sharedMemoryPolicy:
+      $ref: "#/components/schemas/SharedMemoryPolicy"
     scope:
       $ref: "#/components/schemas/TeamScope"
     skillIds:
@@ -477,10 +511,24 @@ TeamRecord:
       items:
         type: string
       type: array
+    taskDomains:
+      items:
+        type: string
+      type: array
+    teamTopology:
+      $ref: "#/components/schemas/TeamTopology"
+    trustMetadata:
+      $ref: "#/components/schemas/AssetTrustMetadata"
     updatedAt:
       type: integer
+    workerConcurrencyLimit:
+      type: integer
+    workflowAffordance:
+      $ref: "#/components/schemas/WorkflowAffordance"
     workspaceId:
       type: string
+    delegationPolicy:
+      $ref: "#/components/schemas/DelegationPolicy"
   required:
     - id
     - workspaceId
@@ -495,6 +543,27 @@ TeamRecord:
     - memberAgentIds
     - description
     - status
+    - taskDomains
+    - manifestRevision
+    - defaultModelStrategy
+    - capabilityPolicy
+    - permissionEnvelope
+    - memoryPolicy
+    - delegationPolicy
+    - approvalPreference
+    - outputContract
+    - sharedCapabilityPolicy
+    - leaderRef
+    - memberRefs
+    - teamTopology
+    - sharedMemoryPolicy
+    - mailboxPolicy
+    - artifactHandoffPolicy
+    - workflowAffordance
+    - workerConcurrencyLimit
+    - trustMetadata
+    - dependencyResolution
+    - importMetadata
     - updatedAt
   type: object
 TeamScope:
@@ -541,16 +610,30 @@ UpdateWorkspaceResourceInput:
 UpsertTeamInput:
   additionalProperties: false
   properties:
+    approvalPreference:
+      $ref: "#/components/schemas/ApprovalPreference"
+    artifactHandoffPolicy:
+      $ref: "#/components/schemas/ArtifactHandoffPolicy"
     avatar:
       $ref: "#/components/schemas/AvatarUploadPayload"
     builtinToolKeys:
       items:
         type: string
       type: array
+    capabilityPolicy:
+      $ref: "#/components/schemas/CapabilityPolicy"
+    defaultModelStrategy:
+      $ref: "#/components/schemas/DefaultModelStrategy"
     description:
       type: string
+    delegationPolicy:
+      $ref: "#/components/schemas/DelegationPolicy"
     leaderAgentId:
       type: string
+    leaderRef:
+      type: string
+    mailboxPolicy:
+      $ref: "#/components/schemas/MailboxPolicy"
     mcpServerNames:
       items:
         type: string
@@ -559,16 +642,30 @@ UpsertTeamInput:
       items:
         type: string
       type: array
+    memberRefs:
+      items:
+        type: string
+      type: array
+    memoryPolicy:
+      $ref: "#/components/schemas/MemoryPolicy"
     name:
       type: string
+    outputContract:
+      $ref: "#/components/schemas/OutputContract"
     personality:
       type: string
+    permissionEnvelope:
+      $ref: "#/components/schemas/PermissionEnvelope"
     projectId:
       type: string
     prompt:
       type: string
     removeAvatar:
       type: boolean
+    sharedCapabilityPolicy:
+      $ref: "#/components/schemas/SharedCapabilityPolicy"
+    sharedMemoryPolicy:
+      $ref: "#/components/schemas/SharedMemoryPolicy"
     scope:
       $ref: "#/components/schemas/TeamScope"
     skillIds:
@@ -581,6 +678,16 @@ UpsertTeamInput:
       items:
         type: string
       type: array
+    taskDomains:
+      items:
+        type: string
+      type: array
+    teamTopology:
+      $ref: "#/components/schemas/TeamTopology"
+    workerConcurrencyLimit:
+      type: integer
+    workflowAffordance:
+      $ref: "#/components/schemas/WorkflowAffordance"
     workspaceId:
       type: string
   required:
@@ -596,6 +703,91 @@ UpsertTeamInput:
     - memberAgentIds
     - description
     - status
+  type: object
+ArtifactHandoffPolicy:
+  additionalProperties: false
+  properties:
+    mode:
+      enum:
+        - leader-reviewed
+        - direct-handoff
+      type: string
+    requireLineage:
+      type: boolean
+    retainArtifacts:
+      type: boolean
+  required:
+    - mode
+    - requireLineage
+    - retainArtifacts
+  type: object
+MailboxPolicy:
+  additionalProperties: false
+  properties:
+    allowWorkerToWorker:
+      type: boolean
+    mode:
+      enum:
+        - leader-hub
+      type: string
+    retainMessages:
+      type: boolean
+  required:
+    - mode
+    - allowWorkerToWorker
+    - retainMessages
+  type: object
+SharedMemoryPolicy:
+  additionalProperties: false
+  properties:
+    requireReviewBeforePersist:
+      type: boolean
+    shareMode:
+      enum:
+        - isolated
+        - team-shared
+        - project-shared
+      type: string
+    writableByWorkers:
+      type: boolean
+  required:
+    - shareMode
+    - writableByWorkers
+    - requireReviewBeforePersist
+  type: object
+TeamTopology:
+  additionalProperties: false
+  properties:
+    leaderRef:
+      type: string
+    memberRefs:
+      items:
+        type: string
+      type: array
+    mode:
+      enum:
+        - leader-orchestrated
+      type: string
+  required:
+    - mode
+    - leaderRef
+    - memberRefs
+  type: object
+WorkflowAffordance:
+  additionalProperties: false
+  properties:
+    automationCapable:
+      type: boolean
+    backgroundCapable:
+      type: boolean
+    supportedTaskKinds:
+      items:
+        type: string
+      type: array
+  required:
+    - supportedTaskKinds
+    - backgroundCapable
+    - automationCapable
   type: object
 UserRecordSummary:
   additionalProperties: false

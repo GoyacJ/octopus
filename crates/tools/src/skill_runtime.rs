@@ -6,7 +6,7 @@ use std::sync::{Mutex, OnceLock};
 use glob::glob;
 use runtime::ConfigLoader;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 
 use crate::capability_runtime::{
     CapabilityConcurrencyPolicy, CapabilityExecutionKind, CapabilityInvocationPolicy,
@@ -316,7 +316,9 @@ pub struct PromptSkillExecutor {
 impl PromptSkillExecutor {
     #[must_use]
     pub fn new(capability_executor: Option<crate::CapabilityExecutor>) -> Self {
-        Self { capability_executor }
+        Self {
+            capability_executor,
+        }
     }
 
     pub fn execute(
@@ -511,12 +513,10 @@ pub(crate) fn prompt_skill_has_runtime_executor(capability: &CapabilitySpec) -> 
     capability.execution_kind == CapabilityExecutionKind::PromptSkill
         && match capability.source_kind {
             CapabilitySourceKind::LocalSkill | CapabilitySourceKind::BundledSkill => true,
-            CapabilitySourceKind::PluginSkill | CapabilitySourceKind::McpPrompt => {
-                capability
-                    .executor_key
-                    .as_ref()
-                    .is_some_and(|key| !key.trim().is_empty())
-            }
+            CapabilitySourceKind::PluginSkill | CapabilitySourceKind::McpPrompt => capability
+                .executor_key
+                .as_ref()
+                .is_some_and(|key| !key.trim().is_empty()),
             _ => false,
         }
 }
@@ -762,10 +762,8 @@ fn resolve_bundled_skill_roots() -> Vec<PathBuf> {
         }
     }
 
-    vec![
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../octopus-infra/seed/builtin-assets/skills"),
-    ]
+    vec![PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../octopus-infra/seed/builtin-assets/skills")]
 }
 
 fn load_skill_capability_from_path(

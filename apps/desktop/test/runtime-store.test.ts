@@ -50,10 +50,7 @@ describe('useRuntimeStore', () => {
 
     await runtime.submitTurn({
       content: 'Summarize the desktop runtime integration progress.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     })
 
     await waitFor(() =>
@@ -102,10 +99,7 @@ describe('useRuntimeStore', () => {
 
     const submitPromise = runtime.submitTurn({
       content: 'Show this message immediately.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'readonly',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     })
 
     await waitFor(() => runtime.activeMessages.some(message => message.content === 'Show this message immediately.'))
@@ -129,10 +123,7 @@ describe('useRuntimeStore', () => {
 
     runtime.addOptimisticUserMessage({
       content: 'Run pwd in the workspace terminal.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     })
 
     runtime.applyRuntimeEvent({
@@ -245,10 +236,7 @@ describe('useRuntimeStore', () => {
 
     runtime.addOptimisticUserMessage({
       content: 'Explain the rollout plan.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'readonly',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     })
 
     runtime.applyRuntimeEvent({
@@ -332,10 +320,7 @@ describe('useRuntimeStore', () => {
 
     await runtime.submitTurn({
       content: 'Run pwd in the workspace terminal.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     })
 
     await waitFor(() => runtime.pendingApproval !== null)
@@ -344,15 +329,11 @@ describe('useRuntimeStore', () => {
 
     await runtime.submitTurn({
       content: 'Then summarize the output.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     })
 
     expect(runtime.activeQueue).toHaveLength(1)
     expect(runtime.activeQueue[0]?.content).toBe('Then summarize the output.')
-    expect(runtime.activeQueue[0]?.actorId).toBe('agent-architect')
 
     await runtime.resolveApproval('approve')
 
@@ -377,10 +358,7 @@ describe('useRuntimeStore', () => {
 
     await runtime.submitTurn({
       content: 'Run pwd in the workspace terminal.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'readonly',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     })
 
     await waitFor(() =>
@@ -405,10 +383,7 @@ describe('useRuntimeStore', () => {
 
     await runtime.submitTurn({
       content: 'Run pwd in the workspace terminal.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'danger-full-access',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     })
 
     await waitFor(() =>
@@ -446,14 +421,14 @@ describe('useRuntimeStore', () => {
       conversationId: 'conv-team-runtime',
       projectId: 'proj-redesign',
       title: 'Team Runtime Session',
+      selectedActorRef: 'team:team-studio',
+      selectedConfiguredModelId: 'anthropic-primary',
+      executionPermissionMode: 'workspace-write',
     })
 
     await runtime.submitTurn({
       content: 'Coordinate the redesign rollout.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorKind: 'team',
-      actorId: 'team-studio',
     })
 
     await waitFor(() =>
@@ -495,12 +470,76 @@ describe('useRuntimeStore', () => {
         startedAt: 100,
         updatedAt: 200,
         modelId: 'claude-sonnet-4-5',
+        capabilityPlanSummary: {
+          activatedTools: [],
+          approvedTools: [],
+          authResolvedTools: [],
+          availableResources: [],
+          deferredTools: [],
+          discoverableSkills: [],
+          grantedTools: [],
+          hiddenCapabilities: [],
+          pendingTools: [],
+          providerFallbacks: [],
+          visibleTools: [],
+        },
+        capabilityStateRef: 'capstate-events',
         nextAction: 'runtime.run.idle',
         requestedActorKind: 'agent',
         requestedActorId: 'agent-architect',
         resolvedActorKind: 'agent',
         resolvedActorId: 'agent-architect',
         resolvedActorLabel: '默认智能体',
+        pendingMediation: {
+          mediationKind: 'none',
+        },
+        providerStateSummary: [],
+        lastExecutionOutcome: {
+          outcome: 'success',
+        },
+        usageSummary: {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        },
+        artifactRefs: [],
+        traceContext: {
+          sessionId: runtime.activeSessionId,
+          traceId: 'trace-events',
+          turnId: 'turn-events',
+        },
+        checkpoint: {
+          serializedSession: {
+            sessionId: runtime.activeSessionId,
+            runId: 'runtime-run-1',
+          },
+          capabilityPlanSummary: {
+            activatedTools: [],
+            approvedTools: [],
+            authResolvedTools: [],
+            availableResources: [],
+            deferredTools: [],
+            discoverableSkills: [],
+            grantedTools: [],
+            hiddenCapabilities: [],
+            pendingTools: [],
+            providerFallbacks: [],
+            visibleTools: [],
+          },
+          capabilityStateRef: 'capstate-events',
+          currentIterationIndex: 0,
+          pendingMediation: {
+            mediationKind: 'none',
+          },
+          lastExecutionOutcome: {
+            outcome: 'success',
+          },
+          usageSummary: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+          },
+        },
       },
     })
 
@@ -603,6 +642,47 @@ describe('useRuntimeStore', () => {
         title: 'Local Stale Session',
         status: 'draft',
         updatedAt: 10,
+        selectedActorRef: 'agent:agent-architect',
+        manifestRevision: 'manifest-local-v2',
+        sessionPolicy: {
+          selectedActorRef: 'agent:agent-architect',
+          selectedConfiguredModelId: 'anthropic-primary',
+          executionPermissionMode: 'workspace-write',
+          configSnapshotId: 'cfgsnap-local',
+          manifestRevision: 'manifest-local-v2',
+          capabilityPolicy: {},
+          memoryPolicy: {},
+          delegationPolicy: {},
+          approvalPreference: {},
+        },
+        activeRunId: 'run-local',
+        subrunCount: 0,
+        memorySummary: {
+          summary: 'No durable memories selected.',
+          durableMemoryCount: 0,
+          selectedMemoryIds: [],
+        },
+        capabilityPlanSummary: {
+          activatedTools: [],
+          approvedTools: [],
+          authResolvedTools: [],
+          availableResources: [],
+          deferredTools: [],
+          discoverableSkills: [],
+          grantedTools: [],
+          hiddenCapabilities: [],
+          pendingTools: [],
+          providerFallbacks: [],
+          visibleTools: [],
+        },
+        capabilityStateRef: 'capstate-local',
+        pendingMediation: {
+          mediationKind: 'none',
+        },
+        providerStateSummary: [],
+        lastExecutionOutcome: {
+          outcome: 'success',
+        },
       },
       run: {
         id: 'run-local',
@@ -612,8 +692,80 @@ describe('useRuntimeStore', () => {
         currentStep: 'runtime.run.idle',
         startedAt: 10,
         updatedAt: 10,
+        actorRef: 'agent:agent-architect',
+        runKind: 'primary',
         modelId: 'claude-sonnet-4-5',
+        capabilityPlanSummary: {
+          activatedTools: [],
+          approvedTools: [],
+          authResolvedTools: [],
+          availableResources: [],
+          deferredTools: [],
+          discoverableSkills: [],
+          grantedTools: [],
+          hiddenCapabilities: [],
+          pendingTools: [],
+          providerFallbacks: [],
+          visibleTools: [],
+        },
+        capabilityStateRef: 'capstate-local',
+        configuredModelId: 'anthropic-primary',
+        configuredModelName: 'Claude Sonnet 4.5',
         nextAction: 'runtime.run.awaitingInput',
+        configSnapshotId: 'cfgsnap-local',
+        effectiveConfigHash: 'cfg-hash-local',
+        startedFromScopeSet: ['project'],
+        approvalState: 'none',
+        pendingMediation: {
+          mediationKind: 'none',
+        },
+        providerStateSummary: [],
+        lastExecutionOutcome: {
+          outcome: 'success',
+        },
+        usageSummary: {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        },
+        artifactRefs: [],
+        traceContext: {
+          sessionId: 'rt-local',
+          traceId: 'trace-local',
+          turnId: 'turn-local',
+        },
+        checkpoint: {
+          serializedSession: {
+            sessionId: 'rt-local',
+            runId: 'run-local',
+          },
+          capabilityPlanSummary: {
+            activatedTools: [],
+            approvedTools: [],
+            authResolvedTools: [],
+            availableResources: [],
+            deferredTools: [],
+            discoverableSkills: [],
+            grantedTools: [],
+            hiddenCapabilities: [],
+            pendingTools: [],
+            providerFallbacks: [],
+            visibleTools: [],
+          },
+          capabilityStateRef: 'capstate-local',
+          currentIterationIndex: 0,
+          pendingMediation: {
+            mediationKind: 'none',
+          },
+          lastExecutionOutcome: {
+            outcome: 'success',
+          },
+          usageSummary: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+          },
+        },
       },
       messages: [],
       trace: [],
@@ -627,6 +779,47 @@ describe('useRuntimeStore', () => {
         title: 'Enterprise Fresh Session',
         status: 'draft',
         updatedAt: 20,
+        selectedActorRef: 'agent:agent-architect',
+        manifestRevision: 'manifest-enterprise-v2',
+        sessionPolicy: {
+          selectedActorRef: 'agent:agent-architect',
+          selectedConfiguredModelId: 'anthropic-primary',
+          executionPermissionMode: 'workspace-write',
+          configSnapshotId: 'cfgsnap-enterprise',
+          manifestRevision: 'manifest-enterprise-v2',
+          capabilityPolicy: {},
+          memoryPolicy: {},
+          delegationPolicy: {},
+          approvalPreference: {},
+        },
+        activeRunId: 'run-enterprise',
+        subrunCount: 0,
+        memorySummary: {
+          summary: 'No durable memories selected.',
+          durableMemoryCount: 0,
+          selectedMemoryIds: [],
+        },
+        capabilityPlanSummary: {
+          activatedTools: [],
+          approvedTools: [],
+          authResolvedTools: [],
+          availableResources: [],
+          deferredTools: [],
+          discoverableSkills: [],
+          grantedTools: [],
+          hiddenCapabilities: [],
+          pendingTools: [],
+          providerFallbacks: [],
+          visibleTools: [],
+        },
+        capabilityStateRef: 'capstate-enterprise',
+        pendingMediation: {
+          mediationKind: 'none',
+        },
+        providerStateSummary: [],
+        lastExecutionOutcome: {
+          outcome: 'success',
+        },
       },
       run: {
         id: 'run-enterprise',
@@ -636,8 +829,80 @@ describe('useRuntimeStore', () => {
         currentStep: 'runtime.run.idle',
         startedAt: 20,
         updatedAt: 20,
+        actorRef: 'agent:agent-architect',
+        runKind: 'primary',
         modelId: 'claude-sonnet-4-5',
+        capabilityPlanSummary: {
+          activatedTools: [],
+          approvedTools: [],
+          authResolvedTools: [],
+          availableResources: [],
+          deferredTools: [],
+          discoverableSkills: [],
+          grantedTools: [],
+          hiddenCapabilities: [],
+          pendingTools: [],
+          providerFallbacks: [],
+          visibleTools: [],
+        },
+        capabilityStateRef: 'capstate-enterprise',
+        configuredModelId: 'anthropic-primary',
+        configuredModelName: 'Claude Sonnet 4.5',
         nextAction: 'runtime.run.awaitingInput',
+        configSnapshotId: 'cfgsnap-enterprise',
+        effectiveConfigHash: 'cfg-hash-enterprise',
+        startedFromScopeSet: ['project'],
+        approvalState: 'none',
+        pendingMediation: {
+          mediationKind: 'none',
+        },
+        providerStateSummary: [],
+        lastExecutionOutcome: {
+          outcome: 'success',
+        },
+        usageSummary: {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        },
+        artifactRefs: [],
+        traceContext: {
+          sessionId: 'rt-enterprise',
+          traceId: 'trace-enterprise',
+          turnId: 'turn-enterprise',
+        },
+        checkpoint: {
+          serializedSession: {
+            sessionId: 'rt-enterprise',
+            runId: 'run-enterprise',
+          },
+          capabilityPlanSummary: {
+            activatedTools: [],
+            approvedTools: [],
+            authResolvedTools: [],
+            availableResources: [],
+            deferredTools: [],
+            discoverableSkills: [],
+            grantedTools: [],
+            hiddenCapabilities: [],
+            pendingTools: [],
+            providerFallbacks: [],
+            visibleTools: [],
+          },
+          capabilityStateRef: 'capstate-enterprise',
+          currentIterationIndex: 0,
+          pendingMediation: {
+            mediationKind: 'none',
+          },
+          lastExecutionOutcome: {
+            outcome: 'success',
+          },
+          usageSummary: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+          },
+        },
       },
       messages: [],
       trace: [],

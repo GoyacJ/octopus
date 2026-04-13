@@ -511,16 +511,15 @@ default_project_id = "proj-redesign"
         assert!(builtin_bash.enabled);
         assert_eq!(builtin_bash.state, "builtin");
 
-        let updated_projection = runtime
-            .block_on(
-                bundle
-                    .workspace
-                    .set_capability_asset_disabled(CapabilityAssetDisablePatch {
+        let updated_projection =
+            runtime
+                .block_on(bundle.workspace.set_capability_asset_disabled(
+                    CapabilityAssetDisablePatch {
                         source_key: "builtin:bash".into(),
                         disabled: true,
-                    }),
-            )
-            .expect("disabled tool");
+                    },
+                ))
+                .expect("disabled tool");
         assert!(updated_projection
             .entries
             .iter()

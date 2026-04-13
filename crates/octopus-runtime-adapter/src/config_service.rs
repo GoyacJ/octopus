@@ -77,7 +77,7 @@ impl RuntimeAdapter {
         }
 
         let response = match self
-            .execute_resolved_turn(&resolved_target, "Reply with exactly OK.", None, None)
+            .execute_resolved_turn(&resolved_target, "Reply with exactly OK.", None)
             .await
         {
             Ok(response) => response,

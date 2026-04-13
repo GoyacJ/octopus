@@ -397,11 +397,9 @@ mod tests {
         fs::write(root.join(".gitignore"), ".claw/settings.local.json\n").expect("write gitignore");
 
         let first = initialize_repo(&root).expect("first init should succeed");
-        assert!(
-            first
-                .render()
-                .contains("CLAUDE.md        skipped (already exists)")
-        );
+        assert!(first
+            .render()
+            .contains("CLAUDE.md        skipped (already exists)"));
         let second = initialize_repo(&root).expect("second init should succeed");
         let second_rendered = second.render();
         assert!(second_rendered.contains(".claw/"));

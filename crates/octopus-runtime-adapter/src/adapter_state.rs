@@ -12,10 +12,67 @@ pub(super) struct RuntimeState {
     pub(super) broadcasters: Mutex<HashMap<String, broadcast::Sender<RuntimeEventEnvelope>>>,
 }
 
+#[derive(Clone, Debug, Default)]
+pub(super) struct RuntimeAggregateMetadata {
+    pub(super) manifest_snapshot_ref: String,
+    pub(super) session_policy_snapshot_ref: String,
+}
+
 #[derive(Clone)]
 pub(super) struct RuntimeAggregate {
     pub(super) detail: RuntimeSessionDetail,
     pub(super) events: Vec<RuntimeEventEnvelope>,
+    pub(super) metadata: RuntimeAggregateMetadata,
+}
+
+pub(super) fn sync_runtime_session_detail(detail: &mut RuntimeSessionDetail) {
+    if detail.selected_actor_ref.is_empty() {
+        detail.selected_actor_ref = detail.summary.selected_actor_ref.clone();
+    }
+    if detail.manifest_revision.is_empty() {
+        detail.manifest_revision = detail.summary.manifest_revision.clone();
+    }
+    if detail.session_policy.execution_permission_mode.is_empty() {
+        detail.session_policy = detail.summary.session_policy.clone();
+    }
+    if detail.active_run_id.is_empty() {
+        detail.active_run_id = if detail.summary.active_run_id.is_empty() {
+            detail.run.id.clone()
+        } else {
+            detail.summary.active_run_id.clone()
+        };
+    }
+    if detail.subrun_count == 0 {
+        detail.subrun_count = detail.summary.subrun_count;
+    }
+    if detail.memory_summary.summary.is_empty() && !detail.summary.memory_summary.summary.is_empty()
+    {
+        detail.memory_summary = detail.summary.memory_summary.clone();
+    }
+    if detail.capability_summary.visible_tools.is_empty()
+        && !detail.summary.capability_summary.visible_tools.is_empty()
+    {
+        detail.capability_summary = detail.summary.capability_summary.clone();
+    }
+
+    detail.summary.selected_actor_ref = detail.selected_actor_ref.clone();
+    detail.summary.manifest_revision = detail.manifest_revision.clone();
+    detail.summary.session_policy = detail.session_policy.clone();
+    detail.summary.active_run_id = detail.active_run_id.clone();
+    detail.summary.subrun_count = detail.subrun_count;
+    detail.summary.memory_summary = detail.memory_summary.clone();
+    detail.summary.capability_summary = detail.capability_summary.clone();
+    detail.summary.provider_state_summary = detail.provider_state_summary.clone();
+    detail.summary.pending_mediation = detail.pending_mediation.clone();
+    detail.summary.capability_state_ref = detail.capability_state_ref.clone();
+    detail.summary.last_execution_outcome = detail.last_execution_outcome.clone();
+
+    if detail.run.actor_ref.is_empty() {
+        detail.run.actor_ref = detail.selected_actor_ref.clone();
+    }
+    if detail.run.trace_context.session_id.is_empty() {
+        detail.run.trace_context.session_id = detail.summary.id.clone();
+    }
 }
 
 pub(super) fn optional_project_id(project_id: &str) -> Option<String> {

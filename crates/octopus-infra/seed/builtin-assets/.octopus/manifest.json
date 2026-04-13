@@ -1,80 +1,147 @@
 {
-  "version": 1,
+  "version": 2,
+  "bundleKind": "octopus-asset-bundle",
   "bundleRoot": "bundle",
-  "agents": [
+  "assets": [
     {
+      "assetKind": "agent",
       "sourceId": "财务分析师",
-      "name": "财务分析师",
-      "path": "bundle/财务分析师",
-      "avatar": "Frame-17.png",
-      "generatedAvatar": true,
-      "skills": [
-        "aifinance-1.0.0",
-        "financial-calculator-1.0.0",
-        "minimax-xlsx",
-        "summarize-pro"
+      "displayName": "财务分析师",
+      "sourcePath": "bundle/财务分析师/财务分析师.md",
+      "manifestRevision": "asset-manifest/v2",
+      "taskDomains": [
+        "懂财务会建模"
       ],
-      "mcps": [
-        "finance-data"
-      ]
-    }
-  ],
-  "teams": [
+      "translationMode": "native"
+    },
     {
+      "assetKind": "team",
       "sourceId": "财务部",
-      "name": "财务部",
-      "path": "bundle/财务部",
-      "avatar": "leader_woman1.png",
-      "generatedAvatar": true,
-      "skills": [],
-      "mcps": [
-        "finance-data"
+      "displayName": "财务部",
+      "sourcePath": "bundle/财务部/财务部.md",
+      "manifestRevision": "asset-manifest/v2",
+      "taskDomains": [
+        "会使用工具"
       ],
-      "members": [
-        "应收应付专员",
-        "成本控制专员",
-        "报销审核助手",
-        "经营核算专员",
-        "财务分析师",
-        "财务负责人",
-        "预算规划师"
-      ]
-    }
-  ],
-  "skills": [
+      "translationMode": "native"
+    },
     {
+      "assetKind": "skill",
       "sourceId": "aifinance-1.0.0",
-      "name": "ai-finance-expert",
-      "slug": "ai-finance-expert",
-      "description": "AI智能财务专家技能。当用户涉及以下场景时自动触发：\n账务处理、会计分录编制、科目选择、账务调整、凭证处理；\n财务报表分析（资产负债表/利润表/现金流量表）、财务指标计算、异常识别、趋势分析；\n税务计算（增值税/企业所得税/个人所得税/消费税/房产税/土地增值税等）、税务筹划、税务合规检查；\n预算编制、成本管控、费用分析；\nCPA/注册会计师相关知识解答；\n财务政策法规解读。\nKeywords: 财务, 会计, 税务, 报表, 审计, 预算, 分录, 凭证, 科目, 账务, 纳税, 报税, 财务分析, 成本, 费用, 核算。",
-      "path": "skills/ai-finance-expert"
+      "displayName": "ai-finance-expert",
+      "sourcePath": "skills/ai-finance-expert/SKILL.md",
+      "manifestRevision": "asset-manifest/v2",
+      "taskDomains": [
+        "finance"
+      ],
+      "translationMode": "native"
     },
     {
+      "assetKind": "skill",
       "sourceId": "financial-calculator-1.0.0",
-      "name": "financial-calculator",
-      "slug": "financial-calculator",
-      "description": "Advanced financial calculator with future value tables, present value, discount calculations, markup pricing, and compound interest. Use when calculating investment growth, pricing strategies, loan values, discounts, or comparing financial scenarios across different rates and time periods. Includes both CLI and interactive web UI.",
-      "path": "skills/financial-calculator"
+      "displayName": "financial-calculator",
+      "sourcePath": "skills/financial-calculator/SKILL.md",
+      "manifestRevision": "asset-manifest/v2",
+      "taskDomains": [
+        "finance"
+      ],
+      "translationMode": "native"
     },
     {
+      "assetKind": "skill",
       "sourceId": "minimax-xlsx",
-      "name": "minimax-xlsx",
-      "slug": "minimax-xlsx",
-      "description": "Open, create, read, analyze, edit, or validate Excel/spreadsheet files (.xlsx, .xlsm, .csv, .tsv). Use when the user asks to create, build, modify, analyze, read, validate, or format any Excel spreadsheet, financial model, pivot table, or tabular data file. Covers: creating new xlsx from scratch, reading and analyzing existing files, editing existing xlsx with zero format loss, formula recalculation and validation, and applying professional financial formatting standards. Triggers on 'spreadsheet', 'Excel', '.xlsx', '.csv', 'pivot table', 'financial model', 'formula', or any request to produce tabular data in Excel format.",
-      "path": "skills/minimax-xlsx"
+      "displayName": "minimax-xlsx",
+      "sourcePath": "skills/minimax-xlsx/SKILL.md",
+      "manifestRevision": "asset-manifest/v2",
+      "taskDomains": [
+        "finance"
+      ],
+      "translationMode": "native"
     },
     {
+      "assetKind": "skill",
       "sourceId": "summarize-pro",
-      "name": "summarize-pro",
-      "slug": "summarize-pro",
-      "description": "When user asks to summarize text, articles, documents, meetings, emails, YouTube transcripts, books, PDFs, reports, conversations, or any long content. Also handles bullet points, key takeaways, action items, TL;DR, ELI5, executive summaries, chapter summaries, comparison summaries, translation summaries, thread summaries, and custom-length summaries. 20-feature AI summarizer with multiple formats, languages, and export options. All processing happens locally — NO external API calls, NO network requests, NO data sent to any server.",
-      "path": "skills/summarize-pro"
+      "displayName": "summarize-pro",
+      "sourcePath": "skills/summarize-pro/SKILL.md",
+      "manifestRevision": "asset-manifest/v2",
+      "taskDomains": [
+        "finance"
+      ],
+      "translationMode": "native"
+    },
+    {
+      "assetKind": "mcp-server",
+      "sourceId": "finance-data",
+      "displayName": "finance-data",
+      "sourcePath": "mcps/finance-data.json",
+      "manifestRevision": "asset-manifest/v2",
+      "taskDomains": [],
+      "translationMode": "native"
     }
   ],
-  "mcps": [
-    {
-      "serverName": "finance-data",
-      "path": "mcps/finance-data.json"
+  "dependencies": [],
+  "trustMetadata": {
+    "publisher": "octopus",
+    "origin": "builtin-seed",
+    "signatureState": "unsigned",
+    "trustLevel": "trusted",
+    "trustWarnings": []
+  },
+  "compatibilityMapping": {
+    "supportedTargets": [
+      "octopus"
+    ],
+    "downgradedFeatures": [],
+    "rejectedFeatures": [],
+    "translatorVersion": "phase-1"
+  },
+  "policyDefaults": {
+    "defaultModelStrategy": {
+      "selectionMode": "session-selected",
+      "preferredModelRef": null,
+      "fallbackModelRefs": [],
+      "allowTurnOverride": true
+    },
+    "permissionEnvelope": {
+      "defaultMode": "workspace-write",
+      "maxMode": "workspace-write",
+      "escalationAllowed": false,
+      "allowedResourceScopes": [
+        "agent-private",
+        "project-shared"
+      ]
+    },
+    "memoryPolicy": {
+      "durableScopes": [
+        "user-private",
+        "agent-private"
+      ],
+      "writeRequiresApproval": true,
+      "allowWorkspaceSharedWrite": false,
+      "maxSelections": 6,
+      "freshnessRequired": true
+    },
+    "delegationPolicy": {
+      "mode": "leader-orchestrated",
+      "allowBackgroundRuns": true,
+      "allowParallelWorkers": true,
+      "maxWorkerCount": 4
+    },
+    "approvalPreference": {
+      "toolExecution": "require-approval",
+      "mcpAuth": "require-approval",
+      "memoryWrite": "require-approval",
+      "teamSpawn": "require-approval",
+      "workflowEscalation": "require-approval"
     }
-  ]
+  },
+  "registryMetadata": {
+    "publisher": "octopus",
+    "revision": "builtin-seed",
+    "releaseChannel": "stable",
+    "tags": [
+      "finance",
+      "builtin"
+    ]
+  }
 }

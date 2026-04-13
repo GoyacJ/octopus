@@ -7,10 +7,12 @@ use octopus_core::{
     WorkspaceToolConsumerSummary,
 };
 
-use crate::agent_assets::{
-    find_builtin_mcp_asset, find_builtin_skill_asset_by_id, list_builtin_agent_templates,
-    list_builtin_mcp_assets, list_builtin_skill_assets, list_builtin_team_templates,
-    BuiltinSkillAsset,
+use crate::{
+    agent_assets::BuiltinSkillAsset,
+    agent_bundle::{
+        find_builtin_mcp_asset, find_builtin_skill_asset_by_id, list_builtin_agent_templates,
+        list_builtin_mcp_assets, list_builtin_skill_assets, list_builtin_team_templates,
+    },
 };
 
 const BUILTIN_SKILL_SOURCE_ORIGIN: &str = "builtin_bundle";
@@ -173,36 +175,45 @@ fn capability_asset_id(entry: &WorkspaceToolCatalogEntry) -> String {
 }
 
 fn capability_id(entry: &WorkspaceToolCatalogEntry) -> String {
-    entry.capability_id.clone().unwrap_or_else(|| entry.id.clone())
+    entry
+        .capability_id
+        .clone()
+        .unwrap_or_else(|| entry.id.clone())
 }
 
 fn capability_source_kind(entry: &WorkspaceToolCatalogEntry) -> String {
-    entry.source_kind.clone().unwrap_or_else(|| match entry.kind.as_str() {
-        "builtin" => "builtin".into(),
-        "skill" => {
-            if entry.source_origin.as_deref() == Some(BUILTIN_SKILL_SOURCE_ORIGIN) {
-                "bundled_skill".into()
-            } else {
-                "local_skill".into()
+    entry
+        .source_kind
+        .clone()
+        .unwrap_or_else(|| match entry.kind.as_str() {
+            "builtin" => "builtin".into(),
+            "skill" => {
+                if entry.source_origin.as_deref() == Some(BUILTIN_SKILL_SOURCE_ORIGIN) {
+                    "bundled_skill".into()
+                } else {
+                    "local_skill".into()
+                }
             }
-        }
-        "mcp" => "mcp_tool".into(),
-        _ => "builtin".into(),
-    })
+            "mcp" => "mcp_tool".into(),
+            _ => "builtin".into(),
+        })
 }
 
 fn capability_execution_kind(entry: &WorkspaceToolCatalogEntry) -> String {
-    entry.execution_kind.clone().unwrap_or_else(|| match entry.kind.as_str() {
-        "skill" => "prompt_skill".into(),
-        "mcp" => {
-            if entry.resource_uri.is_some() {
-                "resource".into()
-            } else {
-                "tool".into()
+    entry
+        .execution_kind
+        .clone()
+        .unwrap_or_else(|| match entry.kind.as_str() {
+            "skill" => "prompt_skill".into(),
+            "mcp" => {
+                if entry.resource_uri.is_some() {
+                    "resource".into()
+                } else {
+                    "tool".into()
+                }
             }
-        }
-        _ => "tool".into(),
-    })
+            _ => "tool".into(),
+        })
 }
 
 fn unique_sorted(values: impl IntoIterator<Item = String>) -> Vec<String> {
@@ -216,7 +227,10 @@ fn unique_sorted(values: impl IntoIterator<Item = String>) -> Vec<String> {
 
 fn capability_asset_name(entry: &WorkspaceToolCatalogEntry) -> String {
     if entry.kind == "mcp" {
-        entry.server_name.clone().unwrap_or_else(|| entry.name.clone())
+        entry
+            .server_name
+            .clone()
+            .unwrap_or_else(|| entry.name.clone())
     } else {
         entry.name.clone()
     }
@@ -245,9 +259,7 @@ fn capability_asset_manifest(entries: &[&WorkspaceToolCatalogEntry]) -> Capabili
         source_key: entry.source_key.clone(),
         kind: entry.kind.clone(),
         source_kinds: unique_sorted(entries.iter().map(|item| capability_source_kind(item))),
-        execution_kinds: unique_sorted(
-            entries.iter().map(|item| capability_execution_kind(item)),
-        ),
+        execution_kinds: unique_sorted(entries.iter().map(|item| capability_execution_kind(item))),
         name: capability_asset_name(entry),
         description: capability_asset_description(entry),
         display_path: entry.display_path.clone(),
@@ -355,7 +367,9 @@ fn skill_package_manifest(entry: &WorkspaceToolCatalogEntry) -> Option<SkillPack
     })
 }
 
-fn mcp_server_package_manifest(entries: &[&WorkspaceToolCatalogEntry]) -> Option<McpServerPackageManifest> {
+fn mcp_server_package_manifest(
+    entries: &[&WorkspaceToolCatalogEntry],
+) -> Option<McpServerPackageManifest> {
     let entry = entries.first().copied()?;
     if entry.kind != "mcp" {
         return None;
@@ -397,11 +411,7 @@ fn mcp_server_package_manifest(entries: &[&WorkspaceToolCatalogEntry]) -> Option
                 .filter(|item| capability_source_kind(item) == "mcp_prompt")
                 .map(|item| item.name.clone()),
         ),
-        resource_uris: unique_sorted(
-            entries
-                .iter()
-                .filter_map(|item| item.resource_uri.clone()),
-        ),
+        resource_uris: unique_sorted(entries.iter().filter_map(|item| item.resource_uri.clone())),
         scope,
         status_detail: entry.status_detail.clone(),
     })
@@ -417,7 +427,11 @@ fn capability_management_projection(
     let mut grouped_entries = BTreeMap::<String, Vec<&WorkspaceToolCatalogEntry>>::new();
     for entry in &entries {
         grouped_entries
-            .entry(format!("{}::{}", capability_asset_id(entry), entry.source_key))
+            .entry(format!(
+                "{}::{}",
+                capability_asset_id(entry),
+                entry.source_key
+            ))
             .or_default()
             .push(entry);
     }
@@ -1616,13 +1630,17 @@ fn string_map_from_json(value: Option<&serde_json::Value>) -> BTreeMap<String, S
         .map(|object| {
             object
                 .iter()
-                .filter_map(|(key, value)| value.as_str().map(|item| (key.clone(), item.to_string())))
+                .filter_map(|(key, value)| {
+                    value.as_str().map(|item| (key.clone(), item.to_string()))
+                })
                 .collect::<BTreeMap<_, _>>()
         })
         .unwrap_or_default()
 }
 
-fn mcp_oauth_config_from_json(value: Option<&serde_json::Value>) -> Option<runtime::McpOAuthConfig> {
+fn mcp_oauth_config_from_json(
+    value: Option<&serde_json::Value>,
+) -> Option<runtime::McpOAuthConfig> {
     let object = value?.as_object()?;
     Some(runtime::McpOAuthConfig {
         client_id: object
@@ -1932,7 +1950,8 @@ impl DiscoveredMcpServerCapabilities {
         if self.availability.is_empty() {
             self.availability = if self.status_detail.is_some() {
                 "attention".into()
-            } else if self.tools.is_empty() && self.prompts.is_empty() && self.resources.is_empty() {
+            } else if self.tools.is_empty() && self.prompts.is_empty() && self.resources.is_empty()
+            {
                 "configured".into()
             } else {
                 "healthy".into()
@@ -2079,7 +2098,10 @@ fn append_mcp_catalog_entries(
         });
     };
 
-    if discovered.tools.is_empty() && discovered.prompts.is_empty() && discovered.resources.is_empty() {
+    if discovered.tools.is_empty()
+        && discovered.prompts.is_empty()
+        && discovered.resources.is_empty()
+    {
         let capability_id = format!("mcp_server__{}__{}", scope, server_name);
         push_entry(
             capability_id.clone(),
@@ -2143,7 +2165,10 @@ fn append_mcp_catalog_entries(
                 .clone()
                 .or_else(|| resource.name.clone())
                 .unwrap_or_else(|| {
-                    format!("Read MCP resource `{}` from server `{server_name}`.", resource.uri)
+                    format!(
+                        "Read MCP resource `{}` from server `{server_name}`.",
+                        resource.uri
+                    )
                 }),
             Vec::new(),
             Some(resource.uri.clone()),
@@ -2375,8 +2400,11 @@ impl InfraWorkspaceService {
                 let parsed = configs
                     .iter()
                     .filter_map(|(server_name, config)| {
-                        scoped_mcp_server_config_from_document(runtime::ConfigSource::Project, config)
-                            .map(|parsed| (server_name.clone(), parsed))
+                        scoped_mcp_server_config_from_document(
+                            runtime::ConfigSource::Project,
+                            config,
+                        )
+                        .map(|parsed| (server_name.clone(), parsed))
                     })
                     .collect::<BTreeMap<_, _>>();
                 (project_id.clone(), parsed)
@@ -2782,12 +2810,10 @@ mod tests {
             entry["sourceKind"] == "mcp_tool" && entry["executionKind"] == "tool"
         }));
         assert!(entries.iter().any(|entry| {
-            entry["sourceKind"] == "mcp_prompt"
-                && entry["executionKind"] == "prompt_skill"
+            entry["sourceKind"] == "mcp_prompt" && entry["executionKind"] == "prompt_skill"
         }));
         assert!(entries.iter().any(|entry| {
-            entry["sourceKind"] == "mcp_resource"
-                && entry["executionKind"] == "resource"
+            entry["sourceKind"] == "mcp_resource" && entry["executionKind"] == "resource"
         }));
 
         let assets = projection_json["assets"]

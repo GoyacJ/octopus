@@ -4,6 +4,9 @@ import type {
   PetPresenceState,
   PetProfile,
   PetWorkspaceSnapshot,
+  RuntimeCapabilityPlanSummary,
+  RuntimeCapabilityProviderState,
+  RuntimePendingMediationSummary,
   RuntimeApprovalRequest,
   RuntimeEffectiveConfig,
   RuntimeEventEnvelope,
@@ -14,6 +17,38 @@ import type {
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T
+}
+
+function createCapabilityPlanSummary(): RuntimeCapabilityPlanSummary {
+  return {
+    activatedTools: ['workspace-api'],
+    approvedTools: [],
+    authResolvedTools: [],
+    availableResources: [],
+    deferredTools: [],
+    discoverableSkills: ['docs'],
+    grantedTools: ['workspace-api'],
+    hiddenCapabilities: [],
+    pendingTools: [],
+    providerFallbacks: [],
+    visibleTools: ['workspace-api'],
+  }
+}
+
+function createProviderStateSummary(): RuntimeCapabilityProviderState[] {
+  return [
+    {
+      providerKey: 'workspace-api',
+      state: 'ready',
+      degraded: false,
+    },
+  ]
+}
+
+function createPendingMediationSummary(): RuntimePendingMediationSummary {
+  return {
+    mediationKind: 'none',
+  }
 }
 
 export interface RuntimeSessionState {
@@ -157,8 +192,28 @@ export function createPetSnapshot(
   }
 }
 
-export function createSessionDetail(conversationId: string, projectId: string, title: string, sessionKind: 'project' | 'pet' = 'project'): RuntimeSessionDetail {
+export function createSessionDetail(
+  conversationId: string,
+  projectId: string,
+  title: string,
+  sessionKind: 'project' | 'pet' = 'project',
+  selectedActorRef?: string,
+  selectedConfiguredModelId = 'anthropic-primary',
+  executionPermissionMode = 'workspace-write',
+): RuntimeSessionDetail {
   const sessionId = `rt-${conversationId}`
+  const resolvedSelectedActorRef = selectedActorRef ?? (sessionKind === 'pet' ? 'team:pet-runtime' : 'agent:agent-architect')
+  const sessionPolicy = {
+    selectedActorRef: resolvedSelectedActorRef,
+    selectedConfiguredModelId,
+    executionPermissionMode,
+    configSnapshotId: 'cfgsnap-fixture',
+    manifestRevision: 'manifest-fixture-v2',
+    capabilityPolicy: {},
+    memoryPolicy: {},
+    delegationPolicy: {},
+    approvalPreference: {},
+  }
   return {
     summary: {
       id: sessionId,
@@ -172,6 +227,23 @@ export function createSessionDetail(conversationId: string, projectId: string, t
       configSnapshotId: 'cfgsnap-fixture',
       effectiveConfigHash: 'cfg-hash-fixture',
       startedFromScopeSet: ['project'],
+      selectedActorRef: resolvedSelectedActorRef,
+      manifestRevision: 'manifest-fixture-v2',
+      sessionPolicy,
+      activeRunId: `run-${conversationId}`,
+      subrunCount: 0,
+      capabilityPlanSummary: createCapabilityPlanSummary(),
+      capabilityStateRef: 'capstate-fixture',
+      memorySummary: {
+        summary: 'No durable memories selected.',
+        durableMemoryCount: 0,
+        selectedMemoryIds: [],
+      },
+      pendingMediation: createPendingMediationSummary(),
+      providerStateSummary: createProviderStateSummary(),
+      lastExecutionOutcome: {
+        outcome: 'success',
+      },
     },
     run: {
       id: `run-${conversationId}`,
@@ -181,6 +253,8 @@ export function createSessionDetail(conversationId: string, projectId: string, t
       currentStep: 'runtime.run.idle',
       startedAt: 1,
       updatedAt: 1,
+      actorRef: resolvedSelectedActorRef,
+      runKind: 'primary',
       configuredModelId: 'anthropic-primary',
       configuredModelName: 'Claude Sonnet 4.5',
       modelId: 'claude-sonnet-4-5',
@@ -188,10 +262,64 @@ export function createSessionDetail(conversationId: string, projectId: string, t
       configSnapshotId: 'cfgsnap-fixture',
       effectiveConfigHash: 'cfg-hash-fixture',
       startedFromScopeSet: ['project'],
+      capabilityPlanSummary: createCapabilityPlanSummary(),
+      capabilityStateRef: 'capstate-fixture',
+      approvalState: 'none',
+      pendingMediation: createPendingMediationSummary(),
+      providerStateSummary: createProviderStateSummary(),
+      lastExecutionOutcome: {
+        outcome: 'success',
+      },
+      usageSummary: {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+      },
+      artifactRefs: [],
+      traceContext: {
+        sessionId,
+        traceId: `trace-${conversationId}`,
+        turnId: `turn-${conversationId}`,
+      },
+      checkpoint: {
+        serializedSession: {
+          sessionId,
+          runId: `run-${conversationId}`,
+        },
+        capabilityPlanSummary: createCapabilityPlanSummary(),
+        capabilityStateRef: 'capstate-fixture',
+        pendingMediation: createPendingMediationSummary(),
+        currentIterationIndex: 0,
+        lastExecutionOutcome: {
+          outcome: 'success',
+        },
+        usageSummary: {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        },
+      },
     },
     messages: [],
     trace: [],
     pendingApproval: undefined,
+    activeRunId: `run-${conversationId}`,
+    subrunCount: 0,
+    selectedActorRef: resolvedSelectedActorRef,
+    manifestRevision: 'manifest-fixture-v2',
+    sessionPolicy,
+    capabilityPlanSummary: createCapabilityPlanSummary(),
+    capabilityStateRef: 'capstate-fixture',
+    memorySummary: {
+      summary: 'No durable memories selected.',
+      durableMemoryCount: 0,
+      selectedMemoryIds: [],
+    },
+    pendingMediation: createPendingMediationSummary(),
+    providerStateSummary: createProviderStateSummary(),
+    lastExecutionOutcome: {
+      outcome: 'success',
+    },
   }
 }
 
@@ -322,6 +450,10 @@ export function createApproval(state: RuntimeSessionState): RuntimeApprovalReque
     riskLevel: 'medium',
     createdAt: state.nextSequence * 10,
     status: 'pending',
+    approvalLayer: 'execution',
+    targetKind: 'tool',
+    targetRef: 'bash',
+    escalationReason: 'workspace-write execution requires approval',
   }
 }
 

@@ -9,8 +9,8 @@
 //! - Code pushed (has output file)
 
 use runtime::{
-    LaneBlocker, LaneContext, PolicyAction, PolicyCondition, PolicyEngine, PolicyRule,
-    ReviewStatus, evaluate,
+    evaluate, LaneBlocker, LaneContext, PolicyAction, PolicyCondition, PolicyEngine, PolicyRule,
+    ReviewStatus,
 };
 
 use crate::AgentOutput;

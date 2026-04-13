@@ -61,6 +61,80 @@ pub trait ApiClient {
 /// Trait implemented by tool dispatchers that execute model-requested tools.
 pub trait ToolExecutor {
     fn execute(&mut self, tool_name: &str, input: &str) -> Result<String, ToolError>;
+
+    fn execute_with_outcome(&mut self, tool_name: &str, input: &str) -> ToolExecutionOutcome {
+        match self.execute(tool_name, input) {
+            Ok(output) => ToolExecutionOutcome::Allow { output },
+            Err(error) => ToolExecutionOutcome::Failed {
+                message: error.to_string(),
+            },
+        }
+    }
+
+    fn manages_mediation(&self) -> bool {
+        false
+    }
+}
+
+/// Structured result of one tool invocation after capability mediation and execution.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolExecutionOutcome {
+    Allow { output: String },
+    RequireApproval { reason: Option<String> },
+    RequireAuth { reason: Option<String> },
+    Deny { reason: String },
+    Cancelled { reason: Option<String> },
+    Interrupted { reason: Option<String> },
+    Degraded { reason: Option<String> },
+    Failed { message: String },
+}
+
+impl ToolExecutionOutcome {
+    #[must_use]
+    pub fn message_for_tool(&self, tool_name: &str) -> String {
+        match self {
+            Self::Allow { output } => output.clone(),
+            Self::RequireApproval { reason } => reason.as_deref().map_or_else(
+                || format!("tool `{tool_name}` requires approval before execution"),
+                |reason| format!("tool `{tool_name}` requires approval before execution: {reason}"),
+            ),
+            Self::RequireAuth { reason } => reason.as_deref().map_or_else(
+                || format!("tool `{tool_name}` requires auth before execution"),
+                |reason| format!("tool `{tool_name}` requires auth before execution: {reason}"),
+            ),
+            Self::Deny { reason } => reason.clone(),
+            Self::Cancelled { reason } => reason
+                .clone()
+                .unwrap_or_else(|| format!("tool `{tool_name}` was cancelled before completion")),
+            Self::Interrupted { reason } => reason.clone().unwrap_or_else(|| {
+                format!("tool `{tool_name}` was interrupted before completion")
+            }),
+            Self::Degraded { reason } => reason.clone().unwrap_or_else(|| {
+                format!("tool `{tool_name}` could not complete because its provider is degraded")
+            }),
+            Self::Failed { message } => message.clone(),
+        }
+    }
+
+    #[must_use]
+    pub fn dispatch_started(&self) -> bool {
+        matches!(
+            self,
+            Self::Allow { .. }
+                | Self::Cancelled { .. }
+                | Self::Interrupted { .. }
+                | Self::Degraded { .. }
+                | Self::Failed { .. }
+        )
+    }
+
+    #[must_use]
+    pub fn into_result(self, tool_name: &str) -> Result<String, ToolError> {
+        match self {
+            Self::Allow { output } => Ok(output),
+            other => Err(ToolError::new(other.message_for_tool(tool_name))),
+        }
+    }
 }
 
 /// Error returned when a tool invocation fails locally.

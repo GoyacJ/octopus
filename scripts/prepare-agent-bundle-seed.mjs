@@ -385,6 +385,7 @@ async function materializeOwner({
   return {
     sourceId,
     name: String(frontmatter.name ?? sourceId).trim(),
+    taskDomains: stableStringList(frontmatter.tag),
     avatar: avatar.fileName,
     generatedAvatar: avatar.generated,
     skillRefs,
@@ -506,56 +507,111 @@ async function copyCanonicalMcpLibrary(mcpDefinitions, config) {
 }
 
 function buildManifest({ bundleRoot, agents, teams, skillDefinitions, mcpDefinitions, config }) {
+  const assetPath = sourcePath => (bundleRoot === '.' ? sourcePath : `bundle/${sourcePath}`)
   return {
-    version: 1,
+    version: 2,
+    bundleKind: 'octopus-asset-bundle',
     bundleRoot,
-    sourceMetadata: {
-      generatedBy: 'scripts/prepare-agent-bundle-seed.mjs',
-      templatesRoot: toSourceMetadataPath(config, config.templatesRoot),
-      avatarLibraryRoot: toSourceMetadataPath(config, config.avatarLibraryRoot),
-    },
-    agents: agents
+    assets: [
+      ...agents
       .map(agent => ({
+        assetKind: 'agent',
         sourceId: agent.sourceId,
-        name: agent.name,
-        path: bundleRoot === '.' ? agent.sourceId : `bundle/${agent.sourceId}`,
-        templatePath: normalizePath(join('templates', 'agents', agent.sourceId)),
-        avatar: agent.avatar,
-        generatedAvatar: agent.generatedAvatar,
-        skills: agent.skillRefs,
-        mcps: agent.mcpRefs,
+        displayName: agent.name,
+        sourcePath: assetPath(`${agent.sourceId}/${agent.sourceId}.md`),
+        manifestRevision: 'asset-manifest/v2',
+        taskDomains: agent.taskDomains.length > 0 ? agent.taskDomains : ['finance'],
+        translationMode: 'native',
       }))
       .sort((left, right) => left.sourceId.localeCompare(right.sourceId)),
-    teams: teams
+      ...teams
       .map(team => ({
+        assetKind: 'team',
         sourceId: team.sourceId,
-        name: team.name,
-        path: bundleRoot === '.' ? team.sourceId : `bundle/${team.sourceId}`,
-        templatePath: normalizePath(join('templates', 'teams', team.sourceId)),
-        avatar: team.avatar,
-        generatedAvatar: team.generatedAvatar,
-        skills: team.skillRefs,
-        mcps: team.mcpRefs,
-        members: [...team.memberIds].sort((left, right) => left.localeCompare(right)),
+        displayName: team.name,
+        sourcePath: assetPath(`${team.sourceId}/${team.sourceId}.md`),
+        manifestRevision: 'asset-manifest/v2',
+        taskDomains: team.taskDomains.length > 0 ? team.taskDomains : ['finance'],
+        translationMode: 'native',
       }))
       .sort((left, right) => left.sourceId.localeCompare(right.sourceId)),
-    skills: skillDefinitions
+      ...skillDefinitions
       .map(definition => ({
+        assetKind: 'skill',
         sourceId: definition.sourceId,
-        name: definition.name,
-        slug: definition.slug,
-        description: definition.description,
-        path: `skills/${definition.slug}`,
-        templatePath: normalizePath(join('templates', 'skills', definition.sourceId)),
+        displayName: definition.name,
+        sourcePath: `skills/${definition.slug}/SKILL.md`,
+        manifestRevision: 'asset-manifest/v2',
+        taskDomains: ['finance'],
+        translationMode: 'native',
       }))
       .sort((left, right) => left.sourceId.localeCompare(right.sourceId)),
-    mcps: mcpDefinitions
+      ...mcpDefinitions
       .map(definition => ({
-        serverName: definition.serverName,
-        path: `mcps/${definition.fileName}`,
-        templatePath: normalizePath(join('templates', 'mcps', definition.fileName)),
+        assetKind: 'mcp-server',
+        sourceId: definition.serverName,
+        displayName: definition.serverName,
+        sourcePath: `mcps/${definition.fileName}`,
+        manifestRevision: 'asset-manifest/v2',
+        taskDomains: [],
+        translationMode: 'native',
       }))
-      .sort((left, right) => left.serverName.localeCompare(right.serverName)),
+      .sort((left, right) => left.sourceId.localeCompare(right.sourceId)),
+    ],
+    dependencies: [],
+    trustMetadata: {
+      publisher: 'octopus',
+      origin: 'builtin-seed',
+      signatureState: 'unsigned',
+      trustLevel: 'trusted',
+      trustWarnings: [],
+    },
+    compatibilityMapping: {
+      supportedTargets: ['octopus'],
+      downgradedFeatures: [],
+      rejectedFeatures: [],
+      translatorVersion: 'phase-1',
+    },
+    policyDefaults: {
+      defaultModelStrategy: {
+        selectionMode: 'session-selected',
+        preferredModelRef: null,
+        fallbackModelRefs: [],
+        allowTurnOverride: true,
+      },
+      permissionEnvelope: {
+        defaultMode: 'workspace-write',
+        maxMode: 'workspace-write',
+        escalationAllowed: false,
+        allowedResourceScopes: ['agent-private', 'project-shared'],
+      },
+      memoryPolicy: {
+        durableScopes: ['user-private', 'agent-private'],
+        writeRequiresApproval: true,
+        allowWorkspaceSharedWrite: false,
+        maxSelections: 6,
+        freshnessRequired: true,
+      },
+      delegationPolicy: {
+        mode: 'leader-orchestrated',
+        allowBackgroundRuns: true,
+        allowParallelWorkers: true,
+        maxWorkerCount: 4,
+      },
+      approvalPreference: {
+        toolExecution: 'require-approval',
+        mcpAuth: 'require-approval',
+        memoryWrite: 'require-approval',
+        teamSpawn: 'require-approval',
+        workflowEscalation: 'require-approval',
+      },
+    },
+    registryMetadata: {
+      publisher: 'octopus',
+      revision: 'builtin-seed',
+      releaseChannel: 'stable',
+      tags: ['finance', 'builtin'],
+    },
   }
 }
 

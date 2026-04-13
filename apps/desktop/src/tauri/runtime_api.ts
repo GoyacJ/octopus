@@ -129,7 +129,7 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
       return await openRuntimeSseStream(context, sessionId, options)
     },
     async submitUserTurn(sessionId, input, idempotencyKey) {
-      const resolvedPermissionMode: RuntimePermissionMode = resolveRuntimePermissionMode(input.permissionMode)
+      const resolvedPermissionMode: RuntimePermissionMode = resolveRuntimePermissionMode(input.permissionMode ?? 'read-only')
       return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions/{sessionId}/turns', 'post', {
         session: assertWorkspaceRequestReady(context),
         pathParams: {

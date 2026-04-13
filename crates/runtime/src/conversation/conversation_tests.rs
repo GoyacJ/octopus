@@ -19,7 +19,8 @@ use crate::ToolError;
 use super::assistant_projection::build_assistant_message;
 use super::{
     parse_auto_compaction_threshold, ApiClient, ApiRequest, AssistantEvent, AutoCompactionEvent,
-    ConversationRuntime, PromptCacheEvent, RuntimeError, StaticToolExecutor, ToolExecutor,
+    ConversationRuntime, PromptCacheEvent, RuntimeError, StaticToolExecutor, ToolExecutionOutcome,
+    ToolExecutor,
     DEFAULT_AUTO_COMPACTION_INPUT_TOKENS_THRESHOLD,
 };
 
@@ -230,6 +231,103 @@ fn records_denied_tool_results_when_prompt_rejects() {
         &summary.tool_results[0].blocks[0],
         ContentBlock::ToolResult { is_error: true, output, .. } if output == "not now"
     ));
+}
+
+#[test]
+fn consumes_capability_mediation_and_execution_outcomes_without_permission_fallback() {
+    struct SingleToolApiClient;
+    impl ApiClient for SingleToolApiClient {
+        fn stream(&mut self, request: ApiRequest) -> Result<Vec<AssistantEvent>, RuntimeError> {
+            if request
+                .messages
+                .iter()
+                .any(|message| message.role == MessageRole::Tool)
+            {
+                return Ok(vec![
+                    AssistantEvent::TextDelta("observed".to_string()),
+                    AssistantEvent::MessageStop,
+                ]);
+            }
+            Ok(vec![
+                AssistantEvent::ToolUse {
+                    id: "tool-1".to_string(),
+                    name: "runtime-tool".to_string(),
+                    input: r#"{"path":"secret.txt"}"#.to_string(),
+                },
+                AssistantEvent::MessageStop,
+            ])
+        }
+    }
+
+    struct PanicPrompter;
+    impl PermissionPrompter for PanicPrompter {
+        fn decide(&mut self, _request: &PermissionRequest) -> PermissionPromptDecision {
+            panic!("capability-managed executor should not fall back to permission prompting")
+        }
+    }
+
+    struct ScriptedOutcomeExecutor {
+        outcome: ToolExecutionOutcome,
+    }
+
+    impl ToolExecutor for ScriptedOutcomeExecutor {
+        fn execute(&mut self, _tool_name: &str, _input: &str) -> Result<String, ToolError> {
+            panic!("conversation loop should use execute_with_outcome for capability executors")
+        }
+
+        fn execute_with_outcome(&mut self, _tool_name: &str, _input: &str) -> ToolExecutionOutcome {
+            self.outcome.clone()
+        }
+
+        fn manages_mediation(&self) -> bool {
+            true
+        }
+    }
+
+    for (outcome, expected_message) in [
+        (
+            ToolExecutionOutcome::RequireApproval {
+                reason: Some("approval required".to_string()),
+            },
+            "tool `runtime-tool` requires approval before execution: approval required".to_string(),
+        ),
+        (
+            ToolExecutionOutcome::RequireAuth {
+                reason: Some("auth required".to_string()),
+            },
+            "tool `runtime-tool` requires auth before execution: auth required".to_string(),
+        ),
+        (
+            ToolExecutionOutcome::Interrupted {
+                reason: Some("transport interrupted".to_string()),
+            },
+            "transport interrupted".to_string(),
+        ),
+        (
+            ToolExecutionOutcome::Degraded {
+                reason: Some("provider degraded".to_string()),
+            },
+            "provider degraded".to_string(),
+        ),
+    ] {
+        let mut runtime = ConversationRuntime::new(
+            Session::new(),
+            SingleToolApiClient,
+            ScriptedOutcomeExecutor { outcome },
+            PermissionPolicy::new(PermissionMode::WorkspaceWrite),
+            vec!["system".to_string()],
+        );
+
+        let summary = runtime
+            .run_turn("use the runtime tool", Some(&mut PanicPrompter))
+            .expect("conversation should continue after capability outcome");
+
+        assert_eq!(summary.tool_results.len(), 1);
+        assert!(matches!(
+            &summary.tool_results[0].blocks[0],
+            ContentBlock::ToolResult { is_error: true, output, .. } if output == &expected_message
+        ));
+    }
 }
 
 #[test]

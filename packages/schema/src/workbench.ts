@@ -43,7 +43,7 @@ export interface ExecutionProfile {
   interruptPreference: string
 }
 
-export interface CapabilityPolicy {
+export interface WorkbenchCapabilityPolicy {
   model: string
   tools: string[]
   externalBindings: string[]
@@ -84,7 +84,7 @@ export interface Agent {
   tags?: string[]
   mcpBindings: string[]
   systemPrompt: string
-  capabilityPolicy: CapabilityPolicy
+  capabilityPolicy: WorkbenchCapabilityPolicy
   knowledgeScope: KnowledgeScope
   executionProfile: ExecutionProfile
   approvalPreferences: string[]

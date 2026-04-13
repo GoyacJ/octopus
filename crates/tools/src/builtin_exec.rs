@@ -52,8 +52,6 @@ pub(crate) fn execute_tool_with_enforcer(
         "WebFetch" => from_value::<WebFetchInput>(input).and_then(run_web_fetch),
         "WebSearch" => from_value::<WebSearchInput>(input).and_then(run_web_search),
         "TodoWrite" => from_value::<TodoWriteInput>(input).and_then(run_todo_write),
-        "SkillDiscovery" => from_value::<SkillDiscoveryInput>(input).and_then(run_skill_discovery),
-        "SkillTool" => from_value::<SkillToolInput>(input).and_then(run_skill_tool),
         "Agent" => from_value::<AgentInput>(input).and_then(run_agent),
         "ToolSearch" => from_value::<ToolSearchInput>(input).and_then(run_tool_search),
         "NotebookEdit" => from_value::<NotebookEditInput>(input).and_then(run_notebook_edit),
@@ -184,28 +182,44 @@ pub(crate) fn run_todo_write(input: TodoWriteInput) -> Result<String, String> {
     to_pretty_json(execute_todo_write(input)?)
 }
 
+#[allow(dead_code)]
 pub(crate) fn run_skill_discovery(input: SkillDiscoveryInput) -> Result<String, String> {
     let runtime = crate::CapabilityRuntime::builtin();
-    run_skill_discovery_with_runtime(&runtime, input)
+    run_skill_discovery_impl(&runtime, input)
 }
 
+#[allow(dead_code)]
 pub(crate) fn run_skill_tool(input: SkillToolInput) -> Result<String, String> {
     let runtime = crate::CapabilityRuntime::builtin();
-    run_skill_tool_with_runtime(&runtime, input)
+    run_skill_tool_impl(&runtime, input)
 }
 
-pub(crate) fn run_skill_discovery_with_runtime(
+#[allow(dead_code)]
+fn run_skill_discovery_impl(
     runtime: &crate::CapabilityRuntime,
     input: SkillDiscoveryInput,
 ) -> Result<String, String> {
-    execute_runtime_skill_compat_tool(runtime, "SkillDiscovery", input)
+    let current_dir = std::env::current_dir().ok();
+    let discovery = runtime.skill_discovery(
+        &input.query,
+        input.max_results.unwrap_or(5),
+        crate::CapabilityPlannerInput::default().with_current_dir(current_dir.as_deref()),
+    );
+    to_pretty_json(discovery)
 }
 
-pub(crate) fn run_skill_tool_with_runtime(
+#[allow(dead_code)]
+fn run_skill_tool_impl(
     runtime: &crate::CapabilityRuntime,
     input: SkillToolInput,
 ) -> Result<String, String> {
-    execute_runtime_skill_compat_tool(runtime, "SkillTool", input)
+    let current_dir = std::env::current_dir().ok();
+    let result = runtime.execute_skill(
+        &input.skill,
+        input.arguments,
+        crate::CapabilityPlannerInput::default().with_current_dir(current_dir.as_deref()),
+    );
+    result.and_then(to_pretty_json)
 }
 
 pub(crate) fn run_tool_search(input: ToolSearchInput) -> Result<String, String> {
@@ -459,34 +473,6 @@ fn execute_todo_write(input: TodoWriteInput) -> Result<TodoWriteOutput, String> 
         new_todos: input.todos,
         verification_nudge_needed,
     })
-}
-
-fn execute_runtime_skill_compat_tool<T: Serialize>(
-    runtime: &crate::CapabilityRuntime,
-    tool_name: &str,
-    input: T,
-) -> Result<String, String> {
-    let current_dir = std::env::current_dir().ok();
-    let input = serde_json::to_value(input).map_err(|error| error.to_string())?;
-    let store = crate::SessionCapabilityStore::default();
-
-    // Keep the compat shim thin: all model-facing skill gating must come from the
-    // capability runtime surface and executor, not from ad-hoc callsite logic here.
-    runtime
-        .execute_tool(
-            tool_name,
-            input,
-            crate::CapabilityPlannerInput::default().with_current_dir(current_dir.as_deref()),
-            &store,
-            None,
-            None,
-            |_kind, runtime_tool_name, _input| {
-                Err(ToolError::new(format!(
-                    "tool `{runtime_tool_name}` requires a runtime host and is not available through the builtin compatibility shim"
-                )))
-            },
-        )
-        .map_err(|error| error.to_string())
 }
 
 fn validate_todos(todos: &[TodoItem]) -> Result<(), String> {

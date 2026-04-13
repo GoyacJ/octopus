@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 7143b0fafea4e58d735646edf27e0c645dd4014d9ddd4c9da33efed7caf9b54a
+// Source hash: 91ad97118dd78a437cd5e08b66311fdf3b4a3b8a87ae813965ee42fa2b679eee
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "7143b0fafea4e58d735646edf27e0c645dd4014d9ddd4c9da33efed7caf9b54a"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "91ad97118dd78a437cd5e08b66311fdf3b4a3b8a87ae813965ee42fa2b679eee"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -50,24 +50,37 @@ export interface AccessUserUpsertRequest {
 }
 
 export interface AgentRecord {
+  approvalPreference: ApprovalPreference
   avatar?: string
   avatarPath?: string
   builtinToolKeys: string[]
+  capabilityPolicy: CapabilityPolicy
+  defaultModelStrategy: DefaultModelStrategy
+  delegationPolicy: DelegationPolicy
+  dependencyResolution: AssetDependencyResolution[]
   description: string
   id: string
+  importMetadata: AssetImportMetadata
   integrationSource?: {
   kind: "workspace-link" | "builtin-template"
   sourceId: string
 }
+  manifestRevision: string
   mcpServerNames: string[]
+  memoryPolicy: MemoryPolicy
   name: string
+  outputContract: OutputContract
+  permissionEnvelope: PermissionEnvelope
   personality: string
   projectId?: string
   prompt: string
   scope: AgentScope
+  sharedCapabilityPolicy: SharedCapabilityPolicy
   skillIds: string[]
   status: AgentStatus
   tags: string[]
+  taskDomains: string[]
+  trustMetadata: AssetTrustMetadata
   updatedAt: number
   workspaceId: string
 }
@@ -90,6 +103,22 @@ export interface ApiErrorEnvelope {
   error: ApiErrorDetailEnvelope
 }
 
+export type ApprovalMode = "auto" | "require-approval" | "deny"
+
+export interface ApprovalPreference {
+  mcpAuth: ApprovalMode
+  memoryWrite: ApprovalMode
+  teamSpawn: ApprovalMode
+  toolExecution: ApprovalMode
+  workflowEscalation: ApprovalMode
+}
+
+export interface ArtifactHandoffPolicy {
+  mode: "leader-reviewed" | "direct-handoff"
+  requireLineage: boolean
+  retainArtifacts: boolean
+}
+
 export interface ArtifactRecord {
   byteSize?: number
   contentHash?: string
@@ -105,6 +134,108 @@ export interface ArtifactRecord {
 }
 
 export type ArtifactStatus = "draft" | "review" | "approved" | "published"
+
+export interface AssetBundleAssetEntry {
+  assetKind: "agent" | "team" | "skill" | "mcp-server" | "plugin" | "workflow-template"
+  displayName: string
+  manifestRevision: string
+  sourceId: string
+  sourcePath: string
+  taskDomains: string[]
+  translationMode: "native" | "translate" | "downgrade" | "reject"
+}
+
+export interface AssetBundleCompatibilityMapping {
+  downgradedFeatures: string[]
+  rejectedFeatures: string[]
+  supportedTargets: string[]
+  translatorVersion: string
+}
+
+export interface AssetBundleManifest {
+  assets: AssetBundleAssetEntry[]
+  bundleKind: "octopus-asset-bundle"
+  bundleRoot: string
+  compatibilityMapping: AssetBundleCompatibilityMapping
+  dependencies: AssetDependency[]
+  policyDefaults: AssetBundlePolicyDefaults
+  registryMetadata?: AssetBundleRegistryMetadata
+  trustMetadata: AssetTrustMetadata
+  version: number
+}
+
+export interface AssetBundlePolicyDefaults {
+  approvalPreference: ApprovalPreference
+  defaultModelStrategy: DefaultModelStrategy
+  delegationPolicy: DelegationPolicy
+  memoryPolicy: MemoryPolicy
+  permissionEnvelope: PermissionEnvelope
+}
+
+export interface AssetBundleRegistryMetadata {
+  publisher: string
+  releaseChannel: string
+  revision: string
+  tags: string[]
+}
+
+export interface AssetDependency {
+  kind: string
+  ref: string
+  required: boolean
+  versionRange: string
+}
+
+export interface AssetDependencyResolution {
+  kind: string
+  ref: string
+  required: boolean
+  resolutionState: "resolved" | "missing" | "version-mismatch" | "rejected"
+  resolvedRef?: string
+}
+
+export interface AssetImportMetadata {
+  importedAt?: number
+  manifestVersion: number
+  originKind: "native" | "bundle-import" | "builtin-template" | "workspace-link"
+  sourceId?: string
+  translationStatus: "native" | "translated" | "downgraded" | "rejected"
+}
+
+export interface AssetTranslationDiagnostic {
+  assetId?: string
+  assetKind?: string
+  code: string
+  dependencyRef?: string
+  details?: Record<string, unknown>
+  message: string
+  severity: "info" | "warning" | "error"
+  sourcePath?: string
+  stage: "parse" | "validate" | "translate" | "execute"
+  suggestion?: string
+}
+
+export interface AssetTranslationReport {
+  dependencyResolution: AssetDependencyResolution[]
+  diagnostics: AssetTranslationDiagnostic[]
+  downgradedCount: number
+  rejectedCount: number
+  status: "native" | "translated" | "downgraded" | "rejected" | "mixed"
+  translatedCount: number
+  trustWarnings: string[]
+  unsupportedFeatures: string[]
+}
+
+export type AssetTrustLevel = "trusted" | "reviewed" | "untrusted"
+
+export interface AssetTrustMetadata {
+  origin: string
+  publisher: string
+  signatureState: "verified" | "unsigned" | "invalid"
+  trustLevel: AssetTrustLevel
+  trustWarnings: string[]
+  verifiedAt?: number
+}
 
 export interface AuditRecord {
   action: string
@@ -252,6 +383,15 @@ export interface CapabilityManagementProjection {
   skillPackages: SkillPackageManifest[]
 }
 
+export interface CapabilityPolicy {
+  builtinToolKeys: string[]
+  denyByDefault: boolean
+  mcpServerNames: string[]
+  mode: "allow-list"
+  pluginCapabilityRefs: string[]
+  skillIds: string[]
+}
+
 export type CapabilitySourceKind = "builtin" | "runtime_tool" | "plugin_tool" | "local_skill" | "bundled_skill" | "mcp_tool" | "mcp_prompt" | "mcp_resource" | "plugin_skill"
 
 export interface ChangeCurrentUserPasswordRequest {
@@ -349,7 +489,10 @@ export interface CreateProjectRequest {
 
 export interface CreateRuntimeSessionInput {
   conversationId: string
+  executionPermissionMode: RuntimePermissionMode
   projectId: string
+  selectedActorRef: string
+  selectedConfiguredModelId?: string
   sessionKind?: RuntimeSessionKind
   title: string
 }
@@ -412,6 +555,20 @@ export interface DataPolicyUpsertRequest {
 
 export type DecisionAction = "approve" | "reject"
 
+export interface DefaultModelStrategy {
+  allowTurnOverride: boolean
+  fallbackModelRefs: string[]
+  preferredModelRef?: string
+  selectionMode: "session-selected" | "actor-default" | "provider-pinned"
+}
+
+export interface DelegationPolicy {
+  allowBackgroundRuns: boolean
+  allowParallelWorkers: boolean
+  maxWorkerCount: number
+  mode: "disabled" | "leader-orchestrated" | "single-worker" | "multi-worker"
+}
+
 export interface EnterpriseAuthSuccess {
   session: EnterpriseSessionSummary
   workspace: WorkspaceSummary
@@ -451,6 +608,7 @@ export interface ExportWorkspaceAgentBundleInput {
 export interface ExportWorkspaceAgentBundleResult {
   agentCount: number
   avatarCount: number
+  bundleManifest: AssetBundleManifest
   fileCount: number
   files: WorkspaceDirectoryUploadEntry[]
   issues: ImportIssue[]
@@ -458,6 +616,7 @@ export interface ExportWorkspaceAgentBundleResult {
   rootDirName: string
   skillCount: number
   teamCount: number
+  translationReport: AssetTranslationReport
 }
 
 export interface FeatureDefinition {
@@ -544,10 +703,13 @@ export interface ImportedAgentPreviewItem {
   action: "create" | "update" | "skip" | "failed"
   agentId?: string
   department: string
+  manifestRevision: string
   mcpServerNames: string[]
   name: string
   skillSlugs: string[]
   sourceId: string
+  taskDomains: string[]
+  translationMode: "native" | "translate" | "downgrade" | "reject"
 }
 
 export interface ImportedAvatarPreviewItem {
@@ -583,17 +745,27 @@ export interface ImportedTeamPreviewItem {
   action: "create" | "update" | "skip" | "failed"
   agentSourceIds: string[]
   leaderName?: string
+  manifestRevision: string
   memberNames: string[]
   name: string
   sourceId: string
+  taskDomains: string[]
   teamId?: string
+  translationMode: "native" | "translate" | "downgrade" | "reject"
 }
 
 export interface ImportIssue {
+  assetKind?: string
+  code: string
+  dependencyRef?: string
+  details?: Record<string, unknown>
   message: string
   scope: "bundle" | "agent" | "team" | "skill" | "mcp" | "avatar"
-  severity: "warning" | "error"
+  severity: "info" | "warning" | "error"
   sourceId?: string
+  sourcePath?: string
+  stage: "parse" | "validate" | "translate" | "execute"
+  suggestion?: string
 }
 
 export interface ImportWorkspaceAgentBundleInput {
@@ -605,6 +777,7 @@ export interface ImportWorkspaceAgentBundlePreview {
   agents: ImportedAgentPreviewItem[]
   avatarCount: number
   avatars: ImportedAvatarPreviewItem[]
+  bundleManifest: AssetBundleManifest
   createCount: number
   departmentCount: number
   departments: string[]
@@ -622,6 +795,7 @@ export interface ImportWorkspaceAgentBundlePreview {
   skipCount: number
   teamCount: number
   teams: ImportedTeamPreviewItem[]
+  translationReport: AssetTranslationReport
   uniqueMcpCount: number
   uniqueSkillCount: number
   updateCount: number
@@ -636,6 +810,7 @@ export interface ImportWorkspaceAgentBundleResult {
   agents: ImportedAgentPreviewItem[]
   avatarCount: number
   avatars: ImportedAvatarPreviewItem[]
+  bundleManifest: AssetBundleManifest
   createCount: number
   departmentCount: number
   departments: string[]
@@ -653,6 +828,7 @@ export interface ImportWorkspaceAgentBundleResult {
   skipCount: number
   teamCount: number
   teams: ImportedTeamPreviewItem[]
+  translationReport: AssetTranslationReport
   uniqueMcpCount: number
   uniqueSkillCount: number
   updateCount: number
@@ -716,7 +892,21 @@ export type KnowledgeStatus = "candidate" | "reviewed" | "shared" | "archived"
 
 export type Locale = "zh-CN" | "en-US"
 
+export interface MailboxPolicy {
+  allowWorkerToWorker: boolean
+  mode: "leader-hub"
+  retainMessages: boolean
+}
+
 export type McpServerPackageManifest = CapabilityAssetManifest & unknown
+
+export interface MemoryPolicy {
+  allowWorkspaceSharedWrite: boolean
+  durableScopes: string[]
+  freshnessRequired: boolean
+  maxSelections: number
+  writeRequiresApproval: boolean
+}
 
 export interface MenuDefinition {
   featureCode: string
@@ -842,6 +1032,13 @@ export interface OrgUnitUpsertRequest {
   status: string
 }
 
+export interface OutputContract {
+  artifactKinds: string[]
+  preserveLineage: boolean
+  primaryFormat: "markdown" | "json" | "artifact" | "mixed"
+  requireStructuredSummary: boolean
+}
+
 export type PasswordState = "set" | "reset-required" | "temporary"
 
 export interface PermissionDefinition {
@@ -851,6 +1048,13 @@ export interface PermissionDefinition {
   description: string
   name: string
   resourceType: string
+}
+
+export interface PermissionEnvelope {
+  allowedResourceScopes: string[]
+  defaultMode: "readonly" | "workspace-write" | "danger-full-access"
+  escalationAllowed: boolean
+  maxMode: "readonly" | "workspace-write" | "danger-full-access"
 }
 
 export type PermissionMode = "auto" | "readonly" | "danger-full-access"
@@ -1168,21 +1372,93 @@ export type RunStatus = "idle" | "draft" | "planned" | "running" | "waiting_inpu
 export type RuntimeActorType = "user" | "assistant" | "system"
 
 export interface RuntimeApprovalRequest {
+  approvalLayer: string
   conversationId: string
   createdAt: number
   detail: string
+  escalationReason: string
   id: string
   riskLevel: RiskLevel
   runId: string
   sessionId: string
   status: "pending" | "approved" | "rejected"
   summary: string
+  targetKind: string
+  targetRef: string
   toolName: string
 }
 
 export interface RuntimeBootstrap {
   provider: ProviderConfig
   sessions: RuntimeSessionSummary[]
+}
+
+export interface RuntimeCapabilityExecutionOutcome {
+  capabilityId?: string
+  concurrencyPolicy?: string
+  detail?: string
+  dispatchKind?: string
+  outcome: string
+  providerKey?: string
+  requiresApproval: boolean
+  requiresAuth: boolean
+  toolName?: string
+}
+
+export interface RuntimeCapabilityPlanSummary {
+  activatedTools: string[]
+  approvedTools: string[]
+  authResolvedTools: string[]
+  availableResources: string[]
+  deferredTools: string[]
+  discoverableSkills: string[]
+  grantedTools: string[]
+  hiddenCapabilities: string[]
+  pendingTools: string[]
+  providerFallbacks: string[]
+  visibleTools: string[]
+}
+
+export interface RuntimeCapabilityProviderState {
+  degraded: boolean
+  detail?: string
+  providerKey: string
+  state: string
+}
+
+export interface RuntimeCapabilityStateSnapshot {
+  activatedTools: string[]
+  approvedTools: string[]
+  authResolvedTools: string[]
+  effortOverride?: string
+  grantedToolCount: number
+  grantedTools: string[]
+  hiddenTools: string[]
+  injectedSkillMessageCount: number
+  modelOverride?: string
+  pendingTools: string[]
+}
+
+export interface RuntimeCapabilitySummary {
+  activatedTools: string[]
+  approvedTools: string[]
+  authResolvedTools: string[]
+  availableResources: string[]
+  deferredTools: string[]
+  discoverableSkills: string[]
+  grantedTools: string[]
+  hiddenCapabilities: string[]
+  pendingTools: string[]
+  providerFallbacks: string[]
+  visibleTools: string[]
+}
+
+export interface RuntimeCapabilitySurface {
+  availableResources: string[]
+  deferredTools: string[]
+  discoverableSkills: string[]
+  hiddenCapabilities: string[]
+  visibleTools: string[]
 }
 
 export interface RuntimeConfigPatch {
@@ -1236,6 +1512,8 @@ export interface RuntimeEffectiveConfig {
 
 export interface RuntimeEventEnvelope {
   approval?: RuntimeApprovalRequest
+  capabilityPlanSummary?: RuntimeCapabilityPlanSummary
+  capabilityStateRef?: string
   conversationId: string
   decision?: DecisionAction
   emittedAt: number
@@ -1243,9 +1521,12 @@ export interface RuntimeEventEnvelope {
   eventType: RuntimeEventKind
   id: string
   kind?: RuntimeEventKind
+  lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
   message?: RuntimeMessage
   payload?: Record<string, unknown>
+  pendingMediation?: RuntimePendingMediationSummary
   projectId?: string
+  providerStateSummary?: RuntimeCapabilityProviderState[]
   run?: RuntimeRunSnapshot
   runId?: string
   sequence: number
@@ -1255,7 +1536,13 @@ export interface RuntimeEventEnvelope {
   workspaceId: string
 }
 
-export type RuntimeEventKind = "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "runtime.session.updated" | "runtime.error"
+export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "trace.emitted" | "subrun.spawned" | "subrun.completed" | "subrun.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "runtime.session.updated" | "runtime.error"
+
+export interface RuntimeMemorySummary {
+  durableMemoryCount: number
+  selectedMemoryIds: string[]
+  summary: string
+}
 
 export interface RuntimeMessage {
   artifacts?: string[]
@@ -1283,30 +1570,80 @@ export interface RuntimeMessage {
   usedDefaultActor?: boolean
 }
 
+export interface RuntimePendingMediationSummary {
+  capabilityId?: string
+  mediationKind: string
+  providerKey?: string
+  reason?: string
+  toolName?: string
+}
+
+export type RuntimePermissionEnvelope = Record<string, unknown>
+
 export type RuntimePermissionMode = "read-only" | "workspace-write" | "danger-full-access"
 
+export interface RuntimePolicySnapshot {
+  approvalPreference?: RuntimePermissionEnvelope
+  capabilityPolicy?: RuntimePermissionEnvelope
+  configSnapshotId: string
+  delegationPolicy?: RuntimePermissionEnvelope
+  executionPermissionMode: RuntimePermissionMode
+  manifestRevision: string
+  memoryPolicy?: RuntimePermissionEnvelope
+  selectedActorRef: string
+  selectedConfiguredModelId: string
+}
+
+export interface RuntimeRunCheckpoint {
+  capabilityPlanSummary: RuntimeCapabilityPlanSummary
+  capabilityStateRef?: string
+  compactionMetadata?: RuntimePermissionEnvelope
+  currentIterationIndex: number
+  lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
+  pendingApproval?: RuntimeApprovalRequest
+  pendingMediation?: RuntimePendingMediationSummary
+  serializedSession: RuntimePermissionEnvelope
+  usageSummary: RuntimeUsageSummary
+}
+
+export type RuntimeRunKind = "primary" | "subrun"
+
 export interface RuntimeRunSnapshot {
+  actorRef: string
+  approvalState?: string
+  artifactRefs: string[]
+  capabilityPlanSummary: RuntimeCapabilityPlanSummary
+  capabilityStateRef?: string
+  checkpoint: RuntimeRunCheckpoint
   configSnapshotId: string
   configuredModelId?: string
   configuredModelName?: string
   consumedTokens?: number
   conversationId: string
   currentStep: string
+  delegatedByToolCallId?: string
   effectiveConfigHash: string
   id: string
+  lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
   modelId?: string
   nextAction?: string
+  parentRunId?: string
+  pendingMediation?: RuntimePendingMediationSummary
+  providerStateSummary: RuntimeCapabilityProviderState[]
   requestedActorId?: string
   requestedActorKind?: ConversationActorKind
   resolvedActorId?: string
   resolvedActorKind?: ConversationActorKind
   resolvedActorLabel?: string
   resolvedTarget?: ResolvedExecutionTarget
+  runKind: RuntimeRunKind
   sessionId: string
   startedAt: number
   startedFromScopeSet: RuntimeConfigScope[]
   status: RunStatus
+  traceContext: RuntimeTraceContext
   updatedAt: number
+  usageSummary: RuntimeUsageSummary
 }
 
 export type RuntimeSecretReferenceState = "reference-present" | "reference-missing" | "inline-redacted"
@@ -1319,9 +1656,20 @@ export interface RuntimeSecretReferenceStatus {
 }
 
 export interface RuntimeSessionDetail {
+  activeRunId: string
+  capabilityPlanSummary: RuntimeCapabilityPlanSummary
+  capabilityStateRef?: string
+  lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
+  manifestRevision: string
+  memorySummary: RuntimeMemorySummary
   messages: RuntimeMessage[]
   pendingApproval?: RuntimeApprovalRequest
+  pendingMediation?: RuntimePendingMediationSummary
+  providerStateSummary: RuntimeCapabilityProviderState[]
   run: RuntimeRunSnapshot
+  selectedActorRef: string
+  sessionPolicy: RuntimePolicySnapshot
+  subrunCount: number
   summary: RuntimeSessionSummary
   trace: RuntimeTraceItem[]
 }
@@ -1329,17 +1677,35 @@ export interface RuntimeSessionDetail {
 export type RuntimeSessionKind = "project" | "pet"
 
 export interface RuntimeSessionSummary {
+  activeRunId: string
+  capabilityPlanSummary: RuntimeCapabilityPlanSummary
+  capabilityStateRef?: string
   configSnapshotId: string
   conversationId: string
   effectiveConfigHash: string
   id: string
+  lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
   lastMessagePreview?: string
+  manifestRevision: string
+  memorySummary: RuntimeMemorySummary
+  pendingMediation?: RuntimePendingMediationSummary
   projectId: string
+  providerStateSummary: RuntimeCapabilityProviderState[]
+  selectedActorRef: string
   sessionKind: RuntimeSessionKind
+  sessionPolicy: RuntimePolicySnapshot
   startedFromScopeSet: RuntimeConfigScope[]
   status: RunStatus
+  subrunCount: number
   title: string
   updatedAt: number
+}
+
+export interface RuntimeTraceContext {
+  parentRunId?: string
+  sessionId: string
+  traceId: string
+  turnId: string
 }
 
 export interface RuntimeTraceItem {
@@ -1357,6 +1723,12 @@ export interface RuntimeTraceItem {
   timestamp: number
   title: string
   tone: TraceTone
+}
+
+export interface RuntimeUsageSummary {
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
 }
 
 export interface SavePetPresenceInput {
@@ -1381,6 +1753,18 @@ export interface SessionRecord {
 }
 
 export type SessionStatus = "active" | "revoked" | "expired"
+
+export interface SharedCapabilityPolicy {
+  allowTeamInheritedCapabilities: boolean
+  denyDirectMemberEscalation: boolean
+  sharedCapabilityRefs: string[]
+}
+
+export interface SharedMemoryPolicy {
+  requireReviewBeforePersist: boolean
+  shareMode: "isolated" | "team-shared" | "project-shared"
+  writableByWorkers: boolean
+}
 
 export interface ShellBootstrap {
   backend?: HostBackendConnection
@@ -1408,12 +1792,8 @@ export interface ShellPreferences {
 export type SkillPackageManifest = CapabilityAssetManifest & unknown
 
 export interface SubmitRuntimeTurnInput {
-  actorId?: string
-  actorKind?: ConversationActorKind
-  configuredModelId?: string
   content: string
-  modelId?: string
-  permissionMode: RuntimePermissionMode
+  permissionMode?: RuntimePermissionMode
 }
 
 export interface SystemAuthStatus {
@@ -1436,33 +1816,60 @@ export interface SystemBootstrapStatus {
 }
 
 export interface TeamRecord {
+  approvalPreference: ApprovalPreference
+  artifactHandoffPolicy: ArtifactHandoffPolicy
   avatar?: string
   avatarPath?: string
   builtinToolKeys: string[]
+  capabilityPolicy: CapabilityPolicy
+  defaultModelStrategy: DefaultModelStrategy
+  delegationPolicy: DelegationPolicy
+  dependencyResolution: AssetDependencyResolution[]
   description: string
   id: string
+  importMetadata: AssetImportMetadata
   integrationSource?: {
   kind: "workspace-link" | "builtin-template"
   sourceId: string
 }
   leaderAgentId?: string
+  leaderRef: string
+  mailboxPolicy: MailboxPolicy
+  manifestRevision: string
   mcpServerNames: string[]
   memberAgentIds: string[]
+  memberRefs: string[]
+  memoryPolicy: MemoryPolicy
   name: string
+  outputContract: OutputContract
+  permissionEnvelope: PermissionEnvelope
   personality: string
   projectId?: string
   prompt: string
   scope: TeamScope
+  sharedCapabilityPolicy: SharedCapabilityPolicy
+  sharedMemoryPolicy: SharedMemoryPolicy
   skillIds: string[]
   status: TeamStatus
   tags: string[]
+  taskDomains: string[]
+  teamTopology: TeamTopology
+  trustMetadata: AssetTrustMetadata
   updatedAt: number
+  workerConcurrencyLimit: number
+  workflowAffordance: WorkflowAffordance
   workspaceId: string
 }
 
 export type TeamScope = "workspace" | "project"
 
 export type TeamStatus = "active" | "archived"
+
+export interface TeamTopology {
+  leaderRef: string
+  memberRefs: string[]
+  mode: "leader-orchestrated"
+}
 
 export type ThemeMode = "light" | "dark" | "system"
 
@@ -1521,38 +1928,64 @@ export interface UpdateWorkspaceSkillInput {
 }
 
 export interface UpsertAgentInput {
+  approvalPreference?: ApprovalPreference
   avatar?: AvatarUploadPayload
   builtinToolKeys: string[]
+  capabilityPolicy?: CapabilityPolicy
+  defaultModelStrategy?: DefaultModelStrategy
+  delegationPolicy?: DelegationPolicy
   description: string
   mcpServerNames: string[]
+  memoryPolicy?: MemoryPolicy
   name: string
+  outputContract?: OutputContract
+  permissionEnvelope?: PermissionEnvelope
   personality: string
   projectId?: string
   prompt: string
   removeAvatar?: boolean
   scope: AgentScope
+  sharedCapabilityPolicy?: SharedCapabilityPolicy
   skillIds: string[]
   status: AgentStatus
   tags: string[]
+  taskDomains?: string[]
   workspaceId: string
 }
 
 export interface UpsertTeamInput {
+  approvalPreference?: ApprovalPreference
+  artifactHandoffPolicy?: ArtifactHandoffPolicy
   avatar?: AvatarUploadPayload
   builtinToolKeys: string[]
+  capabilityPolicy?: CapabilityPolicy
+  defaultModelStrategy?: DefaultModelStrategy
+  delegationPolicy?: DelegationPolicy
   description: string
   leaderAgentId?: string
+  leaderRef?: string
+  mailboxPolicy?: MailboxPolicy
   mcpServerNames: string[]
   memberAgentIds: string[]
+  memberRefs?: string[]
+  memoryPolicy?: MemoryPolicy
   name: string
+  outputContract?: OutputContract
+  permissionEnvelope?: PermissionEnvelope
   personality: string
   projectId?: string
   prompt: string
   removeAvatar?: boolean
   scope: TeamScope
+  sharedCapabilityPolicy?: SharedCapabilityPolicy
+  sharedMemoryPolicy?: SharedMemoryPolicy
   skillIds: string[]
   status: TeamStatus
   tags: string[]
+  taskDomains?: string[]
+  teamTopology?: TeamTopology
+  workerConcurrencyLimit?: number
+  workflowAffordance?: WorkflowAffordance
   workspaceId: string
 }
 
@@ -1602,6 +2035,12 @@ export interface UserRecordSummary {
 export type UserStatus = "active" | "disabled"
 
 export type ViewStatus = "healthy" | "configured" | "attention"
+
+export interface WorkflowAffordance {
+  automationCapable: boolean
+  backgroundCapable: boolean
+  supportedTaskKinds: string[]
+}
 
 export interface WorkspaceActivityRecord {
   description: string

@@ -16,12 +16,24 @@ The runtime canonical flow is:
 
 Canonical runtime types live in:
 
-- `crates/tools/src/capability_runtime.rs`
-  - `CapabilityHandle`
-  - `CapabilitySurface`
-  - `CapabilityExecutionPlan`
+- `crates/tools/src/capability_runtime/provider.rs`
+  - `CapabilitySpec`
+  - `CapabilityRuntime`
   - `CapabilityTrustProfile`
   - `CapabilityScopeConstraints`
+- `crates/tools/src/capability_runtime/planner.rs`
+  - `CapabilityExecutionPlan`
+  - `CapabilitySurfaceProjection`
+  - `CapabilityPlanner`
+- `crates/tools/src/capability_runtime/executor.rs`
+  - `CapabilityExecutor`
+  - `CapabilityDispatchKind`
+- `crates/tools/src/capability_runtime/state.rs`
+  - `SessionCapabilityState`
+  - `SessionCapabilityStore`
+- `crates/tools/src/capability_runtime/events.rs`
+  - `CapabilityExecutionEvent`
+  - `CapabilityExecutionRequest`
 - `crates/tools/src/skill_runtime.rs`
   - `PromptSkillExecutor`
   - `SkillExecutionResult`

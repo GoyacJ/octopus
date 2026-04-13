@@ -327,11 +327,15 @@ export const runtimeStoreActions = {
       this.activeSessionId,
       this.activeConversationId,
       input,
+      this.activeSession.run,
+      this.activeSession.summary.selectedActorRef,
     )
     const optimisticAssistantMessage = createOptimisticAssistantMessage(
       this.activeSessionId,
       this.activeConversationId,
       input,
+      this.activeSession.run,
+      this.activeSession.summary.selectedActorRef,
       optimisticUserMessage.timestamp + 1,
     )
     const detail: RuntimeSessionDetail = {
@@ -444,11 +448,7 @@ export const runtimeStoreActions = {
     try {
       const run = await client.runtime.submitUserTurn(this.activeSessionId, {
         content: trimmed,
-        modelId: input.modelId,
-        configuredModelId: input.configuredModelId,
         permissionMode: input.permissionMode,
-        actorKind: input.actorKind,
-        actorId: input.actorId,
       }, tauriClient.createIdempotencyKey(`runtime-turn-${connectionId}-${this.activeSessionId}`))
       if (this.activeWorkspaceConnectionId !== connectionId) {
         return false

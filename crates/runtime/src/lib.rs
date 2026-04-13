@@ -66,7 +66,7 @@ pub use config::{
 pub use conversation::{
     auto_compaction_threshold_from_env, ApiClient, ApiRequest, AssistantEvent, AutoCompactionEvent,
     ConversationRuntime, PromptCacheEvent, RuntimeError, StaticToolExecutor, ToolError,
-    ToolExecutor, TurnSummary,
+    ToolExecutionOutcome, ToolExecutor, TurnSummary,
 };
 pub use file_ops::{
     edit_file, glob_search, grep_search, read_file, write_file, EditFileOutput, GlobSearchOutput,
@@ -95,14 +95,13 @@ pub use mcp_lifecycle_hardened::{
 };
 pub use mcp_stdio::{
     spawn_mcp_stdio_process, JsonRpcError, JsonRpcId, JsonRpcRequest, JsonRpcResponse,
-    ManagedMcpPrompt, ManagedMcpTool, McpDiscoveryFailure, McpGetPromptParams,
-    McpGetPromptResult, McpInitializeClientInfo, McpInitializeParams, McpInitializeResult,
-    McpInitializeServerInfo, McpListPromptsParams, McpListPromptsResult, McpListResourcesParams,
-    McpListResourcesResult, McpListToolsParams, McpListToolsResult, McpPrompt,
-    McpPromptArgument, McpPromptMessage, McpReadResourceParams, McpReadResourceResult,
-    McpResource, McpResourceContents, McpServerManager, McpServerManagerError, McpStdioProcess,
-    McpTool, McpToolCallContent, McpToolCallParams, McpToolCallResult, McpToolDiscoveryReport,
-    UnsupportedMcpServer,
+    ManagedMcpPrompt, ManagedMcpTool, McpDiscoveryFailure, McpGetPromptParams, McpGetPromptResult,
+    McpInitializeClientInfo, McpInitializeParams, McpInitializeResult, McpInitializeServerInfo,
+    McpListPromptsParams, McpListPromptsResult, McpListResourcesParams, McpListResourcesResult,
+    McpListToolsParams, McpListToolsResult, McpPrompt, McpPromptArgument, McpPromptMessage,
+    McpReadResourceParams, McpReadResourceResult, McpResource, McpResourceContents,
+    McpServerManager, McpServerManagerError, McpStdioProcess, McpTool, McpToolCallContent,
+    McpToolCallParams, McpToolCallResult, McpToolDiscoveryReport, UnsupportedMcpServer,
 };
 pub use oauth::{
     clear_oauth_credentials, code_challenge_s256, credentials_path, generate_pkce_pair,

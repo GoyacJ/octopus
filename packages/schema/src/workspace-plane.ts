@@ -1,4 +1,5 @@
 import type {
+  AgentRecord as OpenApiAgentRecord,
   ChangeCurrentUserPasswordRequest as OpenApiChangeCurrentUserPasswordRequest,
   ChangeCurrentUserPasswordResponse as OpenApiChangeCurrentUserPasswordResponse,
   CreateWorkspaceResourceFolderInput as OpenApiCreateWorkspaceResourceFolderInput,
@@ -11,6 +12,7 @@ import type {
   ProjectDashboardSnapshot as OpenApiProjectDashboardSnapshot,
   TeamRecord as OpenApiTeamRecord,
   UpdateCurrentUserProfileRequest as OpenApiUpdateCurrentUserProfileRequest,
+  UpsertAgentInput as OpenApiUpsertAgentInput,
   UpsertTeamInput as OpenApiUpsertTeamInput,
   UpdateWorkspaceResourceInput as OpenApiUpdateWorkspaceResourceInput,
   UserRecordSummary as OpenApiUserRecordSummary,
@@ -28,11 +30,6 @@ import type {
   ResourcePreviewKind as OpenApiResourcePreviewKind,
 } from './generated'
 import type {
-  AvatarUploadPayload,
-} from './auth'
-import type {
-  AgentScope,
-  AgentStatus,
   AutomationStatus,
   ViewStatus,
   WorkspaceToolPermissionMode,
@@ -75,53 +72,12 @@ export type WorkspaceResourceFolderUploadEntry = OpenApiWorkspaceResourceFolderU
 export type CreateWorkspaceResourceFolderInput = OpenApiCreateWorkspaceResourceFolderInput
 export type KnowledgeRecord = OpenApiKnowledgeRecord
 
-export interface AgentRecord {
-  id: string
-  workspaceId: string
-  projectId?: string
-  scope: AgentScope
-  name: string
-  avatarPath?: string
-  avatar?: string
-  personality: string
-  tags: string[]
-  prompt: string
-  builtinToolKeys: string[]
-  skillIds: string[]
-  mcpServerNames: string[]
-  integrationSource?: AgentIntegrationSource
-  description: string
-  status: AgentStatus
-  updatedAt: number
-}
-
+export type AgentRecord = OpenApiAgentRecord
 export type TeamRecord = OpenApiTeamRecord
 
-export interface WorkspaceLinkIntegrationSource {
-  kind: 'workspace-link' | 'builtin-template'
-  sourceId: string
-}
-
-export type AgentIntegrationSource = WorkspaceLinkIntegrationSource
-export type TeamIntegrationSource = WorkspaceLinkIntegrationSource
-
-export interface UpsertAgentInput {
-  workspaceId: string
-  projectId?: string
-  scope: AgentScope
-  name: string
-  avatar?: AvatarUploadPayload
-  removeAvatar?: boolean
-  personality: string
-  tags: string[]
-  prompt: string
-  builtinToolKeys: string[]
-  skillIds: string[]
-  mcpServerNames: string[]
-  description: string
-  status: AgentStatus
-}
-
+export type AgentIntegrationSource = AgentRecord['integrationSource']
+export type TeamIntegrationSource = TeamRecord['integrationSource']
+export type UpsertAgentInput = OpenApiUpsertAgentInput
 export type UpsertTeamInput = OpenApiUpsertTeamInput
 
 export interface ProjectAgentLinkRecord {

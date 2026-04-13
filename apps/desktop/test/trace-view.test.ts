@@ -83,10 +83,7 @@ describe('TraceView runtime integration', () => {
     })
     await runtime.submitTurn({
       content: 'Summarize the runtime trace state.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     })
 
     await waitFor(() => runtime.activeRun?.status === 'completed' && runtime.activeTrace.length > 0)
@@ -108,13 +105,11 @@ describe('TraceView runtime integration', () => {
       conversationId: 'conv-team-trace',
       projectId: 'proj-redesign',
       title: 'Team Trace Runtime Session',
+      selectedActorRef: 'team:team-studio',
     })
     await runtime.submitTurn({
       content: 'Summarize the runtime trace state.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorKind: 'team',
-      actorId: 'team-studio',
     })
 
     await waitFor(() => runtime.activeRun?.status === 'completed' && runtime.activeTrace.length > 0)
@@ -137,10 +132,7 @@ describe('TraceView runtime integration', () => {
     })
     await runtime.submitTurn({
       content: 'Run bash pwd in the workspace terminal.',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     })
 
     await waitFor(() => runtime.pendingApproval !== null)

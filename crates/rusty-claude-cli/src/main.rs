@@ -24,40 +24,40 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use api::{
-    AnthropicClient, AuthSource, ContentBlockDelta, InputContentBlock, InputMessage,
-    MessageRequest, MessageResponse, OutputContentBlock, PromptCache,
-    StreamEvent as ApiStreamEvent, ToolChoice, ToolDefinition, ToolResultContentBlock,
-    oauth_token_is_expired, resolve_startup_auth_source,
+    oauth_token_is_expired, resolve_startup_auth_source, AnthropicClient, AuthSource,
+    ContentBlockDelta, InputContentBlock, InputMessage, MessageRequest, MessageResponse,
+    OutputContentBlock, PromptCache, StreamEvent as ApiStreamEvent, ToolChoice, ToolDefinition,
+    ToolResultContentBlock,
 };
 
 use commands::{
-    SlashCommand, handle_agents_slash_command, handle_agents_slash_command_json,
-    handle_mcp_slash_command, handle_mcp_slash_command_json, handle_plugins_slash_command,
-    handle_skills_slash_command, handle_skills_slash_command_json, render_slash_command_help,
-    resume_supported_slash_commands, slash_command_specs, validate_slash_command_input,
+    handle_agents_slash_command, handle_agents_slash_command_json, handle_mcp_slash_command,
+    handle_mcp_slash_command_json, handle_plugins_slash_command, handle_skills_slash_command,
+    handle_skills_slash_command_json, render_slash_command_help, resume_supported_slash_commands,
+    slash_command_specs, validate_slash_command_input, SlashCommand,
 };
-use compat_harness::{UpstreamPaths, extract_manifest};
+use compat_harness::{extract_manifest, UpstreamPaths};
 use init::initialize_repo;
 use plugins::{PluginHooks, PluginManager, PluginManagerConfig, PluginRegistry};
 use render::{MarkdownStreamState, Spinner, TerminalRenderer};
 use runtime::{
-    ApiClient, ApiRequest, AssistantEvent, CompactionConfig, ConfigLoader, ConfigSource,
-    ContentBlock, ConversationMessage, ConversationRuntime, MessageRole, ModelPricing,
-    OAuthAuthorizationRequest, OAuthConfig, OAuthTokenExchangeRequest, PermissionMode,
-    PermissionPolicy, ProjectContext, PromptCacheEvent, ResolvedPermissionMode, RuntimeError,
-    Session, TokenUsage, ToolError, ToolExecutor, UsageTracker, clear_oauth_credentials,
-    format_usd, generate_pkce_pair, generate_state, load_oauth_credentials, load_system_prompt,
-    parse_oauth_callback_request_target, pricing_for_model, resolve_sandbox_status,
-    save_oauth_credentials,
+    clear_oauth_credentials, format_usd, generate_pkce_pair, generate_state,
+    load_oauth_credentials, load_system_prompt, parse_oauth_callback_request_target,
+    pricing_for_model, resolve_sandbox_status, save_oauth_credentials, ApiClient, ApiRequest,
+    AssistantEvent, CompactionConfig, ConfigLoader, ConfigSource, ContentBlock,
+    ConversationMessage, ConversationRuntime, MessageRole, ModelPricing, OAuthAuthorizationRequest,
+    OAuthConfig, OAuthTokenExchangeRequest, PermissionMode, PermissionPolicy, ProjectContext,
+    PromptCacheEvent, ResolvedPermissionMode, RuntimeError, Session, TokenUsage, ToolError,
+    ToolExecutionOutcome, ToolExecutor, UsageTracker,
 };
 use serde::Deserialize;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use tools::{
-    CapabilityActivation, CapabilityExecutionEvent, CapabilityExecutionPhase,
-    CapabilityExecutionRequest, CapabilityMediationDecision, CapabilityPlannerInput,
-    CapabilityProvider, CapabilityRuntime, CapabilitySpec, ManagedMcpRuntime,
-    RuntimeToolDefinition, SessionCapabilityState, SessionCapabilityStore,
-    SharedSessionCapabilityState, ToolSearchOutput, apply_skill_session_overrides,
+    apply_skill_session_overrides, CapabilityActivation, CapabilityExecutionEvent,
+    CapabilityExecutionPhase, CapabilityExecutionRequest, CapabilityMediationDecision,
+    CapabilityPlannerInput, CapabilityProvider, CapabilityRuntime, CapabilitySpec,
+    ManagedMcpRuntime, RuntimeToolDefinition, SessionCapabilityState, SessionCapabilityStore,
+    SharedSessionCapabilityState, ToolSearchOutput,
 };
 
 const DEFAULT_MODEL: &str = "claude-opus-4-6";
@@ -1352,12 +1352,10 @@ fn check_workspace_health(context: &StatusContext) -> DiagnosticCheck {
         ("cwd".to_string(), json!(context.cwd.display().to_string())),
         (
             "project_root".to_string(),
-            json!(
-                context
-                    .project_root
-                    .as_ref()
-                    .map(|path| path.display().to_string())
-            ),
+            json!(context
+                .project_root
+                .as_ref()
+                .map(|path| path.display().to_string())),
         ),
         ("in_git_repo".to_string(), json!(in_repo)),
         ("git_branch".to_string(), json!(context.git_branch)),
@@ -4948,12 +4946,10 @@ impl InternalPromptProgressRun {
 
         let (heartbeat_stop, heartbeat_rx) = mpsc::channel();
         let heartbeat_reporter = reporter.clone();
-        let heartbeat_handle = thread::spawn(move || {
-            loop {
-                match heartbeat_rx.recv_timeout(INTERNAL_PROGRESS_HEARTBEAT_INTERVAL) {
-                    Ok(()) | Err(RecvTimeoutError::Disconnected) => break,
-                    Err(RecvTimeoutError::Timeout) => heartbeat_reporter.emit_heartbeat(),
-                }
+        let heartbeat_handle = thread::spawn(move || loop {
+            match heartbeat_rx.recv_timeout(INTERNAL_PROGRESS_HEARTBEAT_INTERVAL) {
+                Ok(()) | Err(RecvTimeoutError::Disconnected) => break,
+                Err(RecvTimeoutError::Timeout) => heartbeat_reporter.emit_heartbeat(),
             }
         });
 
@@ -6255,8 +6251,21 @@ impl CliToolExecutor {
 
 impl ToolExecutor for CliToolExecutor {
     fn execute(&mut self, tool_name: &str, input: &str) -> Result<String, ToolError> {
+        self.execute_with_outcome(tool_name, input)
+            .into_result(tool_name)
+    }
+
+    fn execute_with_outcome(&mut self, tool_name: &str, input: &str) -> ToolExecutionOutcome {
         let value = serde_json::from_str(input)
-            .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")))?;
+            .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")));
+        let value = match value {
+            Ok(value) => value,
+            Err(error) => {
+                return ToolExecutionOutcome::Failed {
+                    message: error.to_string(),
+                };
+            }
+        };
         let current_dir = env::current_dir().ok();
         let state = self.capability_store.snapshot();
         let (pending_mcp_servers, mcp_degraded) =
@@ -6269,7 +6278,7 @@ impl ToolExecutor for CliToolExecutor {
         let capability_runtime = self.capability_runtime.clone();
         let capability_store = self.capability_store.clone();
         let mcp_state = self.mcp_state.clone();
-        let result = capability_runtime.execute_tool(
+        let outcome = capability_runtime.execute_tool_with_outcome(
             tool_name,
             value,
             CapabilityPlannerInput::new(self.allowed_tools.as_ref(), Some(&state))
@@ -6278,29 +6287,42 @@ impl ToolExecutor for CliToolExecutor {
             pending_mcp_servers,
             mcp_degraded,
             move |_dispatch_kind, name, value| {
-                execute_runtime_capability(mcp_state.as_ref(), name, value)
+                execute_runtime_capability(mcp_state.as_ref(), name, value).map(|output| {
+                    ToolExecutionOutcome::Allow { output }
+                })
             },
         );
-        match result {
-            Ok(output) => {
+        match outcome {
+            ToolExecutionOutcome::Allow { output } => {
                 if self.emit_output {
                     let markdown = format_tool_result(tool_name, &output, false);
-                    self.renderer
-                        .stream_markdown(&markdown, &mut io::stdout())
-                        .map_err(|error| ToolError::new(error.to_string()))?;
+                    if let Err(error) = self.renderer.stream_markdown(&markdown, &mut io::stdout())
+                    {
+                        return ToolExecutionOutcome::Failed {
+                            message: error.to_string(),
+                        };
+                    }
                 }
-                Ok(output)
+                ToolExecutionOutcome::Allow { output }
             }
-            Err(error) => {
+            other => {
                 if self.emit_output {
-                    let markdown = format_tool_result(tool_name, &error.to_string(), true);
-                    self.renderer
-                        .stream_markdown(&markdown, &mut io::stdout())
-                        .map_err(|stream_error| ToolError::new(stream_error.to_string()))?;
+                    let markdown =
+                        format_tool_result(tool_name, &other.message_for_tool(tool_name), true);
+                    if let Err(error) = self.renderer.stream_markdown(&markdown, &mut io::stdout())
+                    {
+                        return ToolExecutionOutcome::Failed {
+                            message: error.to_string(),
+                        };
+                    }
                 }
-                Err(error)
+                other
             }
         }
+    }
+
+    fn manages_mediation(&self) -> bool {
+        true
     }
 }
 
@@ -6369,6 +6391,9 @@ fn format_capability_execution_event(event: &CapabilityExecutionEvent) -> String
         CapabilityExecutionPhase::BlockedApproval => "blocked-approval",
         CapabilityExecutionPhase::BlockedAuth => "blocked-auth",
         CapabilityExecutionPhase::Denied => "denied",
+        CapabilityExecutionPhase::Cancelled => "cancelled",
+        CapabilityExecutionPhase::Interrupted => "interrupted",
+        CapabilityExecutionPhase::Degraded => "degraded",
     };
     let detail = event
         .detail
@@ -6617,16 +6642,14 @@ fn print_help(output_format: CliOutputFormat) -> Result<(), Box<dyn std::error::
 #[cfg(test)]
 mod tests {
     use super::{
-        CliAction, CliOutputFormat, CliToolExecutor, DEFAULT_MODEL, GitWorkspaceSummary,
-        InternalPromptProgressEvent, InternalPromptProgressState, LiveCli, LocalHelpTopic,
-        SlashCommand, StatusUsage, build_runtime_plugin_state_with_loader,
-        build_runtime_with_plugin_state, create_managed_session_handle, describe_tool_progress,
-        filter_tool_specs, format_bughunter_report, format_commit_preflight_report,
-        format_commit_skipped_report, format_compact_report, format_cost_report,
-        format_internal_prompt_progress_line, format_issue_report, format_model_report,
-        format_model_switch_report, format_permissions_report, format_permissions_switch_report,
-        format_pr_report, format_resume_report, format_status_report, format_tool_call_start,
-        format_tool_result, format_ultraplan_report, format_unknown_slash_command,
+        build_runtime_plugin_state_with_loader, build_runtime_with_plugin_state,
+        create_managed_session_handle, describe_tool_progress, filter_tool_specs,
+        format_bughunter_report, format_commit_preflight_report, format_commit_skipped_report,
+        format_compact_report, format_cost_report, format_internal_prompt_progress_line,
+        format_issue_report, format_model_report, format_model_switch_report,
+        format_permissions_report, format_permissions_switch_report, format_pr_report,
+        format_resume_report, format_status_report, format_tool_call_start, format_tool_result,
+        format_ultraplan_report, format_unknown_slash_command,
         format_unknown_slash_command_message, format_user_visible_api_error,
         normalize_permission_mode, parse_args, parse_git_status_branch,
         parse_git_status_metadata_for, parse_git_workspace_summary, permission_policy,
@@ -6635,7 +6658,9 @@ mod tests {
         render_resume_usage, resolve_model_alias, resolve_session_reference, response_to_events,
         resume_supported_slash_commands, run_resume_command,
         slash_command_completion_candidates_with_sessions, status_context, validate_no_args,
-        write_mcp_server_fixture,
+        write_mcp_server_fixture, CliAction, CliOutputFormat, CliToolExecutor, GitWorkspaceSummary,
+        InternalPromptProgressEvent, InternalPromptProgressState, LiveCli, LocalHelpTopic,
+        SlashCommand, StatusUsage, DEFAULT_MODEL,
     };
     use api::{ApiError, MessageResponse, OutputContentBlock, Usage};
     use plugins::{
@@ -6748,18 +6773,14 @@ mod tests {
             .surface_projection(CapabilityPlannerInput::default())
             .expect("capability surface should plan");
 
-        assert!(
-            surface
-                .deferred_tools
-                .iter()
-                .any(|capability| capability.display_name == "plugin_echo")
-        );
-        assert!(
-            surface
-                .deferred_tools
-                .iter()
-                .any(|capability| capability.display_name == "runtime_echo")
-        );
+        assert!(surface
+            .deferred_tools
+            .iter()
+            .any(|capability| capability.display_name == "plugin_echo"));
+        assert!(surface
+            .deferred_tools
+            .iter()
+            .any(|capability| capability.display_name == "runtime_echo"));
     }
 
     #[test]
@@ -7806,22 +7827,16 @@ mod tests {
         assert!(preflight.contains("Result           ready"));
         assert!(preflight.contains("Branch           feature/ux"));
         assert!(preflight.contains("Workspace        dirty · 2 files · 1 staged, 1 unstaged"));
-        assert!(
-            preflight.contains(
-                "Action           create a git commit from the current workspace changes"
-            )
-        );
+        assert!(preflight
+            .contains("Action           create a git commit from the current workspace changes"));
     }
 
     #[test]
     fn commit_skipped_report_points_to_next_steps() {
         let report = format_commit_skipped_report();
         assert!(report.contains("Reason           no workspace changes"));
-        assert!(
-            report.contains(
-                "Action           create a git commit from the current workspace changes"
-            )
-        );
+        assert!(report
+            .contains("Action           create a git commit from the current workspace changes"));
         assert!(report.contains("/status to inspect context"));
         assert!(report.contains("/diff to inspect repo changes"));
     }
@@ -8650,26 +8665,20 @@ UU conflicted.rs",
             .capability_runtime
             .surface_projection(tools::CapabilityPlannerInput::default())
             .expect("capability surface should plan");
-        assert!(
-            surface
-                .deferred_tools
-                .iter()
-                .any(|capability| capability.display_name == "mcp__alpha__echo"
-                    && format!("{:?}", capability.source_kind) == "McpTool")
-        );
-        assert!(
-            surface
-                .available_resources
-                .iter()
-                .any(|capability| format!("{:?}", capability.source_kind) == "McpResource")
-        );
-        assert!(
-            surface
-                .discoverable_skills
-                .iter()
-                .any(|capability| capability.display_name == "workspace-guide"
-                    && format!("{:?}", capability.source_kind) == "McpPrompt")
-        );
+        assert!(surface
+            .deferred_tools
+            .iter()
+            .any(|capability| capability.display_name == "mcp__alpha__echo"
+                && format!("{:?}", capability.source_kind) == "McpTool"));
+        assert!(surface
+            .available_resources
+            .iter()
+            .any(|capability| format!("{:?}", capability.source_kind) == "McpResource"));
+        assert!(surface
+            .discoverable_skills
+            .iter()
+            .any(|capability| capability.display_name == "workspace-guide"
+                && format!("{:?}", capability.source_kind) == "McpPrompt"));
 
         let allowed = state
             .capability_runtime
@@ -8677,12 +8686,10 @@ UU conflicted.rs",
             .expect("mcp tools should be allow-listable")
             .expect("allow-list should exist");
         assert!(allowed.contains("mcp__alpha__echo"));
-        assert!(
-            state
-                .capability_runtime
-                .normalize_allowed_tools(&["MCPTool".to_string()])
-                .is_err()
-        );
+        assert!(state
+            .capability_runtime
+            .normalize_allowed_tools(&["MCPTool".to_string()])
+            .is_err());
 
         let mut executor = CliToolExecutor::from_capability_runtime(
             None,
@@ -8737,11 +8744,9 @@ UU conflicted.rs",
         let skill_json: serde_json::Value =
             serde_json::from_str(&skill_output).expect("skill output should be json");
         assert_eq!(skill_json["skill"], "workspace-guide");
-        assert!(
-            skill_json["messages_to_inject"][0]["content"]
-                .as_str()
-                .is_some_and(|message| message.contains("MCP workspace guidance for workspace"))
-        );
+        assert!(skill_json["messages_to_inject"][0]["content"]
+            .as_str()
+            .is_some_and(|message| message.contains("MCP workspace guidance for workspace")));
 
         let execution_plan = state
             .capability_runtime
@@ -8772,11 +8777,9 @@ UU conflicted.rs",
                 r#"{"qualifiedName":"mcp__alpha__echo","arguments":{"text":"wrapped"}}"#,
             )
             .expect_err("generic mcp wrapper should no longer execute");
-        assert!(
-            wrapper_error
-                .to_string()
-                .contains("current capability surface")
-        );
+        assert!(wrapper_error
+            .to_string()
+            .contains("current capability surface"));
 
         if let Some(mcp_state) = state.mcp_state {
             mcp_state
@@ -8942,12 +8945,10 @@ Guide the model through the workspace.
         assert!(locked.is_tool_granted("WebSearch"));
         assert_eq!(locked.model_override(), Some("claude-sonnet-4-5"));
         assert_eq!(locked.effort_override(), Some("high"));
-        assert!(
-            locked
-                .injected_skill_messages()
-                .iter()
-                .any(|message| message.contains("Guide the model through the workspace"))
-        );
+        assert!(locked
+            .injected_skill_messages()
+            .iter()
+            .any(|message| message.contains("Guide the model through the workspace")));
 
         if let Some(home) = original_home {
             std::env::set_var("HOME", home);
@@ -9102,12 +9103,10 @@ Guide the model through the workspace.
 
         assert!(restored_state.is_tool_activated("WebSearch"));
         assert!(restored_state.is_tool_granted("mcp__alpha__echo"));
-        assert!(
-            restored_state
-                .injected_skill_messages()
-                .iter()
-                .any(|message| message == "Skill message")
-        );
+        assert!(restored_state
+            .injected_skill_messages()
+            .iter()
+            .any(|message| message == "Skill message"));
         assert_eq!(restored_state.model_override(), Some("claude-sonnet-4-5"));
         assert_eq!(restored_state.effort_override(), Some("high"));
 
@@ -9306,7 +9305,7 @@ fn write_mcp_server_fixture(script_path: &Path) {
 
 #[cfg(test)]
 mod sandbox_report_tests {
-    use super::{HookAbortMonitor, format_sandbox_report};
+    use super::{format_sandbox_report, HookAbortMonitor};
     use runtime::HookAbortSignal;
     use std::sync::mpsc;
     use std::time::Duration;

@@ -14,6 +14,12 @@ CreateRuntimeSessionInput:
   properties:
     conversationId:
       type: string
+    executionPermissionMode:
+      $ref: "#/components/schemas/RuntimePermissionMode"
+    selectedActorRef:
+      type: string
+    selectedConfiguredModelId:
+      type: string
     projectId:
       type: string
     sessionKind:
@@ -24,6 +30,8 @@ CreateRuntimeSessionInput:
     - conversationId
     - projectId
     - title
+    - selectedActorRef
+    - executionPermissionMode
   type: object
 MessageProcessEntry:
   additionalProperties: false
@@ -153,11 +161,15 @@ RuntimeActorType:
 RuntimeApprovalRequest:
   additionalProperties: false
   properties:
+    approvalLayer:
+      type: string
     conversationId:
       type: string
     createdAt:
       type: integer
     detail:
+      type: string
+    escalationReason:
       type: string
     id:
       type: string
@@ -175,6 +187,10 @@ RuntimeApprovalRequest:
       type: string
     summary:
       type: string
+    targetKind:
+      type: string
+    targetRef:
+      type: string
     toolName:
       type: string
   required:
@@ -188,6 +204,372 @@ RuntimeApprovalRequest:
     - riskLevel
     - createdAt
     - status
+    - approvalLayer
+    - targetKind
+    - targetRef
+    - escalationReason
+  type: object
+RuntimeCapabilityProviderState:
+  additionalProperties: false
+  properties:
+    providerKey:
+      type: string
+    state:
+      type: string
+    detail:
+      type: string
+    degraded:
+      type: boolean
+  required:
+    - providerKey
+    - state
+    - degraded
+  type: object
+RuntimeCapabilityPlanSummary:
+  additionalProperties: false
+  properties:
+    discoverableSkills:
+      items:
+        type: string
+      type: array
+    deferredTools:
+      items:
+        type: string
+      type: array
+    availableResources:
+      items:
+        type: string
+      type: array
+    hiddenCapabilities:
+      items:
+        type: string
+      type: array
+    activatedTools:
+      items:
+        type: string
+      type: array
+    grantedTools:
+      items:
+        type: string
+      type: array
+    pendingTools:
+      items:
+        type: string
+      type: array
+    approvedTools:
+      items:
+        type: string
+      type: array
+    authResolvedTools:
+      items:
+        type: string
+      type: array
+    providerFallbacks:
+      items:
+        type: string
+      type: array
+    visibleTools:
+      items:
+        type: string
+      type: array
+  required:
+    - visibleTools
+    - deferredTools
+    - discoverableSkills
+    - availableResources
+    - hiddenCapabilities
+    - activatedTools
+    - grantedTools
+    - pendingTools
+    - approvedTools
+    - authResolvedTools
+    - providerFallbacks
+  type: object
+RuntimeCapabilitySummary:
+  additionalProperties: false
+  properties:
+    discoverableSkills:
+      items:
+        type: string
+      type: array
+    deferredTools:
+      items:
+        type: string
+      type: array
+    availableResources:
+      items:
+        type: string
+      type: array
+    hiddenCapabilities:
+      items:
+        type: string
+      type: array
+    activatedTools:
+      items:
+        type: string
+      type: array
+    grantedTools:
+      items:
+        type: string
+      type: array
+    pendingTools:
+      items:
+        type: string
+      type: array
+    approvedTools:
+      items:
+        type: string
+      type: array
+    authResolvedTools:
+      items:
+        type: string
+      type: array
+    providerFallbacks:
+      items:
+        type: string
+      type: array
+    visibleTools:
+      items:
+        type: string
+      type: array
+  required:
+    - visibleTools
+    - deferredTools
+    - discoverableSkills
+    - availableResources
+    - hiddenCapabilities
+    - activatedTools
+    - grantedTools
+    - pendingTools
+    - approvedTools
+    - authResolvedTools
+    - providerFallbacks
+  type: object
+RuntimeCapabilitySurface:
+  additionalProperties: false
+  properties:
+    visibleTools:
+      items:
+        type: string
+      type: array
+    deferredTools:
+      items:
+        type: string
+      type: array
+    discoverableSkills:
+      items:
+        type: string
+      type: array
+    availableResources:
+      items:
+        type: string
+      type: array
+    hiddenCapabilities:
+      items:
+        type: string
+      type: array
+  required:
+    - visibleTools
+    - deferredTools
+    - discoverableSkills
+    - availableResources
+    - hiddenCapabilities
+  type: object
+RuntimeCapabilityStateSnapshot:
+  additionalProperties: false
+  properties:
+    activatedTools:
+      items:
+        type: string
+      type: array
+    grantedTools:
+      items:
+        type: string
+      type: array
+    pendingTools:
+      items:
+        type: string
+      type: array
+    approvedTools:
+      items:
+        type: string
+      type: array
+    authResolvedTools:
+      items:
+        type: string
+      type: array
+    hiddenTools:
+      items:
+        type: string
+      type: array
+    injectedSkillMessageCount:
+      type: integer
+    grantedToolCount:
+      type: integer
+    modelOverride:
+      type: string
+    effortOverride:
+      type: string
+  required:
+    - activatedTools
+    - grantedTools
+    - pendingTools
+    - approvedTools
+    - authResolvedTools
+    - hiddenTools
+    - injectedSkillMessageCount
+    - grantedToolCount
+  type: object
+RuntimeCapabilityExecutionOutcome:
+  additionalProperties: false
+  properties:
+    capabilityId:
+      type: string
+    toolName:
+      type: string
+    providerKey:
+      type: string
+    dispatchKind:
+      type: string
+    outcome:
+      type: string
+    detail:
+      type: string
+    requiresApproval:
+      type: boolean
+    requiresAuth:
+      type: boolean
+    concurrencyPolicy:
+      type: string
+  required:
+    - outcome
+    - requiresApproval
+    - requiresAuth
+  type: object
+RuntimePendingMediationSummary:
+  additionalProperties: false
+  properties:
+    capabilityId:
+      type: string
+    toolName:
+      type: string
+    providerKey:
+      type: string
+    mediationKind:
+      type: string
+    reason:
+      type: string
+  required:
+    - mediationKind
+  type: object
+RuntimeMemorySummary:
+  additionalProperties: false
+  properties:
+    durableMemoryCount:
+      type: integer
+    selectedMemoryIds:
+      items:
+        type: string
+      type: array
+    summary:
+      type: string
+  required:
+    - summary
+    - durableMemoryCount
+    - selectedMemoryIds
+  type: object
+RuntimePermissionEnvelope:
+  additionalProperties: true
+  type: object
+RuntimePolicySnapshot:
+  additionalProperties: false
+  properties:
+    approvalPreference:
+      $ref: "#/components/schemas/RuntimePermissionEnvelope"
+    capabilityPolicy:
+      $ref: "#/components/schemas/RuntimePermissionEnvelope"
+    configSnapshotId:
+      type: string
+    delegationPolicy:
+      $ref: "#/components/schemas/RuntimePermissionEnvelope"
+    executionPermissionMode:
+      $ref: "#/components/schemas/RuntimePermissionMode"
+    manifestRevision:
+      type: string
+    memoryPolicy:
+      $ref: "#/components/schemas/RuntimePermissionEnvelope"
+    selectedConfiguredModelId:
+      type: string
+    selectedActorRef:
+      type: string
+  required:
+    - selectedActorRef
+    - selectedConfiguredModelId
+    - executionPermissionMode
+    - configSnapshotId
+    - manifestRevision
+  type: object
+RuntimeRunCheckpoint:
+  additionalProperties: false
+  properties:
+    capabilityPlanSummary:
+      $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
+    capabilityStateRef:
+      type: string
+    compactionMetadata:
+      $ref: "#/components/schemas/RuntimePermissionEnvelope"
+    currentIterationIndex:
+      type: integer
+    lastExecutionOutcome:
+      $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+    pendingMediation:
+      $ref: "#/components/schemas/RuntimePendingMediationSummary"
+    pendingApproval:
+      $ref: "#/components/schemas/RuntimeApprovalRequest"
+    serializedSession:
+      $ref: "#/components/schemas/RuntimePermissionEnvelope"
+    usageSummary:
+      $ref: "#/components/schemas/RuntimeUsageSummary"
+  required:
+    - serializedSession
+    - currentIterationIndex
+    - usageSummary
+    - capabilityPlanSummary
+  type: object
+RuntimeRunKind:
+  enum:
+    - primary
+    - subrun
+  type: string
+RuntimeTraceContext:
+  additionalProperties: false
+  properties:
+    parentRunId:
+      type: string
+    sessionId:
+      type: string
+    traceId:
+      type: string
+    turnId:
+      type: string
+  required:
+    - sessionId
+    - traceId
+    - turnId
+  type: object
+RuntimeUsageSummary:
+  additionalProperties: false
+  properties:
+    inputTokens:
+      type: integer
+    outputTokens:
+      type: integer
+    totalTokens:
+      type: integer
+  required:
+    - inputTokens
+    - outputTokens
+    - totalTokens
   type: object
 RuntimeBootstrap:
   additionalProperties: false
@@ -340,6 +722,10 @@ RuntimeEventEnvelope:
   properties:
     approval:
       $ref: "#/components/schemas/RuntimeApprovalRequest"
+    capabilityPlanSummary:
+      $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
+    capabilityStateRef:
+      type: string
     conversationId:
       type: string
     decision:
@@ -354,13 +740,21 @@ RuntimeEventEnvelope:
       type: string
     kind:
       $ref: "#/components/schemas/RuntimeEventKind"
+    lastExecutionOutcome:
+      $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
     message:
       $ref: "#/components/schemas/RuntimeMessage"
+    pendingMediation:
+      $ref: "#/components/schemas/RuntimePendingMediationSummary"
     payload:
       additionalProperties: true
       type: object
     projectId:
       type: string
+    providerStateSummary:
+      items:
+        $ref: "#/components/schemas/RuntimeCapabilityProviderState"
+      type: array
     run:
       $ref: "#/components/schemas/RuntimeRunSnapshot"
     runId:
@@ -386,6 +780,30 @@ RuntimeEventEnvelope:
   type: object
 RuntimeEventKind:
   enum:
+    - planner.started
+    - planner.completed
+    - model.started
+    - model.streaming
+    - model.completed
+    - model.failed
+    - tool.requested
+    - tool.started
+    - tool.completed
+    - tool.failed
+    - skill.requested
+    - skill.started
+    - skill.completed
+    - skill.failed
+    - mcp.requested
+    - mcp.started
+    - mcp.completed
+    - mcp.failed
+    - approval.requested
+    - approval.resolved
+    - trace.emitted
+    - subrun.spawned
+    - subrun.completed
+    - subrun.failed
     - runtime.run.updated
     - runtime.message.created
     - runtime.trace.emitted
@@ -472,6 +890,18 @@ RuntimePermissionMode:
 RuntimeRunSnapshot:
   additionalProperties: false
   properties:
+    actorRef:
+      type: string
+    approvalState:
+      type: string
+    artifactRefs:
+      items:
+        type: string
+      type: array
+    capabilityPlanSummary:
+      $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
+    capabilityStateRef:
+      type: string
     configSnapshotId:
       type: string
     configuredModelId:
@@ -482,16 +912,30 @@ RuntimeRunSnapshot:
       type: integer
     conversationId:
       type: string
+    delegatedByToolCallId:
+      type: string
     currentStep:
       type: string
     effectiveConfigHash:
       type: string
     id:
       type: string
+    lastExecutionOutcome:
+      $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
     modelId:
       type: string
+    parentRunId:
+      type: string
+    pendingMediation:
+      $ref: "#/components/schemas/RuntimePendingMediationSummary"
     nextAction:
       type: string
+    providerStateSummary:
+      items:
+        $ref: "#/components/schemas/RuntimeCapabilityProviderState"
+      type: array
+    runKind:
+      $ref: "#/components/schemas/RuntimeRunKind"
     requestedActorId:
       type: string
     requestedActorKind:
@@ -514,12 +958,20 @@ RuntimeRunSnapshot:
       type: array
     status:
       $ref: "#/components/schemas/RunStatus"
+    traceContext:
+      $ref: "#/components/schemas/RuntimeTraceContext"
     updatedAt:
       type: integer
+    usageSummary:
+      $ref: "#/components/schemas/RuntimeUsageSummary"
+    checkpoint:
+      $ref: "#/components/schemas/RuntimeRunCheckpoint"
   required:
     - id
     - sessionId
     - conversationId
+    - actorRef
+    - runKind
     - status
     - currentStep
     - startedAt
@@ -527,6 +979,12 @@ RuntimeRunSnapshot:
     - configSnapshotId
     - effectiveConfigHash
     - startedFromScopeSet
+    - usageSummary
+    - artifactRefs
+    - traceContext
+    - checkpoint
+    - capabilityPlanSummary
+    - providerStateSummary
   type: object
 RuntimeSecretReferenceState:
   enum:
@@ -553,14 +1011,38 @@ RuntimeSecretReferenceStatus:
 RuntimeSessionDetail:
   additionalProperties: false
   properties:
+    activeRunId:
+      type: string
+    capabilityPlanSummary:
+      $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
+    capabilityStateRef:
+      type: string
     messages:
       items:
         $ref: "#/components/schemas/RuntimeMessage"
       type: array
+    lastExecutionOutcome:
+      $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+    manifestRevision:
+      type: string
+    memorySummary:
+      $ref: "#/components/schemas/RuntimeMemorySummary"
     pendingApproval:
       $ref: "#/components/schemas/RuntimeApprovalRequest"
+    pendingMediation:
+      $ref: "#/components/schemas/RuntimePendingMediationSummary"
+    providerStateSummary:
+      items:
+        $ref: "#/components/schemas/RuntimeCapabilityProviderState"
+      type: array
     run:
       $ref: "#/components/schemas/RuntimeRunSnapshot"
+    selectedActorRef:
+      type: string
+    sessionPolicy:
+      $ref: "#/components/schemas/RuntimePolicySnapshot"
+    subrunCount:
+      type: integer
     summary:
       $ref: "#/components/schemas/RuntimeSessionSummary"
     trace:
@@ -572,6 +1054,14 @@ RuntimeSessionDetail:
     - run
     - messages
     - trace
+    - selectedActorRef
+    - manifestRevision
+    - sessionPolicy
+    - activeRunId
+    - subrunCount
+    - memorySummary
+    - capabilityPlanSummary
+    - providerStateSummary
   type: object
 RuntimeSessionKind:
   enum:
@@ -581,6 +1071,8 @@ RuntimeSessionKind:
 RuntimeSessionSummary:
   additionalProperties: false
   properties:
+    activeRunId:
+      type: string
     configSnapshotId:
       type: string
     conversationId:
@@ -591,14 +1083,36 @@ RuntimeSessionSummary:
       type: string
     lastMessagePreview:
       type: string
+    manifestRevision:
+      type: string
+    memorySummary:
+      $ref: "#/components/schemas/RuntimeMemorySummary"
     projectId:
+      type: string
+    capabilityPlanSummary:
+      $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
+    capabilityStateRef:
       type: string
     sessionKind:
       $ref: "#/components/schemas/RuntimeSessionKind"
+    lastExecutionOutcome:
+      $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+    pendingMediation:
+      $ref: "#/components/schemas/RuntimePendingMediationSummary"
+    providerStateSummary:
+      items:
+        $ref: "#/components/schemas/RuntimeCapabilityProviderState"
+      type: array
+    selectedActorRef:
+      type: string
+    sessionPolicy:
+      $ref: "#/components/schemas/RuntimePolicySnapshot"
     startedFromScopeSet:
       items:
         $ref: "#/components/schemas/RuntimeConfigScope"
       type: array
+    subrunCount:
+      type: integer
     status:
       $ref: "#/components/schemas/RunStatus"
     title:
@@ -616,6 +1130,14 @@ RuntimeSessionSummary:
     - configSnapshotId
     - effectiveConfigHash
     - startedFromScopeSet
+    - selectedActorRef
+    - manifestRevision
+    - sessionPolicy
+    - activeRunId
+    - subrunCount
+    - memorySummary
+    - capabilityPlanSummary
+    - providerStateSummary
   type: object
 RuntimeTraceItem:
   additionalProperties: false
@@ -663,19 +1185,10 @@ RuntimeTraceItem:
 SubmitRuntimeTurnInput:
   additionalProperties: false
   properties:
-    actorId:
-      type: string
-    actorKind:
-      $ref: "#/components/schemas/ConversationActorKind"
-    configuredModelId:
-      type: string
     content:
-      type: string
-    modelId:
       type: string
     permissionMode:
       $ref: "#/components/schemas/RuntimePermissionMode"
   required:
     - content
-    - permissionMode
   type: object

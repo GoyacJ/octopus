@@ -1,10 +1,9 @@
 use super::*;
 use crate::dto_mapping::metric_record;
 use octopus_core::{
-    AuthorizationRequest, CreateProjectPromotionRequestInput,
+    AuthorizationRequest, CapabilityManagementProjection, CreateProjectPromotionRequestInput,
     ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult, ProjectPromotionRequest,
     ProtectedResourceDescriptor, ReviewProjectPromotionRequestInput,
-    CapabilityManagementProjection,
 };
 
 #[derive(Debug, Default, Deserialize)]
@@ -1077,7 +1076,12 @@ pub(crate) async fn import_project_resource(
     authorize_request(
         &state,
         &session,
-        &resource_input_authorization_request(&session, "resource.upload", Some(&project_id), &tags),
+        &resource_input_authorization_request(
+            &session,
+            "resource.upload",
+            Some(&project_id),
+            &tags,
+        ),
         &request_id(&headers),
     )
     .await?;

@@ -1,26 +1,24 @@
 use async_trait::async_trait;
 use octopus_core::{
-    AgentRecord, AppError, AutomationRecord, BindPetConversationInput,
+    AgentRecord, AppError, AutomationRecord, BindPetConversationInput, CapabilityAssetDisablePatch,
     CapabilityManagementProjection, ChangeCurrentUserPasswordRequest,
     ChangeCurrentUserPasswordResponse, CopyWorkspaceSkillToManagedInput,
-    CreateProjectPromotionRequestInput, CreateProjectRequest,
-    CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput, CreateWorkspaceSkillInput,
-    ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult,
-    ImportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundlePreview,
-    ImportWorkspaceAgentBundlePreviewInput, ImportWorkspaceAgentBundleResult,
-    ImportWorkspaceSkillArchiveInput, ImportWorkspaceSkillFolderInput, KnowledgeRecord,
-    ModelCatalogRecord, PetConversationBinding, PetPresenceState, PetWorkspaceSnapshot,
-    ProjectAgentLinkInput, ProjectAgentLinkRecord, ProjectPromotionRequest, ProjectRecord,
-    ProjectTeamLinkInput, ProjectTeamLinkRecord, PromoteWorkspaceResourceInput,
-    ProviderCredentialRecord, ReviewProjectPromotionRequestInput, SavePetPresenceInput,
-    SystemBootstrapStatus, TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest,
-    UpdateProjectRequest, UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput,
-    UpdateWorkspaceSkillInput, UpsertAgentInput, UpsertTeamInput,
+    CreateProjectPromotionRequestInput, CreateProjectRequest, CreateWorkspaceResourceFolderInput,
+    CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, ExportWorkspaceAgentBundleInput,
+    ExportWorkspaceAgentBundleResult, ImportWorkspaceAgentBundleInput,
+    ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
+    ImportWorkspaceAgentBundleResult, ImportWorkspaceSkillArchiveInput,
+    ImportWorkspaceSkillFolderInput, KnowledgeRecord, ModelCatalogRecord, PetConversationBinding,
+    PetPresenceState, PetWorkspaceSnapshot, ProjectAgentLinkInput, ProjectAgentLinkRecord,
+    ProjectPromotionRequest, ProjectRecord, ProjectTeamLinkInput, ProjectTeamLinkRecord,
+    PromoteWorkspaceResourceInput, ProviderCredentialRecord, ReviewProjectPromotionRequestInput,
+    SavePetPresenceInput, SystemBootstrapStatus, TeamRecord, ToolRecord,
+    UpdateCurrentUserProfileRequest, UpdateProjectRequest, UpdateWorkspaceResourceInput,
+    UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput, UpsertAgentInput, UpsertTeamInput,
     UpsertWorkspaceMcpServerInput, UserRecordSummary, WorkspaceDirectoryBrowserResponse,
     WorkspaceMcpServerDocument, WorkspaceResourceChildrenRecord, WorkspaceResourceContentDocument,
     WorkspaceResourceImportInput, WorkspaceResourceRecord, WorkspaceSkillDocument,
     WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceSummary,
-    CapabilityAssetDisablePatch,
 };
 
 #[async_trait]
@@ -41,7 +39,9 @@ pub trait WorkspaceService: Send + Sync {
         &self,
         project_id: &str,
     ) -> Result<Vec<ProjectPromotionRequest>, AppError>;
-    async fn list_workspace_promotion_requests(&self) -> Result<Vec<ProjectPromotionRequest>, AppError>;
+    async fn list_workspace_promotion_requests(
+        &self,
+    ) -> Result<Vec<ProjectPromotionRequest>, AppError>;
     async fn create_project_promotion_request(
         &self,
         project_id: &str,

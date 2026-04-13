@@ -9,6 +9,29 @@ import {
   type SubmitRuntimeTurnInput,
 } from '@octopus/schema'
 
+function parseActorRef(actorRef?: string): {
+  actorKind?: RuntimeMessage['resolvedActorKind']
+  actorId?: string
+} {
+  if (!actorRef) {
+    return {}
+  }
+
+  const [actorKind, actorId] = actorRef.split(':', 2)
+  if (!actorKind || !actorId) {
+    return {}
+  }
+
+  if (actorKind !== 'agent' && actorKind !== 'team') {
+    return {}
+  }
+
+  return {
+    actorKind: actorKind as RuntimeMessage['resolvedActorKind'],
+    actorId,
+  }
+}
+
 function toConversationAttachments(attachments?: string[]): ConversationAttachment[] {
   return (attachments ?? []).map((attachmentId) => ({
     id: attachmentId,
@@ -21,11 +44,14 @@ export function createOptimisticRuntimeMessage(
   sessionId: string,
   conversationId: string,
   input: SubmitRuntimeTurnInput,
+  run?: RuntimeRunSnapshot,
+  selectedActorRef?: string,
   timestamp = Date.now(),
 ): RuntimeMessage {
-  const requestedActorKind = input.actorKind
-  const requestedActorId = input.actorId
-  const status: RunStatus = resolveRuntimePermissionMode(input.permissionMode) === 'workspace-write'
+  const requestedActor = parseActorRef(selectedActorRef)
+  const resolvedActorKind = run?.resolvedActorKind ?? requestedActor.actorKind
+  const resolvedActorId = run?.resolvedActorId ?? requestedActor.actorId
+  const status: RunStatus = resolveRuntimePermissionMode(input.permissionMode ?? 'read-only') === 'workspace-write'
     ? 'waiting_approval'
     : 'running'
 
@@ -37,13 +63,14 @@ export function createOptimisticRuntimeMessage(
     senderLabel: 'You',
     content: input.content.trim(),
     timestamp,
-    configuredModelId: input.configuredModelId,
-    modelId: input.modelId,
+    configuredModelId: run?.configuredModelId,
+    configuredModelName: run?.configuredModelName,
+    modelId: run?.modelId,
     status,
-    requestedActorKind,
-    requestedActorId,
-    resolvedActorKind: requestedActorKind,
-    resolvedActorId: requestedActorId,
+    requestedActorKind: requestedActor.actorKind,
+    requestedActorId: requestedActor.actorId,
+    resolvedActorKind,
+    resolvedActorId,
     resolvedActorLabel: 'You',
     usedDefaultActor: false,
     resourceIds: [],
@@ -56,27 +83,32 @@ export function createOptimisticAssistantMessage(
   sessionId: string,
   conversationId: string,
   input: SubmitRuntimeTurnInput,
+  run?: RuntimeRunSnapshot,
+  selectedActorRef?: string,
   timestamp = Date.now() + 1,
 ): RuntimeMessage {
-  const requestedActorKind = input.actorKind
-  const requestedActorId = input.actorId
+  const requestedActor = parseActorRef(selectedActorRef)
+  const resolvedActorKind = run?.resolvedActorKind ?? requestedActor.actorKind
+  const resolvedActorId = run?.resolvedActorId ?? requestedActor.actorId
+  const resolvedActorLabel = run?.resolvedActorLabel ?? 'Assistant'
 
   return {
     id: `optimistic-assistant-${timestamp}`,
     sessionId,
     conversationId,
     senderType: 'assistant',
-    senderLabel: 'Assistant',
+    senderLabel: resolvedActorLabel,
     content: 'Thinking…',
     timestamp,
-    configuredModelId: input.configuredModelId,
-    modelId: input.modelId,
+    configuredModelId: run?.configuredModelId,
+    configuredModelName: run?.configuredModelName,
+    modelId: run?.modelId,
     status: 'running',
-    requestedActorKind,
-    requestedActorId,
-    resolvedActorKind: requestedActorKind,
-    resolvedActorId: requestedActorId,
-    resolvedActorLabel: 'Assistant',
+    requestedActorKind: requestedActor.actorKind,
+    requestedActorId: requestedActor.actorId,
+    resolvedActorKind,
+    resolvedActorId,
+    resolvedActorLabel,
     usedDefaultActor: false,
     resourceIds: [],
     attachments: [],

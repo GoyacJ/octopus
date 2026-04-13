@@ -322,36 +322,83 @@ impl InfraWorkspaceService {
         input: UpsertAgentInput,
         current: Option<&AgentRecord>,
     ) -> Result<AgentRecord, AppError> {
-        let next_avatar_path = if input.remove_avatar.unwrap_or(false) {
+        let UpsertAgentInput {
+            workspace_id,
+            project_id,
+            scope,
+            name,
+            avatar,
+            remove_avatar,
+            personality,
+            tags,
+            prompt,
+            builtin_tool_keys,
+            skill_ids,
+            mcp_server_names,
+            task_domains,
+            default_model_strategy: input_default_model_strategy,
+            capability_policy: input_capability_policy,
+            permission_envelope: input_permission_envelope,
+            memory_policy: input_memory_policy,
+            delegation_policy: input_delegation_policy,
+            approval_preference: input_approval_preference,
+            output_contract: input_output_contract,
+            shared_capability_policy: input_shared_capability_policy,
+            description,
+            status,
+        } = input;
+
+        let next_avatar_path = if remove_avatar.unwrap_or(false) {
             None
-        } else if let Some(avatar) = input.avatar.as_ref() {
+        } else if let Some(avatar) = avatar.as_ref() {
             Some(self.persist_workspace_avatar(agent_id, avatar)?.0)
         } else {
             current.and_then(|record| record.avatar_path.clone())
         };
         let avatar = agent_avatar(&self.state.paths, next_avatar_path.as_deref());
+        let task_domains = normalize_task_domains(task_domains);
 
         Ok(AgentRecord {
             id: agent_id.into(),
-            workspace_id: if input.workspace_id.trim().is_empty() {
+            workspace_id: if workspace_id.trim().is_empty() {
                 self.state.workspace_id()?
             } else {
-                input.workspace_id
+                workspace_id
             },
-            project_id: input.project_id,
-            scope: input.scope,
-            name: input.name.trim().into(),
+            project_id,
+            scope,
+            name: name.trim().into(),
             avatar_path: next_avatar_path,
             avatar,
-            personality: input.personality.trim().into(),
-            tags: input.tags,
-            prompt: input.prompt.trim().into(),
-            builtin_tool_keys: input.builtin_tool_keys,
-            skill_ids: input.skill_ids,
-            mcp_server_names: input.mcp_server_names,
+            personality: personality.trim().into(),
+            tags,
+            prompt: prompt.trim().into(),
+            builtin_tool_keys: builtin_tool_keys.clone(),
+            skill_ids: skill_ids.clone(),
+            mcp_server_names: mcp_server_names.clone(),
+            task_domains,
+            manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
+            default_model_strategy: input_default_model_strategy
+                .unwrap_or_else(default_model_strategy),
+            capability_policy: input_capability_policy.unwrap_or_else(|| {
+                capability_policy_from_sources(&builtin_tool_keys, &skill_ids, &mcp_server_names)
+            }),
+            permission_envelope: input_permission_envelope
+                .unwrap_or_else(default_permission_envelope),
+            memory_policy: input_memory_policy.unwrap_or_else(default_agent_memory_policy),
+            delegation_policy: input_delegation_policy
+                .unwrap_or_else(default_agent_delegation_policy),
+            approval_preference: input_approval_preference
+                .unwrap_or_else(default_approval_preference),
+            output_contract: input_output_contract.unwrap_or_else(default_output_contract),
+            shared_capability_policy: input_shared_capability_policy
+                .unwrap_or_else(default_agent_shared_capability_policy),
             integration_source: None,
-            description: input.description.trim().into(),
-            status: input.status.trim().into(),
+            trust_metadata: default_asset_trust_metadata(),
+            dependency_resolution: Vec::new(),
+            import_metadata: default_asset_import_metadata(),
+            description: description.trim().into(),
+            status: status.trim().into(),
             updated_at: Self::now(),
         })
     }
@@ -362,40 +409,130 @@ impl InfraWorkspaceService {
         input: UpsertTeamInput,
         current: Option<&TeamRecord>,
     ) -> Result<TeamRecord, AppError> {
-        let next_avatar_path = if input.remove_avatar.unwrap_or(false) {
+        let UpsertTeamInput {
+            workspace_id,
+            project_id,
+            scope,
+            name,
+            avatar,
+            remove_avatar,
+            personality,
+            tags,
+            prompt,
+            builtin_tool_keys,
+            skill_ids,
+            mcp_server_names,
+            task_domains,
+            default_model_strategy: input_default_model_strategy,
+            capability_policy: input_capability_policy,
+            permission_envelope: input_permission_envelope,
+            memory_policy: input_memory_policy,
+            delegation_policy: input_delegation_policy,
+            approval_preference: input_approval_preference,
+            output_contract: input_output_contract,
+            shared_capability_policy: input_shared_capability_policy,
+            leader_agent_id: input_leader_agent_id,
+            member_agent_ids: input_member_agent_ids,
+            leader_ref: input_leader_ref,
+            member_refs: input_member_refs,
+            team_topology: input_team_topology,
+            shared_memory_policy: input_shared_memory_policy,
+            mailbox_policy: input_mailbox_policy,
+            artifact_handoff_policy: input_artifact_handoff_policy,
+            workflow_affordance: input_workflow_affordance,
+            worker_concurrency_limit: input_worker_concurrency_limit,
+            description,
+            status,
+        } = input;
+
+        let next_avatar_path = if remove_avatar.unwrap_or(false) {
             None
-        } else if let Some(avatar) = input.avatar.as_ref() {
+        } else if let Some(avatar) = avatar.as_ref() {
             Some(self.persist_workspace_avatar(team_id, avatar)?.0)
         } else {
             current.and_then(|record| record.avatar_path.clone())
         };
         let avatar = agent_avatar(&self.state.paths, next_avatar_path.as_deref());
 
+        let member_agent_ids = input_member_agent_ids;
+        let member_refs = if input_member_refs.is_empty() {
+            member_agent_ids.clone()
+        } else {
+            input_member_refs
+        };
+        let leader_agent_id = input_leader_agent_id.filter(|value| !value.trim().is_empty());
+        let leader_ref = input_leader_ref
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| leader_agent_id.clone())
+            .unwrap_or_default();
+        let task_domains = normalize_task_domains(task_domains);
+        let delegation_policy =
+            input_delegation_policy.unwrap_or_else(default_team_delegation_policy);
+        let worker_concurrency_limit =
+            input_worker_concurrency_limit.unwrap_or(delegation_policy.max_worker_count);
+        let team_topology = input_team_topology.unwrap_or_else(|| {
+            team_topology_from_refs(Some(leader_ref.clone()), member_refs.clone())
+        });
+        let workflow_affordance = input_workflow_affordance.unwrap_or_else(|| {
+            workflow_affordance_from_task_domains(
+                &task_domains,
+                delegation_policy.allow_background_runs,
+                true,
+            )
+        });
+
         Ok(TeamRecord {
             id: team_id.into(),
-            workspace_id: if input.workspace_id.trim().is_empty() {
+            workspace_id: if workspace_id.trim().is_empty() {
                 self.state.workspace_id()?
             } else {
-                input.workspace_id
+                workspace_id
             },
-            project_id: input.project_id,
-            scope: input.scope,
-            name: input.name.trim().into(),
+            project_id,
+            scope,
+            name: name.trim().into(),
             avatar_path: next_avatar_path,
             avatar,
-            personality: input.personality.trim().into(),
-            tags: input.tags,
-            prompt: input.prompt.trim().into(),
-            builtin_tool_keys: input.builtin_tool_keys,
-            skill_ids: input.skill_ids,
-            mcp_server_names: input.mcp_server_names,
-            leader_agent_id: input
-                .leader_agent_id
-                .filter(|value| !value.trim().is_empty()),
-            member_agent_ids: input.member_agent_ids,
+            personality: personality.trim().into(),
+            tags,
+            prompt: prompt.trim().into(),
+            builtin_tool_keys: builtin_tool_keys.clone(),
+            skill_ids: skill_ids.clone(),
+            mcp_server_names: mcp_server_names.clone(),
+            task_domains,
+            manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
+            default_model_strategy: input_default_model_strategy
+                .unwrap_or_else(default_model_strategy),
+            capability_policy: input_capability_policy.unwrap_or_else(|| {
+                capability_policy_from_sources(&builtin_tool_keys, &skill_ids, &mcp_server_names)
+            }),
+            permission_envelope: input_permission_envelope
+                .unwrap_or_else(default_permission_envelope),
+            memory_policy: input_memory_policy.unwrap_or_else(default_team_memory_policy),
+            delegation_policy: delegation_policy.clone(),
+            approval_preference: input_approval_preference
+                .unwrap_or_else(default_approval_preference),
+            output_contract: input_output_contract.unwrap_or_else(default_output_contract),
+            shared_capability_policy: input_shared_capability_policy
+                .unwrap_or_else(default_team_shared_capability_policy),
+            leader_agent_id,
+            member_agent_ids,
+            leader_ref: leader_ref.clone(),
+            member_refs: member_refs.clone(),
+            team_topology,
+            shared_memory_policy: input_shared_memory_policy
+                .unwrap_or_else(default_shared_memory_policy),
+            mailbox_policy: input_mailbox_policy.unwrap_or_else(default_mailbox_policy),
+            artifact_handoff_policy: input_artifact_handoff_policy
+                .unwrap_or_else(default_artifact_handoff_policy),
+            workflow_affordance,
+            worker_concurrency_limit,
             integration_source: None,
-            description: input.description.trim().into(),
-            status: input.status.trim().into(),
+            trust_metadata: default_asset_trust_metadata(),
+            dependency_resolution: Vec::new(),
+            import_metadata: default_asset_import_metadata(),
+            description: description.trim().into(),
+            status: status.trim().into(),
             updated_at: Self::now(),
         })
     }

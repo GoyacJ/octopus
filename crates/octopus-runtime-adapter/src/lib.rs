@@ -1,8 +1,12 @@
 mod actor_context;
+mod actor_manifest;
 mod adapter_state;
 #[cfg(test)]
 mod adapter_tests;
+mod agent_runtime_core;
 mod approval_flow;
+mod capability_planner_bridge;
+mod capability_state;
 mod config_service;
 mod event_bus;
 mod execution_events;
@@ -12,9 +16,12 @@ mod executor;
 mod model_usage;
 mod persistence;
 mod registry;
+mod run_context;
 mod runtime_config;
+mod session_policy;
 mod session_service;
 mod snapshot_store;
+mod trace_context;
 mod turn_submit;
 
 #[cfg(test)]
@@ -30,15 +37,20 @@ use std::{
 
 use async_trait::async_trait;
 use octopus_core::{
-    normalize_runtime_permission_mode_label, timestamp_now, AppError, ApprovalRequestRecord,
-    AuditRecord, ConfiguredModelRecord, CostLedgerEntry, CreateRuntimeSessionInput,
-    ModelCatalogSnapshot, ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput,
-    ResolvedExecutionTarget, RuntimeBootstrap, RuntimeConfigPatch, RuntimeConfigSnapshotSummary,
-    RuntimeConfigSource, RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
+    timestamp_now, AgentRecord, AppError, ApprovalRequestRecord, AuditRecord,
+    ConfiguredModelRecord, CostLedgerEntry, CreateRuntimeSessionInput, ModelCatalogSnapshot,
+    ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput, ResolvedExecutionTarget,
+    RuntimeBootstrap, RuntimeCapabilityExecutionOutcome, RuntimeCapabilityPlanSummary,
+    RuntimeCapabilityProviderState, RuntimeCapabilityStateSnapshot, RuntimeConfigPatch,
+    RuntimeConfigSnapshotSummary, RuntimeConfigSource,
+    RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
     RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
-    RuntimeMessage, RuntimeRunSnapshot, RuntimeSecretReferenceStatus, RuntimeSessionDetail,
-    RuntimeSessionSummary, RuntimeTraceItem, SubmitRuntimeTurnInput, TraceEventRecord,
-    RUNTIME_PERMISSION_WORKSPACE_WRITE,
+    RuntimeMemorySummary, RuntimeMessage, RuntimePendingMediationSummary,
+    RuntimeRunCheckpoint, RuntimeRunSnapshot, RuntimeSecretReferenceStatus,
+    RuntimeSessionDetail, RuntimeSessionPolicySnapshot,
+    RuntimeSessionSummary, RuntimeTraceContext, RuntimeTraceItem, RuntimeUsageSummary,
+    SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord, RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+    RUNTIME_PERMISSION_READ_ONLY, RUNTIME_PERMISSION_WORKSPACE_WRITE,
 };
 use octopus_infra::WorkspacePaths;
 use octopus_platform::{
@@ -56,7 +68,8 @@ use tools as _;
 use uuid::Uuid;
 
 use adapter_state::{
-    merge_project_assignments, optional_project_id, RuntimeAggregate, RuntimeState,
+    merge_project_assignments, optional_project_id, sync_runtime_session_detail, RuntimeAggregate,
+    RuntimeAggregateMetadata, RuntimeState,
 };
 use executor::ExecutionResponse;
 pub use executor::{LiveRuntimeModelExecutor, MockRuntimeModelExecutor, RuntimeModelExecutor};

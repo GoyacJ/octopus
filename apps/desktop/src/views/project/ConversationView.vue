@@ -4,7 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowUp, Bot, Plus, Shield, Sparkles } from 'lucide-vue-next'
 
-import type { ConversationActorKind, Message, PermissionMode, WorkspaceResourceRecord } from '@octopus/schema'
+import { resolveRuntimePermissionMode, type ConversationActorKind, type Message, type PermissionMode, type WorkspaceResourceRecord } from '@octopus/schema'
 import { UiButton, UiConversationComposerShell, UiEmptyState, UiSelect, UiStatusCallout, UiTextarea } from '@octopus/ui'
 
 import ConversationMessageBubble from '@/components/conversation/ConversationMessageBubble.vue'
@@ -128,7 +128,7 @@ const queueItems = computed(() =>
   runtime.activeQueue.map(item => ({
     id: item.id,
     content: item.content,
-    actorLabel: actorLabelMap.value.get(`${item.actorKind}:${item.actorId}`) ?? 'Assistant',
+    actorLabel: actorLabelMap.value.get(runtime.activeSession?.summary.selectedActorRef ?? '') ?? 'Assistant',
     createdAt: item.createdAt,
   })),
 )
@@ -173,6 +173,9 @@ async function ensureRuntimeSession() {
     conversationId: conversationId.value,
     projectId: projectId.value,
     title: `Conversation ${conversationId.value.slice(-6)}`,
+    selectedActorRef: selectedActorValue.value || actorOptions.value[0]?.value || '',
+    selectedConfiguredModelId: selectedModelId.value || modelOptions.value[0]?.value || undefined,
+    executionPermissionMode: resolveRuntimePermissionMode(selectedPermissionMode.value),
   })
 }
 
@@ -215,10 +218,7 @@ async function submitRuntimeTurn() {
   await ensureRuntimeSession()
   const submitted = await runtime.submitTurn({
     content: draft,
-    configuredModelId: selectedModelId.value || modelOptions.value[0]?.value || '',
-    permissionMode: selectedPermissionMode.value,
-    actorKind: selectedActor.value?.kind,
-    actorId: selectedActor.value?.value.split(':')[1],
+    permissionMode: resolveRuntimePermissionMode(selectedPermissionMode.value),
   })
 
   if (!submitted) {

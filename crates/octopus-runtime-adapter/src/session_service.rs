@@ -54,8 +54,29 @@ impl RuntimeSessionService for RuntimeAdapter {
         let snapshot = self
             .current_config_snapshot(optional_project_id(&project_id).as_deref(), Some(user_id))?;
         self.persist_config_snapshot(&snapshot)?;
+        let manifest = self.compile_actor_manifest(&input.selected_actor_ref)?;
+        let session_policy = self.compile_session_policy(
+            &session_id,
+            &manifest,
+            &snapshot,
+            input.selected_configured_model_id.as_deref(),
+            &input.execution_permission_mode,
+        )?;
+        self.persist_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref, &manifest)?;
+        self.persist_session_policy_snapshot(
+            &session_policy.session_policy_snapshot_ref,
+            &session_policy,
+        )?;
+        let memory_summary = manifest.memory_summary();
+        let capability_projection = self.project_capability_state(
+            &manifest,
+            &snapshot.id,
+            format!("{run_id}-capability-state"),
+            &tools::SessionCapabilityStore::default(),
+        )?;
+        let capability_summary = capability_projection.plan_summary.clone();
 
-        let detail = RuntimeSessionDetail {
+        let mut detail = RuntimeSessionDetail {
             summary: RuntimeSessionSummary {
                 id: session_id.clone(),
                 conversation_id: conversation_id.clone(),
@@ -68,9 +89,31 @@ impl RuntimeSessionService for RuntimeAdapter {
                 config_snapshot_id: snapshot.id.clone(),
                 effective_config_hash: snapshot.effective_config_hash.clone(),
                 started_from_scope_set: snapshot.started_from_scope_set.clone(),
+                selected_actor_ref: input.selected_actor_ref.clone(),
+                manifest_revision: manifest.manifest_revision().to_string(),
+                session_policy: session_policy.contract_snapshot(),
+                active_run_id: run_id.clone(),
+                subrun_count: 0,
+                memory_summary,
+                capability_summary: capability_summary.clone(),
+                provider_state_summary: capability_projection.provider_state_summary.clone(),
+                pending_mediation: None,
+                capability_state_ref: Some(capability_projection.capability_state_ref.clone()),
+                last_execution_outcome: None,
             },
+            selected_actor_ref: input.selected_actor_ref.clone(),
+            manifest_revision: manifest.manifest_revision().to_string(),
+            session_policy: session_policy.contract_snapshot(),
+            active_run_id: run_id.clone(),
+            subrun_count: 0,
+            memory_summary: manifest.memory_summary(),
+            capability_summary: capability_summary.clone(),
+            provider_state_summary: capability_projection.provider_state_summary.clone(),
+            pending_mediation: None,
+            capability_state_ref: Some(capability_projection.capability_state_ref.clone()),
+            last_execution_outcome: None,
             run: RuntimeRunSnapshot {
-                id: run_id,
+                id: run_id.clone(),
                 session_id: session_id.clone(),
                 conversation_id: conversation_id.clone(),
                 status: "draft".into(),
@@ -85,20 +128,49 @@ impl RuntimeSessionService for RuntimeAdapter {
                 config_snapshot_id: snapshot.id.clone(),
                 effective_config_hash: snapshot.effective_config_hash,
                 started_from_scope_set: snapshot.started_from_scope_set,
+                run_kind: "primary".into(),
+                parent_run_id: None,
+                actor_ref: input.selected_actor_ref.clone(),
+                delegated_by_tool_call_id: None,
+                approval_state: "not-required".into(),
+                usage_summary: RuntimeUsageSummary::default(),
+                artifact_refs: Vec::new(),
+                trace_context: trace_context::runtime_trace_context(&session_id, None),
+                checkpoint: RuntimeRunCheckpoint {
+                    serialized_session: json!({}),
+                    current_iteration_index: 0,
+                    usage_summary: RuntimeUsageSummary::default(),
+                    pending_approval: None,
+                    compaction_metadata: json!({}),
+                    pending_mediation: None,
+                    capability_state_ref: Some(capability_projection.capability_state_ref.clone()),
+                    capability_plan_summary: capability_summary.clone(),
+                    last_execution_outcome: None,
+                },
+                capability_plan_summary: capability_summary,
+                provider_state_summary: capability_projection.provider_state_summary.clone(),
+                pending_mediation: None,
+                capability_state_ref: Some(capability_projection.capability_state_ref),
+                last_execution_outcome: None,
                 resolved_target: None,
-                requested_actor_kind: None,
-                requested_actor_id: None,
-                resolved_actor_kind: None,
-                resolved_actor_id: None,
-                resolved_actor_label: None,
+                requested_actor_kind: Some(manifest.actor_kind_label().into()),
+                requested_actor_id: Some(input.selected_actor_ref.clone()),
+                resolved_actor_kind: Some(manifest.actor_kind_label().into()),
+                resolved_actor_id: Some(input.selected_actor_ref.clone()),
+                resolved_actor_label: Some(manifest.label().to_string()),
             },
             messages: Vec::new(),
             trace: Vec::new(),
             pending_approval: None,
         };
+        sync_runtime_session_detail(&mut detail);
         let aggregate = RuntimeAggregate {
             detail: detail.clone(),
             events: Vec::new(),
+            metadata: RuntimeAggregateMetadata {
+                manifest_snapshot_ref: session_policy.manifest_snapshot_ref.clone(),
+                session_policy_snapshot_ref: session_policy.session_policy_snapshot_ref.clone(),
+            },
         };
 
         self.state
@@ -135,6 +207,11 @@ impl RuntimeSessionService for RuntimeAdapter {
             decision: None,
             summary: Some(detail.summary.clone()),
             error: None,
+            capability_plan_summary: Some(detail.summary.capability_summary.clone()),
+            provider_state_summary: Some(detail.summary.provider_state_summary.clone()),
+            pending_mediation: detail.summary.pending_mediation.clone(),
+            capability_state_ref: detail.summary.capability_state_ref.clone(),
+            last_execution_outcome: detail.summary.last_execution_outcome.clone(),
         };
         self.emit_event(&session_id, event).await?;
 

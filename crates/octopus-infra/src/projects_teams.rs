@@ -70,9 +70,9 @@ impl WorkspaceService for InfraWorkspaceService {
             permission_overrides: request
                 .permission_overrides
                 .unwrap_or_else(default_project_permission_overrides),
-            linked_workspace_assets: request
-                .linked_workspace_assets
-                .unwrap_or_else(|| Self::linked_workspace_assets_from_assignments(assignments.as_ref())),
+            linked_workspace_assets: request.linked_workspace_assets.unwrap_or_else(|| {
+                Self::linked_workspace_assets_from_assignments(assignments.as_ref())
+            }),
             assignments,
         };
 
@@ -191,7 +191,9 @@ impl WorkspaceService for InfraWorkspaceService {
             .collect())
     }
 
-    async fn list_workspace_promotion_requests(&self) -> Result<Vec<ProjectPromotionRequest>, AppError> {
+    async fn list_workspace_promotion_requests(
+        &self,
+    ) -> Result<Vec<ProjectPromotionRequest>, AppError> {
         Ok(self
             .state
             .project_promotion_requests
@@ -228,8 +230,9 @@ impl WorkspaceService for InfraWorkspaceService {
             asset_id: input.asset_id.clone(),
             requested_by_user_id: requested_by_user_id.into(),
             submitted_by_owner_user_id: project.owner_user_id.clone(),
-            required_workspace_capability:
-                Self::required_workspace_capability_for_project_asset(&input.asset_type)?,
+            required_workspace_capability: Self::required_workspace_capability_for_project_asset(
+                &input.asset_type,
+            )?,
             status: "pending".into(),
             reviewed_by_user_id: None,
             review_comment: None,
@@ -873,7 +876,7 @@ impl WorkspaceService for InfraWorkspaceService {
             .lock()
             .map_err(|_| AppError::runtime("agents mutex poisoned"))?
             .clone();
-        agents.extend(crate::agent_assets::list_builtin_agent_templates(
+        agents.extend(crate::agent_bundle::list_builtin_agent_templates(
             &workspace_id,
         )?);
         agents.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
@@ -884,27 +887,7 @@ impl WorkspaceService for InfraWorkspaceService {
         let agent_id = format!("agent-{}", Uuid::new_v4());
         let record = self.build_agent_record(&agent_id, input, None)?;
 
-        self.state.open_db()?.execute(
-            "INSERT INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-            params![
-                record.id,
-                record.workspace_id,
-                record.project_id,
-                record.scope,
-                record.name,
-                record.avatar_path,
-                record.personality,
-                serde_json::to_string(&record.tags)?,
-                record.prompt,
-                serde_json::to_string(&record.builtin_tool_keys)?,
-                serde_json::to_string(&record.skill_ids)?,
-                serde_json::to_string(&record.mcp_server_names)?,
-                record.description,
-                record.status,
-                record.updated_at as i64,
-            ],
-        ).map_err(|error| AppError::database(error.to_string()))?;
+        write_agent_record(&self.state.open_db()?, &record, false)?;
 
         let mut agents = self
             .state
@@ -931,27 +914,7 @@ impl WorkspaceService for InfraWorkspaceService {
         };
         let record = self.build_agent_record(agent_id, input, current.as_ref())?;
 
-        self.state.open_db()?.execute(
-            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
-            params![
-                record.id,
-                record.workspace_id,
-                record.project_id,
-                record.scope,
-                record.name,
-                record.avatar_path,
-                record.personality,
-                serde_json::to_string(&record.tags)?,
-                record.prompt,
-                serde_json::to_string(&record.builtin_tool_keys)?,
-                serde_json::to_string(&record.skill_ids)?,
-                serde_json::to_string(&record.mcp_server_names)?,
-                record.description,
-                record.status,
-                record.updated_at as i64,
-            ],
-        ).map_err(|error| AppError::database(error.to_string()))?;
+        write_agent_record(&self.state.open_db()?, &record, true)?;
 
         if let Some(previous) = current.as_ref() {
             if previous.avatar_path != record.avatar_path {
@@ -1008,11 +971,11 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<ImportWorkspaceAgentBundlePreview, AppError> {
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        agent_assets::preview_import(
+        agent_bundle::preview_import(
             &connection,
             &self.state.paths,
             &workspace_id,
-            agent_assets::AssetTargetScope::Workspace,
+            agent_bundle::BundleTarget::Workspace,
             input,
         )
     }
@@ -1023,11 +986,11 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        let result = agent_assets::execute_import(
+        let result = agent_bundle::execute_import(
             &connection,
             &self.state.paths,
             &workspace_id,
-            agent_assets::AssetTargetScope::Workspace,
+            agent_bundle::BundleTarget::Workspace,
             input,
         )?;
         self.refresh_agent_and_team_caches(&connection)?;
@@ -1038,15 +1001,15 @@ impl WorkspaceService for InfraWorkspaceService {
         &self,
         agent_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_assets::extract_builtin_agent_template_files(agent_id)?
+        let files = crate::agent_bundle::extract_builtin_agent_template_files(agent_id)?
             .ok_or_else(|| AppError::not_found("builtin agent template"))?;
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        let result = agent_assets::execute_import(
+        let result = agent_bundle::execute_import(
             &connection,
             &self.state.paths,
             &workspace_id,
-            agent_assets::AssetTargetScope::Workspace,
+            agent_bundle::BundleTarget::Workspace,
             ImportWorkspaceAgentBundleInput { files },
         )?;
         self.refresh_agent_and_team_caches(&connection)?;
@@ -1059,11 +1022,11 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<ExportWorkspaceAgentBundleResult, AppError> {
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        agent_assets::export_assets(
+        agent_bundle::export_assets(
             &connection,
             &self.state.paths,
             &workspace_id,
-            agent_assets::AssetTargetScope::Workspace,
+            agent_bundle::BundleTarget::Workspace,
             input,
         )
     }
@@ -1075,11 +1038,11 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<ImportWorkspaceAgentBundlePreview, AppError> {
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        agent_assets::preview_import(
+        agent_bundle::preview_import(
             &connection,
             &self.state.paths,
             &workspace_id,
-            agent_assets::AssetTargetScope::Project(project_id),
+            agent_bundle::BundleTarget::Project(project_id),
             input,
         )
     }
@@ -1091,11 +1054,11 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        let result = agent_assets::execute_import(
+        let result = agent_bundle::execute_import(
             &connection,
             &self.state.paths,
             &workspace_id,
-            agent_assets::AssetTargetScope::Project(project_id),
+            agent_bundle::BundleTarget::Project(project_id),
             input,
         )?;
         self.refresh_agent_and_team_caches(&connection)?;
@@ -1107,15 +1070,15 @@ impl WorkspaceService for InfraWorkspaceService {
         project_id: &str,
         agent_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_assets::extract_builtin_agent_template_files(agent_id)?
+        let files = crate::agent_bundle::extract_builtin_agent_template_files(agent_id)?
             .ok_or_else(|| AppError::not_found("builtin agent template"))?;
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        let result = agent_assets::execute_import(
+        let result = agent_bundle::execute_import(
             &connection,
             &self.state.paths,
             &workspace_id,
-            agent_assets::AssetTargetScope::Project(project_id),
+            agent_bundle::BundleTarget::Project(project_id),
             ImportWorkspaceAgentBundleInput { files },
         )?;
         self.refresh_agent_and_team_caches(&connection)?;
@@ -1129,11 +1092,11 @@ impl WorkspaceService for InfraWorkspaceService {
     ) -> Result<ExportWorkspaceAgentBundleResult, AppError> {
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        agent_assets::export_assets(
+        agent_bundle::export_assets(
             &connection,
             &self.state.paths,
             &workspace_id,
-            agent_assets::AssetTargetScope::Project(project_id),
+            agent_bundle::BundleTarget::Project(project_id),
             input,
         )
     }
@@ -1204,7 +1167,7 @@ impl WorkspaceService for InfraWorkspaceService {
             .lock()
             .map_err(|_| AppError::runtime("teams mutex poisoned"))?
             .clone();
-        teams.extend(crate::agent_assets::list_builtin_team_templates(
+        teams.extend(crate::agent_bundle::list_builtin_team_templates(
             &workspace_id,
         )?);
         teams.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
@@ -1297,15 +1260,15 @@ impl WorkspaceService for InfraWorkspaceService {
         &self,
         team_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_assets::extract_builtin_team_template_files(team_id)?
+        let files = crate::agent_bundle::extract_builtin_team_template_files(team_id)?
             .ok_or_else(|| AppError::not_found("builtin team template"))?;
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        let result = agent_assets::execute_import(
+        let result = agent_bundle::execute_import(
             &connection,
             &self.state.paths,
             &workspace_id,
-            agent_assets::AssetTargetScope::Workspace,
+            agent_bundle::BundleTarget::Workspace,
             ImportWorkspaceAgentBundleInput { files },
         )?;
         self.refresh_agent_and_team_caches(&connection)?;
@@ -1317,15 +1280,15 @@ impl WorkspaceService for InfraWorkspaceService {
         project_id: &str,
         team_id: &str,
     ) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-        let files = crate::agent_assets::extract_builtin_team_template_files(team_id)?
+        let files = crate::agent_bundle::extract_builtin_team_template_files(team_id)?
             .ok_or_else(|| AppError::not_found("builtin team template"))?;
         let connection = self.state.open_db()?;
         let workspace_id = self.state.workspace_id()?;
-        let result = agent_assets::execute_import(
+        let result = agent_bundle::execute_import(
             &connection,
             &self.state.paths,
             &workspace_id,
-            agent_assets::AssetTargetScope::Project(project_id),
+            agent_bundle::BundleTarget::Project(project_id),
             ImportWorkspaceAgentBundleInput { files },
         )?;
         self.refresh_agent_and_team_caches(&connection)?;
@@ -1524,7 +1487,7 @@ impl WorkspaceService for InfraWorkspaceService {
         skill_id: &str,
         input: CopyWorkspaceSkillToManagedInput,
     ) -> Result<WorkspaceSkillDocument, AppError> {
-        if let Some(asset) = crate::agent_assets::find_builtin_skill_asset_by_id(skill_id)? {
+        if let Some(asset) = crate::agent_bundle::find_builtin_skill_asset_by_id(skill_id)? {
             let document = self.import_skill_files_to_managed_root(&input.slug, asset.files)?;
             let mut asset_state = load_workspace_asset_state_document(&self.state.paths)?;
             set_workspace_asset_trusted(&mut asset_state, &document.source_key, true);
@@ -1634,7 +1597,7 @@ impl WorkspaceService for InfraWorkspaceService {
         &self,
         server_name: &str,
     ) -> Result<WorkspaceMcpServerDocument, AppError> {
-        let asset = crate::agent_assets::find_builtin_mcp_asset(server_name)?
+        let asset = crate::agent_bundle::find_builtin_mcp_asset(server_name)?
             .ok_or_else(|| AppError::not_found("builtin mcp server"))?;
         let config =
             asset.config.as_object().cloned().ok_or_else(|| {
@@ -2068,7 +2031,9 @@ impl InfraWorkspaceService {
     fn normalize_resource_directory(&self, value: &str) -> Result<String, AppError> {
         let normalized = value.trim();
         if normalized.is_empty() {
-            return Err(AppError::invalid_input("project resource directory is required"));
+            return Err(AppError::invalid_input(
+                "project resource directory is required",
+            ));
         }
         let path = PathBuf::from(normalized);
         if path.is_absolute() {
@@ -2141,14 +2106,20 @@ impl InfraWorkspaceService {
             return Ok(record.scope.clone());
         }
 
-        match (record.scope.as_str(), requested, record.project_id.is_some()) {
+        match (
+            record.scope.as_str(),
+            requested,
+            record.project_id.is_some(),
+        ) {
             ("personal", "project", true) => Ok("project".into()),
             ("personal", "workspace", false) => Ok("workspace".into()),
             ("project", "workspace", _) => Ok("workspace".into()),
             ("workspace", _, _) => Err(AppError::invalid_input(
                 "workspace resources cannot be promoted further",
             )),
-            _ => Err(AppError::invalid_input("resource promotion scope is invalid")),
+            _ => Err(AppError::invalid_input(
+                "resource promotion scope is invalid",
+            )),
         }
     }
 
@@ -2238,8 +2209,16 @@ impl InfraWorkspaceService {
         Ok(())
     }
 
-    fn persist_project_record(&self, record: &ProjectRecord, replace: bool) -> Result<(), AppError> {
-        let verb = if replace { "INSERT OR REPLACE" } else { "INSERT" };
+    fn persist_project_record(
+        &self,
+        record: &ProjectRecord,
+        replace: bool,
+    ) -> Result<(), AppError> {
+        let verb = if replace {
+            "INSERT OR REPLACE"
+        } else {
+            "INSERT"
+        };
         let sql = format!(
             "{verb} INTO projects (id, workspace_id, name, status, description, resource_directory, assignments_json, owner_user_id, member_user_ids_json, permission_overrides_json, linked_workspace_assets_json)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
@@ -2277,7 +2256,11 @@ impl InfraWorkspaceService {
         record: &ProjectPromotionRequest,
         replace: bool,
     ) -> Result<(), AppError> {
-        let verb = if replace { "INSERT OR REPLACE" } else { "INSERT" };
+        let verb = if replace {
+            "INSERT OR REPLACE"
+        } else {
+            "INSERT"
+        };
         let sql = format!(
             "{verb} INTO project_promotion_requests (id, workspace_id, project_id, asset_type, asset_id, requested_by_user_id, submitted_by_owner_user_id, required_workspace_capability, status, reviewed_by_user_id, review_comment, created_at, updated_at, reviewed_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)"
@@ -2313,7 +2296,11 @@ impl InfraWorkspaceService {
         record: &WorkspaceResourceRecord,
         replace: bool,
     ) -> Result<(), AppError> {
-        let verb = if replace { "INSERT OR REPLACE" } else { "INSERT" };
+        let verb = if replace {
+            "INSERT OR REPLACE"
+        } else {
+            "INSERT"
+        };
         let sql = format!(
             "{verb} INTO resources (id, workspace_id, project_id, kind, name, location, origin, scope, visibility, owner_user_id, storage_path, content_type, byte_size, preview_kind, status, updated_at, tags, source_artifact_id)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)"
@@ -2371,7 +2358,11 @@ impl InfraWorkspaceService {
             .extension()
             .and_then(|extension| extension.to_str())
             .or_else(|| {
-                location.and_then(|value| Path::new(value).extension().and_then(|extension| extension.to_str()))
+                location.and_then(|value| {
+                    Path::new(value)
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                })
             })?
             .to_ascii_lowercase();
 
@@ -2392,9 +2383,9 @@ impl InfraWorkspaceService {
             "mp4" => "video/mp4",
             "mov" => "video/quicktime",
             "webm" => "video/webm",
-            "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt"
-            | "swift" | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "yaml"
-            | "yml" | "toml" | "sql" | "sh" => "text/plain",
+            "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt" | "swift"
+            | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "yaml" | "yml" | "toml"
+            | "sql" | "sh" => "text/plain",
             _ => "application/octet-stream",
         };
 
@@ -2448,9 +2439,29 @@ impl InfraWorkspaceService {
             if matches!(
                 extension.as_deref(),
                 Some(
-                    "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt"
-                        | "swift" | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css"
-                        | "json" | "yaml" | "yml" | "toml" | "sql" | "sh"
+                    "rs" | "ts"
+                        | "tsx"
+                        | "js"
+                        | "jsx"
+                        | "vue"
+                        | "py"
+                        | "go"
+                        | "java"
+                        | "kt"
+                        | "swift"
+                        | "c"
+                        | "cc"
+                        | "cpp"
+                        | "h"
+                        | "hpp"
+                        | "html"
+                        | "css"
+                        | "json"
+                        | "yaml"
+                        | "yml"
+                        | "toml"
+                        | "sql"
+                        | "sh"
                 )
             ) {
                 return "code".into();
@@ -2471,7 +2482,10 @@ impl InfraWorkspaceService {
         ) {
             return "image".into();
         }
-        if matches!(lower.rsplit('.').next(), Some("mp3" | "wav" | "ogg" | "m4a")) {
+        if matches!(
+            lower.rsplit('.').next(),
+            Some("mp3" | "wav" | "ogg" | "m4a")
+        ) {
             return "audio".into();
         }
         if matches!(lower.rsplit('.').next(), Some("mp4" | "mov" | "webm")) {
@@ -2480,9 +2494,29 @@ impl InfraWorkspaceService {
         if matches!(
             lower.rsplit('.').next(),
             Some(
-                "rs" | "ts" | "tsx" | "js" | "jsx" | "vue" | "py" | "go" | "java" | "kt"
-                    | "swift" | "c" | "cc" | "cpp" | "h" | "hpp" | "html" | "css" | "json"
-                    | "yaml" | "yml" | "toml" | "sql" | "sh"
+                "rs" | "ts"
+                    | "tsx"
+                    | "js"
+                    | "jsx"
+                    | "vue"
+                    | "py"
+                    | "go"
+                    | "java"
+                    | "kt"
+                    | "swift"
+                    | "c"
+                    | "cc"
+                    | "cpp"
+                    | "h"
+                    | "hpp"
+                    | "html"
+                    | "css"
+                    | "json"
+                    | "yaml"
+                    | "yml"
+                    | "toml"
+                    | "sql"
+                    | "sh"
             )
         ) {
             return "code".into();
@@ -2500,14 +2534,19 @@ impl InfraWorkspaceService {
         let kind = input.kind.trim().to_string();
         let name = Self::normalize_resource_name(&input.name)?;
         let location = Self::normalize_resource_location(input.location);
-        let scope = self.normalize_resource_scope(input.project_id.as_deref(), input.scope.as_deref().unwrap_or_default())?;
-        let visibility = self.normalize_resource_visibility(input.visibility.as_deref().unwrap_or("public"))?;
+        let scope = self.normalize_resource_scope(
+            input.project_id.as_deref(),
+            input.scope.as_deref().unwrap_or_default(),
+        )?;
+        let visibility =
+            self.normalize_resource_visibility(input.visibility.as_deref().unwrap_or("public"))?;
         let content_type = if kind == "url" {
             None
         } else {
             Self::resource_content_type(&name, location.as_deref())
         };
-        let preview_kind = Self::resource_preview_kind(&kind, &name, location.as_deref(), content_type.as_deref());
+        let preview_kind =
+            Self::resource_preview_kind(&kind, &name, location.as_deref(), content_type.as_deref());
 
         Ok(WorkspaceResourceRecord {
             id: format!("res-{}", Uuid::new_v4()),
@@ -2540,7 +2579,9 @@ impl InfraWorkspaceService {
         files: &[WorkspaceResourceFolderUploadEntry],
     ) -> Result<(), AppError> {
         if files.is_empty() {
-            Err(AppError::invalid_input("resource import requires at least one file"))
+            Err(AppError::invalid_input(
+                "resource import requires at least one file",
+            ))
         } else {
             Ok(())
         }
@@ -2571,7 +2612,8 @@ impl InfraWorkspaceService {
         root_dir_name: Option<&str>,
         files: Vec<WorkspaceResourceFolderUploadEntry>,
     ) -> Result<Vec<WorkspaceResourceFolderUploadEntry>, AppError> {
-        let Some(root_dir_name) = root_dir_name.filter(|value: &&str| !value.trim().is_empty()) else {
+        let Some(root_dir_name) = root_dir_name.filter(|value: &&str| !value.trim().is_empty())
+        else {
             return Ok(files);
         };
 
@@ -2598,7 +2640,9 @@ impl InfraWorkspaceService {
         }
         let path = Path::new(&normalized);
         if path.is_absolute() {
-            return Err(AppError::invalid_input("resource file path must be relative"));
+            return Err(AppError::invalid_input(
+                "resource file path must be relative",
+            ));
         }
 
         let mut safe = PathBuf::new();
@@ -2647,7 +2691,10 @@ impl InfraWorkspaceService {
             .file_stem()
             .and_then(|name| name.to_str())
             .unwrap_or("resource");
-        match candidate.extension().and_then(|extension| extension.to_str()) {
+        match candidate
+            .extension()
+            .and_then(|extension| extension.to_str())
+        {
             Some(extension) => candidate.with_file_name(format!("{stem}-{suffix}.{extension}")),
             None => candidate.with_file_name(format!("{stem}-{suffix}")),
         }
@@ -2857,6 +2904,15 @@ impl InfraWorkspaceService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use octopus_core::{
+        ApprovalPreference, ArtifactHandoffPolicy, CapabilityPolicy, DefaultModelStrategy,
+        DelegationPolicy, MailboxPolicy, MemoryPolicy, OutputContract, PermissionEnvelope,
+        SharedCapabilityPolicy, SharedMemoryPolicy, TeamTopology, WorkflowAffordance,
+    };
+
+    fn runtime() -> tokio::runtime::Runtime {
+        tokio::runtime::Runtime::new().expect("runtime")
+    }
 
     fn encoded_file(
         relative_path: &str,
@@ -2874,6 +2930,265 @@ mod tests {
             data_base64: BASE64_STANDARD.encode(content.as_bytes()),
             byte_size: content.len() as u64,
         }
+    }
+
+    #[test]
+    fn create_agent_persists_runtime_policy_fields_across_db_reload() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        let created = runtime()
+            .block_on(bundle.workspace.create_agent(UpsertAgentInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: None,
+                scope: "workspace".into(),
+                name: "Research Analyst".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Structured and evidence-driven".into(),
+                tags: vec!["research".into(), "docs".into()],
+                prompt: "Investigate sources and produce a concise brief.".into(),
+                builtin_tool_keys: vec!["bash".into(), "read_file".into()],
+                skill_ids: vec!["skill-research".into()],
+                mcp_server_names: vec!["browser".into()],
+                description: "Produces research briefs and source syntheses.".into(),
+                status: "active".into(),
+                task_domains: vec!["research".into(), "docs".into()],
+                default_model_strategy: Some(DefaultModelStrategy {
+                    selection_mode: "actor-default".into(),
+                    preferred_model_ref: Some("claude-sonnet-4-5".into()),
+                    fallback_model_refs: vec!["gpt-4o".into()],
+                    allow_turn_override: false,
+                }),
+                capability_policy: Some(CapabilityPolicy {
+                    mode: "allow-list".into(),
+                    deny_by_default: true,
+                    builtin_tool_keys: vec!["bash".into(), "read_file".into()],
+                    skill_ids: vec!["skill-research".into()],
+                    mcp_server_names: vec!["browser".into()],
+                    plugin_capability_refs: vec!["plugin.browser.capture".into()],
+                }),
+                permission_envelope: Some(PermissionEnvelope {
+                    default_mode: "readonly".into(),
+                    max_mode: "workspace-write".into(),
+                    escalation_allowed: true,
+                    allowed_resource_scopes: vec!["project-shared".into(), "team-shared".into()],
+                }),
+                memory_policy: Some(MemoryPolicy {
+                    durable_scopes: vec!["user-private".into(), "project-shared".into()],
+                    write_requires_approval: true,
+                    allow_workspace_shared_write: false,
+                    max_selections: 4,
+                    freshness_required: true,
+                }),
+                delegation_policy: Some(DelegationPolicy {
+                    mode: "single-worker".into(),
+                    allow_background_runs: true,
+                    allow_parallel_workers: false,
+                    max_worker_count: 1,
+                }),
+                approval_preference: Some(ApprovalPreference {
+                    tool_execution: "require-approval".into(),
+                    memory_write: "require-approval".into(),
+                    mcp_auth: "require-approval".into(),
+                    team_spawn: "deny".into(),
+                    workflow_escalation: "require-approval".into(),
+                }),
+                output_contract: Some(OutputContract {
+                    primary_format: "markdown".into(),
+                    artifact_kinds: vec!["report".into(), "trace".into()],
+                    require_structured_summary: true,
+                    preserve_lineage: true,
+                }),
+                shared_capability_policy: Some(SharedCapabilityPolicy {
+                    allow_team_inherited_capabilities: false,
+                    deny_direct_member_escalation: true,
+                    shared_capability_refs: vec!["skill://docs/review".into()],
+                }),
+            }))
+            .expect("create agent");
+
+        let connection = bundle.workspace.state.open_db().expect("open db");
+        let reloaded = load_agents(&connection)
+            .expect("load agents")
+            .into_iter()
+            .find(|agent| agent.id == created.id)
+            .expect("reloaded agent");
+
+        assert_eq!(reloaded.task_domains, vec!["research", "docs"]);
+        assert_eq!(
+            reloaded.default_model_strategy,
+            DefaultModelStrategy {
+                selection_mode: "actor-default".into(),
+                preferred_model_ref: Some("claude-sonnet-4-5".into()),
+                fallback_model_refs: vec!["gpt-4o".into()],
+                allow_turn_override: false,
+            }
+        );
+        assert_eq!(
+            reloaded.capability_policy.plugin_capability_refs,
+            vec!["plugin.browser.capture"]
+        );
+        assert_eq!(reloaded.permission_envelope.default_mode, "readonly");
+        assert_eq!(reloaded.memory_policy.max_selections, 4);
+        assert_eq!(reloaded.delegation_policy.mode, "single-worker");
+        assert_eq!(reloaded.approval_preference.team_spawn, "deny");
+        assert_eq!(
+            reloaded.output_contract.artifact_kinds,
+            vec!["report", "trace"]
+        );
+        assert_eq!(
+            reloaded.shared_capability_policy.shared_capability_refs,
+            vec!["skill://docs/review"]
+        );
+        assert_eq!(reloaded.manifest_revision, "asset-manifest/v2");
+        assert_eq!(reloaded.import_metadata.origin_kind, "native");
+        assert_eq!(reloaded.import_metadata.translation_status, "native");
+        assert_eq!(reloaded.trust_metadata.trust_level, "trusted");
+        assert!(reloaded.dependency_resolution.is_empty());
+    }
+
+    #[test]
+    fn create_team_persists_topology_and_workflow_policy_fields_across_db_reload() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+
+        let created = runtime()
+            .block_on(bundle.workspace.create_team(UpsertTeamInput {
+                workspace_id: DEFAULT_WORKSPACE_ID.into(),
+                project_id: None,
+                scope: "workspace".into(),
+                name: "Research Ops Team".into(),
+                avatar: None,
+                remove_avatar: None,
+                personality: "Leader-coordinated specialists".into(),
+                tags: vec!["research".into(), "browser".into()],
+                prompt: "Break research work into specialist subruns.".into(),
+                builtin_tool_keys: vec!["bash".into()],
+                skill_ids: vec!["skill-research".into(), "skill-synthesis".into()],
+                mcp_server_names: vec!["browser".into(), "notion".into()],
+                leader_agent_id: Some("agent-lead".into()),
+                member_agent_ids: vec!["agent-research".into(), "agent-browser".into()],
+                description: "Coordinates research and browsing specialists.".into(),
+                status: "active".into(),
+                task_domains: vec!["research".into(), "browser".into()],
+                default_model_strategy: Some(DefaultModelStrategy {
+                    selection_mode: "session-selected".into(),
+                    preferred_model_ref: Some("claude-sonnet-4-5".into()),
+                    fallback_model_refs: vec!["gpt-4o".into()],
+                    allow_turn_override: true,
+                }),
+                capability_policy: Some(CapabilityPolicy {
+                    mode: "allow-list".into(),
+                    deny_by_default: true,
+                    builtin_tool_keys: vec!["bash".into()],
+                    skill_ids: vec!["skill-research".into(), "skill-synthesis".into()],
+                    mcp_server_names: vec!["browser".into(), "notion".into()],
+                    plugin_capability_refs: vec!["plugin.browser.capture".into()],
+                }),
+                permission_envelope: Some(PermissionEnvelope {
+                    default_mode: "workspace-write".into(),
+                    max_mode: "danger-full-access".into(),
+                    escalation_allowed: true,
+                    allowed_resource_scopes: vec!["team-shared".into(), "project-shared".into()],
+                }),
+                memory_policy: Some(MemoryPolicy {
+                    durable_scopes: vec!["team-shared".into(), "project-shared".into()],
+                    write_requires_approval: true,
+                    allow_workspace_shared_write: false,
+                    max_selections: 6,
+                    freshness_required: true,
+                }),
+                delegation_policy: Some(DelegationPolicy {
+                    mode: "leader-orchestrated".into(),
+                    allow_background_runs: true,
+                    allow_parallel_workers: true,
+                    max_worker_count: 3,
+                }),
+                approval_preference: Some(ApprovalPreference {
+                    tool_execution: "require-approval".into(),
+                    memory_write: "require-approval".into(),
+                    mcp_auth: "require-approval".into(),
+                    team_spawn: "require-approval".into(),
+                    workflow_escalation: "require-approval".into(),
+                }),
+                output_contract: Some(OutputContract {
+                    primary_format: "markdown".into(),
+                    artifact_kinds: vec!["brief".into(), "artifact".into()],
+                    require_structured_summary: true,
+                    preserve_lineage: true,
+                }),
+                shared_capability_policy: Some(SharedCapabilityPolicy {
+                    allow_team_inherited_capabilities: true,
+                    deny_direct_member_escalation: true,
+                    shared_capability_refs: vec!["skill://research/common".into()],
+                }),
+                leader_ref: Some("agent://workspace/lead".into()),
+                member_refs: vec![
+                    "agent://workspace/research".into(),
+                    "agent://workspace/browser".into(),
+                ],
+                team_topology: Some(TeamTopology {
+                    mode: "leader-orchestrated".into(),
+                    leader_ref: "agent://workspace/lead".into(),
+                    member_refs: vec![
+                        "agent://workspace/research".into(),
+                        "agent://workspace/browser".into(),
+                    ],
+                }),
+                shared_memory_policy: Some(SharedMemoryPolicy {
+                    share_mode: "team-shared".into(),
+                    writable_by_workers: true,
+                    require_review_before_persist: true,
+                }),
+                mailbox_policy: Some(MailboxPolicy {
+                    mode: "leader-hub".into(),
+                    allow_worker_to_worker: false,
+                    retain_messages: true,
+                }),
+                artifact_handoff_policy: Some(ArtifactHandoffPolicy {
+                    mode: "leader-reviewed".into(),
+                    require_lineage: true,
+                    retain_artifacts: true,
+                }),
+                workflow_affordance: Some(WorkflowAffordance {
+                    supported_task_kinds: vec!["research".into(), "browser".into()],
+                    background_capable: true,
+                    automation_capable: true,
+                }),
+                worker_concurrency_limit: Some(3),
+            }))
+            .expect("create team");
+
+        let connection = bundle.workspace.state.open_db().expect("open db");
+        let reloaded = load_teams(&connection)
+            .expect("load teams")
+            .into_iter()
+            .find(|team| team.id == created.id)
+            .expect("reloaded team");
+
+        assert_eq!(reloaded.leader_agent_id.as_deref(), Some("agent-lead"));
+        assert_eq!(
+            reloaded.member_agent_ids,
+            vec!["agent-research", "agent-browser"]
+        );
+        assert_eq!(reloaded.leader_ref, "agent://workspace/lead");
+        assert_eq!(
+            reloaded.member_refs,
+            vec!["agent://workspace/research", "agent://workspace/browser"]
+        );
+        assert_eq!(reloaded.team_topology.mode, "leader-orchestrated");
+        assert_eq!(reloaded.shared_memory_policy.share_mode, "team-shared");
+        assert_eq!(reloaded.mailbox_policy.mode, "leader-hub");
+        assert_eq!(reloaded.artifact_handoff_policy.mode, "leader-reviewed");
+        assert_eq!(
+            reloaded.workflow_affordance.supported_task_kinds,
+            vec!["research", "browser"]
+        );
+        assert_eq!(reloaded.worker_concurrency_limit, 3);
+        assert_eq!(reloaded.delegation_policy.max_worker_count, 3);
+        assert_eq!(reloaded.trust_metadata.trust_level, "trusted");
+        assert_eq!(reloaded.import_metadata.origin_kind, "native");
     }
 
     #[test]
@@ -2899,13 +3214,11 @@ mod tests {
             created.resource_directory,
             "data/projects/resource-project/resources"
         );
-        assert!(
-            bundle
-                .paths
-                .root
-                .join("data/projects/resource-project/resources")
-                .exists()
-        );
+        assert!(bundle
+            .paths
+            .root
+            .join("data/projects/resource-project/resources")
+            .exists());
     }
 
     #[test]
@@ -2961,11 +3274,9 @@ mod tests {
             .block_on(bundle.workspace.list_resource_children(&imported.id))
             .expect("children");
         assert_eq!(children.len(), 2);
-        assert!(
-            children
-                .iter()
-                .any(|entry| entry.relative_path == "nested/spec.json")
-        );
+        assert!(children
+            .iter()
+            .any(|entry| entry.relative_path == "nested/spec.json"));
 
         let promoted = tokio::runtime::Runtime::new()
             .expect("runtime")
@@ -2984,15 +3295,19 @@ mod tests {
 
         tokio::runtime::Runtime::new()
             .expect("runtime")
-            .block_on(bundle.workspace.delete_project_resource(&created.id, &imported.id))
+            .block_on(
+                bundle
+                    .workspace
+                    .delete_project_resource(&created.id, &imported.id),
+            )
             .expect("deleted");
 
         assert!(!absolute_storage_path.exists());
     }
 
     #[test]
-    fn workspace_import_writes_into_workspace_resources_and_supports_content_and_directory_browsing()
-    {
+    fn workspace_import_writes_into_workspace_resources_and_supports_content_and_directory_browsing(
+    ) {
         let temp = tempfile::tempdir().expect("tempdir");
         let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
 
@@ -3043,12 +3358,10 @@ mod tests {
             .block_on(bundle.workspace.list_directories(Some("data/resources")))
             .expect("directories");
         assert_eq!(directories.current_path, "data/resources");
-        assert!(
-            directories
-                .entries
-                .iter()
-                .any(|entry| entry.path == "data/resources/workspace")
-        );
+        assert!(directories
+            .entries
+            .iter()
+            .any(|entry| entry.path == "data/resources/workspace"));
     }
 
     #[test]
@@ -3093,14 +3406,14 @@ mod tests {
         assert_eq!(imported.scope, "personal");
         assert_eq!(imported.visibility, "private");
 
-        let invalid_direct_promotion = tokio::runtime::Runtime::new()
-            .expect("runtime")
-            .block_on(bundle.workspace.promote_resource(
+        let invalid_direct_promotion = tokio::runtime::Runtime::new().expect("runtime").block_on(
+            bundle.workspace.promote_resource(
                 &imported.id,
                 octopus_core::PromoteWorkspaceResourceInput {
                     scope: "workspace".into(),
                 },
-            ));
+            ),
+        );
         assert!(invalid_direct_promotion.is_err());
 
         let promoted_to_project = tokio::runtime::Runtime::new()

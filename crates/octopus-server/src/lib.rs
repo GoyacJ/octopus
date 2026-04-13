@@ -30,14 +30,14 @@ use octopus_core::{
     timestamp_now, AccessAuditListResponse, AccessAuditQuery, AccessRoleRecord,
     AccessSessionRecord, AccessUserRecord, AccessUserUpsertRequest, AgentRecord, ApiErrorDetail,
     ApiErrorEnvelope, AppError, AuditRecord, AuthorizationRequest, AuthorizationSnapshot,
-    AutomationRecord, ChangeCurrentUserPasswordRequest, ChangeCurrentUserPasswordResponse,
-    ClientAppRecord, ConnectionProfile, ConversationRecord, CopyWorkspaceSkillToManagedInput,
-    CreateHostWorkspaceConnectionInput, CreateMenuPolicyRequest, CreateNotificationInput,
-    CreateProjectRequest, CreateWorkspaceResourceFolderInput, CreateWorkspaceResourceInput,
-    CreateWorkspaceSkillInput, DataPolicyRecord,
-    DataPolicyUpsertRequest, DesktopBackendConnection, FeatureDefinition,
-    HealthcheckBackendStatus, HealthcheckStatus, HostReleaseSummary, HostState,
-    HostUpdateStatus, HostWorkspaceConnectionRecord, ImportWorkspaceAgentBundleInput,
+    AutomationRecord, CapabilityAssetDisablePatch, ChangeCurrentUserPasswordRequest,
+    ChangeCurrentUserPasswordResponse, ClientAppRecord, ConnectionProfile, ConversationRecord,
+    CopyWorkspaceSkillToManagedInput, CreateHostWorkspaceConnectionInput, CreateMenuPolicyRequest,
+    CreateNotificationInput, CreateProjectRequest, CreateWorkspaceResourceFolderInput,
+    CreateWorkspaceResourceInput, CreateWorkspaceSkillInput, DataPolicyRecord,
+    DataPolicyUpsertRequest, DesktopBackendConnection, FeatureDefinition, HealthcheckBackendStatus,
+    HealthcheckStatus, HostReleaseSummary, HostState, HostUpdateStatus,
+    HostWorkspaceConnectionRecord, ImportWorkspaceAgentBundleInput,
     ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
     ImportWorkspaceAgentBundleResult, ImportWorkspaceSkillArchiveInput,
     ImportWorkspaceSkillFolderInput, KnowledgeRecord, LoginRequest, MenuDefinition, MenuGateResult,
@@ -49,20 +49,19 @@ use octopus_core::{
     ProjectTeamLinkRecord, PromoteWorkspaceResourceInput, ProtectedResourceDescriptor,
     ProtectedResourceMetadataUpsertRequest, ProviderCredentialRecord,
     RegisterBootstrapAdminRequest, ResolveRuntimeApprovalInput, ResourceActionGrant,
-    ResourcePolicyRecord, ResourcePolicyUpsertRequest, RoleBindingRecord,
-    RoleBindingUpsertRequest, RoleUpsertRequest, RuntimeConfigPatch,
-    RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
-    RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, SavePetPresenceInput,
-    SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput, TeamRecord,
-    ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
+    ResourcePolicyRecord, ResourcePolicyUpsertRequest, RoleBindingRecord, RoleBindingUpsertRequest,
+    RoleUpsertRequest, RuntimeConfigPatch, RuntimeConfigValidationResult,
+    RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
+    SavePetPresenceInput, SessionRecord, ShellBootstrap, ShellPreferences, SubmitRuntimeTurnInput,
+    TeamRecord, ToolRecord, UpdateCurrentUserProfileRequest, UpdateProjectRequest,
     UpdateWorkspaceResourceInput, UpdateWorkspaceSkillFileInput, UpdateWorkspaceSkillInput,
     UpsertAgentInput, UpsertTeamInput, UpsertWorkspaceMcpServerInput, UserGroupRecord,
     UserGroupUpsertRequest, UserOrgAssignmentRecord, UserOrgAssignmentUpsertRequest,
     UserRecordSummary, WorkspaceActivityRecord, WorkspaceDirectoryBrowserResponse,
     WorkspaceMcpServerDocument, WorkspaceMetricRecord, WorkspaceOverviewSnapshot,
-    WorkspaceResourceChildrenRecord, WorkspaceResourceContentDocument, WorkspaceResourceImportInput,
-    WorkspaceResourceRecord, WorkspaceSkillDocument, WorkspaceSkillFileDocument,
-    WorkspaceSkillTreeDocument, WorkspaceSummary, CapabilityAssetDisablePatch,
+    WorkspaceResourceChildrenRecord, WorkspaceResourceContentDocument,
+    WorkspaceResourceImportInput, WorkspaceResourceRecord, WorkspaceSkillDocument,
+    WorkspaceSkillFileDocument, WorkspaceSkillTreeDocument, WorkspaceSummary,
 };
 use octopus_platform::PlatformServices;
 use reqwest::Client;
@@ -466,9 +465,13 @@ async fn authorize_request(
         .await?;
     if decision.allowed {
         if let Some(project_id) = authorization_request.project_id.as_deref() {
-            if let Some(reason) =
-                evaluate_project_authorization_denial(state, session, authorization_request, project_id)
-                    .await?
+            if let Some(reason) = evaluate_project_authorization_denial(
+                state,
+                session,
+                authorization_request,
+                project_id,
+            )
+            .await?
             {
                 decision.allowed = false;
                 decision.reason = Some(reason);
@@ -527,7 +530,11 @@ async fn evaluate_project_authorization_denial(
         .find(|record| record.id == project_id)
         .ok_or_else(|| ApiError::from(AppError::not_found(format!("project {project_id}"))))?;
 
-    if !project.member_user_ids.iter().any(|user_id| user_id == &session.user_id) {
+    if !project
+        .member_user_ids
+        .iter()
+        .any(|user_id| user_id == &session.user_id)
+    {
         return Ok(Some("project membership is required".into()));
     }
 
@@ -612,35 +619,33 @@ async fn ensure_runtime_submit(
     )
     .await?;
     if let Some(input) = input {
-        if input.permission_mode.is_empty() {
-            return Err(ApiError::new(
-                AppError::invalid_input("permission mode is required"),
-                request_id,
-            ));
+        if let Some(permission_mode) = input.permission_mode.as_deref() {
+            if permission_mode.trim().is_empty() {
+                return Err(ApiError::new(
+                    AppError::invalid_input("permission mode must not be empty"),
+                    request_id,
+                ));
+            }
         }
     }
     Ok(session)
 }
 
 fn normalize_runtime_submit_input(input: &mut SubmitRuntimeTurnInput) -> Result<(), ApiError> {
-    input.configured_model_id = input
-        .configured_model_id
+    input.permission_mode = input
+        .permission_mode
         .take()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
-    input.model_id = input
-        .model_id
-        .take()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
-    let normalized =
-        normalize_runtime_permission_mode_label(&input.permission_mode).ok_or_else(|| {
-            ApiError::from(AppError::invalid_input(format!(
-                "unsupported permission mode: {}",
-                input.permission_mode
-            )))
-        })?;
-    input.permission_mode = normalized.to_string();
+    if let Some(permission_mode) = input.permission_mode.as_deref() {
+        let normalized =
+            normalize_runtime_permission_mode_label(permission_mode).ok_or_else(|| {
+                ApiError::from(AppError::invalid_input(format!(
+                    "unsupported permission mode: {permission_mode}"
+                )))
+            })?;
+        input.permission_mode = Some(normalized.to_string());
+    }
     Ok(())
 }
 

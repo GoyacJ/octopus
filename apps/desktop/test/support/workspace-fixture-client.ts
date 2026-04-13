@@ -233,6 +233,28 @@ export function createWorkspaceClientFixture(
     accessUsers.find(user => user.id === getCurrentUserId())
     ?? accessUsers.find(user => user.id === workspaceState.workspace.ownerUserId)
     ?? accessUsers[0]
+  const resolveSelectedActor = (selectedActorRef?: string) => {
+    const [actorKind, actorId] = (selectedActorRef ?? '').split(':', 2)
+    if ((actorKind === 'agent' || actorKind === 'team') && actorId) {
+      return {
+        actorKind,
+        actorId,
+      } as const
+    }
+
+    return {
+      actorKind: 'agent' as const,
+      actorId: 'agent-architect',
+    }
+  }
+  const resolveActorLabel = (actorKind: 'agent' | 'team', actorId: string) => {
+    const actorRecord = actorKind === 'team'
+      ? workspaceState.teams.find(team => team.id === actorId)
+      : workspaceState.agents.find(agent => agent.id === actorId)
+    return actorRecord
+      ? `${actorRecord.name} · ${actorKind === 'team' ? 'Team' : 'Agent'}`
+      : '默认智能体'
+  }
 
   const getFeatureCode = (menuId: string, routeName?: string) => `feature:${routeName ?? menuId}`
   const protectedResourceKey = (resourceType: string, resourceId: string) => `${resourceType}:${resourceId}`
@@ -3119,7 +3141,15 @@ export function createWorkspaceClientFixture(
           return clone(existing.detail)
         }
 
-        const detail = createSessionDetail(input.conversationId, input.projectId, input.title, input.sessionKind ?? 'project')
+        const detail = createSessionDetail(
+          input.conversationId,
+          input.projectId,
+          input.title,
+          input.sessionKind ?? 'project',
+          input.selectedActorRef,
+          input.selectedConfiguredModelId,
+          input.executionPermissionMode,
+        )
         const state: RuntimeSessionState = {
           detail,
           events: [],
@@ -3149,19 +3179,13 @@ export function createWorkspaceClientFixture(
       },
       async submitUserTurn(sessionId, input) {
         const state = ensureRuntimeState(sessionId)
-        const permissionMode = resolveRuntimePermissionMode(input.permissionMode)
-        const configuredModelId = input.configuredModelId ?? input.modelId ?? 'anthropic-primary'
+        const permissionMode = resolveRuntimePermissionMode(input.permissionMode ?? 'read-only')
+        const configuredModelId = state.detail.summary.sessionPolicy.selectedConfiguredModelId
         const configuredModel = workspaceState.catalog.configuredModels.find(model => model.configuredModelId === configuredModelId)
-        const registryModelId = configuredModel?.modelId ?? input.modelId ?? 'claude-sonnet-4-5'
+        const registryModelId = configuredModel?.modelId ?? state.detail.run.modelId ?? 'claude-sonnet-4-5'
         const configuredModelName = configuredModel?.name ?? registryModelId
-        const requestedActorKind = input.actorKind ?? 'agent'
-        const requestedActorId = input.actorId ?? 'agent-architect'
-        const actorRecord = requestedActorKind === 'team'
-          ? workspaceState.teams.find(team => team.id === requestedActorId)
-          : workspaceState.agents.find(agent => agent.id === requestedActorId)
-        const actorLabel = actorRecord
-          ? `${actorRecord.name} · ${requestedActorKind === 'team' ? 'Team' : 'Agent'}`
-          : '默认智能体'
+        const requestedActor = resolveSelectedActor(state.detail.summary.selectedActorRef)
+        const actorLabel = resolveActorLabel(requestedActor.actorKind, requestedActor.actorId)
         const userMessage = createRuntimeMessage(
           state,
           'user',
@@ -3170,8 +3194,8 @@ export function createWorkspaceClientFixture(
           registryModelId,
           configuredModelId,
           configuredModelName,
-          requestedActorKind,
-          requestedActorId,
+          requestedActor.actorKind,
+          requestedActor.actorId,
         )
         state.detail.messages.push(userMessage)
         state.detail.summary.lastMessagePreview = input.content
@@ -3183,7 +3207,7 @@ export function createWorkspaceClientFixture(
 
         if (requiresApproval) {
           const approval = createApproval(state)
-          const pendingTrace = createTraceItem(state, 'Awaiting approval before running the terminal command.', 'warning', requestedActorKind, requestedActorId, actorLabel)
+          const pendingTrace = createTraceItem(state, 'Awaiting approval before running the terminal command.', 'warning', requestedActor.actorKind, requestedActor.actorId, actorLabel)
           state.detail.pendingApproval = approval
           state.detail.trace.push(pendingTrace)
           state.detail.run = {
@@ -3195,10 +3219,10 @@ export function createWorkspaceClientFixture(
             configuredModelName,
             modelId: registryModelId,
             nextAction: 'runtime.run.awaitingApproval',
-            requestedActorKind,
-            requestedActorId,
-            resolvedActorKind: requestedActorKind,
-            resolvedActorId: requestedActorId,
+            requestedActorKind: requestedActor.actorKind,
+            requestedActorId: requestedActor.actorId,
+            resolvedActorKind: requestedActor.actorKind,
+            resolvedActorId: requestedActor.actorId,
             resolvedActorLabel: actorLabel,
           }
           state.detail.summary.status = 'waiting_approval'
@@ -3224,10 +3248,10 @@ export function createWorkspaceClientFixture(
           registryModelId,
           configuredModelId,
           configuredModelName,
-          requestedActorKind,
-          requestedActorId,
+          requestedActor.actorKind,
+          requestedActor.actorId,
         )
-        const trace = createTraceItem(state, `Executed with ${modeLabel}.`, 'success', requestedActorKind, requestedActorId, actorLabel)
+        const trace = createTraceItem(state, `Executed with ${modeLabel}.`, 'success', requestedActor.actorKind, requestedActor.actorId, actorLabel)
 
         state.detail.messages.push(assistantMessage)
         state.detail.trace.push(trace)
@@ -3240,10 +3264,10 @@ export function createWorkspaceClientFixture(
           configuredModelName,
           modelId: registryModelId,
           nextAction: 'runtime.run.processing',
-          requestedActorKind,
-          requestedActorId,
-          resolvedActorKind: requestedActorKind,
-          resolvedActorId: requestedActorId,
+          requestedActorKind: requestedActor.actorKind,
+          requestedActorId: requestedActor.actorId,
+          resolvedActorKind: requestedActor.actorKind,
+          resolvedActorId: requestedActor.actorId,
           resolvedActorLabel: actorLabel,
         }
         const immediateRun: RuntimeRunSnapshot = clone(state.detail.run)

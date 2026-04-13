@@ -228,34 +228,6 @@ pub fn mvp_tool_specs() -> Vec<ToolSpec> {
             required_permission: PermissionMode::WorkspaceWrite,
         },
         ToolSpec {
-            name: "SkillDiscovery",
-            description: "Discover executable prompt skills that can inject context or tool grants.",
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "query": { "type": "string" },
-                    "max_results": { "type": "integer", "minimum": 1 }
-                },
-                "required": ["query"],
-                "additionalProperties": false
-            }),
-            required_permission: PermissionMode::ReadOnly,
-        },
-        ToolSpec {
-            name: "SkillTool",
-            description: "Execute an executable prompt skill and apply its runtime effects.",
-            input_schema: json!({
-                "type": "object",
-                "properties": {
-                    "skill": { "type": "string" },
-                    "arguments": {}
-                },
-                "required": ["skill"],
-                "additionalProperties": false
-            }),
-            required_permission: PermissionMode::ReadOnly,
-        },
-        ToolSpec {
             name: "Agent",
             description: "Launch a specialized agent task and persist its handoff metadata.",
             input_schema: json!({

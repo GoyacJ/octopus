@@ -7,39 +7,42 @@ use std::{
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
 use include_dir::{include_dir, Dir, DirEntry};
 use octopus_core::{
-    timestamp_now, AgentRecord, AppError, ExportWorkspaceAgentBundleInput,
-    ExportWorkspaceAgentBundleResult, ImportIssue, ImportWorkspaceAgentBundleInput,
-    ImportWorkspaceAgentBundlePreview, ImportWorkspaceAgentBundlePreviewInput,
-    ImportWorkspaceAgentBundleResult, ImportedAgentPreviewItem, ImportedAvatarPreviewItem,
-    ImportedMcpPreviewItem, ImportedSkillPreviewItem, ImportedTeamPreviewItem, TeamRecord,
-    WorkspaceDirectoryUploadEntry,
+    capability_policy_from_sources, default_agent_delegation_policy, default_agent_memory_policy,
+    default_agent_shared_capability_policy, default_approval_preference,
+    default_artifact_handoff_policy, default_asset_import_metadata, default_asset_trust_metadata,
+    default_mailbox_policy, default_model_strategy, default_output_contract,
+    default_permission_envelope, default_shared_memory_policy, default_team_delegation_policy,
+    default_team_memory_policy, default_team_shared_capability_policy, normalize_task_domains,
+    team_topology_from_refs, timestamp_now, workflow_affordance_from_task_domains, AgentRecord,
+    AppError, AssetBundleManifestV2, AssetDependency, AssetDependencyResolution,
+    AssetTranslationReport, BundleAssetDescriptorRecord, ExportWorkspaceAgentBundleInput,
+    ImportIssue, TeamRecord, WorkspaceDirectoryUploadEntry, ASSET_MANIFEST_REVISION_V2,
 };
 use rusqlite::{params, Connection};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    infra_state::{agent_avatar, load_agents, load_teams, write_team_record},
+    infra_state::{agent_avatar, load_agents, load_bundle_asset_descriptor_records, load_teams},
     resources_skills::{
-        catalog_hash_id, discover_skill_roots, load_skills_from_roots,
-        load_workspace_asset_state_document, save_workspace_asset_state_document,
-        set_workspace_asset_enabled, set_workspace_asset_trusted, skill_source_key,
-        validate_skill_file_relative_path, validate_skill_slug, write_workspace_runtime_document,
-        WorkspaceCapabilityAssetMetadata,
+        discover_skill_roots, load_skills_from_roots, load_workspace_asset_state_document,
+        save_workspace_asset_state_document, set_workspace_asset_enabled,
+        set_workspace_asset_trusted, skill_source_key, validate_skill_file_relative_path,
+        validate_skill_slug, write_workspace_runtime_document, WorkspaceCapabilityAssetMetadata,
     },
     WorkspacePaths,
 };
 
-const ISSUE_WARNING: &str = "warning";
-const ISSUE_ERROR: &str = "error";
-const SOURCE_SCOPE_BUNDLE: &str = "bundle";
-const SOURCE_SCOPE_AGENT: &str = "agent";
-const SOURCE_SCOPE_TEAM: &str = "team";
-const SOURCE_SCOPE_SKILL: &str = "skill";
-const SOURCE_SCOPE_MCP: &str = "mcp";
-const SOURCE_SCOPE_AVATAR: &str = "avatar";
-const SKILL_FRONTMATTER_FILE: &str = "SKILL.md";
-const BUNDLE_ASSET_STATE_PATH: &str = ".octopus/asset-state.json";
+pub(crate) const ISSUE_WARNING: &str = "warning";
+pub(crate) const ISSUE_ERROR: &str = "error";
+pub(crate) const SOURCE_SCOPE_BUNDLE: &str = "bundle";
+pub(crate) const SOURCE_SCOPE_AGENT: &str = "agent";
+pub(crate) const SOURCE_SCOPE_TEAM: &str = "team";
+pub(crate) const SOURCE_SCOPE_SKILL: &str = "skill";
+pub(crate) const SOURCE_SCOPE_MCP: &str = "mcp";
+pub(crate) const SOURCE_SCOPE_AVATAR: &str = "avatar";
+pub(crate) const SKILL_FRONTMATTER_FILE: &str = "SKILL.md";
+pub(crate) const BUNDLE_ASSET_STATE_PATH: &str = ".octopus/asset-state.json";
 const RESERVED_DIRS: &[&str] = &["skills", "mcps", ".octopus"];
 const FILTERED_DIR_NAMES: &[&str] = &[
     "node_modules",
@@ -60,8 +63,6 @@ static DEFAULT_LEADER_AVATARS: Dir<'_> =
     include_dir!("$CARGO_MANIFEST_DIR/../../packages/assets/header/leader");
 static BUILTIN_BUNDLE_ASSET_DIR: Dir<'_> =
     include_dir!("$CARGO_MANIFEST_DIR/seed/builtin-assets/bundle");
-static BUILTIN_MCP_ASSET_DIR: Dir<'_> =
-    include_dir!("$CARGO_MANIFEST_DIR/seed/builtin-assets/mcps");
 
 pub(crate) const BUILTIN_SKILL_DISPLAY_ROOT: &str = "builtin-assets/skills";
 
@@ -72,35 +73,35 @@ pub(crate) enum AssetTargetScope<'a> {
 }
 
 impl AssetTargetScope<'_> {
-    fn scope_label(&self) -> &'static str {
+    pub(crate) fn scope_label(&self) -> &'static str {
         match self {
             Self::Workspace => "workspace",
             Self::Project(_) => "project",
         }
     }
 
-    fn project_id(&self) -> Option<&str> {
+    pub(crate) fn project_id(&self) -> Option<&str> {
         match self {
             Self::Workspace => None,
             Self::Project(project_id) => Some(project_id),
         }
     }
 
-    fn source_kind(&self) -> String {
+    pub(crate) fn source_kind(&self) -> String {
         match self {
             Self::Workspace => String::from("user_import:workspace"),
             Self::Project(project_id) => format!("user_import:project:{project_id}"),
         }
     }
 
-    fn skill_root(&self, paths: &WorkspacePaths) -> PathBuf {
+    pub(crate) fn skill_root(&self, paths: &WorkspacePaths) -> PathBuf {
         match self {
             Self::Workspace => paths.managed_skills_dir.clone(),
             Self::Project(project_id) => paths.project_skills_root(project_id),
         }
     }
 
-    fn runtime_document_path(&self, paths: &WorkspacePaths) -> PathBuf {
+    pub(crate) fn runtime_document_path(&self, paths: &WorkspacePaths) -> PathBuf {
         match self {
             Self::Workspace => paths.runtime_config_dir.join("workspace.json"),
             Self::Project(project_id) => paths
@@ -109,15 +110,15 @@ impl AssetTargetScope<'_> {
         }
     }
 
-    fn avatar_seed_key(&self, source_id: &str) -> String {
+    pub(crate) fn avatar_seed_key(&self, source_id: &str) -> String {
         format!("{}:{source_id}", self.scope_label())
     }
 }
 
 #[derive(Debug, Clone)]
-struct BundleFile {
-    relative_path: String,
-    bytes: Vec<u8>,
+pub(crate) struct BundleFile {
+    pub(crate) relative_path: String,
+    pub(crate) bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
@@ -127,8 +128,52 @@ pub(crate) struct BuiltinSkillAsset {
     pub(crate) description: String,
     pub(crate) display_path: String,
     pub(crate) root_display_path: String,
-    pub(crate) source_ids: Vec<String>,
     pub(crate) files: Vec<(String, Vec<u8>)>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BuiltinSkillCatalogSource {
+    pub(crate) source_id: String,
+    pub(crate) name: String,
+    pub(crate) canonical_slug: String,
+    pub(crate) content_hash: String,
+    pub(crate) description: String,
+    pub(crate) files: Vec<(String, Vec<u8>)>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BuiltinAgentTemplateSource {
+    pub(crate) source_id: String,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) avatar_data_url: Option<String>,
+    pub(crate) personality: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) prompt: String,
+    pub(crate) builtin_tool_keys: Vec<String>,
+    pub(crate) skill_source_ids: Vec<String>,
+    pub(crate) mcp_server_names: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BuiltinTeamTemplateSource {
+    pub(crate) source_id: String,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) avatar_data_url: Option<String>,
+    pub(crate) personality: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) prompt: String,
+    pub(crate) builtin_tool_keys: Vec<String>,
+    pub(crate) skill_source_ids: Vec<String>,
+    pub(crate) mcp_server_names: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BuiltinCatalogSources {
+    pub(crate) skill_sources: Vec<BuiltinSkillCatalogSource>,
+    pub(crate) agent_sources: Vec<BuiltinAgentTemplateSource>,
+    pub(crate) team_sources: Vec<BuiltinTeamTemplateSource>,
 }
 
 #[derive(Debug, Clone)]
@@ -139,70 +184,70 @@ pub(crate) struct BuiltinMcpAsset {
 }
 
 #[derive(Debug, Clone)]
-struct ParsedAssetAvatar {
-    source_id: String,
-    owner_kind: String,
-    owner_name: String,
-    file_name: String,
-    content_type: String,
-    bytes: Vec<u8>,
-    generated: bool,
+pub(crate) struct ParsedAssetAvatar {
+    pub(crate) source_id: String,
+    pub(crate) owner_kind: String,
+    pub(crate) owner_name: String,
+    pub(crate) file_name: String,
+    pub(crate) content_type: String,
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) generated: bool,
 }
 
 #[derive(Debug, Clone)]
-struct ParsedAgent {
-    source_id: String,
-    team_name: Option<String>,
-    name: String,
-    description: String,
-    personality: String,
-    prompt: String,
-    tags: Vec<String>,
-    builtin_tool_keys: Vec<String>,
-    skill_source_ids: Vec<String>,
-    mcp_source_ids: Vec<String>,
-    avatar: ParsedAssetAvatar,
+pub(crate) struct ParsedAgent {
+    pub(crate) source_id: String,
+    pub(crate) team_name: Option<String>,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) personality: String,
+    pub(crate) prompt: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) builtin_tool_keys: Vec<String>,
+    pub(crate) skill_source_ids: Vec<String>,
+    pub(crate) mcp_source_ids: Vec<String>,
+    pub(crate) avatar: ParsedAssetAvatar,
 }
 
 #[derive(Debug, Clone)]
-struct ParsedTeam {
-    source_id: String,
-    name: String,
-    description: String,
-    personality: String,
-    prompt: String,
-    tags: Vec<String>,
-    builtin_tool_keys: Vec<String>,
-    skill_source_ids: Vec<String>,
-    mcp_source_ids: Vec<String>,
-    leader_name: Option<String>,
-    member_names: Vec<String>,
-    agent_source_ids: Vec<String>,
-    avatar: ParsedAssetAvatar,
+pub(crate) struct ParsedTeam {
+    pub(crate) source_id: String,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) personality: String,
+    pub(crate) prompt: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) builtin_tool_keys: Vec<String>,
+    pub(crate) skill_source_ids: Vec<String>,
+    pub(crate) mcp_source_ids: Vec<String>,
+    pub(crate) leader_name: Option<String>,
+    pub(crate) member_names: Vec<String>,
+    pub(crate) agent_source_ids: Vec<String>,
+    pub(crate) avatar: ParsedAssetAvatar,
 }
 
 #[derive(Debug, Clone)]
-struct ParsedSkillSource {
-    source_id: String,
-    owner_name: String,
-    name: String,
-    canonical_slug: String,
-    content_hash: String,
-    files: Vec<(String, Vec<u8>)>,
+pub(crate) struct ParsedSkillSource {
+    pub(crate) source_id: String,
+    pub(crate) owner_name: String,
+    pub(crate) name: String,
+    pub(crate) canonical_slug: String,
+    pub(crate) content_hash: String,
+    pub(crate) files: Vec<(String, Vec<u8>)>,
 }
 
 #[derive(Debug, Clone)]
-struct ParsedMcpSource {
-    source_id: String,
-    owner_name: String,
-    server_name: String,
-    content_hash: Option<String>,
-    config: Option<JsonValue>,
-    referenced_only: bool,
+pub(crate) struct ParsedMcpSource {
+    pub(crate) source_id: String,
+    pub(crate) owner_name: String,
+    pub(crate) server_name: String,
+    pub(crate) content_hash: Option<String>,
+    pub(crate) config: Option<JsonValue>,
+    pub(crate) referenced_only: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ImportAction {
+pub(crate) enum ImportAction {
     Create,
     Update,
     Skip,
@@ -210,7 +255,7 @@ enum ImportAction {
 }
 
 impl ImportAction {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Create => "create",
             Self::Update => "update",
@@ -221,956 +266,181 @@ impl ImportAction {
 }
 
 #[derive(Debug, Clone)]
-struct PlannedSkill {
-    slug: String,
-    skill_id: String,
-    name: String,
-    action: ImportAction,
-    content_hash: String,
-    file_count: usize,
-    source_ids: Vec<String>,
-    consumer_names: Vec<String>,
-    files: Vec<(String, Vec<u8>)>,
+pub(crate) struct PlannedSkill {
+    pub(crate) slug: String,
+    pub(crate) skill_id: String,
+    pub(crate) name: String,
+    pub(crate) action: ImportAction,
+    pub(crate) content_hash: String,
+    pub(crate) file_count: usize,
+    pub(crate) source_ids: Vec<String>,
+    pub(crate) consumer_names: Vec<String>,
+    pub(crate) files: Vec<(String, Vec<u8>)>,
 }
 
 #[derive(Debug, Clone)]
-struct PlannedMcp {
-    server_name: String,
-    action: ImportAction,
-    content_hash: Option<String>,
-    source_ids: Vec<String>,
-    consumer_names: Vec<String>,
-    config: Option<JsonValue>,
-    referenced_only: bool,
-    resolved: bool,
+pub(crate) struct PlannedMcp {
+    pub(crate) server_name: String,
+    pub(crate) action: ImportAction,
+    pub(crate) content_hash: Option<String>,
+    pub(crate) source_ids: Vec<String>,
+    pub(crate) consumer_names: Vec<String>,
+    pub(crate) config: Option<JsonValue>,
+    pub(crate) referenced_only: bool,
+    pub(crate) resolved: bool,
 }
 
 #[derive(Debug, Clone)]
-struct PlannedAgent {
-    source_id: String,
-    agent_id: Option<String>,
-    name: String,
-    department: String,
-    action: ImportAction,
-    description: String,
-    personality: String,
-    prompt: String,
-    tags: Vec<String>,
-    builtin_tool_keys: Vec<String>,
-    skill_slugs: Vec<String>,
-    mcp_server_names: Vec<String>,
-    avatar: ParsedAssetAvatar,
+pub(crate) struct PlannedAgent {
+    pub(crate) source_id: String,
+    pub(crate) agent_id: Option<String>,
+    pub(crate) name: String,
+    pub(crate) department: String,
+    pub(crate) action: ImportAction,
+    pub(crate) description: String,
+    pub(crate) personality: String,
+    pub(crate) prompt: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) builtin_tool_keys: Vec<String>,
+    pub(crate) skill_slugs: Vec<String>,
+    pub(crate) mcp_server_names: Vec<String>,
+    pub(crate) avatar: ParsedAssetAvatar,
 }
 
 #[derive(Debug, Clone)]
-struct PlannedTeam {
-    source_id: String,
-    team_id: Option<String>,
-    name: String,
-    action: ImportAction,
-    description: String,
-    personality: String,
-    prompt: String,
-    tags: Vec<String>,
-    builtin_tool_keys: Vec<String>,
-    skill_slugs: Vec<String>,
-    mcp_server_names: Vec<String>,
-    leader_name: Option<String>,
-    member_names: Vec<String>,
-    agent_source_ids: Vec<String>,
-    avatar: ParsedAssetAvatar,
+pub(crate) struct PlannedTeam {
+    pub(crate) source_id: String,
+    pub(crate) team_id: Option<String>,
+    pub(crate) name: String,
+    pub(crate) action: ImportAction,
+    pub(crate) description: String,
+    pub(crate) personality: String,
+    pub(crate) prompt: String,
+    pub(crate) tags: Vec<String>,
+    pub(crate) builtin_tool_keys: Vec<String>,
+    pub(crate) skill_slugs: Vec<String>,
+    pub(crate) mcp_server_names: Vec<String>,
+    pub(crate) leader_name: Option<String>,
+    pub(crate) member_names: Vec<String>,
+    pub(crate) agent_source_ids: Vec<String>,
+    pub(crate) avatar: ParsedAssetAvatar,
 }
 
 #[derive(Debug, Clone)]
-struct BundlePlan {
-    departments: Vec<String>,
-    detected_agent_count: u64,
-    detected_team_count: u64,
-    filtered_file_count: u64,
-    issues: Vec<ImportIssue>,
-    skills: Vec<PlannedSkill>,
-    mcps: Vec<PlannedMcp>,
-    agents: Vec<PlannedAgent>,
-    teams: Vec<PlannedTeam>,
-    avatars: Vec<ParsedAssetAvatar>,
-    asset_state: BundleAssetStateDocument,
+pub(crate) struct PlannedBundleDescriptor {
+    pub(crate) action: ImportAction,
+    pub(crate) record: BundleAssetDescriptorRecord,
+    pub(crate) bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone)]
-struct ExistingAgentImportSource {
-    agent_id: String,
+pub(crate) struct BundlePlan {
+    pub(crate) bundle_manifest_template: Option<AssetBundleManifestV2>,
+    pub(crate) descriptor_assets: Vec<PlannedBundleDescriptor>,
+    pub(crate) dependency_resolution: Vec<AssetDependencyResolution>,
+    pub(crate) departments: Vec<String>,
+    pub(crate) detected_agent_count: u64,
+    pub(crate) detected_team_count: u64,
+    pub(crate) filtered_file_count: u64,
+    pub(crate) issues: Vec<ImportIssue>,
+    pub(crate) skills: Vec<PlannedSkill>,
+    pub(crate) mcps: Vec<PlannedMcp>,
+    pub(crate) agents: Vec<PlannedAgent>,
+    pub(crate) teams: Vec<PlannedTeam>,
+    pub(crate) avatars: Vec<ParsedAssetAvatar>,
+    pub(crate) asset_state: BundleAssetStateDocument,
 }
 
 #[derive(Debug, Clone)]
-struct ExistingTeamImportSource {
-    team_id: String,
+pub(crate) struct ExistingAgentImportSource {
+    pub(crate) agent_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct ExistingSkillImportSource {
-    skill_slug: String,
+pub(crate) struct ExistingTeamImportSource {
+    pub(crate) team_id: String,
 }
 
 #[derive(Debug, Clone)]
-struct ExistingManagedSkill {
-    slug: String,
-    content_hash: String,
-}
-
-pub(crate) fn preview_import(
-    connection: &Connection,
-    paths: &WorkspacePaths,
-    workspace_id: &str,
-    target: AssetTargetScope<'_>,
-    input: ImportWorkspaceAgentBundlePreviewInput,
-) -> Result<ImportWorkspaceAgentBundlePreview, AppError> {
-    let plan = build_bundle_plan(connection, paths, workspace_id, target, &input.files)?;
-    Ok(plan_to_preview(&plan))
-}
-
-pub(crate) fn execute_import(
-    connection: &Connection,
-    paths: &WorkspacePaths,
-    workspace_id: &str,
-    target: AssetTargetScope<'_>,
-    input: ImportWorkspaceAgentBundleInput,
-) -> Result<ImportWorkspaceAgentBundleResult, AppError> {
-    let plan = build_bundle_plan(
-        connection,
-        paths,
-        workspace_id,
-        target.clone(),
-        &input.files,
-    )?;
-    let mut issues = plan.issues.clone();
-    let now = timestamp_now();
-    let source_kind = target.source_kind();
-
-    let mut total_create = 0_u64;
-    let mut total_update = 0_u64;
-    let mut total_skip = 0_u64;
-
-    let mut failed_skill_slugs = BTreeSet::new();
-    let mut skill_results = Vec::new();
-    for skill in &plan.skills {
-        let mut action = skill.action;
-        if matches!(action, ImportAction::Create | ImportAction::Update) {
-            if let Err(error) =
-                write_managed_skill(&target.skill_root(paths), &skill.slug, &skill.files)
-            {
-                action = ImportAction::Failed;
-                failed_skill_slugs.insert(skill.slug.clone());
-                issues.push(issue(
-                    ISSUE_ERROR,
-                    SOURCE_SCOPE_SKILL,
-                    skill.source_ids.first().cloned(),
-                    format!("failed to import skill '{}': {error}", skill.slug),
-                ));
-            }
-        }
-        if action != ImportAction::Failed {
-            for source_id in &skill.source_ids {
-                upsert_skill_import_source(
-                    connection,
-                    &source_kind,
-                    source_id,
-                    &skill.content_hash,
-                    &skill.slug,
-                    now,
-                )?;
-            }
-        }
-        increment_action_counts(
-            action,
-            &mut total_create,
-            &mut total_update,
-            &mut total_skip,
-        );
-        skill_results.push(ImportedSkillPreviewItem {
-            slug: skill.slug.clone(),
-            skill_id: skill.skill_id.clone(),
-            name: skill.name.clone(),
-            action: action.as_str().into(),
-            content_hash: skill.content_hash.clone(),
-            file_count: skill.file_count as u64,
-            source_ids: skill.source_ids.clone(),
-            departments: Vec::new(),
-            agent_names: skill.consumer_names.clone(),
-        });
-    }
-
-    let existing_mcp_target = load_target_runtime_document(paths, &target)?;
-    let effective_mcp_document =
-        plan_mcp_document_updates(existing_mcp_target, &plan.mcps, &mut issues)?;
-    write_target_runtime_document(paths, &target, &effective_mcp_document)?;
-    apply_imported_asset_state(paths, &target, &plan)?;
-
-    let mut mcp_results = Vec::new();
-    for mcp in &plan.mcps {
-        increment_action_counts(
-            mcp.action,
-            &mut total_create,
-            &mut total_update,
-            &mut total_skip,
-        );
-        mcp_results.push(ImportedMcpPreviewItem {
-            server_name: mcp.server_name.clone(),
-            action: mcp.action.as_str().into(),
-            content_hash: mcp.content_hash.clone(),
-            source_ids: mcp.source_ids.clone(),
-            consumer_names: mcp.consumer_names.clone(),
-            referenced_only: mcp.referenced_only,
-        });
-    }
-
-    let existing_agents = load_scoped_agents(connection, &target)?;
-    let mut agent_results = Vec::new();
-    let mut agent_id_by_source = HashMap::new();
-    for agent in &plan.agents {
-        let usable_skill_slugs = agent
-            .skill_slugs
-            .iter()
-            .filter(|slug| !failed_skill_slugs.contains(*slug))
-            .cloned()
-            .collect::<Vec<_>>();
-        let skill_ids = usable_skill_slugs
-            .iter()
-            .map(|slug| managed_skill_id(&target, slug))
-            .collect::<Vec<_>>();
-        let actual_action =
-            resolve_agent_action(workspace_id, &target, &existing_agents, agent, &skill_ids)?;
-        let mut result_action = actual_action;
-        let agent_id = agent
-            .agent_id
-            .clone()
-            .unwrap_or_else(|| deterministic_asset_id("agent", &target, &agent.source_id));
-        let avatar_path = match persist_avatar(paths, &agent_id, &agent.avatar) {
-            Ok(path) => path,
-            Err(error) => {
-                result_action = ImportAction::Failed;
-                issues.push(issue(
-                    ISSUE_ERROR,
-                    SOURCE_SCOPE_AVATAR,
-                    Some(agent.source_id.clone()),
-                    format!("failed to persist agent avatar '{}': {error}", agent.name),
-                ));
-                None
-            }
-        };
-
-        if result_action != ImportAction::Failed
-            && matches!(actual_action, ImportAction::Create | ImportAction::Update)
-        {
-            let record = build_agent_record(
-                paths,
-                workspace_id,
-                &target,
-                &agent_id,
-                &agent.name,
-                avatar_path.clone(),
-                &agent.description,
-                &agent.personality,
-                &agent.prompt,
-                &agent.tags,
-                &agent.builtin_tool_keys,
-                &skill_ids,
-                &agent.mcp_server_names,
-            );
-            if let Err(error) =
-                write_agent_record(connection, &record, actual_action == ImportAction::Update)
-            {
-                result_action = ImportAction::Failed;
-                issues.push(issue(
-                    ISSUE_ERROR,
-                    SOURCE_SCOPE_AGENT,
-                    Some(agent.source_id.clone()),
-                    format!("failed to import agent '{}': {error}", agent.name),
-                ));
-            } else {
-                upsert_agent_import_source(
-                    connection,
-                    &source_kind,
-                    &agent.source_id,
-                    &agent_id,
-                    now,
-                )?;
-            }
-        } else if result_action != ImportAction::Failed {
-            upsert_agent_import_source(connection, &source_kind, &agent.source_id, &agent_id, now)?;
-        }
-
-        increment_action_counts(
-            result_action,
-            &mut total_create,
-            &mut total_update,
-            &mut total_skip,
-        );
-        if result_action != ImportAction::Failed {
-            agent_id_by_source.insert(agent.source_id.clone(), agent_id.clone());
-        }
-        agent_results.push(ImportedAgentPreviewItem {
-            source_id: agent.source_id.clone(),
-            agent_id: Some(agent_id),
-            name: agent.name.clone(),
-            department: agent.department.clone(),
-            action: result_action.as_str().into(),
-            skill_slugs: usable_skill_slugs,
-            mcp_server_names: agent.mcp_server_names.clone(),
-        });
-    }
-
-    let existing_teams = load_scoped_teams(connection, &target)?;
-    let mut team_results = Vec::new();
-    for team in &plan.teams {
-        let skill_ids = team
-            .skill_slugs
-            .iter()
-            .filter(|slug| !failed_skill_slugs.contains(*slug))
-            .map(|slug| managed_skill_id(&target, slug))
-            .collect::<Vec<_>>();
-        let member_agent_ids = team
-            .agent_source_ids
-            .iter()
-            .filter_map(|source_id| agent_id_by_source.get(source_id))
-            .cloned()
-            .collect::<Vec<_>>();
-        let leader_agent_id = team.leader_name.as_ref().and_then(|leader_name| {
-            team.agent_source_ids.iter().find_map(|source_id| {
-                let agent = plan
-                    .agents
-                    .iter()
-                    .find(|candidate| &candidate.source_id == source_id)?;
-                if &agent.name == leader_name {
-                    agent_id_by_source.get(source_id).cloned()
-                } else {
-                    None
-                }
-            })
-        });
-        let actual_action = resolve_team_action(
-            workspace_id,
-            &target,
-            &existing_teams,
-            team,
-            &skill_ids,
-            leader_agent_id.as_deref(),
-            &member_agent_ids,
-        )?;
-        let mut result_action = actual_action;
-        let team_id = team
-            .team_id
-            .clone()
-            .unwrap_or_else(|| deterministic_asset_id("team", &target, &team.source_id));
-        let avatar_path = match persist_avatar(paths, &team_id, &team.avatar) {
-            Ok(path) => path,
-            Err(error) => {
-                result_action = ImportAction::Failed;
-                issues.push(issue(
-                    ISSUE_ERROR,
-                    SOURCE_SCOPE_AVATAR,
-                    Some(team.source_id.clone()),
-                    format!("failed to persist team avatar '{}': {error}", team.name),
-                ));
-                None
-            }
-        };
-
-        if result_action != ImportAction::Failed
-            && matches!(actual_action, ImportAction::Create | ImportAction::Update)
-        {
-            let record = build_team_record(
-                paths,
-                workspace_id,
-                &target,
-                &team_id,
-                &team.name,
-                avatar_path.clone(),
-                &team.description,
-                &team.personality,
-                &team.prompt,
-                &team.tags,
-                &team.builtin_tool_keys,
-                &skill_ids,
-                &team.mcp_server_names,
-                leader_agent_id.clone(),
-                member_agent_ids.clone(),
-            );
-            if let Err(error) =
-                write_team_record(connection, &record, actual_action == ImportAction::Update)
-            {
-                result_action = ImportAction::Failed;
-                issues.push(issue(
-                    ISSUE_ERROR,
-                    SOURCE_SCOPE_TEAM,
-                    Some(team.source_id.clone()),
-                    format!("failed to import team '{}': {error}", team.name),
-                ));
-            } else {
-                upsert_team_import_source(
-                    connection,
-                    &source_kind,
-                    &team.source_id,
-                    &team_id,
-                    now,
-                )?;
-            }
-        } else if result_action != ImportAction::Failed {
-            upsert_team_import_source(connection, &source_kind, &team.source_id, &team_id, now)?;
-        }
-
-        increment_action_counts(
-            result_action,
-            &mut total_create,
-            &mut total_update,
-            &mut total_skip,
-        );
-        team_results.push(ImportedTeamPreviewItem {
-            source_id: team.source_id.clone(),
-            team_id: Some(team_id),
-            name: team.name.clone(),
-            action: result_action.as_str().into(),
-            leader_name: team.leader_name.clone(),
-            member_names: team.member_names.clone(),
-            agent_source_ids: team.agent_source_ids.clone(),
-        });
-    }
-
-    let avatar_results = plan
-        .avatars
-        .iter()
-        .map(|avatar| ImportedAvatarPreviewItem {
-            source_id: avatar.source_id.clone(),
-            owner_kind: avatar.owner_kind.clone(),
-            owner_name: avatar.owner_name.clone(),
-            file_name: avatar.file_name.clone(),
-            generated: avatar.generated,
-        })
-        .collect::<Vec<_>>();
-
-    Ok(ImportWorkspaceAgentBundleResult {
-        departments: plan.departments.clone(),
-        department_count: plan.departments.len() as u64,
-        detected_agent_count: plan.detected_agent_count,
-        importable_agent_count: plan.agents.len() as u64,
-        detected_team_count: plan.detected_team_count,
-        importable_team_count: plan.teams.len() as u64,
-        create_count: total_create,
-        update_count: total_update,
-        skip_count: total_skip,
-        failure_count: issues
-            .iter()
-            .filter(|entry| entry.severity == ISSUE_ERROR)
-            .count() as u64,
-        unique_skill_count: skill_results.len() as u64,
-        unique_mcp_count: mcp_results.len() as u64,
-        agent_count: agent_results.len() as u64,
-        team_count: team_results.len() as u64,
-        skill_count: skill_results.len() as u64,
-        mcp_count: mcp_results.len() as u64,
-        avatar_count: avatar_results.len() as u64,
-        filtered_file_count: plan.filtered_file_count,
-        agents: agent_results,
-        teams: team_results,
-        skills: skill_results,
-        mcps: mcp_results,
-        avatars: avatar_results,
-        issues,
-    })
-}
-
-pub(crate) fn export_assets(
-    connection: &Connection,
-    paths: &WorkspacePaths,
-    _workspace_id: &str,
-    target: AssetTargetScope<'_>,
-    input: ExportWorkspaceAgentBundleInput,
-) -> Result<ExportWorkspaceAgentBundleResult, AppError> {
-    let context = build_export_context(connection, paths, target, input)?;
-    let root_dir_name = context.root_dir_name.clone();
-    let mut files = Vec::new();
-
-    for team in &context.teams {
-        files.extend(export_team_files(paths, &context, team, &root_dir_name)?);
-    }
-
-    let team_member_ids = context
-        .teams
-        .iter()
-        .flat_map(|team| team.member_agent_ids.iter().cloned())
-        .collect::<BTreeSet<_>>();
-    for agent in &context.agents {
-        if team_member_ids.contains(&agent.id) {
-            continue;
-        }
-        files.extend(export_agent_files(
-            paths,
-            &context,
-            agent,
-            None,
-            &root_dir_name,
-        )?);
-    }
-
-    files.push(encode_file(
-        &format!("{root_dir_name}/.octopus/manifest.json"),
-        "application/json",
-        serde_json::to_vec_pretty(&json!({
-            "mode": context.mode,
-            "agentIds": context.agents.iter().map(|item| item.id.clone()).collect::<Vec<_>>(),
-            "teamIds": context.teams.iter().map(|item| item.id.clone()).collect::<Vec<_>>(),
-        }))?,
-    ));
-    if !context.asset_state.is_empty() {
-        files.push(encode_file(
-            &format!("{root_dir_name}/{BUNDLE_ASSET_STATE_PATH}"),
-            "application/json",
-            serde_json::to_vec_pretty(&context.asset_state)?,
-        ));
-    }
-
-    Ok(ExportWorkspaceAgentBundleResult {
-        root_dir_name,
-        file_count: files.len() as u64,
-        agent_count: context.agents.len() as u64,
-        team_count: context.teams.len() as u64,
-        skill_count: context.skill_paths.len() as u64,
-        mcp_count: context.mcp_configs.len() as u64,
-        avatar_count: context.avatar_payloads.len() as u64,
-        files,
-        issues: context.issues,
-    })
+pub(crate) struct ExistingSkillImportSource {
+    pub(crate) skill_slug: String,
 }
 
 #[derive(Debug, Clone)]
-struct ExportContext {
-    mode: String,
-    root_dir_name: String,
-    agents: Vec<AgentRecord>,
-    teams: Vec<TeamRecord>,
-    skill_paths: HashMap<String, PathBuf>,
-    builtin_skill_assets: HashMap<String, BuiltinSkillAsset>,
-    mcp_configs: HashMap<String, JsonValue>,
-    avatar_payloads: HashMap<String, (String, String, Vec<u8>)>,
-    asset_state: BundleAssetStateDocument,
-    issues: Vec<ImportIssue>,
-}
-
-fn build_bundle_plan(
-    connection: &Connection,
-    paths: &WorkspacePaths,
-    workspace_id: &str,
-    target: AssetTargetScope<'_>,
-    files: &[WorkspaceDirectoryUploadEntry],
-) -> Result<BundlePlan, AppError> {
-    let (bundle_files, filtered_file_count, mut issues) = normalize_bundle_files(files)?;
-    let bundle_files = strip_optional_bundle_root(bundle_files);
-    let parsed = parse_bundle_files(&bundle_files, &target, &mut issues)?;
-    let existing_skill_sources =
-        load_existing_skill_import_sources(connection, &target.source_kind())?;
-    let existing_team_sources =
-        load_existing_team_import_sources(connection, &target.source_kind())?;
-    let existing_agent_sources =
-        load_existing_agent_import_sources(connection, &target.source_kind())?;
-    let existing_managed_skills = load_existing_managed_skills(&target.skill_root(paths))?;
-    let existing_target_mcp = load_target_mcp_map(paths, &target)?;
-    let existing_effective_mcp = load_effective_mcp_map(paths, &target)?;
-    let existing_agents = load_scoped_agents(connection, &target)?;
-    let existing_teams = load_scoped_teams(connection, &target)?;
-
-    let mut unique_skills = BTreeMap::<(String, String), PlannedSkill>::new();
-    for source in &parsed.skills {
-        let entry = unique_skills
-            .entry((source.canonical_slug.clone(), source.content_hash.clone()))
-            .or_insert_with(|| PlannedSkill {
-                slug: String::new(),
-                skill_id: String::new(),
-                name: source.name.clone(),
-                action: ImportAction::Create,
-                content_hash: source.content_hash.clone(),
-                file_count: source.files.len(),
-                source_ids: Vec::new(),
-                consumer_names: Vec::new(),
-                files: source.files.clone(),
-            });
-        entry.source_ids.push(source.source_id.clone());
-        if !entry
-            .consumer_names
-            .iter()
-            .any(|name| name == &source.owner_name)
-        {
-            entry.consumer_names.push(source.owner_name.clone());
-        }
-    }
-
-    let mut planned_skills = Vec::new();
-    for ((canonical_slug, content_hash), mut planned) in unique_skills {
-        let mut mapped_slugs = planned
-            .source_ids
-            .iter()
-            .filter_map(|source_id| existing_skill_sources.get(source_id))
-            .filter_map(|mapping| existing_managed_skills.get(&mapping.skill_slug))
-            .map(|skill| skill.slug.clone())
-            .collect::<BTreeSet<_>>();
-
-        let (slug, action) = if let Some(mapped_slug) = mapped_slugs.pop_first() {
-            let existing = existing_managed_skills.get(&mapped_slug);
-            if existing.is_some_and(|item| item.content_hash == content_hash) {
-                (mapped_slug, ImportAction::Skip)
-            } else {
-                (mapped_slug, ImportAction::Update)
-            }
-        } else if let Some(existing) = existing_managed_skills.get(&canonical_slug) {
-            if existing.content_hash == content_hash {
-                (canonical_slug.clone(), ImportAction::Skip)
-            } else {
-                let candidate = format!("{}-{}", canonical_slug, short_hash(&content_hash));
-                let action = if existing_managed_skills
-                    .get(&candidate)
-                    .is_some_and(|item| item.content_hash == content_hash)
-                {
-                    ImportAction::Skip
-                } else {
-                    ImportAction::Create
-                };
-                (candidate, action)
-            }
-        } else {
-            (canonical_slug.clone(), ImportAction::Create)
-        };
-
-        planned.slug = slug.clone();
-        planned.skill_id = managed_skill_id(&target, &slug);
-        planned.action = action;
-        planned_skills.push(planned);
-    }
-    planned_skills.sort_by(|left, right| left.slug.cmp(&right.slug));
-
-    let skill_slug_by_source_id = planned_skills
-        .iter()
-        .flat_map(|skill| {
-            skill
-                .source_ids
-                .iter()
-                .cloned()
-                .map(move |source_id| (source_id, skill.slug.clone()))
-        })
-        .collect::<HashMap<_, _>>();
-
-    let mut unique_mcps = BTreeMap::<(String, Option<String>, bool), PlannedMcp>::new();
-    for source in &parsed.mcps {
-        let key = (
-            source.server_name.clone(),
-            source.content_hash.clone(),
-            source.referenced_only,
-        );
-        let entry = unique_mcps.entry(key).or_insert_with(|| PlannedMcp {
-            server_name: source.server_name.clone(),
-            action: ImportAction::Create,
-            content_hash: source.content_hash.clone(),
-            source_ids: Vec::new(),
-            consumer_names: Vec::new(),
-            config: source.config.clone(),
-            referenced_only: source.referenced_only,
-            resolved: false,
-        });
-        entry.source_ids.push(source.source_id.clone());
-        if !entry
-            .consumer_names
-            .iter()
-            .any(|name| name == &source.owner_name)
-        {
-            entry.consumer_names.push(source.owner_name.clone());
-        }
-    }
-
-    let mut planned_mcps = Vec::new();
-    let mut resolved_mcp_name_by_source_id = HashMap::new();
-    for ((_server_name, content_hash, referenced_only), mut planned) in unique_mcps {
-        if referenced_only {
-            if existing_effective_mcp.contains_key(&planned.server_name) {
-                planned.action = ImportAction::Skip;
-                planned.resolved = true;
-            } else {
-                planned.action = ImportAction::Failed;
-                issues.push(issue(
-                    ISSUE_WARNING,
-                    SOURCE_SCOPE_MCP,
-                    planned.source_ids.first().cloned(),
-                    format!(
-                        "bundle references MCP '{}' without mcps/ directory payload; kept as reference only but no matching server exists",
-                        planned.server_name
-                    ),
-                ));
-            }
-        } else if let Some(config) = planned.config.as_ref() {
-            if let Some(existing) = existing_target_mcp.get(&planned.server_name) {
-                if existing == config {
-                    planned.action = ImportAction::Skip;
-                } else {
-                    planned.server_name = format!(
-                        "{}-{}",
-                        planned.server_name,
-                        short_hash(content_hash.as_deref().unwrap_or_default())
-                    );
-                    planned.action = if existing_target_mcp
-                        .get(&planned.server_name)
-                        .is_some_and(|candidate| candidate == config)
-                    {
-                        ImportAction::Skip
-                    } else {
-                        ImportAction::Create
-                    };
-                }
-            } else {
-                planned.action = ImportAction::Create;
-            }
-            planned.resolved = true;
-        }
-
-        if planned.resolved {
-            for source_id in &planned.source_ids {
-                resolved_mcp_name_by_source_id
-                    .insert(source_id.clone(), planned.server_name.clone());
-            }
-        }
-        planned_mcps.push(planned);
-    }
-    planned_mcps.sort_by(|left, right| left.server_name.cmp(&right.server_name));
-
-    let mut planned_agents = Vec::new();
-    for parsed_agent in &parsed.agents {
-        let skill_slugs = parsed_agent
-            .skill_source_ids
-            .iter()
-            .filter_map(|source_id| skill_slug_by_source_id.get(source_id))
-            .cloned()
-            .collect::<Vec<_>>();
-        let mcp_server_names = parsed_agent
-            .mcp_source_ids
-            .iter()
-            .filter_map(|source_id| resolved_mcp_name_by_source_id.get(source_id))
-            .cloned()
-            .collect::<Vec<_>>();
-        let agent_id = existing_agent_sources
-            .get(&parsed_agent.source_id)
-            .map(|mapping| mapping.agent_id.clone())
-            .or_else(|| {
-                let deterministic =
-                    deterministic_asset_id("agent", &target, &parsed_agent.source_id);
-                existing_agents
-                    .contains_key(&deterministic)
-                    .then_some(deterministic)
-            });
-        let action = resolve_agent_action(
-            workspace_id,
-            &target,
-            &existing_agents,
-            &PlannedAgent {
-                source_id: parsed_agent.source_id.clone(),
-                agent_id: agent_id.clone(),
-                name: parsed_agent.name.clone(),
-                department: parsed_agent.team_name.clone().unwrap_or_default(),
-                action: ImportAction::Create,
-                description: parsed_agent.description.clone(),
-                personality: parsed_agent.personality.clone(),
-                prompt: parsed_agent.prompt.clone(),
-                tags: parsed_agent.tags.clone(),
-                builtin_tool_keys: parsed_agent.builtin_tool_keys.clone(),
-                skill_slugs: skill_slugs.clone(),
-                mcp_server_names: mcp_server_names.clone(),
-                avatar: parsed_agent.avatar.clone(),
-            },
-            &skill_slugs
-                .iter()
-                .map(|slug| managed_skill_id(&target, slug))
-                .collect::<Vec<_>>(),
-        )?;
-        planned_agents.push(PlannedAgent {
-            source_id: parsed_agent.source_id.clone(),
-            agent_id,
-            name: parsed_agent.name.clone(),
-            department: parsed_agent.team_name.clone().unwrap_or_default(),
-            action,
-            description: parsed_agent.description.clone(),
-            personality: parsed_agent.personality.clone(),
-            prompt: parsed_agent.prompt.clone(),
-            tags: parsed_agent.tags.clone(),
-            builtin_tool_keys: parsed_agent.builtin_tool_keys.clone(),
-            skill_slugs,
-            mcp_server_names,
-            avatar: parsed_agent.avatar.clone(),
-        });
-    }
-    planned_agents.sort_by(|left, right| left.source_id.cmp(&right.source_id));
-
-    let agent_name_by_source = planned_agents
-        .iter()
-        .map(|agent| (agent.source_id.clone(), agent.name.clone()))
-        .collect::<HashMap<_, _>>();
-    let agent_id_by_source = planned_agents
-        .iter()
-        .map(|agent| {
-            (
-                agent.source_id.clone(),
-                agent
-                    .agent_id
-                    .clone()
-                    .unwrap_or_else(|| deterministic_asset_id("agent", &target, &agent.source_id)),
-            )
-        })
-        .collect::<HashMap<_, _>>();
-
-    let mut planned_teams = Vec::new();
-    for parsed_team in &parsed.teams {
-        let skill_slugs = parsed_team
-            .skill_source_ids
-            .iter()
-            .filter_map(|source_id| skill_slug_by_source_id.get(source_id))
-            .cloned()
-            .collect::<Vec<_>>();
-        let mcp_server_names = parsed_team
-            .mcp_source_ids
-            .iter()
-            .filter_map(|source_id| resolved_mcp_name_by_source_id.get(source_id))
-            .cloned()
-            .collect::<Vec<_>>();
-        let member_names = if parsed_team.member_names.is_empty() {
-            parsed_team
-                .agent_source_ids
-                .iter()
-                .filter_map(|source_id| agent_name_by_source.get(source_id))
-                .cloned()
-                .collect::<Vec<_>>()
-        } else {
-            parsed_team.member_names.clone()
-        };
-        let member_agent_ids = parsed_team
-            .agent_source_ids
-            .iter()
-            .filter_map(|source_id| agent_id_by_source.get(source_id))
-            .cloned()
-            .collect::<Vec<_>>();
-        let leader_agent_id = parsed_team.leader_name.as_ref().and_then(|leader_name| {
-            parsed_team.agent_source_ids.iter().find_map(|source_id| {
-                if agent_name_by_source.get(source_id) == Some(leader_name) {
-                    agent_id_by_source.get(source_id).cloned()
-                } else {
-                    None
-                }
-            })
-        });
-        let team_id = existing_team_sources
-            .get(&parsed_team.source_id)
-            .map(|mapping| mapping.team_id.clone())
-            .or_else(|| {
-                let deterministic = deterministic_asset_id("team", &target, &parsed_team.source_id);
-                existing_teams
-                    .contains_key(&deterministic)
-                    .then_some(deterministic)
-            });
-        let action = resolve_team_action(
-            workspace_id,
-            &target,
-            &existing_teams,
-            &PlannedTeam {
-                source_id: parsed_team.source_id.clone(),
-                team_id: team_id.clone(),
-                name: parsed_team.name.clone(),
-                action: ImportAction::Create,
-                description: parsed_team.description.clone(),
-                personality: parsed_team.personality.clone(),
-                prompt: parsed_team.prompt.clone(),
-                tags: parsed_team.tags.clone(),
-                builtin_tool_keys: parsed_team.builtin_tool_keys.clone(),
-                skill_slugs: skill_slugs.clone(),
-                mcp_server_names: mcp_server_names.clone(),
-                leader_name: parsed_team.leader_name.clone(),
-                member_names: member_names.clone(),
-                agent_source_ids: parsed_team.agent_source_ids.clone(),
-                avatar: parsed_team.avatar.clone(),
-            },
-            &skill_slugs
-                .iter()
-                .map(|slug| managed_skill_id(&target, slug))
-                .collect::<Vec<_>>(),
-            leader_agent_id.as_deref(),
-            &member_agent_ids,
-        )?;
-        planned_teams.push(PlannedTeam {
-            source_id: parsed_team.source_id.clone(),
-            team_id,
-            name: parsed_team.name.clone(),
-            action,
-            description: parsed_team.description.clone(),
-            personality: parsed_team.personality.clone(),
-            prompt: parsed_team.prompt.clone(),
-            tags: parsed_team.tags.clone(),
-            builtin_tool_keys: parsed_team.builtin_tool_keys.clone(),
-            skill_slugs,
-            mcp_server_names,
-            leader_name: parsed_team.leader_name.clone(),
-            member_names,
-            agent_source_ids: parsed_team.agent_source_ids.clone(),
-            avatar: parsed_team.avatar.clone(),
-        });
-    }
-    planned_teams.sort_by(|left, right| left.source_id.cmp(&right.source_id));
-
-    Ok(BundlePlan {
-        departments: parsed
-            .teams
-            .iter()
-            .map(|team| team.name.clone())
-            .collect::<Vec<_>>(),
-        detected_agent_count: parsed.agents.len() as u64,
-        detected_team_count: parsed.teams.len() as u64,
-        filtered_file_count,
-        issues,
-        skills: planned_skills,
-        mcps: planned_mcps,
-        agents: planned_agents,
-        teams: planned_teams,
-        avatars: parsed.avatars,
-        asset_state: parsed.asset_state,
-    })
+pub(crate) struct ExistingManagedSkill {
+    pub(crate) slug: String,
+    pub(crate) content_hash: String,
 }
 
 #[derive(Debug, Clone)]
-struct ParsedBundle {
-    agents: Vec<ParsedAgent>,
-    teams: Vec<ParsedTeam>,
-    skills: Vec<ParsedSkillSource>,
-    mcps: Vec<ParsedMcpSource>,
-    avatars: Vec<ParsedAssetAvatar>,
-    asset_state: BundleAssetStateDocument,
+pub(crate) struct ExportContext {
+    pub(crate) root_dir_name: String,
+    pub(crate) agents: Vec<AgentRecord>,
+    pub(crate) teams: Vec<TeamRecord>,
+    pub(crate) descriptors: Vec<BundleAssetDescriptorRecord>,
+    pub(crate) skill_paths: HashMap<String, PathBuf>,
+    pub(crate) builtin_skill_assets: HashMap<String, BuiltinSkillAsset>,
+    pub(crate) mcp_configs: HashMap<String, JsonValue>,
+    pub(crate) avatar_payloads: HashMap<String, (String, String, Vec<u8>)>,
+    pub(crate) asset_state: BundleAssetStateDocument,
+    pub(crate) bundle_manifest: AssetBundleManifestV2,
+    pub(crate) translation_report: AssetTranslationReport,
+    pub(crate) issues: Vec<ImportIssue>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ParsedBundle {
+    pub(crate) bundle_manifest: Option<AssetBundleManifestV2>,
+    pub(crate) descriptor_assets: Vec<ParsedBundleDescriptor>,
+    pub(crate) agents: Vec<ParsedAgent>,
+    pub(crate) teams: Vec<ParsedTeam>,
+    pub(crate) skills: Vec<ParsedSkillSource>,
+    pub(crate) mcps: Vec<ParsedMcpSource>,
+    pub(crate) avatars: Vec<ParsedAssetAvatar>,
+    pub(crate) asset_state: BundleAssetStateDocument,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ParsedBundleDescriptor {
+    pub(crate) asset_kind: String,
+    pub(crate) source_id: String,
+    pub(crate) display_name: String,
+    pub(crate) source_path: String,
+    pub(crate) manifest_revision: String,
+    pub(crate) task_domains: Vec<String>,
+    pub(crate) translation_mode: String,
+    pub(crate) bytes: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct BundleAssetStateDocument {
+pub(crate) struct BundleAssetStateDocument {
     #[serde(default)]
-    skills: BTreeMap<String, WorkspaceCapabilityAssetMetadata>,
+    pub(crate) skills: BTreeMap<String, WorkspaceCapabilityAssetMetadata>,
     #[serde(default)]
-    mcps: BTreeMap<String, WorkspaceCapabilityAssetMetadata>,
+    pub(crate) mcps: BTreeMap<String, WorkspaceCapabilityAssetMetadata>,
 }
 
 impl BundleAssetStateDocument {
-    fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.skills.is_empty() && self.mcps.is_empty()
     }
 }
 
-fn parse_bundle_files(
+pub(crate) fn parse_bundle_files(
     files: &[BundleFile],
     target: &AssetTargetScope<'_>,
     issues: &mut Vec<ImportIssue>,
 ) -> Result<ParsedBundle, AppError> {
     let asset_state = parse_bundle_asset_state(files, issues);
+    let bundle_manifest = parse_bundle_manifest(files, issues);
     let content_files = files
         .iter()
         .filter(|file| !file.relative_path.starts_with(".octopus/"))
         .cloned()
         .collect::<Vec<_>>();
+    let descriptor_assets =
+        parse_bundle_descriptors(bundle_manifest.as_ref(), &content_files, issues);
     let grouped = group_top_level(&content_files);
     let builtin_tool_keys = builtin_tool_keys();
 
@@ -1319,6 +589,8 @@ fn parse_bundle_files(
     }
 
     Ok(ParsedBundle {
+        bundle_manifest,
+        descriptor_assets,
         agents,
         teams,
         skills,
@@ -1332,15 +604,12 @@ fn parse_bundle_asset_state(
     files: &[BundleFile],
     issues: &mut Vec<ImportIssue>,
 ) -> BundleAssetStateDocument {
-    let Some(file) = files
-        .iter()
-        .find(|file| {
-            file.relative_path == BUNDLE_ASSET_STATE_PATH
-                || file
-                    .relative_path
-                    .ends_with(&format!("/{BUNDLE_ASSET_STATE_PATH}"))
-        })
-    else {
+    let Some(file) = files.iter().find(|file| {
+        file.relative_path == BUNDLE_ASSET_STATE_PATH
+            || file
+                .relative_path
+                .ends_with(&format!("/{BUNDLE_ASSET_STATE_PATH}"))
+    }) else {
         return BundleAssetStateDocument::default();
     };
 
@@ -1358,236 +627,175 @@ fn parse_bundle_asset_state(
     }
 }
 
-pub(crate) fn list_builtin_skill_assets() -> Result<Vec<BuiltinSkillAsset>, AppError> {
-    let parsed = parse_builtin_bundle()?;
+fn parse_bundle_manifest(
+    files: &[BundleFile],
+    issues: &mut Vec<ImportIssue>,
+) -> Option<AssetBundleManifestV2> {
+    let file = files.iter().find(|file| {
+        file.relative_path == ".octopus/manifest.json"
+            || file.relative_path.ends_with("/.octopus/manifest.json")
+    })?;
 
-    let mut unique_skills =
-        BTreeMap::<(String, String), (String, String, Vec<String>, Vec<(String, Vec<u8>)>)>::new();
-    for source in parsed.skills {
-        let description = source
-            .files
-            .iter()
-            .find(|(path, _)| path == SKILL_FRONTMATTER_FILE)
-            .and_then(|(_, bytes)| String::from_utf8(bytes.clone()).ok())
-            .and_then(|content| parse_frontmatter(&content).ok())
-            .and_then(|(frontmatter, _)| yaml_string(&frontmatter, "description"))
-            .unwrap_or_default();
-        unique_skills
-            .entry((source.canonical_slug.clone(), source.content_hash.clone()))
-            .or_insert_with(|| {
-                (
-                    source.name.clone(),
-                    description,
-                    Vec::new(),
-                    source.files.clone(),
-                )
-            })
-            .2
-            .push(source.source_id.clone());
+    match serde_json::from_slice::<AssetBundleManifestV2>(&file.bytes) {
+        Ok(manifest) => Some(manifest),
+        Err(error) => {
+            issues.push(issue(
+                ISSUE_WARNING,
+                SOURCE_SCOPE_BUNDLE,
+                Some(file.relative_path.clone()),
+                format!("ignored invalid '.octopus/manifest.json': {error}"),
+            ));
+            None
+        }
     }
+}
 
-    let mut assigned_hash_by_slug = BTreeMap::<String, String>::new();
-    let mut assets = Vec::new();
-    for ((canonical_slug, content_hash), (name, description, mut source_ids, files)) in
-        unique_skills
-    {
-        let slug = match assigned_hash_by_slug.get(&canonical_slug) {
-            Some(existing_hash) if existing_hash != &content_hash => {
-                format!("{canonical_slug}-{}", short_hash(&content_hash))
-            }
-            _ => canonical_slug,
+fn parse_bundle_descriptors(
+    bundle_manifest: Option<&AssetBundleManifestV2>,
+    content_files: &[BundleFile],
+    issues: &mut Vec<ImportIssue>,
+) -> Vec<ParsedBundleDescriptor> {
+    let Some(bundle_manifest) = bundle_manifest else {
+        return Vec::new();
+    };
+
+    let mut descriptors = Vec::new();
+    for entry in &bundle_manifest.assets {
+        if !matches!(entry.asset_kind.as_str(), "plugin" | "workflow-template") {
+            continue;
+        }
+        let Some(file) = content_files
+            .iter()
+            .find(|file| file.relative_path == entry.source_path)
+        else {
+            issues.push(issue(
+                ISSUE_ERROR,
+                SOURCE_SCOPE_BUNDLE,
+                Some(entry.source_id.clone()),
+                format!(
+                    "bundle manifest entry '{}' is missing source file '{}'",
+                    entry.display_name, entry.source_path
+                ),
+            ));
+            continue;
         };
-        assigned_hash_by_slug.insert(slug.clone(), content_hash);
-        source_ids.sort();
-        source_ids.dedup();
-        assets.push(BuiltinSkillAsset {
-            slug: slug.clone(),
-            name,
-            description,
-            display_path: format!("{BUILTIN_SKILL_DISPLAY_ROOT}/{slug}/{SKILL_FRONTMATTER_FILE}"),
-            root_display_path: format!("{BUILTIN_SKILL_DISPLAY_ROOT}/{slug}"),
-            source_ids,
-            files,
+        descriptors.push(ParsedBundleDescriptor {
+            asset_kind: entry.asset_kind.clone(),
+            source_id: entry.source_id.clone(),
+            display_name: entry.display_name.clone(),
+            source_path: entry.source_path.clone(),
+            manifest_revision: entry.manifest_revision.clone(),
+            task_domains: entry.task_domains.clone(),
+            translation_mode: entry.translation_mode.clone(),
+            bytes: file.bytes.clone(),
         });
     }
-    assets.sort_by(|left, right| left.name.cmp(&right.name).then(left.slug.cmp(&right.slug)));
-    Ok(assets)
+
+    descriptors
+}
+
+pub(crate) fn load_builtin_catalog_sources() -> Result<BuiltinCatalogSources, AppError> {
+    let parsed = parse_builtin_bundle()?;
+    let mcp_name_by_source = parsed
+        .mcps
+        .iter()
+        .map(|mcp| (mcp.source_id.clone(), mcp.server_name.clone()))
+        .collect::<HashMap<_, _>>();
+
+    Ok(BuiltinCatalogSources {
+        skill_sources: parsed
+            .skills
+            .into_iter()
+            .map(|source| {
+                let description = source
+                    .files
+                    .iter()
+                    .find(|(path, _)| path == SKILL_FRONTMATTER_FILE)
+                    .and_then(|(_, bytes)| String::from_utf8(bytes.clone()).ok())
+                    .and_then(|content| parse_frontmatter(&content).ok())
+                    .and_then(|(frontmatter, _)| yaml_string(&frontmatter, "description"))
+                    .unwrap_or_default();
+                BuiltinSkillCatalogSource {
+                    source_id: source.source_id,
+                    name: source.name,
+                    canonical_slug: source.canonical_slug,
+                    content_hash: source.content_hash,
+                    description,
+                    files: source.files,
+                }
+            })
+            .collect(),
+        agent_sources: {
+            let mut records = parsed
+                .agents
+                .into_iter()
+                .filter(|agent| agent.team_name.is_none())
+                .map(|agent| BuiltinAgentTemplateSource {
+                    source_id: agent.source_id,
+                    name: agent.name.clone(),
+                    avatar_data_url: avatar_data_url(&agent.avatar),
+                    personality: agent.personality.clone(),
+                    tags: agent.tags.clone(),
+                    prompt: agent.prompt.clone(),
+                    builtin_tool_keys: agent.builtin_tool_keys.clone(),
+                    skill_source_ids: agent.skill_source_ids,
+                    mcp_server_names: agent
+                        .mcp_source_ids
+                        .iter()
+                        .filter_map(|source_id| mcp_name_by_source.get(source_id))
+                        .cloned()
+                        .collect(),
+                    description: agent.description,
+                })
+                .collect::<Vec<_>>();
+            records.sort_by(|left, right| {
+                left.name
+                    .cmp(&right.name)
+                    .then(left.source_id.cmp(&right.source_id))
+            });
+            records
+        },
+        team_sources: {
+            let mut records = parsed
+                .teams
+                .into_iter()
+                .map(|team| BuiltinTeamTemplateSource {
+                    source_id: team.source_id,
+                    name: team.name.clone(),
+                    avatar_data_url: avatar_data_url(&team.avatar),
+                    personality: team.personality.clone(),
+                    tags: team.tags.clone(),
+                    prompt: team.prompt.clone(),
+                    builtin_tool_keys: team.builtin_tool_keys.clone(),
+                    skill_source_ids: team.skill_source_ids,
+                    mcp_server_names: team
+                        .mcp_source_ids
+                        .iter()
+                        .filter_map(|source_id| mcp_name_by_source.get(source_id))
+                        .cloned()
+                        .collect(),
+                    description: team.description,
+                })
+                .collect::<Vec<_>>();
+            records.sort_by(|left, right| {
+                left.name
+                    .cmp(&right.name)
+                    .then(left.source_id.cmp(&right.source_id))
+            });
+            records
+        },
+    })
 }
 
 pub(crate) fn find_builtin_skill_asset_by_id(
     skill_id: &str,
 ) -> Result<Option<BuiltinSkillAsset>, AppError> {
-    Ok(list_builtin_skill_assets()?
-        .into_iter()
-        .find(|asset| catalog_hash_id("skill", &asset.display_path) == skill_id))
-}
-
-pub(crate) fn list_builtin_agent_templates(
-    workspace_id: &str,
-) -> Result<Vec<AgentRecord>, AppError> {
-    let parsed = parse_builtin_bundle()?;
-    let skill_id_by_source = builtin_skill_id_by_source_id()?;
-    let mcp_name_by_source = parsed
-        .mcps
-        .iter()
-        .map(|mcp| (mcp.source_id.clone(), mcp.server_name.clone()))
-        .collect::<HashMap<_, _>>();
-
-    let mut records = parsed
-        .agents
-        .into_iter()
-        .filter(|agent| agent.team_name.is_none())
-        .map(|agent| AgentRecord {
-            id: catalog_hash_id("builtin-agent", &agent.source_id),
-            workspace_id: workspace_id.to_string(),
-            project_id: None,
-            scope: "workspace".into(),
-            name: agent.name.clone(),
-            avatar_path: None,
-            avatar: avatar_data_url(&agent.avatar),
-            personality: agent.personality.clone(),
-            tags: agent.tags.clone(),
-            prompt: agent.prompt.clone(),
-            builtin_tool_keys: agent.builtin_tool_keys.clone(),
-            skill_ids: agent
-                .skill_source_ids
-                .iter()
-                .filter_map(|source_id| skill_id_by_source.get(source_id))
-                .cloned()
-                .collect(),
-            mcp_server_names: agent
-                .mcp_source_ids
-                .iter()
-                .filter_map(|source_id| mcp_name_by_source.get(source_id))
-                .cloned()
-                .collect(),
-            integration_source: Some(octopus_core::WorkspaceLinkIntegrationSource {
-                kind: "builtin-template".into(),
-                source_id: agent.source_id,
-            }),
-            description: agent.description,
-            status: "active".into(),
-            updated_at: 0,
-        })
-        .collect::<Vec<_>>();
-    records.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
-    Ok(records)
-}
-
-pub(crate) fn list_builtin_team_templates(workspace_id: &str) -> Result<Vec<TeamRecord>, AppError> {
-    let parsed = parse_builtin_bundle()?;
-    let skill_id_by_source = builtin_skill_id_by_source_id()?;
-    let mcp_name_by_source = parsed
-        .mcps
-        .iter()
-        .map(|mcp| (mcp.source_id.clone(), mcp.server_name.clone()))
-        .collect::<HashMap<_, _>>();
-
-    let mut records = parsed
-        .teams
-        .into_iter()
-        .map(|team| TeamRecord {
-            id: catalog_hash_id("builtin-team", &team.source_id),
-            workspace_id: workspace_id.to_string(),
-            project_id: None,
-            scope: "workspace".into(),
-            name: team.name.clone(),
-            avatar_path: None,
-            avatar: avatar_data_url(&team.avatar),
-            personality: team.personality.clone(),
-            tags: team.tags.clone(),
-            prompt: team.prompt.clone(),
-            builtin_tool_keys: team.builtin_tool_keys.clone(),
-            skill_ids: team
-                .skill_source_ids
-                .iter()
-                .filter_map(|source_id| skill_id_by_source.get(source_id))
-                .cloned()
-                .collect(),
-            mcp_server_names: team
-                .mcp_source_ids
-                .iter()
-                .filter_map(|source_id| mcp_name_by_source.get(source_id))
-                .cloned()
-                .collect(),
-            leader_agent_id: None,
-            member_agent_ids: Vec::new(),
-            integration_source: Some(octopus_core::WorkspaceLinkIntegrationSource {
-                kind: "builtin-template".into(),
-                source_id: team.source_id,
-            }),
-            description: team.description,
-            status: "active".into(),
-            updated_at: 0,
-        })
-        .collect::<Vec<_>>();
-    records.sort_by(|left, right| left.name.cmp(&right.name).then(left.id.cmp(&right.id)));
-    Ok(records)
-}
-
-pub(crate) fn extract_builtin_agent_template_files(
-    agent_id: &str,
-) -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, AppError> {
-    let parsed = parse_builtin_bundle()?;
-    let Some(agent) = parsed.agents.iter().find(|agent| {
-        agent.team_name.is_none() && catalog_hash_id("builtin-agent", &agent.source_id) == agent_id
-    }) else {
-        return Ok(None);
-    };
-    Ok(Some(encode_builtin_bundle_entries(&agent.source_id)?))
-}
-
-pub(crate) fn extract_builtin_team_template_files(
-    team_id: &str,
-) -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, AppError> {
-    let parsed = parse_builtin_bundle()?;
-    let Some(team) = parsed
-        .teams
-        .iter()
-        .find(|team| catalog_hash_id("builtin-team", &team.source_id) == team_id)
-    else {
-        return Ok(None);
-    };
-    Ok(Some(encode_builtin_bundle_entries(&team.source_id)?))
-}
-
-pub(crate) fn list_builtin_mcp_assets() -> Result<Vec<BuiltinMcpAsset>, AppError> {
-    let mut assets = embedded_bundle_files(&BUILTIN_MCP_ASSET_DIR)?
-        .into_iter()
-        .filter(|file| file.relative_path.ends_with(".json"))
-        .map(|file| {
-            let server_name = Path::new(&file.relative_path)
-                .file_stem()
-                .and_then(|value| value.to_str())
-                .ok_or_else(|| AppError::invalid_input("invalid builtin MCP file name"))?
-                .to_string();
-            let config = serde_json::from_slice::<JsonValue>(&file.bytes)?;
-            if !config.is_object() {
-                return Err(AppError::invalid_input(
-                    "builtin MCP config must be a JSON object",
-                ));
-            }
-            Ok(BuiltinMcpAsset {
-                server_name: server_name.clone(),
-                display_path: format!("builtin-assets/mcps/{}.json", server_name),
-                config,
-            })
-        })
-        .collect::<Result<Vec<_>, AppError>>()?;
-    assets.sort_by(|left, right| left.server_name.cmp(&right.server_name));
-    Ok(assets)
-}
-
-pub(crate) fn find_builtin_mcp_asset(
-    server_name: &str,
-) -> Result<Option<BuiltinMcpAsset>, AppError> {
-    Ok(list_builtin_mcp_assets()?
-        .into_iter()
-        .find(|asset| asset.server_name == server_name))
+    crate::agent_bundle::find_builtin_skill_asset_by_id(skill_id)
 }
 
 fn parse_builtin_bundle() -> Result<ParsedBundle, AppError> {
-    let bundle_files = embedded_bundle_files(&BUILTIN_BUNDLE_ASSET_DIR)?;
+    let bundle_files =
+        crate::agent_bundle::builtin::embedded_bundle_files(&BUILTIN_BUNDLE_ASSET_DIR)?;
     let mut issues = Vec::new();
     let parsed = parse_bundle_files(&bundle_files, &AssetTargetScope::Workspace, &mut issues)?;
     if let Some(issue) = issues.iter().find(|issue| issue.severity == ISSUE_ERROR) {
@@ -1599,93 +807,12 @@ fn parse_builtin_bundle() -> Result<ParsedBundle, AppError> {
     Ok(parsed)
 }
 
-fn builtin_skill_id_by_source_id() -> Result<HashMap<String, String>, AppError> {
-    let mut map = HashMap::new();
-    for asset in list_builtin_skill_assets()? {
-        let skill_id = catalog_hash_id("skill", &asset.display_path);
-        for source_id in asset.source_ids {
-            map.insert(source_id, skill_id.clone());
-        }
-    }
-    Ok(map)
-}
-
 fn avatar_data_url(avatar: &ParsedAssetAvatar) -> Option<String> {
     Some(format!(
         "data:{};base64,{}",
         avatar.content_type,
         BASE64_STANDARD.encode(&avatar.bytes)
     ))
-}
-
-fn encode_builtin_bundle_entries(
-    root_dir: &str,
-) -> Result<Vec<WorkspaceDirectoryUploadEntry>, AppError> {
-    let prefix = format!("{root_dir}/");
-    let mut files = embedded_bundle_files(&BUILTIN_BUNDLE_ASSET_DIR)?
-        .into_iter()
-        .filter(|file| file.relative_path == root_dir || file.relative_path.starts_with(&prefix))
-        .map(|file| {
-            encode_file(
-                &file.relative_path,
-                content_type_for_export(&file.relative_path),
-                file.bytes,
-            )
-        })
-        .collect::<Vec<_>>();
-    files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
-    if files.is_empty() {
-        return Err(AppError::not_found("builtin template bundle"));
-    }
-    Ok(files)
-}
-
-fn embedded_bundle_files(dir: &Dir<'_>) -> Result<Vec<BundleFile>, AppError> {
-    let mut files = Vec::new();
-    collect_embedded_bundle_files(dir, "", &mut files)?;
-    files.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
-    Ok(files)
-}
-
-fn collect_embedded_bundle_files(
-    dir: &Dir<'_>,
-    prefix: &str,
-    files: &mut Vec<BundleFile>,
-) -> Result<(), AppError> {
-    for entry in dir.entries() {
-        match entry {
-            DirEntry::Dir(child) => {
-                let name = child
-                    .path()
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .ok_or_else(|| AppError::invalid_input("invalid builtin asset directory"))?;
-                let next_prefix = if prefix.is_empty() {
-                    name.to_string()
-                } else {
-                    format!("{prefix}/{name}")
-                };
-                collect_embedded_bundle_files(child, &next_prefix, files)?;
-            }
-            DirEntry::File(file) => {
-                let name = file
-                    .path()
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .ok_or_else(|| AppError::invalid_input("invalid builtin asset file"))?;
-                let relative_path = if prefix.is_empty() {
-                    name.to_string()
-                } else {
-                    format!("{prefix}/{name}")
-                };
-                files.push(BundleFile {
-                    relative_path,
-                    bytes: file.contents().to_vec(),
-                });
-            }
-        }
-    }
-    Ok(())
 }
 
 fn parse_agent_dir(
@@ -1993,7 +1120,7 @@ fn deterministic_index(seed_key: &str, len: usize) -> usize {
     (value as usize) % len
 }
 
-fn normalize_bundle_files(
+pub(crate) fn normalize_bundle_files(
     files: &[WorkspaceDirectoryUploadEntry],
 ) -> Result<(Vec<BundleFile>, u64, Vec<ImportIssue>), AppError> {
     if files.is_empty() {
@@ -2029,7 +1156,7 @@ fn normalize_bundle_files(
     Ok((normalized, filtered, issues))
 }
 
-fn strip_optional_bundle_root(files: Vec<BundleFile>) -> Vec<BundleFile> {
+pub(crate) fn strip_optional_bundle_root(files: Vec<BundleFile>) -> Vec<BundleFile> {
     let mut first_segments = files
         .iter()
         .filter_map(|file| file.relative_path.split('/').next().map(ToOwned::to_owned))
@@ -2252,6 +1379,12 @@ fn hash_json_value(value: &JsonValue) -> Result<String, AppError> {
     Ok(hash_text(&serde_json::to_string(value)?))
 }
 
+pub(crate) fn hash_bytes(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    format!("sha256-{:x}", hasher.finalize())
+}
+
 fn short_hash(value: &str) -> String {
     value
         .rsplit('-')
@@ -2286,6 +1419,7 @@ fn slugify_skill_name(value: &str, fallback_prefix: &str) -> String {
     }
 }
 
+#[cfg(test)]
 fn managed_skill_id(target: &AssetTargetScope<'_>, slug: &str) -> String {
     let display_path = match target {
         AssetTargetScope::Workspace => format!("data/skills/{slug}/{SKILL_FRONTMATTER_FILE}"),
@@ -2293,10 +1427,10 @@ fn managed_skill_id(target: &AssetTargetScope<'_>, slug: &str) -> String {
             format!("data/projects/{project_id}/skills/{slug}/{SKILL_FRONTMATTER_FILE}")
         }
     };
-    catalog_hash_id("skill", &display_path)
+    crate::catalog_hash_id("skill", &display_path)
 }
 
-fn apply_imported_asset_state(
+pub(crate) fn apply_imported_asset_state(
     paths: &WorkspacePaths,
     target: &AssetTargetScope<'_>,
     plan: &BundlePlan,
@@ -2359,48 +1493,155 @@ fn apply_asset_metadata(
     }
 }
 
-fn asset_metadata_has_values(metadata: &WorkspaceCapabilityAssetMetadata) -> bool {
+pub(crate) fn asset_metadata_has_values(metadata: &WorkspaceCapabilityAssetMetadata) -> bool {
     metadata.enabled.is_some() || metadata.trusted.is_some()
 }
 
-fn bundle_mcp_source_key(target: &AssetTargetScope<'_>, server_name: &str) -> String {
+pub(crate) fn bundle_mcp_source_key(target: &AssetTargetScope<'_>, server_name: &str) -> String {
     match target {
         AssetTargetScope::Project(project_id) => format!("mcp:project:{project_id}:{server_name}"),
         AssetTargetScope::Workspace => format!("mcp:{server_name}"),
     }
 }
 
-fn deterministic_asset_id(prefix: &str, target: &AssetTargetScope<'_>, source_id: &str) -> String {
+pub(crate) fn deterministic_asset_id(
+    prefix: &str,
+    target: &AssetTargetScope<'_>,
+    source_id: &str,
+) -> String {
     format!(
         "{prefix}-{}",
         short_hash(&hash_text(&format!("{}:{source_id}", target.scope_label())))
     )
 }
 
-fn issue(severity: &str, scope: &str, source_id: Option<String>, message: String) -> ImportIssue {
+pub(crate) fn deterministic_descriptor_id(
+    target: &AssetTargetScope<'_>,
+    asset_kind: &str,
+    source_id: &str,
+) -> String {
+    let prefix = match asset_kind {
+        "plugin" => "plugin-asset",
+        "workflow-template" => "workflow-template-asset",
+        other => other,
+    };
+    deterministic_asset_id(prefix, target, source_id)
+}
+
+pub(crate) fn descriptor_storage_path(
+    target: &AssetTargetScope<'_>,
+    descriptor: &ParsedBundleDescriptor,
+) -> String {
+    let scope_segment = match target {
+        AssetTargetScope::Workspace => String::from("workspace"),
+        AssetTargetScope::Project(project_id) => format!("project/{project_id}"),
+    };
+    format!(
+        "data/artifacts/bundle-assets/{scope_segment}/{}/{}/{}",
+        descriptor.asset_kind,
+        short_hash(&hash_text(&descriptor.source_id)),
+        descriptor.source_path
+    )
+}
+
+pub(crate) fn basename_from_source_id(source_id: &str) -> &str {
+    source_id.rsplit('/').next().unwrap_or(source_id)
+}
+
+pub(crate) fn dependency_resolution_from_manifest(
+    manifest: Option<&AssetBundleManifestV2>,
+    issues: &[ImportIssue],
+) -> Vec<AssetDependencyResolution> {
+    let Some(manifest) = manifest else {
+        return Vec::new();
+    };
+    let unresolved_dependency_refs = issues
+        .iter()
+        .filter_map(|issue| issue.dependency_ref.clone())
+        .collect::<BTreeSet<_>>();
+    manifest
+        .dependencies
+        .iter()
+        .map(|dependency| AssetDependencyResolution {
+            kind: dependency.kind.clone(),
+            r#ref: dependency.r#ref.clone(),
+            required: dependency.required,
+            resolution_state: if unresolved_dependency_refs.contains(&dependency.r#ref) {
+                "missing".into()
+            } else {
+                "resolved".into()
+            },
+            resolved_ref: if unresolved_dependency_refs.contains(&dependency.r#ref) {
+                None
+            } else {
+                Some(dependency.r#ref.clone())
+            },
+        })
+        .collect()
+}
+
+pub(crate) fn dependencies_from_resolution(
+    dependency_resolution: &[AssetDependencyResolution],
+) -> Vec<AssetDependency> {
+    dependency_resolution
+        .iter()
+        .map(|dependency| AssetDependency {
+            kind: dependency.kind.clone(),
+            r#ref: dependency.r#ref.clone(),
+            version_range: "*".into(),
+            required: dependency.required,
+        })
+        .collect()
+}
+
+pub(crate) fn descriptor_record_matches(
+    existing: &BundleAssetDescriptorRecord,
+    candidate: &BundleAssetDescriptorRecord,
+) -> bool {
+    existing.workspace_id == candidate.workspace_id
+        && existing.project_id == candidate.project_id
+        && existing.scope == candidate.scope
+        && existing.asset_kind == candidate.asset_kind
+        && existing.source_id == candidate.source_id
+        && existing.display_name == candidate.display_name
+        && existing.source_path == candidate.source_path
+        && existing.storage_path == candidate.storage_path
+        && existing.content_hash == candidate.content_hash
+        && existing.byte_size == candidate.byte_size
+        && existing.manifest_revision == candidate.manifest_revision
+        && existing.task_domains == candidate.task_domains
+        && existing.translation_mode == candidate.translation_mode
+        && existing.trust_metadata == candidate.trust_metadata
+        && existing.dependency_resolution == candidate.dependency_resolution
+        && existing.import_metadata.origin_kind == candidate.import_metadata.origin_kind
+        && existing.import_metadata.source_id == candidate.import_metadata.source_id
+        && existing.import_metadata.manifest_version == candidate.import_metadata.manifest_version
+        && existing.import_metadata.translation_status
+            == candidate.import_metadata.translation_status
+}
+
+pub(crate) fn issue(
+    severity: &str,
+    scope: &str,
+    source_id: Option<String>,
+    message: String,
+) -> ImportIssue {
     ImportIssue {
         severity: severity.into(),
         scope: scope.into(),
+        code: format!("{scope}-diagnostic"),
+        stage: "translate".into(),
         source_id,
+        source_path: None,
+        dependency_ref: None,
+        asset_kind: None,
         message,
+        suggestion: None,
+        details: None,
     }
 }
 
-fn increment_action_counts(
-    action: ImportAction,
-    create: &mut u64,
-    update: &mut u64,
-    skip: &mut u64,
-) {
-    match action {
-        ImportAction::Create => *create += 1,
-        ImportAction::Update => *update += 1,
-        ImportAction::Skip => *skip += 1,
-        ImportAction::Failed => {}
-    }
-}
-
-fn build_agent_record(
+pub(crate) fn build_agent_record(
     paths: &WorkspacePaths,
     workspace_id: &str,
     target: &AssetTargetScope<'_>,
@@ -2415,6 +1656,10 @@ fn build_agent_record(
     skill_ids: &[String],
     mcp_server_names: &[String],
 ) -> AgentRecord {
+    let builtin_tool_keys = builtin_tool_keys.to_vec();
+    let skill_ids = skill_ids.to_vec();
+    let mcp_server_names = mcp_server_names.to_vec();
+    let task_domains = normalize_task_domains(tags.to_vec());
     AgentRecord {
         id: agent_id.to_string(),
         workspace_id: workspace_id.to_string(),
@@ -2426,17 +1671,34 @@ fn build_agent_record(
         personality: personality.trim().to_string(),
         tags: tags.to_vec(),
         prompt: prompt.trim().to_string(),
-        builtin_tool_keys: builtin_tool_keys.to_vec(),
-        skill_ids: skill_ids.to_vec(),
-        mcp_server_names: mcp_server_names.to_vec(),
+        builtin_tool_keys: builtin_tool_keys.clone(),
+        skill_ids: skill_ids.clone(),
+        mcp_server_names: mcp_server_names.clone(),
+        task_domains: task_domains.clone(),
+        manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
+        default_model_strategy: default_model_strategy(),
+        capability_policy: capability_policy_from_sources(
+            &builtin_tool_keys,
+            &skill_ids,
+            &mcp_server_names,
+        ),
+        permission_envelope: default_permission_envelope(),
+        memory_policy: default_agent_memory_policy(),
+        delegation_policy: default_agent_delegation_policy(),
+        approval_preference: default_approval_preference(),
+        output_contract: default_output_contract(),
+        shared_capability_policy: default_agent_shared_capability_policy(),
         integration_source: None,
+        trust_metadata: default_asset_trust_metadata(),
+        dependency_resolution: Vec::new(),
+        import_metadata: default_asset_import_metadata(),
         description: description.trim().to_string(),
         status: "active".into(),
         updated_at: timestamp_now(),
     }
 }
 
-fn build_team_record(
+pub(crate) fn build_team_record(
     paths: &WorkspacePaths,
     workspace_id: &str,
     target: &AssetTargetScope<'_>,
@@ -2453,6 +1715,12 @@ fn build_team_record(
     leader_agent_id: Option<String>,
     member_agent_ids: Vec<String>,
 ) -> TeamRecord {
+    let builtin_tool_keys = builtin_tool_keys.to_vec();
+    let skill_ids = skill_ids.to_vec();
+    let mcp_server_names = mcp_server_names.to_vec();
+    let task_domains = normalize_task_domains(tags.to_vec());
+    let delegation_policy = default_team_delegation_policy();
+    let leader_ref = leader_agent_id.clone().unwrap_or_default();
     TeamRecord {
         id: team_id.to_string(),
         workspace_id: workspace_id.to_string(),
@@ -2464,12 +1732,37 @@ fn build_team_record(
         personality: personality.trim().to_string(),
         tags: tags.to_vec(),
         prompt: prompt.trim().to_string(),
-        builtin_tool_keys: builtin_tool_keys.to_vec(),
-        skill_ids: skill_ids.to_vec(),
-        mcp_server_names: mcp_server_names.to_vec(),
+        builtin_tool_keys: builtin_tool_keys.clone(),
+        skill_ids: skill_ids.clone(),
+        mcp_server_names: mcp_server_names.clone(),
+        task_domains: task_domains.clone(),
+        manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
+        default_model_strategy: default_model_strategy(),
+        capability_policy: capability_policy_from_sources(
+            &builtin_tool_keys,
+            &skill_ids,
+            &mcp_server_names,
+        ),
+        permission_envelope: default_permission_envelope(),
+        memory_policy: default_team_memory_policy(),
+        delegation_policy: delegation_policy.clone(),
+        approval_preference: default_approval_preference(),
+        output_contract: default_output_contract(),
+        shared_capability_policy: default_team_shared_capability_policy(),
         leader_agent_id,
-        member_agent_ids,
+        member_agent_ids: member_agent_ids.clone(),
+        leader_ref: leader_ref.clone(),
+        member_refs: member_agent_ids.clone(),
+        team_topology: team_topology_from_refs(Some(leader_ref), member_agent_ids.clone()),
+        shared_memory_policy: default_shared_memory_policy(),
+        mailbox_policy: default_mailbox_policy(),
+        artifact_handoff_policy: default_artifact_handoff_policy(),
+        workflow_affordance: workflow_affordance_from_task_domains(&task_domains, true, true),
+        worker_concurrency_limit: delegation_policy.max_worker_count,
         integration_source: None,
+        trust_metadata: default_asset_trust_metadata(),
+        dependency_resolution: Vec::new(),
+        import_metadata: default_asset_import_metadata(),
         description: description.trim().to_string(),
         status: "active".into(),
         updated_at: timestamp_now(),
@@ -2560,7 +1853,7 @@ fn compute_existing_team_hash(record: &TeamRecord) -> Result<String, AppError> {
     }))?))
 }
 
-fn resolve_agent_action(
+pub(crate) fn resolve_agent_action(
     workspace_id: &str,
     target: &AssetTargetScope<'_>,
     existing_agents: &HashMap<String, AgentRecord>,
@@ -2582,7 +1875,7 @@ fn resolve_agent_action(
     }
 }
 
-fn resolve_team_action(
+pub(crate) fn resolve_team_action(
     workspace_id: &str,
     target: &AssetTargetScope<'_>,
     existing_teams: &HashMap<String, TeamRecord>,
@@ -2613,7 +1906,7 @@ fn resolve_team_action(
     }
 }
 
-fn load_scoped_agents(
+pub(crate) fn load_scoped_agents(
     connection: &Connection,
     target: &AssetTargetScope<'_>,
 ) -> Result<HashMap<String, AgentRecord>, AppError> {
@@ -2624,7 +1917,7 @@ fn load_scoped_agents(
         .collect())
 }
 
-fn load_scoped_teams(
+pub(crate) fn load_scoped_teams(
     connection: &Connection,
     target: &AssetTargetScope<'_>,
 ) -> Result<HashMap<String, TeamRecord>, AppError> {
@@ -2635,7 +1928,7 @@ fn load_scoped_teams(
         .collect())
 }
 
-fn load_existing_managed_skills(
+pub(crate) fn load_existing_managed_skills(
     skills_root: &Path,
 ) -> Result<HashMap<String, ExistingManagedSkill>, AppError> {
     let mut skills = HashMap::new();
@@ -2694,7 +1987,7 @@ fn read_directory_files_recursive(
     Ok(())
 }
 
-fn write_managed_skill(
+pub(crate) fn write_managed_skill(
     skills_root: &Path,
     slug: &str,
     files: &[(String, Vec<u8>)],
@@ -2716,59 +2009,29 @@ fn write_managed_skill(
     Ok(())
 }
 
-fn write_agent_record(
+pub(crate) fn write_agent_record(
     connection: &Connection,
     record: &AgentRecord,
     replace: bool,
 ) -> Result<(), AppError> {
-    let verb = if replace {
-        "INSERT OR REPLACE"
-    } else {
-        "INSERT"
-    };
-    connection
-        .execute(
-            &format!(
-                "{verb} INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)"
-            ),
-            params![
-                record.id,
-                record.workspace_id,
-                record.project_id,
-                record.scope,
-                record.name,
-                record.avatar_path,
-                record.personality,
-                serde_json::to_string(&record.tags)?,
-                record.prompt,
-                serde_json::to_string(&record.builtin_tool_keys)?,
-                serde_json::to_string(&record.skill_ids)?,
-                serde_json::to_string(&record.mcp_server_names)?,
-                record.description,
-                record.status,
-                record.updated_at as i64,
-            ],
-        )
-        .map_err(|error| AppError::database(error.to_string()))?;
-    Ok(())
+    crate::infra_state::write_agent_record(connection, record, replace)
 }
 
-fn load_target_runtime_document(
+pub(crate) fn load_target_runtime_document(
     paths: &WorkspacePaths,
     target: &AssetTargetScope<'_>,
 ) -> Result<JsonMap<String, JsonValue>, AppError> {
     read_runtime_document(&target.runtime_document_path(paths))
 }
 
-fn load_target_mcp_map(
+pub(crate) fn load_target_mcp_map(
     paths: &WorkspacePaths,
     target: &AssetTargetScope<'_>,
 ) -> Result<BTreeMap<String, JsonValue>, AppError> {
     extract_mcp_map(&load_target_runtime_document(paths, target)?)
 }
 
-fn load_effective_mcp_map(
+pub(crate) fn load_effective_mcp_map(
     paths: &WorkspacePaths,
     target: &AssetTargetScope<'_>,
 ) -> Result<BTreeMap<String, JsonValue>, AppError> {
@@ -2819,7 +2082,7 @@ fn extract_mcp_map(
         .unwrap_or_default())
 }
 
-fn plan_mcp_document_updates(
+pub(crate) fn plan_mcp_document_updates(
     mut document: JsonMap<String, JsonValue>,
     mcps: &[PlannedMcp],
     issues: &mut Vec<ImportIssue>,
@@ -2855,7 +2118,7 @@ fn plan_mcp_document_updates(
     Ok(document)
 }
 
-fn write_target_runtime_document(
+pub(crate) fn write_target_runtime_document(
     paths: &WorkspacePaths,
     target: &AssetTargetScope<'_>,
     document: &JsonMap<String, JsonValue>,
@@ -2875,7 +2138,7 @@ fn write_target_runtime_document(
     Ok(())
 }
 
-fn persist_avatar(
+pub(crate) fn persist_avatar(
     paths: &WorkspacePaths,
     entity_id: &str,
     avatar: &ParsedAssetAvatar,
@@ -2899,7 +2162,20 @@ fn persist_avatar(
     Ok(Some(relative_path))
 }
 
-fn upsert_skill_import_source(
+pub(crate) fn persist_bundle_descriptor(
+    paths: &WorkspacePaths,
+    record: &BundleAssetDescriptorRecord,
+    bytes: &[u8],
+) -> Result<(), AppError> {
+    let absolute_path = paths.root.join(&record.storage_path);
+    if let Some(parent) = absolute_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(absolute_path, bytes)?;
+    Ok(())
+}
+
+pub(crate) fn upsert_skill_import_source(
     connection: &Connection,
     source_kind: &str,
     source_id: &str,
@@ -2916,7 +2192,7 @@ fn upsert_skill_import_source(
     Ok(())
 }
 
-fn upsert_agent_import_source(
+pub(crate) fn upsert_agent_import_source(
     connection: &Connection,
     source_kind: &str,
     source_id: &str,
@@ -2942,7 +2218,7 @@ fn upsert_agent_import_source(
     Ok(())
 }
 
-fn upsert_team_import_source(
+pub(crate) fn upsert_team_import_source(
     connection: &Connection,
     source_kind: &str,
     source_id: &str,
@@ -2968,7 +2244,7 @@ fn upsert_team_import_source(
     Ok(())
 }
 
-fn load_existing_skill_import_sources(
+pub(crate) fn load_existing_skill_import_sources(
     connection: &Connection,
     source_kind: &str,
 ) -> Result<HashMap<String, ExistingSkillImportSource>, AppError> {
@@ -2993,7 +2269,7 @@ fn load_existing_skill_import_sources(
     Ok(mappings)
 }
 
-fn load_existing_agent_import_sources(
+pub(crate) fn load_existing_agent_import_sources(
     connection: &Connection,
     source_kind: &str,
 ) -> Result<HashMap<String, ExistingAgentImportSource>, AppError> {
@@ -3018,7 +2294,7 @@ fn load_existing_agent_import_sources(
     Ok(mappings)
 }
 
-fn load_existing_team_import_sources(
+pub(crate) fn load_existing_team_import_sources(
     connection: &Connection,
     source_kind: &str,
 ) -> Result<HashMap<String, ExistingTeamImportSource>, AppError> {
@@ -3043,115 +2319,19 @@ fn load_existing_team_import_sources(
     Ok(mappings)
 }
 
-fn plan_to_preview(plan: &BundlePlan) -> ImportWorkspaceAgentBundlePreview {
-    let mut create_count = 0_u64;
-    let mut update_count = 0_u64;
-    let mut skip_count = 0_u64;
-    for action in plan
-        .skills
-        .iter()
-        .map(|item| item.action)
-        .chain(plan.mcps.iter().map(|item| item.action))
-        .chain(plan.agents.iter().map(|item| item.action))
-        .chain(plan.teams.iter().map(|item| item.action))
-    {
-        increment_action_counts(
-            action,
-            &mut create_count,
-            &mut update_count,
-            &mut skip_count,
-        );
-    }
-
-    ImportWorkspaceAgentBundlePreview {
-        departments: plan.departments.clone(),
-        department_count: plan.departments.len() as u64,
-        detected_agent_count: plan.detected_agent_count,
-        importable_agent_count: plan.agents.len() as u64,
-        detected_team_count: plan.detected_team_count,
-        importable_team_count: plan.teams.len() as u64,
-        create_count,
-        update_count,
-        skip_count,
-        failure_count: plan
-            .issues
-            .iter()
-            .filter(|item| item.severity == ISSUE_ERROR)
-            .count() as u64,
-        unique_skill_count: plan.skills.len() as u64,
-        unique_mcp_count: plan.mcps.len() as u64,
-        agent_count: plan.agents.len() as u64,
-        team_count: plan.teams.len() as u64,
-        skill_count: plan.skills.len() as u64,
-        mcp_count: plan.mcps.len() as u64,
-        avatar_count: plan.avatars.len() as u64,
-        filtered_file_count: plan.filtered_file_count,
-        agents: plan
-            .agents
-            .iter()
-            .map(|agent| ImportedAgentPreviewItem {
-                source_id: agent.source_id.clone(),
-                agent_id: agent.agent_id.clone(),
-                name: agent.name.clone(),
-                department: agent.department.clone(),
-                action: agent.action.as_str().into(),
-                skill_slugs: agent.skill_slugs.clone(),
-                mcp_server_names: agent.mcp_server_names.clone(),
-            })
-            .collect(),
-        teams: plan
-            .teams
-            .iter()
-            .map(|team| ImportedTeamPreviewItem {
-                source_id: team.source_id.clone(),
-                team_id: team.team_id.clone(),
-                name: team.name.clone(),
-                action: team.action.as_str().into(),
-                leader_name: team.leader_name.clone(),
-                member_names: team.member_names.clone(),
-                agent_source_ids: team.agent_source_ids.clone(),
-            })
-            .collect(),
-        skills: plan
-            .skills
-            .iter()
-            .map(|skill| ImportedSkillPreviewItem {
-                slug: skill.slug.clone(),
-                skill_id: skill.skill_id.clone(),
-                name: skill.name.clone(),
-                action: skill.action.as_str().into(),
-                content_hash: skill.content_hash.clone(),
-                file_count: skill.file_count as u64,
-                source_ids: skill.source_ids.clone(),
-                departments: Vec::new(),
-                agent_names: skill.consumer_names.clone(),
-            })
-            .collect(),
-        mcps: plan
-            .mcps
-            .iter()
-            .map(|mcp| ImportedMcpPreviewItem {
-                server_name: mcp.server_name.clone(),
-                action: mcp.action.as_str().into(),
-                content_hash: mcp.content_hash.clone(),
-                source_ids: mcp.source_ids.clone(),
-                consumer_names: mcp.consumer_names.clone(),
-                referenced_only: mcp.referenced_only,
-            })
-            .collect(),
-        avatars: plan
-            .avatars
-            .iter()
-            .map(|avatar| ImportedAvatarPreviewItem {
-                source_id: avatar.source_id.clone(),
-                owner_kind: avatar.owner_kind.clone(),
-                owner_name: avatar.owner_name.clone(),
-                file_name: avatar.file_name.clone(),
-                generated: avatar.generated,
-            })
-            .collect(),
-        issues: plan.issues.clone(),
-    }
+pub(crate) fn load_scoped_bundle_asset_descriptors(
+    connection: &Connection,
+    target: &AssetTargetScope<'_>,
+) -> Result<HashMap<String, BundleAssetDescriptorRecord>, AppError> {
+    let descriptors = load_bundle_asset_descriptor_records(connection)?;
+    Ok(descriptors
+        .into_iter()
+        .filter(|descriptor| {
+            descriptor.scope == target.scope_label()
+                && descriptor.project_id.as_deref() == target.project_id()
+        })
+        .map(|descriptor| (descriptor.id.clone(), descriptor))
+        .collect())
 }
 
 fn is_supported_avatar_file(file_name: &str) -> bool {
@@ -3172,7 +2352,7 @@ fn content_type_for_avatar(file_name: &str) -> Option<&'static str> {
     }
 }
 
-fn content_type_for_export(path: &str) -> &'static str {
+pub(crate) fn content_type_for_export(path: &str) -> &'static str {
     match Path::new(path)
         .extension()
         .and_then(|value| value.to_str())
@@ -3188,7 +2368,7 @@ fn content_type_for_export(path: &str) -> &'static str {
     }
 }
 
-fn encode_file(
+pub(crate) fn encode_file(
     relative_path: &str,
     content_type: &str,
     bytes: Vec<u8>,
@@ -3276,7 +2456,7 @@ fn yaml_inline_string(value: &str) -> String {
     }
 }
 
-fn export_team_files(
+pub(crate) fn export_team_files(
     paths: &WorkspacePaths,
     context: &ExportContext,
     team: &TeamRecord,
@@ -3337,7 +2517,7 @@ fn export_team_files(
     Ok(files)
 }
 
-fn export_agent_files(
+pub(crate) fn export_agent_files(
     _paths: &WorkspacePaths,
     context: &ExportContext,
     agent: &AgentRecord,
@@ -3469,7 +2649,7 @@ fn sanitize_export_dir_name(name: &str) -> String {
         .collect()
 }
 
-fn build_export_context(
+pub(crate) fn build_export_context(
     connection: &Connection,
     paths: &WorkspacePaths,
     target: AssetTargetScope<'_>,
@@ -3564,7 +2744,15 @@ fn build_export_context(
     let builtin_skill_assets = resolve_builtin_skill_assets(&agents, &teams)?;
     let mcp_configs = resolve_mcp_configs(paths, &target, &agents, &teams)?;
     let avatar_payloads = resolve_avatar_payloads(paths, &target, &agents, &teams)?;
-    let asset_state = build_bundle_asset_state(paths, &target, &skill_paths, &mcp_configs)?;
+    let descriptors = load_scoped_bundle_asset_descriptors(connection, &target)?
+        .into_values()
+        .collect::<Vec<_>>();
+    let asset_state = crate::agent_bundle::manifest_v2::build_bundle_asset_state(
+        paths,
+        &target,
+        &skill_paths,
+        &mcp_configs,
+    )?;
     let root_dir_name = if input.mode == "single"
         && teams.len() == 1
         && agents
@@ -3577,55 +2765,32 @@ fn build_export_context(
     } else {
         String::from("agent-bundle")
     };
+    let bundle_manifest = crate::agent_bundle::manifest_v2::build_export_bundle_manifest(
+        &agents,
+        &teams,
+        &descriptors,
+    );
+    let translation_report = crate::agent_bundle::manifest_v2::build_export_translation_report(
+        &agents,
+        &teams,
+        &descriptors,
+        &bundle_manifest,
+    );
 
     Ok(ExportContext {
-        mode: input.mode,
         root_dir_name,
         agents,
         teams,
+        descriptors,
         skill_paths,
         builtin_skill_assets,
         mcp_configs,
         avatar_payloads,
         asset_state,
+        bundle_manifest,
+        translation_report,
         issues: Vec::new(),
     })
-}
-
-fn build_bundle_asset_state(
-    paths: &WorkspacePaths,
-    target: &AssetTargetScope<'_>,
-    skill_paths: &HashMap<String, PathBuf>,
-    mcp_configs: &HashMap<String, JsonValue>,
-) -> Result<BundleAssetStateDocument, AppError> {
-    let document = load_workspace_asset_state_document(paths)?;
-    let mut asset_state = BundleAssetStateDocument::default();
-
-    for path in skill_paths.values() {
-        let source_key = skill_source_key(&path.join(SKILL_FRONTMATTER_FILE), &paths.root);
-        if let Some(metadata) = document
-            .assets
-            .get(&source_key)
-            .filter(|metadata| asset_metadata_has_values(metadata))
-        {
-            if let Some(slug) = path.file_name().and_then(|segment| segment.to_str()) {
-                asset_state.skills.insert(slug.to_string(), metadata.clone());
-            }
-        }
-    }
-
-    for server_name in mcp_configs.keys() {
-        let source_key = bundle_mcp_source_key(target, server_name);
-        if let Some(metadata) = document
-            .assets
-            .get(&source_key)
-            .filter(|metadata| asset_metadata_has_values(metadata))
-        {
-            asset_state.mcps.insert(server_name.clone(), metadata.clone());
-        }
-    }
-
-    Ok(asset_state)
 }
 
 fn load_project_linked_ids(
@@ -3723,7 +2888,7 @@ fn resolve_mcp_configs(
             resolved.insert(server_name.clone(), config.clone());
             continue;
         }
-        if let Some(asset) = find_builtin_mcp_asset(server_name)? {
+        if let Some(asset) = crate::agent_bundle::find_builtin_mcp_asset(server_name)? {
             resolved.insert(server_name.clone(), asset.config);
         }
     }
@@ -3791,6 +2956,15 @@ fn export_avatar_payload(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalog_hash_id;
+    use crate::infra_state::{
+        ensure_agent_record_columns, ensure_bundle_asset_descriptor_columns,
+        ensure_team_record_columns,
+    };
+    use octopus_core::{
+        ExportWorkspaceAgentBundleInput, ImportWorkspaceAgentBundleInput,
+        ImportWorkspaceAgentBundlePreviewInput,
+    };
 
     fn encoded_file(relative_path: &str, content: &str) -> WorkspaceDirectoryUploadEntry {
         WorkspaceDirectoryUploadEntry {
@@ -3873,7 +3047,64 @@ mod tests {
                 );",
             )
             .expect("tables");
-        crate::agent_import::ensure_import_source_tables(connection).expect("import source tables");
+        ensure_agent_record_columns(connection).expect("agent columns");
+        ensure_team_record_columns(connection).expect("team columns");
+        ensure_bundle_asset_descriptor_columns(connection).expect("descriptor columns");
+        crate::agent_bundle::shared::ensure_import_source_tables(connection)
+            .expect("import source tables");
+    }
+
+    fn test_agent_record(
+        id: &str,
+        workspace_id: &str,
+        project_id: Option<&str>,
+        scope: &str,
+        name: &str,
+        personality: &str,
+        tags: Vec<String>,
+        prompt: &str,
+        builtin_tool_keys: Vec<String>,
+        skill_ids: Vec<String>,
+        mcp_server_names: Vec<String>,
+        description: &str,
+    ) -> AgentRecord {
+        let task_domains = normalize_task_domains(tags.clone());
+        AgentRecord {
+            id: id.into(),
+            workspace_id: workspace_id.into(),
+            project_id: project_id.map(str::to_string),
+            scope: scope.into(),
+            name: name.into(),
+            avatar_path: None,
+            avatar: None,
+            personality: personality.into(),
+            tags,
+            prompt: prompt.into(),
+            builtin_tool_keys: builtin_tool_keys.clone(),
+            skill_ids: skill_ids.clone(),
+            mcp_server_names: mcp_server_names.clone(),
+            task_domains: task_domains.clone(),
+            manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
+            default_model_strategy: default_model_strategy(),
+            capability_policy: capability_policy_from_sources(
+                &builtin_tool_keys,
+                &skill_ids,
+                &mcp_server_names,
+            ),
+            permission_envelope: default_permission_envelope(),
+            memory_policy: default_agent_memory_policy(),
+            delegation_policy: default_agent_delegation_policy(),
+            approval_preference: default_approval_preference(),
+            output_contract: default_output_contract(),
+            shared_capability_policy: default_agent_shared_capability_policy(),
+            integration_source: None,
+            trust_metadata: default_asset_trust_metadata(),
+            dependency_resolution: Vec::new(),
+            import_metadata: default_asset_import_metadata(),
+            description: description.into(),
+            status: "active".into(),
+            updated_at: timestamp_now(),
+        }
     }
 
     #[test]
@@ -3884,11 +3115,11 @@ mod tests {
         let connection = Connection::open(paths.db_path.clone()).expect("db");
         ensure_test_tables(&connection);
 
-        let preview = preview_import(
+        let preview = crate::agent_bundle::preview_import(
             &connection,
             &paths,
             "ws-local",
-            AssetTargetScope::Workspace,
+            crate::agent_bundle::BundleTarget::Workspace,
             ImportWorkspaceAgentBundlePreviewInput {
                 files: vec![
                     encoded_file(
@@ -3923,11 +3154,11 @@ mod tests {
         let connection = Connection::open(paths.db_path.clone()).expect("db");
         ensure_test_tables(&connection);
 
-        let preview = preview_import(
+        let preview = crate::agent_bundle::preview_import(
             &connection,
             &paths,
             "ws-local",
-            AssetTargetScope::Workspace,
+            crate::agent_bundle::BundleTarget::Workspace,
             ImportWorkspaceAgentBundlePreviewInput {
                 files: vec![
                     encoded_file(
@@ -3963,32 +3194,27 @@ mod tests {
         ensure_test_tables(&connection);
 
         let agent_id = "agent-1";
-        let record = AgentRecord {
-            id: agent_id.into(),
-            workspace_id: "ws-local".into(),
-            project_id: None,
-            scope: "workspace".into(),
-            name: "财务分析师".into(),
-            avatar_path: None,
-            avatar: None,
-            personality: "数字敏感".into(),
-            tags: vec!["财务".into()],
-            prompt: "# 角色定义\n财务专家\n".into(),
-            builtin_tool_keys: Vec::new(),
-            skill_ids: Vec::new(),
-            mcp_server_names: Vec::new(),
-            integration_source: None,
-            description: "负责财务分析".into(),
-            status: "active".into(),
-            updated_at: timestamp_now(),
-        };
+        let record = test_agent_record(
+            agent_id,
+            "ws-local",
+            None,
+            "workspace",
+            "财务分析师",
+            "数字敏感",
+            vec!["财务".into()],
+            "# 角色定义\n财务专家\n",
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+            "负责财务分析",
+        );
         write_agent_record(&connection, &record, false).expect("write agent");
 
-        let exported = export_assets(
+        let exported = crate::agent_bundle::export_assets(
             &connection,
             &paths,
             "ws-local",
-            AssetTargetScope::Workspace,
+            crate::agent_bundle::BundleTarget::Workspace,
             ExportWorkspaceAgentBundleInput {
                 mode: "single".into(),
                 agent_ids: vec![agent_id.into()],
@@ -4023,35 +3249,30 @@ mod tests {
         .expect("write skill");
 
         let project_agent_id = "agent-project-1";
-        let project_agent = AgentRecord {
-            id: project_agent_id.into(),
-            workspace_id: "ws-local".into(),
-            project_id: Some(project_id.into()),
-            scope: "project".into(),
-            name: "项目财务分析师".into(),
-            avatar_path: None,
-            avatar: None,
-            personality: "项目财务".into(),
-            tags: vec!["项目".into()],
-            prompt: "# 角色定义\n项目财务分析\n".into(),
-            builtin_tool_keys: Vec::new(),
-            skill_ids: vec![managed_skill_id(
+        let project_agent = test_agent_record(
+            project_agent_id,
+            "ws-local",
+            Some(project_id),
+            "project",
+            "项目财务分析师",
+            "项目财务",
+            vec!["项目".into()],
+            "# 角色定义\n项目财务分析\n",
+            Vec::new(),
+            vec![managed_skill_id(
                 &AssetTargetScope::Project(project_id),
                 skill_slug,
             )],
-            mcp_server_names: Vec::new(),
-            integration_source: None,
-            description: "项目级技能".into(),
-            status: "active".into(),
-            updated_at: timestamp_now(),
-        };
+            Vec::new(),
+            "项目级技能",
+        );
         write_agent_record(&connection, &project_agent, false).expect("write project agent");
 
-        let exported = export_assets(
+        let exported = crate::agent_bundle::export_assets(
             &connection,
             &paths,
             "ws-local",
-            AssetTargetScope::Project(project_id),
+            crate::agent_bundle::BundleTarget::Project(project_id),
             ExportWorkspaceAgentBundleInput {
                 mode: "batch".into(),
                 agent_ids: Vec::new(),
@@ -4073,36 +3294,31 @@ mod tests {
         let connection = Connection::open(paths.db_path.clone()).expect("db");
         ensure_test_tables(&connection);
 
-        let builtin_skill = list_builtin_skill_assets()
+        let builtin_skill = crate::agent_bundle::list_builtin_skill_assets()
             .expect("builtin skills")
             .into_iter()
             .find(|asset| asset.slug == "financial-calculator")
             .expect("financial-calculator builtin skill");
         let builtin_skill_id = catalog_hash_id("skill", &builtin_skill.display_path);
-        let builtin_mcp = find_builtin_mcp_asset("finance-data")
+        let builtin_mcp = crate::agent_bundle::find_builtin_mcp_asset("finance-data")
             .expect("builtin mcp lookup")
             .expect("finance-data builtin mcp");
 
         let agent_id = "agent-linked-workspace";
-        let record = AgentRecord {
-            id: agent_id.into(),
-            workspace_id: "ws-local".into(),
-            project_id: None,
-            scope: "workspace".into(),
-            name: "财务联动员工".into(),
-            avatar_path: None,
-            avatar: None,
-            personality: "处理项目联动财务任务".into(),
-            tags: vec!["财务".into()],
-            prompt: "# 角色定义\n处理项目财务联动\n".into(),
-            builtin_tool_keys: vec!["bash".into()],
-            skill_ids: vec![builtin_skill_id],
-            mcp_server_names: vec![builtin_mcp.server_name.clone()],
-            integration_source: None,
-            description: "工作区级财务员工".into(),
-            status: "active".into(),
-            updated_at: timestamp_now(),
-        };
+        let record = test_agent_record(
+            agent_id,
+            "ws-local",
+            None,
+            "workspace",
+            "财务联动员工",
+            "处理项目联动财务任务",
+            vec!["财务".into()],
+            "# 角色定义\n处理项目财务联动\n",
+            vec!["bash".into()],
+            vec![builtin_skill_id],
+            vec![builtin_mcp.server_name.clone()],
+            "工作区级财务员工",
+        );
         write_agent_record(&connection, &record, false).expect("write workspace agent");
         connection
             .execute(
@@ -4112,11 +3328,11 @@ mod tests {
             )
             .expect("insert project agent link");
 
-        let exported = export_assets(
+        let exported = crate::agent_bundle::export_assets(
             &connection,
             &paths,
             "ws-local",
-            AssetTargetScope::Project("proj-finance"),
+            crate::agent_bundle::BundleTarget::Project("proj-finance"),
             ExportWorkspaceAgentBundleInput {
                 mode: "single".into(),
                 agent_ids: vec![agent_id.into()],
@@ -4154,7 +3370,7 @@ mod tests {
         let connection = Connection::open(paths.db_path.clone()).expect("db");
         ensure_test_tables(&connection);
 
-        let builtin_skill = list_builtin_skill_assets()
+        let builtin_skill = crate::agent_bundle::list_builtin_skill_assets()
             .expect("builtin skills")
             .into_iter()
             .find(|asset| asset.slug == "financial-calculator")
@@ -4162,25 +3378,20 @@ mod tests {
         let builtin_skill_id = catalog_hash_id("skill", &builtin_skill.display_path);
 
         let agent_id = "agent-linked-roundtrip";
-        let record = AgentRecord {
-            id: agent_id.into(),
-            workspace_id: "ws-local".into(),
-            project_id: None,
-            scope: "workspace".into(),
-            name: "导出回导员工".into(),
-            avatar_path: None,
-            avatar: None,
-            personality: "负责导出回导验证".into(),
-            tags: vec!["回归".into()],
-            prompt: "# 角色定义\n导出后重新导入\n".into(),
-            builtin_tool_keys: vec!["bash".into()],
-            skill_ids: vec![builtin_skill_id],
-            mcp_server_names: vec!["finance-data".into()],
-            integration_source: None,
-            description: "验证项目导出闭包".into(),
-            status: "active".into(),
-            updated_at: timestamp_now(),
-        };
+        let record = test_agent_record(
+            agent_id,
+            "ws-local",
+            None,
+            "workspace",
+            "导出回导员工",
+            "负责导出回导验证",
+            vec!["回归".into()],
+            "# 角色定义\n导出后重新导入\n",
+            vec!["bash".into()],
+            vec![builtin_skill_id],
+            vec!["finance-data".into()],
+            "验证项目导出闭包",
+        );
         write_agent_record(&connection, &record, false).expect("write workspace agent");
         connection
             .execute(
@@ -4190,11 +3401,11 @@ mod tests {
             )
             .expect("insert project agent link");
 
-        let exported = export_assets(
+        let exported = crate::agent_bundle::export_assets(
             &connection,
             &paths,
             "ws-local",
-            AssetTargetScope::Project("proj-export"),
+            crate::agent_bundle::BundleTarget::Project("proj-export"),
             ExportWorkspaceAgentBundleInput {
                 mode: "single".into(),
                 agent_ids: vec![agent_id.into()],
@@ -4203,11 +3414,11 @@ mod tests {
         )
         .expect("export");
 
-        let imported = execute_import(
+        let imported = crate::agent_bundle::execute_import(
             &connection,
             &paths,
             "ws-local",
-            AssetTargetScope::Project("proj-import"),
+            crate::agent_bundle::BundleTarget::Project("proj-import"),
             ImportWorkspaceAgentBundleInput {
                 files: exported.files,
             },
@@ -4239,8 +3450,7 @@ mod tests {
         )
         .expect("write managed skill");
 
-        let skill_source_key =
-            format!("skill:data/skills/{skill_slug}/{SKILL_FRONTMATTER_FILE}");
+        let skill_source_key = format!("skill:data/skills/{skill_slug}/{SKILL_FRONTMATTER_FILE}");
         let mcp_server_name = "roundtrip-mcp";
         let mcp_source_key = format!("mcp:{mcp_server_name}");
 
@@ -4289,32 +3499,27 @@ mod tests {
         .expect("write workspace runtime document");
 
         let agent_id = "agent-managed-roundtrip";
-        let record = AgentRecord {
-            id: agent_id.into(),
-            workspace_id: "ws-local".into(),
-            project_id: None,
-            scope: "workspace".into(),
-            name: "Managed Roundtrip".into(),
-            avatar_path: None,
-            avatar: None,
-            personality: "Verifies asset metadata export and import".into(),
-            tags: vec!["roundtrip".into()],
-            prompt: "# Role\nVerify asset metadata roundtrip.\n".into(),
-            builtin_tool_keys: vec!["bash".into()],
-            skill_ids: vec![managed_skill_id(&AssetTargetScope::Workspace, skill_slug)],
-            mcp_server_names: vec![mcp_server_name.into()],
-            integration_source: None,
-            description: "Managed asset metadata roundtrip".into(),
-            status: "active".into(),
-            updated_at: timestamp_now(),
-        };
+        let record = test_agent_record(
+            agent_id,
+            "ws-local",
+            None,
+            "workspace",
+            "Managed Roundtrip",
+            "Verifies asset metadata export and import",
+            vec!["roundtrip".into()],
+            "# Role\nVerify asset metadata roundtrip.\n",
+            vec!["bash".into()],
+            vec![managed_skill_id(&AssetTargetScope::Workspace, skill_slug)],
+            vec![mcp_server_name.into()],
+            "Managed asset metadata roundtrip",
+        );
         write_agent_record(&source_connection, &record, false).expect("write source agent");
 
-        let exported = export_assets(
+        let exported = crate::agent_bundle::export_assets(
             &source_connection,
             &source_paths,
             "ws-local",
-            AssetTargetScope::Workspace,
+            crate::agent_bundle::BundleTarget::Workspace,
             ExportWorkspaceAgentBundleInput {
                 mode: "single".into(),
                 agent_ids: vec![agent_id.into()],
@@ -4332,16 +3537,18 @@ mod tests {
 
         let destination_temp = tempfile::tempdir().expect("destination tempdir");
         let destination_paths = WorkspacePaths::new(destination_temp.path());
-        destination_paths.ensure_layout().expect("destination layout");
+        destination_paths
+            .ensure_layout()
+            .expect("destination layout");
         let destination_connection =
             Connection::open(destination_paths.db_path.clone()).expect("destination db");
         ensure_test_tables(&destination_connection);
 
-        execute_import(
+        crate::agent_bundle::execute_import(
             &destination_connection,
             &destination_paths,
             "ws-local",
-            AssetTargetScope::Workspace,
+            crate::agent_bundle::BundleTarget::Workspace,
             ImportWorkspaceAgentBundleInput {
                 files: exported.files,
             },

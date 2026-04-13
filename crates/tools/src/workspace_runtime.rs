@@ -699,8 +699,6 @@ fn capability_profile_for_subagent(subagent_type: &str) -> CapabilityProfile {
             "WebFetch",
             "WebSearch",
             "ToolSearch",
-            "SkillDiscovery",
-            "SkillTool",
             "StructuredOutput",
         ],
         "Plan" => vec![
@@ -710,8 +708,6 @@ fn capability_profile_for_subagent(subagent_type: &str) -> CapabilityProfile {
             "WebFetch",
             "WebSearch",
             "ToolSearch",
-            "SkillDiscovery",
-            "SkillTool",
             "TodoWrite",
             "StructuredOutput",
             "SendUserMessage",
@@ -724,8 +720,6 @@ fn capability_profile_for_subagent(subagent_type: &str) -> CapabilityProfile {
             "WebFetch",
             "WebSearch",
             "ToolSearch",
-            "SkillDiscovery",
-            "SkillTool",
             "TodoWrite",
             "StructuredOutput",
             "SendUserMessage",
@@ -738,8 +732,6 @@ fn capability_profile_for_subagent(subagent_type: &str) -> CapabilityProfile {
             "WebFetch",
             "WebSearch",
             "ToolSearch",
-            "SkillDiscovery",
-            "SkillTool",
             "StructuredOutput",
             "SendUserMessage",
         ],
@@ -762,8 +754,6 @@ fn capability_profile_for_subagent(subagent_type: &str) -> CapabilityProfile {
             "WebFetch",
             "WebSearch",
             "TodoWrite",
-            "SkillDiscovery",
-            "SkillTool",
             "ToolSearch",
             "NotebookEdit",
             "Sleep",
@@ -1224,13 +1214,24 @@ impl SubagentToolExecutor {
 
 impl ToolExecutor for SubagentToolExecutor {
     fn execute(&mut self, tool_name: &str, input: &str) -> Result<String, ToolError> {
-        let value: Value = serde_json::from_str(input)
-            .map_err(|error| ToolError::new(format!("invalid tool input JSON: {error}")))?;
+        self.execute_with_outcome(tool_name, input)
+            .into_result(tool_name)
+    }
+
+    fn execute_with_outcome(&mut self, tool_name: &str, input: &str) -> ToolExecutionOutcome {
+        let value: Value = match serde_json::from_str(input) {
+            Ok(value) => value,
+            Err(error) => {
+                return ToolExecutionOutcome::Failed {
+                    message: format!("invalid tool input JSON: {error}"),
+                };
+            }
+        };
         let current_dir = std::env::current_dir().ok();
         let state = self.session_capability_store.snapshot();
         let capability_runtime = self.capability_runtime.clone();
         let capability_store = self.session_capability_store.clone();
-        capability_runtime.execute_tool(
+        capability_runtime.execute_tool_with_outcome(
             tool_name,
             value,
             CapabilityPlannerInput::new(
@@ -1247,6 +1248,10 @@ impl ToolExecutor for SubagentToolExecutor {
                 )))
             },
         )
+    }
+
+    fn manages_mediation(&self) -> bool {
+        true
     }
 }
 

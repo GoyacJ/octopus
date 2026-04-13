@@ -4113,6 +4113,8 @@ components:
     AgentRecord:
       additionalProperties: false
       properties:
+        approvalPreference:
+          $ref: "#/components/schemas/ApprovalPreference"
         avatar:
           type: string
         avatarPath:
@@ -4121,10 +4123,22 @@ components:
           items:
             type: string
           type: array
+        capabilityPolicy:
+          $ref: "#/components/schemas/CapabilityPolicy"
+        defaultModelStrategy:
+          $ref: "#/components/schemas/DefaultModelStrategy"
+        delegationPolicy:
+          $ref: "#/components/schemas/DelegationPolicy"
+        dependencyResolution:
+          items:
+            $ref: "#/components/schemas/AssetDependencyResolution"
+          type: array
         description:
           type: string
         id:
           type: string
+        importMetadata:
+          $ref: "#/components/schemas/AssetImportMetadata"
         integrationSource:
           additionalProperties: false
           properties:
@@ -4139,12 +4153,20 @@ components:
             - kind
             - sourceId
           type: object
+        manifestRevision:
+          type: string
         mcpServerNames:
           items:
             type: string
           type: array
+        memoryPolicy:
+          $ref: "#/components/schemas/MemoryPolicy"
         name:
           type: string
+        outputContract:
+          $ref: "#/components/schemas/OutputContract"
+        permissionEnvelope:
+          $ref: "#/components/schemas/PermissionEnvelope"
         personality:
           type: string
         projectId:
@@ -4153,6 +4175,8 @@ components:
           type: string
         scope:
           $ref: "#/components/schemas/AgentScope"
+        sharedCapabilityPolicy:
+          $ref: "#/components/schemas/SharedCapabilityPolicy"
         skillIds:
           items:
             type: string
@@ -4163,6 +4187,12 @@ components:
           items:
             type: string
           type: array
+        taskDomains:
+          items:
+            type: string
+          type: array
+        trustMetadata:
+          $ref: "#/components/schemas/AssetTrustMetadata"
         updatedAt:
           type: integer
         workspaceId:
@@ -4180,6 +4210,19 @@ components:
         - mcpServerNames
         - description
         - status
+        - taskDomains
+        - manifestRevision
+        - defaultModelStrategy
+        - capabilityPolicy
+        - permissionEnvelope
+        - memoryPolicy
+        - delegationPolicy
+        - approvalPreference
+        - outputContract
+        - sharedCapabilityPolicy
+        - trustMetadata
+        - dependencyResolution
+        - importMetadata
         - updatedAt
       type: object
     AgentScope:
@@ -4234,6 +4277,49 @@ components:
       required:
         - error
       type: object
+    ApprovalMode:
+      enum:
+        - auto
+        - require-approval
+        - deny
+      type: string
+    ApprovalPreference:
+      additionalProperties: false
+      properties:
+        mcpAuth:
+          $ref: "#/components/schemas/ApprovalMode"
+        memoryWrite:
+          $ref: "#/components/schemas/ApprovalMode"
+        teamSpawn:
+          $ref: "#/components/schemas/ApprovalMode"
+        toolExecution:
+          $ref: "#/components/schemas/ApprovalMode"
+        workflowEscalation:
+          $ref: "#/components/schemas/ApprovalMode"
+      required:
+        - toolExecution
+        - memoryWrite
+        - mcpAuth
+        - teamSpawn
+        - workflowEscalation
+      type: object
+    ArtifactHandoffPolicy:
+      additionalProperties: false
+      properties:
+        mode:
+          enum:
+            - leader-reviewed
+            - direct-handoff
+          type: string
+        requireLineage:
+          type: boolean
+        retainArtifacts:
+          type: boolean
+      required:
+        - mode
+        - requireLineage
+        - retainArtifacts
+      type: object
     ArtifactRecord:
       additionalProperties: false
       properties:
@@ -4274,6 +4360,330 @@ components:
         - approved
         - published
       type: string
+    AssetBundleAssetEntry:
+      additionalProperties: false
+      properties:
+        assetKind:
+          enum:
+            - agent
+            - team
+            - skill
+            - mcp-server
+            - plugin
+            - workflow-template
+          type: string
+        displayName:
+          type: string
+        manifestRevision:
+          type: string
+        sourceId:
+          type: string
+        sourcePath:
+          type: string
+        taskDomains:
+          items:
+            type: string
+          type: array
+        translationMode:
+          enum:
+            - native
+            - translate
+            - downgrade
+            - reject
+          type: string
+      required:
+        - assetKind
+        - sourceId
+        - displayName
+        - sourcePath
+        - manifestRevision
+        - taskDomains
+        - translationMode
+      type: object
+    AssetBundleCompatibilityMapping:
+      additionalProperties: false
+      properties:
+        downgradedFeatures:
+          items:
+            type: string
+          type: array
+        rejectedFeatures:
+          items:
+            type: string
+          type: array
+        supportedTargets:
+          items:
+            type: string
+          type: array
+        translatorVersion:
+          type: string
+      required:
+        - supportedTargets
+        - downgradedFeatures
+        - rejectedFeatures
+        - translatorVersion
+      type: object
+    AssetBundleManifest:
+      additionalProperties: false
+      properties:
+        assets:
+          items:
+            $ref: "#/components/schemas/AssetBundleAssetEntry"
+          type: array
+        bundleKind:
+          enum:
+            - octopus-asset-bundle
+          type: string
+        bundleRoot:
+          type: string
+        compatibilityMapping:
+          $ref: "#/components/schemas/AssetBundleCompatibilityMapping"
+        dependencies:
+          items:
+            $ref: "#/components/schemas/AssetDependency"
+          type: array
+        policyDefaults:
+          $ref: "#/components/schemas/AssetBundlePolicyDefaults"
+        registryMetadata:
+          $ref: "#/components/schemas/AssetBundleRegistryMetadata"
+        trustMetadata:
+          $ref: "#/components/schemas/AssetTrustMetadata"
+        version:
+          type: integer
+      required:
+        - version
+        - bundleKind
+        - bundleRoot
+        - assets
+        - dependencies
+        - trustMetadata
+        - compatibilityMapping
+        - policyDefaults
+      type: object
+    AssetBundlePolicyDefaults:
+      additionalProperties: false
+      properties:
+        approvalPreference:
+          $ref: "#/components/schemas/ApprovalPreference"
+        defaultModelStrategy:
+          $ref: "#/components/schemas/DefaultModelStrategy"
+        delegationPolicy:
+          $ref: "#/components/schemas/DelegationPolicy"
+        memoryPolicy:
+          $ref: "#/components/schemas/MemoryPolicy"
+        permissionEnvelope:
+          $ref: "#/components/schemas/PermissionEnvelope"
+      required:
+        - defaultModelStrategy
+        - permissionEnvelope
+        - memoryPolicy
+        - delegationPolicy
+        - approvalPreference
+      type: object
+    AssetBundleRegistryMetadata:
+      additionalProperties: false
+      properties:
+        publisher:
+          type: string
+        releaseChannel:
+          type: string
+        revision:
+          type: string
+        tags:
+          items:
+            type: string
+          type: array
+      required:
+        - publisher
+        - releaseChannel
+        - revision
+        - tags
+      type: object
+    AssetDependency:
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+        ref:
+          type: string
+        required:
+          type: boolean
+        versionRange:
+          type: string
+      required:
+        - kind
+        - ref
+        - required
+        - versionRange
+      type: object
+    AssetDependencyResolution:
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+        ref:
+          type: string
+        required:
+          type: boolean
+        resolutionState:
+          enum:
+            - resolved
+            - missing
+            - version-mismatch
+            - rejected
+          type: string
+        resolvedRef:
+          type: string
+      required:
+        - kind
+        - ref
+        - required
+        - resolutionState
+      type: object
+    AssetImportMetadata:
+      additionalProperties: false
+      properties:
+        importedAt:
+          type: integer
+        manifestVersion:
+          type: integer
+        originKind:
+          enum:
+            - native
+            - bundle-import
+            - builtin-template
+            - workspace-link
+          type: string
+        sourceId:
+          type: string
+        translationStatus:
+          enum:
+            - native
+            - translated
+            - downgraded
+            - rejected
+          type: string
+      required:
+        - originKind
+        - manifestVersion
+        - translationStatus
+      type: object
+    AssetTranslationDiagnostic:
+      additionalProperties: false
+      properties:
+        assetId:
+          type: string
+        assetKind:
+          type: string
+        code:
+          type: string
+        dependencyRef:
+          type: string
+        details:
+          additionalProperties: true
+          type: object
+        message:
+          type: string
+        severity:
+          enum:
+            - info
+            - warning
+            - error
+          type: string
+        sourcePath:
+          type: string
+        stage:
+          enum:
+            - parse
+            - validate
+            - translate
+            - execute
+          type: string
+        suggestion:
+          type: string
+      required:
+        - severity
+        - code
+        - stage
+        - message
+      type: object
+    AssetTranslationReport:
+      additionalProperties: false
+      properties:
+        dependencyResolution:
+          items:
+            $ref: "#/components/schemas/AssetDependencyResolution"
+          type: array
+        diagnostics:
+          items:
+            $ref: "#/components/schemas/AssetTranslationDiagnostic"
+          type: array
+        downgradedCount:
+          type: integer
+        rejectedCount:
+          type: integer
+        status:
+          enum:
+            - native
+            - translated
+            - downgraded
+            - rejected
+            - mixed
+          type: string
+        translatedCount:
+          type: integer
+        trustWarnings:
+          items:
+            type: string
+          type: array
+        unsupportedFeatures:
+          items:
+            type: string
+          type: array
+      required:
+        - status
+        - translatedCount
+        - downgradedCount
+        - rejectedCount
+        - diagnostics
+        - unsupportedFeatures
+        - trustWarnings
+        - dependencyResolution
+      type: object
+    AssetTrustLevel:
+      enum:
+        - trusted
+        - reviewed
+        - untrusted
+      type: string
+    AssetTrustMetadata:
+      additionalProperties: false
+      properties:
+        origin:
+          type: string
+        publisher:
+          type: string
+        signatureState:
+          enum:
+            - verified
+            - unsigned
+            - invalid
+          type: string
+        trustLevel:
+          $ref: "#/components/schemas/AssetTrustLevel"
+        trustWarnings:
+          items:
+            type: string
+          type: array
+        verifiedAt:
+          type: integer
+      required:
+        - publisher
+        - origin
+        - signatureState
+        - trustLevel
+        - trustWarnings
+      type: object
     AuditRecord:
       additionalProperties: false
       properties:
@@ -4697,6 +5107,39 @@ components:
         - skillPackages
         - mcpServerPackages
       type: object
+    CapabilityPolicy:
+      additionalProperties: false
+      properties:
+        builtinToolKeys:
+          items:
+            type: string
+          type: array
+        denyByDefault:
+          type: boolean
+        mcpServerNames:
+          items:
+            type: string
+          type: array
+        mode:
+          enum:
+            - allow-list
+          type: string
+        pluginCapabilityRefs:
+          items:
+            type: string
+          type: array
+        skillIds:
+          items:
+            type: string
+          type: array
+      required:
+        - mode
+        - denyByDefault
+        - builtinToolKeys
+        - skillIds
+        - mcpServerNames
+        - pluginCapabilityRefs
+      type: object
     CapabilitySourceKind:
       enum:
         - builtin
@@ -4942,7 +5385,13 @@ components:
       properties:
         conversationId:
           type: string
+        executionPermissionMode:
+          $ref: "#/components/schemas/RuntimePermissionMode"
         projectId:
+          type: string
+        selectedActorRef:
+          type: string
+        selectedConfiguredModelId:
           type: string
         sessionKind:
           $ref: "#/components/schemas/RuntimeSessionKind"
@@ -4952,6 +5401,8 @@ components:
         - conversationId
         - projectId
         - title
+        - selectedActorRef
+        - executionPermissionMode
       type: object
     CreateWorkspaceResourceFolderInput:
       additionalProperties: false
@@ -5115,6 +5566,50 @@ components:
         - approve
         - reject
       type: string
+    DefaultModelStrategy:
+      additionalProperties: false
+      properties:
+        allowTurnOverride:
+          type: boolean
+        fallbackModelRefs:
+          items:
+            type: string
+          type: array
+        preferredModelRef:
+          type: string
+        selectionMode:
+          enum:
+            - session-selected
+            - actor-default
+            - provider-pinned
+          type: string
+      required:
+        - selectionMode
+        - allowTurnOverride
+        - fallbackModelRefs
+      type: object
+    DelegationPolicy:
+      additionalProperties: false
+      properties:
+        allowBackgroundRuns:
+          type: boolean
+        allowParallelWorkers:
+          type: boolean
+        maxWorkerCount:
+          type: integer
+        mode:
+          enum:
+            - disabled
+            - leader-orchestrated
+            - single-worker
+            - multi-worker
+          type: string
+      required:
+        - mode
+        - allowBackgroundRuns
+        - allowParallelWorkers
+        - maxWorkerCount
+      type: object
     EnterpriseAuthSuccess:
       additionalProperties: false
       properties:
@@ -5212,6 +5707,8 @@ components:
           type: integer
         avatarCount:
           type: integer
+        bundleManifest:
+          $ref: "#/components/schemas/AssetBundleManifest"
         fileCount:
           type: integer
         files:
@@ -5230,6 +5727,8 @@ components:
           type: integer
         teamCount:
           type: integer
+        translationReport:
+          $ref: "#/components/schemas/AssetTranslationReport"
       required:
         - rootDirName
         - fileCount
@@ -5238,6 +5737,8 @@ components:
         - skillCount
         - mcpCount
         - avatarCount
+        - bundleManifest
+        - translationReport
         - files
         - issues
       type: object
@@ -5451,6 +5952,8 @@ components:
           type: string
         department:
           type: string
+        manifestRevision:
+          type: string
         mcpServerNames:
           items:
             type: string
@@ -5463,13 +5966,27 @@ components:
           type: array
         sourceId:
           type: string
+        taskDomains:
+          items:
+            type: string
+          type: array
+        translationMode:
+          enum:
+            - native
+            - translate
+            - downgrade
+            - reject
+          type: string
       required:
         - sourceId
         - name
         - department
         - action
+        - manifestRevision
         - skillSlugs
         - mcpServerNames
+        - taskDomains
+        - translationMode
       type: object
     ImportedAvatarPreviewItem:
       additionalProperties: false
@@ -5581,6 +6098,8 @@ components:
           type: array
         leaderName:
           type: string
+        manifestRevision:
+          type: string
         memberNames:
           items:
             type: string
@@ -5589,18 +6108,41 @@ components:
           type: string
         sourceId:
           type: string
+        taskDomains:
+          items:
+            type: string
+          type: array
         teamId:
+          type: string
+        translationMode:
+          enum:
+            - native
+            - translate
+            - downgrade
+            - reject
           type: string
       required:
         - sourceId
         - name
         - action
+        - manifestRevision
         - memberNames
         - agentSourceIds
+        - taskDomains
+        - translationMode
       type: object
     ImportIssue:
       additionalProperties: false
       properties:
+        assetKind:
+          type: string
+        code:
+          type: string
+        dependencyRef:
+          type: string
+        details:
+          additionalProperties: true
+          type: object
         message:
           type: string
         scope:
@@ -5614,14 +6156,28 @@ components:
           type: string
         severity:
           enum:
+            - info
             - warning
             - error
           type: string
         sourceId:
           type: string
+        sourcePath:
+          type: string
+        stage:
+          enum:
+            - parse
+            - validate
+            - translate
+            - execute
+          type: string
+        suggestion:
+          type: string
       required:
         - severity
         - scope
+        - code
+        - stage
         - message
       type: object
     ImportWorkspaceAgentBundleInput:
@@ -5649,6 +6205,8 @@ components:
           items:
             $ref: "#/components/schemas/ImportedAvatarPreviewItem"
           type: array
+        bundleManifest:
+          $ref: "#/components/schemas/AssetBundleManifest"
         createCount:
           type: integer
         departmentCount:
@@ -5693,6 +6251,8 @@ components:
           items:
             $ref: "#/components/schemas/ImportedTeamPreviewItem"
           type: array
+        translationReport:
+          $ref: "#/components/schemas/AssetTranslationReport"
         uniqueMcpCount:
           type: integer
         uniqueSkillCount:
@@ -5701,6 +6261,7 @@ components:
           type: integer
       required:
         - departments
+        - bundleManifest
         - departmentCount
         - detectedAgentCount
         - importableAgentCount
@@ -5724,6 +6285,7 @@ components:
         - mcps
         - avatars
         - issues
+        - translationReport
       type: object
     ImportWorkspaceAgentBundlePreviewInput:
       additionalProperties: false
@@ -5750,6 +6312,8 @@ components:
           items:
             $ref: "#/components/schemas/ImportedAvatarPreviewItem"
           type: array
+        bundleManifest:
+          $ref: "#/components/schemas/AssetBundleManifest"
         createCount:
           type: integer
         departmentCount:
@@ -5794,6 +6358,8 @@ components:
           items:
             $ref: "#/components/schemas/ImportedTeamPreviewItem"
           type: array
+        translationReport:
+          $ref: "#/components/schemas/AssetTranslationReport"
         uniqueMcpCount:
           type: integer
         uniqueSkillCount:
@@ -5802,6 +6368,7 @@ components:
           type: integer
       required:
         - departments
+        - bundleManifest
         - departmentCount
         - detectedAgentCount
         - importableAgentCount
@@ -5825,6 +6392,7 @@ components:
         - mcps
         - avatars
         - issues
+        - translationReport
       type: object
     ImportWorkspaceSkillArchiveInput:
       additionalProperties: false
@@ -5977,6 +6545,22 @@ components:
         - zh-CN
         - en-US
       type: string
+    MailboxPolicy:
+      additionalProperties: false
+      properties:
+        allowWorkerToWorker:
+          type: boolean
+        mode:
+          enum:
+            - leader-hub
+          type: string
+        retainMessages:
+          type: boolean
+      required:
+        - mode
+        - allowWorkerToWorker
+        - retainMessages
+      type: object
     McpServerPackageManifest:
       allOf:
         - $ref: "#/components/schemas/CapabilityAssetManifest"
@@ -6027,6 +6611,28 @@ components:
             - promptNames
             - resourceUris
             - scope
+    MemoryPolicy:
+      additionalProperties: false
+      properties:
+        allowWorkspaceSharedWrite:
+          type: boolean
+        durableScopes:
+          items:
+            type: string
+          type: array
+        freshnessRequired:
+          type: boolean
+        maxSelections:
+          type: integer
+        writeRequiresApproval:
+          type: boolean
+      required:
+        - durableScopes
+        - writeRequiresApproval
+        - allowWorkspaceSharedWrite
+        - maxSelections
+        - freshnessRequired
+      type: object
     MenuDefinition:
       additionalProperties: false
       properties:
@@ -6341,6 +6947,30 @@ components:
         - name
         - status
       type: object
+    OutputContract:
+      additionalProperties: false
+      properties:
+        artifactKinds:
+          items:
+            type: string
+          type: array
+        preserveLineage:
+          type: boolean
+        primaryFormat:
+          enum:
+            - markdown
+            - json
+            - artifact
+            - mixed
+          type: string
+        requireStructuredSummary:
+          type: boolean
+      required:
+        - primaryFormat
+        - artifactKinds
+        - requireStructuredSummary
+        - preserveLineage
+      type: object
     PasswordState:
       enum:
         - set
@@ -6371,6 +7001,33 @@ components:
         - category
         - resourceType
         - actions
+      type: object
+    PermissionEnvelope:
+      additionalProperties: false
+      properties:
+        allowedResourceScopes:
+          items:
+            type: string
+          type: array
+        defaultMode:
+          enum:
+            - readonly
+            - workspace-write
+            - danger-full-access
+          type: string
+        escalationAllowed:
+          type: boolean
+        maxMode:
+          enum:
+            - readonly
+            - workspace-write
+            - danger-full-access
+          type: string
+      required:
+        - defaultMode
+        - maxMode
+        - escalationAllowed
+        - allowedResourceScopes
       type: object
     PermissionMode:
       enum:
@@ -7219,11 +7876,15 @@ components:
     RuntimeApprovalRequest:
       additionalProperties: false
       properties:
+        approvalLayer:
+          type: string
         conversationId:
           type: string
         createdAt:
           type: integer
         detail:
+          type: string
+        escalationReason:
           type: string
         id:
           type: string
@@ -7241,6 +7902,10 @@ components:
           type: string
         summary:
           type: string
+        targetKind:
+          type: string
+        targetRef:
+          type: string
         toolName:
           type: string
       required:
@@ -7254,6 +7919,10 @@ components:
         - riskLevel
         - createdAt
         - status
+        - approvalLayer
+        - targetKind
+        - targetRef
+        - escalationReason
       type: object
     RuntimeBootstrap:
       additionalProperties: false
@@ -7267,6 +7936,243 @@ components:
       required:
         - provider
         - sessions
+      type: object
+    RuntimeCapabilityExecutionOutcome:
+      additionalProperties: false
+      properties:
+        capabilityId:
+          type: string
+        concurrencyPolicy:
+          type: string
+        detail:
+          type: string
+        dispatchKind:
+          type: string
+        outcome:
+          type: string
+        providerKey:
+          type: string
+        requiresApproval:
+          type: boolean
+        requiresAuth:
+          type: boolean
+        toolName:
+          type: string
+      required:
+        - outcome
+        - requiresApproval
+        - requiresAuth
+      type: object
+    RuntimeCapabilityPlanSummary:
+      additionalProperties: false
+      properties:
+        activatedTools:
+          items:
+            type: string
+          type: array
+        approvedTools:
+          items:
+            type: string
+          type: array
+        authResolvedTools:
+          items:
+            type: string
+          type: array
+        availableResources:
+          items:
+            type: string
+          type: array
+        deferredTools:
+          items:
+            type: string
+          type: array
+        discoverableSkills:
+          items:
+            type: string
+          type: array
+        grantedTools:
+          items:
+            type: string
+          type: array
+        hiddenCapabilities:
+          items:
+            type: string
+          type: array
+        pendingTools:
+          items:
+            type: string
+          type: array
+        providerFallbacks:
+          items:
+            type: string
+          type: array
+        visibleTools:
+          items:
+            type: string
+          type: array
+      required:
+        - visibleTools
+        - deferredTools
+        - discoverableSkills
+        - availableResources
+        - hiddenCapabilities
+        - activatedTools
+        - grantedTools
+        - pendingTools
+        - approvedTools
+        - authResolvedTools
+        - providerFallbacks
+      type: object
+    RuntimeCapabilityProviderState:
+      additionalProperties: false
+      properties:
+        degraded:
+          type: boolean
+        detail:
+          type: string
+        providerKey:
+          type: string
+        state:
+          type: string
+      required:
+        - providerKey
+        - state
+        - degraded
+      type: object
+    RuntimeCapabilityStateSnapshot:
+      additionalProperties: false
+      properties:
+        activatedTools:
+          items:
+            type: string
+          type: array
+        approvedTools:
+          items:
+            type: string
+          type: array
+        authResolvedTools:
+          items:
+            type: string
+          type: array
+        effortOverride:
+          type: string
+        grantedToolCount:
+          type: integer
+        grantedTools:
+          items:
+            type: string
+          type: array
+        hiddenTools:
+          items:
+            type: string
+          type: array
+        injectedSkillMessageCount:
+          type: integer
+        modelOverride:
+          type: string
+        pendingTools:
+          items:
+            type: string
+          type: array
+      required:
+        - activatedTools
+        - grantedTools
+        - pendingTools
+        - approvedTools
+        - authResolvedTools
+        - hiddenTools
+        - injectedSkillMessageCount
+        - grantedToolCount
+      type: object
+    RuntimeCapabilitySummary:
+      additionalProperties: false
+      properties:
+        activatedTools:
+          items:
+            type: string
+          type: array
+        approvedTools:
+          items:
+            type: string
+          type: array
+        authResolvedTools:
+          items:
+            type: string
+          type: array
+        availableResources:
+          items:
+            type: string
+          type: array
+        deferredTools:
+          items:
+            type: string
+          type: array
+        discoverableSkills:
+          items:
+            type: string
+          type: array
+        grantedTools:
+          items:
+            type: string
+          type: array
+        hiddenCapabilities:
+          items:
+            type: string
+          type: array
+        pendingTools:
+          items:
+            type: string
+          type: array
+        providerFallbacks:
+          items:
+            type: string
+          type: array
+        visibleTools:
+          items:
+            type: string
+          type: array
+      required:
+        - visibleTools
+        - deferredTools
+        - discoverableSkills
+        - availableResources
+        - hiddenCapabilities
+        - activatedTools
+        - grantedTools
+        - pendingTools
+        - approvedTools
+        - authResolvedTools
+        - providerFallbacks
+      type: object
+    RuntimeCapabilitySurface:
+      additionalProperties: false
+      properties:
+        availableResources:
+          items:
+            type: string
+          type: array
+        deferredTools:
+          items:
+            type: string
+          type: array
+        discoverableSkills:
+          items:
+            type: string
+          type: array
+        hiddenCapabilities:
+          items:
+            type: string
+          type: array
+        visibleTools:
+          items:
+            type: string
+          type: array
+      required:
+        - visibleTools
+        - deferredTools
+        - discoverableSkills
+        - availableResources
+        - hiddenCapabilities
       type: object
     RuntimeConfigPatch:
       additionalProperties: false
@@ -7406,6 +8312,10 @@ components:
       properties:
         approval:
           $ref: "#/components/schemas/RuntimeApprovalRequest"
+        capabilityPlanSummary:
+          $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
+        capabilityStateRef:
+          type: string
         conversationId:
           type: string
         decision:
@@ -7420,13 +8330,21 @@ components:
           type: string
         kind:
           $ref: "#/components/schemas/RuntimeEventKind"
+        lastExecutionOutcome:
+          $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
         message:
           $ref: "#/components/schemas/RuntimeMessage"
         payload:
           additionalProperties: true
           type: object
+        pendingMediation:
+          $ref: "#/components/schemas/RuntimePendingMediationSummary"
         projectId:
           type: string
+        providerStateSummary:
+          items:
+            $ref: "#/components/schemas/RuntimeCapabilityProviderState"
+          type: array
         run:
           $ref: "#/components/schemas/RuntimeRunSnapshot"
         runId:
@@ -7452,6 +8370,30 @@ components:
       type: object
     RuntimeEventKind:
       enum:
+        - planner.started
+        - planner.completed
+        - model.started
+        - model.streaming
+        - model.completed
+        - model.failed
+        - tool.requested
+        - tool.started
+        - tool.completed
+        - tool.failed
+        - skill.requested
+        - skill.started
+        - skill.completed
+        - skill.failed
+        - mcp.requested
+        - mcp.started
+        - mcp.completed
+        - mcp.failed
+        - approval.requested
+        - approval.resolved
+        - trace.emitted
+        - subrun.spawned
+        - subrun.completed
+        - subrun.failed
         - runtime.run.updated
         - runtime.message.created
         - runtime.trace.emitted
@@ -7460,6 +8402,22 @@ components:
         - runtime.session.updated
         - runtime.error
       type: string
+    RuntimeMemorySummary:
+      additionalProperties: false
+      properties:
+        durableMemoryCount:
+          type: integer
+        selectedMemoryIds:
+          items:
+            type: string
+          type: array
+        summary:
+          type: string
+      required:
+        - summary
+        - durableMemoryCount
+        - selectedMemoryIds
+      type: object
     RuntimeMessage:
       additionalProperties: false
       properties:
@@ -7529,15 +8487,108 @@ components:
         - timestamp
         - status
       type: object
+    RuntimePendingMediationSummary:
+      additionalProperties: false
+      properties:
+        capabilityId:
+          type: string
+        mediationKind:
+          type: string
+        providerKey:
+          type: string
+        reason:
+          type: string
+        toolName:
+          type: string
+      required:
+        - mediationKind
+      type: object
+    RuntimePermissionEnvelope:
+      additionalProperties: true
+      type: object
     RuntimePermissionMode:
       enum:
         - read-only
         - workspace-write
         - danger-full-access
       type: string
+    RuntimePolicySnapshot:
+      additionalProperties: false
+      properties:
+        approvalPreference:
+          $ref: "#/components/schemas/RuntimePermissionEnvelope"
+        capabilityPolicy:
+          $ref: "#/components/schemas/RuntimePermissionEnvelope"
+        configSnapshotId:
+          type: string
+        delegationPolicy:
+          $ref: "#/components/schemas/RuntimePermissionEnvelope"
+        executionPermissionMode:
+          $ref: "#/components/schemas/RuntimePermissionMode"
+        manifestRevision:
+          type: string
+        memoryPolicy:
+          $ref: "#/components/schemas/RuntimePermissionEnvelope"
+        selectedActorRef:
+          type: string
+        selectedConfiguredModelId:
+          type: string
+      required:
+        - selectedActorRef
+        - selectedConfiguredModelId
+        - executionPermissionMode
+        - configSnapshotId
+        - manifestRevision
+      type: object
+    RuntimeRunCheckpoint:
+      additionalProperties: false
+      properties:
+        capabilityPlanSummary:
+          $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
+        capabilityStateRef:
+          type: string
+        compactionMetadata:
+          $ref: "#/components/schemas/RuntimePermissionEnvelope"
+        currentIterationIndex:
+          type: integer
+        lastExecutionOutcome:
+          $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+        pendingApproval:
+          $ref: "#/components/schemas/RuntimeApprovalRequest"
+        pendingMediation:
+          $ref: "#/components/schemas/RuntimePendingMediationSummary"
+        serializedSession:
+          $ref: "#/components/schemas/RuntimePermissionEnvelope"
+        usageSummary:
+          $ref: "#/components/schemas/RuntimeUsageSummary"
+      required:
+        - serializedSession
+        - currentIterationIndex
+        - usageSummary
+        - capabilityPlanSummary
+      type: object
+    RuntimeRunKind:
+      enum:
+        - primary
+        - subrun
+      type: string
     RuntimeRunSnapshot:
       additionalProperties: false
       properties:
+        actorRef:
+          type: string
+        approvalState:
+          type: string
+        artifactRefs:
+          items:
+            type: string
+          type: array
+        capabilityPlanSummary:
+          $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
+        capabilityStateRef:
+          type: string
+        checkpoint:
+          $ref: "#/components/schemas/RuntimeRunCheckpoint"
         configSnapshotId:
           type: string
         configuredModelId:
@@ -7550,14 +8601,26 @@ components:
           type: string
         currentStep:
           type: string
+        delegatedByToolCallId:
+          type: string
         effectiveConfigHash:
           type: string
         id:
           type: string
+        lastExecutionOutcome:
+          $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
         modelId:
           type: string
         nextAction:
           type: string
+        parentRunId:
+          type: string
+        pendingMediation:
+          $ref: "#/components/schemas/RuntimePendingMediationSummary"
+        providerStateSummary:
+          items:
+            $ref: "#/components/schemas/RuntimeCapabilityProviderState"
+          type: array
         requestedActorId:
           type: string
         requestedActorKind:
@@ -7570,6 +8633,8 @@ components:
           type: string
         resolvedTarget:
           $ref: "#/components/schemas/ResolvedExecutionTarget"
+        runKind:
+          $ref: "#/components/schemas/RuntimeRunKind"
         sessionId:
           type: string
         startedAt:
@@ -7580,12 +8645,18 @@ components:
           type: array
         status:
           $ref: "#/components/schemas/RunStatus"
+        traceContext:
+          $ref: "#/components/schemas/RuntimeTraceContext"
         updatedAt:
           type: integer
+        usageSummary:
+          $ref: "#/components/schemas/RuntimeUsageSummary"
       required:
         - id
         - sessionId
         - conversationId
+        - actorRef
+        - runKind
         - status
         - currentStep
         - startedAt
@@ -7593,6 +8664,12 @@ components:
         - configSnapshotId
         - effectiveConfigHash
         - startedFromScopeSet
+        - usageSummary
+        - artifactRefs
+        - traceContext
+        - checkpoint
+        - capabilityPlanSummary
+        - providerStateSummary
       type: object
     RuntimeSecretReferenceState:
       enum:
@@ -7619,14 +8696,38 @@ components:
     RuntimeSessionDetail:
       additionalProperties: false
       properties:
+        activeRunId:
+          type: string
+        capabilityPlanSummary:
+          $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
+        capabilityStateRef:
+          type: string
+        lastExecutionOutcome:
+          $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+        manifestRevision:
+          type: string
+        memorySummary:
+          $ref: "#/components/schemas/RuntimeMemorySummary"
         messages:
           items:
             $ref: "#/components/schemas/RuntimeMessage"
           type: array
         pendingApproval:
           $ref: "#/components/schemas/RuntimeApprovalRequest"
+        pendingMediation:
+          $ref: "#/components/schemas/RuntimePendingMediationSummary"
+        providerStateSummary:
+          items:
+            $ref: "#/components/schemas/RuntimeCapabilityProviderState"
+          type: array
         run:
           $ref: "#/components/schemas/RuntimeRunSnapshot"
+        selectedActorRef:
+          type: string
+        sessionPolicy:
+          $ref: "#/components/schemas/RuntimePolicySnapshot"
+        subrunCount:
+          type: integer
         summary:
           $ref: "#/components/schemas/RuntimeSessionSummary"
         trace:
@@ -7638,6 +8739,14 @@ components:
         - run
         - messages
         - trace
+        - selectedActorRef
+        - manifestRevision
+        - sessionPolicy
+        - activeRunId
+        - subrunCount
+        - memorySummary
+        - capabilityPlanSummary
+        - providerStateSummary
       type: object
     RuntimeSessionKind:
       enum:
@@ -7647,6 +8756,12 @@ components:
     RuntimeSessionSummary:
       additionalProperties: false
       properties:
+        activeRunId:
+          type: string
+        capabilityPlanSummary:
+          $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
+        capabilityStateRef:
+          type: string
         configSnapshotId:
           type: string
         conversationId:
@@ -7655,18 +8770,36 @@ components:
           type: string
         id:
           type: string
+        lastExecutionOutcome:
+          $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
         lastMessagePreview:
           type: string
+        manifestRevision:
+          type: string
+        memorySummary:
+          $ref: "#/components/schemas/RuntimeMemorySummary"
+        pendingMediation:
+          $ref: "#/components/schemas/RuntimePendingMediationSummary"
         projectId:
+          type: string
+        providerStateSummary:
+          items:
+            $ref: "#/components/schemas/RuntimeCapabilityProviderState"
+          type: array
+        selectedActorRef:
           type: string
         sessionKind:
           $ref: "#/components/schemas/RuntimeSessionKind"
+        sessionPolicy:
+          $ref: "#/components/schemas/RuntimePolicySnapshot"
         startedFromScopeSet:
           items:
             $ref: "#/components/schemas/RuntimeConfigScope"
           type: array
         status:
           $ref: "#/components/schemas/RunStatus"
+        subrunCount:
+          type: integer
         title:
           type: string
         updatedAt:
@@ -7682,6 +8815,30 @@ components:
         - configSnapshotId
         - effectiveConfigHash
         - startedFromScopeSet
+        - selectedActorRef
+        - manifestRevision
+        - sessionPolicy
+        - activeRunId
+        - subrunCount
+        - memorySummary
+        - capabilityPlanSummary
+        - providerStateSummary
+      type: object
+    RuntimeTraceContext:
+      additionalProperties: false
+      properties:
+        parentRunId:
+          type: string
+        sessionId:
+          type: string
+        traceId:
+          type: string
+        turnId:
+          type: string
+      required:
+        - sessionId
+        - traceId
+        - turnId
       type: object
     RuntimeTraceItem:
       additionalProperties: false
@@ -7725,6 +8882,20 @@ components:
         - tone
         - timestamp
         - actor
+      type: object
+    RuntimeUsageSummary:
+      additionalProperties: false
+      properties:
+        inputTokens:
+          type: integer
+        outputTokens:
+          type: integer
+        totalTokens:
+          type: integer
+      required:
+        - inputTokens
+        - outputTokens
+        - totalTokens
       type: object
     SavePetPresenceInput:
       additionalProperties: false
@@ -7780,6 +8951,40 @@ components:
         - revoked
         - expired
       type: string
+    SharedCapabilityPolicy:
+      additionalProperties: false
+      properties:
+        allowTeamInheritedCapabilities:
+          type: boolean
+        denyDirectMemberEscalation:
+          type: boolean
+        sharedCapabilityRefs:
+          items:
+            type: string
+          type: array
+      required:
+        - allowTeamInheritedCapabilities
+        - denyDirectMemberEscalation
+        - sharedCapabilityRefs
+      type: object
+    SharedMemoryPolicy:
+      additionalProperties: false
+      properties:
+        requireReviewBeforePersist:
+          type: boolean
+        shareMode:
+          enum:
+            - isolated
+            - team-shared
+            - project-shared
+          type: string
+        writableByWorkers:
+          type: boolean
+      required:
+        - shareMode
+        - writableByWorkers
+        - requireReviewBeforePersist
+      type: object
     ShellBootstrap:
       additionalProperties: false
       properties:
@@ -7883,21 +9088,12 @@ components:
     SubmitRuntimeTurnInput:
       additionalProperties: false
       properties:
-        actorId:
-          type: string
-        actorKind:
-          $ref: "#/components/schemas/ConversationActorKind"
-        configuredModelId:
-          type: string
         content:
-          type: string
-        modelId:
           type: string
         permissionMode:
           $ref: "#/components/schemas/RuntimePermissionMode"
       required:
         - content
-        - permissionMode
       type: object
     SystemAuthStatus:
       additionalProperties: false
@@ -7952,6 +9148,10 @@ components:
     TeamRecord:
       additionalProperties: false
       properties:
+        approvalPreference:
+          $ref: "#/components/schemas/ApprovalPreference"
+        artifactHandoffPolicy:
+          $ref: "#/components/schemas/ArtifactHandoffPolicy"
         avatar:
           type: string
         avatarPath:
@@ -7960,10 +9160,22 @@ components:
           items:
             type: string
           type: array
+        capabilityPolicy:
+          $ref: "#/components/schemas/CapabilityPolicy"
+        defaultModelStrategy:
+          $ref: "#/components/schemas/DefaultModelStrategy"
+        delegationPolicy:
+          $ref: "#/components/schemas/DelegationPolicy"
+        dependencyResolution:
+          items:
+            $ref: "#/components/schemas/AssetDependencyResolution"
+          type: array
         description:
           type: string
         id:
           type: string
+        importMetadata:
+          $ref: "#/components/schemas/AssetImportMetadata"
         integrationSource:
           additionalProperties: false
           properties:
@@ -7980,6 +9192,12 @@ components:
           type: object
         leaderAgentId:
           type: string
+        leaderRef:
+          type: string
+        mailboxPolicy:
+          $ref: "#/components/schemas/MailboxPolicy"
+        manifestRevision:
+          type: string
         mcpServerNames:
           items:
             type: string
@@ -7988,8 +9206,18 @@ components:
           items:
             type: string
           type: array
+        memberRefs:
+          items:
+            type: string
+          type: array
+        memoryPolicy:
+          $ref: "#/components/schemas/MemoryPolicy"
         name:
           type: string
+        outputContract:
+          $ref: "#/components/schemas/OutputContract"
+        permissionEnvelope:
+          $ref: "#/components/schemas/PermissionEnvelope"
         personality:
           type: string
         projectId:
@@ -7998,6 +9226,10 @@ components:
           type: string
         scope:
           $ref: "#/components/schemas/TeamScope"
+        sharedCapabilityPolicy:
+          $ref: "#/components/schemas/SharedCapabilityPolicy"
+        sharedMemoryPolicy:
+          $ref: "#/components/schemas/SharedMemoryPolicy"
         skillIds:
           items:
             type: string
@@ -8008,8 +9240,20 @@ components:
           items:
             type: string
           type: array
+        taskDomains:
+          items:
+            type: string
+          type: array
+        teamTopology:
+          $ref: "#/components/schemas/TeamTopology"
+        trustMetadata:
+          $ref: "#/components/schemas/AssetTrustMetadata"
         updatedAt:
           type: integer
+        workerConcurrencyLimit:
+          type: integer
+        workflowAffordance:
+          $ref: "#/components/schemas/WorkflowAffordance"
         workspaceId:
           type: string
       required:
@@ -8026,6 +9270,27 @@ components:
         - memberAgentIds
         - description
         - status
+        - taskDomains
+        - manifestRevision
+        - defaultModelStrategy
+        - capabilityPolicy
+        - permissionEnvelope
+        - memoryPolicy
+        - delegationPolicy
+        - approvalPreference
+        - outputContract
+        - sharedCapabilityPolicy
+        - leaderRef
+        - memberRefs
+        - teamTopology
+        - sharedMemoryPolicy
+        - mailboxPolicy
+        - artifactHandoffPolicy
+        - workflowAffordance
+        - workerConcurrencyLimit
+        - trustMetadata
+        - dependencyResolution
+        - importMetadata
         - updatedAt
       type: object
     TeamScope:
@@ -8038,6 +9303,24 @@ components:
         - active
         - archived
       type: string
+    TeamTopology:
+      additionalProperties: false
+      properties:
+        leaderRef:
+          type: string
+        memberRefs:
+          items:
+            type: string
+          type: array
+        mode:
+          enum:
+            - leader-orchestrated
+          type: string
+      required:
+        - mode
+        - leaderRef
+        - memberRefs
+      type: object
     ThemeMode:
       enum:
         - light
@@ -8185,20 +9468,34 @@ components:
     UpsertAgentInput:
       additionalProperties: false
       properties:
+        approvalPreference:
+          $ref: "#/components/schemas/ApprovalPreference"
         avatar:
           $ref: "#/components/schemas/AvatarUploadPayload"
         builtinToolKeys:
           items:
             type: string
           type: array
+        capabilityPolicy:
+          $ref: "#/components/schemas/CapabilityPolicy"
+        defaultModelStrategy:
+          $ref: "#/components/schemas/DefaultModelStrategy"
+        delegationPolicy:
+          $ref: "#/components/schemas/DelegationPolicy"
         description:
           type: string
         mcpServerNames:
           items:
             type: string
           type: array
+        memoryPolicy:
+          $ref: "#/components/schemas/MemoryPolicy"
         name:
           type: string
+        outputContract:
+          $ref: "#/components/schemas/OutputContract"
+        permissionEnvelope:
+          $ref: "#/components/schemas/PermissionEnvelope"
         personality:
           type: string
         projectId:
@@ -8209,6 +9506,8 @@ components:
           type: boolean
         scope:
           $ref: "#/components/schemas/AgentScope"
+        sharedCapabilityPolicy:
+          $ref: "#/components/schemas/SharedCapabilityPolicy"
         skillIds:
           items:
             type: string
@@ -8216,6 +9515,10 @@ components:
         status:
           $ref: "#/components/schemas/AgentStatus"
         tags:
+          items:
+            type: string
+          type: array
+        taskDomains:
           items:
             type: string
           type: array
@@ -8237,16 +9540,30 @@ components:
     UpsertTeamInput:
       additionalProperties: false
       properties:
+        approvalPreference:
+          $ref: "#/components/schemas/ApprovalPreference"
+        artifactHandoffPolicy:
+          $ref: "#/components/schemas/ArtifactHandoffPolicy"
         avatar:
           $ref: "#/components/schemas/AvatarUploadPayload"
         builtinToolKeys:
           items:
             type: string
           type: array
+        capabilityPolicy:
+          $ref: "#/components/schemas/CapabilityPolicy"
+        defaultModelStrategy:
+          $ref: "#/components/schemas/DefaultModelStrategy"
+        delegationPolicy:
+          $ref: "#/components/schemas/DelegationPolicy"
         description:
           type: string
         leaderAgentId:
           type: string
+        leaderRef:
+          type: string
+        mailboxPolicy:
+          $ref: "#/components/schemas/MailboxPolicy"
         mcpServerNames:
           items:
             type: string
@@ -8255,8 +9572,18 @@ components:
           items:
             type: string
           type: array
+        memberRefs:
+          items:
+            type: string
+          type: array
+        memoryPolicy:
+          $ref: "#/components/schemas/MemoryPolicy"
         name:
           type: string
+        outputContract:
+          $ref: "#/components/schemas/OutputContract"
+        permissionEnvelope:
+          $ref: "#/components/schemas/PermissionEnvelope"
         personality:
           type: string
         projectId:
@@ -8267,6 +9594,10 @@ components:
           type: boolean
         scope:
           $ref: "#/components/schemas/TeamScope"
+        sharedCapabilityPolicy:
+          $ref: "#/components/schemas/SharedCapabilityPolicy"
+        sharedMemoryPolicy:
+          $ref: "#/components/schemas/SharedMemoryPolicy"
         skillIds:
           items:
             type: string
@@ -8277,6 +9608,16 @@ components:
           items:
             type: string
           type: array
+        taskDomains:
+          items:
+            type: string
+          type: array
+        teamTopology:
+          $ref: "#/components/schemas/TeamTopology"
+        workerConcurrencyLimit:
+          type: integer
+        workflowAffordance:
+          $ref: "#/components/schemas/WorkflowAffordance"
         workspaceId:
           type: string
       required:
@@ -8417,6 +9758,22 @@ components:
         - configured
         - attention
       type: string
+    WorkflowAffordance:
+      additionalProperties: false
+      properties:
+        automationCapable:
+          type: boolean
+        backgroundCapable:
+          type: boolean
+        supportedTaskKinds:
+          items:
+            type: string
+          type: array
+      required:
+        - supportedTaskKinds
+        - backgroundCapable
+        - automationCapable
+      type: object
     WorkspaceActivityRecord:
       additionalProperties: false
       properties:

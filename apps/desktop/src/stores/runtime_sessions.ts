@@ -1,11 +1,12 @@
 import type {
   CreateRuntimeSessionInput,
+  PermissionMode,
   ProviderConfig,
+  RuntimePermissionMode,
   RuntimeConfiguredModelProbeResult,
   RuntimeEffectiveConfig,
   RuntimeSessionDetail,
   RuntimeSessionSummary,
-  SubmitRuntimeTurnInput,
 } from '@octopus/schema'
 
 import * as tauriClient from '@/tauri/client'
@@ -19,7 +20,12 @@ import {
 } from './runtime-config'
 import { createPendingApprovalAssistantMessage } from './runtime_messages'
 
-export interface RuntimeQueueItem extends SubmitRuntimeTurnInput {
+export interface RuntimeTurnDraftInput {
+  content: string
+  permissionMode?: PermissionMode | RuntimePermissionMode
+}
+
+export interface RuntimeQueueItem extends RuntimeTurnDraftInput {
   id: string
   sessionId: string
   createdAt: number
@@ -339,7 +345,7 @@ export const runtimeSessionActions = {
       return null
     }
   },
-  enqueueTurn(this: any, input: SubmitRuntimeTurnInput) {
+  enqueueTurn(this: any, input: RuntimeTurnDraftInput) {
     if (!this.activeSessionId) {
       return
     }

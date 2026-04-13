@@ -45,20 +45,14 @@ describe('runtime client transport', () => {
 
     await workspaceClient.runtime.submitUserTurn('runtime-session-conv-1', {
       content: 'hello',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'auto',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     }, 'idem-turn-1')
 
     const request = firstRequest()
     const headers = request.headers as Headers
     expect(JSON.parse(String(request.body))).toMatchObject({
       content: 'hello',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'workspace-write',
-      actorKind: 'agent',
-      actorId: 'agent-architect',
     })
     expect(headers.get('Idempotency-Key')).toBe('idem-turn-1')
   })
@@ -91,17 +85,12 @@ describe('runtime client transport', () => {
 
     await workspaceClient.runtime.submitUserTurn('runtime-session-conv-2', {
       content: 'hello',
-      modelId: 'claude-sonnet-4-5',
       permissionMode: 'danger-full-access',
-      actorKind: 'team',
-      actorId: 'team-studio',
     })
 
     const request = firstRequest()
     expect(JSON.parse(String(request.body))).toMatchObject({
       permissionMode: 'danger-full-access',
-      actorKind: 'team',
-      actorId: 'team-studio',
     })
   })
 

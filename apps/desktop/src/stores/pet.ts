@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 
-import type { PetChatSender, PetMessage, PetMotionState, PetPresenceState, PetProfile, PetWorkspaceSnapshot } from '@octopus/schema'
+import { resolveRuntimePermissionMode, type PetChatSender, type PetMessage, type PetMotionState, type PetPresenceState, type PetProfile, type PetWorkspaceSnapshot } from '@octopus/schema'
 
 import { useAgentStore } from '@/stores/agent'
 
@@ -318,6 +318,11 @@ export const usePetStore = defineStore('pet', () => {
       projectId,
       title: `${current.profile.displayName} ${projectId}`,
       sessionKind: 'pet',
+      selectedActorRef: preferredActor.value
+        ? `${preferredActor.value.kind}:${preferredActor.value.id}`
+        : 'agent:agent-architect',
+      selectedConfiguredModelId: resolvedConfiguredModelId.value || undefined,
+      executionPermissionMode: resolveRuntimePermissionMode(preferredPermissionMode.value),
     })
     if (!session) {
       return null
@@ -407,10 +412,7 @@ export const usePetStore = defineStore('pet', () => {
       })
       const submitted = await runtime.submitTurn({
         content: trimmed,
-        configuredModelId: resolvedConfiguredModelId.value,
-        permissionMode: preferredPermissionMode.value,
-        actorKind: preferredActor.value?.kind,
-        actorId: preferredActor.value?.id,
+        permissionMode: resolveRuntimePermissionMode(preferredPermissionMode.value),
       })
       errors.value = {
         ...errors.value,

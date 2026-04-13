@@ -20,9 +20,9 @@ use crate::McpLifecyclePhase;
 use super::{
     spawn_mcp_stdio_process, unsupported_server_failed_server, JsonRpcId, JsonRpcRequest,
     JsonRpcResponse, McpInitializeClientInfo, McpInitializeParams, McpInitializeResult,
-    McpInitializeServerInfo, McpListPromptsResult, McpListToolsResult, McpPrompt,
-    McpPromptMessage, McpReadResourceParams, McpReadResourceResult, McpServerManager,
-    McpServerManagerError, McpStdioProcess, McpTool, McpToolCallParams,
+    McpInitializeServerInfo, McpListPromptsResult, McpListToolsResult, McpPrompt, McpPromptMessage,
+    McpReadResourceParams, McpReadResourceResult, McpServerManager, McpServerManagerError,
+    McpStdioProcess, McpTool, McpToolCallParams,
 };
 
 fn temp_dir() -> PathBuf {
@@ -1371,10 +1371,17 @@ fn manager_discovers_and_gets_prompts_from_stdio_servers() {
         assert_eq!(prompts.len(), 1);
         assert_eq!(prompts[0].server_name, "alpha");
         assert_eq!(prompts[0].raw_name, "workspace-guide");
-        assert_eq!(prompts[0].qualified_name, "mcp_prompt__alpha__workspace-guide");
+        assert_eq!(
+            prompts[0].qualified_name,
+            "mcp_prompt__alpha__workspace-guide"
+        );
 
         let prompt = manager
-            .get_prompt("alpha", "workspace-guide", Some(json!({"topic": "workspace"})))
+            .get_prompt(
+                "alpha",
+                "workspace-guide",
+                Some(json!({"topic": "workspace"})),
+            )
             .await
             .expect("get prompt");
         assert_eq!(

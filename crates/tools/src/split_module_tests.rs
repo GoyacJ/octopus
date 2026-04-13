@@ -16,19 +16,18 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::{
-    AgentInput, AgentJob, CapabilityPlannerInput, CapabilityProvider, CapabilityRuntime,
-    LaneEventName, LaneFailureClass, SubagentToolExecutor, agent_permission_policy,
-    allowed_tools_for_subagent, classify_lane_failure, derive_agent_state,
+    agent_permission_policy, allowed_tools_for_subagent, classify_lane_failure, derive_agent_state,
     execute_agent_with_spawn, execute_tool, final_assistant_text, maybe_commit_provenance,
     mvp_tool_specs, permission_mode_from_plugin, persist_agent_terminal_state, push_output_block,
-    run_task_packet,
+    run_task_packet, AgentInput, AgentJob, CapabilityPlannerInput, CapabilityProvider,
+    CapabilityRuntime, LaneEventName, LaneFailureClass, SubagentToolExecutor,
 };
 use api::OutputContentBlock;
 use plugins::{PluginTool, PluginToolDefinition, PluginToolPermission};
 use runtime::{
-    ApiRequest, AssistantEvent, ConfigLoader, ConversationRuntime, PermissionMode,
-    PermissionPolicy, RuntimeError, Session, TaskPacket, ToolExecutor,
-    permission_enforcer::PermissionEnforcer,
+    permission_enforcer::PermissionEnforcer, ApiRequest, AssistantEvent, ConfigLoader,
+    ConversationRuntime, PermissionMode, PermissionPolicy, RuntimeError, Session, TaskPacket,
+    ToolExecutor,
 };
 use serde_json::json;
 
@@ -157,44 +156,6 @@ fn provider_prompt_skill_capability(
     }
 }
 
-fn provider_resource_capability(
-    capability_id: &str,
-    display_name: &str,
-) -> super::CapabilitySpec {
-    super::CapabilitySpec {
-        capability_id: capability_id.to_string(),
-        source_kind: super::CapabilitySourceKind::McpResource,
-        execution_kind: super::CapabilityExecutionKind::Resource,
-        display_name: display_name.to_string(),
-        description: "Read a provider-backed workspace resource.".to_string(),
-        when_to_use: Some("Use when the task needs provider-backed reference material.".to_string()),
-        input_schema: json!({
-            "type": "object",
-            "properties": {
-                "uri": { "type": "string" }
-            },
-            "required": ["uri"],
-            "additionalProperties": false
-        }),
-        search_hint: Some("workspace reference".to_string()),
-        visibility: super::CapabilityVisibility::DefaultVisible,
-        state: super::CapabilityState::Ready,
-        permission_profile: crate::capability_runtime::CapabilityPermissionProfile {
-            required_permission: PermissionMode::ReadOnly,
-        },
-        trust_profile: crate::capability_runtime::CapabilityTrustProfile::default(),
-        scope_constraints: crate::capability_runtime::CapabilityScopeConstraints::default(),
-        invocation_policy: crate::capability_runtime::CapabilityInvocationPolicy {
-            selectable: true,
-            requires_approval: false,
-            requires_auth: false,
-        },
-        concurrency_policy: super::CapabilityConcurrencyPolicy::ParallelRead,
-        provider_key: Some("mcp".to_string()),
-        executor_key: Some(capability_id.to_string()),
-    }
-}
-
 fn capability_runtime_with_runtime_tools(
     runtime_tools: Vec<super::RuntimeToolDefinition>,
 ) -> CapabilityRuntime {
@@ -215,6 +176,36 @@ fn execute_local_tool_with_runtime(
         .map_err(|error| error.to_string())
 }
 
+fn run_skill_discovery_with_runtime(
+    runtime: &CapabilityRuntime,
+    input: super::SkillDiscoveryInput,
+) -> serde_json::Value {
+    let current_dir = std::env::current_dir().ok();
+    let discovery = runtime.skill_discovery(
+        &input.query,
+        input.max_results.unwrap_or(5),
+        CapabilityPlannerInput::default().with_current_dir(current_dir.as_deref()),
+    );
+    serde_json::to_value(discovery).expect("skill discovery output should be json")
+}
+
+fn run_skill_tool_with_runtime(
+    runtime: &CapabilityRuntime,
+    input: super::SkillToolInput,
+) -> Result<String, String> {
+    let current_dir = std::env::current_dir().ok();
+    match runtime.execute_skill(
+        &input.skill,
+        input.arguments,
+        CapabilityPlannerInput::default().with_current_dir(current_dir.as_deref()),
+    ) {
+        Ok(result) => {
+            serde_json::to_string_pretty(&result).map_err(|error| error.to_string())
+        }
+        Err(error) => Err(error),
+    }
+}
+
 #[test]
 fn exposes_mvp_tools() {
     let names = mvp_tool_specs()
@@ -226,8 +217,6 @@ fn exposes_mvp_tools() {
     assert!(names.contains(&"WebFetch"));
     assert!(names.contains(&"WebSearch"));
     assert!(names.contains(&"TodoWrite"));
-    assert!(names.contains(&"SkillDiscovery"));
-    assert!(names.contains(&"SkillTool"));
     assert!(names.contains(&"Agent"));
     assert!(names.contains(&"ToolSearch"));
     assert!(names.contains(&"NotebookEdit"));
@@ -519,11 +508,9 @@ fn worker_get_on_unknown_id_returns_error() {
         result.is_err(),
         "WorkerGet on unknown id should return error"
     );
-    assert!(
-        result
-            .expect_err("unknown worker get should fail")
-            .contains("worker not found")
-    );
+    assert!(result
+        .expect_err("unknown worker get should fail")
+        .contains("worker not found"));
 }
 
 #[test]
@@ -788,11 +775,9 @@ fn subagent_tool_executor_denies_blocked_tool_before_dispatch() {
         .expect_err("subagent write tool should be denied before dispatch");
 
     // then
-    assert!(
-        error
-            .to_string()
-            .contains("is not enabled in the current capability surface")
-    );
+    assert!(error
+        .to_string()
+        .contains("is not enabled in the current capability surface"));
 }
 
 #[test]
@@ -835,12 +820,10 @@ fn subagent_tool_search_select_updates_shared_session_capability_state() {
             Some(&locked),
         ))
         .expect("activated tool should be visible");
-    assert!(
-        surface
-            .visible_tools
-            .iter()
-            .any(|capability| capability.display_name == "WebSearch")
-    );
+    assert!(surface
+        .visible_tools
+        .iter()
+        .any(|capability| capability.display_name == "WebSearch"));
 }
 
 #[test]
@@ -889,13 +872,11 @@ fn workspace_and_subagent_skill_paths_match_runtime_surface_rules() {
     );
     let workspace_discovery: serde_json::Value =
         serde_json::to_value(workspace_discovery).expect("workspace discovery should serialize");
-    assert!(
-        !workspace_discovery["matches"]
-            .as_array()
-            .expect("matches")
-            .iter()
-            .any(|value| value == "workspace-guide-parity")
-    );
+    assert!(!workspace_discovery["matches"]
+        .as_array()
+        .expect("matches")
+        .iter()
+        .any(|value| value == "workspace-guide-parity"));
 
     let workspace_error = capability_runtime
         .execute_skill(
@@ -906,12 +887,9 @@ fn workspace_and_subagent_skill_paths_match_runtime_surface_rules() {
         .expect_err("workspace/runtime skill path should be surface gated");
     assert!(workspace_error.contains("is not enabled in the current capability surface"));
 
-    let profile = super::CapabilityProfile::from_tools(
-        ["SkillDiscovery", "SkillTool"]
-            .into_iter()
-            .map(str::to_string)
-            .collect(),
-    );
+    let profile = super::CapabilityProfile::from_tools(BTreeSet::from([String::from(
+        "ToolSearch",
+    )]));
     let shared_state = std::sync::Arc::new(std::sync::Mutex::new(
         super::SessionCapabilityState::default(),
     ));
@@ -919,32 +897,24 @@ fn workspace_and_subagent_skill_paths_match_runtime_surface_rules() {
         SubagentToolExecutor::from_capability_provider(profile, capability_provider, shared_state);
 
     let subagent_discovery = executor
-        .execute(
-            "SkillDiscovery",
-            r#"{"query":"workspace guidance","max_results":10}"#,
-        )
-        .expect("subagent skill discovery should succeed");
+        .execute("ToolSearch", r#"{"query":"workspace guidance","max_results":10}"#)
+        .expect("subagent tool search should succeed");
     let subagent_discovery: serde_json::Value =
         serde_json::from_str(&subagent_discovery).expect("subagent discovery should be json");
-    assert!(
-        !subagent_discovery["matches"]
-            .as_array()
-            .expect("matches")
-            .iter()
-            .any(|value| value == "workspace-guide-parity")
-    );
+    assert!(!subagent_discovery["matches"]
+        .as_array()
+        .expect("matches")
+        .iter()
+        .any(|value| value == "workspace-guide-parity"));
 
-    let subagent_error = executor
-        .execute(
-            "SkillTool",
-            r#"{"skill":"workspace-guide-parity","arguments":{"topic":"workspace"}}"#,
+    let subagent_error = capability_runtime
+        .execute_skill(
+            "workspace-guide-parity",
+            Some(json!({"topic":"workspace"})),
+            super::CapabilityPlannerInput::default(),
         )
         .expect_err("subagent skill path should be surface gated");
-    assert!(
-        subagent_error
-            .to_string()
-            .contains("is not enabled in the current capability surface")
-    );
+    assert!(subagent_error.contains("is not enabled in the current capability surface"));
 }
 
 #[test]
@@ -982,8 +952,6 @@ fn builtin_capability_surface_classifies_default_visible_and_deferred_tools() {
 
     assert!(visible.contains(&"read_file"));
     assert!(visible.contains(&"ToolSearch"));
-    assert!(visible.contains(&"SkillDiscovery"));
-    assert!(visible.contains(&"SkillTool"));
     assert!(!deferred.contains(&"read_file"));
     assert!(deferred.contains(&"WebSearch"));
     assert!(!deferred.contains(&"Skill"));
@@ -1346,12 +1314,10 @@ fn managed_mcp_runtime_discovers_and_executes_prompt_capabilities() {
         .expect("managed runtime should execute MCP prompts as prompt skills");
 
     assert_eq!(executed.skill, prompt_capability.display_name);
-    assert!(
-        executed
-            .injected_system_sections()
-            .iter()
-            .any(|message| message.contains("MCP workspace guidance"))
-    );
+    assert!(executed
+        .injected_system_sections()
+        .iter()
+        .any(|message| message.contains("MCP workspace guidance")));
 
     mcp_runtime.shutdown().expect("mcp shutdown should succeed");
     cleanup_mcp_runtime_fixture(&config_home, &workspace);
@@ -1369,24 +1335,18 @@ fn session_activation_moves_deferred_tools_into_visible_surface() {
             Some(&state),
         ))
         .expect("planner surface should resolve");
-    assert!(
-        before
-            .visible_tools
-            .iter()
-            .any(|capability| capability.display_name == "ToolSearch")
-    );
-    assert!(
-        !before
-            .visible_tools
-            .iter()
-            .any(|capability| capability.display_name == "WebSearch")
-    );
-    assert!(
-        before
-            .deferred_tools
-            .iter()
-            .any(|capability| capability.display_name == "WebSearch")
-    );
+    assert!(before
+        .visible_tools
+        .iter()
+        .any(|capability| capability.display_name == "ToolSearch"));
+    assert!(!before
+        .visible_tools
+        .iter()
+        .any(|capability| capability.display_name == "WebSearch"));
+    assert!(before
+        .deferred_tools
+        .iter()
+        .any(|capability| capability.display_name == "WebSearch"));
 
     let search = runtime.search(
         "select:WebSearch",
@@ -1406,18 +1366,14 @@ fn session_activation_moves_deferred_tools_into_visible_surface() {
             Some(&state),
         ))
         .expect("planner surface should resolve after activation");
-    assert!(
-        after
-            .visible_tools
-            .iter()
-            .any(|capability| capability.display_name == "WebSearch")
-    );
-    assert!(
-        !after
-            .deferred_tools
-            .iter()
-            .any(|capability| capability.display_name == "WebSearch")
-    );
+    assert!(after
+        .visible_tools
+        .iter()
+        .any(|capability| capability.display_name == "WebSearch"));
+    assert!(!after
+        .deferred_tools
+        .iter()
+        .any(|capability| capability.display_name == "WebSearch"));
 
     let after_search = runtime.search(
         "web",
@@ -1428,13 +1384,11 @@ fn session_activation_moves_deferred_tools_into_visible_surface() {
     );
     let after_search_json =
         serde_json::to_value(after_search).expect("search output should serialize");
-    assert!(
-        !after_search_json["matches"]
-            .as_array()
-            .expect("matches should be present")
-            .iter()
-            .any(|value| value == "WebSearch")
-    );
+    assert!(!after_search_json["matches"]
+        .as_array()
+        .expect("matches should be present")
+        .iter()
+        .any(|value| value == "WebSearch"));
 }
 
 #[test]
@@ -1495,12 +1449,10 @@ fn web_fetch_supports_plain_text_and_rejects_invalid_url() {
 
     let output: serde_json::Value = serde_json::from_str(&result).expect("valid json");
     assert_eq!(output["url"], format!("http://{}/plain", server.addr()));
-    assert!(
-        output["result"]
-            .as_str()
-            .expect("result")
-            .contains("plain text response")
-    );
+    assert!(output["result"]
+        .as_str()
+        .expect("result")
+        .contains("plain text response"));
 
     let error = execute_tool(
         "WebFetch",
@@ -1797,6 +1749,27 @@ fn legacy_mcp_wrappers_are_removed_from_builtin_dispatch() {
 }
 
 #[test]
+fn legacy_skill_compat_wrappers_are_removed_from_builtin_dispatch() {
+    for (tool_name, input) in [
+        (
+            "SkillDiscovery",
+            json!({"query": "workspace guidance", "max_results": 3}),
+        ),
+        (
+            "SkillTool",
+            json!({"skill": "workspace-guide", "arguments": {"topic": "workspace"}}),
+        ),
+    ] {
+        let error = execute_tool(tool_name, &input)
+            .expect_err("legacy skill compat wrappers should no longer be dispatchable");
+        assert!(
+            error.contains(&format!("unsupported tool: {tool_name}")),
+            "unexpected error for {tool_name}: {error}"
+        );
+    }
+}
+
+#[test]
 fn tool_search_supports_keyword_and_select_queries() {
     let keyword = execute_tool(
         "ToolSearch",
@@ -1875,13 +1848,12 @@ Reference notes only.
     let original_home = std::env::var("HOME").ok();
     std::env::set_var("HOME", &home);
 
-    let discovered = execute_tool(
-        "SkillDiscovery",
-        &json!({
-            "query": "workspace guidance",
-            "max_results": 5
-        }),
-    )
+    let capability_runtime = CapabilityRuntime::builtin();
+    let discovered = serde_json::to_string_pretty(&capability_runtime.skill_discovery(
+        "workspace guidance",
+        5,
+        super::CapabilityPlannerInput::default(),
+    ))
     .expect("SkillDiscovery should succeed");
 
     let output: serde_json::Value = serde_json::from_str(&discovered).expect("valid json");
@@ -2082,18 +2054,14 @@ fn provider_prompt_skills_without_runtime_executors_stay_hidden_from_skill_disco
     let surface = runtime
         .surface_projection(super::CapabilityPlannerInput::default())
         .expect("planner should project a capability surface");
-    assert!(
-        !surface
-            .discoverable_skills
-            .iter()
-            .any(|skill| skill.display_name == "workspace-guide")
-    );
-    assert!(
-        surface
-            .hidden_capabilities
-            .iter()
-            .any(|skill| skill.display_name == "workspace-guide")
-    );
+    assert!(!surface
+        .discoverable_skills
+        .iter()
+        .any(|skill| skill.display_name == "workspace-guide"));
+    assert!(surface
+        .hidden_capabilities
+        .iter()
+        .any(|skill| skill.display_name == "workspace-guide"));
 
     let discovery = runtime.skill_discovery(
         "workspace guidance",
@@ -2106,11 +2074,9 @@ fn provider_prompt_skills_without_runtime_executors_stay_hidden_from_skill_disco
     let results = output["results"].as_array().expect("results");
 
     assert!(!matches.iter().any(|value| value == "workspace-guide"));
-    assert!(
-        !results
-            .iter()
-            .any(|entry| entry["name"] == "workspace-guide")
-    );
+    assert!(!results
+        .iter()
+        .any(|entry| entry["name"] == "workspace-guide"));
 }
 
 #[test]
@@ -2120,7 +2086,7 @@ fn provider_prompt_skills_with_registered_runtime_executors_are_discoverable_and
         super::CapabilitySourceKind::PluginSkill,
         "workspace-guide",
     );
-    let mut runtime = capability_runtime_with_provided_capabilities(vec![capability.clone()]);
+    let runtime = capability_runtime_with_provided_capabilities(vec![capability.clone()]);
     runtime.register_prompt_skill_executor(
         capability
             .executor_key
@@ -2152,12 +2118,10 @@ fn provider_prompt_skills_with_registered_runtime_executors_are_discoverable_and
     let surface = runtime
         .surface_projection(super::CapabilityPlannerInput::default())
         .expect("planner should project a capability surface");
-    assert!(
-        surface
-            .discoverable_skills
-            .iter()
-            .any(|skill| skill.display_name == "workspace-guide")
-    );
+    assert!(surface
+        .discoverable_skills
+        .iter()
+        .any(|skill| skill.display_name == "workspace-guide"));
 
     let discovery = runtime.skill_discovery(
         "workspace guidance",
@@ -2166,32 +2130,22 @@ fn provider_prompt_skills_with_registered_runtime_executors_are_discoverable_and
     );
     let output: serde_json::Value =
         serde_json::to_value(discovery).expect("skill discovery output should be json");
-    assert!(
-        output["matches"]
-            .as_array()
-            .expect("matches")
-            .iter()
-            .any(|value| value == "workspace-guide")
-    );
+    assert!(output["matches"]
+        .as_array()
+        .expect("matches")
+        .iter()
+        .any(|value| value == "workspace-guide"));
 
     let executed = runtime
-        .execute_tool(
-            "SkillTool",
-            json!({
-                "skill": "workspace-guide",
-                "arguments": { "topic": "workspace" }
-            }),
+        .execute_skill_detailed(
+            "workspace-guide",
+            Some(json!({ "topic": "workspace" })),
             super::CapabilityPlannerInput::default(),
-            &store,
-            None,
-            None,
-            |_kind, _tool_name, _input| {
-                panic!("provider prompt skills should execute through the prompt-skill executor")
-            },
         )
         .expect("provider-backed prompt skill should execute");
+    store.apply_skill_execution_result(&executed);
     let executed: serde_json::Value =
-        serde_json::from_str(&executed).expect("skill execution output should be json");
+        serde_json::to_value(&executed).expect("skill execution output should be json");
     assert_eq!(executed["skill"], "workspace-guide");
     assert_eq!(executed["tool_grants"][0], "WebSearch");
     assert_eq!(executed["model_override"], "claude-opus-4-6");
@@ -2201,12 +2155,10 @@ fn provider_prompt_skills_with_registered_runtime_executors_are_discoverable_and
     assert!(snapshot.is_tool_granted("WebSearch"));
     assert_eq!(snapshot.model_override(), Some("claude-opus-4-6"));
     assert_eq!(snapshot.effort_override(), Some("high"));
-    assert!(
-        snapshot
-            .injected_skill_messages()
-            .iter()
-            .any(|message| message.contains("Provider workspace guidance"))
-    );
+    assert!(snapshot
+        .injected_skill_messages()
+        .iter()
+        .any(|message| message.contains("Provider workspace guidance")));
 }
 
 #[test]
@@ -2221,27 +2173,16 @@ fn capability_runtime_execute_tool_surface_gates_provider_prompt_skill_without_r
     let store = super::SessionCapabilityStore::default();
 
     let error = runtime
-        .execute_tool(
-            "SkillTool",
-            json!({
-                "skill": "workspace-guide",
-                "arguments": { "topic": "workspace" }
-            }),
+        .execute_skill(
+            "workspace-guide",
+            Some(json!({ "topic": "workspace" })),
             super::CapabilityPlannerInput::default(),
-            &store,
-            None,
-            None,
-            |_kind, _tool_name, _input| {
-                panic!("provider prompt skills should not dispatch through legacy tool lookup")
-            },
         )
         .expect_err("provider-backed prompt skills without executors should be surface gated");
 
-    assert!(
-        error
-            .to_string()
-            .contains("is not enabled in the current capability surface")
-    );
+    assert!(error
+        .to_string()
+        .contains("is not enabled in the current capability surface"));
     let snapshot = store.snapshot();
     assert!(snapshot.skill_state_updates().is_empty());
     assert!(snapshot.injected_skill_messages().is_empty());
@@ -2259,32 +2200,17 @@ fn capability_runtime_execute_tool_reports_hidden_provider_prompt_skill_as_surfa
     capability.visibility = super::CapabilityVisibility::Hidden;
     capability.executor_key = None;
     let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
-    let store = super::SessionCapabilityStore::default();
-
     let error = runtime
-        .execute_tool(
-            "SkillTool",
-            json!({
-                "skill": "workspace-guide-hidden",
-                "arguments": { "topic": "workspace" }
-            }),
+        .execute_skill(
+            "workspace-guide-hidden",
+            Some(json!({ "topic": "workspace" })),
             super::CapabilityPlannerInput::default(),
-            &store,
-            None,
-            None,
-            |_kind, _tool_name, _input| {
-                panic!(
-                    "hidden provider prompt skills should not dispatch through legacy tool lookup"
-                )
-            },
         )
         .expect_err("hidden provider prompt skills should be surface gated");
 
-    assert!(
-        error
-            .to_string()
-            .contains("is not enabled in the current capability surface")
-    );
+    assert!(error
+        .to_string()
+        .contains("is not enabled in the current capability surface"));
 }
 
 #[test]
@@ -2300,18 +2226,14 @@ fn skill_discovery_hides_non_selectable_provider_prompt_skills() {
     let surface = runtime
         .surface_projection(super::CapabilityPlannerInput::default())
         .expect("planner should project a capability surface");
-    assert!(
-        !surface
-            .discoverable_skills
-            .iter()
-            .any(|skill| skill.display_name == "workspace-guide-disabled")
-    );
-    assert!(
-        surface
-            .hidden_capabilities
-            .iter()
-            .any(|skill| skill.display_name == "workspace-guide-disabled")
-    );
+    assert!(!surface
+        .discoverable_skills
+        .iter()
+        .any(|skill| skill.display_name == "workspace-guide-disabled"));
+    assert!(surface
+        .hidden_capabilities
+        .iter()
+        .any(|skill| skill.display_name == "workspace-guide-disabled"));
 
     let discovery = runtime.skill_discovery(
         "workspace guidance",
@@ -2321,11 +2243,9 @@ fn skill_discovery_hides_non_selectable_provider_prompt_skills() {
     let output: serde_json::Value =
         serde_json::to_value(discovery).expect("skill discovery output should be json");
     let matches = output["matches"].as_array().expect("matches");
-    assert!(
-        !matches
-            .iter()
-            .any(|value| value == "workspace-guide-disabled")
-    );
+    assert!(!matches
+        .iter()
+        .any(|value| value == "workspace-guide-disabled"));
 }
 
 #[test]
@@ -2338,24 +2258,19 @@ fn builtin_skill_discovery_compat_shim_hides_provider_prompt_skills_without_runt
     capability.executor_key = None;
     let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
 
-    let output = super::builtin_exec::run_skill_discovery_with_runtime(
+    let output = run_skill_discovery_with_runtime(
         &runtime,
         super::SkillDiscoveryInput {
             query: "workspace guidance".to_string(),
             max_results: Some(10),
         },
-    )
-    .expect("compat shim should execute through runtime facade");
-    let output: serde_json::Value =
-        serde_json::from_str(&output).expect("compat skill discovery output should be json");
-
-    assert!(
-        !output["matches"]
-            .as_array()
-            .expect("matches")
-            .iter()
-            .any(|value| value == "workspace-guide-compat")
     );
+
+    assert!(!output["matches"]
+        .as_array()
+        .expect("matches")
+        .iter()
+        .any(|value| value == "workspace-guide-compat"));
 }
 
 #[test]
@@ -2368,7 +2283,7 @@ fn builtin_skill_tool_compat_shim_surface_gates_provider_prompt_skills_without_r
     capability.executor_key = None;
     let runtime = capability_runtime_with_provided_capabilities(vec![capability]);
 
-    let error = super::builtin_exec::run_skill_tool_with_runtime(
+    let error = run_skill_tool_with_runtime(
         &runtime,
         super::SkillToolInput {
             skill: "workspace-guide-compat".to_string(),
@@ -2418,25 +2333,20 @@ Scoped workspace guidance.
 
     let runtime = CapabilityRuntime::builtin();
 
-    let path_mismatch_discovery = super::builtin_exec::run_skill_discovery_with_runtime(
+    let path_mismatch_discovery = run_skill_discovery_with_runtime(
         &runtime,
         super::SkillDiscoveryInput {
             query: "workspace guidance".to_string(),
             max_results: Some(10),
         },
-    )
-    .expect("compat discovery should execute through runtime facade");
-    let path_mismatch_discovery: serde_json::Value = serde_json::from_str(&path_mismatch_discovery)
-        .expect("compat discovery output should be json");
-    assert!(
-        !path_mismatch_discovery["matches"]
-            .as_array()
-            .expect("matches")
-            .iter()
-            .any(|value| value == "workspace-guide-compat-local")
     );
+    assert!(!path_mismatch_discovery["matches"]
+        .as_array()
+        .expect("matches")
+        .iter()
+        .any(|value| value == "workspace-guide-compat-local"));
 
-    let path_mismatch_error = super::builtin_exec::run_skill_tool_with_runtime(
+    let path_mismatch_error = run_skill_tool_with_runtime(
         &runtime,
         super::SkillToolInput {
             skill: "workspace-guide-compat-local".to_string(),
@@ -2457,26 +2367,20 @@ Scoped workspace guidance.
     )
     .expect("workspace settings should exist");
 
-    let trust_mismatch_discovery = super::builtin_exec::run_skill_discovery_with_runtime(
+    let trust_mismatch_discovery = run_skill_discovery_with_runtime(
         &runtime,
         super::SkillDiscoveryInput {
             query: "workspace guidance".to_string(),
             max_results: Some(10),
         },
-    )
-    .expect("compat discovery should execute through runtime facade");
-    let trust_mismatch_discovery: serde_json::Value =
-        serde_json::from_str(&trust_mismatch_discovery)
-            .expect("compat discovery output should be json");
-    assert!(
-        !trust_mismatch_discovery["matches"]
-            .as_array()
-            .expect("matches")
-            .iter()
-            .any(|value| value == "workspace-guide-compat-local")
     );
+    assert!(!trust_mismatch_discovery["matches"]
+        .as_array()
+        .expect("matches")
+        .iter()
+        .any(|value| value == "workspace-guide-compat-local"));
 
-    let trust_mismatch_error = super::builtin_exec::run_skill_tool_with_runtime(
+    let trust_mismatch_error = run_skill_tool_with_runtime(
         &runtime,
         super::SkillToolInput {
             skill: "workspace-guide-compat-local".to_string(),
@@ -2666,25 +2570,19 @@ Guide the model through the workspace.
         .surface_projection_for_allowlist(None, None)
         .expect("builtin capabilities should plan");
 
-    assert!(
-        surface
-            .visible_tools
-            .iter()
-            .any(|capability| capability.display_name == "read_file")
-    );
-    assert!(
-        surface
-            .discoverable_skills
-            .iter()
-            .any(|capability| capability.display_name == "help")
-    );
+    assert!(surface
+        .visible_tools
+        .iter()
+        .any(|capability| capability.display_name == "read_file"));
+    assert!(surface
+        .discoverable_skills
+        .iter()
+        .any(|capability| capability.display_name == "help"));
     assert!(surface.available_resources.is_empty());
-    assert!(
-        !surface
-            .hidden_capabilities
-            .iter()
-            .any(|capability| capability.display_name == "help")
-    );
+    assert!(!surface
+        .hidden_capabilities
+        .iter()
+        .any(|capability| capability.display_name == "help"));
 
     if let Some(home) = original_home {
         std::env::set_var("HOME", home);
@@ -2727,32 +2625,24 @@ Guide the model through the workspace.
     let runtime = CapabilityRuntime::builtin();
     let profile = BTreeSet::from([
         String::from("ToolSearch"),
-        String::from("SkillDiscovery"),
-        String::from("SkillTool"),
         String::from("WebSearch"),
     ]);
 
     let surface = runtime
         .surface_projection(super::CapabilityPlannerInput::new(Some(&profile), None))
         .expect("runtime facade should project a capability surface");
-    assert!(
-        surface
-            .visible_tools
-            .iter()
-            .any(|capability| capability.display_name == "ToolSearch")
-    );
-    assert!(
-        surface
-            .discoverable_skills
-            .iter()
-            .any(|capability| capability.display_name == "help")
-    );
-    assert!(
-        surface
-            .deferred_tools
-            .iter()
-            .any(|capability| capability.display_name == "WebSearch")
-    );
+    assert!(surface
+        .visible_tools
+        .iter()
+        .any(|capability| capability.display_name == "ToolSearch"));
+    assert!(surface
+        .discoverable_skills
+        .iter()
+        .any(|capability| capability.display_name == "help"));
+    assert!(surface
+        .deferred_tools
+        .iter()
+        .any(|capability| capability.display_name == "WebSearch"));
 
     let search = runtime.search(
         "select:WebSearch",
@@ -2837,23 +2727,17 @@ Guide the model through the workspace.
     let store = super::SessionCapabilityStore::default();
 
     let output = runtime
-        .execute_tool(
-            "SkillTool",
-            json!({
-                "skill": "help",
-                "arguments": { "topic": "workspace" }
-            }),
+        .execute_skill_detailed(
+            "help",
+            Some(json!({
+                "topic": "workspace"
+            })),
             super::CapabilityPlannerInput::default(),
-            &store,
-            None,
-            None,
-            |_kind, _tool_name, _input| {
-                panic!("SkillTool should execute inside capability runtime")
-            },
         )
         .expect("SkillTool should execute through runtime facade");
+    store.apply_skill_execution_result(&output);
     let output_json: serde_json::Value =
-        serde_json::from_str(&output).expect("skill tool output should be json");
+        serde_json::to_value(&output).expect("skill tool output should be json");
 
     assert_eq!(output_json["skill"], "help");
     assert_eq!(output_json["tool_grants"][0], "WebSearch");
@@ -2861,12 +2745,10 @@ Guide the model through the workspace.
     assert!(snapshot.is_tool_granted("WebSearch"));
     assert_eq!(snapshot.model_override(), Some("claude-sonnet-4-5"));
     assert_eq!(snapshot.effort_override(), Some("high"));
-    assert!(
-        snapshot
-            .injected_skill_messages()
-            .iter()
-            .any(|message| message.contains("Guide the model through the workspace"))
-    );
+    assert!(snapshot
+        .injected_skill_messages()
+        .iter()
+        .any(|message| message.contains("Guide the model through the workspace")));
 
     if let Some(home) = original_home {
         std::env::set_var("HOME", home);
@@ -2916,22 +2798,16 @@ Build a plan for the provided task.
     let store = super::SessionCapabilityStore::default();
 
     let error = runtime
-        .execute_tool(
-            "SkillTool",
-            json!({
-                "skill": "planner",
-                "arguments": { "topic": "workspace auth" }
-            }),
+        .execute_skill_detailed(
+            "planner",
+            Some(json!({
+                "topic": "workspace auth"
+            })),
             super::CapabilityPlannerInput::default(),
-            &store,
-            None,
-            None,
-            |_kind, _tool_name, _input| {
-                panic!("SkillTool should execute inside capability runtime")
-            },
         )
         .expect_err("fork spawn failures should surface");
-    assert!(error.to_string().contains("failed to spawn sub-agent"));
+    store.apply_skill_state_updates(&error.state_updates);
+    assert!(error.message.contains("failed to spawn sub-agent"));
 
     let raw_state = store.with_state(Clone::clone);
     assert!(!raw_state.is_tool_granted("WebSearch"));
@@ -2960,16 +2836,14 @@ Build a plan for the provided task.
     assert_eq!(fork_spawn.1.as_deref(), Some("Plan"));
     assert!(Path::new(&fork_spawn.2).exists());
     assert!(Path::new(&fork_spawn.3).exists());
-    assert!(
-        raw_state
-            .skill_state_updates()
-            .contains(&super::SkillStateUpdate::ForkFailed {
-                agent_id: fork_spawn.0,
-                output_file: fork_spawn.2,
-                manifest_file: fork_spawn.3,
-                error: Some("failed to spawn sub-agent: thread creation failed".to_string()),
-            })
-    );
+    assert!(raw_state
+        .skill_state_updates()
+        .contains(&super::SkillStateUpdate::ForkFailed {
+            agent_id: fork_spawn.0,
+            output_file: fork_spawn.2,
+            manifest_file: fork_spawn.3,
+            error: Some("failed to spawn sub-agent: thread creation failed".to_string()),
+        }));
 
     super::skill_runtime::set_skill_fork_spawn_override(None);
     if let Some(home) = original_home {
@@ -3245,6 +3119,54 @@ fn capability_runtime_execute_tool_mediation_hook_blocks_and_traces_dispatch() {
 }
 
 #[test]
+fn capability_runtime_execute_tool_with_outcome_preserves_structured_mediation_state() {
+    let runtime = capability_runtime_with_runtime_tools(vec![super::RuntimeToolDefinition {
+        name: "RuntimeAuth".to_string(),
+        description: Some("Auth-gated runtime write.".to_string()),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "value": { "type": "string" }
+            },
+            "required": ["value"],
+            "additionalProperties": false
+        }),
+        required_permission: runtime::PermissionMode::WorkspaceWrite,
+    }]);
+    let store = super::SessionCapabilityStore::default();
+    store.activate(super::CapabilityActivation::tool("RuntimeAuth"));
+    let profile = BTreeSet::from([String::from("RuntimeAuth")]);
+    let state = store.snapshot();
+
+    runtime.set_mediation_hook(|request| {
+        assert_eq!(request.tool_name, "RuntimeAuth");
+        super::CapabilityMediationDecision::RequireAuth(Some(
+            "sign in before calling runtime auth tool".to_string(),
+        ))
+    });
+
+    let outcome = runtime.execute_tool_with_outcome(
+        "RuntimeAuth",
+        json!({ "value": "blocked" }),
+        super::CapabilityPlannerInput::new(Some(&profile), Some(&state)),
+        &store,
+        None,
+        None,
+        |_dispatch_kind, _tool_name, _input| {
+            panic!("auth-gated dispatch should not execute")
+        },
+    );
+
+    assert_eq!(
+        outcome,
+        runtime::ToolExecutionOutcome::RequireAuth {
+            reason: Some("sign in before calling runtime auth tool".to_string())
+        }
+    );
+    assert!(store.snapshot().is_tool_pending("RuntimeAuth"));
+}
+
+#[test]
 fn capability_runtime_execute_tool_executes_builtin_without_external_dispatch() {
     let runtime = CapabilityRuntime::builtin();
     let store = super::SessionCapabilityStore::default();
@@ -3372,16 +3294,14 @@ fn session_capability_store_persists_and_restores_shared_runtime_state() {
     assert_eq!(snapshot.injected_skill_messages(), &["Injected guidance"]);
     assert_eq!(snapshot.model_override(), Some("claude-sonnet-4-6"));
     assert_eq!(snapshot.effort_override(), Some("medium"));
-    assert!(
-        snapshot
-            .skill_state_updates()
-            .contains(&super::SkillStateUpdate::ForkSpawned {
-                agent_id: "agent-123".to_string(),
-                subagent_type: Some("Plan".to_string()),
-                output_file: "/tmp/agent-123/output.json".to_string(),
-                manifest_file: "/tmp/agent-123/manifest.json".to_string(),
-            })
-    );
+    assert!(snapshot
+        .skill_state_updates()
+        .contains(&super::SkillStateUpdate::ForkSpawned {
+            agent_id: "agent-123".to_string(),
+            subagent_type: Some("Plan".to_string()),
+            output_file: "/tmp/agent-123/output.json".to_string(),
+            manifest_file: "/tmp/agent-123/manifest.json".to_string(),
+        }));
 }
 
 #[test]
@@ -3447,27 +3367,23 @@ fn session_capability_store_restore_marks_fork_lifecycle_from_agent_manifest() {
         .expect("store state should restore");
     let snapshot = restored.snapshot();
 
-    assert!(
-        snapshot
-            .skill_state_updates()
-            .contains(&super::SkillStateUpdate::ForkRestored {
-                agent_id: "agent-restore".to_string(),
-                status: "completed".to_string(),
-                derived_state: "finished_cleanable".to_string(),
-                output_file: output_file.display().to_string(),
-                manifest_file: manifest_file.display().to_string(),
-            })
-    );
-    assert!(
-        snapshot
-            .skill_state_updates()
-            .contains(&super::SkillStateUpdate::ForkCompleted {
-                agent_id: "agent-restore".to_string(),
-                output_file: output_file.display().to_string(),
-                manifest_file: manifest_file.display().to_string(),
-                completed_at: Some("2026-04-12T00:00:05Z".to_string()),
-            })
-    );
+    assert!(snapshot
+        .skill_state_updates()
+        .contains(&super::SkillStateUpdate::ForkRestored {
+            agent_id: "agent-restore".to_string(),
+            status: "completed".to_string(),
+            derived_state: "finished_cleanable".to_string(),
+            output_file: output_file.display().to_string(),
+            manifest_file: manifest_file.display().to_string(),
+        }));
+    assert!(snapshot
+        .skill_state_updates()
+        .contains(&super::SkillStateUpdate::ForkCompleted {
+            agent_id: "agent-restore".to_string(),
+            output_file: output_file.display().to_string(),
+            manifest_file: manifest_file.display().to_string(),
+            completed_at: Some("2026-04-12T00:00:05Z".to_string()),
+        }));
 
     fs::remove_dir_all(output_dir).expect("temp output dir should clean up");
 }
@@ -3646,16 +3562,14 @@ fn session_capability_store_snapshot_marks_failed_fork_lifecycle_from_agent_mani
     });
 
     let snapshot = store.snapshot();
-    assert!(
-        snapshot
-            .skill_state_updates()
-            .contains(&super::SkillStateUpdate::ForkFailed {
-                agent_id: "agent-failed".to_string(),
-                output_file: output_file.display().to_string(),
-                manifest_file: manifest_file.display().to_string(),
-                error: Some("sub-agent thread panicked".to_string()),
-            })
-    );
+    assert!(snapshot
+        .skill_state_updates()
+        .contains(&super::SkillStateUpdate::ForkFailed {
+            agent_id: "agent-failed".to_string(),
+            output_file: output_file.display().to_string(),
+            manifest_file: manifest_file.display().to_string(),
+            error: Some("sub-agent thread panicked".to_string()),
+        }));
     assert!(
         !snapshot.skill_state_updates().iter().any(|update| matches!(
             update,
@@ -3772,20 +3686,10 @@ Guide the model through the workspace.
 
     let capability_provider = CapabilityProvider::builtin();
     let capability_runtime = CapabilityRuntime::new(capability_provider.clone());
-    let profile = BTreeSet::from([
-        String::from("SkillDiscovery"),
-        String::from("SkillTool"),
-        String::from("ToolSearch"),
-        String::from("WebSearch"),
-    ]);
+    let profile = BTreeSet::from([String::from("ToolSearch"), String::from("WebSearch")]);
     let shared_state = std::sync::Arc::new(std::sync::Mutex::new(
         super::SessionCapabilityState::default(),
     ));
-    let mut executor = SubagentToolExecutor::from_capability_provider(
-        super::CapabilityProfile::from_tools(profile.clone()),
-        capability_provider,
-        shared_state.clone(),
-    );
 
     let before = {
         let locked = shared_state
@@ -3798,20 +3702,26 @@ Guide the model through the workspace.
             ))
             .expect("planner surface should resolve before grant")
     };
-    assert!(
-        !before
-            .visible_tools
-            .iter()
-            .any(|capability| capability.display_name == "WebSearch")
-    );
+    assert!(!before
+        .visible_tools
+        .iter()
+        .any(|capability| capability.display_name == "WebSearch"));
 
-    let result = executor
-        .execute(
-            "SkillTool",
-            r#"{"skill":"help","arguments":{"topic":"workspace"}} "#,
+    let result = capability_runtime
+        .execute_skill_detailed(
+            "help",
+            Some(json!({"topic":"workspace"})),
+            super::CapabilityPlannerInput::default(),
         )
         .expect("SkillTool should succeed");
-    let result_json: serde_json::Value = serde_json::from_str(&result).expect("valid json");
+    {
+        let mut locked = shared_state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        locked.apply_skill_execution_result(&result);
+    }
+    let result_json: serde_json::Value =
+        serde_json::to_value(&result).expect("valid json");
     assert_eq!(result_json["skill"], "help");
     assert_eq!(result_json["context"], "inline");
     assert_eq!(result_json["tool_grants"][0], "WebSearch");
@@ -3831,18 +3741,14 @@ Guide the model through the workspace.
             Some(&locked),
         ))
         .expect("planner surface should resolve after grant");
-    assert!(
-        after
-            .visible_tools
-            .iter()
-            .any(|capability| capability.display_name == "WebSearch")
-    );
-    assert!(
-        locked
-            .injected_skill_messages()
-            .iter()
-            .any(|message| message.contains("Guide the model through the workspace"))
-    );
+    assert!(after
+        .visible_tools
+        .iter()
+        .any(|capability| capability.display_name == "WebSearch"));
+    assert!(locked
+        .injected_skill_messages()
+        .iter()
+        .any(|message| message.contains("Guide the model through the workspace")));
 
     if let Some(home) = original_home {
         std::env::set_var("HOME", home);
@@ -3892,18 +3798,14 @@ fn mcp_prompt_capabilities_without_runtime_executors_stay_hidden_from_skill_disc
     let surface = runtime
         .surface_projection(super::CapabilityPlannerInput::default())
         .expect("planner should project a capability surface");
-    assert!(
-        !surface
-            .discoverable_skills
-            .iter()
-            .any(|skill| skill.display_name == "workspace-guide")
-    );
-    assert!(
-        surface
-            .hidden_capabilities
-            .iter()
-            .any(|skill| skill.display_name == "workspace-guide")
-    );
+    assert!(!surface
+        .discoverable_skills
+        .iter()
+        .any(|skill| skill.display_name == "workspace-guide"));
+    assert!(surface
+        .hidden_capabilities
+        .iter()
+        .any(|skill| skill.display_name == "workspace-guide"));
 
     let discovery = runtime.skill_discovery(
         "workspace guidance",
@@ -3912,13 +3814,11 @@ fn mcp_prompt_capabilities_without_runtime_executors_stay_hidden_from_skill_disc
     );
     let output: serde_json::Value =
         serde_json::to_value(discovery).expect("skill discovery output should be json");
-    assert!(
-        !output["matches"]
-            .as_array()
-            .expect("matches")
-            .iter()
-            .any(|value| value == "workspace-guide")
-    );
+    assert!(!output["matches"]
+        .as_array()
+        .expect("matches")
+        .iter()
+        .any(|value| value == "workspace-guide"));
 }
 
 #[test]
@@ -3973,18 +3873,14 @@ fn agent_persists_handoff_metadata() {
         .clone()
         .expect("spawn job should be captured");
     assert_eq!(captured_job.prompt, "Check tests and outstanding work.");
-    assert!(
-        captured_job
-            .capability_profile
-            .allowed_tools()
-            .contains("read_file")
-    );
-    assert!(
-        !captured_job
-            .capability_profile
-            .allowed_tools()
-            .contains("Agent")
-    );
+    assert!(captured_job
+        .capability_profile
+        .allowed_tools()
+        .contains("read_file"));
+    assert!(!captured_job
+        .capability_profile
+        .allowed_tools()
+        .contains("Agent"));
 
     let normalized = execute_tool(
         "Agent",
@@ -4278,32 +4174,24 @@ fn agent_tool_subset_mapping_is_expected() {
     let general = allowed_tools_for_subagent("general-purpose");
     assert!(general.contains("bash"));
     assert!(general.contains("write_file"));
-    assert!(general.contains("SkillDiscovery"));
-    assert!(general.contains("SkillTool"));
     assert!(!general.contains("Skill"));
     assert!(!general.contains("Agent"));
 
     let explore = allowed_tools_for_subagent("Explore");
     assert!(explore.contains("read_file"));
     assert!(explore.contains("grep_search"));
-    assert!(explore.contains("SkillDiscovery"));
-    assert!(explore.contains("SkillTool"));
     assert!(!explore.contains("Skill"));
     assert!(!explore.contains("bash"));
 
     let plan = allowed_tools_for_subagent("Plan");
     assert!(plan.contains("TodoWrite"));
     assert!(plan.contains("StructuredOutput"));
-    assert!(plan.contains("SkillDiscovery"));
-    assert!(plan.contains("SkillTool"));
     assert!(!plan.contains("Skill"));
     assert!(!plan.contains("Agent"));
 
     let verification = allowed_tools_for_subagent("Verification");
     assert!(verification.contains("bash"));
     assert!(verification.contains("PowerShell"));
-    assert!(verification.contains("SkillDiscovery"));
-    assert!(verification.contains("SkillTool"));
     assert!(!verification.contains("Skill"));
     assert!(!verification.contains("write_file"));
 }
@@ -4368,18 +4256,16 @@ fn subagent_runtime_executes_tool_loop_with_isolated_session() {
         final_assistant_text(&summary),
         "Scope: completed mock review"
     );
-    assert!(
-        runtime
-            .session()
-            .messages
-            .iter()
-            .flat_map(|message| message.blocks.iter())
-            .any(|block| matches!(
-                block,
-                runtime::ContentBlock::ToolResult { output, .. }
-                    if output.contains("hello from child")
-            ))
-    );
+    assert!(runtime
+        .session()
+        .messages
+        .iter()
+        .flat_map(|message| message.blocks.iter())
+        .any(|block| matches!(
+            block,
+            runtime::ContentBlock::ToolResult { output, .. }
+                if output.contains("hello from child")
+        )));
 
     let _ = std::fs::remove_file(path);
 }
@@ -4543,24 +4429,20 @@ fn bash_tool_reports_success_exit_failure_timeout_and_background() {
         .expect("bash failure should still return structured output");
     let failure_output: serde_json::Value = serde_json::from_str(&failure).expect("json");
     assert_eq!(failure_output["returnCodeInterpretation"], "exit_code:7");
-    assert!(
-        failure_output["stderr"]
-            .as_str()
-            .expect("stderr")
-            .contains("oops")
-    );
+    assert!(failure_output["stderr"]
+        .as_str()
+        .expect("stderr")
+        .contains("oops"));
 
     let timeout = execute_tool("bash", &json!({ "command": "sleep 1", "timeout": 10 }))
         .expect("bash timeout should return output");
     let timeout_output: serde_json::Value = serde_json::from_str(&timeout).expect("json");
     assert_eq!(timeout_output["interrupted"], true);
     assert_eq!(timeout_output["returnCodeInterpretation"], "timeout");
-    assert!(
-        timeout_output["stderr"]
-            .as_str()
-            .expect("stderr")
-            .contains("Command exceeded timeout")
-    );
+    assert!(timeout_output["stderr"]
+        .as_str()
+        .expect("stderr")
+        .contains("Command exceeded timeout"));
 
     let background = execute_tool(
         "bash",
@@ -4601,12 +4483,10 @@ fn bash_workspace_tests_are_blocked_when_branch_is_behind_main() {
         output_json["returnCodeInterpretation"],
         "preflight_blocked:branch_divergence"
     );
-    assert!(
-        output_json["stderr"]
-            .as_str()
-            .expect("stderr")
-            .contains("branch divergence detected before workspace tests")
-    );
+    assert!(output_json["stderr"]
+        .as_str()
+        .expect("stderr")
+        .contains("branch divergence detected before workspace tests"));
     assert_eq!(
         output_json["structuredContent"][0]["event"],
         "branch.stale_against_main"
@@ -4788,12 +4668,10 @@ fn glob_and_grep_tools_cover_success_and_errors() {
         .expect("glob should succeed");
     let globbed_output: serde_json::Value = serde_json::from_str(&globbed).expect("json");
     assert_eq!(globbed_output["numFiles"], 1);
-    assert!(
-        globbed_output["filenames"][0]
-            .as_str()
-            .expect("filename")
-            .ends_with("nested/lib.rs")
-    );
+    assert!(globbed_output["filenames"][0]
+        .as_str()
+        .expect("filename")
+        .ends_with("nested/lib.rs"));
 
     let glob_error = execute_tool("glob_search", &json!({ "pattern": "[" }))
         .expect_err("invalid glob should fail");
@@ -4816,12 +4694,10 @@ fn glob_and_grep_tools_cover_success_and_errors() {
     assert_eq!(grep_content_output["numFiles"], 0);
     assert!(grep_content_output["appliedLimit"].is_null());
     assert_eq!(grep_content_output["appliedOffset"], 1);
-    assert!(
-        grep_content_output["content"]
-            .as_str()
-            .expect("content")
-            .contains("let alpha = 2;")
-    );
+    assert!(grep_content_output["content"]
+        .as_str()
+        .expect("content")
+        .contains("let alpha = 2;"));
 
     let grep_count = execute_tool(
         "grep_search",
@@ -4849,12 +4725,10 @@ fn sleep_waits_and_reports_duration() {
     let elapsed = started.elapsed();
     let output: serde_json::Value = serde_json::from_str(&result).expect("json");
     assert_eq!(output["duration_ms"], 20);
-    assert!(
-        output["message"]
-            .as_str()
-            .expect("message")
-            .contains("Slept for 20ms")
-    );
+    assert!(output["message"]
+        .as_str()
+        .expect("message")
+        .contains("Slept for 20ms"));
     assert!(elapsed >= Duration::from_millis(15));
 }
 
@@ -5022,12 +4896,11 @@ fn enter_and_exit_plan_mode_round_trip_existing_local_override() {
     let local_settings = std::fs::read_to_string(cwd.join(".claw").join("settings.local.json"))
         .expect("local settings after exit");
     assert!(local_settings.contains(r#""defaultMode": "acceptEdits""#));
-    assert!(
-        !cwd.join(".claw")
-            .join("tool-state")
-            .join("plan-mode.json")
-            .exists()
-    );
+    assert!(!cwd
+        .join(".claw")
+        .join("tool-state")
+        .join("plan-mode.json")
+        .exists());
 
     std::env::set_current_dir(&original_dir).expect("restore cwd");
     match original_home {
@@ -5084,12 +4957,11 @@ fn exit_plan_mode_clears_override_when_enter_created_it_from_empty_local_state()
         None,
         "permissions override should be removed on exit"
     );
-    assert!(
-        !cwd.join(".claw")
-            .join("tool-state")
-            .join("plan-mode.json")
-            .exists()
-    );
+    assert!(!cwd
+        .join(".claw")
+        .join("tool-state")
+        .join("plan-mode.json")
+        .exists());
 
     std::env::set_current_dir(&original_dir).expect("restore cwd");
     match original_home {
@@ -5674,28 +5546,26 @@ impl TestServer {
         let addr = listener.local_addr().expect("local addr");
         let (tx, rx) = std::sync::mpsc::channel::<()>();
 
-        let handle = thread::spawn(move || {
-            loop {
-                if rx.try_recv().is_ok() {
-                    break;
-                }
+        let handle = thread::spawn(move || loop {
+            if rx.try_recv().is_ok() {
+                break;
+            }
 
-                match listener.accept() {
-                    Ok((mut stream, _)) => {
-                        let mut buffer = [0_u8; 4096];
-                        let size = stream.read(&mut buffer).expect("read request");
-                        let request = String::from_utf8_lossy(&buffer[..size]).into_owned();
-                        let request_line = request.lines().next().unwrap_or_default().to_string();
-                        let response = handler(&request_line);
-                        stream
-                            .write_all(response.to_bytes().as_slice())
-                            .expect("write response");
-                    }
-                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(error) => panic!("server accept failed: {error}"),
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    let mut buffer = [0_u8; 4096];
+                    let size = stream.read(&mut buffer).expect("read request");
+                    let request = String::from_utf8_lossy(&buffer[..size]).into_owned();
+                    let request_line = request.lines().next().unwrap_or_default().to_string();
+                    let response = handler(&request_line);
+                    stream
+                        .write_all(response.to_bytes().as_slice())
+                        .expect("write response");
                 }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => panic!("server accept failed: {error}"),
             }
         });
 

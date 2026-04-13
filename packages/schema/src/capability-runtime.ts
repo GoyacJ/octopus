@@ -1,0 +1,15 @@
+import type {
+  RuntimeCapabilityExecutionOutcome as OpenApiRuntimeCapabilityExecutionOutcome,
+  RuntimeCapabilityPlanSummary as OpenApiRuntimeCapabilityPlanSummary,
+  RuntimeCapabilityProviderState as OpenApiRuntimeCapabilityProviderState,
+  RuntimeCapabilityStateSnapshot as OpenApiRuntimeCapabilityStateSnapshot,
+  RuntimeCapabilitySurface as OpenApiRuntimeCapabilitySurface,
+  RuntimePendingMediationSummary as OpenApiRuntimePendingMediationSummary,
+} from './generated'
+
+export type RuntimeCapabilityProviderState = OpenApiRuntimeCapabilityProviderState
+export type RuntimeCapabilityPlanSummary = OpenApiRuntimeCapabilityPlanSummary
+export type RuntimeCapabilitySurface = OpenApiRuntimeCapabilitySurface
+export type RuntimeCapabilityStateSnapshot = OpenApiRuntimeCapabilityStateSnapshot
+export type RuntimeCapabilityExecutionOutcome = OpenApiRuntimeCapabilityExecutionOutcome
+export type RuntimePendingMediationSummary = OpenApiRuntimePendingMediationSummary

@@ -1,5 +1,6 @@
 use super::*;
 
+#[allow(dead_code)]
 pub(super) fn resolve_actor_label(
     paths: &WorkspacePaths,
     actor_kind: Option<&str>,
@@ -51,6 +52,7 @@ pub(super) fn build_actor_system_prompt(
     }
 }
 
+#[allow(dead_code)]
 pub(super) fn resolve_actor_system_prompt(
     paths: &WorkspacePaths,
     actor_kind: Option<&str>,

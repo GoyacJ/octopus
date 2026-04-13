@@ -22,6 +22,7 @@ pub struct WorkspacePaths {
     pub user_avatars_dir: PathBuf,
     pub workspace_resources_dir: PathBuf,
     pub artifacts_dir: PathBuf,
+    pub bundle_assets_dir: PathBuf,
     pub knowledge_dir: PathBuf,
     pub inbox_dir: PathBuf,
     pub managed_skills_dir: PathBuf,
@@ -51,6 +52,7 @@ impl WorkspacePaths {
         let user_avatars_dir = blobs_dir.join("avatars");
         let workspace_resources_dir = data_dir.join("resources").join("workspace");
         let artifacts_dir = data_dir.join("artifacts");
+        let bundle_assets_dir = artifacts_dir.join("bundle-assets");
         let knowledge_dir = data_dir.join("knowledge");
         let inbox_dir = data_dir.join("inbox");
         let managed_skills_dir = data_dir.join("skills");
@@ -82,6 +84,7 @@ impl WorkspacePaths {
             user_avatars_dir,
             workspace_resources_dir,
             artifacts_dir,
+            bundle_assets_dir,
             knowledge_dir,
             inbox_dir,
             managed_skills_dir,
@@ -112,6 +115,7 @@ impl WorkspacePaths {
             &self.user_avatars_dir,
             &self.workspace_resources_dir,
             &self.artifacts_dir,
+            &self.bundle_assets_dir,
             &self.knowledge_dir,
             &self.inbox_dir,
             &self.managed_skills_dir,

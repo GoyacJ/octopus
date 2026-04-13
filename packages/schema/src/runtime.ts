@@ -1,11 +1,4 @@
 import type {
-  CreateRuntimeSessionInput as OpenApiCreateRuntimeSessionInput,
-  ProviderConfig as OpenApiProviderConfig,
-  ResolvedExecutionTarget as OpenApiResolvedExecutionTarget,
-  ResolveRuntimeApprovalInput as OpenApiResolveRuntimeApprovalInput,
-  RuntimeActorType as OpenApiRuntimeActorType,
-  RuntimeApprovalRequest as OpenApiRuntimeApprovalRequest,
-  RuntimeBootstrap as OpenApiRuntimeBootstrap,
   RuntimeConfigScope as OpenApiRuntimeConfigScope,
   RuntimeConfigPatch as OpenApiRuntimeConfigPatch,
   RuntimeConfigSource as OpenApiRuntimeConfigSource,
@@ -13,23 +6,15 @@ import type {
   RuntimeConfiguredModelProbeInput as OpenApiRuntimeConfiguredModelProbeInput,
   RuntimeConfiguredModelProbeResult as OpenApiRuntimeConfiguredModelProbeResult,
   RuntimeEffectiveConfig as OpenApiRuntimeEffectiveConfig,
-  RuntimeEventEnvelope as OpenApiRuntimeEventEnvelope,
-  RuntimeEventKind as OpenApiRuntimeEventKind,
-  RuntimeMessage as OpenApiRuntimeMessage,
-  RuntimeRunSnapshot as OpenApiRuntimeRunSnapshot,
   RuntimeSecretReferenceStatus as OpenApiRuntimeSecretReferenceStatus,
-  RuntimeSessionDetail as OpenApiRuntimeSessionDetail,
-  RuntimeSessionKind as OpenApiRuntimeSessionKind,
-  RuntimeSessionSummary as OpenApiRuntimeSessionSummary,
-  RuntimeTraceItem as OpenApiRuntimeTraceItem,
-  SubmitRuntimeTurnInput as OpenApiSubmitRuntimeTurnInput,
 } from './generated'
-import type {
-  DecisionAction,
-  PermissionMode,
-  WorkspaceToolPermissionMode,
-} from './shared'
-import type { RuntimePermissionMode } from './permissions'
+import type { WorkspaceToolPermissionMode } from './shared'
+
+export * from './actor-manifest'
+export * from './agent-runtime'
+export * from './capability-runtime'
+export * from './memory-runtime'
+export * from './runtime-policy'
 
 export type JsonValue =
   | string
@@ -90,27 +75,3 @@ export interface RuntimeConfigSnapshotSummary {
   createdAt: number
   effectiveConfig?: Record<string, JsonValue>
 }
-
-export type ResolvedExecutionTarget = OpenApiResolvedExecutionTarget
-export type RuntimeActorType = OpenApiRuntimeActorType
-export type RuntimeEventKind = OpenApiRuntimeEventKind
-export type RuntimeSessionKind = OpenApiRuntimeSessionKind
-export type RuntimeSessionSummary = OpenApiRuntimeSessionSummary
-export type RuntimeRunSnapshot = OpenApiRuntimeRunSnapshot
-export type RuntimeMessage = OpenApiRuntimeMessage
-export type RuntimeTraceItem = OpenApiRuntimeTraceItem
-export type RuntimeApprovalRequest = OpenApiRuntimeApprovalRequest
-
-export type RuntimeDecisionAction = DecisionAction
-
-export type RuntimeEventEnvelope = OpenApiRuntimeEventEnvelope
-export type RuntimeSessionDetail = OpenApiRuntimeSessionDetail
-export type ProviderConfig = OpenApiProviderConfig
-export type RuntimeBootstrap = OpenApiRuntimeBootstrap
-export type CreateRuntimeSessionInput = OpenApiCreateRuntimeSessionInput
-
-export interface SubmitRuntimeTurnInput extends Omit<OpenApiSubmitRuntimeTurnInput, 'permissionMode'> {
-  permissionMode: PermissionMode | RuntimePermissionMode
-}
-
-export type ResolveRuntimeApprovalInput = OpenApiResolveRuntimeApprovalInput

@@ -5,8 +5,8 @@ use crate::session::{ContentBlock, ConversationMessage};
 use super::assistant_projection::build_assistant_message;
 use super::conversation_hooks::{format_hook_message, merge_hook_feedback};
 use super::{
-    ApiClient, ApiRequest, AutoCompactionEvent, ConversationRuntime, RuntimeError, ToolExecutor,
-    TurnSummary,
+    ApiClient, ApiRequest, AutoCompactionEvent, ConversationRuntime, RuntimeError, ToolExecutionOutcome,
+    ToolExecutor, TurnSummary,
 };
 
 impl<C, T> ConversationRuntime<C, T>
@@ -99,89 +99,117 @@ where
                     pre_hook_result.permission_reason().map(ToOwned::to_owned),
                 );
 
-                let permission_outcome = if pre_hook_result.is_cancelled() {
-                    PermissionOutcome::Deny {
-                        reason: format_hook_message(
-                            &pre_hook_result,
-                            &format!("PreToolUse hook cancelled tool `{tool_name}`"),
-                        ),
-                    }
+                let (execution_outcome, dispatch_started) = if pre_hook_result.is_cancelled() {
+                    (
+                        ToolExecutionOutcome::Cancelled {
+                            reason: Some(format_hook_message(
+                                &pre_hook_result,
+                                &format!("PreToolUse hook cancelled tool `{tool_name}`"),
+                            )),
+                        },
+                        false,
+                    )
                 } else if pre_hook_result.is_failed() {
-                    PermissionOutcome::Deny {
-                        reason: format_hook_message(
-                            &pre_hook_result,
-                            &format!("PreToolUse hook failed for tool `{tool_name}`"),
-                        ),
-                    }
+                    (
+                        ToolExecutionOutcome::Failed {
+                            message: format_hook_message(
+                                &pre_hook_result,
+                                &format!("PreToolUse hook failed for tool `{tool_name}`"),
+                            ),
+                        },
+                        false,
+                    )
                 } else if pre_hook_result.is_denied() {
-                    PermissionOutcome::Deny {
-                        reason: format_hook_message(
-                            &pre_hook_result,
-                            &format!("PreToolUse hook denied tool `{tool_name}`"),
-                        ),
-                    }
-                } else if let Some(prompt) = prompter.as_mut() {
-                    self.permission_policy.authorize_with_context(
-                        &tool_name,
-                        &effective_input,
-                        &permission_context,
-                        Some(*prompt),
+                    (
+                        ToolExecutionOutcome::Deny {
+                            reason: format_hook_message(
+                                &pre_hook_result,
+                                &format!("PreToolUse hook denied tool `{tool_name}`"),
+                            ),
+                        },
+                        false,
                     )
+                } else if self.tool_executor.manages_mediation() {
+                    let outcome = self
+                        .tool_executor
+                        .execute_with_outcome(&tool_name, &effective_input);
+                    let dispatch_started = outcome.dispatch_started();
+                    (outcome, dispatch_started)
                 } else {
-                    self.permission_policy.authorize_with_context(
-                        &tool_name,
-                        &effective_input,
-                        &permission_context,
-                        None,
-                    )
+                    let permission_outcome = if let Some(prompt) = prompter.as_mut() {
+                        self.permission_policy.authorize_with_context(
+                            &tool_name,
+                            &effective_input,
+                            &permission_context,
+                            Some(*prompt),
+                        )
+                    } else {
+                        self.permission_policy.authorize_with_context(
+                            &tool_name,
+                            &effective_input,
+                            &permission_context,
+                            None,
+                        )
+                    };
+                    match permission_outcome {
+                        PermissionOutcome::Allow => {
+                            let outcome = self
+                                .tool_executor
+                                .execute_with_outcome(&tool_name, &effective_input);
+                            let dispatch_started = outcome.dispatch_started();
+                            (outcome, dispatch_started)
+                        }
+                        PermissionOutcome::Deny { reason } => {
+                            (ToolExecutionOutcome::Deny { reason }, false)
+                        }
+                    }
                 };
 
-                let result_message = match permission_outcome {
-                    PermissionOutcome::Allow => {
-                        self.record_tool_started(iterations, &tool_name);
-                        let (mut output, mut is_error) =
-                            match self.tool_executor.execute(&tool_name, &effective_input) {
-                                Ok(output) => (output, false),
-                                Err(error) => (error.to_string(), true),
-                            };
+                if dispatch_started {
+                    self.record_tool_started(iterations, &tool_name);
+                }
+
+                let result_message = match execution_outcome {
+                    ToolExecutionOutcome::Allow { mut output } => {
                         output = merge_hook_feedback(pre_hook_result.messages(), output, false);
 
-                        let post_hook_result = if is_error {
-                            self.run_post_tool_use_failure_hook(
-                                &tool_name,
-                                &effective_input,
-                                &output,
-                            )
-                        } else {
-                            self.run_post_tool_use_hook(
-                                &tool_name,
-                                &effective_input,
-                                &output,
-                                false,
-                            )
-                        };
-                        if post_hook_result.is_denied()
+                        let post_hook_result = self.run_post_tool_use_hook(
+                            &tool_name,
+                            &effective_input,
+                            &output,
+                            false,
+                        );
+                        let post_hook_error = post_hook_result.is_denied()
                             || post_hook_result.is_failed()
-                            || post_hook_result.is_cancelled()
-                        {
-                            is_error = true;
-                        }
+                            || post_hook_result.is_cancelled();
                         output = merge_hook_feedback(
                             post_hook_result.messages(),
                             output,
-                            post_hook_result.is_denied()
-                                || post_hook_result.is_failed()
-                                || post_hook_result.is_cancelled(),
+                            post_hook_error,
                         );
 
-                        ConversationMessage::tool_result(tool_use_id, tool_name, output, is_error)
+                        ConversationMessage::tool_result(
+                            tool_use_id,
+                            tool_name,
+                            output,
+                            post_hook_error,
+                        )
                     }
-                    PermissionOutcome::Deny { reason } => ConversationMessage::tool_result(
-                        tool_use_id,
-                        tool_name,
-                        merge_hook_feedback(pre_hook_result.messages(), reason, true),
-                        true,
-                    ),
+                    other => {
+                        let mut output =
+                            merge_hook_feedback(pre_hook_result.messages(), other.message_for_tool(&tool_name), true);
+
+                        if dispatch_started {
+                            let post_hook_result = self.run_post_tool_use_failure_hook(
+                                &tool_name,
+                                &effective_input,
+                                &output,
+                            );
+                            output = merge_hook_feedback(post_hook_result.messages(), output, true);
+                        }
+
+                        ConversationMessage::tool_result(tool_use_id, tool_name, output, true)
+                    }
                 };
                 self.session
                     .push_message(result_message.clone())
