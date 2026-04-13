@@ -45,6 +45,15 @@ pub(super) fn sync_runtime_session_detail(detail: &mut RuntimeSessionDetail) {
     if detail.subrun_count == 0 {
         detail.subrun_count = detail.summary.subrun_count;
     }
+    if detail.workflow.is_none() {
+        detail.workflow = detail.summary.workflow.clone();
+    }
+    if detail.pending_mailbox.is_none() {
+        detail.pending_mailbox = detail.summary.pending_mailbox.clone();
+    }
+    if detail.background_run.is_none() {
+        detail.background_run = detail.summary.background_run.clone();
+    }
     if detail.memory_summary.summary.is_empty() && !detail.summary.memory_summary.summary.is_empty()
     {
         detail.memory_summary = detail.summary.memory_summary.clone();
@@ -60,6 +69,9 @@ pub(super) fn sync_runtime_session_detail(detail: &mut RuntimeSessionDetail) {
     detail.summary.session_policy = detail.session_policy.clone();
     detail.summary.active_run_id = detail.active_run_id.clone();
     detail.summary.subrun_count = detail.subrun_count;
+    detail.summary.workflow = detail.workflow.clone();
+    detail.summary.pending_mailbox = detail.pending_mailbox.clone();
+    detail.summary.background_run = detail.background_run.clone();
     detail.summary.memory_summary = detail.memory_summary.clone();
     detail.summary.capability_summary = detail.capability_summary.clone();
     detail.summary.provider_state_summary = detail.provider_state_summary.clone();

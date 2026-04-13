@@ -68,6 +68,13 @@ describe('useRuntimeStore', () => {
     expect(runtime.activeMessages.some((message) => message.actorId === 'agent-architect')).toBe(true)
     expect(runtime.activeMessages.some((message) => (message.artifacts ?? []).length > 0)).toBe(true)
     expect(runtime.activeTrace[0]?.title.length).toBeGreaterThan(0)
+    expect(runtime.activeSession?.workflow?.status).toBe('completed')
+    expect(runtime.activeSession?.pendingMailbox?.channel).toBe('team-mailbox')
+    expect(runtime.activeSession?.backgroundRun?.status).toBe('completed')
+    expect(runtime.activeSession?.subruns.length).toBeGreaterThan(0)
+    expect(runtime.activeSession?.handoffs.length).toBeGreaterThan(0)
+    expect(runtime.activeRun?.workflowRun).toBeTruthy()
+    expect(runtime.activeRun?.workerDispatch?.totalSubruns).toBeGreaterThan(0)
 
     runtime.dispose()
   })

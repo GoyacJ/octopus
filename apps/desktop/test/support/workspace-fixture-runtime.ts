@@ -51,6 +51,41 @@ function createPendingMediationSummary(): RuntimePendingMediationSummary {
   }
 }
 
+function createWorkflowSummary(workflowRunId: string, updatedAt: number) {
+  return {
+    workflowRunId,
+    label: 'Runtime workflow',
+    status: 'completed',
+    totalSteps: 3,
+    completedSteps: 3,
+    currentStepId: 'workflow-complete',
+    currentStepLabel: 'Workflow complete',
+    backgroundCapable: true,
+    updatedAt,
+  }
+}
+
+function createMailboxSummary(mailboxRef: string, updatedAt: number) {
+  return {
+    mailboxRef,
+    channel: 'team-mailbox',
+    status: 'completed',
+    pendingCount: 0,
+    totalMessages: 2,
+    updatedAt,
+  }
+}
+
+function createBackgroundRunSummary(runId: string, workflowRunId: string, updatedAt: number) {
+  return {
+    runId,
+    workflowRunId,
+    status: 'completed',
+    backgroundCapable: true,
+    updatedAt,
+  }
+}
+
 export interface RuntimeSessionState {
   detail: RuntimeSessionDetail
   events: RuntimeEventEnvelope[]
@@ -202,6 +237,9 @@ export function createSessionDetail(
   executionPermissionMode = 'workspace-write',
 ): RuntimeSessionDetail {
   const sessionId = `rt-${conversationId}`
+  const runId = `run-${conversationId}`
+  const workflowRunId = `workflow-${runId}`
+  const mailboxRef = `mailbox-${runId}`
   const resolvedSelectedActorRef = selectedActorRef ?? (sessionKind === 'pet' ? 'team:pet-runtime' : 'agent:agent-architect')
   const sessionPolicy = {
     selectedActorRef: resolvedSelectedActorRef,
@@ -230,8 +268,11 @@ export function createSessionDetail(
       selectedActorRef: resolvedSelectedActorRef,
       manifestRevision: 'manifest-fixture-v2',
       sessionPolicy,
-      activeRunId: `run-${conversationId}`,
-      subrunCount: 0,
+      activeRunId: runId,
+      subrunCount: 2,
+      workflow: createWorkflowSummary(workflowRunId, 1),
+      pendingMailbox: createMailboxSummary(mailboxRef, 1),
+      backgroundRun: createBackgroundRunSummary(runId, workflowRunId, 1),
       capabilityPlanSummary: createCapabilityPlanSummary(),
       capabilityStateRef: 'capstate-fixture',
       memorySummary: {
@@ -246,7 +287,7 @@ export function createSessionDetail(
       },
     },
     run: {
-      id: `run-${conversationId}`,
+      id: runId,
       sessionId,
       conversationId,
       status: 'draft',
@@ -255,6 +296,25 @@ export function createSessionDetail(
       updatedAt: 1,
       actorRef: resolvedSelectedActorRef,
       runKind: 'primary',
+      workflowRun: workflowRunId,
+      workflowRunDetail: {
+        workflowRunId,
+        status: 'completed',
+        currentStepId: 'workflow-complete',
+        currentStepLabel: 'Workflow complete',
+        totalSteps: 3,
+        completedSteps: 3,
+        backgroundCapable: true,
+      },
+      mailboxRef,
+      handoffRef: `handoff-${runId}-1`,
+      backgroundState: 'completed',
+      workerDispatch: {
+        totalSubruns: 2,
+        activeSubruns: 0,
+        completedSubruns: 2,
+        failedSubruns: 0,
+      },
       configuredModelId: 'anthropic-primary',
       configuredModelName: 'Claude Sonnet 4.5',
       modelId: 'claude-sonnet-4-5',
@@ -284,7 +344,7 @@ export function createSessionDetail(
       checkpoint: {
         serializedSession: {
           sessionId,
-          runId: `run-${conversationId}`,
+          runId,
         },
         capabilityPlanSummary: createCapabilityPlanSummary(),
         capabilityStateRef: 'capstate-fixture',
@@ -300,11 +360,64 @@ export function createSessionDetail(
         },
       },
     },
+    subruns: [
+      {
+        runId: `${runId}-subrun-1`,
+        parentRunId: runId,
+        actorRef: 'agent:agent-architect',
+        label: 'agent architect',
+        status: 'completed',
+        runKind: 'subrun',
+        delegatedByToolCallId: 'team-dispatch-1',
+        workflowRunId,
+        mailboxRef,
+        handoffRef: `handoff-${runId}-1`,
+        startedAt: 1,
+        updatedAt: 1,
+      },
+      {
+        runId: `${runId}-subrun-2`,
+        parentRunId: runId,
+        actorRef: 'agent:agent-project-delivery',
+        label: 'agent project delivery',
+        status: 'completed',
+        runKind: 'subrun',
+        delegatedByToolCallId: 'team-dispatch-2',
+        workflowRunId,
+        mailboxRef,
+        handoffRef: `handoff-${runId}-2`,
+        startedAt: 1,
+        updatedAt: 1,
+      },
+    ],
+    handoffs: [
+      {
+        handoffRef: `handoff-${runId}-1`,
+        mailboxRef,
+        senderActorRef: resolvedSelectedActorRef,
+        receiverActorRef: 'agent:agent-architect',
+        state: 'delivered',
+        artifactRefs: [`artifact-${runId}-subrun-1`],
+        updatedAt: 1,
+      },
+      {
+        handoffRef: `handoff-${runId}-2`,
+        mailboxRef,
+        senderActorRef: resolvedSelectedActorRef,
+        receiverActorRef: 'agent:agent-project-delivery',
+        state: 'delivered',
+        artifactRefs: [`artifact-${runId}-subrun-2`],
+        updatedAt: 1,
+      },
+    ],
     messages: [],
     trace: [],
     pendingApproval: undefined,
-    activeRunId: `run-${conversationId}`,
-    subrunCount: 0,
+    activeRunId: runId,
+    subrunCount: 2,
+    workflow: createWorkflowSummary(workflowRunId, 1),
+    pendingMailbox: createMailboxSummary(mailboxRef, 1),
+    backgroundRun: createBackgroundRunSummary(runId, workflowRunId, 1),
     selectedActorRef: resolvedSelectedActorRef,
     manifestRevision: 'manifest-fixture-v2',
     sessionPolicy,

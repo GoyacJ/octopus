@@ -547,6 +547,32 @@ describe('OpenAPI transport helpers', () => {
             },
             activeRunId: 'run-1',
             subrunCount: 0,
+            workflow: {
+              workflowRunId: 'wf-run-1',
+              label: 'Runtime workflow',
+              status: 'running',
+              totalSteps: 3,
+              completedSteps: 1,
+              currentStepId: 'leader-plan',
+              currentStepLabel: 'Leader plan',
+              backgroundCapable: true,
+              updatedAt: 2,
+            },
+            pendingMailbox: {
+              mailboxRef: 'mailbox-1',
+              channel: 'team-mailbox',
+              status: 'pending',
+              pendingCount: 1,
+              totalMessages: 1,
+              updatedAt: 2,
+            },
+            backgroundRun: {
+              runId: 'run-1',
+              workflowRunId: 'wf-run-1',
+              status: 'running',
+              backgroundCapable: true,
+              updatedAt: 2,
+            },
             memorySummary: {
               summary: 'No durable memories selected.',
               durableMemoryCount: 0,
@@ -606,6 +632,32 @@ describe('OpenAPI transport helpers', () => {
             },
             activeRunId: 'run-1',
             subrunCount: 0,
+            workflow: {
+              workflowRunId: 'wf-run-1',
+              label: 'Runtime workflow',
+              status: 'running',
+              totalSteps: 3,
+              completedSteps: 1,
+              currentStepId: 'leader-plan',
+              currentStepLabel: 'Leader plan',
+              backgroundCapable: true,
+              updatedAt: 2,
+            },
+            pendingMailbox: {
+              mailboxRef: 'mailbox-1',
+              channel: 'team-mailbox',
+              status: 'pending',
+              pendingCount: 1,
+              totalMessages: 1,
+              updatedAt: 2,
+            },
+            backgroundRun: {
+              runId: 'run-1',
+              workflowRunId: 'wf-run-1',
+              status: 'running',
+              backgroundCapable: true,
+              updatedAt: 2,
+            },
             memorySummary: {
               summary: 'No durable memories selected.',
               durableMemoryCount: 0,
@@ -643,6 +695,15 @@ describe('OpenAPI transport helpers', () => {
             updatedAt: 2,
             actorRef: 'agent:agent-architect',
             runKind: 'primary',
+            workflowRun: 'wf-run-1',
+            mailboxRef: 'mailbox-1',
+            backgroundState: 'running',
+            workerDispatch: {
+              totalSubruns: 2,
+              activeSubruns: 1,
+              completedSubruns: 1,
+              failedSubruns: 0,
+            },
             capabilityPlanSummary: {
               activatedTools: [],
               approvedTools: [],
@@ -711,6 +772,56 @@ describe('OpenAPI transport helpers', () => {
               },
             },
           },
+          subruns: [
+            {
+              runId: 'run-sub-1',
+              parentRunId: 'run-1',
+              actorRef: 'agent:agent-architect',
+              label: 'Architect',
+              status: 'completed',
+              runKind: 'subrun',
+              delegatedByToolCallId: 'tool-1',
+              startedAt: 1,
+              updatedAt: 2,
+            },
+          ],
+          handoffs: [
+            {
+              handoffRef: 'handoff-1',
+              mailboxRef: 'mailbox-1',
+              senderActorRef: 'team:team-workspace-core',
+              receiverActorRef: 'agent:agent-architect',
+              state: 'delivered',
+              artifactRefs: ['artifact-1'],
+              updatedAt: 2,
+            },
+          ],
+          workflow: {
+            workflowRunId: 'wf-run-1',
+            label: 'Runtime workflow',
+            status: 'running',
+            totalSteps: 3,
+            completedSteps: 1,
+            currentStepId: 'leader-plan',
+            currentStepLabel: 'Leader plan',
+            backgroundCapable: true,
+            updatedAt: 2,
+          },
+          pendingMailbox: {
+            mailboxRef: 'mailbox-1',
+            channel: 'team-mailbox',
+            status: 'pending',
+            pendingCount: 1,
+            totalMessages: 1,
+            updatedAt: 2,
+          },
+          backgroundRun: {
+            runId: 'run-1',
+            workflowRunId: 'wf-run-1',
+            status: 'running',
+            backgroundCapable: true,
+            updatedAt: 2,
+          },
           messages: [],
           trace: [],
         }),
@@ -728,6 +839,15 @@ describe('OpenAPI transport helpers', () => {
           updatedAt: 2,
           actorRef: 'agent:agent-architect',
           runKind: 'primary',
+          workflowRun: 'wf-run-1',
+          mailboxRef: 'mailbox-1',
+          backgroundState: 'running',
+          workerDispatch: {
+            totalSubruns: 2,
+            activeSubruns: 1,
+            completedSubruns: 1,
+            failedSubruns: 0,
+          },
           capabilityPlanSummary: {
             activatedTools: [],
             approvedTools: [],
@@ -813,11 +933,11 @@ describe('OpenAPI transport helpers', () => {
     const session = createWorkspaceSession(connection)
 
     await fetchWorkspaceOpenApi(connection, '/api/v1/runtime/sessions', 'get', { session })
-    await fetchWorkspaceOpenApi(connection, '/api/v1/runtime/sessions/{sessionId}', 'get', {
+    const runtimeDetailPayload = await fetchWorkspaceOpenApi(connection, '/api/v1/runtime/sessions/{sessionId}', 'get', {
       session,
       pathParams: { sessionId: 'rt-1' },
     })
-    await fetchWorkspaceOpenApi(connection, '/api/v1/runtime/sessions/{sessionId}/turns', 'post', {
+    const runtimeRunPayload = await fetchWorkspaceOpenApi(connection, '/api/v1/runtime/sessions/{sessionId}/turns', 'post', {
       session,
       pathParams: { sessionId: 'rt-1' },
       idempotencyKey: 'idem-turn-1',
@@ -873,6 +993,14 @@ describe('OpenAPI transport helpers', () => {
     expect(turnHeaders.get('Idempotency-Key')).toBe('idem-turn-1')
     const approvalHeaders = fetchSpy.mock.calls[3]?.[1]?.headers as Headers
     expect(approvalHeaders.get('Idempotency-Key')).toBe('idem-approval-1')
+    expect(runtimeDetailPayload.workflow?.workflowRunId).toBe('wf-run-1')
+    expect(runtimeDetailPayload.pendingMailbox?.mailboxRef).toBe('mailbox-1')
+    expect(runtimeDetailPayload.backgroundRun?.workflowRunId).toBe('wf-run-1')
+    expect(runtimeDetailPayload.subruns[0]?.runKind).toBe('subrun')
+    expect(runtimeDetailPayload.handoffs[0]?.mailboxRef).toBe('mailbox-1')
+    expect(runtimeRunPayload.workflowRun).toBe('wf-run-1')
+    expect(runtimeRunPayload.mailboxRef).toBe('mailbox-1')
+    expect(runtimeRunPayload.workerDispatch?.totalSubruns).toBe(2)
   })
 
   it('extends generated workspace transport paths to apps, audit, inbox, and knowledge routes', async () => {

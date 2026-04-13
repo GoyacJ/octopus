@@ -6,15 +6,22 @@ import type {
   RuntimeApprovalRequest as OpenApiRuntimeApprovalRequest,
   RuntimeBootstrap as OpenApiRuntimeBootstrap,
   RuntimeEventEnvelope as OpenApiRuntimeEventEnvelope,
+  RuntimeHandoffSummary as OpenApiRuntimeHandoffSummary,
+  RuntimeMailboxSummary as OpenApiRuntimeMailboxSummary,
   RuntimeMessage as OpenApiRuntimeMessage,
+  RuntimeBackgroundRunSummary as OpenApiRuntimeBackgroundRunSummary,
   RuntimeRunCheckpoint as OpenApiRuntimeRunCheckpoint,
   RuntimeRunKind as OpenApiRuntimeRunKind,
   RuntimeRunSnapshot as OpenApiRuntimeRunSnapshot,
   RuntimeSessionDetail as OpenApiRuntimeSessionDetail,
   RuntimeSessionKind as OpenApiRuntimeSessionKind,
   RuntimeSessionSummary as OpenApiRuntimeSessionSummary,
+  RuntimeSubrunSummary as OpenApiRuntimeSubrunSummary,
   RuntimeTraceContext as OpenApiRuntimeTraceContext,
   RuntimeTraceItem as OpenApiRuntimeTraceItem,
+  RuntimeWorkerDispatchSummary as OpenApiRuntimeWorkerDispatchSummary,
+  RuntimeWorkflowRunDetail as OpenApiRuntimeWorkflowRunDetail,
+  RuntimeWorkflowSummary as OpenApiRuntimeWorkflowSummary,
   SubmitRuntimeTurnInput as OpenApiSubmitRuntimeTurnInput,
 } from './generated'
 
@@ -30,6 +37,13 @@ export type RuntimeApprovalRequest = OpenApiRuntimeApprovalRequest
 export type RuntimeRunCheckpoint = OpenApiRuntimeRunCheckpoint
 export type RuntimeEventEnvelope = OpenApiRuntimeEventEnvelope
 export type RuntimeSessionDetail = OpenApiRuntimeSessionDetail
+export type RuntimeSubrunSummary = OpenApiRuntimeSubrunSummary
+export type RuntimeMailboxSummary = OpenApiRuntimeMailboxSummary
+export type RuntimeHandoffSummary = OpenApiRuntimeHandoffSummary
+export type RuntimeWorkflowSummary = OpenApiRuntimeWorkflowSummary
+export type RuntimeWorkflowRunDetail = OpenApiRuntimeWorkflowRunDetail
+export type RuntimeBackgroundRunSummary = OpenApiRuntimeBackgroundRunSummary
+export type RuntimeWorkerDispatchSummary = OpenApiRuntimeWorkerDispatchSummary
 export type ProviderConfig = OpenApiProviderConfig
 export type RuntimeBootstrap = OpenApiRuntimeBootstrap
 export type CreateRuntimeSessionInput = OpenApiCreateRuntimeSessionInput

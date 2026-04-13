@@ -567,6 +567,19 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               manifest_revision TEXT NOT NULL DEFAULT '',
               active_run_id TEXT NOT NULL DEFAULT '',
               subrun_count INTEGER NOT NULL DEFAULT 0,
+              workflow_run_id TEXT,
+              workflow_status TEXT,
+              workflow_total_steps INTEGER NOT NULL DEFAULT 0,
+              workflow_completed_steps INTEGER NOT NULL DEFAULT 0,
+              workflow_current_step_id TEXT,
+              workflow_current_step_label TEXT,
+              workflow_background_capable INTEGER NOT NULL DEFAULT 0,
+              pending_mailbox_ref TEXT,
+              pending_mailbox_count INTEGER NOT NULL DEFAULT 0,
+              handoff_count INTEGER NOT NULL DEFAULT 0,
+              background_run_id TEXT,
+              background_workflow_run_id TEXT,
+              background_status TEXT,
               manifest_snapshot_ref TEXT NOT NULL DEFAULT '',
               session_policy_snapshot_ref TEXT NOT NULL DEFAULT '',
               capability_plan_summary_json TEXT NOT NULL DEFAULT '{}',
@@ -619,6 +632,18 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               parent_run_id TEXT,
               actor_ref TEXT NOT NULL DEFAULT '',
               delegated_by_tool_call_id TEXT,
+              workflow_run_id TEXT,
+              workflow_step_id TEXT,
+              workflow_status TEXT,
+              mailbox_ref TEXT,
+              handoff_ref TEXT,
+              background_state TEXT,
+              worker_total_subruns INTEGER NOT NULL DEFAULT 0,
+              worker_active_subruns INTEGER NOT NULL DEFAULT 0,
+              worker_completed_subruns INTEGER NOT NULL DEFAULT 0,
+              worker_failed_subruns INTEGER NOT NULL DEFAULT 0,
+              worker_dispatch_json TEXT,
+              workflow_run_detail_json TEXT,
               approval_state TEXT NOT NULL DEFAULT 'not-required',
               trace_id TEXT NOT NULL DEFAULT '',
               turn_id TEXT NOT NULL DEFAULT '',
@@ -633,6 +658,85 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               hidden_capability_count INTEGER NOT NULL DEFAULT 0,
               degraded_provider_count INTEGER NOT NULL DEFAULT 0,
               run_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runtime_subrun_projections (
+              run_id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              conversation_id TEXT NOT NULL,
+              parent_run_id TEXT,
+              actor_ref TEXT NOT NULL DEFAULT '',
+              label TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL,
+              run_kind TEXT NOT NULL DEFAULT 'subrun',
+              delegated_by_tool_call_id TEXT,
+              workflow_run_id TEXT,
+              mailbox_ref TEXT,
+              handoff_ref TEXT,
+              started_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              summary_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runtime_mailbox_projections (
+              mailbox_ref TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              run_id TEXT NOT NULL,
+              conversation_id TEXT NOT NULL,
+              channel TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL,
+              pending_count INTEGER NOT NULL DEFAULT 0,
+              total_messages INTEGER NOT NULL DEFAULT 0,
+              latest_handoff_ref TEXT,
+              body_storage_path TEXT,
+              body_content_hash TEXT,
+              updated_at INTEGER NOT NULL,
+              summary_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runtime_handoff_projections (
+              handoff_ref TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              run_id TEXT NOT NULL,
+              conversation_id TEXT NOT NULL,
+              parent_run_id TEXT,
+              delegated_by_tool_call_id TEXT,
+              sender_actor_ref TEXT NOT NULL DEFAULT '',
+              receiver_actor_ref TEXT NOT NULL DEFAULT '',
+              mailbox_ref TEXT NOT NULL DEFAULT '',
+              state TEXT NOT NULL,
+              artifact_refs_json TEXT NOT NULL DEFAULT '[]',
+              envelope_storage_path TEXT,
+              envelope_content_hash TEXT,
+              updated_at INTEGER NOT NULL,
+              summary_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runtime_workflow_projections (
+              workflow_run_id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              run_id TEXT NOT NULL,
+              conversation_id TEXT NOT NULL,
+              label TEXT NOT NULL DEFAULT '',
+              status TEXT NOT NULL,
+              total_steps INTEGER NOT NULL DEFAULT 0,
+              completed_steps INTEGER NOT NULL DEFAULT 0,
+              current_step_id TEXT,
+              current_step_label TEXT,
+              background_capable INTEGER NOT NULL DEFAULT 0,
+              detail_storage_path TEXT,
+              detail_content_hash TEXT,
+              updated_at INTEGER NOT NULL,
+              summary_json TEXT NOT NULL,
+              detail_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runtime_background_projections (
+              run_id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              conversation_id TEXT NOT NULL,
+              workflow_run_id TEXT,
+              status TEXT NOT NULL,
+              background_capable INTEGER NOT NULL DEFAULT 0,
+              state_storage_path TEXT,
+              state_content_hash TEXT,
+              updated_at INTEGER NOT NULL,
+              summary_json TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS runtime_approval_projections (
               id TEXT PRIMARY KEY,
@@ -662,6 +766,7 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
     ensure_runtime_config_snapshot_columns(&connection)?;
     ensure_runtime_session_projection_columns(&connection)?;
     ensure_runtime_run_projection_columns(&connection)?;
+    ensure_runtime_phase_four_projection_tables(&connection)?;
     ensure_cost_entry_columns(&connection)?;
     ensure_resource_columns(&connection)?;
     agent_seed::ensure_import_source_tables(&connection)?;
@@ -1541,6 +1646,19 @@ pub(super) fn ensure_runtime_session_projection_columns(
             ("manifest_revision", "TEXT NOT NULL DEFAULT ''"),
             ("active_run_id", "TEXT NOT NULL DEFAULT ''"),
             ("subrun_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("workflow_run_id", "TEXT"),
+            ("workflow_status", "TEXT"),
+            ("workflow_total_steps", "INTEGER NOT NULL DEFAULT 0"),
+            ("workflow_completed_steps", "INTEGER NOT NULL DEFAULT 0"),
+            ("workflow_current_step_id", "TEXT"),
+            ("workflow_current_step_label", "TEXT"),
+            ("workflow_background_capable", "INTEGER NOT NULL DEFAULT 0"),
+            ("pending_mailbox_ref", "TEXT"),
+            ("pending_mailbox_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("handoff_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("background_run_id", "TEXT"),
+            ("background_workflow_run_id", "TEXT"),
+            ("background_status", "TEXT"),
             ("manifest_snapshot_ref", "TEXT NOT NULL DEFAULT ''"),
             ("session_policy_snapshot_ref", "TEXT NOT NULL DEFAULT ''"),
             ("capability_plan_summary_json", "TEXT NOT NULL DEFAULT '{}'"),
@@ -1572,6 +1690,18 @@ pub(super) fn ensure_runtime_run_projection_columns(
             ("parent_run_id", "TEXT"),
             ("actor_ref", "TEXT NOT NULL DEFAULT ''"),
             ("delegated_by_tool_call_id", "TEXT"),
+            ("workflow_run_id", "TEXT"),
+            ("workflow_step_id", "TEXT"),
+            ("workflow_status", "TEXT"),
+            ("mailbox_ref", "TEXT"),
+            ("handoff_ref", "TEXT"),
+            ("background_state", "TEXT"),
+            ("worker_total_subruns", "INTEGER NOT NULL DEFAULT 0"),
+            ("worker_active_subruns", "INTEGER NOT NULL DEFAULT 0"),
+            ("worker_completed_subruns", "INTEGER NOT NULL DEFAULT 0"),
+            ("worker_failed_subruns", "INTEGER NOT NULL DEFAULT 0"),
+            ("worker_dispatch_json", "TEXT"),
+            ("workflow_run_detail_json", "TEXT"),
             ("approval_state", "TEXT NOT NULL DEFAULT 'not-required'"),
             ("trace_id", "TEXT NOT NULL DEFAULT ''"),
             ("turn_id", "TEXT NOT NULL DEFAULT ''"),
@@ -1591,6 +1721,215 @@ pub(super) fn ensure_runtime_run_projection_columns(
             ),
         ],
     )
+}
+
+pub(super) fn ensure_runtime_phase_four_projection_tables(
+    connection: &Connection,
+) -> Result<(), AppError> {
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS runtime_subrun_projections (
+                run_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                parent_run_id TEXT,
+                actor_ref TEXT NOT NULL DEFAULT '',
+                label TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                run_kind TEXT NOT NULL DEFAULT 'subrun',
+                delegated_by_tool_call_id TEXT,
+                workflow_run_id TEXT,
+                mailbox_ref TEXT,
+                handoff_ref TEXT,
+                started_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                summary_json TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "runtime_subrun_projections",
+        &[
+            ("session_id", "TEXT NOT NULL DEFAULT ''"),
+            ("conversation_id", "TEXT NOT NULL DEFAULT ''"),
+            ("parent_run_id", "TEXT"),
+            ("actor_ref", "TEXT NOT NULL DEFAULT ''"),
+            ("label", "TEXT NOT NULL DEFAULT ''"),
+            ("status", "TEXT NOT NULL DEFAULT 'draft'"),
+            ("run_kind", "TEXT NOT NULL DEFAULT 'subrun'"),
+            ("delegated_by_tool_call_id", "TEXT"),
+            ("workflow_run_id", "TEXT"),
+            ("mailbox_ref", "TEXT"),
+            ("handoff_ref", "TEXT"),
+            ("started_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("summary_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ],
+    )?;
+
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS runtime_mailbox_projections (
+                mailbox_ref TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                channel TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                pending_count INTEGER NOT NULL DEFAULT 0,
+                total_messages INTEGER NOT NULL DEFAULT 0,
+                latest_handoff_ref TEXT,
+                body_storage_path TEXT,
+                body_content_hash TEXT,
+                updated_at INTEGER NOT NULL,
+                summary_json TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "runtime_mailbox_projections",
+        &[
+            ("session_id", "TEXT NOT NULL DEFAULT ''"),
+            ("run_id", "TEXT NOT NULL DEFAULT ''"),
+            ("conversation_id", "TEXT NOT NULL DEFAULT ''"),
+            ("channel", "TEXT NOT NULL DEFAULT ''"),
+            ("status", "TEXT NOT NULL DEFAULT 'pending'"),
+            ("pending_count", "INTEGER NOT NULL DEFAULT 0"),
+            ("total_messages", "INTEGER NOT NULL DEFAULT 0"),
+            ("latest_handoff_ref", "TEXT"),
+            ("body_storage_path", "TEXT"),
+            ("body_content_hash", "TEXT"),
+            ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("summary_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ],
+    )?;
+
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS runtime_handoff_projections (
+                handoff_ref TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                parent_run_id TEXT,
+                delegated_by_tool_call_id TEXT,
+                sender_actor_ref TEXT NOT NULL DEFAULT '',
+                receiver_actor_ref TEXT NOT NULL DEFAULT '',
+                mailbox_ref TEXT NOT NULL DEFAULT '',
+                state TEXT NOT NULL,
+                artifact_refs_json TEXT NOT NULL DEFAULT '[]',
+                envelope_storage_path TEXT,
+                envelope_content_hash TEXT,
+                updated_at INTEGER NOT NULL,
+                summary_json TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "runtime_handoff_projections",
+        &[
+            ("session_id", "TEXT NOT NULL DEFAULT ''"),
+            ("run_id", "TEXT NOT NULL DEFAULT ''"),
+            ("conversation_id", "TEXT NOT NULL DEFAULT ''"),
+            ("parent_run_id", "TEXT"),
+            ("delegated_by_tool_call_id", "TEXT"),
+            ("sender_actor_ref", "TEXT NOT NULL DEFAULT ''"),
+            ("receiver_actor_ref", "TEXT NOT NULL DEFAULT ''"),
+            ("mailbox_ref", "TEXT NOT NULL DEFAULT ''"),
+            ("state", "TEXT NOT NULL DEFAULT 'pending'"),
+            ("artifact_refs_json", "TEXT NOT NULL DEFAULT '[]'"),
+            ("envelope_storage_path", "TEXT"),
+            ("envelope_content_hash", "TEXT"),
+            ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("summary_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ],
+    )?;
+
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS runtime_workflow_projections (
+                workflow_run_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL,
+                total_steps INTEGER NOT NULL DEFAULT 0,
+                completed_steps INTEGER NOT NULL DEFAULT 0,
+                current_step_id TEXT,
+                current_step_label TEXT,
+                background_capable INTEGER NOT NULL DEFAULT 0,
+                detail_storage_path TEXT,
+                detail_content_hash TEXT,
+                updated_at INTEGER NOT NULL,
+                summary_json TEXT NOT NULL,
+                detail_json TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "runtime_workflow_projections",
+        &[
+            ("session_id", "TEXT NOT NULL DEFAULT ''"),
+            ("run_id", "TEXT NOT NULL DEFAULT ''"),
+            ("conversation_id", "TEXT NOT NULL DEFAULT ''"),
+            ("label", "TEXT NOT NULL DEFAULT ''"),
+            ("status", "TEXT NOT NULL DEFAULT 'draft'"),
+            ("total_steps", "INTEGER NOT NULL DEFAULT 0"),
+            ("completed_steps", "INTEGER NOT NULL DEFAULT 0"),
+            ("current_step_id", "TEXT"),
+            ("current_step_label", "TEXT"),
+            ("background_capable", "INTEGER NOT NULL DEFAULT 0"),
+            ("detail_storage_path", "TEXT"),
+            ("detail_content_hash", "TEXT"),
+            ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("summary_json", "TEXT NOT NULL DEFAULT '{}'"),
+            ("detail_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ],
+    )?;
+
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS runtime_background_projections (
+                run_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                workflow_run_id TEXT,
+                status TEXT NOT NULL,
+                background_capable INTEGER NOT NULL DEFAULT 0,
+                state_storage_path TEXT,
+                state_content_hash TEXT,
+                updated_at INTEGER NOT NULL,
+                summary_json TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "runtime_background_projections",
+        &[
+            ("session_id", "TEXT NOT NULL DEFAULT ''"),
+            ("conversation_id", "TEXT NOT NULL DEFAULT ''"),
+            ("workflow_run_id", "TEXT"),
+            ("status", "TEXT NOT NULL DEFAULT 'draft'"),
+            ("background_capable", "INTEGER NOT NULL DEFAULT 0"),
+            ("state_storage_path", "TEXT"),
+            ("state_content_hash", "TEXT"),
+            ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("summary_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ],
+    )?;
+
+    Ok(())
 }
 
 pub(super) fn ensure_cost_entry_columns(connection: &Connection) -> Result<(), AppError> {

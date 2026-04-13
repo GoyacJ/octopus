@@ -64,6 +64,17 @@ fn parse_actor_ref(actor_ref: &str) -> Result<ActorRef, AppError> {
     })
 }
 
+fn normalize_agent_actor_ref(actor_ref: &str) -> String {
+    let trimmed = actor_ref.trim();
+    if trimmed.is_empty() {
+        String::new()
+    } else if trimmed.contains(':') {
+        trimmed.to_string()
+    } else {
+        format!("agent:{trimmed}")
+    }
+}
+
 impl CompiledActorManifest {
     fn capability_policy(&self) -> &octopus_core::CapabilityPolicy {
         match self {
@@ -552,8 +563,9 @@ impl RuntimeAdapter {
                     let approval_preference_raw: String = row.get(19)?;
                     let output_contract_raw: String = row.get(20)?;
                     let shared_capability_policy_raw: String = row.get(21)?;
+                    let leader_agent_id: Option<String> = row.get(22)?;
                     let member_agent_ids_raw: String = row.get(23)?;
-                    let leader_ref: String = row.get(24)?;
+                    let leader_ref_raw: String = row.get(24)?;
                     let member_refs_raw: String = row.get(25)?;
                     let team_topology_raw: String = row.get(26)?;
                     let shared_memory_policy_raw: String = row.get(27)?;
@@ -568,8 +580,47 @@ impl RuntimeAdapter {
                         serde_json::from_str(&mcp_server_names_raw).unwrap_or_default();
                     let member_agent_ids: Vec<String> =
                         serde_json::from_str(&member_agent_ids_raw).unwrap_or_default();
-                    let member_refs: Vec<String> =
+                    let mut leader_ref = normalize_agent_actor_ref(&leader_ref_raw);
+                    if leader_ref.is_empty() {
+                        leader_ref = leader_agent_id
+                            .as_deref()
+                            .map(normalize_agent_actor_ref)
+                            .or_else(|| {
+                                member_agent_ids
+                                    .first()
+                                    .map(|agent_id| normalize_agent_actor_ref(agent_id))
+                            })
+                            .unwrap_or_default();
+                    }
+                    let parsed_member_refs: Vec<String> =
                         serde_json::from_str(&member_refs_raw).unwrap_or_default();
+                    let legacy_member_refs = parsed_member_refs.is_empty() && !member_agent_ids.is_empty();
+                    let mut member_refs = if parsed_member_refs.is_empty() {
+                        member_agent_ids
+                            .iter()
+                            .map(|agent_id| normalize_agent_actor_ref(agent_id))
+                            .collect::<Vec<_>>()
+                    } else {
+                        parsed_member_refs
+                            .into_iter()
+                            .map(|actor_ref| normalize_agent_actor_ref(&actor_ref))
+                            .filter(|actor_ref| !actor_ref.is_empty())
+                            .collect::<Vec<_>>()
+                    };
+                    if member_refs.is_empty() && !leader_ref.is_empty() {
+                        member_refs.push(leader_ref.clone());
+                    }
+                    let worker_concurrency_limit = row.get::<_, i64>(31)? as u64;
+                    let worker_concurrency_limit = if legacy_member_refs
+                        && worker_concurrency_limit <= 1
+                        && member_refs.len() > 1
+                    {
+                        member_refs.len() as u64
+                    } else if worker_concurrency_limit == 0 {
+                        member_refs.len().max(1) as u64
+                    } else {
+                        worker_concurrency_limit
+                    };
                     Ok(TeamRecord {
                         id: row.get(0)?,
                         workspace_id: row.get(1)?,
@@ -623,7 +674,7 @@ impl RuntimeAdapter {
                             &shared_capability_policy_raw,
                             octopus_core::default_team_shared_capability_policy,
                         ),
-                        leader_agent_id: row.get(22)?,
+                        leader_agent_id,
                         member_agent_ids,
                         leader_ref: leader_ref.clone(),
                         member_refs: member_refs.clone(),
@@ -652,7 +703,7 @@ impl RuntimeAdapter {
                                 true,
                             )
                         }),
-                        worker_concurrency_limit: row.get::<_, i64>(31)? as u64,
+                        worker_concurrency_limit,
                         integration_source: None,
                         trust_metadata: octopus_core::default_asset_trust_metadata(),
                         dependency_resolution: Vec::new(),

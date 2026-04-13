@@ -32,6 +32,63 @@ describe('runtime client transport', () => {
         updatedAt: 2,
         modelId: 'claude-sonnet-4-5',
         nextAction: 'runtime.run.idle',
+        runKind: 'primary',
+        workflowRun: 'wf-run-1',
+        mailboxRef: 'mailbox-1',
+        backgroundState: 'completed',
+        workerDispatch: {
+          totalSubruns: 2,
+          activeSubruns: 0,
+          completedSubruns: 2,
+          failedSubruns: 0,
+        },
+        usageSummary: {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        },
+        artifactRefs: [],
+        traceContext: {
+          sessionId: 'runtime-session-conv-1',
+          traceId: 'trace-1',
+          turnId: 'turn-1',
+        },
+        checkpoint: {
+          serializedSession: {},
+          currentIterationIndex: 0,
+          usageSummary: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+          },
+          capabilityPlanSummary: {
+            activatedTools: [],
+            approvedTools: [],
+            authResolvedTools: [],
+            availableResources: [],
+            deferredTools: [],
+            discoverableSkills: [],
+            grantedTools: [],
+            hiddenCapabilities: [],
+            pendingTools: [],
+            providerFallbacks: [],
+            visibleTools: [],
+          },
+        },
+        capabilityPlanSummary: {
+          activatedTools: [],
+          approvedTools: [],
+          authResolvedTools: [],
+          availableResources: [],
+          deferredTools: [],
+          discoverableSkills: [],
+          grantedTools: [],
+          hiddenCapabilities: [],
+          pendingTools: [],
+          providerFallbacks: [],
+          visibleTools: [],
+        },
+        providerStateSummary: [],
       }),
     })
 
@@ -43,7 +100,7 @@ describe('runtime client transport', () => {
       session: createWorkspaceSession(connection!),
     })
 
-    await workspaceClient.runtime.submitUserTurn('runtime-session-conv-1', {
+    const run = await workspaceClient.runtime.submitUserTurn('runtime-session-conv-1', {
       content: 'hello',
       permissionMode: 'auto',
     }, 'idem-turn-1')
@@ -55,6 +112,9 @@ describe('runtime client transport', () => {
       permissionMode: 'workspace-write',
     })
     expect(headers.get('Idempotency-Key')).toBe('idem-turn-1')
+    expect(run.workflowRun).toBe('wf-run-1')
+    expect(run.mailboxRef).toBe('mailbox-1')
+    expect(run.workerDispatch?.totalSubruns).toBe(2)
   })
 
   it('preserves danger-full-access for authenticated runtime requests', async () => {

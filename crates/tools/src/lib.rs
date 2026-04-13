@@ -1,12 +1,13 @@
 mod builtin_exec;
 mod capability_runtime;
 mod fs_shell;
+mod lsp_runtime;
 mod skill_runtime;
 #[cfg(test)]
 mod split_module_tests;
+mod subagent_runtime;
 mod tool_registry;
 mod web_external;
-mod workspace_runtime;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -26,14 +27,11 @@ use runtime::{
     permission_enforcer::{EnforcementResult, PermissionEnforcer},
     read_file,
     summary_compression::compress_summary_text,
-    task_registry::TaskRegistry,
-    team_cron_registry::{CronRegistry, TeamRegistry},
-    worker_boot::{WorkerReadySnapshot, WorkerRegistry},
     write_file, ApiClient, ApiRequest, AssistantEvent, BashCommandInput, BashCommandOutput,
-    BranchFreshness, ConfigLoader, ContentBlock, ConversationMessage, ConversationRuntime,
+    BranchFreshness, ContentBlock, ConversationMessage, ConversationRuntime,
     GrepSearchInput, LaneCommitProvenance, LaneEvent, LaneEventBlocker, LaneEventName,
     LaneEventStatus, LaneFailureClass, McpDegradedReport, MessageRole, PermissionMode,
-    PermissionPolicy, PromptCacheEvent, RuntimeError, Session, TaskPacket, ToolError,
+    PermissionPolicy, PromptCacheEvent, RuntimeError, Session, ToolError,
     ToolExecutionOutcome, ToolExecutor,
 };
 use serde::{Deserialize, Serialize};
@@ -83,6 +81,17 @@ pub(crate) use fs_shell::{
     WriteFileInput,
 };
 #[allow(unused_imports)]
+pub(crate) use lsp_runtime::{run_lsp, LspInput};
+#[allow(unused_imports)]
+pub(crate) use subagent_runtime::{
+    agent_permission_policy, allowed_tools_for_subagent, classify_lane_failure,
+    derive_agent_state, final_assistant_text, iso8601_now, maybe_commit_provenance,
+    persist_agent_terminal_state, push_output_block, spawn_subagent_job, spawn_subagent_task,
+    spawn_subagent_with_job,
+    spawn_subagent_with_job_detailed, AgentInput, AgentJob, AgentOutput, AgentSpawnFailure,
+    SubagentToolExecutor,
+};
+#[allow(unused_imports)]
 pub(crate) use tool_registry::{
     canonical_tool_token, deferred_tool_specs, execute_tool_search, normalize_tool_search_query,
     permission_mode_from_plugin, search_tool_specs,
@@ -91,20 +100,6 @@ pub(crate) use tool_registry::{
 pub(crate) use web_external::{
     run_remote_trigger, run_web_fetch, run_web_search, RemoteTriggerInput, WebFetchInput,
     WebSearchInput,
-};
-#[allow(unused_imports)]
-pub(crate) use workspace_runtime::{
-    agent_permission_policy, allowed_tools_for_subagent, classify_lane_failure, derive_agent_state,
-    execute_agent_with_spawn, final_assistant_text, iso8601_now, maybe_commit_provenance,
-    persist_agent_terminal_state, push_output_block, run_agent, run_cron_create, run_cron_delete,
-    run_cron_list, run_lsp, run_task_create, run_task_get, run_task_list, run_task_output,
-    run_task_packet, run_task_stop, run_task_update, run_team_create, run_team_delete,
-    run_worker_await_ready, run_worker_create, run_worker_get, run_worker_observe,
-    run_worker_observe_completion, run_worker_resolve_trust, run_worker_restart,
-    run_worker_send_prompt, run_worker_terminate, AgentInput, AgentJob, AgentOutput,
-    CronCreateInput, CronDeleteInput, LspInput, SubagentToolExecutor, TaskCreateInput, TaskIdInput,
-    TaskUpdateInput, TeamCreateInput, TeamDeleteInput, WorkerCreateInput, WorkerIdInput,
-    WorkerObserveCompletionInput, WorkerObserveInput, WorkerSendPromptInput,
 };
 
 pub mod lane_completion;

@@ -5,7 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ArrowUp, Bot, Plus, Shield, Sparkles } from 'lucide-vue-next'
 
 import { resolveRuntimePermissionMode, type ConversationActorKind, type Message, type PermissionMode, type WorkspaceResourceRecord } from '@octopus/schema'
-import { UiButton, UiConversationComposerShell, UiEmptyState, UiSelect, UiStatusCallout, UiTextarea } from '@octopus/ui'
+import { UiBadge, UiButton, UiConversationComposerShell, UiEmptyState, UiSelect, UiStatusCallout, UiTextarea } from '@octopus/ui'
 
 import ConversationMessageBubble from '@/components/conversation/ConversationMessageBubble.vue'
 import ConversationQueueList from '@/components/conversation/ConversationQueueList.vue'
@@ -132,6 +132,39 @@ const queueItems = computed(() =>
     createdAt: item.createdAt,
   })),
 )
+const runtimeOrchestrationBadges = computed(() => {
+  const session = runtime.activeSession
+  const badges: Array<{ label: string, tone?: 'default' | 'info' | 'success' | 'warning' }> = []
+  if (!session) {
+    return badges
+  }
+
+  if (session.workflow) {
+    badges.push({
+      label: `Workflow ${session.workflow.status}`,
+      tone: session.workflow.status === 'completed' ? 'success' : 'info',
+    })
+  }
+  if (session.subrunCount > 0) {
+    badges.push({
+      label: `${session.subrunCount} workers`,
+      tone: 'info',
+    })
+  }
+  if (session.pendingMailbox) {
+    badges.push({
+      label: `Mailbox ${session.pendingMailbox.status}`,
+      tone: session.pendingMailbox.pendingCount > 0 ? 'warning' : 'default',
+    })
+  }
+  if (session.backgroundRun) {
+    badges.push({
+      label: `Background ${session.backgroundRun.status}`,
+      tone: session.backgroundRun.status === 'completed' ? 'success' : 'info',
+    })
+  }
+  return badges
+})
 const hasModelOptions = computed(() => modelOptions.value.length > 0)
 const hasActorOptions = computed(() => actorOptions.value.length > 0)
 const canSubmit = computed(() => messageDraft.value.trim().length > 0 && hasModelOptions.value && !!selectedActor.value)
@@ -376,6 +409,19 @@ async function rejectMessageApproval() {
 
         <div v-if="queueItems.length" class="mx-auto mt-4 w-full max-w-[840px]">
           <ConversationQueueList :items="queueItems" @remove="runtime.removeQueuedTurn" />
+        </div>
+
+        <div
+          v-if="runtimeOrchestrationBadges.length"
+          class="mx-auto mt-4 flex w-full max-w-[840px] flex-wrap gap-2 px-1"
+        >
+          <UiBadge
+            v-for="badge in runtimeOrchestrationBadges"
+            :key="badge.label"
+            :label="badge.label"
+            :tone="badge.tone"
+            subtle
+          />
         </div>
 
         <UiConversationComposerShell

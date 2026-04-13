@@ -959,7 +959,7 @@ async fn session_bound_agent_selection_injects_manifest_prompt_into_execution() 
 }
 
 #[tokio::test]
-async fn team_sessions_are_rejected_until_team_runtime_is_enabled() {
+async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
     write_workspace_config(
@@ -1056,18 +1056,221 @@ async fn team_sessions_are_rejected_until_team_runtime_is_enabled() {
                 "Team Actor Session",
                 "team:team-workspace-core",
                 Some("quota-model"),
-                "workspace-write",
+                "readonly",
             ),
             "user-owner",
         )
         .await
         .expect("session");
 
-    let error = adapter
+    let run = adapter
         .submit_turn(&session.summary.id, turn_input("Review the proposal", None))
         .await
-        .expect_err("team runtime should stay disabled in phase 2");
-    assert!(error.to_string().contains("team_runtime_not_enabled"));
+        .expect("team runtime should execute through the shared runtime trunk");
+
+    assert_eq!(run.run_kind, "primary");
+    assert_eq!(run.actor_ref, "team:team-workspace-core");
+    assert!(run.workflow_run.is_some());
+    assert!(run.worker_dispatch.is_some());
+    assert!(run.worker_dispatch.as_ref().is_some_and(|dispatch| dispatch.total_subruns >= 2));
+    assert!(run.mailbox_ref.is_some());
+    assert!(run.background_state.is_some());
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    assert!(detail.subrun_count >= 2);
+    assert_eq!(detail.summary.subrun_count, detail.subrun_count);
+    assert!(detail.workflow.is_some());
+    assert!(detail.pending_mailbox.is_some());
+    assert!(detail.background_run.is_some());
+    assert!(detail.handoffs.len() >= 2);
+    assert!(detail.subruns.len() >= 2);
+
+    let workflow = detail.workflow.as_ref().expect("workflow summary");
+    assert_eq!(workflow.status, "completed");
+    assert!(workflow.total_steps >= 3);
+    assert!(workflow.completed_steps >= 3);
+
+    let first_subrun = detail.subruns.first().expect("subrun summary");
+    assert_eq!(first_subrun.parent_run_id.as_deref(), Some(run.id.as_str()));
+    assert!(first_subrun.actor_ref.starts_with("agent:"));
+    assert_eq!(first_subrun.run_kind, "subrun");
+
+    let mailbox = detail.pending_mailbox.as_ref().expect("mailbox summary");
+    assert_eq!(mailbox.channel, "team-mailbox");
+    assert!(mailbox.total_messages >= 2);
+
+    let background = detail.background_run.as_ref().expect("background summary");
+    assert_eq!(background.status, "completed");
+    assert_eq!(background.workflow_run_id.as_deref(), run.workflow_run.as_deref());
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    let session_projection: (
+        Option<String>,
+        Option<String>,
+        i64,
+        i64,
+        Option<String>,
+        i64,
+        i64,
+        Option<String>,
+    ) = connection
+        .query_row(
+            "SELECT workflow_run_id, workflow_status, workflow_total_steps, workflow_completed_steps,
+                    pending_mailbox_ref, pending_mailbox_count, handoff_count, background_status
+             FROM runtime_session_projections
+             WHERE id = ?1",
+            [&session.summary.id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                ))
+            },
+        )
+        .expect("phase four session projection");
+    assert_eq!(session_projection.0.as_deref(), run.workflow_run.as_deref());
+    assert_eq!(session_projection.1.as_deref(), Some("completed"));
+    assert!(session_projection.2 >= 3);
+    assert!(session_projection.3 >= 3);
+    assert_eq!(session_projection.4.as_deref(), detail.pending_mailbox.as_ref().map(|mailbox| mailbox.mailbox_ref.as_str()));
+    assert_eq!(session_projection.5, mailbox.pending_count as i64);
+    assert!(session_projection.6 >= 2);
+    assert_eq!(session_projection.7.as_deref(), Some("completed"));
+
+    let run_projection: (
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        Option<String>,
+        i64,
+        i64,
+        i64,
+        i64,
+    ) = connection
+        .query_row(
+            "SELECT workflow_run_id, workflow_step_id, mailbox_ref, handoff_ref, background_state,
+                    worker_total_subruns, worker_active_subruns, worker_completed_subruns, worker_failed_subruns
+             FROM runtime_run_projections
+             WHERE id = ?1",
+            [&run.id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                ))
+            },
+        )
+        .expect("phase four run projection");
+    assert_eq!(run_projection.0.as_deref(), run.workflow_run.as_deref());
+    assert!(run_projection.1.is_some());
+    assert_eq!(run_projection.2.as_deref(), run.mailbox_ref.as_deref());
+    assert!(run_projection.3.is_some());
+    assert_eq!(run_projection.4.as_deref(), Some("completed"));
+    assert!(run_projection.5 >= 2);
+    assert_eq!(run_projection.6, 0);
+    assert!(run_projection.7 >= 2);
+    assert_eq!(run_projection.8, 0);
+
+    let subrun_projection_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM runtime_subrun_projections WHERE session_id = ?1 AND parent_run_id = ?2",
+            params![session.summary.id, run.id],
+            |row| row.get(0),
+        )
+        .expect("subrun projections");
+    let handoff_projection_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM runtime_handoff_projections WHERE session_id = ?1 AND run_id = ?2",
+            params![session.summary.id, run.id],
+            |row| row.get(0),
+        )
+        .expect("handoff projections");
+    let workflow_projection: (Option<String>, Option<String>) = connection
+        .query_row(
+            "SELECT detail_storage_path, detail_content_hash
+             FROM runtime_workflow_projections
+             WHERE workflow_run_id = ?1",
+            [run.workflow_run.clone().expect("workflow run id")],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("workflow projection");
+    let mailbox_projection: (Option<String>, Option<String>) = connection
+        .query_row(
+            "SELECT body_storage_path, body_content_hash
+             FROM runtime_mailbox_projections
+             WHERE mailbox_ref = ?1",
+            [mailbox.mailbox_ref.clone()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("mailbox projection");
+    let background_projection: (Option<String>, Option<String>) = connection
+        .query_row(
+            "SELECT state_storage_path, state_content_hash
+             FROM runtime_background_projections
+             WHERE run_id = ?1",
+            [background.run_id.clone()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("background projection");
+    assert!(subrun_projection_count >= 2);
+    assert!(handoff_projection_count >= 2);
+    assert!(workflow_projection.0.as_deref().is_some_and(|path| root.join(path).exists()));
+    assert!(workflow_projection.1.as_deref().is_some_and(|hash| hash.starts_with("sha256-")));
+    assert!(mailbox_projection.0.as_deref().is_some_and(|path| root.join(path).exists()));
+    assert!(mailbox_projection.1.as_deref().is_some_and(|hash| hash.starts_with("sha256-")));
+    assert!(background_projection.0.as_deref().is_some_and(|path| root.join(path).exists()));
+    assert!(background_projection.1.as_deref().is_some_and(|hash| hash.starts_with("sha256-")));
+
+    let workflow_events = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("events")
+        .into_iter()
+        .filter_map(|event| event.kind)
+        .filter(|kind| kind.starts_with("workflow."))
+        .collect::<Vec<_>>();
+    assert!(workflow_events.iter().any(|kind| kind == "workflow.started"));
+    assert!(workflow_events
+        .iter()
+        .any(|kind| kind == "workflow.step.started"));
+    assert!(workflow_events
+        .iter()
+        .any(|kind| kind == "workflow.step.completed"));
+    assert!(workflow_events.iter().any(|kind| kind == "workflow.completed"));
+
+    let reloaded = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        Arc::new(MockRuntimeModelExecutor),
+    );
+    let reloaded_detail = reloaded
+        .get_session(&session.summary.id)
+        .await
+        .expect("reloaded session detail");
+    assert_eq!(reloaded_detail.subrun_count, detail.subrun_count);
+    assert_eq!(reloaded_detail.workflow, detail.workflow);
+    assert_eq!(reloaded_detail.pending_mailbox, detail.pending_mailbox);
+    assert_eq!(reloaded_detail.background_run, detail.background_run);
+    assert_eq!(reloaded_detail.subruns.len(), detail.subruns.len());
+    assert_eq!(reloaded_detail.handoffs.len(), detail.handoffs.len());
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }

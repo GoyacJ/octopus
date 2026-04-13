@@ -17,17 +17,16 @@ use std::time::{Duration, Instant};
 
 use super::{
     agent_permission_policy, allowed_tools_for_subagent, classify_lane_failure, derive_agent_state,
-    execute_agent_with_spawn, execute_tool, final_assistant_text, maybe_commit_provenance,
-    mvp_tool_specs, permission_mode_from_plugin, persist_agent_terminal_state, push_output_block,
-    run_task_packet, AgentInput, AgentJob, CapabilityPlannerInput, CapabilityProvider,
+    execute_tool, final_assistant_text, maybe_commit_provenance, mvp_tool_specs,
+    permission_mode_from_plugin, persist_agent_terminal_state, push_output_block,
+    spawn_subagent_with_job, AgentInput, AgentJob, CapabilityPlannerInput, CapabilityProvider,
     CapabilityRuntime, LaneEventName, LaneFailureClass, SubagentToolExecutor,
 };
 use api::OutputContentBlock;
 use plugins::{PluginTool, PluginToolDefinition, PluginToolPermission};
 use runtime::{
     permission_enforcer::PermissionEnforcer, ApiRequest, AssistantEvent, ConfigLoader,
-    ConversationRuntime, PermissionMode, PermissionPolicy, RuntimeError, Session, TaskPacket,
-    ToolExecutor,
+    ConversationRuntime, PermissionMode, PermissionPolicy, RuntimeError, Session, ToolExecutor,
 };
 use serde_json::json;
 
@@ -42,6 +41,10 @@ fn temp_path(name: &str) -> PathBuf {
         .expect("time")
         .as_nanos();
     std::env::temp_dir().join(format!("clawd-tools-{unique}-{name}"))
+}
+
+fn legacy_tool_name(parts: &[&str]) -> String {
+    parts.concat()
 }
 
 fn run_git(cwd: &Path, args: &[&str]) {
@@ -215,7 +218,7 @@ fn exposes_mvp_tools() {
     assert!(names.contains(&"WebFetch"));
     assert!(names.contains(&"WebSearch"));
     assert!(names.contains(&"TodoWrite"));
-    assert!(names.contains(&"Agent"));
+    assert!(!names.contains(&"Agent"));
     assert!(names.contains(&"ToolSearch"));
     assert!(names.contains(&"NotebookEdit"));
     assert!(names.contains(&"Sleep"));
@@ -226,11 +229,27 @@ fn exposes_mvp_tools() {
     assert!(names.contains(&"StructuredOutput"));
     assert!(names.contains(&"REPL"));
     assert!(names.contains(&"PowerShell"));
-    assert!(names.contains(&"WorkerCreate"));
-    assert!(names.contains(&"WorkerObserve"));
-    assert!(names.contains(&"WorkerAwaitReady"));
-    assert!(names.contains(&"WorkerSendPrompt"));
-    assert!(names.contains(&"WorkerObserveCompletion"));
+    assert!(!names.contains(&legacy_tool_name(&["Task", "Create"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Run", "Task", "Packet"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Task", "Get"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Task", "List"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Task", "Stop"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Task", "Update"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Task", "Output"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Worker", "Create"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Worker", "Get"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Worker", "Observe"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Worker", "Resolve", "Trust"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Worker", "Await", "Ready"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Worker", "Send", "Prompt"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Worker", "Restart"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Worker", "Terminate"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Worker", "Observe", "Completion"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Team", "Create"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Team", "Delete"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Cron", "Create"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Cron", "Delete"]).as_str()));
+    assert!(!names.contains(&legacy_tool_name(&["Cron", "List"]).as_str()));
 }
 
 #[test]
@@ -240,491 +259,33 @@ fn rejects_unknown_tool_names() {
 }
 
 #[test]
-fn worker_tools_gate_prompt_delivery_until_ready_and_support_auto_trust() {
-    let created = execute_tool(
-        "WorkerCreate",
-        &json!({
-            "cwd": "/tmp/worktree/repo",
-            "trusted_roots": ["/tmp/worktree"]
-        }),
-    )
-    .expect("WorkerCreate should succeed");
-    let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
-    let worker_id = created_output["worker_id"]
-        .as_str()
-        .expect("worker id")
-        .to_string();
-    assert_eq!(created_output["status"], "spawning");
-    assert_eq!(created_output["trust_auto_resolve"], true);
-
-    let gated = execute_tool(
-        "WorkerSendPrompt",
-        &json!({
-            "worker_id": worker_id,
-            "prompt": "ship the change"
-        }),
-    )
-    .expect_err("prompt delivery before ready should fail");
-    assert!(gated.contains("not ready for prompt delivery"));
-
-    let observed = execute_tool(
-        "WorkerObserve",
-        &json!({
-            "worker_id": created_output["worker_id"],
-            "screen_text": "Do you trust the files in this folder?\n1. Yes, proceed\n2. No"
-        }),
-    )
-    .expect("WorkerObserve should auto-resolve trust");
-    let observed_output: serde_json::Value = serde_json::from_str(&observed).expect("json");
-    assert_eq!(observed_output["status"], "spawning");
-    assert_eq!(observed_output["trust_gate_cleared"], true);
-    assert_eq!(
-        observed_output["events"][1]["payload"]["type"],
-        "trust_prompt"
-    );
-    assert_eq!(
-        observed_output["events"][2]["payload"]["resolution"],
-        "auto_allowlisted"
-    );
-
-    let ready = execute_tool(
-        "WorkerObserve",
-        &json!({
-            "worker_id": created_output["worker_id"],
-            "screen_text": "Ready for your input\n>"
-        }),
-    )
-    .expect("WorkerObserve should mark worker ready");
-    let ready_output: serde_json::Value = serde_json::from_str(&ready).expect("json");
-    assert_eq!(ready_output["status"], "ready_for_prompt");
-
-    let await_ready = execute_tool(
-        "WorkerAwaitReady",
-        &json!({
-            "worker_id": created_output["worker_id"]
-        }),
-    )
-    .expect("WorkerAwaitReady should succeed");
-    let await_ready_output: serde_json::Value = serde_json::from_str(&await_ready).expect("json");
-    assert_eq!(await_ready_output["ready"], true);
-
-    let accepted = execute_tool(
-        "WorkerSendPrompt",
-        &json!({
-            "worker_id": created_output["worker_id"],
-            "prompt": "ship the change"
-        }),
-    )
-    .expect("WorkerSendPrompt should succeed after ready");
-    let accepted_output: serde_json::Value = serde_json::from_str(&accepted).expect("json");
-    assert_eq!(accepted_output["status"], "running");
-    assert_eq!(accepted_output["prompt_delivery_attempts"], 1);
-    assert_eq!(accepted_output["prompt_in_flight"], true);
-}
-
-#[test]
-fn worker_tools_detect_misdelivery_and_arm_prompt_replay() {
-    let created = execute_tool(
-        "WorkerCreate",
-        &json!({
-            "cwd": "/tmp/repo/worker-misdelivery"
-        }),
-    )
-    .expect("WorkerCreate should succeed");
-    let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
-    let worker_id = created_output["worker_id"]
-        .as_str()
-        .expect("worker id")
-        .to_string();
-
-    execute_tool(
-        "WorkerObserve",
-        &json!({
-            "worker_id": worker_id,
-            "screen_text": "Ready for input\n>"
-        }),
-    )
-    .expect("worker should become ready");
-
-    execute_tool(
-        "WorkerSendPrompt",
-        &json!({
-            "worker_id": worker_id,
-            "prompt": "Investigate flaky boot"
-        }),
-    )
-    .expect("prompt send should succeed");
-
-    let recovered = execute_tool(
-        "WorkerObserve",
-        &json!({
-            "worker_id": worker_id,
-            "screen_text": "% Investigate flaky boot\nzsh: command not found: Investigate"
-        }),
-    )
-    .expect("misdelivery observe should succeed");
-    let recovered_output: serde_json::Value = serde_json::from_str(&recovered).expect("json");
-    assert_eq!(recovered_output["status"], "ready_for_prompt");
-    assert_eq!(recovered_output["last_error"]["kind"], "prompt_delivery");
-    assert_eq!(recovered_output["replay_prompt"], "Investigate flaky boot");
-    assert_eq!(
-        recovered_output["events"][3]["payload"]["observed_target"],
-        "shell"
-    );
-    assert_eq!(
-        recovered_output["events"][4]["payload"]["recovery_armed"],
-        true
-    );
-
-    let replayed = execute_tool(
-        "WorkerSendPrompt",
-        &json!({
-            "worker_id": worker_id
-        }),
-    )
-    .expect("WorkerSendPrompt should replay recovered prompt");
-    let replayed_output: serde_json::Value = serde_json::from_str(&replayed).expect("json");
-    assert_eq!(replayed_output["status"], "running");
-    assert_eq!(replayed_output["prompt_delivery_attempts"], 2);
-    assert_eq!(replayed_output["prompt_in_flight"], true);
-}
-
-#[test]
-fn worker_observe_completion_marks_provider_degraded_failures() {
-    let created = execute_tool(
-        "WorkerCreate",
-        &json!({
-            "cwd": "/tmp/repo/worker-completion"
-        }),
-    )
-    .expect("WorkerCreate should succeed");
-    let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
-    let worker_id = created_output["worker_id"]
-        .as_str()
-        .expect("worker id")
-        .to_string();
-
-    execute_tool(
-        "WorkerObserve",
-        &json!({
-            "worker_id": worker_id,
-            "screen_text": "Ready for input\n>"
-        }),
-    )
-    .expect("worker should become ready");
-    execute_tool(
-        "WorkerSendPrompt",
-        &json!({
-            "worker_id": worker_id,
-            "prompt": "Run the lane"
-        }),
-    )
-    .expect("prompt send should succeed");
-
-    let observed = execute_tool(
-        "WorkerObserveCompletion",
-        &json!({
-            "worker_id": worker_id,
-            "finish_reason": "unknown",
-            "tokens_output": 0
-        }),
-    )
-    .expect("WorkerObserveCompletion should succeed");
-    let observed_output: serde_json::Value = serde_json::from_str(&observed).expect("json");
-    assert_eq!(observed_output["status"], "failed");
-    assert_eq!(observed_output["last_error"]["kind"], "provider");
-}
-
-#[test]
-fn worker_observe_completion_success_finish_sets_finished_status() {
-    let created = execute_tool(
-        "WorkerCreate",
-        &json!({
-            "cwd": "/tmp/observe-completion-success",
-            "trusted_roots": ["/tmp"]
-        }),
-    )
-    .expect("WorkerCreate should succeed");
-    let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
-    let worker_id = created_output["worker_id"]
-        .as_str()
-        .expect("worker id")
-        .to_string();
-
-    let completed = execute_tool(
-        "WorkerObserveCompletion",
-        &json!({
-            "worker_id": worker_id,
-            "finish_reason": "end_turn",
-            "tokens_output": 512
-        }),
-    )
-    .expect("WorkerObserveCompletion should succeed");
-    let completed_output: serde_json::Value = serde_json::from_str(&completed).expect("json");
-    assert_eq!(completed_output["status"], "finished");
-    assert_eq!(completed_output["prompt_in_flight"], false);
-}
-
-#[test]
-fn worker_get_returns_worker_state() {
-    let created = execute_tool(
-        "WorkerCreate",
-        &json!({
-            "cwd": "/tmp/worker-get-state",
-            "trusted_roots": ["/tmp"]
-        }),
-    )
-    .expect("WorkerCreate should succeed");
-    let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
-    let worker_id = created_output["worker_id"]
-        .as_str()
-        .expect("worker id")
-        .to_string();
-
-    let fetched = execute_tool(
-        "WorkerGet",
-        &json!({
-            "worker_id": worker_id
-        }),
-    )
-    .expect("WorkerGet should succeed");
-    let fetched_output: serde_json::Value = serde_json::from_str(&fetched).expect("json");
-    assert_eq!(fetched_output["worker_id"], worker_id);
-    assert_eq!(fetched_output["status"], "spawning");
-    assert_eq!(fetched_output["cwd"], "/tmp/worker-get-state");
-}
-
-#[test]
-fn worker_get_on_unknown_id_returns_error() {
-    let result = execute_tool(
-        "WorkerGet",
-        &json!({
-            "worker_id": "worker_nonexistent_get_00000000"
-        }),
-    );
-    assert!(
-        result.is_err(),
-        "WorkerGet on unknown id should return error"
-    );
-    assert!(result
-        .expect_err("unknown worker get should fail")
-        .contains("worker not found"));
-}
-
-#[test]
-fn worker_await_ready_on_spawning_worker_returns_not_ready() {
-    let created = execute_tool(
-        "WorkerCreate",
-        &json!({
-            "cwd": "/tmp/worker-await-not-ready"
-        }),
-    )
-    .expect("WorkerCreate should succeed");
-    let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
-    let worker_id = created_output["worker_id"]
-        .as_str()
-        .expect("worker id")
-        .to_string();
-
-    let snapshot = execute_tool(
-        "WorkerAwaitReady",
-        &json!({
-            "worker_id": worker_id
-        }),
-    )
-    .expect("WorkerAwaitReady should succeed on spawning worker");
-    let snapshot_output: serde_json::Value = serde_json::from_str(&snapshot).expect("json");
-    assert_eq!(snapshot_output["ready"], false);
-    assert_eq!(snapshot_output["worker_id"], worker_id);
-}
-
-#[test]
-fn stall_detect_and_resolve_trust_end_to_end() {
-    let created = execute_tool(
-        "WorkerCreate",
-        &json!({
-            "cwd": "/no/trusted/root/here"
-        }),
-    )
-    .expect("WorkerCreate should succeed");
-    let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
-    let worker_id = created_output["worker_id"]
-        .as_str()
-        .expect("worker id")
-        .to_string();
-    assert_eq!(created_output["trust_auto_resolve"], false);
-
-    let stalled = execute_tool(
-        "WorkerObserve",
-        &json!({
-            "worker_id": worker_id,
-            "screen_text": "Do you trust the files in this folder?\n[Allow] [Deny]"
-        }),
-    )
-    .expect("WorkerObserve should succeed");
-    let stalled_output: serde_json::Value = serde_json::from_str(&stalled).expect("json");
-    assert_eq!(stalled_output["status"], "trust_required");
-    assert_eq!(stalled_output["trust_gate_cleared"], false);
-
-    let resolved = execute_tool(
-        "WorkerResolveTrust",
-        &json!({
-            "worker_id": worker_id
-        }),
-    )
-    .expect("WorkerResolveTrust should succeed");
-    let resolved_output: serde_json::Value = serde_json::from_str(&resolved).expect("json");
-    assert_eq!(resolved_output["status"], "spawning");
-    assert_eq!(resolved_output["trust_gate_cleared"], true);
-
-    let ready = execute_tool(
-        "WorkerObserve",
-        &json!({
-            "worker_id": worker_id,
-            "screen_text": "Ready for input\n>"
-        }),
-    )
-    .expect("WorkerObserve should succeed after trust resolved");
-    let ready_output: serde_json::Value = serde_json::from_str(&ready).expect("json");
-    assert_eq!(ready_output["status"], "ready_for_prompt");
-}
-
-#[test]
-fn stall_detect_and_restart_recovery_end_to_end() {
-    let created = execute_tool(
-        "WorkerCreate",
-        &json!({
-            "cwd": "/no/trusted/root/restart-test"
-        }),
-    )
-    .expect("WorkerCreate should succeed");
-    let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
-    let worker_id = created_output["worker_id"]
-        .as_str()
-        .expect("worker id")
-        .to_string();
-
-    let stalled = execute_tool(
-        "WorkerObserve",
-        &json!({
-            "worker_id": worker_id,
-            "screen_text": "trust this folder? [Yes] [No]"
-        }),
-    )
-    .expect("WorkerObserve should succeed");
-    let stalled_output: serde_json::Value = serde_json::from_str(&stalled).expect("json");
-    assert_eq!(stalled_output["status"], "trust_required");
-
-    let restarted = execute_tool(
-        "WorkerRestart",
-        &json!({
-            "worker_id": worker_id
-        }),
-    )
-    .expect("WorkerRestart should succeed");
-    let restarted_output: serde_json::Value = serde_json::from_str(&restarted).expect("json");
-    assert_eq!(restarted_output["status"], "spawning");
-    assert_eq!(restarted_output["trust_gate_cleared"], false);
-}
-
-#[test]
-fn recovery_loop_state_file_reflects_transitions() {
-    use std::fs;
-
-    let worktree = temp_path("recovery-loop-state");
-    fs::create_dir_all(&worktree).expect("create worktree");
-    let cwd = worktree.to_str().expect("utf-8").to_string();
-    let state_path = worktree.join(".claw").join("worker-state.json");
-
-    let created = execute_tool(
-        "WorkerCreate",
-        &json!({
-            "cwd": cwd
-        }),
-    )
-    .expect("WorkerCreate should succeed");
-    let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
-    let worker_id = created_output["worker_id"]
-        .as_str()
-        .expect("worker id")
-        .to_string();
-
-    assert!(state_path.exists(), "state file should exist after create");
-    let created_state: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&state_path).expect("read state")).expect("json");
-    assert_eq!(created_state["status"], "spawning");
-    assert_eq!(created_state["is_ready"], false);
-    assert!(created_state["seconds_since_update"].is_number());
-
-    execute_tool(
-        "WorkerObserve",
-        &json!({
-            "worker_id": worker_id,
-            "screen_text": "Do you trust the files in this folder?"
-        }),
-    )
-    .expect("WorkerObserve should succeed");
-    let trust_required_state: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&state_path).expect("read state")).expect("json");
-    assert_eq!(trust_required_state["status"], "trust_required");
-    assert_eq!(trust_required_state["trust_gate_cleared"], false);
-    assert!(trust_required_state["seconds_since_update"].is_number());
-
-    execute_tool(
-        "WorkerResolveTrust",
-        &json!({
-            "worker_id": worker_id
-        }),
-    )
-    .expect("WorkerResolveTrust should succeed");
-    let resolved_state: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&state_path).expect("read state")).expect("json");
-    assert_eq!(resolved_state["status"], "spawning");
-    assert_eq!(resolved_state["trust_gate_cleared"], true);
-
-    execute_tool(
-        "WorkerObserve",
-        &json!({
-            "worker_id": worker_id,
-            "screen_text": "Ready for input\n>"
-        }),
-    )
-    .expect("WorkerObserve ready should succeed");
-    let ready_state: serde_json::Value =
-        serde_json::from_str(&fs::read_to_string(&state_path).expect("read state")).expect("json");
-    assert_eq!(ready_state["status"], "ready_for_prompt");
-    assert_eq!(ready_state["is_ready"], true);
-
-    fs::remove_dir_all(&worktree).ok();
-}
-
-#[test]
-fn worker_create_uses_config_trusted_roots_by_default() {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("time should be after epoch")
-        .as_nanos();
-    let cwd = std::env::temp_dir().join(format!("worker-create-config-{}", nanos));
-    let project_dir = cwd.join("repo");
-    std::fs::create_dir_all(project_dir.join(".claw")).expect("project config dir");
-    std::fs::write(
-        project_dir.join(".claw").join("settings.json"),
-        format!(r#"{{"trustedRoots":["{}"]}}"#, cwd.display()),
-    )
-    .expect("write project settings");
-
-    let created = execute_tool(
-        "WorkerCreate",
-        &json!({
-            "cwd": project_dir.display().to_string()
-        }),
-    )
-    .expect("WorkerCreate should succeed");
-    let created_output: serde_json::Value = serde_json::from_str(&created).expect("json");
-
-    assert_eq!(created_output["trust_auto_resolve"], true);
-
-    std::fs::remove_dir_all(&cwd).expect("cleanup worker create dir");
+fn rejects_legacy_orchestration_tool_names() {
+    for tool_name in [
+        legacy_tool_name(&["Task", "Create"]),
+        legacy_tool_name(&["Run", "Task", "Packet"]),
+        legacy_tool_name(&["Task", "Get"]),
+        legacy_tool_name(&["Task", "List"]),
+        legacy_tool_name(&["Task", "Stop"]),
+        legacy_tool_name(&["Task", "Update"]),
+        legacy_tool_name(&["Task", "Output"]),
+        legacy_tool_name(&["Worker", "Create"]),
+        legacy_tool_name(&["Worker", "Get"]),
+        legacy_tool_name(&["Worker", "Observe"]),
+        legacy_tool_name(&["Worker", "Resolve", "Trust"]),
+        legacy_tool_name(&["Worker", "Await", "Ready"]),
+        legacy_tool_name(&["Worker", "Send", "Prompt"]),
+        legacy_tool_name(&["Worker", "Restart"]),
+        legacy_tool_name(&["Worker", "Terminate"]),
+        legacy_tool_name(&["Worker", "Observe", "Completion"]),
+        legacy_tool_name(&["Team", "Create"]),
+        legacy_tool_name(&["Team", "Delete"]),
+        legacy_tool_name(&["Cron", "Create"]),
+        legacy_tool_name(&["Cron", "Delete"]),
+        legacy_tool_name(&["Cron", "List"]),
+    ] {
+        let error = execute_tool(&tool_name, &json!({})).expect_err("legacy tool should be rejected");
+        assert!(error.contains("unsupported tool"), "{tool_name} should be unsupported");
+    }
 }
 
 #[test]
@@ -1780,27 +1341,27 @@ fn tool_search_supports_keyword_and_select_queries() {
     let matches = keyword_output["matches"].as_array().expect("matches");
     assert!(matches.iter().any(|value| value == "WebSearch"));
 
-    let selected = execute_tool("ToolSearch", &json!({"query": "select:Agent,WebSearch"}))
+    let selected = execute_tool("ToolSearch", &json!({"query": "select:WebFetch,WebSearch"}))
         .expect("ToolSearch should succeed");
     let selected_output: serde_json::Value = serde_json::from_str(&selected).expect("valid json");
-    assert_eq!(selected_output["matches"][0], "Agent");
+    assert_eq!(selected_output["matches"][0], "WebFetch");
     assert_eq!(selected_output["matches"][1], "WebSearch");
 
-    let aliased = execute_tool("ToolSearch", &json!({"query": "AgentTool"}))
+    let aliased = execute_tool("ToolSearch", &json!({"query": "WebSearchTool"}))
         .expect("ToolSearch should support tool aliases");
     let aliased_output: serde_json::Value = serde_json::from_str(&aliased).expect("valid json");
-    assert_eq!(aliased_output["matches"][0], "Agent");
-    assert_eq!(aliased_output["normalized_query"], "agent");
+    assert_eq!(aliased_output["matches"][0], "WebSearch");
+    assert_eq!(aliased_output["normalized_query"], "websearch");
 
     let selected_with_alias = execute_tool(
         "ToolSearch",
-        &json!({"query": "select:AgentTool,WebSearch"}),
+        &json!({"query": "select:WebSearchTool,WebFetchTool"}),
     )
     .expect("ToolSearch alias select should succeed");
     let selected_with_alias_output: serde_json::Value =
         serde_json::from_str(&selected_with_alias).expect("valid json");
-    assert_eq!(selected_with_alias_output["matches"][0], "Agent");
-    assert_eq!(selected_with_alias_output["matches"][1], "WebSearch");
+    assert_eq!(selected_with_alias_output["matches"][0], "WebSearch");
+    assert_eq!(selected_with_alias_output["matches"][1], "WebFetch");
 }
 
 #[test]
@@ -3825,7 +3386,7 @@ fn agent_persists_handoff_metadata() {
     let captured = Arc::new(Mutex::new(None::<AgentJob>));
     let captured_for_spawn = Arc::clone(&captured);
 
-    let manifest = execute_agent_with_spawn(
+    let manifest = spawn_subagent_with_job(
         AgentInput {
             description: "Audit the branch".to_string(),
             prompt: "Check tests and outstanding work.".to_string(),
@@ -3876,30 +3437,31 @@ fn agent_persists_handoff_metadata() {
         .allowed_tools()
         .contains("Agent"));
 
-    let normalized = execute_tool(
-        "Agent",
-        &json!({
-            "description": "Verify the branch",
-            "prompt": "Check tests.",
-            "subagent_type": "explorer"
-        }),
+    let normalized = spawn_subagent_with_job(
+        AgentInput {
+            description: "Verify the branch".to_string(),
+            prompt: "Check tests.".to_string(),
+            subagent_type: Some("explorer".to_string()),
+            name: None,
+            model: None,
+        },
+        |_| Ok(()),
     )
-    .expect("Agent should normalize built-in aliases");
-    let normalized_output: serde_json::Value =
-        serde_json::from_str(&normalized).expect("valid json");
-    assert_eq!(normalized_output["subagentType"], "Explore");
+    .expect("subagent helper should normalize built-in aliases");
+    assert_eq!(normalized.subagent_type.as_deref(), Some("Explore"));
 
-    let named = execute_tool(
-        "Agent",
-        &json!({
-            "description": "Review the branch",
-            "prompt": "Inspect diff.",
-            "name": "Ship Audit!!!"
-        }),
+    let named = spawn_subagent_with_job(
+        AgentInput {
+            description: "Review the branch".to_string(),
+            prompt: "Inspect diff.".to_string(),
+            subagent_type: None,
+            name: Some("Ship Audit!!!".to_string()),
+            model: None,
+        },
+        |_| Ok(()),
     )
-    .expect("Agent should normalize explicit names");
-    let named_output: serde_json::Value = serde_json::from_str(&named).expect("valid json");
-    assert_eq!(named_output["name"], "ship-audit");
+    .expect("subagent helper should normalize explicit names");
+    assert_eq!(named.name, "ship-audit");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -3912,7 +3474,7 @@ fn agent_fake_runner_can_persist_completion_and_failure() {
     let dir = temp_path("agent-runner");
     std::env::set_var("CLAWD_AGENT_STORE", &dir);
 
-    let completed = execute_agent_with_spawn(
+    let completed = spawn_subagent_with_job(
         AgentInput {
             description: "Complete the task".to_string(),
             prompt: "Do the work".to_string(),
@@ -3961,7 +3523,7 @@ fn agent_fake_runner_can_persist_completion_and_failure() {
         "finished_cleanable"
     );
 
-    let failed = execute_agent_with_spawn(
+    let failed = spawn_subagent_with_job(
         AgentInput {
             description: "Fail the task".to_string(),
             prompt: "Do the failing work".to_string(),
@@ -4008,7 +3570,7 @@ fn agent_fake_runner_can_persist_completion_and_failure() {
     );
     assert_eq!(failed_manifest_json["derivedState"], "truly_idle");
 
-    let spawn_error = execute_agent_with_spawn(
+    let spawn_error = spawn_subagent_with_job(
         AgentInput {
             description: "Spawn error task".to_string(),
             prompt: "Never starts".to_string(),
@@ -4266,22 +3828,28 @@ fn subagent_runtime_executes_tool_loop_with_isolated_session() {
 
 #[test]
 fn agent_rejects_blank_required_fields() {
-    let missing_description = execute_tool(
-        "Agent",
-        &json!({
-            "description": "  ",
-            "prompt": "Inspect"
-        }),
+    let missing_description = spawn_subagent_with_job(
+        AgentInput {
+            description: "  ".to_string(),
+            prompt: "Inspect".to_string(),
+            subagent_type: None,
+            name: None,
+            model: None,
+        },
+        |_| Ok(()),
     )
     .expect_err("blank description should fail");
     assert!(missing_description.contains("description must not be empty"));
 
-    let missing_prompt = execute_tool(
-        "Agent",
-        &json!({
-            "description": "Inspect branch",
-            "prompt": " "
-        }),
+    let missing_prompt = spawn_subagent_with_job(
+        AgentInput {
+            description: "Inspect branch".to_string(),
+            prompt: " ".to_string(),
+            subagent_type: None,
+            name: None,
+            model: None,
+        },
+        |_| Ok(()),
     )
     .expect_err("blank prompt should fail");
     assert!(missing_prompt.contains("prompt must not be empty"));
@@ -5287,34 +4855,6 @@ fn capability_runtime_normalize_allowed_tools_matches_provider_resolution() {
         .expect("runtime allow-list");
 
     assert_eq!(runtime_allowed, provider_allowed);
-}
-
-#[test]
-fn run_task_packet_creates_packet_backed_task() {
-    let result = run_task_packet(TaskPacket {
-        objective: "Ship packetized runtime task".to_string(),
-        scope: "runtime/task system".to_string(),
-        repo: "claw-code-parity".to_string(),
-        branch_policy: "origin/main only".to_string(),
-        acceptance_tests: vec![
-            "cargo build --workspace".to_string(),
-            "cargo test --workspace".to_string(),
-        ],
-        commit_policy: "single commit".to_string(),
-        reporting_contract: "print build/test result and sha".to_string(),
-        escalation_policy: "manual escalation".to_string(),
-    })
-    .expect("task packet should create a task");
-
-    let output: serde_json::Value = serde_json::from_str(&result).expect("json");
-    assert_eq!(output["status"], "created");
-    assert_eq!(output["prompt"], "Ship packetized runtime task");
-    assert_eq!(output["description"], "runtime/task system");
-    assert_eq!(output["task_packet"]["repo"], "claw-code-parity");
-    assert_eq!(
-        output["task_packet"]["acceptance_tests"][1],
-        "cargo test --workspace"
-    );
 }
 
 fn setup_managed_mcp_runtime_fixture(

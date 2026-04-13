@@ -156,12 +156,6 @@ impl AgentRuntimeCore {
     ) -> Result<RuntimeRunSnapshot, AppError> {
         let now = timestamp_now();
         let run_context = adapter.build_run_context(session_id, &input, now).await?;
-        if matches!(
-            run_context.actor_manifest,
-            actor_manifest::CompiledActorManifest::Team(_)
-        ) {
-            return Err(AppError::runtime("team_runtime_not_enabled"));
-        }
         let requires_approval =
             execution_target::requires_approval(&run_context.requested_permission_mode)?;
         let execution = if requires_approval {
@@ -665,6 +659,13 @@ fn apply_submit_state(
     aggregate.detail.pending_mediation = pending_mediation;
     aggregate.detail.capability_state_ref = Some(run_context.capability_state_ref.clone());
     aggregate.detail.last_execution_outcome = last_execution_outcome;
+    if let actor_manifest::CompiledActorManifest::Team(team_manifest) = &run_context.actor_manifest {
+        team_runtime::apply_team_runtime_projection(
+            &mut aggregate.detail,
+            team_manifest,
+            run_context.now,
+        );
+    }
     sync_runtime_session_detail(&mut aggregate.detail);
 
     let run = aggregate.detail.run.clone();
@@ -876,6 +877,9 @@ fn apply_approval_resolution_state(
     aggregate.detail.pending_mediation = pending_mediation;
     aggregate.detail.capability_state_ref = aggregate.detail.run.capability_state_ref.clone();
     aggregate.detail.last_execution_outcome = last_execution_outcome;
+    if let actor_manifest::CompiledActorManifest::Team(team_manifest) = actor_manifest {
+        team_runtime::apply_team_runtime_projection(&mut aggregate.detail, team_manifest, now);
+    }
     sync_runtime_session_detail(&mut aggregate.detail);
     let run = aggregate.detail.run.clone();
     let conversation_id = aggregate.detail.summary.conversation_id.clone();

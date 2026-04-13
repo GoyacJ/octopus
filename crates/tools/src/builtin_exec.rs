@@ -52,7 +52,6 @@ pub(crate) fn execute_tool_with_enforcer(
         "WebFetch" => from_value::<WebFetchInput>(input).and_then(run_web_fetch),
         "WebSearch" => from_value::<WebSearchInput>(input).and_then(run_web_search),
         "TodoWrite" => from_value::<TodoWriteInput>(input).and_then(run_todo_write),
-        "Agent" => from_value::<AgentInput>(input).and_then(run_agent),
         "ToolSearch" => from_value::<ToolSearchInput>(input).and_then(run_tool_search),
         "NotebookEdit" => from_value::<NotebookEditInput>(input).and_then(run_notebook_edit),
         "Sleep" => from_value::<SleepInput>(input).and_then(run_sleep),
@@ -68,32 +67,6 @@ pub(crate) fn execute_tool_with_enforcer(
         "AskUserQuestion" => {
             from_value::<AskUserQuestionInput>(input).and_then(run_ask_user_question)
         }
-        "TaskCreate" => from_value::<TaskCreateInput>(input).and_then(run_task_create),
-        "RunTaskPacket" => from_value::<TaskPacket>(input).and_then(run_task_packet),
-        "TaskGet" => from_value::<TaskIdInput>(input).and_then(run_task_get),
-        "TaskList" => run_task_list(input.clone()),
-        "TaskStop" => from_value::<TaskIdInput>(input).and_then(run_task_stop),
-        "TaskUpdate" => from_value::<TaskUpdateInput>(input).and_then(run_task_update),
-        "TaskOutput" => from_value::<TaskIdInput>(input).and_then(run_task_output),
-        "WorkerCreate" => from_value::<WorkerCreateInput>(input).and_then(run_worker_create),
-        "WorkerGet" => from_value::<WorkerIdInput>(input).and_then(run_worker_get),
-        "WorkerObserve" => from_value::<WorkerObserveInput>(input).and_then(run_worker_observe),
-        "WorkerResolveTrust" => {
-            from_value::<WorkerIdInput>(input).and_then(run_worker_resolve_trust)
-        }
-        "WorkerAwaitReady" => from_value::<WorkerIdInput>(input).and_then(run_worker_await_ready),
-        "WorkerSendPrompt" => {
-            from_value::<WorkerSendPromptInput>(input).and_then(run_worker_send_prompt)
-        }
-        "WorkerRestart" => from_value::<WorkerIdInput>(input).and_then(run_worker_restart),
-        "WorkerTerminate" => from_value::<WorkerIdInput>(input).and_then(run_worker_terminate),
-        "WorkerObserveCompletion" => from_value::<WorkerObserveCompletionInput>(input)
-            .and_then(run_worker_observe_completion),
-        "TeamCreate" => from_value::<TeamCreateInput>(input).and_then(run_team_create),
-        "TeamDelete" => from_value::<TeamDeleteInput>(input).and_then(run_team_delete),
-        "CronCreate" => from_value::<CronCreateInput>(input).and_then(run_cron_create),
-        "CronDelete" => from_value::<CronDeleteInput>(input).and_then(run_cron_delete),
-        "CronList" => run_cron_list(input.clone()),
         "LSP" => from_value::<LspInput>(input).and_then(run_lsp),
         "RemoteTrigger" => from_value::<RemoteTriggerInput>(input).and_then(run_remote_trigger),
         "TestingPermission" => {

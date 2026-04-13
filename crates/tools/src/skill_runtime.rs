@@ -961,9 +961,9 @@ struct ForkedSkillAgent {
 fn spawn_fork_skill_agent(
     skill: &SkillCapability,
     rendered_prompt: &str,
-) -> Result<ForkedSkillAgent, crate::workspace_runtime::AgentSpawnFailure> {
-    let agent = crate::workspace_runtime::execute_agent_with_spawn_detailed(
-        crate::workspace_runtime::AgentInput {
+) -> Result<ForkedSkillAgent, crate::AgentSpawnFailure> {
+    let agent = crate::spawn_subagent_with_job_detailed(
+        crate::AgentInput {
             description: format!("Execute fork skill `{}`", skill.display_name),
             prompt: rendered_prompt.to_string(),
             subagent_type: skill.frontmatter.agent.clone(),
@@ -982,7 +982,7 @@ fn spawn_fork_skill_agent(
 }
 
 #[cfg(test)]
-type SkillForkSpawnFn = fn(crate::workspace_runtime::AgentJob) -> Result<(), String>;
+type SkillForkSpawnFn = fn(crate::AgentJob) -> Result<(), String>;
 
 #[cfg(test)]
 fn skill_fork_spawn_override() -> &'static Mutex<Option<SkillForkSpawnFn>> {
@@ -998,7 +998,7 @@ pub(crate) fn set_skill_fork_spawn_override(override_fn: Option<SkillForkSpawnFn
     *slot = override_fn;
 }
 
-fn spawn_skill_fork_job(job: crate::workspace_runtime::AgentJob) -> Result<(), String> {
+fn spawn_skill_fork_job(job: crate::AgentJob) -> Result<(), String> {
     #[cfg(test)]
     {
         if let Some(override_fn) = *skill_fork_spawn_override()
@@ -1009,10 +1009,10 @@ fn spawn_skill_fork_job(job: crate::workspace_runtime::AgentJob) -> Result<(), S
         }
     }
 
-    crate::workspace_runtime::spawn_agent_job(job)
+    crate::spawn_subagent_job(job)
 }
 
-fn load_fork_agent_manifest(path: &str) -> Option<crate::workspace_runtime::AgentOutput> {
+fn load_fork_agent_manifest(path: &str) -> Option<crate::AgentOutput> {
     let contents = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&contents).ok()
 }

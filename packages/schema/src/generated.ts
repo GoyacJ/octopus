@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 91ad97118dd78a437cd5e08b66311fdf3b4a3b8a87ae813965ee42fa2b679eee
+// Source hash: 443be449350c0c5f01a2510ed4e3648bf0cb8a894b0b4f3152313553cb48275f
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "91ad97118dd78a437cd5e08b66311fdf3b4a3b8a87ae813965ee42fa2b679eee"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "443be449350c0c5f01a2510ed4e3648bf0cb8a894b0b4f3152313553cb48275f"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -1388,6 +1388,14 @@ export interface RuntimeApprovalRequest {
   toolName: string
 }
 
+export interface RuntimeBackgroundRunSummary {
+  backgroundCapable: boolean
+  runId: string
+  status: string
+  updatedAt: number
+  workflowRunId?: string
+}
+
 export interface RuntimeBootstrap {
   provider: ProviderConfig
   sessions: RuntimeSessionSummary[]
@@ -1511,6 +1519,7 @@ export interface RuntimeEffectiveConfig {
 }
 
 export interface RuntimeEventEnvelope {
+  actorRef?: string
   approval?: RuntimeApprovalRequest
   capabilityPlanSummary?: RuntimeCapabilityPlanSummary
   capabilityStateRef?: string
@@ -1520,9 +1529,12 @@ export interface RuntimeEventEnvelope {
   error?: string
   eventType: RuntimeEventKind
   id: string
+  iteration?: number
   kind?: RuntimeEventKind
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
   message?: RuntimeMessage
+  outcome?: string
+  parentRunId?: string
   payload?: Record<string, unknown>
   pendingMediation?: RuntimePendingMediationSummary
   projectId?: string
@@ -1532,11 +1544,33 @@ export interface RuntimeEventEnvelope {
   sequence: number
   sessionId: string
   summary?: RuntimeSessionSummary
+  toolUseId?: string
   trace?: RuntimeTraceItem
+  workflowRunId?: string
+  workflowStepId?: string
   workspaceId: string
 }
 
-export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "trace.emitted" | "subrun.spawned" | "subrun.completed" | "subrun.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "runtime.session.updated" | "runtime.error"
+export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "trace.emitted" | "subrun.spawned" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "runtime.session.updated" | "runtime.error"
+
+export interface RuntimeHandoffSummary {
+  artifactRefs: string[]
+  handoffRef: string
+  mailboxRef: string
+  receiverActorRef: string
+  senderActorRef: string
+  state: string
+  updatedAt: number
+}
+
+export interface RuntimeMailboxSummary {
+  channel: string
+  mailboxRef: string
+  pendingCount: number
+  status: string
+  totalMessages: number
+  updatedAt: number
+}
 
 export interface RuntimeMemorySummary {
   durableMemoryCount: number
@@ -1612,6 +1646,7 @@ export interface RuntimeRunSnapshot {
   actorRef: string
   approvalState?: string
   artifactRefs: string[]
+  backgroundState?: string
   capabilityPlanSummary: RuntimeCapabilityPlanSummary
   capabilityStateRef?: string
   checkpoint: RuntimeRunCheckpoint
@@ -1623,8 +1658,10 @@ export interface RuntimeRunSnapshot {
   currentStep: string
   delegatedByToolCallId?: string
   effectiveConfigHash: string
+  handoffRef?: string
   id: string
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
+  mailboxRef?: string
   modelId?: string
   nextAction?: string
   parentRunId?: string
@@ -1644,6 +1681,9 @@ export interface RuntimeRunSnapshot {
   traceContext: RuntimeTraceContext
   updatedAt: number
   usageSummary: RuntimeUsageSummary
+  workerDispatch?: RuntimeWorkerDispatchSummary
+  workflowRun?: string
+  workflowRunDetail?: RuntimeWorkflowRunDetail
 }
 
 export type RuntimeSecretReferenceState = "reference-present" | "reference-missing" | "inline-redacted"
@@ -1657,27 +1697,33 @@ export interface RuntimeSecretReferenceStatus {
 
 export interface RuntimeSessionDetail {
   activeRunId: string
+  backgroundRun?: RuntimeBackgroundRunSummary
   capabilityPlanSummary: RuntimeCapabilityPlanSummary
   capabilityStateRef?: string
+  handoffs: RuntimeHandoffSummary[]
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
   manifestRevision: string
   memorySummary: RuntimeMemorySummary
   messages: RuntimeMessage[]
   pendingApproval?: RuntimeApprovalRequest
+  pendingMailbox?: RuntimeMailboxSummary
   pendingMediation?: RuntimePendingMediationSummary
   providerStateSummary: RuntimeCapabilityProviderState[]
   run: RuntimeRunSnapshot
   selectedActorRef: string
   sessionPolicy: RuntimePolicySnapshot
   subrunCount: number
+  subruns: RuntimeSubrunSummary[]
   summary: RuntimeSessionSummary
   trace: RuntimeTraceItem[]
+  workflow?: RuntimeWorkflowSummary
 }
 
 export type RuntimeSessionKind = "project" | "pet"
 
 export interface RuntimeSessionSummary {
   activeRunId: string
+  backgroundRun?: RuntimeBackgroundRunSummary
   capabilityPlanSummary: RuntimeCapabilityPlanSummary
   capabilityStateRef?: string
   configSnapshotId: string
@@ -1688,6 +1734,7 @@ export interface RuntimeSessionSummary {
   lastMessagePreview?: string
   manifestRevision: string
   memorySummary: RuntimeMemorySummary
+  pendingMailbox?: RuntimeMailboxSummary
   pendingMediation?: RuntimePendingMediationSummary
   projectId: string
   providerStateSummary: RuntimeCapabilityProviderState[]
@@ -1699,6 +1746,22 @@ export interface RuntimeSessionSummary {
   subrunCount: number
   title: string
   updatedAt: number
+  workflow?: RuntimeWorkflowSummary
+}
+
+export interface RuntimeSubrunSummary {
+  actorRef: string
+  delegatedByToolCallId?: string
+  handoffRef?: string
+  label: string
+  mailboxRef?: string
+  parentRunId?: string
+  runId: string
+  runKind: RuntimeRunKind
+  startedAt: number
+  status: RunStatus
+  updatedAt: number
+  workflowRunId?: string
 }
 
 export interface RuntimeTraceContext {
@@ -1729,6 +1792,35 @@ export interface RuntimeUsageSummary {
   inputTokens: number
   outputTokens: number
   totalTokens: number
+}
+
+export interface RuntimeWorkerDispatchSummary {
+  activeSubruns: number
+  completedSubruns: number
+  failedSubruns: number
+  totalSubruns: number
+}
+
+export interface RuntimeWorkflowRunDetail {
+  backgroundCapable: boolean
+  completedSteps: number
+  currentStepId?: string
+  currentStepLabel?: string
+  status: string
+  totalSteps: number
+  workflowRunId: string
+}
+
+export interface RuntimeWorkflowSummary {
+  backgroundCapable: boolean
+  completedSteps: number
+  currentStepId?: string
+  currentStepLabel?: string
+  label: string
+  status: string
+  totalSteps: number
+  updatedAt: number
+  workflowRunId: string
 }
 
 export interface SavePetPresenceInput {

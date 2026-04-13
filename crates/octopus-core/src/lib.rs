@@ -2080,6 +2080,91 @@ fn default_runtime_session_kind() -> String {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct RuntimeSubrunSummary {
+    pub run_id: String,
+    pub parent_run_id: Option<String>,
+    pub actor_ref: String,
+    pub label: String,
+    pub status: String,
+    pub run_kind: String,
+    pub delegated_by_tool_call_id: Option<String>,
+    pub workflow_run_id: Option<String>,
+    pub mailbox_ref: Option<String>,
+    pub handoff_ref: Option<String>,
+    pub started_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeMailboxSummary {
+    pub mailbox_ref: String,
+    pub channel: String,
+    pub status: String,
+    pub pending_count: u64,
+    pub total_messages: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeHandoffSummary {
+    pub handoff_ref: String,
+    pub mailbox_ref: String,
+    pub sender_actor_ref: String,
+    pub receiver_actor_ref: String,
+    pub state: String,
+    pub artifact_refs: Vec<String>,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeWorkflowSummary {
+    pub workflow_run_id: String,
+    pub label: String,
+    pub status: String,
+    pub total_steps: u64,
+    pub completed_steps: u64,
+    pub current_step_id: Option<String>,
+    pub current_step_label: Option<String>,
+    pub background_capable: bool,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeWorkflowRunDetail {
+    pub workflow_run_id: String,
+    pub status: String,
+    pub current_step_id: Option<String>,
+    pub current_step_label: Option<String>,
+    pub total_steps: u64,
+    pub completed_steps: u64,
+    pub background_capable: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeBackgroundRunSummary {
+    pub run_id: String,
+    pub workflow_run_id: Option<String>,
+    pub status: String,
+    pub background_capable: bool,
+    pub updated_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeWorkerDispatchSummary {
+    pub total_subruns: u64,
+    pub active_subruns: u64,
+    pub completed_subruns: u64,
+    pub failed_subruns: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct RuntimeSessionSummary {
     pub id: String,
     pub conversation_id: String,
@@ -2100,6 +2185,12 @@ pub struct RuntimeSessionSummary {
     #[serde(default)]
     pub active_run_id: String,
     pub subrun_count: u64,
+    #[serde(default)]
+    pub workflow: Option<RuntimeWorkflowSummary>,
+    #[serde(default)]
+    pub pending_mailbox: Option<RuntimeMailboxSummary>,
+    #[serde(default)]
+    pub background_run: Option<RuntimeBackgroundRunSummary>,
     #[serde(default)]
     pub memory_summary: RuntimeMemorySummary,
     #[serde(default)]
@@ -2137,6 +2228,18 @@ pub struct RuntimeRunSnapshot {
     #[serde(default)]
     pub actor_ref: String,
     pub delegated_by_tool_call_id: Option<String>,
+    #[serde(default)]
+    pub workflow_run: Option<String>,
+    #[serde(default)]
+    pub workflow_run_detail: Option<RuntimeWorkflowRunDetail>,
+    #[serde(default)]
+    pub mailbox_ref: Option<String>,
+    #[serde(default)]
+    pub handoff_ref: Option<String>,
+    #[serde(default)]
+    pub background_state: Option<String>,
+    #[serde(default)]
+    pub worker_dispatch: Option<RuntimeWorkerDispatchSummary>,
     pub approval_state: String,
     pub usage_summary: RuntimeUsageSummary,
     pub artifact_refs: Vec<String>,
@@ -2227,7 +2330,7 @@ pub struct ApprovalRequestRecord {
     pub escalation_reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeEventEnvelope {
     pub id: String,
@@ -2238,8 +2341,22 @@ pub struct RuntimeEventEnvelope {
     pub session_id: String,
     pub conversation_id: String,
     pub run_id: Option<String>,
+    #[serde(default)]
+    pub parent_run_id: Option<String>,
     pub emitted_at: u64,
     pub sequence: u64,
+    #[serde(default)]
+    pub iteration: Option<u32>,
+    #[serde(default)]
+    pub workflow_run_id: Option<String>,
+    #[serde(default)]
+    pub workflow_step_id: Option<String>,
+    #[serde(default)]
+    pub actor_ref: Option<String>,
+    #[serde(default)]
+    pub tool_use_id: Option<String>,
+    #[serde(default)]
+    pub outcome: Option<String>,
     pub payload: Option<serde_json::Value>,
     pub run: Option<RuntimeRunSnapshot>,
     pub message: Option<RuntimeMessage>,
@@ -2275,6 +2392,12 @@ pub struct RuntimeSessionDetail {
     #[serde(default)]
     pub subrun_count: u64,
     #[serde(default)]
+    pub workflow: Option<RuntimeWorkflowSummary>,
+    #[serde(default)]
+    pub pending_mailbox: Option<RuntimeMailboxSummary>,
+    #[serde(default)]
+    pub background_run: Option<RuntimeBackgroundRunSummary>,
+    #[serde(default)]
     pub memory_summary: RuntimeMemorySummary,
     #[serde(default)]
     pub capability_summary: RuntimeCapabilityPlanSummary,
@@ -2287,6 +2410,10 @@ pub struct RuntimeSessionDetail {
     #[serde(default)]
     pub last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
     pub run: RuntimeRunSnapshot,
+    #[serde(default)]
+    pub subruns: Vec<RuntimeSubrunSummary>,
+    #[serde(default)]
+    pub handoffs: Vec<RuntimeHandoffSummary>,
     pub messages: Vec<RuntimeMessage>,
     pub trace: Vec<RuntimeTraceItem>,
     pub pending_approval: Option<ApprovalRequestRecord>,

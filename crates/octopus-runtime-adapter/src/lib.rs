@@ -5,6 +5,7 @@ mod adapter_state;
 mod adapter_tests;
 mod agent_runtime_core;
 mod approval_flow;
+mod background_runtime;
 mod capability_planner_bridge;
 mod capability_state;
 mod config_service;
@@ -17,12 +18,18 @@ mod model_usage;
 mod persistence;
 mod registry;
 mod run_context;
+mod subrun_orchestrator;
+mod team_runtime;
 mod runtime_config;
 mod session_policy;
 mod session_service;
 mod snapshot_store;
 mod trace_context;
 mod turn_submit;
+mod worker_runtime;
+mod mailbox_runtime;
+mod handoff_runtime;
+mod workflow_runtime;
 
 #[cfg(test)]
 mod split_module_tests;
@@ -40,14 +47,17 @@ use octopus_core::{
     timestamp_now, AgentRecord, AppError, ApprovalRequestRecord, AuditRecord,
     ConfiguredModelRecord, CostLedgerEntry, CreateRuntimeSessionInput, ModelCatalogSnapshot,
     ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput, ResolvedExecutionTarget,
-    RuntimeBootstrap, RuntimeCapabilityExecutionOutcome, RuntimeCapabilityPlanSummary,
-    RuntimeCapabilityProviderState, RuntimeCapabilityStateSnapshot, RuntimeConfigPatch,
-    RuntimeConfigSnapshotSummary, RuntimeConfigSource, RuntimeConfigValidationResult,
-    RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
-    RuntimeEventEnvelope, RuntimeMemorySummary, RuntimeMessage, RuntimePendingMediationSummary,
-    RuntimeRunCheckpoint, RuntimeRunSnapshot, RuntimeSecretReferenceStatus, RuntimeSessionDetail,
-    RuntimeSessionPolicySnapshot, RuntimeSessionSummary, RuntimeTraceContext, RuntimeTraceItem,
-    RuntimeUsageSummary, SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord,
+    RuntimeBackgroundRunSummary, RuntimeBootstrap, RuntimeCapabilityExecutionOutcome,
+    RuntimeCapabilityPlanSummary, RuntimeCapabilityProviderState, RuntimeCapabilityStateSnapshot,
+    RuntimeConfigPatch, RuntimeConfigSnapshotSummary, RuntimeConfigSource,
+    RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
+    RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
+    RuntimeHandoffSummary, RuntimeMailboxSummary, RuntimeMemorySummary, RuntimeMessage,
+    RuntimePendingMediationSummary, RuntimeRunCheckpoint, RuntimeRunSnapshot,
+    RuntimeSecretReferenceStatus, RuntimeSessionDetail, RuntimeSessionPolicySnapshot,
+    RuntimeSessionSummary, RuntimeSubrunSummary, RuntimeTraceContext, RuntimeTraceItem,
+    RuntimeUsageSummary, RuntimeWorkerDispatchSummary, RuntimeWorkflowRunDetail,
+    RuntimeWorkflowSummary, SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord,
     RUNTIME_PERMISSION_DANGER_FULL_ACCESS, RUNTIME_PERMISSION_READ_ONLY,
     RUNTIME_PERMISSION_WORKSPACE_WRITE,
 };

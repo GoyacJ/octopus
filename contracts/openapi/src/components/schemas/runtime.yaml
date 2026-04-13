@@ -541,6 +541,183 @@ RuntimeRunKind:
     - primary
     - subrun
   type: string
+RuntimeSubrunSummary:
+  additionalProperties: false
+  properties:
+    actorRef:
+      type: string
+    delegatedByToolCallId:
+      type: string
+    handoffRef:
+      type: string
+    label:
+      type: string
+    mailboxRef:
+      type: string
+    parentRunId:
+      type: string
+    runId:
+      type: string
+    runKind:
+      $ref: "#/components/schemas/RuntimeRunKind"
+    startedAt:
+      type: integer
+    status:
+      $ref: "#/components/schemas/RunStatus"
+    updatedAt:
+      type: integer
+    workflowRunId:
+      type: string
+  required:
+    - runId
+    - actorRef
+    - label
+    - status
+    - runKind
+    - startedAt
+    - updatedAt
+  type: object
+RuntimeMailboxSummary:
+  additionalProperties: false
+  properties:
+    channel:
+      type: string
+    mailboxRef:
+      type: string
+    pendingCount:
+      type: integer
+    status:
+      type: string
+    totalMessages:
+      type: integer
+    updatedAt:
+      type: integer
+  required:
+    - mailboxRef
+    - channel
+    - status
+    - pendingCount
+    - totalMessages
+    - updatedAt
+  type: object
+RuntimeHandoffSummary:
+  additionalProperties: false
+  properties:
+    artifactRefs:
+      items:
+        type: string
+      type: array
+    handoffRef:
+      type: string
+    mailboxRef:
+      type: string
+    receiverActorRef:
+      type: string
+    senderActorRef:
+      type: string
+    state:
+      type: string
+    updatedAt:
+      type: integer
+  required:
+    - handoffRef
+    - mailboxRef
+    - senderActorRef
+    - receiverActorRef
+    - state
+    - artifactRefs
+    - updatedAt
+  type: object
+RuntimeWorkflowSummary:
+  additionalProperties: false
+  properties:
+    backgroundCapable:
+      type: boolean
+    completedSteps:
+      type: integer
+    currentStepId:
+      type: string
+    currentStepLabel:
+      type: string
+    label:
+      type: string
+    status:
+      type: string
+    totalSteps:
+      type: integer
+    updatedAt:
+      type: integer
+    workflowRunId:
+      type: string
+  required:
+    - workflowRunId
+    - label
+    - status
+    - totalSteps
+    - completedSteps
+    - backgroundCapable
+    - updatedAt
+  type: object
+RuntimeWorkflowRunDetail:
+  additionalProperties: false
+  properties:
+    backgroundCapable:
+      type: boolean
+    completedSteps:
+      type: integer
+    currentStepId:
+      type: string
+    currentStepLabel:
+      type: string
+    status:
+      type: string
+    totalSteps:
+      type: integer
+    workflowRunId:
+      type: string
+  required:
+    - workflowRunId
+    - status
+    - totalSteps
+    - completedSteps
+    - backgroundCapable
+  type: object
+RuntimeBackgroundRunSummary:
+  additionalProperties: false
+  properties:
+    backgroundCapable:
+      type: boolean
+    runId:
+      type: string
+    status:
+      type: string
+    updatedAt:
+      type: integer
+    workflowRunId:
+      type: string
+  required:
+    - runId
+    - status
+    - backgroundCapable
+    - updatedAt
+  type: object
+RuntimeWorkerDispatchSummary:
+  additionalProperties: false
+  properties:
+    activeSubruns:
+      type: integer
+    completedSubruns:
+      type: integer
+    failedSubruns:
+      type: integer
+    totalSubruns:
+      type: integer
+  required:
+    - totalSubruns
+    - activeSubruns
+    - completedSubruns
+    - failedSubruns
+  type: object
 RuntimeTraceContext:
   additionalProperties: false
   properties:
@@ -742,6 +919,8 @@ RuntimeEventEnvelope:
       $ref: "#/components/schemas/RuntimeEventKind"
     lastExecutionOutcome:
       $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+    iteration:
+      type: integer
     message:
       $ref: "#/components/schemas/RuntimeMessage"
     pendingMediation:
@@ -749,6 +928,8 @@ RuntimeEventEnvelope:
     payload:
       additionalProperties: true
       type: object
+    parentRunId:
+      type: string
     projectId:
       type: string
     providerStateSummary:
@@ -759,14 +940,24 @@ RuntimeEventEnvelope:
       $ref: "#/components/schemas/RuntimeRunSnapshot"
     runId:
       type: string
+    actorRef:
+      type: string
+    outcome:
+      type: string
     sequence:
       type: integer
     sessionId:
       type: string
     summary:
       $ref: "#/components/schemas/RuntimeSessionSummary"
+    toolUseId:
+      type: string
     trace:
       $ref: "#/components/schemas/RuntimeTraceItem"
+    workflowRunId:
+      type: string
+    workflowStepId:
+      type: string
     workspaceId:
       type: string
   required:
@@ -804,6 +995,11 @@ RuntimeEventKind:
     - subrun.spawned
     - subrun.completed
     - subrun.failed
+    - workflow.started
+    - workflow.step.started
+    - workflow.step.completed
+    - workflow.completed
+    - workflow.failed
     - runtime.run.updated
     - runtime.message.created
     - runtime.trace.emitted
@@ -924,6 +1120,12 @@ RuntimeRunSnapshot:
       $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
     modelId:
       type: string
+    backgroundState:
+      type: string
+    handoffRef:
+      type: string
+    mailboxRef:
+      type: string
     parentRunId:
       type: string
     pendingMediation:
@@ -964,6 +1166,12 @@ RuntimeRunSnapshot:
       type: integer
     usageSummary:
       $ref: "#/components/schemas/RuntimeUsageSummary"
+    workerDispatch:
+      $ref: "#/components/schemas/RuntimeWorkerDispatchSummary"
+    workflowRun:
+      type: string
+    workflowRunDetail:
+      $ref: "#/components/schemas/RuntimeWorkflowRunDetail"
     checkpoint:
       $ref: "#/components/schemas/RuntimeRunCheckpoint"
   required:
@@ -1013,10 +1221,16 @@ RuntimeSessionDetail:
   properties:
     activeRunId:
       type: string
+    backgroundRun:
+      $ref: "#/components/schemas/RuntimeBackgroundRunSummary"
     capabilityPlanSummary:
       $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
     capabilityStateRef:
       type: string
+    handoffs:
+      items:
+        $ref: "#/components/schemas/RuntimeHandoffSummary"
+      type: array
     messages:
       items:
         $ref: "#/components/schemas/RuntimeMessage"
@@ -1027,6 +1241,8 @@ RuntimeSessionDetail:
       type: string
     memorySummary:
       $ref: "#/components/schemas/RuntimeMemorySummary"
+    pendingMailbox:
+      $ref: "#/components/schemas/RuntimeMailboxSummary"
     pendingApproval:
       $ref: "#/components/schemas/RuntimeApprovalRequest"
     pendingMediation:
@@ -1041,6 +1257,10 @@ RuntimeSessionDetail:
       type: string
     sessionPolicy:
       $ref: "#/components/schemas/RuntimePolicySnapshot"
+    subruns:
+      items:
+        $ref: "#/components/schemas/RuntimeSubrunSummary"
+      type: array
     subrunCount:
       type: integer
     summary:
@@ -1049,9 +1269,13 @@ RuntimeSessionDetail:
       items:
         $ref: "#/components/schemas/RuntimeTraceItem"
       type: array
+    workflow:
+      $ref: "#/components/schemas/RuntimeWorkflowSummary"
   required:
     - summary
     - run
+    - subruns
+    - handoffs
     - messages
     - trace
     - selectedActorRef
@@ -1073,6 +1297,8 @@ RuntimeSessionSummary:
   properties:
     activeRunId:
       type: string
+    backgroundRun:
+      $ref: "#/components/schemas/RuntimeBackgroundRunSummary"
     configSnapshotId:
       type: string
     conversationId:
@@ -1087,6 +1313,8 @@ RuntimeSessionSummary:
       type: string
     memorySummary:
       $ref: "#/components/schemas/RuntimeMemorySummary"
+    pendingMailbox:
+      $ref: "#/components/schemas/RuntimeMailboxSummary"
     projectId:
       type: string
     capabilityPlanSummary:
@@ -1119,6 +1347,8 @@ RuntimeSessionSummary:
       type: string
     updatedAt:
       type: integer
+    workflow:
+      $ref: "#/components/schemas/RuntimeWorkflowSummary"
   required:
     - id
     - conversationId

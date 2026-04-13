@@ -136,6 +136,7 @@ pub(super) async fn emit_submit_turn_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
         },
         RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
@@ -163,6 +164,7 @@ pub(super) async fn emit_submit_turn_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
         },
         RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
@@ -190,6 +192,7 @@ pub(super) async fn emit_submit_turn_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
         },
     ];
 
@@ -220,6 +223,7 @@ pub(super) async fn emit_submit_turn_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
         });
         events.push(RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
@@ -247,6 +251,7 @@ pub(super) async fn emit_submit_turn_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
         });
     }
 
@@ -277,6 +282,7 @@ pub(super) async fn emit_submit_turn_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
         });
         events.push(RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
@@ -304,6 +310,7 @@ pub(super) async fn emit_submit_turn_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
         });
     }
 
@@ -335,6 +342,108 @@ pub(super) async fn emit_submit_turn_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
+        });
+    }
+
+    if let (Some(workflow_run_id), Some(workflow_detail)) =
+        (run.workflow_run.clone(), run.workflow_run_detail.clone())
+    {
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "workflow.started".into(),
+            kind: Some("workflow.started".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            parent_run_id: run.parent_run_id.clone(),
+            emitted_at: now,
+            sequence: 0,
+            iteration: Some(run.checkpoint.current_iteration_index),
+            workflow_run_id: Some(workflow_run_id.clone()),
+            workflow_step_id: workflow_detail.current_step_id.clone(),
+            actor_ref: Some(run.actor_ref.clone()),
+            tool_use_id: run.delegated_by_tool_call_id.clone(),
+            outcome: Some(run.status.clone()),
+            payload: Some(json!({ "workflow": workflow_detail.clone() })),
+            ..Default::default()
+        });
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "workflow.step.started".into(),
+            kind: Some("workflow.step.started".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            parent_run_id: run.parent_run_id.clone(),
+            emitted_at: now,
+            sequence: 0,
+            iteration: Some(run.checkpoint.current_iteration_index),
+            workflow_run_id: Some(workflow_run_id.clone()),
+            workflow_step_id: workflow_detail.current_step_id.clone(),
+            actor_ref: Some(run.actor_ref.clone()),
+            tool_use_id: run.delegated_by_tool_call_id.clone(),
+            outcome: Some("started".into()),
+            payload: Some(json!({
+                "workflowRunId": workflow_run_id,
+                "stepId": workflow_detail.current_step_id,
+                "stepLabel": workflow_detail.current_step_label,
+            })),
+            ..Default::default()
+        });
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "workflow.step.completed".into(),
+            kind: Some("workflow.step.completed".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            parent_run_id: run.parent_run_id.clone(),
+            emitted_at: now,
+            sequence: 0,
+            iteration: Some(run.checkpoint.current_iteration_index),
+            workflow_run_id: Some(workflow_run_id.clone()),
+            workflow_step_id: workflow_detail.current_step_id.clone(),
+            actor_ref: Some(run.actor_ref.clone()),
+            tool_use_id: run.delegated_by_tool_call_id.clone(),
+            outcome: Some(run.status.clone()),
+            payload: Some(json!({ "workflow": workflow_detail.clone() })),
+            ..Default::default()
+        });
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: if run.status == "failed" {
+                "workflow.failed".into()
+            } else {
+                "workflow.completed".into()
+            },
+            kind: Some(if run.status == "failed" {
+                "workflow.failed".into()
+            } else {
+                "workflow.completed".into()
+            }),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            parent_run_id: run.parent_run_id.clone(),
+            emitted_at: now,
+            sequence: 0,
+            iteration: Some(run.checkpoint.current_iteration_index),
+            workflow_run_id: Some(workflow_detail.workflow_run_id.clone()),
+            workflow_step_id: workflow_detail.current_step_id.clone(),
+            actor_ref: Some(run.actor_ref.clone()),
+            tool_use_id: run.delegated_by_tool_call_id.clone(),
+            outcome: Some(run.status.clone()),
+            payload: Some(json!({ "workflow": workflow_detail })),
+            ..Default::default()
         });
     }
 
@@ -364,6 +473,7 @@ pub(super) async fn emit_submit_turn_events(
         pending_mediation: run.pending_mediation.clone(),
         capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
+        ..Default::default()
     });
 
     for event in events {
@@ -508,6 +618,7 @@ pub(super) async fn emit_approval_resolution_events(
         pending_mediation: run.pending_mediation.clone(),
         capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
+        ..Default::default()
     }];
 
     if let Some(message) = assistant_message {
@@ -537,6 +648,7 @@ pub(super) async fn emit_approval_resolution_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
         });
     }
     if let Some(trace) = execution_trace {
@@ -566,6 +678,7 @@ pub(super) async fn emit_approval_resolution_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
         });
         events.push(RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
@@ -593,6 +706,61 @@ pub(super) async fn emit_approval_resolution_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
+        });
+    }
+    if let (Some(workflow_run_id), Some(workflow_detail)) =
+        (run.workflow_run.clone(), run.workflow_run_detail.clone())
+    {
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "workflow.step.completed".into(),
+            kind: Some("workflow.step.completed".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            parent_run_id: run.parent_run_id.clone(),
+            emitted_at: now,
+            sequence: 0,
+            iteration: Some(run.checkpoint.current_iteration_index),
+            workflow_run_id: Some(workflow_run_id.clone()),
+            workflow_step_id: workflow_detail.current_step_id.clone(),
+            actor_ref: Some(run.actor_ref.clone()),
+            tool_use_id: run.delegated_by_tool_call_id.clone(),
+            outcome: Some(run.status.clone()),
+            payload: Some(json!({ "workflow": workflow_detail.clone() })),
+            ..Default::default()
+        });
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: if run.status == "failed" {
+                "workflow.failed".into()
+            } else {
+                "workflow.completed".into()
+            },
+            kind: Some(if run.status == "failed" {
+                "workflow.failed".into()
+            } else {
+                "workflow.completed".into()
+            }),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            parent_run_id: run.parent_run_id.clone(),
+            emitted_at: now,
+            sequence: 0,
+            iteration: Some(run.checkpoint.current_iteration_index),
+            workflow_run_id: Some(workflow_run_id),
+            workflow_step_id: workflow_detail.current_step_id.clone(),
+            actor_ref: Some(run.actor_ref.clone()),
+            tool_use_id: run.delegated_by_tool_call_id.clone(),
+            outcome: Some(run.status.clone()),
+            payload: Some(json!({ "workflow": workflow_detail })),
+            ..Default::default()
         });
     }
     events.push(RuntimeEventEnvelope {
@@ -623,6 +791,7 @@ pub(super) async fn emit_approval_resolution_events(
         pending_mediation: run.pending_mediation.clone(),
         capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
+        ..Default::default()
     });
 
     for event in events {
