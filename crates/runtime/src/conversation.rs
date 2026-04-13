@@ -106,9 +106,9 @@ impl ToolExecutionOutcome {
             Self::Cancelled { reason } => reason
                 .clone()
                 .unwrap_or_else(|| format!("tool `{tool_name}` was cancelled before completion")),
-            Self::Interrupted { reason } => reason.clone().unwrap_or_else(|| {
-                format!("tool `{tool_name}` was interrupted before completion")
-            }),
+            Self::Interrupted { reason } => reason
+                .clone()
+                .unwrap_or_else(|| format!("tool `{tool_name}` was interrupted before completion")),
             Self::Degraded { reason } => reason.clone().unwrap_or_else(|| {
                 format!("tool `{tool_name}` could not complete because its provider is degraded")
             }),

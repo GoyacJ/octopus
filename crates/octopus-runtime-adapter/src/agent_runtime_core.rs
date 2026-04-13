@@ -155,7 +155,7 @@ impl AgentRuntimeCore {
         input: SubmitRuntimeTurnInput,
     ) -> Result<RuntimeRunSnapshot, AppError> {
         let now = timestamp_now();
-        let run_context = adapter.build_run_context(session_id, &input, now)?;
+        let run_context = adapter.build_run_context(session_id, &input, now).await?;
         if matches!(
             run_context.actor_manifest,
             actor_manifest::CompiledActorManifest::Team(_)
@@ -243,8 +243,23 @@ impl AgentRuntimeCore {
     ) -> Result<RuntimeRunSnapshot, AppError> {
         let now = timestamp_now();
         let decision_status = approval_flow::approval_decision_status(&input.decision)?;
-        let (actor_manifest, session_policy, checkpoint, resolved_target, configured_model) =
-            load_pending_checkpoint(adapter, session_id, approval_id)?;
+        let (
+            actor_manifest,
+            session_policy,
+            checkpoint,
+            resolved_target,
+            configured_model,
+            capability_state_ref,
+        ) = load_pending_checkpoint(adapter, session_id, approval_id)?;
+        let capability_store = adapter.load_capability_store(Some(&capability_state_ref))?;
+        let capability_projection = adapter
+            .project_capability_state_async(
+                &actor_manifest,
+                &session_policy.config_snapshot_id,
+                capability_state_ref,
+                &capability_store,
+            )
+            .await?;
 
         let execution = if decision_status == "approved" {
             let content = checkpoint
@@ -276,6 +291,7 @@ impl AgentRuntimeCore {
                 decision_status,
                 &actor_manifest,
                 &session_policy,
+                capability_projection,
                 execution.as_ref(),
                 consumed_tokens,
             )?;
@@ -322,10 +338,17 @@ fn load_pending_checkpoint(
         RuntimeRunCheckpoint,
         ResolvedExecutionTarget,
         ConfiguredModelRecord,
+        String,
     ),
     AppError,
 > {
-    let (approval, session_policy_snapshot_ref, checkpoint, configured_model_id) = {
+    let (
+        approval,
+        session_policy_snapshot_ref,
+        checkpoint,
+        configured_model_id,
+        capability_state_ref,
+    ) = {
         let sessions = adapter
             .state
             .sessions
@@ -348,6 +371,13 @@ fn load_pending_checkpoint(
             aggregate.metadata.session_policy_snapshot_ref.clone(),
             checkpoint.clone(),
             aggregate.detail.run.configured_model_id.clone(),
+            aggregate
+                .detail
+                .run
+                .capability_state_ref
+                .clone()
+                .or_else(|| aggregate.detail.capability_state_ref.clone())
+                .unwrap_or_else(|| format!("{}-capability-state", aggregate.detail.run.id)),
         )
     };
     let session_policy = adapter.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
@@ -371,6 +401,7 @@ fn load_pending_checkpoint(
         checkpoint,
         resolved_target,
         configured_model,
+        capability_state_ref,
     ))
 }
 
@@ -661,6 +692,7 @@ fn apply_approval_resolution_state(
     decision_status: &str,
     actor_manifest: &actor_manifest::CompiledActorManifest,
     session_policy: &session_policy::CompiledSessionPolicy,
+    capability_projection: capability_planner_bridge::CapabilityProjection,
     execution: Option<&ExecutionResponse>,
     consumed_tokens: Option<u32>,
 ) -> Result<ApprovalResolutionState, AppError> {
@@ -682,20 +714,6 @@ fn apply_approval_resolution_state(
     }
     pending.status = decision_status.into();
     let approval = pending.clone();
-    let capability_state_ref = aggregate
-        .detail
-        .run
-        .capability_state_ref
-        .clone()
-        .or_else(|| aggregate.detail.capability_state_ref.clone())
-        .unwrap_or_else(|| format!("{}-capability-state", aggregate.detail.run.id));
-    let capability_store = adapter.load_capability_store(Some(&capability_state_ref))?;
-    let capability_projection = adapter.project_capability_state(
-        actor_manifest,
-        &session_policy.config_snapshot_id,
-        capability_state_ref,
-        &capability_store,
-    )?;
     let pending_mediation = None;
     let last_execution_outcome = Some(if decision_status == "approved" {
         execution_outcome("allow", None, false, false)

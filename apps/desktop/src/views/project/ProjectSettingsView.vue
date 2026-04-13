@@ -22,6 +22,8 @@ const {
   allowedWorkspaceConfiguredModels,
   actorCandidateAgents,
   actorCandidateTeams,
+  projectOwnedAgents,
+  projectOwnedTeams,
   workspaceAssignedAgents,
   workspaceAssignedTeams,
   workspaceUsers,
@@ -130,6 +132,8 @@ const {
             v-else-if="activeTab === 'agents'"
             :candidate-agents="actorCandidateAgents"
             :candidate-teams="actorCandidateTeams"
+            :project-owned-agents="projectOwnedAgents"
+            :project-owned-teams="projectOwnedTeams"
             :workspace-assigned-agents="workspaceAssignedAgents"
             :workspace-assigned-teams="workspaceAssignedTeams"
             :enabled-agent-ids="enabledAgentIds"

@@ -4,9 +4,7 @@ use std::path::Path;
 use plugins::PluginTool;
 use runtime::{permission_enforcer::PermissionEnforcer, PermissionMode};
 
-use crate::tool_registry::{
-    permission_mode_from_plugin, RuntimeToolDefinition, ToolSpec,
-};
+use crate::tool_registry::{permission_mode_from_plugin, RuntimeToolDefinition, ToolSpec};
 
 use super::provider::{
     CapabilityExecutionKind, CapabilityInvocationPolicy, CapabilityPermissionProfile,
@@ -66,7 +64,10 @@ pub(crate) struct CapabilityGraph {
 pub struct CapabilityCompiler;
 
 impl CapabilityCompiler {
-    pub(crate) fn compile(&self, input: CapabilityCompilationInput) -> Result<CapabilityGraph, String> {
+    pub(crate) fn compile(
+        &self,
+        input: CapabilityCompilationInput,
+    ) -> Result<CapabilityGraph, String> {
         let has_invalid_plugin_permission = input
             .plugin_tools
             .iter()

@@ -171,18 +171,19 @@ impl RuntimeAdapter {
             session_capability_snapshot.injected_skill_message_count as i64;
         let deferred_capability_count =
             aggregate.detail.capability_summary.deferred_tools.len() as i64;
-        let hidden_capability_count =
-            aggregate.detail.capability_summary.hidden_capabilities.len() as i64;
+        let hidden_capability_count = aggregate
+            .detail
+            .capability_summary
+            .hidden_capabilities
+            .len() as i64;
         let degraded_provider_count = aggregate
             .detail
             .provider_state_summary
             .iter()
             .filter(|provider| provider.degraded)
             .count() as i64;
-        let run_capability_plan_summary_json =
-            serde_json::to_string(&run.capability_plan_summary)?;
-        let run_provider_state_summary_json =
-            serde_json::to_string(&run.provider_state_summary)?;
+        let run_capability_plan_summary_json = serde_json::to_string(&run.capability_plan_summary)?;
+        let run_provider_state_summary_json = serde_json::to_string(&run.provider_state_summary)?;
         let run_pending_mediation_json = run
             .pending_mediation
             .as_ref()

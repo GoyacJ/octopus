@@ -6287,9 +6287,8 @@ impl ToolExecutor for CliToolExecutor {
             pending_mcp_servers,
             mcp_degraded,
             move |_dispatch_kind, name, value| {
-                execute_runtime_capability(mcp_state.as_ref(), name, value).map(|output| {
-                    ToolExecutionOutcome::Allow { output }
-                })
+                execute_runtime_capability(mcp_state.as_ref(), name, value)
+                    .map(|output| ToolExecutionOutcome::Allow { output })
             },
         );
         match outcome {

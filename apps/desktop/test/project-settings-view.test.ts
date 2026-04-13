@@ -117,9 +117,11 @@ describe('Project settings view', () => {
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-agents"]')?.click()
     await waitFor(() => mounted.container.textContent?.includes('Architect Agent') ?? false)
+    expect(mounted.container.textContent).toContain('Redesign Copilot')
     expect(mounted.container.textContent).toContain('Architect Agent')
     expect(mounted.container.textContent).toContain('Coder Agent')
     expect(mounted.container.textContent).toContain('Finance Planner Template')
+    expect(mounted.container.textContent).toContain('Redesign Tiger Team')
     expect(mounted.container.textContent).toContain('Studio Direction Team')
     expect(mounted.container.textContent).toContain('Finance Ops Template')
 
@@ -192,6 +194,8 @@ describe('Project settings view', () => {
 
     mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-agents"]')?.click()
     await waitFor(() => mounted.container.textContent?.includes('Architect Agent') ?? false)
+    expect(mounted.container.querySelector('[data-testid="project-owned-agent-agent-redesign"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="project-owned-team-team-redesign"]')).not.toBeNull()
     expect(
       mounted.container
         .querySelector<HTMLInputElement>('[data-testid="project-agent-option-agent-architect"] input[type="checkbox"]')

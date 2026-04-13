@@ -61,6 +61,48 @@ fn write_workspace_config(path: &Path, total_tokens: Option<u64>) {
     );
 }
 
+fn write_workspace_config_with_http_mcp(path: &Path, total_tokens: Option<u64>, server_name: &str) {
+    let configured_model = if let Some(total_tokens) = total_tokens {
+        json!({
+            "configuredModelId": "quota-model",
+            "name": "Quota Model",
+            "providerId": "anthropic",
+            "modelId": "claude-sonnet-4-5",
+            "credentialRef": "env:ANTHROPIC_API_KEY",
+            "tokenQuota": {
+                "totalTokens": total_tokens
+            },
+            "enabled": true,
+            "source": "workspace"
+        })
+    } else {
+        json!({
+            "configuredModelId": "quota-model",
+            "name": "Quota Model",
+            "providerId": "anthropic",
+            "modelId": "claude-sonnet-4-5",
+            "credentialRef": "env:ANTHROPIC_API_KEY",
+            "enabled": true,
+            "source": "workspace"
+        })
+    };
+
+    write_json(
+        path,
+        json!({
+            "configuredModels": {
+                "quota-model": configured_model
+            },
+            "mcpServers": {
+                server_name: {
+                    "type": "http",
+                    "url": format!("https://{server_name}.example.invalid/mcp")
+                }
+            }
+        }),
+    );
+}
+
 fn session_input(
     conversation_id: &str,
     project_id: &str,
@@ -1309,7 +1351,10 @@ async fn create_session_populates_real_capability_plan_and_state_snapshot() {
         .await
         .expect("session");
 
-    assert_eq!(session.capability_summary.visible_tools, vec!["bash".to_string()]);
+    assert_eq!(
+        session.capability_summary.visible_tools,
+        vec!["bash".to_string()]
+    );
     assert_eq!(
         session.capability_summary.deferred_tools,
         vec!["WebFetch".to_string()]
@@ -1318,8 +1363,14 @@ async fn create_session_populates_real_capability_plan_and_state_snapshot() {
     assert!(session.pending_mediation.is_none());
     assert!(session.last_execution_outcome.is_none());
     assert!(session.capability_state_ref.is_some());
-    assert_eq!(session.run.capability_plan_summary, session.capability_summary);
-    assert_eq!(session.run.checkpoint.capability_plan_summary, session.capability_summary);
+    assert_eq!(
+        session.run.capability_plan_summary,
+        session.capability_summary
+    );
+    assert_eq!(
+        session.run.checkpoint.capability_plan_summary,
+        session.capability_summary
+    );
     assert_eq!(session.run.checkpoint.current_iteration_index, 0);
     assert!(session.run.checkpoint.capability_state_ref.is_some());
 
@@ -1346,7 +1397,10 @@ async fn create_session_populates_real_capability_plan_and_state_snapshot() {
         serde_json::from_str(&persisted.0).expect("capability plan summary json");
     assert_eq!(summary.visible_tools, vec!["bash".to_string()]);
     assert_eq!(summary.deferred_tools, vec!["WebFetch".to_string()]);
-    assert_eq!(persisted.1, session.capability_state_ref.clone().expect("state ref"));
+    assert_eq!(
+        persisted.1,
+        session.capability_state_ref.clone().expect("state ref")
+    );
     assert_eq!(persisted.2, 0);
     assert_eq!(persisted.3, 0);
     assert_eq!(persisted.4, 1);
@@ -1467,7 +1521,10 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
     let persisted_pending: RuntimePendingMediationSummary =
         serde_json::from_str(&persisted.0).expect("pending mediation json");
     assert_eq!(persisted_pending.tool_name.as_deref(), Some("runtime.turn"));
-    assert_eq!(persisted.1, run.capability_state_ref.clone().expect("state ref"));
+    assert_eq!(
+        persisted.1,
+        run.capability_state_ref.clone().expect("state ref")
+    );
     let persisted_outcome: RuntimeCapabilityExecutionOutcome =
         serde_json::from_str(&persisted.2).expect("outcome json");
     assert_eq!(persisted_outcome.outcome, "require_approval");
@@ -1475,6 +1532,178 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
         serde_json::from_str(&persisted.3).expect("plan json");
     assert_eq!(persisted_plan.visible_tools, vec!["bash".to_string()]);
     assert_eq!(persisted.4, 0);
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn submit_turn_with_configured_mcp_server_stays_async_safe() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config_with_http_mcp(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+        "remote",
+    );
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-mcp-runtime",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "MCP Runtime Agent",
+                Option::<String>::None,
+                "Planner",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Exercise capability planning with MCP config.",
+                serde_json::to_string(&vec!["bash"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&vec!["remote"]).expect("mcp server names"),
+                "Agent for MCP runtime projection tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert mcp runtime agent");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        Arc::new(MockRuntimeModelExecutor),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-mcp-runtime",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "MCP Runtime Session",
+                "agent:agent-mcp-runtime",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+    assert!(session
+        .provider_state_summary
+        .iter()
+        .any(|provider| provider.provider_key == "remote"));
+
+    let run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Inspect runtime state", None),
+        )
+        .await
+        .expect("run");
+    assert!(run
+        .provider_state_summary
+        .iter()
+        .any(|provider| provider.provider_key == "remote"));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn resolve_approval_with_configured_mcp_server_stays_async_safe() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config_with_http_mcp(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+        "remote",
+    );
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-mcp-approval",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "MCP Approval Agent",
+                Option::<String>::None,
+                "Approver",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Exercise approval resume with MCP config.",
+                serde_json::to_string(&vec!["bash"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&vec!["remote"]).expect("mcp server names"),
+                "Agent for MCP approval projection tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert mcp approval agent");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        Arc::new(MockRuntimeModelExecutor),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-mcp-approval",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "MCP Approval Session",
+                "agent:agent-mcp-approval",
+                Some("quota-model"),
+                "workspace-write",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Run the approval gated action", Some("workspace-write")),
+        )
+        .await
+        .expect("pending approval run");
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    let approval_id = detail
+        .pending_approval
+        .as_ref()
+        .map(|approval| approval.id.clone())
+        .expect("pending approval id");
+
+    let resolved = adapter
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect("resolved approval");
+    assert_eq!(resolved.approval_state, "approved");
+    assert!(resolved
+        .provider_state_summary
+        .iter()
+        .any(|provider| provider.provider_key == "remote"));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }

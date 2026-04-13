@@ -19,11 +19,13 @@ use crate::tool_registry::{
     SearchableToolSpec, ToolSearchOutput, ToolSpec,
 };
 
-use super::events::{CapabilityExecutionEvent, CapabilityExecutionRequest, CapabilityMediationDecision};
+use super::events::{
+    CapabilityExecutionEvent, CapabilityExecutionRequest, CapabilityMediationDecision,
+};
 use super::executor::{CapabilityDispatchKind, CapabilityExecutor};
 use super::planner::{
-    concurrency_policy, plan_effective_capability_surface, CapabilityCompilationInput, CapabilityCompiler,
-    CapabilityExecutionPlan, CapabilityPlanner, CapabilityPlannerInput,
+    concurrency_policy, plan_effective_capability_surface, CapabilityCompilationInput,
+    CapabilityCompiler, CapabilityExecutionPlan, CapabilityPlanner, CapabilityPlannerInput,
 };
 use super::state::{CapabilitySurfaceProjection, SessionCapabilityStore};
 

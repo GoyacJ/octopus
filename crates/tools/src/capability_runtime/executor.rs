@@ -12,10 +12,10 @@ pub use super::events::{
     CapabilityMediationDecision,
 };
 use super::planner::CapabilityPlannerInput;
+pub use super::provider::CapabilityRuntime;
 use super::provider::{
     CapabilityConcurrencyPolicy, CapabilityExecutionKind, CapabilitySourceKind, CapabilitySpec,
 };
-pub use super::provider::CapabilityRuntime;
 use super::state::{CapabilityActivation, SessionCapabilityStore};
 
 type CapabilityExecutionHook = Arc<dyn Fn(CapabilityExecutionEvent) + Send + Sync>;
@@ -433,7 +433,9 @@ impl CapabilityExecutor {
                 (CapabilityExecutionPhase::Failed, Some(message.clone()))
             }
         };
-        self.emit_event(CapabilityExecutionEvent::from_request(request, phase, detail));
+        self.emit_event(CapabilityExecutionEvent::from_request(
+            request, phase, detail,
+        ));
     }
 
     fn with_concurrency_gate<T>(
@@ -479,9 +481,11 @@ impl CapabilityExecutor {
             .visible_tools
             .into_iter()
             .find(|capability| capability.display_name == tool_name)
-            .ok_or_else(|| ToolError::new(format!(
+            .ok_or_else(|| {
+                ToolError::new(format!(
                     "tool `{tool_name}` is not enabled in the current capability surface"
-                )));
+                ))
+            });
         let capability = match capability {
             Ok(capability) => capability,
             Err(error) => return Self::classify_dispatch_error(tool_name, error),
@@ -496,9 +500,11 @@ impl CapabilityExecutor {
             requires_approval: capability.invocation_policy.requires_approval,
             input: input.clone(),
         };
-        if let Some(outcome) =
-            self.handle_mediation_decision(&request, self.mediation_decision(&request, store), store)
-        {
+        if let Some(outcome) = self.handle_mediation_decision(
+            &request,
+            self.mediation_decision(&request, store),
+            store,
+        ) {
             return outcome;
         }
         self.emit_event(CapabilityExecutionEvent::from_request(
@@ -552,13 +558,12 @@ impl CapabilityExecutor {
                 }
             }
             _ => match request.dispatch_kind {
-                CapabilityDispatchKind::BuiltinOrPlugin => {
-                    runtime
-                        .execute_local_tool(tool_name, &input)
-                        .map(|output| ToolExecutionOutcome::Allow { output })
+                CapabilityDispatchKind::BuiltinOrPlugin => runtime
+                    .execute_local_tool(tool_name, &input)
+                    .map(|output| ToolExecutionOutcome::Allow { output }),
+                CapabilityDispatchKind::RuntimeCapability => {
+                    dispatch(CapabilityDispatchKind::RuntimeCapability, tool_name, input)
                 }
-                CapabilityDispatchKind::RuntimeCapability =>
-                    dispatch(CapabilityDispatchKind::RuntimeCapability, tool_name, input),
             },
         });
         let outcome = match result {

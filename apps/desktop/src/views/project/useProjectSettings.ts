@@ -102,6 +102,12 @@ export function useProjectSettings() {
     ...teamStore.workspaceOwnedTeams,
     ...teamStore.builtinTemplateTeams,
   ])
+  const projectOwnedAgents = computed<AgentRecord[]>(() =>
+    agentStore.agents.filter(agent => agent.projectId === projectId.value),
+  )
+  const projectOwnedTeams = computed<TeamRecord[]>(() =>
+    teamStore.teams.filter(team => team.projectId === projectId.value),
+  )
   const workspaceAssignedAgents = computed<AgentRecord[]>(() => {
     const assignedIds = workspaceAssignments.value?.agents?.agentIds ?? []
     return actorCandidateAgents.value.filter(agent => assignedIds.includes(agent.id))
@@ -191,8 +197,8 @@ export function useProjectSettings() {
     Object.values(toolPermissionDraft.value).filter(value => value !== 'inherit').length,
   )
   const summaryActorCount = computed(() =>
-    agentStore.projectOwnedAgents.length
-    + teamStore.projectOwnedTeams.length
+    projectOwnedAgents.value.length
+    + projectOwnedTeams.value.length
     + enabledAgentIds.value.length
     + enabledTeamIds.value.length,
   )
@@ -574,6 +580,8 @@ export function useProjectSettings() {
     allowedWorkspaceConfiguredModels,
     actorCandidateAgents,
     actorCandidateTeams,
+    projectOwnedAgents,
+    projectOwnedTeams,
     workspaceAssignedAgents,
     workspaceAssignedTeams,
     workspaceUsers,

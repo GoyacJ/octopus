@@ -106,6 +106,30 @@ impl RuntimeAdapter {
             .map_err(|error| AppError::runtime(error.to_string()))
     }
 
+    pub(crate) async fn project_capability_state_async(
+        &self,
+        manifest: &actor_manifest::CompiledActorManifest,
+        config_snapshot_id: &str,
+        capability_state_ref: impl Into<String>,
+        store: &tools::SessionCapabilityStore,
+    ) -> Result<CapabilityProjection, AppError> {
+        let adapter = self.clone();
+        let manifest = manifest.clone();
+        let config_snapshot_id = config_snapshot_id.to_string();
+        let capability_state_ref = capability_state_ref.into();
+        let store = store.clone();
+        tokio::task::spawn_blocking(move || {
+            adapter.project_capability_state(
+                &manifest,
+                &config_snapshot_id,
+                capability_state_ref,
+                &store,
+            )
+        })
+        .await
+        .map_err(|error| AppError::runtime(format!("capability projection task failed: {error}")))?
+    }
+
     pub(crate) fn project_capability_state(
         &self,
         manifest: &actor_manifest::CompiledActorManifest,
@@ -169,7 +193,8 @@ impl RuntimeAdapter {
                         }),
                 );
                 for server_name in mcp_runtime.pending_servers().unwrap_or_default() {
-                    if allowed_mcp_servers.is_empty() || allowed_mcp_servers.contains(&server_name) {
+                    if allowed_mcp_servers.is_empty() || allowed_mcp_servers.contains(&server_name)
+                    {
                         if provider_state_summary
                             .iter()
                             .all(|provider| provider.provider_key != server_name)
@@ -231,7 +256,9 @@ impl RuntimeAdapter {
         let discoverable_skills = plan
             .discoverable_skills
             .iter()
-            .filter(|capability| matches_manifest_skill(capability, &skill_ids, &allowed_mcp_servers))
+            .filter(|capability| {
+                matches_manifest_skill(capability, &skill_ids, &allowed_mcp_servers)
+            })
             .map(|capability| capability.display_name.clone())
             .collect::<Vec<_>>();
         let mut hidden_capabilities = capability_names(&plan.hidden_capabilities);

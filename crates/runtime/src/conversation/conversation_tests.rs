@@ -20,8 +20,7 @@ use super::assistant_projection::build_assistant_message;
 use super::{
     parse_auto_compaction_threshold, ApiClient, ApiRequest, AssistantEvent, AutoCompactionEvent,
     ConversationRuntime, PromptCacheEvent, RuntimeError, StaticToolExecutor, ToolExecutionOutcome,
-    ToolExecutor,
-    DEFAULT_AUTO_COMPACTION_INPUT_TOKENS_THRESHOLD,
+    ToolExecutor, DEFAULT_AUTO_COMPACTION_INPUT_TOKENS_THRESHOLD,
 };
 
 struct ScriptedApiClient {

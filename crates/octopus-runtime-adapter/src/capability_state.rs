@@ -45,9 +45,9 @@ impl RuntimeAdapter {
         }
         let raw = fs::read(path)?;
         let persisted: PersistedCapabilityState = serde_json::from_slice(&raw)?;
-        Ok(tools::SessionCapabilityStore::from_shared(Arc::new(Mutex::new(
-            persisted.session_state,
-        ))))
+        Ok(tools::SessionCapabilityStore::from_shared(Arc::new(
+            Mutex::new(persisted.session_state),
+        )))
     }
 
     pub(crate) fn load_capability_state_snapshot(

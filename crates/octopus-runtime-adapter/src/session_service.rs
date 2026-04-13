@@ -68,12 +68,14 @@ impl RuntimeSessionService for RuntimeAdapter {
             &session_policy,
         )?;
         let memory_summary = manifest.memory_summary();
-        let capability_projection = self.project_capability_state(
-            &manifest,
-            &snapshot.id,
-            format!("{run_id}-capability-state"),
-            &tools::SessionCapabilityStore::default(),
-        )?;
+        let capability_projection = self
+            .project_capability_state_async(
+                &manifest,
+                &snapshot.id,
+                format!("{run_id}-capability-state"),
+                &tools::SessionCapabilityStore::default(),
+            )
+            .await?;
         let capability_summary = capability_projection.plan_summary.clone();
 
         let mut detail = RuntimeSessionDetail {

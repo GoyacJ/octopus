@@ -92,6 +92,7 @@ describe('workspace and project agents pages', () => {
     expect(mounted.container.querySelector('[data-testid="agent-center-tabs-shell"]')).not.toBeNull()
     expect(mounted.container.textContent).toContain('Architect Agent')
     expect(mounted.container.textContent).toContain('Coder Agent')
+    expect(mounted.container.textContent).toContain('Finance Planner Template')
     expect(mounted.container.textContent).toContain('数字团队')
     expect(mounted.container.textContent).toContain('内置工具')
     expect(mounted.container.textContent).toContain('技能')
@@ -107,6 +108,7 @@ describe('workspace and project agents pages', () => {
 
     expect(router.currentRoute.value.query.tab).toBe('team')
     expect(mounted.container.textContent).toContain('Studio Direction Team')
+    expect(mounted.container.textContent).toContain('Finance Ops Template')
 
     const skillTab = mounted.container.querySelector('[data-testid="ui-tabs-trigger-skill"]') as HTMLButtonElement | null
     expect(skillTab).not.toBeNull()

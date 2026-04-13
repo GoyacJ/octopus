@@ -16,7 +16,7 @@ pub(crate) struct RunContext {
 }
 
 impl RuntimeAdapter {
-    pub(crate) fn build_run_context(
+    pub(crate) async fn build_run_context(
         &self,
         session_id: &str,
         input: &SubmitRuntimeTurnInput,
@@ -54,12 +54,14 @@ impl RuntimeAdapter {
             .filter(|value| !value.trim().is_empty())
             .unwrap_or_else(|| format!("{run_id}-capability-state"));
         let capability_store = self.load_capability_store(Some(&capability_state_ref))?;
-        let capability_projection = self.project_capability_state(
-            &actor_manifest,
-            &session_policy.config_snapshot_id,
-            capability_state_ref.clone(),
-            &capability_store,
-        )?;
+        let capability_projection = self
+            .project_capability_state_async(
+                &actor_manifest,
+                &session_policy.config_snapshot_id,
+                capability_state_ref.clone(),
+                &capability_store,
+            )
+            .await?;
 
         Ok(RunContext {
             session_id: session_id.to_string(),

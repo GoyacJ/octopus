@@ -25,7 +25,6 @@ use sha2::{Digest, Sha256};
 use crate::{
     infra_state::{
         agent_avatar, load_agents, load_bundle_asset_descriptor_records, load_projects, load_teams,
-        write_team_record,
     },
     resources_skills::{
         discover_skill_roots, load_skills_from_roots, load_workspace_asset_state_document,
@@ -3417,7 +3416,7 @@ mod tests {
             vec![leader.id.clone(), member.id.clone()],
             "财务团队",
         );
-        write_team_record(&connection, &team, false).expect("write team");
+        crate::infra_state::write_team_record(&connection, &team, false).expect("write team");
 
         let exported = crate::agent_bundle::export_assets(
             &connection,

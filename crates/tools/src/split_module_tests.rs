@@ -199,9 +199,7 @@ fn run_skill_tool_with_runtime(
         input.arguments,
         CapabilityPlannerInput::default().with_current_dir(current_dir.as_deref()),
     ) {
-        Ok(result) => {
-            serde_json::to_string_pretty(&result).map_err(|error| error.to_string())
-        }
+        Ok(result) => serde_json::to_string_pretty(&result).map_err(|error| error.to_string()),
         Err(error) => Err(error),
     }
 }
@@ -887,9 +885,8 @@ fn workspace_and_subagent_skill_paths_match_runtime_surface_rules() {
         .expect_err("workspace/runtime skill path should be surface gated");
     assert!(workspace_error.contains("is not enabled in the current capability surface"));
 
-    let profile = super::CapabilityProfile::from_tools(BTreeSet::from([String::from(
-        "ToolSearch",
-    )]));
+    let profile =
+        super::CapabilityProfile::from_tools(BTreeSet::from([String::from("ToolSearch")]));
     let shared_state = std::sync::Arc::new(std::sync::Mutex::new(
         super::SessionCapabilityState::default(),
     ));
@@ -897,7 +894,10 @@ fn workspace_and_subagent_skill_paths_match_runtime_surface_rules() {
         SubagentToolExecutor::from_capability_provider(profile, capability_provider, shared_state);
 
     let subagent_discovery = executor
-        .execute("ToolSearch", r#"{"query":"workspace guidance","max_results":10}"#)
+        .execute(
+            "ToolSearch",
+            r#"{"query":"workspace guidance","max_results":10}"#,
+        )
         .expect("subagent tool search should succeed");
     let subagent_discovery: serde_json::Value =
         serde_json::from_str(&subagent_discovery).expect("subagent discovery should be json");
@@ -2623,10 +2623,7 @@ Guide the model through the workspace.
     std::env::set_var("HOME", &home);
 
     let runtime = CapabilityRuntime::builtin();
-    let profile = BTreeSet::from([
-        String::from("ToolSearch"),
-        String::from("WebSearch"),
-    ]);
+    let profile = BTreeSet::from([String::from("ToolSearch"), String::from("WebSearch")]);
 
     let surface = runtime
         .surface_projection(super::CapabilityPlannerInput::new(Some(&profile), None))
@@ -3152,9 +3149,7 @@ fn capability_runtime_execute_tool_with_outcome_preserves_structured_mediation_s
         &store,
         None,
         None,
-        |_dispatch_kind, _tool_name, _input| {
-            panic!("auth-gated dispatch should not execute")
-        },
+        |_dispatch_kind, _tool_name, _input| panic!("auth-gated dispatch should not execute"),
     );
 
     assert_eq!(
@@ -3720,8 +3715,7 @@ Guide the model through the workspace.
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         locked.apply_skill_execution_result(&result);
     }
-    let result_json: serde_json::Value =
-        serde_json::to_value(&result).expect("valid json");
+    let result_json: serde_json::Value = serde_json::to_value(&result).expect("valid json");
     assert_eq!(result_json["skill"], "help");
     assert_eq!(result_json["context"], "inline");
     assert_eq!(result_json["tool_grants"][0], "WebSearch");

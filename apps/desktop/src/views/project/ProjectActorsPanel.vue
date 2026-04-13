@@ -7,6 +7,8 @@ import { UiButton, UiCheckbox, UiEmptyState, UiField, UiRecordCard, UiStatusCall
 const props = defineProps<{
   candidateAgents: AgentRecord[]
   candidateTeams: TeamRecord[]
+  projectOwnedAgents: AgentRecord[]
+  projectOwnedTeams: TeamRecord[]
   workspaceAssignedAgents: AgentRecord[]
   workspaceAssignedTeams: TeamRecord[]
   enabledAgentIds: string[]
@@ -35,6 +37,10 @@ const enabledTeamIdsModel = computed({
 function actorOriginLabel(record: AgentRecord | TeamRecord) {
   return record.integrationSource?.kind === 'builtin-template' ? '内置模板' : '工作区'
 }
+
+function projectOwnedSummary(record: AgentRecord | TeamRecord) {
+  return record.description || '项目自有资产，默认加入当前项目会话。'
+}
 </script>
 
 <template>
@@ -47,12 +53,57 @@ function actorOriginLabel(record: AgentRecord | TeamRecord) {
     </template>
 
     <UiEmptyState
-      v-if="!candidateAgents.length && !candidateTeams.length"
+      v-if="!projectOwnedAgents.length && !projectOwnedTeams.length && !candidateAgents.length && !candidateTeams.length"
       :title="$t('projectSettings.agents.emptyTitle')"
       :description="$t('projectSettings.agents.emptyDescription')"
     />
 
     <div v-else class="space-y-6">
+      <section v-if="projectOwnedAgents.length || projectOwnedTeams.length" class="space-y-3">
+        <UiField
+          label="项目自有数字员工与团队"
+          hint="这些资产属于当前项目，默认生效，并会直接出现在会话智能体选择里。"
+        >
+          <div class="space-y-3">
+            <div
+              v-for="agent in projectOwnedAgents"
+              :key="agent.id"
+              :data-testid="`project-owned-agent-${agent.id}`"
+              class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+            >
+              <div class="min-w-0 space-y-1">
+                <div class="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                  {{ agent.name }}
+                  <span class="text-[11px] font-medium text-text-tertiary">项目内</span>
+                </div>
+                <div class="text-xs text-text-secondary">
+                  {{ projectOwnedSummary(agent) }}
+                </div>
+              </div>
+              <span class="text-[11px] font-medium text-text-tertiary">默认启用</span>
+            </div>
+
+            <div
+              v-for="team in projectOwnedTeams"
+              :key="team.id"
+              :data-testid="`project-owned-team-${team.id}`"
+              class="flex items-start justify-between gap-4 rounded-[var(--radius-l)] border border-border bg-surface px-4 py-3"
+            >
+              <div class="min-w-0 space-y-1">
+                <div class="flex items-center gap-2 text-sm font-semibold text-text-primary">
+                  {{ team.name }}
+                  <span class="text-[11px] font-medium text-text-tertiary">项目内</span>
+                </div>
+                <div class="text-xs text-text-secondary">
+                  {{ projectOwnedSummary(team) }}
+                </div>
+              </div>
+              <span class="text-[11px] font-medium text-text-tertiary">默认启用</span>
+            </div>
+          </div>
+        </UiField>
+      </section>
+
       <section v-if="candidateAgents.length" class="space-y-3">
         <UiField
           :label="$t('projectSettings.agents.agentsLabel')"

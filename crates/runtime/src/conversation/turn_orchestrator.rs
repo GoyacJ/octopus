@@ -5,8 +5,8 @@ use crate::session::{ContentBlock, ConversationMessage};
 use super::assistant_projection::build_assistant_message;
 use super::conversation_hooks::{format_hook_message, merge_hook_feedback};
 use super::{
-    ApiClient, ApiRequest, AutoCompactionEvent, ConversationRuntime, RuntimeError, ToolExecutionOutcome,
-    ToolExecutor, TurnSummary,
+    ApiClient, ApiRequest, AutoCompactionEvent, ConversationRuntime, RuntimeError,
+    ToolExecutionOutcome, ToolExecutor, TurnSummary,
 };
 
 impl<C, T> ConversationRuntime<C, T>
@@ -196,8 +196,11 @@ where
                         )
                     }
                     other => {
-                        let mut output =
-                            merge_hook_feedback(pre_hook_result.messages(), other.message_for_tool(&tool_name), true);
+                        let mut output = merge_hook_feedback(
+                            pre_hook_result.messages(),
+                            other.message_for_tool(&tool_name),
+                            true,
+                        );
 
                         if dispatch_started {
                             let post_hook_result = self.run_post_tool_use_failure_hook(
