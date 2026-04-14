@@ -2032,6 +2032,8 @@ pub struct RuntimeMemoryProposal {
     pub proposal_reason: String,
     #[serde(default)]
     pub review: Option<RuntimeMemoryProposalReview>,
+    #[serde(default, skip_serializing, skip_deserializing)]
+    pub normalized_content: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2173,7 +2175,13 @@ pub struct RuntimePendingMediation {
     #[serde(default)]
     pub mediation_kind: String,
     #[serde(default)]
+    pub dispatch_kind: Option<String>,
+    #[serde(default)]
     pub provider_key: Option<String>,
+    #[serde(default)]
+    pub concurrency_policy: Option<String>,
+    #[serde(default)]
+    pub input: Option<serde_json::Value>,
     #[serde(default)]
     pub reason: Option<String>,
     #[serde(default)]
@@ -2251,7 +2259,13 @@ pub struct RuntimeAuthChallengeSummary {
     #[serde(default)]
     pub id: String,
     #[serde(default)]
+    pub dispatch_kind: Option<String>,
+    #[serde(default)]
     pub provider_key: Option<String>,
+    #[serde(default)]
+    pub concurrency_policy: Option<String>,
+    #[serde(default)]
+    pub input: Option<serde_json::Value>,
     #[serde(default)]
     pub required_permission: Option<String>,
     #[serde(default)]
@@ -2418,6 +2432,14 @@ pub struct RuntimeRunCheckpoint {
     pub serialized_session: serde_json::Value,
     #[serde(default)]
     pub current_iteration_index: u32,
+    #[serde(default)]
+    pub tool_name: Option<String>,
+    #[serde(default)]
+    pub dispatch_kind: Option<String>,
+    #[serde(default)]
+    pub concurrency_policy: Option<String>,
+    #[serde(default)]
+    pub input: Option<serde_json::Value>,
     #[serde(default)]
     pub usage_summary: RuntimeUsageSummary,
     #[serde(default)]
@@ -2740,7 +2762,13 @@ pub struct ApprovalRequestRecord {
     #[serde(default)]
     pub checkpoint_ref: Option<String>,
     #[serde(default)]
+    pub dispatch_kind: Option<String>,
+    #[serde(default)]
     pub provider_key: Option<String>,
+    #[serde(default)]
+    pub concurrency_policy: Option<String>,
+    #[serde(default)]
+    pub input: Option<serde_json::Value>,
     #[serde(default)]
     pub required_permission: Option<String>,
     #[serde(default)]

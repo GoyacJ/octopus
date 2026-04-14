@@ -175,6 +175,9 @@ export interface RunSummary {
   updatedAt: number
   ownerType: 'agent' | 'team'
   ownerId: string
+  parentRunId?: string
+  delegatedByToolCallId?: string
+  subrunCount?: number
   blockers: string[]
   nextAction: string
 }

@@ -90,12 +90,7 @@ fn pending_mediation_projection_fields(
 
 fn last_mediation_projection_fields(
     outcome: Option<&RuntimeMediationOutcome>,
-) -> (
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<i64>,
-) {
+) -> (Option<String>, Option<String>, Option<String>, Option<i64>) {
     let Some(outcome) = outcome else {
         return (None, None, None, None);
     };
@@ -198,6 +193,14 @@ impl RuntimeAdapter {
             .runtime_sessions_dir
             .join("handoffs")
             .join(format!("{handoff_ref}.json"))
+    }
+
+    pub(super) fn runtime_subrun_state_path(&self, run_id: &str) -> PathBuf {
+        self.state
+            .paths
+            .runtime_sessions_dir
+            .join("subruns")
+            .join(format!("{run_id}.json"))
     }
 
     fn runtime_workflow_state_path(&self, workflow_run_id: &str) -> PathBuf {
@@ -307,25 +310,45 @@ impl RuntimeAdapter {
         Ok(Some(serde_json::from_slice(&raw)?))
     }
 
-    fn build_worker_dispatch_summary(
+    fn load_subrun_state_artifacts(
         &self,
+        session_id: &str,
+        parent_run_id: &str,
         subruns: &[RuntimeSubrunSummary],
-    ) -> RuntimeWorkerDispatchSummary {
-        RuntimeWorkerDispatchSummary {
-            total_subruns: subruns.len() as u64,
-            active_subruns: subruns
-                .iter()
-                .filter(|subrun| subrun.status == "running")
-                .count() as u64,
-            completed_subruns: subruns
-                .iter()
-                .filter(|subrun| subrun.status == "completed")
-                .count() as u64,
-            failed_subruns: subruns
-                .iter()
-                .filter(|subrun| subrun.status == "failed")
-                .count() as u64,
+    ) -> Result<BTreeMap<String, team_runtime::PersistedSubrunState>, AppError> {
+        let mut states = BTreeMap::new();
+        for subrun in subruns {
+            let path = self.runtime_subrun_state_path(&subrun.run_id);
+            if !path.exists() {
+                continue;
+            }
+            let raw = fs::read(path)?;
+            let state = serde_json::from_slice::<team_runtime::PersistedSubrunState>(&raw)?;
+            states.insert(subrun.run_id.clone(), state);
         }
+
+        let subrun_dir = self.state.paths.runtime_sessions_dir.join("subruns");
+        if !subrun_dir.exists() {
+            return Ok(states);
+        }
+
+        for entry in fs::read_dir(subrun_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            let raw = fs::read(&path)?;
+            let state = serde_json::from_slice::<team_runtime::PersistedSubrunState>(&raw)?;
+            if state.run.session_id != session_id
+                || state.run.parent_run_id.as_deref() != Some(parent_run_id)
+            {
+                continue;
+            }
+            states.insert(state.run.id.clone(), state);
+        }
+
+        Ok(states)
     }
 
     fn hydrate_phase_four_runtime_projection(
@@ -479,7 +502,8 @@ impl RuntimeAdapter {
                 .handoffs
                 .first()
                 .map(|handoff| handoff.handoff_ref.clone());
-            detail.run.worker_dispatch = Some(self.build_worker_dispatch_summary(&detail.subruns));
+            detail.run.worker_dispatch =
+                Some(team_runtime::build_worker_dispatch_summary(&detail.subruns));
         }
         sync_runtime_session_detail(detail);
         Ok(())
@@ -523,6 +547,13 @@ impl RuntimeAdapter {
             let mut detail = serde_json::from_str::<RuntimeSessionDetail>(&detail_json)?;
             sync_runtime_session_detail(&mut detail);
             self.hydrate_phase_four_runtime_projection(&connection, &mut detail)?;
+            let subrun_states = self.load_subrun_state_artifacts(
+                &detail.summary.id,
+                &detail.run.id,
+                &detail.subruns,
+            )?;
+            team_runtime::apply_subrun_state_projection(&mut detail, &subrun_states);
+            sync_runtime_session_detail(&mut detail);
             let events = self.load_event_log(&detail.summary.id)?;
             let fallback_manifest_snapshot_ref = format!("{}-manifest", detail.summary.id);
             let fallback_session_policy_snapshot_ref = format!("{}-policy", detail.summary.id);
@@ -537,6 +568,7 @@ impl RuntimeAdapter {
                             .unwrap_or(fallback_manifest_snapshot_ref),
                         session_policy_snapshot_ref: session_policy_snapshot_ref
                             .unwrap_or(fallback_session_policy_snapshot_ref),
+                        subrun_states,
                     },
                 },
             );
@@ -770,8 +802,10 @@ impl RuntimeAdapter {
                 .or(run.checkpoint.pending_auth_challenge.as_ref()),
             run.last_mediation_outcome.as_ref(),
         )?;
-        let denied_exposure_count =
-            aggregate.detail.policy_decision_summary.denied_exposure_count as i64;
+        let denied_exposure_count = aggregate
+            .detail
+            .policy_decision_summary
+            .denied_exposure_count as i64;
         let granted_tool_count = session_capability_snapshot.granted_tool_count as i64;
         let injected_skill_message_count =
             session_capability_snapshot.injected_skill_message_count as i64;
@@ -838,7 +872,10 @@ impl RuntimeAdapter {
             .iter()
             .filter(|provider| provider.degraded)
             .count() as i64;
-        let run_denied_exposure_count = aggregate.detail.policy_decision_summary.denied_exposure_count as i64;
+        let run_denied_exposure_count = aggregate
+            .detail
+            .policy_decision_summary
+            .denied_exposure_count as i64;
         let workflow_run_id = summary
             .workflow
             .as_ref()
@@ -1096,6 +1133,12 @@ impl RuntimeAdapter {
             )
             .map_err(|error| AppError::database(error.to_string()))?;
         for subrun in &aggregate.detail.subruns {
+            if let Some(state) = aggregate.metadata.subrun_states.get(&subrun.run_id) {
+                self.persist_runtime_artifact(
+                    self.runtime_subrun_state_path(&subrun.run_id),
+                    state,
+                )?;
+            }
             connection
                 .execute(
                     "INSERT OR REPLACE INTO runtime_subrun_projections

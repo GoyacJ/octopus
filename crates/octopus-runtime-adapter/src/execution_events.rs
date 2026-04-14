@@ -7,6 +7,418 @@ pub(crate) fn usage_cost_shape(total_tokens: Option<u32>) -> (&'static str, i64,
     }
 }
 
+fn base_run_event(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    project_id: &str,
+    conversation_id: &str,
+    run: &RuntimeRunSnapshot,
+    now: u64,
+    event_type: &str,
+) -> RuntimeEventEnvelope {
+    RuntimeEventEnvelope {
+        id: format!("evt-{}", Uuid::new_v4()),
+        event_type: event_type.into(),
+        kind: Some(event_type.into()),
+        workspace_id: adapter.state.workspace_id.clone(),
+        project_id: optional_project_id(project_id),
+        session_id: session_id.into(),
+        conversation_id: conversation_id.into(),
+        run_id: Some(run.id.clone()),
+        parent_run_id: run.parent_run_id.clone(),
+        emitted_at: now,
+        sequence: 0,
+        capability_plan_summary: Some(run.capability_plan_summary.clone()),
+        provider_state_summary: Some(run.provider_state_summary.clone()),
+        pending_mediation: run.pending_mediation.clone(),
+        capability_state_ref: run.capability_state_ref.clone(),
+        last_execution_outcome: run.last_execution_outcome.clone(),
+        last_mediation_outcome: run.last_mediation_outcome.clone(),
+        ..Default::default()
+    }
+}
+
+fn model_streamed(message: &RuntimeMessage) -> bool {
+    !message.content.trim().is_empty()
+}
+
+fn capability_dispatch_kind_label(dispatch_kind: tools::CapabilityDispatchKind) -> &'static str {
+    match dispatch_kind {
+        tools::CapabilityDispatchKind::BuiltinOrPlugin => "builtin_or_plugin",
+        tools::CapabilityDispatchKind::RuntimeCapability => "runtime_capability",
+    }
+}
+
+fn capability_concurrency_policy_label(
+    policy: tools::CapabilityConcurrencyPolicy,
+) -> &'static str {
+    match policy {
+        tools::CapabilityConcurrencyPolicy::ParallelRead => "parallel_read",
+        tools::CapabilityConcurrencyPolicy::Serialized => "serialized",
+    }
+}
+
+fn capability_family(
+    record: &agent_runtime_core::RuntimeLoopCapabilityEvent,
+) -> &'static str {
+    let Some(capability) = record.capability.as_ref() else {
+        return "tool";
+    };
+    match capability.source_kind {
+        tools::CapabilitySourceKind::McpTool
+        | tools::CapabilitySourceKind::McpPrompt
+        | tools::CapabilitySourceKind::McpResource => "mcp",
+        tools::CapabilitySourceKind::LocalSkill
+        | tools::CapabilitySourceKind::BundledSkill
+        | tools::CapabilitySourceKind::PluginSkill => "skill",
+        _ if capability.execution_kind == tools::CapabilityExecutionKind::PromptSkill => "skill",
+        _ => "tool",
+    }
+}
+
+fn capability_phase_outcome(phase: tools::CapabilityExecutionPhase) -> &'static str {
+    match phase {
+        tools::CapabilityExecutionPhase::Started => "started",
+        tools::CapabilityExecutionPhase::Completed => "completed",
+        tools::CapabilityExecutionPhase::Failed => "failed",
+        tools::CapabilityExecutionPhase::BlockedApproval => "blocked_approval",
+        tools::CapabilityExecutionPhase::BlockedAuth => "blocked_auth",
+        tools::CapabilityExecutionPhase::Denied => "denied",
+        tools::CapabilityExecutionPhase::Cancelled => "cancelled",
+        tools::CapabilityExecutionPhase::Interrupted => "interrupted",
+        tools::CapabilityExecutionPhase::Degraded => "degraded",
+    }
+}
+
+fn subrun_summaries_for_run(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    run_id: &str,
+) -> Result<Vec<RuntimeSubrunSummary>, AppError> {
+    let sessions = adapter
+        .state
+        .sessions
+        .lock()
+        .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+    Ok(sessions
+        .get(session_id)
+        .map(|aggregate| {
+            aggregate
+                .detail
+                .subruns
+                .iter()
+                .filter(|subrun| subrun.parent_run_id.as_deref() == Some(run_id))
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default())
+}
+
+fn append_runtime_loop_events(
+    events: &mut Vec<RuntimeEventEnvelope>,
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    now: u64,
+    conversation_id: &str,
+    project_id: &str,
+    run: &RuntimeRunSnapshot,
+    assistant_message: Option<&RuntimeMessage>,
+    execution_trace: Option<&RuntimeTraceItem>,
+    model_iterations: &[agent_runtime_core::RuntimeLoopModelIteration],
+    capability_events: &[agent_runtime_core::RuntimeLoopCapabilityEvent],
+    subruns: &[RuntimeSubrunSummary],
+) {
+    let fallback_iterations = if model_iterations.is_empty()
+        && (assistant_message.is_some() || execution_trace.is_some())
+    {
+        vec![agent_runtime_core::RuntimeLoopModelIteration {
+            iteration: run.checkpoint.current_iteration_index.max(1),
+            streamed: assistant_message.is_some_and(model_streamed),
+        }]
+    } else {
+        Vec::new()
+    };
+    let iterations = if model_iterations.is_empty() {
+        fallback_iterations.as_slice()
+    } else {
+        model_iterations
+    };
+
+    for iteration in iterations {
+        let mut started = base_run_event(
+            adapter,
+            session_id,
+            project_id,
+            conversation_id,
+            run,
+            now,
+            "model.started",
+        );
+        started.iteration = Some(iteration.iteration);
+        started.outcome = Some("started".into());
+        started.run = Some(run.clone());
+        started.payload = Some(json!({
+            "iteration": iteration.iteration,
+            "run": run.clone(),
+        }));
+        events.push(started);
+
+        if iteration.streamed {
+            let mut streaming = base_run_event(
+                adapter,
+                session_id,
+                project_id,
+                conversation_id,
+                run,
+                now,
+                "model.streaming",
+            );
+            streaming.iteration = Some(iteration.iteration);
+            streaming.outcome = Some("streaming".into());
+            streaming.payload = Some(json!({
+                "iteration": iteration.iteration,
+                "run": run.clone(),
+            }));
+            if let Some(message) = assistant_message.cloned() {
+                streaming.message = Some(message);
+            }
+            events.push(streaming);
+        }
+
+        let mut completed = base_run_event(
+            adapter,
+            session_id,
+            project_id,
+            conversation_id,
+            run,
+            now,
+            "model.completed",
+        );
+        completed.iteration = Some(iteration.iteration);
+        completed.outcome = Some("completed".into());
+        completed.payload = Some(json!({
+            "iteration": iteration.iteration,
+            "run": run.clone(),
+        }));
+        if Some(iteration.iteration) == iterations.last().map(|item| item.iteration)
+            && execution_trace.is_some()
+        {
+            completed.trace = execution_trace.cloned();
+            completed.payload = execution_trace
+                .cloned()
+                .map(|trace| json!({ "trace": trace }))
+                .or_else(|| completed.payload.clone());
+        }
+        events.push(completed);
+    }
+
+    if let Some(trace) = execution_trace.cloned() {
+        let mut trace_event = base_run_event(
+            adapter,
+            session_id,
+            project_id,
+            conversation_id,
+            run,
+            now,
+            "trace.emitted",
+        );
+        trace_event.trace = Some(trace.clone());
+        trace_event.payload = Some(json!({ "trace": trace }));
+        events.push(trace_event);
+    }
+
+    let mut requested_tool_uses = std::collections::BTreeSet::new();
+    for record in capability_events {
+        let family = capability_family(record);
+        let target_ref = format!("capability-call:{}:{}", run.id, record.tool_use_id);
+        let capability_id = record.execution.capability_id.clone();
+        let tool_name = record.execution.tool_name.clone();
+        let source_kind = record
+            .capability
+            .as_ref()
+            .map(|capability| capability.source_kind.as_str().to_string());
+        let execution_kind = record
+            .capability
+            .as_ref()
+            .map(|capability| capability.execution_kind.as_str().to_string());
+        let provider_key = record
+            .capability
+            .as_ref()
+            .and_then(|capability| capability.provider_key.clone());
+        let detail = record.execution.detail.clone();
+        if requested_tool_uses.insert(record.tool_use_id.clone()) {
+            let mut requested = base_run_event(
+                adapter,
+                session_id,
+                project_id,
+                conversation_id,
+                run,
+                now,
+                &format!("{family}.requested"),
+            );
+            requested.iteration = Some(record.iteration);
+            requested.actor_ref = Some(run.actor_ref.clone());
+            requested.tool_use_id = Some(record.tool_use_id.clone());
+            requested.target_kind = Some("capability-call".into());
+            requested.target_ref = Some(target_ref.clone());
+            requested.outcome = Some("requested".into());
+            requested.payload = Some(json!({
+                "capabilityId": capability_id.clone(),
+                "toolName": tool_name.clone(),
+                "sourceKind": source_kind.clone(),
+                "executionKind": execution_kind.clone(),
+                "providerKey": provider_key.clone(),
+                "dispatchKind": capability_dispatch_kind_label(record.execution.dispatch_kind),
+                "requiredPermission": record.execution.required_permission.as_str(),
+                "concurrencyPolicy": capability_concurrency_policy_label(record.execution.concurrency_policy),
+                "requiresApproval": record.execution.requires_approval,
+                "requiresAuth": record.execution.requires_auth,
+            }));
+            events.push(requested);
+        }
+
+        let event_type = match record.execution.phase {
+            tools::CapabilityExecutionPhase::Started => format!("{family}.started"),
+            tools::CapabilityExecutionPhase::Completed => format!("{family}.completed"),
+            _ => format!("{family}.failed"),
+        };
+        let mut capability_event = base_run_event(
+            adapter,
+            session_id,
+            project_id,
+            conversation_id,
+            run,
+            now,
+            &event_type,
+        );
+        capability_event.iteration = Some(record.iteration);
+        capability_event.actor_ref = Some(run.actor_ref.clone());
+        capability_event.tool_use_id = Some(record.tool_use_id.clone());
+        capability_event.target_kind = Some("capability-call".into());
+        capability_event.target_ref = Some(target_ref);
+        capability_event.outcome = Some(capability_phase_outcome(record.execution.phase).into());
+        if matches!(
+            record.execution.phase,
+            tools::CapabilityExecutionPhase::BlockedApproval
+                | tools::CapabilityExecutionPhase::BlockedAuth
+        ) {
+            capability_event.approval_layer = Some("capability-call".into());
+        }
+        capability_event.payload = Some(json!({
+            "capabilityId": capability_id,
+            "toolName": tool_name,
+            "sourceKind": source_kind,
+            "executionKind": execution_kind,
+            "providerKey": provider_key,
+            "dispatchKind": capability_dispatch_kind_label(record.execution.dispatch_kind),
+            "requiredPermission": record.execution.required_permission.as_str(),
+            "concurrencyPolicy": capability_concurrency_policy_label(record.execution.concurrency_policy),
+            "requiresApproval": record.execution.requires_approval,
+            "requiresAuth": record.execution.requires_auth,
+            "detail": detail,
+        }));
+        events.push(capability_event);
+    }
+
+    for subrun in subruns {
+        let mut spawned = base_run_event(
+            adapter,
+            session_id,
+            project_id,
+            conversation_id,
+            run,
+            now,
+            "subrun.spawned",
+        );
+        spawned.iteration = Some(run.checkpoint.current_iteration_index);
+        spawned.parent_run_id = subrun.parent_run_id.clone().or_else(|| Some(run.id.clone()));
+        spawned.workflow_run_id = subrun.workflow_run_id.clone();
+        spawned.actor_ref = Some(subrun.actor_ref.clone());
+        spawned.tool_use_id = subrun.delegated_by_tool_call_id.clone();
+        spawned.outcome = Some("spawned".into());
+        spawned.payload = Some(json!({ "subrun": subrun }));
+        events.push(spawned);
+
+        let terminal_kind = match subrun.status.as_str() {
+            "completed" => Some("subrun.completed"),
+            "failed" => Some("subrun.failed"),
+            _ => None,
+        };
+        if let Some(terminal_kind) = terminal_kind {
+            let mut terminal = base_run_event(
+                adapter,
+                session_id,
+                project_id,
+                conversation_id,
+                run,
+                now,
+                terminal_kind,
+            );
+            terminal.iteration = Some(run.checkpoint.current_iteration_index);
+            terminal.parent_run_id = subrun.parent_run_id.clone().or_else(|| Some(run.id.clone()));
+            terminal.workflow_run_id = subrun.workflow_run_id.clone();
+            terminal.actor_ref = Some(subrun.actor_ref.clone());
+            terminal.tool_use_id = subrun.delegated_by_tool_call_id.clone();
+            terminal.outcome = Some(subrun.status.clone());
+            terminal.payload = Some(json!({ "subrun": subrun }));
+            events.push(terminal);
+        }
+    }
+}
+
+fn append_runtime_loop_planner_events(
+    events: &mut Vec<RuntimeEventEnvelope>,
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    now: u64,
+    conversation_id: &str,
+    project_id: &str,
+    run: &RuntimeRunSnapshot,
+    planner_events: &[agent_runtime_core::RuntimeLoopPlannerEvent],
+) {
+    for record in planner_events {
+        let event_type = match record.phase {
+            agent_runtime_core::RuntimeLoopPlannerPhase::Started => "planner.started",
+            agent_runtime_core::RuntimeLoopPlannerPhase::Completed => "planner.completed",
+        };
+        let mut event = base_run_event(
+            adapter,
+            session_id,
+            project_id,
+            conversation_id,
+            run,
+            now,
+            event_type,
+        );
+        event.iteration = Some(record.iteration);
+        event.outcome = Some(match record.phase {
+            agent_runtime_core::RuntimeLoopPlannerPhase::Started => "started".into(),
+            agent_runtime_core::RuntimeLoopPlannerPhase::Completed => "completed".into(),
+        });
+        if let Some(summary) = record.capability_plan_summary.clone() {
+            event.capability_plan_summary = Some(summary);
+        }
+        if let Some(provider_state_summary) = record.provider_state_summary.clone() {
+            event.provider_state_summary = Some(provider_state_summary);
+        }
+        if let Some(capability_state_ref) = record.capability_state_ref.clone() {
+            event.capability_state_ref = Some(capability_state_ref);
+        }
+        event.payload = Some(match record.phase {
+            agent_runtime_core::RuntimeLoopPlannerPhase::Started => json!({
+                "iteration": record.iteration,
+            }),
+            agent_runtime_core::RuntimeLoopPlannerPhase::Completed => json!({
+                "iteration": record.iteration,
+                "capabilityPlanSummary": record.capability_plan_summary.clone(),
+                "providerStateSummary": record.provider_state_summary.clone(),
+                "capabilityStateRef": record.capability_state_ref.clone(),
+            }),
+        });
+        events.push(event);
+    }
+}
+
 pub(super) async fn record_submit_turn_activity(
     adapter: &RuntimeAdapter,
     session_id: &str,
@@ -108,6 +520,9 @@ pub(super) async fn emit_submit_turn_events(
     assistant_message: Option<RuntimeMessage>,
     execution_trace: Option<RuntimeTraceItem>,
     approval: Option<ApprovalRequestRecord>,
+    planner_events: &[agent_runtime_core::RuntimeLoopPlannerEvent],
+    model_iterations: &[agent_runtime_core::RuntimeLoopModelIteration],
+    capability_events: &[agent_runtime_core::RuntimeLoopCapabilityEvent],
 ) -> Result<(), AppError> {
     let mut events = vec![
         RuntimeEventEnvelope {
@@ -141,34 +556,6 @@ pub(super) async fn emit_submit_turn_events(
         },
         RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
-            event_type: "planner.completed".into(),
-            kind: Some("planner.completed".into()),
-            workspace_id: adapter.state.workspace_id.clone(),
-            project_id: optional_project_id(&project_id),
-            session_id: session_id.into(),
-            conversation_id: conversation_id.clone(),
-            run_id: Some(run.id.clone()),
-            emitted_at: now,
-            sequence: 0,
-            payload: Some(json!({
-                "trace": submitted_trace.clone(),
-            })),
-            run: None,
-            message: None,
-            trace: Some(submitted_trace.clone()),
-            approval: None,
-            decision: None,
-            summary: None,
-            error: None,
-            capability_plan_summary: Some(run.capability_plan_summary.clone()),
-            provider_state_summary: Some(run.provider_state_summary.clone()),
-            pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
-            last_execution_outcome: run.last_execution_outcome.clone(),
-            ..Default::default()
-        },
-        RuntimeEventEnvelope {
-            id: format!("evt-{}", Uuid::new_v4()),
             event_type: "trace.emitted".into(),
             kind: Some("trace.emitted".into()),
             workspace_id: adapter.state.workspace_id.clone(),
@@ -196,6 +583,17 @@ pub(super) async fn emit_submit_turn_events(
             ..Default::default()
         },
     ];
+
+    append_runtime_loop_planner_events(
+        &mut events,
+        adapter,
+        session_id,
+        now,
+        &conversation_id,
+        &project_id,
+        &run,
+        planner_events,
+    );
 
     if !run.capability_plan_summary.hidden_capabilities.is_empty() {
         events.push(RuntimeEventEnvelope {
@@ -259,35 +657,23 @@ pub(super) async fn emit_submit_turn_events(
         });
     }
 
+    let subruns = subrun_summaries_for_run(adapter, session_id, &run.id)?;
+    append_runtime_loop_events(
+        &mut events,
+        adapter,
+        session_id,
+        now,
+        &conversation_id,
+        &project_id,
+        &run,
+        assistant_message.as_ref(),
+        execution_trace.as_ref(),
+        model_iterations,
+        capability_events,
+        &subruns,
+    );
+
     if let Some(message) = assistant_message {
-        events.push(RuntimeEventEnvelope {
-            id: format!("evt-{}", Uuid::new_v4()),
-            event_type: "model.started".into(),
-            kind: Some("model.started".into()),
-            workspace_id: adapter.state.workspace_id.clone(),
-            project_id: optional_project_id(&project_id),
-            session_id: session_id.into(),
-            conversation_id: conversation_id.clone(),
-            run_id: Some(run.id.clone()),
-            emitted_at: now,
-            sequence: 0,
-            payload: Some(json!({
-                "run": run.clone(),
-            })),
-            run: Some(run.clone()),
-            message: None,
-            trace: None,
-            approval: None,
-            decision: None,
-            summary: None,
-            error: None,
-            capability_plan_summary: Some(run.capability_plan_summary.clone()),
-            provider_state_summary: Some(run.provider_state_summary.clone()),
-            pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
-            last_execution_outcome: run.last_execution_outcome.clone(),
-            ..Default::default()
-        });
         events.push(RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
             event_type: "runtime.message.created".into(),
@@ -305,65 +691,6 @@ pub(super) async fn emit_submit_turn_events(
             run: None,
             message: Some(message),
             trace: None,
-            approval: None,
-            decision: None,
-            summary: None,
-            error: None,
-            capability_plan_summary: Some(run.capability_plan_summary.clone()),
-            provider_state_summary: Some(run.provider_state_summary.clone()),
-            pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
-            last_execution_outcome: run.last_execution_outcome.clone(),
-            ..Default::default()
-        });
-    }
-
-    if let Some(trace) = execution_trace {
-        events.push(RuntimeEventEnvelope {
-            id: format!("evt-{}", Uuid::new_v4()),
-            event_type: "model.completed".into(),
-            kind: Some("model.completed".into()),
-            workspace_id: adapter.state.workspace_id.clone(),
-            project_id: optional_project_id(&project_id),
-            session_id: session_id.into(),
-            conversation_id: conversation_id.clone(),
-            run_id: Some(run.id.clone()),
-            emitted_at: now,
-            sequence: 0,
-            payload: Some(json!({
-                "trace": trace.clone(),
-            })),
-            run: None,
-            message: None,
-            trace: Some(trace.clone()),
-            approval: None,
-            decision: None,
-            summary: None,
-            error: None,
-            capability_plan_summary: Some(run.capability_plan_summary.clone()),
-            provider_state_summary: Some(run.provider_state_summary.clone()),
-            pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
-            last_execution_outcome: run.last_execution_outcome.clone(),
-            ..Default::default()
-        });
-        events.push(RuntimeEventEnvelope {
-            id: format!("evt-{}", Uuid::new_v4()),
-            event_type: "trace.emitted".into(),
-            kind: Some("trace.emitted".into()),
-            workspace_id: adapter.state.workspace_id.clone(),
-            project_id: optional_project_id(&project_id),
-            session_id: session_id.into(),
-            conversation_id: conversation_id.clone(),
-            run_id: Some(run.id.clone()),
-            emitted_at: now,
-            sequence: 0,
-            payload: Some(json!({
-                "trace": trace.clone(),
-            })),
-            run: None,
-            message: None,
-            trace: Some(trace.clone()),
             approval: None,
             decision: None,
             summary: None,
@@ -1022,6 +1349,9 @@ pub(super) async fn emit_approval_resolution_events(
     decision: String,
     assistant_message: Option<RuntimeMessage>,
     execution_trace: Option<RuntimeTraceItem>,
+    planner_events: &[agent_runtime_core::RuntimeLoopPlannerEvent],
+    model_iterations: &[agent_runtime_core::RuntimeLoopModelIteration],
+    capability_events: &[agent_runtime_core::RuntimeLoopCapabilityEvent],
 ) -> Result<(), AppError> {
     let mut events = vec![RuntimeEventEnvelope {
         id: format!("evt-{}", Uuid::new_v4()),
@@ -1055,6 +1385,32 @@ pub(super) async fn emit_approval_resolution_events(
         ..Default::default()
     }];
 
+    append_runtime_loop_planner_events(
+        &mut events,
+        adapter,
+        session_id,
+        now,
+        &conversation_id,
+        &project_id,
+        &run,
+        planner_events,
+    );
+    let subruns = subrun_summaries_for_run(adapter, session_id, &run.id)?;
+    append_runtime_loop_events(
+        &mut events,
+        adapter,
+        session_id,
+        now,
+        &conversation_id,
+        &project_id,
+        &run,
+        assistant_message.as_ref(),
+        execution_trace.as_ref(),
+        model_iterations,
+        capability_events,
+        &subruns,
+    );
+
     if let Some(message) = assistant_message {
         events.push(RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
@@ -1073,66 +1429,6 @@ pub(super) async fn emit_approval_resolution_events(
             run: None,
             message: Some(message),
             trace: None,
-            approval: None,
-            decision: None,
-            summary: None,
-            error: None,
-            capability_plan_summary: Some(run.capability_plan_summary.clone()),
-            provider_state_summary: Some(run.provider_state_summary.clone()),
-            pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
-            last_execution_outcome: run.last_execution_outcome.clone(),
-            last_mediation_outcome: run.last_mediation_outcome.clone(),
-            ..Default::default()
-        });
-    }
-    if let Some(trace) = execution_trace {
-        events.push(RuntimeEventEnvelope {
-            id: format!("evt-{}", Uuid::new_v4()),
-            event_type: "model.completed".into(),
-            kind: Some("model.completed".into()),
-            workspace_id: adapter.state.workspace_id.clone(),
-            project_id: optional_project_id(&project_id),
-            session_id: session_id.into(),
-            conversation_id: conversation_id.clone(),
-            run_id: Some(run.id.clone()),
-            emitted_at: now,
-            sequence: 0,
-            payload: Some(json!({
-                "trace": trace.clone(),
-            })),
-            run: None,
-            message: None,
-            trace: Some(trace.clone()),
-            approval: None,
-            decision: None,
-            summary: None,
-            error: None,
-            capability_plan_summary: Some(run.capability_plan_summary.clone()),
-            provider_state_summary: Some(run.provider_state_summary.clone()),
-            pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
-            last_execution_outcome: run.last_execution_outcome.clone(),
-            last_mediation_outcome: run.last_mediation_outcome.clone(),
-            ..Default::default()
-        });
-        events.push(RuntimeEventEnvelope {
-            id: format!("evt-{}", Uuid::new_v4()),
-            event_type: "trace.emitted".into(),
-            kind: Some("trace.emitted".into()),
-            workspace_id: adapter.state.workspace_id.clone(),
-            project_id: optional_project_id(&project_id),
-            session_id: session_id.into(),
-            conversation_id: conversation_id.clone(),
-            run_id: Some(run.id.clone()),
-            emitted_at: now,
-            sequence: 0,
-            payload: Some(json!({
-                "trace": trace.clone(),
-            })),
-            run: None,
-            message: None,
-            trace: Some(trace),
             approval: None,
             decision: None,
             summary: None,
@@ -1308,6 +1604,9 @@ pub(super) async fn emit_auth_resolution_events(
     resolution: String,
     assistant_message: Option<RuntimeMessage>,
     execution_trace: Option<RuntimeTraceItem>,
+    planner_events: &[agent_runtime_core::RuntimeLoopPlannerEvent],
+    model_iterations: &[agent_runtime_core::RuntimeLoopModelIteration],
+    capability_events: &[agent_runtime_core::RuntimeLoopCapabilityEvent],
 ) -> Result<(), AppError> {
     let auth_event_type = if resolution == "resolved" {
         "auth.resolved"
@@ -1343,6 +1642,32 @@ pub(super) async fn emit_auth_resolution_events(
         ..Default::default()
     }];
 
+    append_runtime_loop_planner_events(
+        &mut events,
+        adapter,
+        session_id,
+        now,
+        &conversation_id,
+        &project_id,
+        &run,
+        planner_events,
+    );
+    let subruns = subrun_summaries_for_run(adapter, session_id, &run.id)?;
+    append_runtime_loop_events(
+        &mut events,
+        adapter,
+        session_id,
+        now,
+        &conversation_id,
+        &project_id,
+        &run,
+        assistant_message.as_ref(),
+        execution_trace.as_ref(),
+        model_iterations,
+        capability_events,
+        &subruns,
+    );
+
     if let Some(message) = assistant_message {
         events.push(RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
@@ -1359,54 +1684,6 @@ pub(super) async fn emit_auth_resolution_events(
                 "message": message.clone(),
             })),
             message: Some(message),
-            capability_plan_summary: Some(run.capability_plan_summary.clone()),
-            provider_state_summary: Some(run.provider_state_summary.clone()),
-            pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
-            last_execution_outcome: run.last_execution_outcome.clone(),
-            last_mediation_outcome: run.last_mediation_outcome.clone(),
-            ..Default::default()
-        });
-    }
-    if let Some(trace) = execution_trace {
-        events.push(RuntimeEventEnvelope {
-            id: format!("evt-{}", Uuid::new_v4()),
-            event_type: "model.completed".into(),
-            kind: Some("model.completed".into()),
-            workspace_id: adapter.state.workspace_id.clone(),
-            project_id: optional_project_id(&project_id),
-            session_id: session_id.into(),
-            conversation_id: conversation_id.clone(),
-            run_id: Some(run.id.clone()),
-            emitted_at: now,
-            sequence: 0,
-            payload: Some(json!({
-                "trace": trace.clone(),
-            })),
-            trace: Some(trace.clone()),
-            capability_plan_summary: Some(run.capability_plan_summary.clone()),
-            provider_state_summary: Some(run.provider_state_summary.clone()),
-            pending_mediation: run.pending_mediation.clone(),
-            capability_state_ref: run.capability_state_ref.clone(),
-            last_execution_outcome: run.last_execution_outcome.clone(),
-            last_mediation_outcome: run.last_mediation_outcome.clone(),
-            ..Default::default()
-        });
-        events.push(RuntimeEventEnvelope {
-            id: format!("evt-{}", Uuid::new_v4()),
-            event_type: "trace.emitted".into(),
-            kind: Some("trace.emitted".into()),
-            workspace_id: adapter.state.workspace_id.clone(),
-            project_id: optional_project_id(&project_id),
-            session_id: session_id.into(),
-            conversation_id: conversation_id.clone(),
-            run_id: Some(run.id.clone()),
-            emitted_at: now,
-            sequence: 0,
-            payload: Some(json!({
-                "trace": trace.clone(),
-            })),
-            trace: Some(trace),
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
             pending_mediation: run.pending_mediation.clone(),

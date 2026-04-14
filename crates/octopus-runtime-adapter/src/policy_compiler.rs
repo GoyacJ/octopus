@@ -38,12 +38,34 @@ fn decision_key(target_kind: &str, target_ref: &str) -> String {
     format!("{target_kind}:{target_ref}")
 }
 
+fn merge_policy_json(base: serde_json::Value, patch: serde_json::Value) -> serde_json::Value {
+    match (base, patch) {
+        (serde_json::Value::Object(mut base_map), serde_json::Value::Object(patch_map)) => {
+            for (key, patch_value) in patch_map {
+                let merged = merge_policy_json(
+                    base_map.remove(&key).unwrap_or(serde_json::Value::Null),
+                    patch_value,
+                );
+                base_map.insert(key, merged);
+            }
+            serde_json::Value::Object(base_map)
+        }
+        (base, serde_json::Value::Null) => base,
+        (_, patch) => patch,
+    }
+}
+
 fn parse_policy_value<T, F>(value: serde_json::Value, default: F) -> T
 where
-    T: DeserializeOwned,
+    T: DeserializeOwned + serde::Serialize,
     F: FnOnce() -> T,
 {
-    serde_json::from_value(value).unwrap_or_else(|_| default())
+    let default_value = default();
+    let merged = serde_json::to_value(&default_value)
+        .ok()
+        .map(|default_json| merge_policy_json(default_json, value))
+        .unwrap_or(serde_json::Value::Null);
+    serde_json::from_value(merged).unwrap_or(default_value)
 }
 
 fn actor_policy_defaults(
@@ -150,12 +172,53 @@ fn compile_target_decisions(
     approval_preference: &ApprovalPreference,
     memory_policy: &MemoryPolicy,
     delegation_policy: &DelegationPolicy,
+    execution_permission_mode: &str,
+    configured_model_id: Option<&str>,
 ) -> RuntimeTargetPolicyDecisions {
     let actor_ref = manifest.actor_ref().to_string();
     let mut decisions = RuntimeTargetPolicyDecisions::new();
 
-    let memory_requires_approval =
-        memory_policy.write_requires_approval || approval_preference.memory_write == "require-approval";
+    if let Some(configured_model_id) = configured_model_id {
+        let tool_execution_requires_approval =
+            execution_target::requires_approval(execution_permission_mode).unwrap_or(false)
+                || approval_preference.tool_execution == "require-approval";
+        let model_execution_decision = if tool_execution_requires_approval {
+            RuntimeTargetPolicyDecision {
+                target_kind: "model-execution".into(),
+                action: "requireApproval".into(),
+                hidden: false,
+                visible: false,
+                deferred: true,
+                requires_approval: true,
+                requires_auth: false,
+                reason: Some(
+                    if approval_preference.tool_execution == "require-approval" {
+                        "tool execution requires mediation review"
+                    } else {
+                        "session ceiling requires approval before model execution can continue"
+                    }
+                    .into(),
+                ),
+                capability_id: Some(format!("model-execution:{configured_model_id}")),
+                provider_key: None,
+                required_permission: Some(execution_permission_mode.into()),
+            }
+        } else {
+            allow_decision(
+                "model-execution",
+                Some(format!("model-execution:{configured_model_id}")),
+                Some("model execution is enabled by the frozen session policy".into()),
+                Some(execution_permission_mode.into()),
+            )
+        };
+        decisions.insert(
+            decision_key("model-execution", configured_model_id),
+            model_execution_decision,
+        );
+    }
+
+    let memory_requires_approval = memory_policy.write_requires_approval
+        || approval_preference.memory_write == "require-approval";
     let memory_decision = if memory_requires_approval {
         deferred_decision(
             "memory-write",
@@ -176,38 +239,39 @@ fn compile_target_decisions(
     };
     decisions.insert(decision_key("memory-write", &actor_ref), memory_decision);
 
-    let team_spawn_decision = if delegation_policy.mode == "disabled" || delegation_policy.max_worker_count == 0 {
-        RuntimeTargetPolicyDecision {
-            target_kind: "team-spawn".into(),
-            action: "deny".into(),
-            hidden: true,
-            visible: false,
-            deferred: false,
-            requires_approval: false,
-            requires_auth: false,
-            reason: Some("delegation is disabled by the frozen session policy".into()),
-            capability_id: Some(actor_ref.clone()),
-            provider_key: None,
-            required_permission: None,
-        }
-    } else if approval_preference.team_spawn == "require-approval" {
-        deferred_decision(
-            "team-spawn",
-            "requireApproval",
-            "team worker spawning requires mediation review",
-            Some(actor_ref.clone()),
-            None,
-            true,
-            false,
-        )
-    } else {
-        allow_decision(
-            "team-spawn",
-            Some(actor_ref.clone()),
-            Some("team worker spawning is enabled by the frozen session policy".into()),
-            None,
-        )
-    };
+    let team_spawn_decision =
+        if delegation_policy.mode == "disabled" || delegation_policy.max_worker_count == 0 {
+            RuntimeTargetPolicyDecision {
+                target_kind: "team-spawn".into(),
+                action: "deny".into(),
+                hidden: true,
+                visible: false,
+                deferred: false,
+                requires_approval: false,
+                requires_auth: false,
+                reason: Some("delegation is disabled by the frozen session policy".into()),
+                capability_id: Some(actor_ref.clone()),
+                provider_key: None,
+                required_permission: None,
+            }
+        } else if approval_preference.team_spawn == "require-approval" {
+            deferred_decision(
+                "team-spawn",
+                "requireApproval",
+                "team worker spawning requires mediation review",
+                Some(actor_ref.clone()),
+                None,
+                true,
+                false,
+            )
+        } else {
+            allow_decision(
+                "team-spawn",
+                Some(actor_ref.clone()),
+                Some("team worker spawning is enabled by the frozen session policy".into()),
+                None,
+            )
+        };
     decisions.insert(decision_key("team-spawn", &actor_ref), team_spawn_decision);
 
     let workflow_decision = if approval_preference.workflow_escalation == "require-approval" {
@@ -228,22 +292,58 @@ fn compile_target_decisions(
             None,
         )
     };
-    decisions.insert(decision_key("workflow-continuation", &actor_ref), workflow_decision);
+    decisions.insert(
+        decision_key("workflow-continuation", &actor_ref),
+        workflow_decision,
+    );
 
-    if !manifest.mcp_server_names().is_empty() {
+    for provider_key in manifest.mcp_server_names() {
         let provider_auth_decision = deferred_decision(
             "provider-auth",
             "requireAuth",
             "provider or MCP auth must resolve before mediated execution can continue",
-            Some(actor_ref.clone()),
-            None,
+            Some(format!("provider-auth:{provider_key}")),
+            Some(provider_key.clone()),
             approval_preference.mcp_auth == "require-approval",
             true,
         );
-        decisions.insert(decision_key("provider-auth", &actor_ref), provider_auth_decision);
+        decisions.insert(
+            decision_key("provider-auth", provider_key),
+            provider_auth_decision,
+        );
     }
 
     decisions
+}
+
+pub(crate) fn compile_manifest_target_decisions(
+    manifest: &actor_manifest::CompiledActorManifest,
+    execution_permission_mode: &str,
+    selected_configured_model_id: Option<&str>,
+) -> RuntimeTargetPolicyDecisions {
+    let normalized_execution_permission_mode =
+        octopus_core::normalize_runtime_permission_mode_label(execution_permission_mode)
+            .unwrap_or(execution_permission_mode);
+    let (default_memory_policy, default_delegation_policy) = actor_policy_defaults(manifest);
+    let memory_policy =
+        parse_policy_value(manifest.memory_policy_value(), || default_memory_policy);
+    let delegation_policy = parse_policy_value(manifest.delegation_policy_value(), || {
+        default_delegation_policy
+    });
+    let approval_preference = parse_policy_value(
+        manifest.approval_preference_value(),
+        default_approval_preference,
+    );
+    let configured_model_id = selected_configured_model_id.or_else(|| manifest.default_model_ref());
+
+    compile_target_decisions(
+        manifest,
+        &approval_preference,
+        &memory_policy,
+        &delegation_policy,
+        normalized_execution_permission_mode,
+        configured_model_id,
+    )
 }
 
 pub(super) async fn compile_session_policy(
@@ -303,17 +403,13 @@ pub(super) async fn compile_session_policy(
     )
     .await?;
 
-    let (default_memory_policy, default_delegation_policy) = actor_policy_defaults(manifest);
-    let memory_policy = parse_policy_value(manifest.memory_policy_value(), || default_memory_policy);
-    let delegation_policy =
-        parse_policy_value(manifest.delegation_policy_value(), || default_delegation_policy);
-    let approval_preference =
-        parse_policy_value(manifest.approval_preference_value(), default_approval_preference);
-    let target_decisions = compile_target_decisions(
+    let configured_model_id = selected_configured_model_id
+        .map(ToOwned::to_owned)
+        .or_else(|| manifest.default_model_ref().map(ToOwned::to_owned));
+    let target_decisions = compile_manifest_target_decisions(
         manifest,
-        &approval_preference,
-        &memory_policy,
-        &delegation_policy,
+        &normalized_execution_permission_mode,
+        configured_model_id.as_deref(),
     );
 
     Ok(session_policy::CompiledSessionPolicy {

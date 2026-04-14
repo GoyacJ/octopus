@@ -8,6 +8,7 @@ mod approval_broker;
 mod approval_flow;
 mod auth_mediation;
 mod background_runtime;
+mod capability_executor_bridge;
 mod capability_planner_bridge;
 mod capability_state;
 mod config_service;
@@ -56,21 +57,20 @@ use octopus_core::{
     ResolveRuntimeMemoryProposalInput, ResolvedExecutionTarget, RuntimeAuthChallengeSummary,
     RuntimeAuthStateSummary, RuntimeBackgroundRunSummary, RuntimeBootstrap,
     RuntimeCapabilityExecutionOutcome, RuntimeCapabilityPlanSummary,
-    RuntimeCapabilityPolicyDecisions,
-    RuntimeCapabilityProviderState, RuntimeCapabilityStateSnapshot, RuntimeConfigPatch,
-    RuntimeConfigSnapshotSummary, RuntimeConfigSource, RuntimeConfigValidationResult,
-    RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
-    RuntimeEventEnvelope, RuntimeHandoffSummary, RuntimeMailboxSummary,
-    RuntimeMediationOutcome, RuntimeMemoryFreshnessSummary, RuntimeMemoryProposal,
-    RuntimeMemoryProposalReview, RuntimeMemorySelectionSummary, RuntimeMemorySummary,
-    RuntimeMessage, RuntimePendingMediationSummary, RuntimePolicyDecisionSummary,
-    RuntimeRunCheckpoint, RuntimeRunSnapshot, RuntimeSecretReferenceStatus,
-    RuntimeSelectedMemoryItem, RuntimeSessionDetail, RuntimeSessionPolicySnapshot,
-    RuntimeSessionSummary, RuntimeSubrunSummary, RuntimeTraceContext, RuntimeTraceItem,
-    RuntimeUsageSummary, RuntimeWorkerDispatchSummary, RuntimeWorkflowRunDetail,
-    RuntimeWorkflowSummary, SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord,
-    RUNTIME_PERMISSION_DANGER_FULL_ACCESS, RUNTIME_PERMISSION_READ_ONLY,
-    RUNTIME_PERMISSION_WORKSPACE_WRITE,
+    RuntimeCapabilityPolicyDecisions, RuntimeCapabilityProviderState,
+    RuntimeCapabilityStateSnapshot, RuntimeConfigPatch, RuntimeConfigSnapshotSummary,
+    RuntimeConfigSource, RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
+    RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
+    RuntimeHandoffSummary, RuntimeMailboxSummary, RuntimeMediationOutcome,
+    RuntimeMemoryFreshnessSummary, RuntimeMemoryProposal, RuntimeMemoryProposalReview,
+    RuntimeMemorySelectionSummary, RuntimeMemorySummary, RuntimeMessage,
+    RuntimePendingMediationSummary, RuntimePolicyDecisionSummary, RuntimeRunCheckpoint,
+    RuntimeRunSnapshot, RuntimeSecretReferenceStatus, RuntimeSelectedMemoryItem,
+    RuntimeSessionDetail, RuntimeSessionPolicySnapshot, RuntimeSessionSummary,
+    RuntimeSubrunSummary, RuntimeTraceContext, RuntimeTraceItem, RuntimeUsageSummary,
+    RuntimeWorkerDispatchSummary, RuntimeWorkflowRunDetail, RuntimeWorkflowSummary,
+    SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord, RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+    RUNTIME_PERMISSION_READ_ONLY, RUNTIME_PERMISSION_WORKSPACE_WRITE,
 };
 use octopus_infra::WorkspacePaths;
 use octopus_platform::{
@@ -92,7 +92,10 @@ use adapter_state::{
     RuntimeAggregateMetadata, RuntimeState,
 };
 use executor::ExecutionResponse;
-pub use executor::{LiveRuntimeModelExecutor, MockRuntimeModelExecutor, RuntimeModelExecutor};
+pub use executor::{
+    LiveRuntimeModelExecutor, MockRuntimeModelExecutor, RuntimeConversationRequest,
+    RuntimeModelExecutor,
+};
 use registry::EffectiveModelRegistry;
 use runtime_config::{RuntimeConfigDocumentRecord, RuntimeConfigScopeKind};
 

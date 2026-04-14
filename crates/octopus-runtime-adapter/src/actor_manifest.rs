@@ -32,12 +32,38 @@ pub(crate) struct ActorRef {
     pub(crate) id: String,
 }
 
+fn merge_json_with_defaults(base: serde_json::Value, patch: serde_json::Value) -> serde_json::Value {
+    match (base, patch) {
+        (serde_json::Value::Object(mut base_map), serde_json::Value::Object(patch_map)) => {
+            for (key, patch_value) in patch_map {
+                let merged = merge_json_with_defaults(
+                    base_map.remove(&key).unwrap_or(serde_json::Value::Null),
+                    patch_value,
+                );
+                base_map.insert(key, merged);
+            }
+            serde_json::Value::Object(base_map)
+        }
+        (base, serde_json::Value::Null) => base,
+        (_, patch) => patch,
+    }
+}
+
 fn parse_json_or_default<T, F>(raw: &str, default: F) -> T
 where
-    T: DeserializeOwned,
+    T: DeserializeOwned + serde::Serialize,
     F: FnOnce() -> T,
 {
-    serde_json::from_str(raw).unwrap_or_else(|_| default())
+    let default_value = default();
+    let merged = serde_json::from_str::<serde_json::Value>(raw)
+        .ok()
+        .and_then(|patch| {
+            serde_json::to_value(&default_value)
+                .ok()
+                .map(|base| merge_json_with_defaults(base, patch))
+        })
+        .unwrap_or(serde_json::Value::Null);
+    serde_json::from_value(merged).unwrap_or(default_value)
 }
 
 fn parse_actor_ref(actor_ref: &str) -> Result<ActorRef, AppError> {
@@ -114,6 +140,10 @@ impl CompiledActorManifest {
 
     pub(crate) fn mcp_server_names(&self) -> &[String] {
         &self.capability_policy().mcp_server_names
+    }
+
+    pub(crate) fn plugin_capability_refs(&self) -> &[String] {
+        &self.capability_policy().plugin_capability_refs
     }
 
     pub(crate) fn memory_summary(&self) -> RuntimeMemorySummary {

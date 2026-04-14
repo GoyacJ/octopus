@@ -1,10 +1,19 @@
 use api::{
-    build_http_client_or_default, AnthropicClient, AuthSource, InputMessage, MessageRequest,
-    MessageResponse, OpenAiCompatClient, OpenAiCompatConfig, OutputContentBlock,
+    build_http_client_or_default, AnthropicClient, AuthSource, InputContentBlock, InputMessage,
+    MessageRequest, MessageResponse, OpenAiCompatClient, OpenAiCompatConfig, OutputContentBlock,
+    ToolChoice, ToolDefinition, ToolResultContentBlock,
 };
 use async_trait::async_trait;
 use octopus_core::{AppError, ResolvedExecutionTarget};
+use runtime::{AssistantEvent, ContentBlock, ConversationMessage, MessageRole, TokenUsage};
 use serde_json::{json, Value};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeConversationRequest {
+    pub system_prompt: Vec<String>,
+    pub messages: Vec<ConversationMessage>,
+    pub tools: Vec<ToolDefinition>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExecutionResponse {
@@ -21,6 +30,40 @@ pub trait RuntimeModelExecutor: Send + Sync {
         input: &str,
         system_prompt: Option<&str>,
     ) -> Result<ExecutionResponse, AppError>;
+
+    async fn execute_conversation(
+        &self,
+        target: &ResolvedExecutionTarget,
+        request: &RuntimeConversationRequest,
+    ) -> Result<Vec<AssistantEvent>, AppError> {
+        let fallback_input = request
+            .messages
+            .iter()
+            .rev()
+            .find_map(|message| {
+                if message.role != MessageRole::User {
+                    return None;
+                }
+                Some(extract_text_content(message))
+            })
+            .unwrap_or_default();
+        let system_prompt =
+            (!request.system_prompt.is_empty()).then(|| request.system_prompt.join("\n\n"));
+        let response = self
+            .execute_turn(target, fallback_input.as_str(), system_prompt.as_deref())
+            .await?;
+        let mut events = vec![AssistantEvent::TextDelta(response.content)];
+        if let Some(total_tokens) = response.total_tokens {
+            events.push(AssistantEvent::Usage(TokenUsage {
+                input_tokens: 0,
+                output_tokens: total_tokens,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }));
+        }
+        events.push(AssistantEvent::MessageStop);
+        Ok(events)
+    }
 }
 
 #[derive(Debug)]
@@ -64,6 +107,59 @@ impl RuntimeModelExecutor for LiveRuntimeModelExecutor {
             ))),
         }
     }
+
+    async fn execute_conversation(
+        &self,
+        target: &ResolvedExecutionTarget,
+        request: &RuntimeConversationRequest,
+    ) -> Result<Vec<AssistantEvent>, AppError> {
+        match target.protocol_family.as_str() {
+            "anthropic_messages" => {
+                execute_message_protocol_conversation(target, request, ProviderProtocol::Anthropic)
+                    .await
+            }
+            "openai_chat" => {
+                execute_message_protocol_conversation(target, request, ProviderProtocol::OpenAiChat)
+                    .await
+            }
+            "openai_responses" | "gemini_native" if request.tools.is_empty() => {
+                let input = request
+                    .messages
+                    .iter()
+                    .rev()
+                    .find_map(|message| {
+                        if message.role != MessageRole::User {
+                            return None;
+                        }
+                        Some(extract_text_content(message))
+                    })
+                    .unwrap_or_default();
+                let system_prompt = (!request.system_prompt.is_empty())
+                    .then(|| request.system_prompt.join("\n\n"));
+                let response = self
+                    .execute_turn(target, input.as_str(), system_prompt.as_deref())
+                    .await?;
+                let mut events = vec![AssistantEvent::TextDelta(response.content)];
+                if let Some(total_tokens) = response.total_tokens {
+                    events.push(AssistantEvent::Usage(TokenUsage {
+                        input_tokens: 0,
+                        output_tokens: total_tokens,
+                        cache_creation_input_tokens: 0,
+                        cache_read_input_tokens: 0,
+                    }));
+                }
+                events.push(AssistantEvent::MessageStop);
+                Ok(events)
+            }
+            "openai_responses" | "gemini_native" => Err(AppError::runtime(format!(
+                "runtime tool loop does not support protocol family `{}` with tool-enabled turns yet",
+                target.protocol_family
+            ))),
+            other => Err(AppError::runtime(format!(
+                "runtime execution does not support protocol family `{other}` yet"
+            ))),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -91,6 +187,12 @@ impl RuntimeModelExecutor for MockRuntimeModelExecutor {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ProviderProtocol {
+    Anthropic,
+    OpenAiChat,
+}
+
 async fn execute_anthropic_messages(
     target: &ResolvedExecutionTarget,
     input: &str,
@@ -113,6 +215,41 @@ async fn execute_anthropic_messages(
         request_id: response.request_id.clone(),
         total_tokens: Some(response.total_tokens()),
     })
+}
+
+async fn execute_message_protocol_conversation(
+    target: &ResolvedExecutionTarget,
+    request: &RuntimeConversationRequest,
+    protocol: ProviderProtocol,
+) -> Result<Vec<AssistantEvent>, AppError> {
+    let api_key = resolve_api_key(target)?;
+    let request = conversation_message_request(target, request);
+    let response = match protocol {
+        ProviderProtocol::Anthropic => AnthropicClient::from_auth(AuthSource::ApiKey(api_key))
+            .with_base_url(
+                target
+                    .base_url
+                    .clone()
+                    .unwrap_or_else(|| "https://api.anthropic.com".into()),
+            )
+            .send_message(&request)
+            .await
+            .map_err(|error| AppError::runtime(error.to_string()))?,
+        ProviderProtocol::OpenAiChat => {
+            let config = compat_config_for_provider(&target.provider_id);
+            OpenAiCompatClient::new(api_key, config)
+                .with_base_url(
+                    target
+                        .base_url
+                        .clone()
+                        .unwrap_or_else(|| config.default_base_url.to_string()),
+                )
+                .send_message(&request)
+                .await
+                .map_err(|error| AppError::runtime(error.to_string()))?
+        }
+    };
+    Ok(response_to_events(response))
 }
 
 async fn execute_openai_chat(
@@ -364,6 +501,27 @@ fn message_request(
     }
 }
 
+fn conversation_message_request(
+    target: &ResolvedExecutionTarget,
+    request: &RuntimeConversationRequest,
+) -> MessageRequest {
+    MessageRequest {
+        model: target.model_id.clone(),
+        max_tokens: target.max_output_tokens.unwrap_or(1024),
+        messages: convert_messages(&request.messages),
+        system: (!request.system_prompt.is_empty()).then(|| request.system_prompt.join("\n\n")),
+        tools: (!request.tools.is_empty()).then(|| request.tools.clone()),
+        tool_choice: (!request.tools.is_empty()).then_some(ToolChoice::Auto),
+        stream: false,
+        temperature: None,
+        top_p: None,
+        frequency_penalty: None,
+        presence_penalty: None,
+        stop: None,
+        reasoning_effort: None,
+    }
+}
+
 fn build_openai_responses_request_body(
     target: &ResolvedExecutionTarget,
     input: &str,
@@ -409,6 +567,83 @@ fn flatten_output_content(content: &[OutputContentBlock]) -> String {
         .filter_map(|block| match block {
             OutputContentBlock::Text { text } => Some(text.as_str()),
             OutputContentBlock::Thinking { thinking, .. } => Some(thinking.as_str()),
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn convert_messages(messages: &[ConversationMessage]) -> Vec<InputMessage> {
+    messages
+        .iter()
+        .filter_map(|message| {
+            let role = match message.role {
+                MessageRole::System | MessageRole::User | MessageRole::Tool => "user",
+                MessageRole::Assistant => "assistant",
+            };
+            let content = message
+                .blocks
+                .iter()
+                .map(|block| match block {
+                    ContentBlock::Text { text } => InputContentBlock::Text { text: text.clone() },
+                    ContentBlock::ToolUse { id, name, input } => InputContentBlock::ToolUse {
+                        id: id.clone(),
+                        name: name.clone(),
+                        input: serde_json::from_str(input)
+                            .unwrap_or_else(|_| serde_json::json!({ "raw": input })),
+                    },
+                    ContentBlock::ToolResult {
+                        tool_use_id,
+                        output,
+                        is_error,
+                        ..
+                    } => InputContentBlock::ToolResult {
+                        tool_use_id: tool_use_id.clone(),
+                        content: vec![ToolResultContentBlock::Text {
+                            text: output.clone(),
+                        }],
+                        is_error: *is_error,
+                    },
+                })
+                .collect::<Vec<_>>();
+            (!content.is_empty()).then(|| InputMessage {
+                role: role.to_string(),
+                content,
+            })
+        })
+        .collect()
+}
+
+fn response_to_events(response: MessageResponse) -> Vec<AssistantEvent> {
+    let mut events = Vec::new();
+    for block in response.content {
+        match block {
+            OutputContentBlock::Text { text } => {
+                if !text.is_empty() {
+                    events.push(AssistantEvent::TextDelta(text));
+                }
+            }
+            OutputContentBlock::ToolUse { id, name, input } => {
+                events.push(AssistantEvent::ToolUse {
+                    id,
+                    name,
+                    input: input.to_string(),
+                });
+            }
+            OutputContentBlock::Thinking { .. } | OutputContentBlock::RedactedThinking { .. } => {}
+        }
+    }
+    events.push(AssistantEvent::Usage(response.usage.token_usage()));
+    events.push(AssistantEvent::MessageStop);
+    events
+}
+
+fn extract_text_content(message: &ConversationMessage) -> String {
+    message
+        .blocks
+        .iter()
+        .filter_map(|block| match block {
+            ContentBlock::Text { text } => Some(text.as_str()),
             _ => None,
         })
         .collect::<Vec<_>>()

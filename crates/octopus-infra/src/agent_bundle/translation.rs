@@ -9,6 +9,20 @@ use crate::agent_assets::{BundlePlan, ImportAction};
 
 use super::manifest_v2;
 
+fn increment_translation_mode_counts(
+    translation_mode: &str,
+    translated_count: &mut u64,
+    downgraded_count: &mut u64,
+    rejected_count: &mut u64,
+) {
+    match translation_mode {
+        "translated" => *translated_count += 1,
+        "downgraded" => *downgraded_count += 1,
+        "reject" | "rejected" => *rejected_count += 1,
+        _ => {}
+    }
+}
+
 pub(crate) fn plan_to_preview(plan: &BundlePlan) -> ImportWorkspaceAgentBundlePreview {
     let mut create_count = 0_u64;
     let mut update_count = 0_u64;
@@ -153,7 +167,7 @@ pub(crate) fn translation_report_from_issues(
             details: issue.details.clone(),
         })
         .collect::<Vec<_>>();
-    let rejected_count = plan
+    let mut rejected_count = plan
         .agents
         .iter()
         .filter(|item| item.action == ImportAction::Failed)
@@ -173,8 +187,24 @@ pub(crate) fn translation_report_from_issues(
             .iter()
             .filter(|item| item.action == ImportAction::Failed)
             .count() as u64;
-    let downgraded_count = 0;
-    let translated_count = 0;
+    let mut translated_count = 0;
+    let mut downgraded_count = 0;
+    rejected_count += plan
+        .descriptor_assets
+        .iter()
+        .filter(|item| item.action == ImportAction::Failed)
+        .count() as u64;
+    for descriptor in &plan.descriptor_assets {
+        if descriptor.action == ImportAction::Failed {
+            continue;
+        }
+        increment_translation_mode_counts(
+            &descriptor.record.translation_mode,
+            &mut translated_count,
+            &mut downgraded_count,
+            &mut rejected_count,
+        );
+    }
     let trust_warnings = issues
         .iter()
         .filter(|issue| issue.severity == crate::agent_assets::ISSUE_WARNING)
@@ -229,3 +259,99 @@ pub(crate) fn import_action_translation_mode(action: ImportAction) -> &'static s
 
 #[allow(dead_code)]
 pub(crate) fn _assert_translation_module_compiles(_: Result<(), AppError>) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent_assets::{
+        BundleAssetStateDocument, PlannedBundleDescriptor, PlannedMcp, PlannedSkill,
+    };
+    use octopus_core::{
+        default_asset_trust_metadata, AssetImportMetadata, BundleAssetDescriptorRecord,
+    };
+
+    fn descriptor(source_id: &str, translation_mode: &str, action: ImportAction) -> PlannedBundleDescriptor {
+        PlannedBundleDescriptor {
+            action,
+            record: BundleAssetDescriptorRecord {
+                id: format!("descriptor-{source_id}"),
+                workspace_id: "workspace".into(),
+                project_id: Some("project".into()),
+                scope: "project".into(),
+                asset_kind: "agent".into(),
+                source_id: source_id.into(),
+                display_name: source_id.into(),
+                source_path: format!("{source_id}.md"),
+                storage_path: format!("bundles/{source_id}.md"),
+                content_hash: format!("hash-{source_id}"),
+                byte_size: 1,
+                manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
+                task_domains: vec!["runtime".into()],
+                translation_mode: translation_mode.into(),
+                trust_metadata: default_asset_trust_metadata(),
+                dependency_resolution: Vec::new(),
+                import_metadata: AssetImportMetadata {
+                    origin_kind: "bundle-import".into(),
+                    source_id: Some(source_id.into()),
+                    manifest_version: 1,
+                    translation_status: translation_mode.into(),
+                    imported_at: Some(1),
+                },
+                updated_at: 1,
+            },
+            bytes: Vec::new(),
+        }
+    }
+
+    fn empty_plan(descriptor_assets: Vec<PlannedBundleDescriptor>) -> BundlePlan {
+        BundlePlan {
+            bundle_manifest_template: None,
+            descriptor_assets,
+            dependency_resolution: Vec::new(),
+            departments: Vec::new(),
+            detected_agent_count: 0,
+            detected_team_count: 0,
+            filtered_file_count: 0,
+            issues: Vec::new(),
+            skills: Vec::<PlannedSkill>::new(),
+            mcps: Vec::<PlannedMcp>::new(),
+            agents: Vec::new(),
+            teams: Vec::new(),
+            avatars: Vec::new(),
+            asset_state: BundleAssetStateDocument::default(),
+        }
+    }
+
+    #[test]
+    fn translation_report_counts_translated_downgraded_and_rejected_assets() {
+        let plan = empty_plan(vec![
+            descriptor("native-agent", "native", ImportAction::Create),
+            descriptor("translated-agent", "translated", ImportAction::Create),
+            descriptor("downgraded-agent", "downgraded", ImportAction::Skip),
+            descriptor("rejected-agent", "reject", ImportAction::Failed),
+        ]);
+
+        let report = translation_report_from_issues(&plan, &[], Vec::new());
+
+        assert_eq!(report.translated_count, 1);
+        assert_eq!(report.downgraded_count, 1);
+        assert_eq!(report.rejected_count, 1);
+        assert_eq!(report.status, "rejected");
+    }
+
+    #[test]
+    fn preview_uses_same_translation_report_as_import_path() {
+        let plan = empty_plan(vec![
+            descriptor("translated-agent", "translated", ImportAction::Create),
+            descriptor("downgraded-agent", "downgraded", ImportAction::Create),
+        ]);
+
+        let preview = plan_to_preview(&plan);
+        let report = translation_report_from_issues(&plan, &plan.issues, Vec::new());
+
+        assert_eq!(preview.translation_report.translated_count, report.translated_count);
+        assert_eq!(preview.translation_report.downgraded_count, report.downgraded_count);
+        assert_eq!(preview.translation_report.rejected_count, report.rejected_count);
+        assert_eq!(preview.translation_report.status, report.status);
+    }
+}

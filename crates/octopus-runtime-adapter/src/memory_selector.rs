@@ -5,6 +5,7 @@ pub(crate) struct RuntimeMemorySelection {
     pub(crate) summary: RuntimeMemorySummary,
     pub(crate) selection_summary: RuntimeMemorySelectionSummary,
     pub(crate) freshness_summary: RuntimeMemoryFreshnessSummary,
+    pub(crate) candidate_memory: Vec<RuntimeSelectedMemoryItem>,
     pub(crate) selected_memory: Vec<RuntimeSelectedMemoryItem>,
     pub(crate) memory_state_ref: String,
 }
@@ -64,30 +65,36 @@ impl RuntimeAdapter {
         });
         let total_candidate_count = candidates.len() as u64;
 
+        let mut candidate_memory = candidates
+            .iter()
+            .filter(|record| !ignored_memory_ids.contains(record.memory_id.as_str()))
+            .map(|record| RuntimeSelectedMemoryItem {
+                memory_id: record.memory_id.clone(),
+                title: record.title.clone(),
+                summary: record.summary.clone(),
+                kind: record.kind.clone(),
+                scope: record.scope.clone(),
+                owner_ref: record.owner_ref.clone(),
+                source_run_id: record.source_run_id.clone(),
+                freshness_state: record.freshness_state.clone(),
+                last_validated_at: record.last_validated_at,
+            })
+            .collect::<Vec<_>>();
+
         let mut selected_memory = if recall_mode == "skip" {
             Vec::new()
         } else {
-            candidates
-                .into_iter()
-                .filter(|record| !ignored_memory_ids.contains(record.memory_id.as_str()))
+            candidate_memory
+                .iter()
                 .filter(|record| {
                     !policy.freshness_required || is_fresh_memory(&record.freshness_state)
                 })
                 .take(policy.max_selections as usize)
-                .map(|record| RuntimeSelectedMemoryItem {
-                    memory_id: record.memory_id,
-                    title: record.title,
-                    summary: record.summary,
-                    kind: record.kind,
-                    scope: record.scope,
-                    owner_ref: record.owner_ref,
-                    source_run_id: record.source_run_id,
-                    freshness_state: record.freshness_state,
-                    last_validated_at: record.last_validated_at,
-                })
+                .cloned()
                 .collect::<Vec<_>>()
         };
 
+        candidate_memory.sort_by(|left, right| left.memory_id.cmp(&right.memory_id));
         selected_memory.sort_by(|left, right| left.memory_id.cmp(&right.memory_id));
         let (summary, selection_summary, freshness_summary) = memory_runtime::build_memory_summary(
             &selected_memory,
@@ -101,6 +108,7 @@ impl RuntimeAdapter {
             summary,
             selection_summary,
             freshness_summary,
+            candidate_memory,
             selected_memory,
             memory_state_ref: memory_runtime::runtime_memory_state_ref(run_id, now),
         })

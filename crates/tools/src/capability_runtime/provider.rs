@@ -304,7 +304,7 @@ impl McpCapabilityProvider {
 
 #[derive(Debug)]
 pub struct ManagedMcpRuntime {
-    runtime: tokio::runtime::Runtime,
+    runtime: Option<tokio::runtime::Runtime>,
     manager: McpServerManager,
     pending_servers: Vec<String>,
     degraded_report: Option<McpDegradedReport>,
@@ -503,7 +503,7 @@ impl ManagedMcpRuntime {
             .collect::<BTreeMap<_, _>>();
 
         Ok(Some(Self {
-            runtime,
+            runtime: Some(runtime),
             manager,
             pending_servers,
             degraded_report,
@@ -515,7 +515,7 @@ impl ManagedMcpRuntime {
     }
 
     pub fn shutdown(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        self.runtime.block_on(self.manager.shutdown())?;
+        self.with_runtime_block_on(|runtime, manager| runtime.block_on(manager.shutdown()))?;
         Ok(())
     }
 
@@ -570,8 +570,9 @@ impl ManagedMcpRuntime {
                     )
                 })?;
         let prompt = self
-            .runtime
-            .block_on(self.manager.get_prompt(&server_name, &raw_name, arguments))
+            .with_runtime_block_on(|runtime, manager| {
+                runtime.block_on(manager.get_prompt(&server_name, &raw_name, arguments))
+            })
             .map_err(|error| error.to_string())?;
         let rendered_prompt = render_mcp_prompt_messages(&prompt.messages);
         Ok(crate::SkillExecutionResult {
@@ -619,8 +620,9 @@ impl ManagedMcpRuntime {
                     )
                 })?;
         let result = self
-            .runtime
-            .block_on(self.manager.read_resource(&server_name, &uri))
+            .with_runtime_block_on(|runtime, manager| {
+                runtime.block_on(manager.read_resource(&server_name, &uri))
+            })
             .map_err(|error| error.to_string())?;
         serde_json::to_string_pretty(&result).map_err(|error| error.to_string())
     }
@@ -635,8 +637,9 @@ impl ManagedMcpRuntime {
         arguments: Option<Value>,
     ) -> Result<String, ToolError> {
         let response = self
-            .runtime
-            .block_on(self.manager.call_tool(qualified_tool_name, arguments))
+            .with_runtime_block_on(|runtime, manager| {
+                runtime.block_on(manager.call_tool(qualified_tool_name, arguments))
+            })
             .map_err(|error| ToolError::new(error.to_string()))?;
         if let Some(error) = response.error {
             return Err(ToolError::new(format!(
@@ -651,6 +654,33 @@ impl ManagedMcpRuntime {
             ))
         })?;
         serde_json::to_string_pretty(&result).map_err(|error| ToolError::new(error.to_string()))
+    }
+
+    fn runtime(&self) -> &tokio::runtime::Runtime {
+        self.runtime
+            .as_ref()
+            .expect("managed MCP runtime is unavailable")
+    }
+
+    fn with_runtime_block_on<T, E>(
+        &mut self,
+        f: impl FnOnce(&tokio::runtime::Runtime, &mut McpServerManager) -> Result<T, E>,
+    ) -> Result<T, E> {
+        let runtime = self
+            .runtime
+            .take()
+            .expect("managed MCP runtime is unavailable");
+        let result = f(&runtime, &mut self.manager);
+        self.runtime = Some(runtime);
+        result
+    }
+}
+
+impl Drop for ManagedMcpRuntime {
+    fn drop(&mut self) {
+        if let Some(runtime) = self.runtime.take() {
+            runtime.shutdown_background();
+        }
     }
 }
 

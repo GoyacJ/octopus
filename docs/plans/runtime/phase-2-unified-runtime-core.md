@@ -240,7 +240,7 @@ cargo test -p octopus-runtime-adapter
 ## Task 6: Make The Runtime Data Model Subrun-Ready
 
 **Files:**
-- Create: `crates/octopus-runtime-adapter/src/subrun_runtime.rs`
+- Create or extend subrun projection support in `crates/octopus-runtime-adapter/src/team_runtime.rs` and `crates/octopus-runtime-adapter/src/subrun_orchestrator.rs`
 - Modify: `crates/octopus-runtime-adapter/src/session_service.rs`
 - Modify: `crates/octopus-runtime-adapter/src/adapter_state.rs`
 - Modify: `crates/octopus-runtime-adapter/src/execution_events.rs`
@@ -248,6 +248,7 @@ cargo test -p octopus-runtime-adapter
 
 **Implement:**
 - add lineage-safe data structures for `subrunCount`, `parentRunId`, and `delegatedByToolCallId`
+- keep the implementation subrun-ready even if the logic lands in existing team runtime modules instead of a dedicated `subrun_runtime.rs`
 - do not implement full team orchestration yet
 - make session and event projections capable of hosting delegated runs without schema churn later
 

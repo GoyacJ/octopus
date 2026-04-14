@@ -106,6 +106,92 @@ fn write_workspace_config_with_http_mcp(path: &Path, total_tokens: Option<u64>, 
     );
 }
 
+fn write_workspace_config_with_plugins(
+    path: &Path,
+    total_tokens: Option<u64>,
+    enabled_plugins: serde_json::Value,
+    external_directories: &[&str],
+) {
+    let configured_model = if let Some(total_tokens) = total_tokens {
+        json!({
+            "configuredModelId": "quota-model",
+            "name": "Quota Model",
+            "providerId": "anthropic",
+            "modelId": "claude-sonnet-4-5",
+            "credentialRef": "env:ANTHROPIC_API_KEY",
+            "tokenQuota": {
+                "totalTokens": total_tokens
+            },
+            "enabled": true,
+            "source": "workspace"
+        })
+    } else {
+        json!({
+            "configuredModelId": "quota-model",
+            "name": "Quota Model",
+            "providerId": "anthropic",
+            "modelId": "claude-sonnet-4-5",
+            "credentialRef": "env:ANTHROPIC_API_KEY",
+            "enabled": true,
+            "source": "workspace"
+        })
+    };
+
+    write_json(
+        path,
+        json!({
+            "configuredModels": {
+                "quota-model": configured_model
+            },
+            "enabledPlugins": enabled_plugins,
+            "plugins": {
+                "externalDirectories": external_directories
+            }
+        }),
+    );
+}
+
+fn write_external_plugin(root: &Path, plugin_dir_name: &str, plugin_name: &str, tool_name: &str) {
+    let plugin_root = root.join("external-plugins").join(plugin_dir_name);
+    fs::create_dir_all(&plugin_root).expect("plugin root");
+    let script_path = plugin_root.join("echo.sh");
+    fs::write(&script_path, "#!/bin/sh\ncat\n").expect("plugin script");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut permissions = fs::metadata(&script_path)
+            .expect("plugin script metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).expect("plugin script permissions");
+    }
+    write_json(
+        &plugin_root.join("plugin.json"),
+        json!({
+            "name": plugin_name,
+            "version": "0.1.0",
+            "description": "Adapter test plugin",
+            "tools": [
+                {
+                    "name": tool_name,
+                    "description": "Echo from plugin",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "message": { "type": "string" }
+                        },
+                        "required": ["message"],
+                        "additionalProperties": false
+                    },
+                    "command": "./echo.sh",
+                    "requiredPermission": "read-only"
+                }
+            ]
+        }),
+    );
+}
+
 fn session_input(
     conversation_id: &str,
     project_id: &str,
@@ -198,6 +284,59 @@ impl RuntimeModelExecutor for FixedTokenRuntimeModelExecutor {
             request_id: Some("fixed-token-request".into()),
             total_tokens: self.total_tokens,
         })
+    }
+}
+
+#[derive(Debug)]
+struct ScriptedConversationRuntimeModelExecutor {
+    responses: Mutex<Vec<Vec<runtime::AssistantEvent>>>,
+    requests: Mutex<Vec<RuntimeConversationRequest>>,
+}
+
+impl ScriptedConversationRuntimeModelExecutor {
+    fn new(responses: Vec<Vec<runtime::AssistantEvent>>) -> Self {
+        Self {
+            responses: Mutex::new(responses.into_iter().rev().collect()),
+            requests: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn request_count(&self) -> usize {
+        self.requests.lock().expect("requests mutex").len()
+    }
+
+    fn requests(&self) -> Vec<RuntimeConversationRequest> {
+        self.requests.lock().expect("requests mutex").clone()
+    }
+}
+
+#[async_trait]
+impl RuntimeModelExecutor for ScriptedConversationRuntimeModelExecutor {
+    async fn execute_turn(
+        &self,
+        _target: &ResolvedExecutionTarget,
+        _input: &str,
+        _system_prompt: Option<&str>,
+    ) -> Result<ExecutionResponse, AppError> {
+        Err(AppError::runtime(
+            "scripted conversation executor should use execute_conversation",
+        ))
+    }
+
+    async fn execute_conversation(
+        &self,
+        _target: &ResolvedExecutionTarget,
+        request: &RuntimeConversationRequest,
+    ) -> Result<Vec<runtime::AssistantEvent>, AppError> {
+        self.requests
+            .lock()
+            .expect("requests mutex")
+            .push(request.clone());
+        self.responses
+            .lock()
+            .expect("responses mutex")
+            .pop()
+            .ok_or_else(|| AppError::runtime("scripted conversation response missing"))
     }
 }
 
@@ -1076,8 +1215,8 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
             .expect("upsert delivery agent");
     connection
             .execute(
-                "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, leader_agent_id, member_agent_ids, description, status, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
                 params![
                     "team-workspace-core",
                     octopus_core::DEFAULT_WORKSPACE_ID,
@@ -1091,6 +1230,15 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
                     serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
                     serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
                     serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                    serde_json::to_string(&json!({
+                        "toolExecution": "auto",
+                        "memoryWrite": "require-approval",
+                        "mcpAuth": "require-approval",
+                        "teamSpawn": "auto"
+                        ,
+                        "workflowEscalation": "auto"
+                    }))
+                    .expect("approval preference"),
                     "agent-orchestrator",
                     serde_json::to_string(&vec!["agent-orchestrator", "agent-project-delivery"]).expect("member ids"),
                     "Core workspace decision board.",
@@ -1161,6 +1309,41 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
     assert_eq!(first_subrun.parent_run_id.as_deref(), Some(run.id.as_str()));
     assert!(first_subrun.actor_ref.starts_with("agent:"));
     assert_eq!(first_subrun.run_kind, "subrun");
+    let first_subrun_state_path = infra
+        .paths
+        .runtime_sessions_dir
+        .join("subruns")
+        .join(format!("{}.json", first_subrun.run_id));
+    assert!(first_subrun_state_path.exists());
+    let first_subrun_state: serde_json::Value =
+        serde_json::from_slice(&fs::read(&first_subrun_state_path).expect("subrun state bytes"))
+            .expect("subrun state json");
+    assert_eq!(
+        first_subrun_state
+            .get("run")
+            .and_then(|value| value.get("id"))
+            .and_then(serde_json::Value::as_str),
+        Some(first_subrun.run_id.as_str())
+    );
+    assert_eq!(
+        first_subrun_state
+            .get("run")
+            .and_then(|value| value.get("parentRunId"))
+            .and_then(serde_json::Value::as_str),
+        Some(run.id.as_str())
+    );
+    assert_eq!(
+        first_subrun_state
+            .get("run")
+            .and_then(|value| value.get("runKind"))
+            .and_then(serde_json::Value::as_str),
+        Some("subrun")
+    );
+    assert!(first_subrun_state
+        .get("run")
+        .and_then(|value| value.get("capabilityStateRef"))
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| !value.is_empty()));
 
     let mailbox = detail.pending_mailbox.as_ref().expect("mailbox summary");
     assert_eq!(mailbox.channel, "team-mailbox");
@@ -1329,12 +1512,13 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
         .as_deref()
         .is_some_and(|hash| hash.starts_with("sha256-")));
 
-    let workflow_events = adapter
+    let events = adapter
         .list_events(&session.summary.id, None)
         .await
-        .expect("events")
-        .into_iter()
-        .filter_map(|event| event.kind)
+        .expect("events");
+    let workflow_events = events
+        .iter()
+        .filter_map(|event| event.kind.clone())
         .filter(|kind| kind.starts_with("workflow."))
         .collect::<Vec<_>>();
     assert!(workflow_events
@@ -1349,6 +1533,39 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
     assert!(workflow_events
         .iter()
         .any(|kind| kind == "workflow.completed"));
+    let spawned_subruns = events
+        .iter()
+        .filter(|event| event.kind.as_deref() == Some("subrun.spawned"))
+        .collect::<Vec<_>>();
+    let completed_subruns = events
+        .iter()
+        .filter(|event| event.kind.as_deref() == Some("subrun.completed"))
+        .collect::<Vec<_>>();
+    assert_eq!(spawned_subruns.len(), detail.subruns.len());
+    assert_eq!(completed_subruns.len(), detail.subruns.len());
+    let first_subrun_event = spawned_subruns.first().expect("subrun spawned event");
+    assert_eq!(first_subrun_event.run_id.as_deref(), Some(run.id.as_str()));
+    assert_eq!(first_subrun_event.parent_run_id.as_deref(), Some(run.id.as_str()));
+    assert_eq!(
+        first_subrun_event.workflow_run_id.as_deref(),
+        run.workflow_run.as_deref()
+    );
+    assert!(first_subrun_event
+        .actor_ref
+        .as_deref()
+        .is_some_and(|actor_ref| actor_ref.starts_with("agent:")));
+    assert!(first_subrun_event.tool_use_id.is_some());
+
+    let mut mutated_subrun_state = first_subrun_state;
+    mutated_subrun_state["run"]["status"] = json!("failed");
+    mutated_subrun_state["run"]["currentStep"] = json!("failed");
+    mutated_subrun_state["run"]["updatedAt"] = json!(first_subrun.updated_at + 17);
+    mutated_subrun_state["run"]["nextAction"] = json!("idle");
+    fs::write(
+        &first_subrun_state_path,
+        serde_json::to_vec_pretty(&mutated_subrun_state).expect("mutated subrun state bytes"),
+    )
+    .expect("overwrite subrun state");
 
     let reloaded = RuntimeAdapter::new_with_executor(
         octopus_core::DEFAULT_WORKSPACE_ID,
@@ -1362,11 +1579,1158 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
         .await
         .expect("reloaded session detail");
     assert_eq!(reloaded_detail.subrun_count, detail.subrun_count);
-    assert_eq!(reloaded_detail.workflow, detail.workflow);
-    assert_eq!(reloaded_detail.pending_mailbox, detail.pending_mailbox);
-    assert_eq!(reloaded_detail.background_run, detail.background_run);
     assert_eq!(reloaded_detail.subruns.len(), detail.subruns.len());
     assert_eq!(reloaded_detail.handoffs.len(), detail.handoffs.len());
+    assert_eq!(
+        reloaded_detail
+            .workflow
+            .as_ref()
+            .map(|workflow| workflow.workflow_run_id.as_str()),
+        detail
+            .workflow
+            .as_ref()
+            .map(|workflow| workflow.workflow_run_id.as_str())
+    );
+    assert_eq!(
+        reloaded_detail
+            .pending_mailbox
+            .as_ref()
+            .map(|mailbox| mailbox.mailbox_ref.as_str()),
+        detail
+            .pending_mailbox
+            .as_ref()
+            .map(|mailbox| mailbox.mailbox_ref.as_str())
+    );
+    assert_eq!(
+        reloaded_detail
+            .background_run
+            .as_ref()
+            .and_then(|background| background.workflow_run_id.as_deref()),
+        detail
+            .background_run
+            .as_ref()
+            .and_then(|background| background.workflow_run_id.as_deref())
+    );
+    let reloaded_first_subrun = reloaded_detail
+        .subruns
+        .iter()
+        .find(|subrun| subrun.run_id == first_subrun.run_id)
+        .expect("reloaded first subrun");
+    assert_eq!(reloaded_first_subrun.status, "failed");
+    assert!(reloaded_detail
+        .run
+        .worker_dispatch
+        .as_ref()
+        .is_some_and(|dispatch| dispatch.failed_subruns >= 1));
+    assert_eq!(
+        reloaded_detail
+            .workflow
+            .as_ref()
+            .map(|workflow| workflow.status.as_str()),
+        Some("failed")
+    );
+    assert_eq!(
+        reloaded_detail
+            .background_run
+            .as_ref()
+            .map(|background| background.status.as_str()),
+        Some("failed")
+    );
+    assert!(reloaded_detail
+        .pending_mailbox
+        .as_ref()
+        .is_some_and(|mailbox| mailbox.pending_count >= 1));
+    assert!(reloaded_detail.handoffs.iter().any(|handoff| {
+        handoff.handoff_ref
+            == reloaded_first_subrun
+                .handoff_ref
+                .clone()
+                .expect("handoff ref")
+            && handoff.state == "failed"
+    }));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn team_sessions_reload_team_state_from_subrun_artifacts_when_phase_four_projections_are_missing(
+) {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                "team-workspace-core",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Workspace Core",
+                Option::<String>::None,
+                "Governance team",
+                serde_json::to_string(&vec!["workspace", "governance"]).expect("tags"),
+                "Maintain workspace-wide standards and governance.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "auto",
+                    "memoryWrite": "require-approval",
+                    "mcpAuth": "require-approval",
+                    "teamSpawn": "auto"
+                    ,
+                    "workflowEscalation": "auto"
+                }))
+                .expect("approval preference"),
+                "agent-orchestrator",
+                serde_json::to_string(&vec!["agent-orchestrator"]).expect("member ids"),
+                "Workspace core team for reload tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("set team spawn auto");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelExecutor),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-team-reload-artifacts",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Team Artifact Reload",
+                "team:team-workspace-core",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(&session.summary.id, turn_input("Review the proposal", None))
+        .await
+        .expect("team runtime should execute through the shared runtime trunk");
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    let original_subrun_count = detail.subruns.len();
+    let original_handoff_count = detail.handoffs.len();
+    assert!(original_subrun_count >= 1);
+    assert!(original_handoff_count >= 1);
+    let first_subrun = detail.subruns.first().expect("subrun summary");
+    let first_subrun_state_path = infra
+        .paths
+        .runtime_sessions_dir
+        .join("subruns")
+        .join(format!("{}.json", first_subrun.run_id));
+    let mut first_subrun_state: serde_json::Value =
+        serde_json::from_slice(&fs::read(&first_subrun_state_path).expect("subrun state bytes"))
+            .expect("subrun state json");
+    first_subrun_state["run"]["status"] = json!("failed");
+    first_subrun_state["run"]["currentStep"] = json!("failed");
+    first_subrun_state["run"]["updatedAt"] = json!(first_subrun.updated_at + 33);
+    fs::write(
+        &first_subrun_state_path,
+        serde_json::to_vec_pretty(&first_subrun_state).expect("mutated subrun state bytes"),
+    )
+    .expect("overwrite subrun state");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "DELETE FROM runtime_subrun_projections WHERE session_id = ?1 AND parent_run_id = ?2",
+            params![session.summary.id, run.id],
+        )
+        .expect("delete subrun projections");
+    connection
+        .execute(
+            "DELETE FROM runtime_handoff_projections WHERE session_id = ?1 AND run_id = ?2",
+            params![session.summary.id, run.id],
+        )
+        .expect("delete handoff projections");
+    connection
+        .execute(
+            "DELETE FROM runtime_mailbox_projections WHERE session_id = ?1 AND run_id = ?2",
+            params![session.summary.id, run.id],
+        )
+        .expect("delete mailbox projections");
+    connection
+        .execute(
+            "DELETE FROM runtime_workflow_projections WHERE session_id = ?1 AND run_id = ?2",
+            params![session.summary.id, run.id],
+        )
+        .expect("delete workflow projections");
+    connection
+        .execute(
+            "DELETE FROM runtime_background_projections WHERE session_id = ?1 AND run_id = ?2",
+            params![session.summary.id, run.id],
+        )
+        .expect("delete background projections");
+
+    let reloaded = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelExecutor),
+    );
+    let reloaded_detail = reloaded
+        .get_session(&session.summary.id)
+        .await
+        .expect("reloaded session detail");
+
+    assert_eq!(reloaded_detail.subruns.len(), original_subrun_count);
+    assert_eq!(reloaded_detail.handoffs.len(), original_handoff_count);
+    assert!(reloaded_detail.pending_mailbox.is_some());
+    assert!(reloaded_detail.workflow.is_some());
+    assert!(reloaded_detail.background_run.is_some());
+    assert!(reloaded_detail
+        .subruns
+        .iter()
+        .any(|subrun| subrun.run_id == first_subrun.run_id && subrun.status == "failed"));
+    assert_eq!(
+        reloaded_detail
+            .workflow
+            .as_ref()
+            .map(|workflow| workflow.status.as_str()),
+        Some("failed")
+    );
+    assert_eq!(
+        reloaded_detail
+            .background_run
+            .as_ref()
+            .map(|background| background.status.as_str()),
+        Some("failed")
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn team_subrun_policy_snapshots_recompile_worker_target_decisions() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            params![
+                "agent-team-policy-leader",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Policy Leader",
+                Option::<String>::None,
+                "Coordinator",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Lead team execution.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Leader for team policy snapshot tests.",
+                serde_json::to_string(&json!({})).expect("approval preference"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert policy leader agent");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            params![
+                "agent-team-policy-worker",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Policy Worker",
+                Option::<String>::None,
+                "Reviewer",
+                serde_json::to_string(&vec!["delivery"]).expect("tags"),
+                "Run delegated execution with approval for tool execution.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Worker for team policy snapshot tests.",
+                serde_json::to_string(&json!({
+                    "toolExecution": "require-approval",
+                    "memoryWrite": "require-approval",
+                    "mcpAuth": "require-approval",
+                    "teamSpawn": "require-approval",
+                    "workflowEscalation": "require-approval"
+                }))
+                .expect("approval preference"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert policy worker agent");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                "team-policy-snapshot",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Policy Snapshot Team",
+                Option::<String>::None,
+                "Policy aware team",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Delegate work to the worker.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "auto",
+                    "memoryWrite": "require-approval",
+                    "mcpAuth": "require-approval",
+                    "teamSpawn": "auto"
+                    ,
+                    "workflowEscalation": "require-approval"
+                }))
+                .expect("approval preference"),
+                "agent-team-policy-leader",
+                serde_json::to_string(&vec![
+                    "agent-team-policy-leader",
+                    "agent-team-policy-worker"
+                ])
+                .expect("member ids"),
+                "Team for worker policy snapshot tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert policy snapshot team");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelExecutor),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-team-policy-snapshot",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Team Policy Snapshot Session",
+                "team:team-policy-snapshot",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Delegate the review to the worker", None),
+        )
+        .await
+        .expect("run");
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    let worker_subrun = detail
+        .subruns
+        .iter()
+        .find(|subrun| subrun.actor_ref == "agent:agent-team-policy-worker")
+        .expect("worker subrun");
+
+    let worker_policy = adapter
+        .load_session_policy_snapshot(&format!("{}-policy", worker_subrun.run_id))
+        .expect("worker policy snapshot");
+    assert_eq!(
+        worker_policy.selected_actor_ref,
+        "agent:agent-team-policy-worker"
+    );
+    assert!(worker_policy
+        .target_decisions
+        .contains_key("team-spawn:agent:agent-team-policy-worker"));
+    assert!(!worker_policy
+        .target_decisions
+        .contains_key("team-spawn:agent:agent-team-policy-leader"));
+
+    let execution_policy = worker_policy
+        .target_decisions
+        .get("model-execution:quota-model")
+        .expect("model execution target policy");
+    assert_eq!(execution_policy.target_kind, "model-execution");
+    assert_eq!(execution_policy.action, "requireApproval");
+    assert!(execution_policy.deferred);
+    assert!(execution_policy.requires_approval);
+    assert_eq!(
+        execution_policy.required_permission.as_deref(),
+        Some("read-only")
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn team_spawn_approval_blocks_subrun_dispatch_until_resolved() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        None,
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-team-spawn-leader",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Spawn Leader",
+                Option::<String>::None,
+                "Coordinator",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Lead the team.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Leader for team spawn approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert team spawn leader");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-team-spawn-worker",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Spawn Worker",
+                Option::<String>::None,
+                "Executor",
+                serde_json::to_string(&vec!["delivery"]).expect("tags"),
+                "Do the delegated work.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Worker for team spawn approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert team spawn worker");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                "team-spawn-approval",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Spawn Approval Team",
+                Option::<String>::None,
+                "Approval aware team",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Delegate after approval.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "auto",
+                    "memoryWrite": "require-approval",
+                    "mcpAuth": "require-approval",
+                    "teamSpawn": "require-approval"
+                    ,
+                    "workflowEscalation": "auto"
+                }))
+                .expect("approval preference"),
+                "agent-team-spawn-leader",
+                serde_json::to_string(&vec![
+                    "agent-team-spawn-leader",
+                    "agent-team-spawn-worker"
+                ])
+                .expect("member ids"),
+                "Team for team spawn approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert team spawn approval team");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![vec![
+        runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
+        runtime::AssistantEvent::MessageStop,
+    ]]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-team-spawn-approval",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Team Spawn Approval",
+                "team:team-spawn-approval",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(&session.summary.id, turn_input("Delegate the task", None))
+        .await
+        .expect("pending team spawn approval");
+
+    assert_eq!(run.status, "waiting_approval");
+    assert_eq!(run.current_step, "awaiting_approval");
+    assert_eq!(
+        run.pending_mediation
+            .as_ref()
+            .map(|mediation| mediation.target_kind.as_str()),
+        Some("team-spawn")
+    );
+    assert_eq!(executor.request_count(), 1);
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    assert!(detail.subruns.is_empty());
+    assert_eq!(
+        detail
+            .pending_approval
+            .as_ref()
+            .and_then(|approval| approval.target_kind.as_deref()),
+        Some("team-spawn")
+    );
+    let approval_id = detail
+        .pending_approval
+        .as_ref()
+        .map(|approval| approval.id.clone())
+        .expect("approval id");
+
+    let resolved = adapter
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect("resolved approval");
+
+    assert_eq!(resolved.status, "completed");
+    assert_eq!(executor.request_count(), 1);
+
+    let resolved_detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("resolved session detail");
+    assert!(resolved_detail.pending_approval.is_none());
+    assert!(resolved_detail.subruns.len() >= 2);
+    assert!(resolved_detail
+        .subruns
+        .iter()
+        .any(|subrun| subrun.actor_ref == "agent:agent-team-spawn-worker"));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn workflow_continuation_approval_blocks_workflow_projection_until_resolved() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        None,
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-workflow-approval-leader",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Workflow Approval Leader",
+                Option::<String>::None,
+                "Coordinator",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Lead the workflow.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Leader for workflow continuation approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert workflow approval leader");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-workflow-approval-worker",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Workflow Approval Worker",
+                Option::<String>::None,
+                "Executor",
+                serde_json::to_string(&vec!["delivery"]).expect("tags"),
+                "Do the delegated work.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Worker for workflow continuation approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert workflow approval worker");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                "team-workflow-approval",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Workflow Approval Team",
+                Option::<String>::None,
+                "Approval aware workflow team",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Delegate, then continue the workflow after approval.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "auto",
+                    "memoryWrite": "require-approval",
+                    "mcpAuth": "require-approval",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "require-approval"
+                }))
+                .expect("approval preference"),
+                "agent-workflow-approval-leader",
+                serde_json::to_string(&vec![
+                    "agent-workflow-approval-leader",
+                    "agent-workflow-approval-worker"
+                ])
+                .expect("member ids"),
+                "Team for workflow continuation approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert workflow approval team");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![vec![
+        runtime::AssistantEvent::TextDelta("Workflow plan ready.".into()),
+        runtime::AssistantEvent::MessageStop,
+    ]]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-workflow-approval",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Workflow Continuation Approval",
+                "team:team-workflow-approval",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(&session.summary.id, turn_input("Continue the workflow", None))
+        .await
+        .expect("pending workflow continuation approval");
+
+    assert_eq!(run.status, "waiting_approval");
+    assert_eq!(run.current_step, "awaiting_approval");
+    assert_eq!(
+        run.pending_mediation
+            .as_ref()
+            .map(|mediation| mediation.target_kind.as_str()),
+        Some("workflow-continuation")
+    );
+    assert_eq!(executor.request_count(), 1);
+    assert!(run
+        .worker_dispatch
+        .as_ref()
+        .is_some_and(|dispatch| dispatch.total_subruns >= 1));
+    assert!(run.workflow_run.is_none());
+    assert!(run.background_state.is_none());
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    assert!(detail.subrun_count >= 1);
+    assert!(!detail.subruns.is_empty());
+    assert!(detail.pending_mailbox.is_some());
+    assert!(detail.workflow.is_none());
+    assert!(detail.background_run.is_none());
+    assert_eq!(
+        detail
+            .pending_approval
+            .as_ref()
+            .and_then(|approval| approval.target_kind.as_deref()),
+        Some("workflow-continuation")
+    );
+    let approval_id = detail
+        .pending_approval
+        .as_ref()
+        .map(|approval| approval.id.clone())
+        .expect("approval id");
+
+    let resolved = adapter
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect("resolved workflow continuation approval");
+
+    assert_eq!(resolved.status, "completed");
+    assert_eq!(executor.request_count(), 1);
+    assert!(resolved.workflow_run.is_some());
+    assert!(resolved.background_state.is_some());
+    assert_eq!(
+        resolved
+            .last_mediation_outcome
+            .as_ref()
+            .map(|outcome| outcome.target_kind.as_str()),
+        Some("workflow-continuation")
+    );
+
+    let resolved_detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("resolved detail");
+    assert!(resolved_detail.workflow.is_some());
+    assert!(resolved_detail.background_run.is_some());
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn team_spawn_approval_chains_into_workflow_continuation_approval_when_required() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        None,
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-team-spawn-workflow-leader",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Spawn Workflow Leader",
+                Option::<String>::None,
+                "Coordinator",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Lead the team.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Leader for chained workflow approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert chained leader");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-team-spawn-workflow-worker",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Spawn Workflow Worker",
+                Option::<String>::None,
+                "Executor",
+                serde_json::to_string(&vec!["delivery"]).expect("tags"),
+                "Do the delegated work.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Worker for chained workflow approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert chained worker");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                "team-spawn-workflow-approval",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Spawn Workflow Approval Team",
+                Option::<String>::None,
+                "Approval aware team",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Delegate after approval, then continue workflow after approval.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "auto",
+                    "memoryWrite": "require-approval",
+                    "mcpAuth": "require-approval",
+                    "teamSpawn": "require-approval",
+                    "workflowEscalation": "require-approval"
+                }))
+                .expect("approval preference"),
+                "agent-team-spawn-workflow-leader",
+                serde_json::to_string(&vec![
+                    "agent-team-spawn-workflow-leader",
+                    "agent-team-spawn-workflow-worker"
+                ])
+                .expect("member ids"),
+                "Team for chained workflow approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert chained approval team");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![vec![
+        runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
+        runtime::AssistantEvent::MessageStop,
+    ]]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-team-spawn-workflow-approval",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Chained Team Approval",
+                "team:team-spawn-workflow-approval",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(&session.summary.id, turn_input("Delegate the task", None))
+        .await
+        .expect("pending team spawn approval");
+
+    assert_eq!(run.status, "waiting_approval");
+    assert_eq!(
+        run.pending_mediation
+            .as_ref()
+            .map(|mediation| mediation.target_kind.as_str()),
+        Some("team-spawn")
+    );
+    let approval_id = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail")
+        .pending_approval
+        .as_ref()
+        .map(|approval| approval.id.clone())
+        .expect("approval id");
+
+    let spawn_resolved = adapter
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect("resolved team spawn approval");
+
+    assert_eq!(spawn_resolved.status, "waiting_approval");
+    assert_eq!(spawn_resolved.current_step, "awaiting_approval");
+    assert_eq!(
+        spawn_resolved
+            .pending_mediation
+            .as_ref()
+            .map(|mediation| mediation.target_kind.as_str()),
+        Some("workflow-continuation")
+    );
+    assert!(spawn_resolved.worker_dispatch.is_some());
+    assert!(spawn_resolved.workflow_run.is_none());
+    assert_eq!(executor.request_count(), 1);
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail after spawn approval");
+    assert!(!detail.subruns.is_empty());
+    assert!(detail.workflow.is_none());
+    assert_eq!(
+        detail
+            .pending_approval
+            .as_ref()
+            .and_then(|approval| approval.target_kind.as_deref()),
+        Some("workflow-continuation")
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn team_spawn_policy_deny_suppresses_subrun_projection_on_main_runtime_path() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        None,
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-team-policy-leader",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Policy Leader",
+                Option::<String>::None,
+                "Coordinator",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Lead the policy-constrained team.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Leader for team spawn deny policy tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert team policy leader");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-team-policy-worker",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Policy Worker",
+                Option::<String>::None,
+                "Executor",
+                serde_json::to_string(&vec!["delivery"]).expect("tags"),
+                "Do the delegated work.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Worker for team spawn deny policy tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert team policy worker");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, delegation_policy_json, approval_preference_json, leader_agent_id, member_agent_ids, worker_concurrency_limit, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+            params![
+                "team-spawn-deny",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Spawn Deny Team",
+                Option::<String>::None,
+                "Policy constrained team",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Do not delegate when policy forbids it.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                serde_json::to_string(&json!({
+                    "mode": "disabled",
+                    "allowBackgroundRuns": false,
+                    "allowParallelWorkers": false,
+                    "maxWorkerCount": 0
+                }))
+                .expect("delegation policy"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "auto",
+                    "memoryWrite": "require-approval",
+                    "mcpAuth": "require-approval",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "require-approval"
+                }))
+                .expect("approval preference"),
+                "agent-team-policy-leader",
+                serde_json::to_string(&vec![
+                    "agent-team-policy-leader",
+                    "agent-team-policy-worker"
+                ])
+                .expect("member ids"),
+                2_i64,
+                "Team for team spawn deny policy tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert team spawn deny team");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelExecutor),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-team-spawn-deny",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Team Spawn Deny",
+                "team:team-spawn-deny",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(&session.summary.id, turn_input("Delegate the task", None))
+        .await
+        .expect("team run");
+
+    assert_eq!(run.status, "completed");
+    assert_eq!(
+        run.worker_dispatch
+            .as_ref()
+            .map(|dispatch| dispatch.total_subruns),
+        Some(0)
+    );
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    assert_eq!(detail.subrun_count, 0);
+    assert!(detail.subruns.is_empty());
+    assert!(detail.handoffs.is_empty());
+
+    let subrun_state_dir = infra.paths.runtime_sessions_dir.join("subruns");
+    let subrun_state_count = if subrun_state_dir.exists() {
+        fs::read_dir(&subrun_state_dir)
+            .expect("subrun state dir")
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(run.id.as_str())
+            })
+            .count()
+    } else {
+        0
+    };
+    assert_eq!(subrun_state_count, 0);
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -1700,6 +3064,66 @@ async fn submit_turn_selects_runtime_memory_and_emits_memory_events() {
 }
 
 #[tokio::test]
+async fn submit_turn_rejects_memory_pollution_candidates() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(FixedTokenRuntimeModelExecutor {
+            total_tokens: Some(12),
+        }),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-memory-pollution",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Memory Pollution",
+                "agent:agent-project-delivery",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(
+            &session.summary.id,
+            SubmitRuntimeTurnInput {
+                content: "For this task, keep the TODO list open for now.".into(),
+                permission_mode: None,
+                recall_mode: Some("default".into()),
+                ignored_memory_ids: Vec::new(),
+                memory_intent: Some("project".into()),
+            },
+        )
+        .await
+        .expect("run");
+
+    assert!(run.pending_memory_proposal.is_none());
+    let events = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("events");
+    assert!(!events
+        .iter()
+        .any(|event| event.event_type == "memory.proposed"));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
 async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
@@ -1799,6 +3223,255 @@ async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
     assert!(events
         .iter()
         .any(|event| event.event_type == "memory.approved"));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn revalidating_existing_memory_refreshes_existing_record_in_place() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(FixedTokenRuntimeModelExecutor {
+            total_tokens: Some(12),
+        }),
+    );
+    adapter
+        .persist_runtime_memory_record(
+            &memory_runtime::PersistedRuntimeMemoryRecord {
+                memory_id: "mem-stale-feedback".into(),
+                project_id: Some(octopus_core::DEFAULT_PROJECT_ID.into()),
+                owner_ref: Some("user:runtime".into()),
+                source_run_id: Some("seed-run".into()),
+                kind: "feedback".into(),
+                scope: "user-private".into(),
+                title: "feedback memory".into(),
+                summary: "Approval reviews need the finance tag on every request.".into(),
+                freshness_state: "stale".into(),
+                last_validated_at: Some(1),
+                proposal_state: "approved".into(),
+                storage_path: None,
+                content_hash: None,
+                updated_at: 1,
+            },
+            &json!({
+                "kind": "feedback",
+                "normalizedContent": "Approval reviews need the finance tag on every request.",
+                "summary": "Approval reviews need the finance tag on every request."
+            }),
+        )
+        .expect("seed stale memory");
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-memory-revalidation",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Memory Revalidation",
+                "agent:agent-project-delivery",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let submitted = adapter
+        .submit_turn(
+            &session.summary.id,
+            SubmitRuntimeTurnInput {
+                content: "Approval reviews need the finance tag on every request.".into(),
+                permission_mode: None,
+                recall_mode: Some("skip".into()),
+                ignored_memory_ids: Vec::new(),
+                memory_intent: Some("feedback".into()),
+            },
+        )
+        .await
+        .expect("submitted");
+    let proposal = submitted
+        .pending_memory_proposal
+        .as_ref()
+        .expect("pending proposal");
+    assert_eq!(proposal.memory_id, "mem-stale-feedback");
+
+    let resolved = adapter
+        .resolve_memory_proposal(
+            &session.summary.id,
+            &proposal.proposal_id,
+            ResolveRuntimeMemoryProposalInput {
+                decision: "revalidate".into(),
+                note: Some("freshened".into()),
+            },
+        )
+        .await
+        .expect("resolved");
+    assert_eq!(
+        resolved
+            .pending_memory_proposal
+            .as_ref()
+            .map(|proposal| proposal.proposal_state.as_str()),
+        Some("revalidated")
+    );
+
+    let records = adapter
+        .load_runtime_memory_records(octopus_core::DEFAULT_PROJECT_ID)
+        .expect("memory records");
+    let record = records
+        .iter()
+        .find(|record| record.memory_id == "mem-stale-feedback")
+        .expect("revalidated memory record");
+    assert_eq!(record.freshness_state, "revalidated");
+    assert_eq!(record.proposal_state, "revalidated");
+
+    let body: serde_json::Value = serde_json::from_slice(
+        &fs::read(adapter.runtime_memory_body_path("mem-stale-feedback"))
+            .expect("memory body bytes"),
+    )
+    .expect("memory body json");
+    assert_eq!(
+        body.get("normalizedContent")
+            .and_then(serde_json::Value::as_str),
+        Some("Approval reviews need the finance tag on every request.")
+    );
+    assert_eq!(
+        body.get("review")
+            .and_then(|value| value.get("decision"))
+            .and_then(serde_json::Value::as_str),
+        Some("revalidate")
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn memory_proposal_mediation_targets_specific_proposal_not_durable_memory_id() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(FixedTokenRuntimeModelExecutor {
+            total_tokens: Some(12),
+        }),
+    );
+    adapter
+        .persist_runtime_memory_record(
+            &memory_runtime::PersistedRuntimeMemoryRecord {
+                memory_id: "mem-stale-feedback".into(),
+                project_id: Some(octopus_core::DEFAULT_PROJECT_ID.into()),
+                owner_ref: Some("user:runtime".into()),
+                source_run_id: Some("seed-run".into()),
+                kind: "feedback".into(),
+                scope: "user-private".into(),
+                title: "feedback memory".into(),
+                summary: "Approval reviews need the finance tag on every request.".into(),
+                freshness_state: "stale".into(),
+                last_validated_at: Some(1),
+                proposal_state: "approved".into(),
+                storage_path: None,
+                content_hash: None,
+                updated_at: 1,
+            },
+            &json!({
+                "kind": "feedback",
+                "normalizedContent": "Approval reviews need the finance tag on every request.",
+                "summary": "Approval reviews need the finance tag on every request."
+            }),
+        )
+        .expect("seed stale memory");
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-memory-mediation-target",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Memory Mediation Target",
+                "agent:agent-project-delivery",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let submitted = adapter
+        .submit_turn(
+            &session.summary.id,
+            SubmitRuntimeTurnInput {
+                content: "Approval reviews need the finance tag on every request.".into(),
+                permission_mode: None,
+                recall_mode: Some("skip".into()),
+                ignored_memory_ids: Vec::new(),
+                memory_intent: Some("feedback".into()),
+            },
+        )
+        .await
+        .expect("submitted");
+    let proposal = submitted
+        .pending_memory_proposal
+        .as_ref()
+        .expect("pending proposal");
+    assert_eq!(proposal.memory_id, "mem-stale-feedback");
+    assert_ne!(proposal.proposal_id, proposal.memory_id);
+    assert_eq!(
+        submitted
+            .pending_mediation
+            .as_ref()
+            .map(|mediation| mediation.target_kind.as_str()),
+        Some("memory-write")
+    );
+    assert_eq!(
+        submitted
+            .pending_mediation
+            .as_ref()
+            .map(|mediation| mediation.target_ref.as_str()),
+        Some(proposal.proposal_id.as_str())
+    );
+
+    let resolved = adapter
+        .resolve_memory_proposal(
+            &session.summary.id,
+            &proposal.proposal_id,
+            ResolveRuntimeMemoryProposalInput {
+                decision: "revalidate".into(),
+                note: Some("freshened".into()),
+            },
+        )
+        .await
+        .expect("resolved");
+    assert_eq!(
+        resolved
+            .last_mediation_outcome
+            .as_ref()
+            .map(|outcome| outcome.target_kind.as_str()),
+        Some("memory-write")
+    );
+    assert_eq!(
+        resolved
+            .last_mediation_outcome
+            .as_ref()
+            .map(|outcome| outcome.target_ref.as_str()),
+        Some(proposal.proposal_id.as_str())
+    );
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -1921,6 +3594,503 @@ async fn create_session_populates_real_capability_plan_and_state_snapshot() {
 }
 
 #[tokio::test]
+async fn create_session_includes_selected_plugin_tools_in_capability_plan() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_external_plugin(&root, "sample-plugin", "sample-plugin", "plugin_echo");
+    write_workspace_config_with_plugins(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+        json!({
+            "sample-plugin@external": true
+        }),
+        &["./external-plugins"],
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, capability_policy_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            params![
+                "agent-plugin-capability-plan",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Plugin Capability Plan Agent",
+                Option::<String>::None,
+                "Planner",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Use plugin tools through the runtime capability planner.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for plugin capability plan tests.",
+                serde_json::to_string(&json!({
+                    "pluginCapabilityRefs": ["plugin_echo"]
+                }))
+                .expect("capability policy"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert plugin capability agent");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelExecutor),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-plugin-capability-plan",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Plugin Capability Plan Session",
+                "agent:agent-plugin-capability-plan",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    assert!(
+        session
+            .capability_summary
+            .deferred_tools
+            .contains(&"plugin_echo".to_string()),
+        "selected plugin tool should be planned as a deferred runtime capability"
+    );
+    assert!(
+        session.provider_state_summary.iter().any(|provider| {
+            provider.provider_key == "sample-plugin@external" && provider.state == "ready"
+        }),
+        "selected plugin provider should surface as ready"
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn submit_turn_replans_and_executes_selected_plugin_tools_through_capability_runtime() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_external_plugin(&root, "sample-plugin", "sample-plugin", "plugin_echo");
+    write_workspace_config_with_plugins(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+        json!({
+            "sample-plugin@external": true
+        }),
+        &["./external-plugins"],
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, capability_policy_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            params![
+                "agent-plugin-runtime-loop",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Plugin Runtime Loop Agent",
+                Option::<String>::None,
+                "Planner",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Discover and use plugin tools through the runtime capability planner.",
+                serde_json::to_string(&vec!["ToolSearch"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for plugin runtime loop tests.",
+                serde_json::to_string(&json!({
+                    "pluginCapabilityRefs": ["plugin_echo"]
+                }))
+                .expect("capability policy"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert plugin runtime loop agent");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Selecting the plugin tool.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-select-plugin-echo".into(),
+                name: "ToolSearch".into(),
+                input: serde_json::json!({
+                    "query": "select:plugin_echo",
+                    "max_results": 5
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 5,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Running the selected plugin tool.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-plugin-echo".into(),
+                name: "plugin_echo".into(),
+                input: serde_json::json!({
+                    "message": "hello from plugin"
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 6,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Plugin tool completed.".into()),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 7,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-plugin-runtime-loop",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Plugin Runtime Loop Session",
+                "agent:agent-plugin-runtime-loop",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Discover and run the plugin tool", None),
+        )
+        .await
+        .expect("run");
+
+    assert_eq!(run.status, "completed");
+    assert_eq!(run.current_step, "completed");
+    assert_eq!(executor.request_count(), 3);
+
+    let requests = executor.requests();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        requests[0]
+            .tools
+            .iter()
+            .map(|tool| tool.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["ToolSearch"]
+    );
+    assert!(
+        requests[1]
+            .tools
+            .iter()
+            .any(|tool| tool.name == "plugin_echo"),
+        "selected plugin tool should be replanned into the next model request"
+    );
+    assert!(
+        requests[2]
+            .messages
+            .iter()
+            .any(|message| matches!(message.role, runtime::MessageRole::Tool)),
+        "final model request should include the plugin tool result"
+    );
+
+    let serialized_messages = run
+        .checkpoint
+        .serialized_session
+        .get("session")
+        .and_then(|value| value.get("messages"))
+        .and_then(serde_json::Value::as_array)
+        .expect("serialized runtime messages");
+    let plugin_tool_result = serialized_messages
+        .iter()
+        .flat_map(|message| {
+            message
+                .get("blocks")
+                .and_then(serde_json::Value::as_array)
+                .into_iter()
+                .flatten()
+        })
+        .find(|block| {
+            block.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
+                && block.get("toolName").and_then(serde_json::Value::as_str)
+                    == Some("plugin_echo")
+        })
+        .expect("plugin tool result");
+    assert_eq!(
+        plugin_tool_result
+            .get("isError")
+            .and_then(serde_json::Value::as_bool),
+        Some(false),
+        "plugin tool should execute successfully through the runtime capability bridge"
+    );
+
+    let events = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("events");
+    let event_kinds = events
+        .iter()
+        .map(|event| event.kind.as_deref().unwrap_or(event.event_type.as_str()))
+        .collect::<Vec<_>>();
+    assert!(event_kinds.contains(&"tool.completed"));
+    assert!(
+        !event_kinds.contains(&"tool.failed"),
+        "plugin capability execution should not fall back to a failed tool event"
+    );
+    let planner_completed = events
+        .iter()
+        .filter(|event| event.kind.as_deref() == Some("planner.completed"))
+        .collect::<Vec<_>>();
+    assert!(
+        planner_completed.len() >= 2,
+        "runtime loop should emit planner completion events for real replans"
+    );
+    assert!(planner_completed.iter().any(|event| {
+        event.capability_plan_summary.as_ref().is_some_and(|summary| {
+            summary.visible_tools.contains(&"plugin_echo".to_string())
+        })
+    }));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn non_coding_research_docs_agent_runs_through_same_capability_trunk() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_external_plugin(&root, "sample-plugin", "sample-plugin", "plugin_echo");
+    write_workspace_config_with_plugins(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+        json!({
+            "sample-plugin@external": true
+        }),
+        &["./external-plugins"],
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, task_domains, description, capability_policy_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+            params![
+                "agent-research-docs-runtime-loop",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Research Docs Agent",
+                Option::<String>::None,
+                "Evidence-driven researcher",
+                serde_json::to_string(&vec!["research", "docs"]).expect("tags"),
+                "Discover research helpers and summarize documentation sources.",
+                serde_json::to_string(&vec!["ToolSearch"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                serde_json::to_string(&vec!["research", "docs"]).expect("task domains"),
+                "Agent for non-coding research/docs runtime acceptance tests.",
+                serde_json::to_string(&json!({
+                    "pluginCapabilityRefs": ["plugin_echo"]
+                }))
+                .expect("capability policy"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert research docs agent");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Selecting the research helper.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-select-plugin-echo".into(),
+                name: "ToolSearch".into(),
+                input: serde_json::json!({
+                    "query": "select:plugin_echo",
+                    "max_results": 5
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 5,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Running the research helper.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-plugin-echo".into(),
+                name: "plugin_echo".into(),
+                input: serde_json::json!({
+                    "message": "Summarize the docs findings"
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 6,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Research summary prepared.".into()),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 7,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-research-docs-runtime-loop",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Research Docs Runtime Loop Session",
+                "agent:agent-research-docs-runtime-loop",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    assert!(
+        session
+            .capability_summary
+            .deferred_tools
+            .contains(&"plugin_echo".to_string()),
+        "research/docs actor should receive the same deferred capability surface"
+    );
+
+    let run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Research the docs and summarize the findings", None),
+        )
+        .await
+        .expect("run");
+
+    assert_eq!(run.status, "completed");
+    assert_eq!(run.current_step, "completed");
+    assert_eq!(executor.request_count(), 3);
+
+    let requests = executor.requests();
+    assert_eq!(requests.len(), 3);
+    let first_prompt = requests[0].system_prompt.join("\n\n");
+    assert!(
+        first_prompt.contains("Task domains: research, docs."),
+        "system prompt should preserve the non-coding research/docs actor domain"
+    );
+    assert_eq!(
+        requests[0]
+            .tools
+            .iter()
+            .map(|tool| tool.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["ToolSearch"]
+    );
+    assert!(
+        requests[1]
+            .tools
+            .iter()
+            .any(|tool| tool.name == "plugin_echo"),
+        "selected capability should be replanned into the next model request"
+    );
+    assert!(
+        requests[2]
+            .messages
+            .iter()
+            .any(|message| matches!(message.role, runtime::MessageRole::Tool)),
+        "final request should include the research helper result"
+    );
+
+    let events = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("events");
+    let event_kinds = events
+        .iter()
+        .map(|event| event.kind.as_deref().unwrap_or(event.event_type.as_str()))
+        .collect::<Vec<_>>();
+    assert!(event_kinds.contains(&"tool.completed"));
+    assert!(
+        !event_kinds.contains(&"tool.failed"),
+        "non-coding research/docs actor should stay on the same successful capability trunk"
+    );
+    let planner_completed = events
+        .iter()
+        .filter(|event| event.kind.as_deref() == Some("planner.completed"))
+        .collect::<Vec<_>>();
+    assert!(
+        planner_completed.len() >= 2,
+        "research/docs runtime loop should emit real replans"
+    );
+    assert!(planner_completed.iter().any(|event| {
+        event.capability_plan_summary.as_ref().is_some_and(|summary| {
+            summary.visible_tools.contains(&"plugin_echo".to_string())
+        })
+    }));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
 async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
@@ -1986,36 +4156,91 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
         )
         .await
         .expect("run");
+    let expected_target_ref = format!("model-execution:{}:quota-model", run.id);
 
     let pending = run.pending_mediation.clone().expect("pending mediation");
-    assert_eq!(pending.tool_name.as_deref(), Some("Capability Approval Agent"));
+    assert_eq!(
+        pending.tool_name.as_deref(),
+        Some("Capability Approval Agent")
+    );
     assert_eq!(pending.mediation_kind, "approval");
-    assert_eq!(pending.target_kind, "runtime-execution");
-    assert_eq!(pending.target_ref, "agent:agent-capability-approval");
+    assert_eq!(pending.target_kind, "model-execution");
+    assert_eq!(pending.target_ref, expected_target_ref);
+    assert_eq!(pending.dispatch_kind.as_deref(), Some("model_execution"));
+    assert_eq!(pending.concurrency_policy.as_deref(), Some("serialized"));
+    assert_eq!(
+        pending.input.as_ref().and_then(|value| value.get("content")),
+        Some(&json!("Do the write action"))
+    );
+    assert_eq!(
+        pending
+            .input
+            .as_ref()
+            .and_then(|value| value.get("requestedPermissionMode")),
+        Some(&json!("workspace-write"))
+    );
     assert!(run.capability_state_ref.is_some());
+    assert_eq!(run.checkpoint.current_iteration_index, 0);
+    assert_eq!(
+        run.checkpoint.tool_name.as_deref(),
+        Some("Capability Approval Agent")
+    );
+    assert_eq!(
+        run.checkpoint.dispatch_kind.as_deref(),
+        Some("model_execution")
+    );
+    assert_eq!(
+        run.checkpoint.concurrency_policy.as_deref(),
+        Some("serialized")
+    );
+    assert_eq!(
+        run.checkpoint.input.as_ref().and_then(|value| value.get("content")),
+        Some(&json!("Do the write action"))
+    );
     assert_eq!(
         run.approval_target
             .as_ref()
             .and_then(|approval| approval.target_kind.as_deref()),
-        Some("runtime-execution")
+        Some("model-execution")
     );
     assert_eq!(
         run.approval_target
             .as_ref()
             .and_then(|approval| approval.target_ref.as_deref()),
-        Some("agent:agent-capability-approval")
+        Some(expected_target_ref.as_str())
     );
-    assert!(
-        run.checkpoint
-            .checkpoint_artifact_ref
-            .as_deref()
-            .is_some_and(|value| value.contains("runtime/checkpoints/mediation/"))
+    assert_eq!(
+        run.approval_target
+            .as_ref()
+            .and_then(|approval| approval.dispatch_kind.as_deref()),
+        Some("model_execution")
     );
+    assert_eq!(
+        run.approval_target
+            .as_ref()
+            .and_then(|approval| approval.concurrency_policy.as_deref()),
+        Some("serialized")
+    );
+    assert_eq!(
+        run.approval_target
+            .as_ref()
+            .and_then(|approval| approval.input.as_ref())
+            .and_then(|value| value.get("content")),
+        Some(&json!("Do the write action"))
+    );
+    assert!(run
+        .checkpoint
+        .checkpoint_artifact_ref
+        .as_deref()
+        .is_some_and(|value| value.contains("runtime/checkpoints/mediation/")));
     let outcome = run
         .last_execution_outcome
         .clone()
         .expect("last execution outcome");
-    assert_eq!(outcome.tool_name.as_deref(), Some("Capability Approval Agent"));
+    assert_eq!(
+        outcome.tool_name.as_deref(),
+        Some("Capability Approval Agent")
+    );
     assert_eq!(outcome.outcome, "require_approval");
     assert!(outcome.requires_approval);
     assert_eq!(
@@ -2026,12 +4251,34 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
         Some("Capability Approval Agent")
     );
     assert_eq!(
+        run.checkpoint
+            .pending_mediation
+            .as_ref()
+            .and_then(|value| value.dispatch_kind.as_deref()),
+        Some("model_execution")
+    );
+    assert_eq!(
+        run.checkpoint
+            .pending_mediation
+            .as_ref()
+            .and_then(|value| value.concurrency_policy.as_deref()),
+        Some("serialized")
+    );
+    assert_eq!(
+        run.checkpoint
+            .pending_mediation
+            .as_ref()
+            .and_then(|value| value.input.as_ref())
+            .and_then(|value| value.get("content")),
+        Some(&json!("Do the write action"))
+    );
+    assert_eq!(
         run.checkpoint.target_kind.as_deref(),
-        Some("runtime-execution")
+        Some("model-execution")
     );
     assert_eq!(
         run.checkpoint.target_ref.as_deref(),
-        Some("agent:agent-capability-approval")
+        Some(expected_target_ref.as_str())
     );
     assert_eq!(
         run.checkpoint
@@ -2039,6 +4286,20 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
             .as_ref()
             .map(|value| value.outcome.as_str()),
         Some("require_approval")
+    );
+    assert_eq!(
+        run.checkpoint
+            .last_execution_outcome
+            .as_ref()
+            .and_then(|value| value.dispatch_kind.as_deref()),
+        Some("model_execution")
+    );
+    assert_eq!(
+        run.checkpoint
+            .last_execution_outcome
+            .as_ref()
+            .and_then(|value| value.concurrency_policy.as_deref()),
+        Some("serialized")
     );
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
@@ -2061,7 +4322,21 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
         .expect("run capability projection");
     let persisted_pending: RuntimePendingMediationSummary =
         serde_json::from_str(&persisted.0).expect("pending mediation json");
-    assert_eq!(persisted_pending.tool_name.as_deref(), Some("Capability Approval Agent"));
+    assert_eq!(
+        persisted_pending.tool_name.as_deref(),
+        Some("Capability Approval Agent")
+    );
+    assert_eq!(persisted_pending.target_kind, "model-execution");
+    assert_eq!(persisted_pending.target_ref, expected_target_ref);
+    assert_eq!(persisted_pending.dispatch_kind.as_deref(), Some("model_execution"));
+    assert_eq!(
+        persisted_pending.concurrency_policy.as_deref(),
+        Some("serialized")
+    );
+    assert_eq!(
+        persisted_pending.input.as_ref().and_then(|value| value.get("content")),
+        Some(&json!("Do the write action"))
+    );
     assert_eq!(
         persisted.1,
         run.capability_state_ref.clone().expect("state ref")
@@ -2069,10 +4344,246 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
     let persisted_outcome: RuntimeCapabilityExecutionOutcome =
         serde_json::from_str(&persisted.2).expect("outcome json");
     assert_eq!(persisted_outcome.outcome, "require_approval");
+    assert_eq!(
+        persisted_outcome.dispatch_kind.as_deref(),
+        Some("model_execution")
+    );
+    assert_eq!(
+        persisted_outcome.concurrency_policy.as_deref(),
+        Some("serialized")
+    );
     let persisted_plan: RuntimeCapabilityPlanSummary =
         serde_json::from_str(&persisted.3).expect("plan json");
     assert_eq!(persisted_plan.visible_tools, vec!["bash".to_string()]);
     assert_eq!(persisted.4, 0);
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn submit_turn_uses_compiled_model_execution_policy_for_tool_execution_approval() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, memory_policy_json, delegation_policy_json, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+            params![
+                "agent-tool-execution-approval",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Tool Execution Approval Agent",
+                Option::<String>::None,
+                "Approver",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Require approval before model execution starts.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for model-execution policy tests.",
+                serde_json::to_string(&json!({})).expect("default model strategy"),
+                serde_json::to_string(&json!({})).expect("capability policy"),
+                serde_json::to_string(&json!({})).expect("permission envelope"),
+                serde_json::to_string(&json!({})).expect("memory policy"),
+                serde_json::to_string(&json!({})).expect("delegation policy"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "require-approval",
+                    "memoryWrite": "require-approval",
+                    "mcpAuth": "require-approval",
+                    "teamSpawn": "require-approval",
+                    "workflowEscalation": "require-approval"
+                }))
+                .expect("approval preference"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert tool execution approval agent");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![vec![
+        runtime::AssistantEvent::TextDelta("This should never execute.".into()),
+        runtime::AssistantEvent::MessageStop,
+    ]]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-tool-execution-approval",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Tool Execution Approval Session",
+                "agent:agent-tool-execution-approval",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let session_policy = adapter
+        .load_session_policy_snapshot(&format!("{}-policy", session.summary.id))
+        .expect("session policy snapshot");
+    let execution_policy = session_policy
+        .target_decisions
+        .get("model-execution:quota-model")
+        .expect("model execution policy decision");
+    assert_eq!(execution_policy.target_kind, "model-execution");
+    assert_eq!(execution_policy.action, "requireApproval");
+    assert!(execution_policy.deferred);
+    assert!(execution_policy.requires_approval);
+    assert_eq!(
+        execution_policy.required_permission.as_deref(),
+        Some("read-only")
+    );
+
+    let run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Do not start model execution yet", None),
+        )
+        .await
+        .expect("pending run");
+
+    assert_eq!(run.status, "waiting_approval");
+    assert_eq!(run.current_step, "awaiting_approval");
+    assert_eq!(executor.request_count(), 0);
+    assert_eq!(
+        run.pending_mediation
+            .as_ref()
+            .map(|mediation| mediation.target_kind.as_str()),
+        Some("model-execution")
+    );
+    assert_eq!(
+        run.approval_target
+            .as_ref()
+            .and_then(|approval| approval.target_kind.as_deref()),
+        Some("model-execution")
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn partial_approval_preference_json_merges_with_defaults_for_policy_compilation() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, memory_policy_json, delegation_policy_json, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+            params![
+                "agent-partial-approval-policy",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Partial Approval Policy Agent",
+                Option::<String>::None,
+                "Approver",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Require approval before model execution starts.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for partial approval preference tests.",
+                serde_json::to_string(&json!({})).expect("default model strategy"),
+                serde_json::to_string(&json!({})).expect("capability policy"),
+                serde_json::to_string(&json!({})).expect("permission envelope"),
+                serde_json::to_string(&json!({})).expect("memory policy"),
+                serde_json::to_string(&json!({})).expect("delegation policy"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "require-approval"
+                }))
+                .expect("approval preference"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert partial approval policy agent");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![vec![
+        runtime::AssistantEvent::TextDelta("This should never execute.".into()),
+        runtime::AssistantEvent::MessageStop,
+    ]]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-partial-approval-policy",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Partial Approval Policy Session",
+                "agent:agent-partial-approval-policy",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let session_policy = adapter
+        .load_session_policy_snapshot(&format!("{}-policy", session.summary.id))
+        .expect("session policy snapshot");
+    let execution_policy = session_policy
+        .target_decisions
+        .get("model-execution:quota-model")
+        .expect("model execution policy decision");
+    assert_eq!(execution_policy.target_kind, "model-execution");
+    assert_eq!(execution_policy.action, "requireApproval");
+    assert!(execution_policy.deferred);
+    assert!(execution_policy.requires_approval);
+    assert_eq!(
+        execution_policy.required_permission.as_deref(),
+        Some("read-only")
+    );
+
+    let run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Do not start model execution yet", None),
+        )
+        .await
+        .expect("pending run");
+
+    assert_eq!(run.status, "waiting_approval");
+    assert_eq!(run.current_step, "awaiting_approval");
+    assert_eq!(executor.request_count(), 0);
+    assert_eq!(
+        run.pending_mediation
+            .as_ref()
+            .map(|mediation| mediation.target_kind.as_str()),
+        Some("model-execution")
+    );
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -2243,10 +4754,529 @@ async fn resolve_approval_with_configured_mcp_server_stays_async_safe() {
         .await
         .expect("resolved approval");
     assert_eq!(resolved.approval_state, "approved");
+    assert_eq!(resolved.checkpoint.current_iteration_index, 1);
     assert!(resolved
         .provider_state_summary
         .iter()
         .any(|provider| provider.provider_key == "remote"));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn submit_turn_executes_runtime_tool_loop_on_main_path() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let note_path = root.join("loop-note.txt");
+    fs::write(&note_path, "runtime loop content\n").expect("seed note");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-runtime-loop",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Runtime Loop Agent",
+                Option::<String>::None,
+                "Reader",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Read files through the runtime capability loop.",
+                serde_json::to_string(&vec!["read_file"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for runtime loop tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert runtime loop agent");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Inspecting the note.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-read-note".into(),
+                name: "read_file".into(),
+                input: serde_json::json!({
+                    "path": note_path.display().to_string()
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 6,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Summary: runtime loop content.".into()),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 8,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-runtime-loop",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Runtime Loop Session",
+                "agent:agent-runtime-loop",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(&session.summary.id, turn_input("Read the note", None))
+        .await
+        .expect("run");
+
+    assert_eq!(run.status, "completed");
+    assert_eq!(run.current_step, "completed");
+    assert_eq!(run.next_action.as_deref(), Some("idle"));
+    assert_eq!(run.checkpoint.current_iteration_index, 2);
+    assert_eq!(run.consumed_tokens, Some(23));
+    assert_eq!(executor.request_count(), 2);
+
+    let requests = executor.requests();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(
+        requests[0]
+            .tools
+            .iter()
+            .map(|tool| tool.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["read_file"]
+    );
+    assert!(requests[0]
+        .messages
+        .iter()
+        .any(|message| matches!(message.role, runtime::MessageRole::User)));
+    assert!(requests[1]
+        .messages
+        .iter()
+        .any(|message| matches!(message.role, runtime::MessageRole::Tool)));
+
+    let serialized_session = run
+        .checkpoint
+        .serialized_session
+        .get("session")
+        .expect("serialized runtime session");
+    let serialized_messages = serialized_session
+        .get("messages")
+        .and_then(serde_json::Value::as_array)
+        .expect("serialized session messages");
+    assert_eq!(serialized_messages.len(), 4);
+    assert_eq!(
+        run.checkpoint
+            .serialized_session
+            .get("content")
+            .and_then(serde_json::Value::as_str),
+        Some("Read the note")
+    );
+
+    let events = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("events");
+    let event_kinds = events
+        .iter()
+        .map(|event| event.kind.as_deref().unwrap_or(event.event_type.as_str()))
+        .collect::<Vec<_>>();
+    assert!(event_kinds.contains(&"planner.started"));
+    assert!(event_kinds.contains(&"planner.completed"));
+    assert!(event_kinds.contains(&"model.started"));
+    assert!(event_kinds.contains(&"model.streaming"));
+    assert!(event_kinds.contains(&"model.completed"));
+    assert!(event_kinds.contains(&"tool.started"));
+    assert!(event_kinds.contains(&"tool.completed"));
+    let tool_started_index = event_kinds
+        .iter()
+        .position(|kind| *kind == "tool.started")
+        .expect("tool started index");
+    let tool_completed_index = event_kinds
+        .iter()
+        .position(|kind| *kind == "tool.completed")
+        .expect("tool completed index");
+    assert!(tool_started_index < tool_completed_index);
+
+    let tool_started = events
+        .iter()
+        .find(|event| event.kind.as_deref() == Some("tool.started"))
+        .expect("tool started event");
+    let expected_target_ref = format!("capability-call:{}:tool-read-note", run.id);
+    assert_eq!(tool_started.run_id.as_deref(), Some(run.id.as_str()));
+    assert_eq!(tool_started.parent_run_id, None);
+    assert_eq!(tool_started.actor_ref.as_deref(), Some(run.actor_ref.as_str()));
+    assert_eq!(tool_started.tool_use_id.as_deref(), Some("tool-read-note"));
+    assert_eq!(tool_started.target_kind.as_deref(), Some("capability-call"));
+    assert_eq!(
+        tool_started.target_ref.as_deref(),
+        Some(expected_target_ref.as_str())
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn approval_resume_uses_runtime_tool_loop_instead_of_one_shot_execution() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let note_path = root.join("approval-loop-note.txt");
+    fs::write(&note_path, "approval loop content\n").expect("seed note");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-runtime-approval-loop",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Runtime Approval Loop Agent",
+                Option::<String>::None,
+                "Reader",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Resume approval into the runtime capability loop.",
+                serde_json::to_string(&vec!["read_file"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for approval loop tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert runtime approval loop agent");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Inspecting the approved note.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-approved-read-note".into(),
+                name: "read_file".into(),
+                input: serde_json::json!({
+                    "path": note_path.display().to_string()
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 5,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Approved summary: approval loop content.".into()),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 7,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-runtime-approval-loop",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Runtime Approval Loop Session",
+                "agent:agent-runtime-approval-loop",
+                Some("quota-model"),
+                "workspace-write",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let pending_run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Read the note after approval", Some("workspace-write")),
+        )
+        .await
+        .expect("pending run");
+    assert_eq!(pending_run.status, "waiting_approval");
+    assert_eq!(executor.request_count(), 0);
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    let approval_id = detail
+        .pending_approval
+        .as_ref()
+        .map(|approval| approval.id.clone())
+        .expect("approval id");
+
+    let resolved = adapter
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect("resolved approval");
+
+    assert_eq!(resolved.status, "completed");
+    assert_eq!(resolved.current_step, "completed");
+    assert_eq!(resolved.checkpoint.current_iteration_index, 2);
+    assert_eq!(resolved.consumed_tokens, Some(21));
+    assert_eq!(executor.request_count(), 2);
+
+    let requests = executor.requests();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1]
+        .messages
+        .iter()
+        .any(|message| matches!(message.role, runtime::MessageRole::Tool)));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        Some(100),
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let output_path = root.join("capability-call-approval.txt");
+    let output_path_string = output_path.display().to_string();
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                "agent-capability-call-approval-loop",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Capability Call Approval Loop Agent",
+                Option::<String>::None,
+                "Writer",
+                serde_json::to_string(&vec!["project", "runtime"]).expect("tags"),
+                "Resume a blocked capability call without replaying the whole turn.",
+                serde_json::to_string(&vec!["write_file"]).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Agent for capability-call approval resume tests.",
+                serde_json::to_string(&json!({})).expect("default model strategy"),
+                serde_json::to_string(&json!({})).expect("capability policy"),
+                serde_json::to_string(&json!({
+                    "defaultMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "maxMode": octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+                    "escalationAllowed": true,
+                    "allowedResourceScopes": ["agent-private", "project-shared"]
+                }))
+                .expect("permission envelope"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert capability-call approval loop agent");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Writing the requested file.".into()),
+            runtime::AssistantEvent::ToolUse {
+                id: "tool-write-approved-note".into(),
+                name: "write_file".into(),
+                input: serde_json::json!({
+                    "path": output_path_string,
+                    "content": "capability approval content\n"
+                })
+                .to_string(),
+            },
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 5,
+                output_tokens: 4,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Completed the approved file write.".into()),
+            runtime::AssistantEvent::Usage(runtime::TokenUsage {
+                input_tokens: 7,
+                output_tokens: 5,
+                cache_creation_input_tokens: 0,
+                cache_read_input_tokens: 0,
+            }),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-capability-call-approval-loop",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Capability Call Approval Loop Session",
+                "agent:agent-capability-call-approval-loop",
+                Some("quota-model"),
+                octopus_core::RUNTIME_PERMISSION_DANGER_FULL_ACCESS,
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let pending_run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Write the file after capability approval", None),
+        )
+        .await
+        .expect("pending capability-call approval run");
+
+    assert_eq!(pending_run.status, "waiting_approval");
+    assert_eq!(pending_run.current_step, "awaiting_approval");
+    assert_eq!(pending_run.checkpoint.current_iteration_index, 1);
+    assert_eq!(executor.request_count(), 1);
+    assert_eq!(
+        pending_run
+            .approval_target
+            .as_ref()
+            .and_then(|approval| approval.target_kind.as_deref()),
+        Some("capability-call")
+    );
+    assert_eq!(
+        pending_run
+            .approval_target
+            .as_ref()
+            .map(|approval| approval.tool_name.as_str()),
+        Some("write_file")
+    );
+    assert_eq!(
+        pending_run
+            .checkpoint
+            .serialized_session
+            .get("pendingToolUses")
+            .and_then(serde_json::Value::as_array)
+            .map(|items| items.len()),
+        Some(1)
+    );
+    assert_eq!(
+        pending_run
+            .checkpoint
+            .serialized_session
+            .pointer("/pendingToolUses/0/toolUseId")
+            .and_then(serde_json::Value::as_str),
+        Some("tool-write-approved-note")
+    );
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    let approval_id = detail
+        .pending_approval
+        .as_ref()
+        .map(|approval| approval.id.clone())
+        .expect("approval id");
+
+    let resolved = adapter
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect("resolved capability-call approval");
+
+    assert_eq!(resolved.status, "completed");
+    assert_eq!(resolved.current_step, "completed");
+    assert_eq!(resolved.checkpoint.current_iteration_index, 2);
+    assert_eq!(executor.request_count(), 2);
+    assert_eq!(
+        fs::read_to_string(&output_path).expect("written file"),
+        "capability approval content\n"
+    );
+    assert_eq!(
+        resolved
+            .checkpoint
+            .serialized_session
+            .get("pendingToolUses")
+            .and_then(serde_json::Value::as_array)
+            .map(|items| items.len()),
+        Some(0)
+    );
+
+    let requests = executor.requests();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1]
+        .messages
+        .iter()
+        .any(|message| matches!(message.role, runtime::MessageRole::Tool)));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }

@@ -8,14 +8,20 @@ pub(crate) fn summarize_auth_state(
     for provider in provider_state_summary {
         match provider.state.as_str() {
             "auth_required" => {
-                if !summary.challenged_provider_keys.contains(&provider.provider_key) {
+                if !summary
+                    .challenged_provider_keys
+                    .contains(&provider.provider_key)
+                {
                     summary
                         .challenged_provider_keys
                         .push(provider.provider_key.clone());
                 }
             }
             "degraded" | "unavailable" => {
-                if !summary.failed_provider_keys.contains(&provider.provider_key) {
+                if !summary
+                    .failed_provider_keys
+                    .contains(&provider.provider_key)
+                {
                     summary
                         .failed_provider_keys
                         .push(provider.provider_key.clone());

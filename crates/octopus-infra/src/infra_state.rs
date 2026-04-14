@@ -1106,12 +1106,38 @@ fn json_string<T: Serialize>(value: &T) -> Result<String, AppError> {
     serde_json::to_string(value).map_err(AppError::from)
 }
 
+fn merge_json_with_defaults(base: serde_json::Value, patch: serde_json::Value) -> serde_json::Value {
+    match (base, patch) {
+        (serde_json::Value::Object(mut base_map), serde_json::Value::Object(patch_map)) => {
+            for (key, patch_value) in patch_map {
+                let merged = merge_json_with_defaults(
+                    base_map.remove(&key).unwrap_or(serde_json::Value::Null),
+                    patch_value,
+                );
+                base_map.insert(key, merged);
+            }
+            serde_json::Value::Object(base_map)
+        }
+        (base, serde_json::Value::Null) => base,
+        (_, patch) => patch,
+    }
+}
+
 fn parse_json_or_default<T, F>(raw: &str, default: F) -> T
 where
-    T: serde::de::DeserializeOwned,
+    T: serde::de::DeserializeOwned + Serialize,
     F: FnOnce() -> T,
 {
-    serde_json::from_str(raw).unwrap_or_else(|_| default())
+    let default_value = default();
+    let merged = serde_json::from_str::<serde_json::Value>(raw)
+        .ok()
+        .and_then(|patch| {
+            serde_json::to_value(&default_value)
+                .ok()
+                .map(|base| merge_json_with_defaults(base, patch))
+        })
+        .unwrap_or(serde_json::Value::Null);
+    serde_json::from_value(merged).unwrap_or(default_value)
 }
 
 pub(super) fn ensure_agent_record_columns(connection: &Connection) -> Result<(), AppError> {
@@ -4116,6 +4142,7 @@ pub(super) fn content_hash(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use octopus_core::ApprovalPreference;
 
     #[test]
     fn agent_avatar_returns_svg_data_url() {
@@ -4133,5 +4160,20 @@ mod tests {
         let avatar = agent_avatar(&paths, Some(relative_path)).expect("avatar");
 
         assert!(avatar.starts_with("data:image/svg+xml;base64,"));
+    }
+
+    #[test]
+    fn parse_json_or_default_merges_partial_approval_preference_with_defaults() {
+        let parsed: ApprovalPreference = parse_json_or_default(
+            r#"{"toolExecution":"require-approval"}"#,
+            default_approval_preference,
+        );
+        let defaults = default_approval_preference();
+
+        assert_eq!(parsed.tool_execution, "require-approval");
+        assert_eq!(parsed.memory_write, defaults.memory_write);
+        assert_eq!(parsed.mcp_auth, defaults.mcp_auth);
+        assert_eq!(parsed.team_spawn, defaults.team_spawn);
+        assert_eq!(parsed.workflow_escalation, defaults.workflow_escalation);
     }
 }

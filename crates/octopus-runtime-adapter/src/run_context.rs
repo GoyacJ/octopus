@@ -7,6 +7,7 @@ pub(crate) struct RunContext {
     pub(crate) conversation_id: String,
     pub(crate) run_id: String,
     pub(crate) actor_manifest: actor_manifest::CompiledActorManifest,
+    pub(crate) session_policy: session_policy::CompiledSessionPolicy,
     pub(crate) requested_permission_mode: String,
     pub(crate) resolved_target: ResolvedExecutionTarget,
     pub(crate) configured_model: ConfiguredModelRecord,
@@ -14,6 +15,7 @@ pub(crate) struct RunContext {
     pub(crate) provider_state_summary: Vec<RuntimeCapabilityProviderState>,
     pub(crate) auth_state_summary: RuntimeAuthStateSummary,
     pub(crate) policy_decision_summary: RuntimePolicyDecisionSummary,
+    pub(crate) execution_policy_decision: Option<RuntimeTargetPolicyDecision>,
     pub(crate) provider_auth_policy_decision: Option<RuntimeTargetPolicyDecision>,
     pub(crate) capability_state_ref: String,
     pub(crate) memory_selection: memory_selector::RuntimeMemorySelection,
@@ -23,6 +25,23 @@ pub(crate) struct RunContext {
 }
 
 impl RuntimeAdapter {
+    fn provider_auth_target_ref(
+        projection: &capability_planner_bridge::CapabilityProjection,
+    ) -> Option<String> {
+        projection
+            .auth_state_summary
+            .challenged_provider_keys
+            .first()
+            .cloned()
+            .or_else(|| {
+                projection
+                    .provider_state_summary
+                    .iter()
+                    .find(|provider| provider.state == "auth_required")
+                    .map(|provider| provider.provider_key.clone())
+            })
+    }
+
     pub(crate) async fn build_run_context(
         &self,
         session_id: &str,
@@ -85,11 +104,21 @@ impl RuntimeAdapter {
             &project_id,
             &memory_runtime::parse_memory_policy(&session_policy.memory_policy),
             input,
-            &memory_selection.selected_memory,
+            &memory_selection.candidate_memory,
         );
-        let provider_auth_policy_decision = session_policy
+        let provider_auth_policy_decision = Self::provider_auth_target_ref(&capability_projection)
+            .and_then(|provider_key| {
+                session_policy
+                    .target_decisions
+                    .get(&format!("provider-auth:{provider_key}"))
+                    .cloned()
+            });
+        let execution_policy_decision = session_policy
             .target_decisions
-            .get(&format!("provider-auth:{}", actor_manifest.actor_ref()))
+            .get(&format!(
+                "model-execution:{}",
+                resolved_target.configured_model_id
+            ))
             .cloned();
 
         Ok(RunContext {
@@ -97,6 +126,7 @@ impl RuntimeAdapter {
             conversation_id,
             run_id,
             actor_manifest,
+            session_policy,
             requested_permission_mode,
             resolved_target,
             configured_model,
@@ -104,6 +134,7 @@ impl RuntimeAdapter {
             provider_state_summary: capability_projection.provider_state_summary,
             auth_state_summary: capability_projection.auth_state_summary,
             policy_decision_summary: capability_projection.policy_decision_summary,
+            execution_policy_decision,
             provider_auth_policy_decision,
             capability_state_ref: capability_projection.capability_state_ref,
             memory_selection,

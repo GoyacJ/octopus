@@ -55,16 +55,17 @@ impl RuntimeSessionService for RuntimeAdapter {
             .current_config_snapshot(optional_project_id(&project_id).as_deref(), Some(user_id))?;
         self.persist_config_snapshot(&snapshot)?;
         let manifest = self.compile_actor_manifest(&input.selected_actor_ref)?;
-        let session_policy = self.compile_session_policy(
-            &session_id,
-            &manifest,
-            &snapshot,
-            input.selected_configured_model_id.as_deref(),
-            &input.execution_permission_mode,
-            user_id,
-            Some(&project_id),
-        )
-        .await?;
+        let session_policy = self
+            .compile_session_policy(
+                &session_id,
+                &manifest,
+                &snapshot,
+                input.selected_configured_model_id.as_deref(),
+                &input.execution_permission_mode,
+                user_id,
+                Some(&project_id),
+            )
+            .await?;
         self.persist_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref, &manifest)?;
         self.persist_session_policy_snapshot(
             &session_policy.session_policy_snapshot_ref,
@@ -179,6 +180,10 @@ impl RuntimeSessionService for RuntimeAdapter {
                     checkpoint_artifact_ref: None,
                     serialized_session: json!({}),
                     current_iteration_index: 0,
+                    tool_name: None,
+                    dispatch_kind: None,
+                    concurrency_policy: None,
+                    input: None,
                     usage_summary: RuntimeUsageSummary::default(),
                     pending_approval: None,
                     pending_auth_challenge: None,
@@ -222,6 +227,7 @@ impl RuntimeSessionService for RuntimeAdapter {
             metadata: RuntimeAggregateMetadata {
                 manifest_snapshot_ref: session_policy.manifest_snapshot_ref.clone(),
                 session_policy_snapshot_ref: session_policy.session_policy_snapshot_ref.clone(),
+                subrun_states: BTreeMap::new(),
             },
         };
 

@@ -171,6 +171,17 @@ pub(crate) fn build_export_translation_report(
     descriptors: &[BundleAssetDescriptorRecord],
     bundle_manifest: &AssetBundleManifestV2,
 ) -> AssetTranslationReport {
+    let mut translated_count = 0;
+    let mut downgraded_count = 0;
+    let mut rejected_count = 0;
+    for asset in &bundle_manifest.assets {
+        increment_translation_mode_counts(
+            &asset.translation_mode,
+            &mut translated_count,
+            &mut downgraded_count,
+            &mut rejected_count,
+        );
+    }
     let dependency_resolution = agents
         .first()
         .map(|agent| agent.dependency_resolution.clone())
@@ -181,15 +192,38 @@ pub(crate) fn build_export_translation_report(
                 .map(|descriptor| descriptor.dependency_resolution.clone())
         })
         .unwrap_or_default();
+    let status = if rejected_count > 0 {
+        "rejected"
+    } else if downgraded_count > 0 {
+        "downgraded"
+    } else if translated_count > 0 {
+        "translated"
+    } else {
+        "native"
+    };
     AssetTranslationReport {
-        status: "native".into(),
-        translated_count: 0,
-        downgraded_count: 0,
-        rejected_count: 0,
+        status: status.into(),
+        translated_count,
+        downgraded_count,
+        rejected_count,
         unsupported_features: Vec::new(),
         trust_warnings: bundle_manifest.trust_metadata.trust_warnings.clone(),
         dependency_resolution,
         diagnostics: Vec::new(),
+    }
+}
+
+fn increment_translation_mode_counts(
+    translation_mode: &str,
+    translated_count: &mut u64,
+    downgraded_count: &mut u64,
+    rejected_count: &mut u64,
+) {
+    match translation_mode {
+        "translated" => *translated_count += 1,
+        "downgraded" => *downgraded_count += 1,
+        "reject" | "rejected" => *rejected_count += 1,
+        _ => {}
     }
 }
 
@@ -289,4 +323,69 @@ fn plan_asset_entries(plan: &BundlePlan) -> Vec<AssetBundleAssetEntry> {
         });
     }
     entries
+}
+
+#[cfg(test)]
+mod tests {
+    use octopus_core::{
+        default_agent_delegation_policy, default_agent_memory_policy,
+        default_approval_preference, default_asset_trust_metadata, default_model_strategy,
+        default_permission_envelope, AssetBundleAssetEntry, AssetBundleCompatibilityMapping,
+        AssetBundleManifestV2, AssetBundlePolicyDefaults,
+    };
+
+    use super::build_export_translation_report;
+
+    #[test]
+    fn export_translation_report_counts_asset_translation_modes() {
+        let mut trust_metadata = default_asset_trust_metadata();
+        trust_metadata.trust_warnings = vec!["unsigned bundle".into()];
+        let bundle_manifest = AssetBundleManifestV2 {
+            version: 2,
+            bundle_kind: "octopus-asset-bundle".into(),
+            bundle_root: ".".into(),
+            assets: vec![
+                asset_entry("native-agent", "native"),
+                asset_entry("translated-agent", "translated"),
+                asset_entry("downgraded-agent", "downgraded"),
+                asset_entry("rejected-agent", "rejected"),
+            ],
+            dependencies: Vec::new(),
+            trust_metadata,
+            compatibility_mapping: AssetBundleCompatibilityMapping {
+                supported_targets: vec!["octopus".into()],
+                downgraded_features: Vec::new(),
+                rejected_features: Vec::new(),
+                translator_version: "phase-1".into(),
+            },
+            policy_defaults: AssetBundlePolicyDefaults {
+                default_model_strategy: default_model_strategy(),
+                permission_envelope: default_permission_envelope(),
+                memory_policy: default_agent_memory_policy(),
+                delegation_policy: default_agent_delegation_policy(),
+                approval_preference: default_approval_preference(),
+            },
+            registry_metadata: None,
+        };
+
+        let report = build_export_translation_report(&[], &[], &[], &bundle_manifest);
+
+        assert_eq!(report.translated_count, 1);
+        assert_eq!(report.downgraded_count, 1);
+        assert_eq!(report.rejected_count, 1);
+        assert_eq!(report.status, "rejected");
+        assert_eq!(report.trust_warnings, vec!["unsigned bundle"]);
+    }
+
+    fn asset_entry(source_id: &str, translation_mode: &str) -> AssetBundleAssetEntry {
+        AssetBundleAssetEntry {
+            asset_kind: "agent".into(),
+            source_id: source_id.into(),
+            display_name: source_id.into(),
+            source_path: format!("{source_id}.md"),
+            manifest_revision: octopus_core::ASSET_MANIFEST_REVISION_V2.into(),
+            task_domains: Vec::new(),
+            translation_mode: translation_mode.into(),
+        }
+    }
 }
