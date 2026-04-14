@@ -3,6 +3,7 @@ import {
   type ConversationAttachment,
   type Message,
   type RuntimeApprovalRequest,
+  type RuntimeAuthChallengeSummary,
   type RuntimeMessage,
   type RuntimeRunSnapshot,
   type RunStatus,
@@ -158,6 +159,44 @@ export function createPendingApprovalAssistantMessage(
         title: approval.summary,
         detail: approval.detail,
         timestamp: approval.createdAt,
+      },
+    ],
+  }
+}
+
+export function createPendingAuthAssistantMessage(
+  sessionId: string,
+  conversationId: string,
+  challenge: RuntimeAuthChallengeSummary,
+  run?: RuntimeRunSnapshot,
+): RuntimeMessage {
+  return {
+    id: `auth-assistant-${challenge.id}`,
+    sessionId,
+    conversationId,
+    senderType: 'assistant',
+    senderLabel: run?.resolvedActorLabel ?? 'Assistant',
+    content: 'Awaiting authentication…',
+    timestamp: challenge.createdAt,
+    configuredModelId: run?.configuredModelId,
+    modelId: run?.modelId,
+    status: 'waiting_input',
+    requestedActorKind: run?.requestedActorKind,
+    requestedActorId: run?.requestedActorId,
+    resolvedActorKind: run?.resolvedActorKind,
+    resolvedActorId: run?.resolvedActorId,
+    resolvedActorLabel: run?.resolvedActorLabel ?? 'Assistant',
+    usedDefaultActor: false,
+    resourceIds: [],
+    attachments: [],
+    artifacts: [],
+    processEntries: [
+      {
+        id: challenge.id,
+        type: 'result',
+        title: challenge.summary,
+        detail: challenge.detail,
+        timestamp: challenge.createdAt,
       },
     ],
   }

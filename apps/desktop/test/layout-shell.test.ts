@@ -70,6 +70,28 @@ function configureWorkspaceClient(
   )
 }
 
+interface ClientCallCounters {
+  workspaceGet: number
+  projectsList: number
+  workspaceOverview: number
+  accessUsers: number
+  accessRoles: number
+  accessPermissions: number
+  runtimeBootstrap: number
+}
+
+function createClientCallCounters(): ClientCallCounters {
+  return {
+    workspaceGet: 0,
+    projectsList: 0,
+    workspaceOverview: 0,
+    accessUsers: 0,
+    accessRoles: 0,
+    accessPermissions: 0,
+    runtimeBootstrap: 0,
+  }
+}
+
 describe('Workbench shell layout', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -266,6 +288,79 @@ describe('Workbench shell layout', () => {
     )
 
     expect(mounted.container.textContent?.trim().length ?? 0).toBeGreaterThan(0)
+
+    mounted.destroy()
+  })
+
+  it('does not rerun workspace, admin access, or runtime bootstrap on same-workspace menu navigation', async () => {
+    const counts = createClientCallCounters()
+    configureWorkspaceClient(client => ({
+      ...client,
+      workspace: {
+        ...client.workspace,
+        async get() {
+          counts.workspaceGet += 1
+          return await client.workspace.get()
+        },
+        async getOverview() {
+          counts.workspaceOverview += 1
+          return await client.workspace.getOverview()
+        },
+      },
+      projects: {
+        ...client.projects,
+        async list() {
+          counts.projectsList += 1
+          return await client.projects.list()
+        },
+      },
+      accessControl: {
+        ...client.accessControl,
+        async listUsers() {
+          counts.accessUsers += 1
+          return await client.accessControl.listUsers()
+        },
+        async listRoles() {
+          counts.accessRoles += 1
+          return await client.accessControl.listRoles()
+        },
+        async listPermissionDefinitions() {
+          counts.accessPermissions += 1
+          return await client.accessControl.listPermissionDefinitions()
+        },
+      },
+      runtime: {
+        ...client.runtime,
+        async bootstrap() {
+          counts.runtimeBootstrap += 1
+          return await client.runtime.bootstrap()
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/overview?project=proj-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    await waitFor(() => mounted.container.querySelector('[data-testid="workspace-overview-view"]') !== null)
+    await new Promise(resolve => window.setTimeout(resolve, 120))
+    await nextTick()
+
+    const baseline = { ...counts }
+
+    await router.push('/workspaces/ws-local/console/projects')
+    await waitFor(() => router.currentRoute.value.name === 'workspace-console-projects')
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/resources')
+    await waitFor(() => router.currentRoute.value.name === 'project-resources')
+
+    expect(counts.workspaceGet - baseline.workspaceGet).toBe(0)
+    expect(counts.projectsList - baseline.projectsList).toBe(0)
+    expect(counts.workspaceOverview - baseline.workspaceOverview).toBe(0)
+    expect(counts.accessUsers - baseline.accessUsers).toBe(0)
+    expect(counts.accessRoles - baseline.accessRoles).toBe(0)
+    expect(counts.accessPermissions - baseline.accessPermissions).toBe(0)
+    expect(counts.runtimeBootstrap - baseline.runtimeBootstrap).toBe(0)
 
     mounted.destroy()
   })

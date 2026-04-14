@@ -4,6 +4,7 @@ import {
   appendProcessEntry,
   appendToolCall,
   createPendingApprovalAssistantMessage,
+  createPendingAuthAssistantMessage,
   mergeAssistantMessageWithPlaceholder,
   updateOptimisticAssistantMessage,
 } from './runtime_messages'
@@ -138,7 +139,12 @@ export const runtimeEventActions = {
     }
 
     const status = this.activeRun?.status
-    if ((status === 'waiting_approval' && this.pendingApproval) || status === 'blocked' || status === 'failed') {
+    if (
+      (status === 'waiting_approval' && this.pendingApproval)
+      || (status === 'waiting_input' && (this.pendingMediation || this.authTarget || this.activeRun?.pendingMemoryProposal))
+      || status === 'blocked'
+      || status === 'failed'
+    ) {
       this.stopRealtimeTransport()
       return
     }
@@ -179,6 +185,10 @@ export const runtimeEventActions = {
       messages: [...existing.messages],
       trace: [...existing.trace],
       pendingApproval: existing.pendingApproval,
+      pendingMediation: event.run?.pendingMediation ?? nextSummary.pendingMediation ?? existing.pendingMediation,
+      lastMediationOutcome: event.run?.lastMediationOutcome ?? existing.lastMediationOutcome,
+      authStateSummary: nextSummary.authStateSummary ?? existing.authStateSummary,
+      policyDecisionSummary: nextSummary.policyDecisionSummary ?? existing.policyDecisionSummary,
     }
 
     if (event.message) {
@@ -237,8 +247,9 @@ export const runtimeEventActions = {
     }
 
     const eventType = resolveRuntimeEventType(event)
-    if (eventType === 'runtime.approval.requested') {
+    if (eventType === 'approval.requested' || eventType === 'runtime.approval.requested') {
       nextDetail.pendingApproval = event.approval
+      nextDetail.pendingMediation = event.run?.pendingMediation ?? nextDetail.pendingMediation
       if (event.approval) {
         const updatedMessages = updateOptimisticAssistantMessage(nextDetail.messages, (message) => ({
           ...appendProcessEntry(message, {
@@ -264,8 +275,39 @@ export const runtimeEventActions = {
       }
     }
 
-    if (eventType === 'runtime.approval.resolved') {
+    if (eventType === 'approval.resolved' || eventType === 'runtime.approval.resolved') {
       nextDetail.pendingApproval = undefined
+      nextDetail.pendingMediation = event.run?.pendingMediation ?? undefined
+    }
+
+    if (eventType === 'auth.challenge_requested' && event.authChallenge) {
+      nextDetail.pendingApproval = undefined
+      nextDetail.pendingMediation = event.run?.pendingMediation ?? nextDetail.pendingMediation
+      const updatedMessages = updateOptimisticAssistantMessage(nextDetail.messages, (message) => ({
+        ...appendProcessEntry(message, {
+          id: event.authChallenge!.id,
+          type: 'result',
+          title: event.authChallenge!.summary,
+          detail: event.authChallenge!.detail,
+          timestamp: event.authChallenge!.createdAt,
+        }),
+        content: 'Awaiting authentication…',
+        status: 'waiting_input',
+      }))
+      nextDetail.messages = updatedMessages
+
+      if (!updatedMessages.some((message: RuntimeMessage) => message.id === `auth-assistant-${event.authChallenge!.id}`)) {
+        nextDetail.messages.push(createPendingAuthAssistantMessage(
+          nextDetail.summary.id,
+          nextDetail.summary.conversationId,
+          event.authChallenge,
+          event.run ?? nextDetail.run,
+        ))
+      }
+    }
+
+    if (eventType === 'auth.resolved' || eventType === 'auth.failed') {
+      nextDetail.pendingMediation = event.run?.pendingMediation ?? undefined
     }
 
     if (event.error) {

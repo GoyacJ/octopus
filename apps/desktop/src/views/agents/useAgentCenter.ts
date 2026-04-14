@@ -1,4 +1,4 @@
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -85,6 +85,10 @@ export function useAgentCenter(scope: CenterScope) {
   const teamDialogOpen = ref(false)
   const editingAgentId = ref<string | null>(null)
   const editingTeamId = ref<string | null>(null)
+  const editingAgentContentReadonly = ref(false)
+  const editingTeamContentReadonly = ref(false)
+  const editingAgentStatusReadonly = ref(false)
+  const editingTeamStatusReadonly = ref(false)
   const agentPendingAvatar = ref<AvatarUploadPayload | null>(null)
   const teamPendingAvatar = ref<AvatarUploadPayload | null>(null)
   const removeAgentAvatar = ref(false)
@@ -163,6 +167,10 @@ export function useAgentCenter(scope: CenterScope) {
     }
     return teamStore.effectiveProjectTeams
   })
+  const resolvedAgents = computed(() => {
+    const merged = [...currentAgents.value, ...agentStore.agents]
+    return merged.filter((record, index) => merged.findIndex(item => item.id === record.id) === index)
+  })
   const effectiveProjectAgents = computed(() => currentAgents.value)
   const effectiveProjectTeams = computed(() => currentTeams.value)
   const pageTitle = computed(() =>
@@ -200,10 +208,10 @@ export function useAgentCenter(scope: CenterScope) {
         helper: entry.displayPath,
       })),
   )
-  const statusOptions = [
-    { value: 'active', label: 'Active' },
-    { value: 'archived', label: 'Archived' },
-  ]
+  const statusOptions = computed(() => [
+    { value: 'active', label: t('agents.status.active') },
+    { value: 'archived', label: t('agents.status.archived') },
+  ])
   const teamAgentOptions = computed<SelectOption[]>(() =>
     currentAgents.value.map(agent => ({
       value: agent.id,
@@ -213,15 +221,16 @@ export function useAgentCenter(scope: CenterScope) {
       disabled: isProjectScope.value ? !isProjectOwnedRecord(agent) : false,
     })),
   )
+  const currentEditingAgentRecord = computed(() => currentAgents.value.find(agent => agent.id === editingAgentId.value))
   const currentEditingTeamRecord = computed(() => currentTeams.value.find(team => team.id === editingTeamId.value))
   const dialogTeamLeader = computed(() =>
-    currentAgents.value.find(agent => agent.id === (teamForm.leaderAgentId || currentEditingTeamRecord.value?.leaderAgentId)),
+    resolvedAgents.value.find(agent => agent.id === (teamForm.leaderAgentId || currentEditingTeamRecord.value?.leaderAgentId)),
   )
   const dialogTeamMembers = computed(() => {
     const selectedIds = teamForm.memberAgentIds.length
       ? teamForm.memberAgentIds
       : (currentEditingTeamRecord.value?.memberAgentIds ?? [])
-    return currentAgents.value.filter(agent => selectedIds.includes(agent.id))
+    return resolvedAgents.value.filter(agent => selectedIds.includes(agent.id))
   })
   const leaderOptions = computed<SelectOption[]>(() =>
     currentAgents.value
@@ -231,6 +240,20 @@ export function useAgentCenter(scope: CenterScope) {
         label: agent.name,
         keywords: [agent.personality, ...agent.tags],
       })),
+  )
+  const agentDialogContentReadonly = computed(() => editingAgentContentReadonly.value)
+  const teamDialogContentReadonly = computed(() => editingTeamContentReadonly.value)
+  const agentDialogStatusReadonly = computed(() => editingAgentStatusReadonly.value)
+  const teamDialogStatusReadonly = computed(() => editingTeamStatusReadonly.value)
+  const canSaveAgentDialog = computed(() => !agentDialogStatusReadonly.value)
+  const canSaveTeamDialog = computed(() => !teamDialogStatusReadonly.value)
+  const currentEditingAgentCopyLabel = computed(() => isProjectScope.value ? '复制到项目' : '复制到工作区')
+  const currentEditingTeamCopyLabel = computed(() => isProjectScope.value ? '复制到项目' : '复制到工作区')
+  const canCopyCurrentEditingAgent = computed(() =>
+    Boolean(currentEditingAgentRecord.value && isBuiltinTemplateRecord(currentEditingAgentRecord.value)),
+  )
+  const canCopyCurrentEditingTeam = computed(() =>
+    Boolean(currentEditingTeamRecord.value && isBuiltinTemplateRecord(currentEditingTeamRecord.value)),
   )
   const tabValues: CenterTab[] = ['agent', 'team', 'builtin', 'skill', 'mcp']
   const tabs = computed(() => ([
@@ -411,11 +434,11 @@ export function useAgentCenter(scope: CenterScope) {
   })
 
   const agentPagination = usePagination(filteredAgents, {
-    pageSize: 6,
+    pageSize: 20,
     resetOn: [agentQuery, () => scope, projectId],
   })
   const teamPagination = usePagination(filteredTeams, {
-    pageSize: 6,
+    pageSize: 20,
     resetOn: [teamQuery, () => scope, projectId],
   })
   const resourcePagination = usePagination(filteredResourceEntries, {
@@ -517,6 +540,8 @@ export function useAgentCenter(scope: CenterScope) {
 
   function resetAgentForm(record?: AgentRecord) {
     editingAgentId.value = record?.id ?? null
+    editingAgentContentReadonly.value = Boolean(record)
+    editingAgentStatusReadonly.value = Boolean(record && isBuiltinTemplateRecord(record))
     agentForm.name = record?.name ?? ''
     agentForm.description = record?.description ?? ''
     agentForm.personality = record?.personality ?? ''
@@ -532,6 +557,8 @@ export function useAgentCenter(scope: CenterScope) {
 
   function resetTeamForm(record?: TeamRecord) {
     editingTeamId.value = record?.id ?? null
+    editingTeamContentReadonly.value = Boolean(record)
+    editingTeamStatusReadonly.value = Boolean(record && isBuiltinTemplateRecord(record))
     teamForm.name = record?.name ?? ''
     teamForm.description = record?.description ?? ''
     teamForm.personality = record?.personality ?? ''
@@ -587,15 +614,24 @@ export function useAgentCenter(scope: CenterScope) {
 
   async function openAgentImportDialog(source: AgentBundleTransferFormat = 'folder') {
     agentImportError.value = ''
+    agentImportPreview.value = null
     agentImportResult.value = null
     agentImportSource.value = source
-    const files = source === 'zip'
-      ? await tauriClient.pickAgentBundleArchive()
-      : await tauriClient.pickAgentBundleFolder()
-    if (!files?.length) {
-      return
+    try {
+      const files = source === 'zip'
+        ? await tauriClient.pickAgentBundleArchive()
+        : await tauriClient.pickAgentBundleFolder()
+      if (!files?.length) {
+        return
+      }
+      agentImportFiles.value = files
+      agentImportDialogOpen.value = true
+      await nextTick()
+      await previewAgentImportFiles(files)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to open agent bundle import dialog'
+      await notifyTransfer('error', '导入失败', message)
     }
-    await previewAgentImportFiles(files)
   }
 
   async function confirmAgentImport() {
@@ -681,7 +717,28 @@ export function useAgentCenter(scope: CenterScope) {
       title,
       body,
       source: 'agent-center',
+      toastDurationMs: 4000,
     })
+  }
+
+  function currentScopeLabel() {
+    return isProjectScope.value ? '项目' : '工作区'
+  }
+
+  async function notifySaved(kind: 'agent' | 'team', name: string, scopeLabel = currentScopeLabel()) {
+    await notifyTransfer(
+      'success',
+      '保存完成',
+      `已在${scopeLabel}保存${kind === 'agent' ? '数字员工' : '数字团队'}「${name}」。`,
+    )
+  }
+
+  async function notifyDeleted(kind: 'agent' | 'team', name: string) {
+    await notifyTransfer(
+      'success',
+      '删除完成',
+      `已从${currentScopeLabel()}删除${kind === 'agent' ? '数字员工' : '数字团队'}「${name}」。`,
+    )
   }
 
   async function exportBundle(
@@ -796,14 +853,6 @@ export function useAgentCenter(scope: CenterScope) {
   }
 
   function openEditAgent(record: AgentRecord) {
-    if (record.integrationSource?.kind === 'builtin-template') {
-      void copyAgentTemplate(record)
-      return
-    }
-    if (isReadonlyProjectRecord(record)) {
-      void copyAgentTemplate(record)
-      return
-    }
     resetAgentForm(record)
     agentDialogOpen.value = true
   }
@@ -826,14 +875,6 @@ export function useAgentCenter(scope: CenterScope) {
   }
 
   function openEditTeam(record: TeamRecord) {
-    if (record.integrationSource?.kind === 'builtin-template') {
-      void copyTeamTemplate(record)
-      return
-    }
-    if (isReadonlyProjectRecord(record)) {
-      void copyTeamTemplate(record)
-      return
-    }
     resetTeamForm(record)
     teamDialogOpen.value = true
   }
@@ -857,7 +898,7 @@ export function useAgentCenter(scope: CenterScope) {
   }
 
   function currentEditingAgent() {
-    return currentAgents.value.find(agent => agent.id === editingAgentId.value)
+    return currentEditingAgentRecord.value
   }
 
   function currentEditingTeam() {
@@ -899,13 +940,17 @@ export function useAgentCenter(scope: CenterScope) {
   }
 
   async function saveAgent() {
+    if (!canSaveAgentDialog.value) {
+      return
+    }
     if (!workspaceStore.currentWorkspaceId || !agentForm.name.trim()) {
       return
     }
+    const currentRecord = currentEditingAgent()
     const input: UpsertAgentInput = {
-      workspaceId: workspaceStore.currentWorkspaceId,
-      projectId: isProjectScope.value ? projectId.value : undefined,
-      scope: isProjectScope.value ? 'project' : 'workspace',
+      workspaceId: currentRecord?.workspaceId ?? workspaceStore.currentWorkspaceId,
+      projectId: currentRecord?.projectId ?? (isProjectScope.value ? projectId.value : undefined),
+      scope: currentRecord?.scope ?? (isProjectScope.value ? 'project' : 'workspace'),
       name: agentForm.name.trim(),
       avatar: agentPendingAvatar.value ?? undefined,
       removeAvatar: removeAgentAvatar.value || undefined,
@@ -918,22 +963,33 @@ export function useAgentCenter(scope: CenterScope) {
       description: agentForm.description.trim(),
       status: agentForm.status as AgentRecord['status'],
     }
-    if (editingAgentId.value) {
-      await agentStore.update(editingAgentId.value, input)
-    } else {
-      await agentStore.create(input)
+    const agentName = input.name
+    try {
+      if (editingAgentId.value) {
+        await agentStore.update(editingAgentId.value, input)
+      } else {
+        await agentStore.create(input)
+      }
+      agentDialogOpen.value = false
+      await notifySaved('agent', agentName, input.projectId ? '项目' : '工作区')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save agent'
+      await notifyTransfer('error', '保存失败', message)
     }
-    agentDialogOpen.value = false
   }
 
   async function saveTeam() {
+    if (!canSaveTeamDialog.value) {
+      return
+    }
     if (!workspaceStore.currentWorkspaceId || !teamForm.name.trim()) {
       return
     }
+    const currentRecord = currentEditingTeam()
     const input: UpsertTeamInput = {
-      workspaceId: workspaceStore.currentWorkspaceId,
-      projectId: isProjectScope.value ? projectId.value : undefined,
-      scope: isProjectScope.value ? 'project' : 'workspace',
+      workspaceId: currentRecord?.workspaceId ?? workspaceStore.currentWorkspaceId,
+      projectId: currentRecord?.projectId ?? (isProjectScope.value ? projectId.value : undefined),
+      scope: currentRecord?.scope ?? (isProjectScope.value ? 'project' : 'workspace'),
       name: teamForm.name.trim(),
       avatar: teamPendingAvatar.value ?? undefined,
       removeAvatar: removeTeamAvatar.value || undefined,
@@ -948,12 +1004,19 @@ export function useAgentCenter(scope: CenterScope) {
       description: teamForm.description.trim(),
       status: teamForm.status as TeamRecord['status'],
     }
-    if (editingTeamId.value) {
-      await teamStore.update(editingTeamId.value, input)
-    } else {
-      await teamStore.create(input)
+    const teamName = input.name
+    try {
+      if (editingTeamId.value) {
+        await teamStore.update(editingTeamId.value, input)
+      } else {
+        await teamStore.create(input)
+      }
+      teamDialogOpen.value = false
+      await notifySaved('team', teamName, input.projectId ? '项目' : '工作区')
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save team'
+      await notifyTransfer('error', '保存失败', message)
     }
-    teamDialogOpen.value = false
   }
 
   async function promoteAgentToWorkspace() {
@@ -1004,6 +1067,24 @@ export function useAgentCenter(scope: CenterScope) {
     }
   }
 
+  async function copyCurrentEditingAgent() {
+    const record = currentEditingAgentRecord.value
+    if (!record || !canCopyCurrentEditingAgent.value) {
+      return
+    }
+    await copyAgentTemplate(record)
+    agentDialogOpen.value = false
+  }
+
+  async function copyCurrentEditingTeam() {
+    const record = currentEditingTeamRecord.value
+    if (!record || !canCopyCurrentEditingTeam.value) {
+      return
+    }
+    await copyTeamTemplate(record)
+    teamDialogOpen.value = false
+  }
+
   function removeAgent(record: AgentRecord) {
     itemToDelete.value = { id: record.id, name: record.name, type: 'agent' }
     deleteConfirmOpen.value = true
@@ -1019,18 +1100,20 @@ export function useAgentCenter(scope: CenterScope) {
       return
     }
 
-    const { id, type } = itemToDelete.value
+    const { id, type, name } = itemToDelete.value
     if (type === 'agent') {
       selectedAgentIds.value = selectedAgentIds.value.filter(selectedId => selectedId !== id)
       const record = currentAgents.value.find(a => a.id === id)
       if (record && isRemovableRecord(record)) {
         await agentStore.remove(id)
+        await notifyDeleted('agent', name)
       }
     } else {
       selectedTeamIds.value = selectedTeamIds.value.filter(selectedId => selectedId !== id)
       const record = currentTeams.value.find(team => team.id === id)
       if (record && isRemovableRecord(record)) {
         await teamStore.remove(id)
+        await notifyDeleted('team', name)
       }
     }
 
@@ -1074,6 +1157,7 @@ export function useAgentCenter(scope: CenterScope) {
     currentProject,
     currentAgents,
     currentTeams,
+    resolvedAgents,
     pageTitle,
     pageDescription,
     builtinOptions,
@@ -1084,6 +1168,16 @@ export function useAgentCenter(scope: CenterScope) {
     dialogTeamLeader,
     dialogTeamMembers,
     leaderOptions,
+    agentDialogContentReadonly,
+    teamDialogContentReadonly,
+    agentDialogStatusReadonly,
+    teamDialogStatusReadonly,
+    canSaveAgentDialog,
+    canSaveTeamDialog,
+    canCopyCurrentEditingAgent,
+    canCopyCurrentEditingTeam,
+    currentEditingAgentCopyLabel,
+    currentEditingTeamCopyLabel,
     tabs,
     pagedAgents,
     pagedTeams,
@@ -1134,6 +1228,8 @@ export function useAgentCenter(scope: CenterScope) {
     clearTeamAvatar,
     saveAgent,
     saveTeam,
+    copyCurrentEditingAgent,
+    copyCurrentEditingTeam,
     promoteAgentToWorkspace,
     promoteTeamToWorkspace,
     removeAgent,

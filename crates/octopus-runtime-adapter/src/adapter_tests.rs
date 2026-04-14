@@ -135,6 +135,17 @@ fn turn_input(content: &str, permission_mode: Option<&str>) -> SubmitRuntimeTurn
     }
 }
 
+fn grant_owner_permissions(infra: &octopus_infra::InfraBundle, user_id: &str) {
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO role_bindings (id, role_id, subject_type, subject_id, effect)
+             VALUES (?1, 'owner', 'user', ?2, 'allow')",
+            params![format!("binding-user-{user_id}-owner"), user_id],
+        )
+        .expect("grant owner permissions");
+}
+
 fn persist_memory_record(
     adapter: &RuntimeAdapter,
     project_id: &str,
@@ -198,6 +209,7 @@ async fn runtime_config_resolution_respects_user_workspace_project_precedence() 
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -369,6 +381,7 @@ async fn runtime_session_snapshot_uses_scope_order_from_user_to_project() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -463,6 +476,7 @@ async fn runtime_config_validation_rejects_non_positive_token_quota() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -505,6 +519,7 @@ async fn runtime_config_validation_accepts_backfilled_upstream_fields_across_sco
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -573,6 +588,7 @@ async fn runtime_config_validation_warns_for_unknown_and_deprecated_top_level_ke
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -609,6 +625,7 @@ async fn runtime_config_validation_reports_wrong_type_for_backfilled_fields() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -639,6 +656,7 @@ async fn runtime_effective_config_includes_backfilled_upstream_fields() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -715,6 +733,7 @@ async fn submit_turn_updates_configured_model_token_usage_and_catalog_snapshot()
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(FixedTokenRuntimeModelExecutor {
             total_tokens: Some(32),
         }),
@@ -793,6 +812,7 @@ async fn configured_model_token_usage_survives_adapter_restart() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(FixedTokenRuntimeModelExecutor {
             total_tokens: Some(24),
         }),
@@ -821,6 +841,7 @@ async fn configured_model_token_usage_survives_adapter_restart() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(FixedTokenRuntimeModelExecutor {
             total_tokens: Some(24),
         }),
@@ -850,6 +871,7 @@ async fn submit_turn_blocks_when_configured_model_token_quota_is_exhausted() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(FixedTokenRuntimeModelExecutor {
             total_tokens: Some(32),
         }),
@@ -945,6 +967,7 @@ async fn session_bound_agent_selection_injects_manifest_prompt_into_execution() 
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -1082,6 +1105,7 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -1330,6 +1354,7 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
     let reloaded_detail = reloaded
@@ -1359,6 +1384,7 @@ async fn runtime_session_public_contract_and_projection_fields_match_phase_two_s
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(FixedTokenRuntimeModelExecutor {
             total_tokens: Some(16),
         }),
@@ -1493,6 +1519,7 @@ async fn runtime_events_only_emit_declared_runtime_event_kinds() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(FixedTokenRuntimeModelExecutor {
             total_tokens: Some(8),
         }),
@@ -1545,6 +1572,13 @@ async fn runtime_events_only_emit_declared_runtime_event_kinds() {
         "mcp.failed",
         "approval.requested",
         "approval.resolved",
+        "approval.cancelled",
+        "auth.challenge_requested",
+        "auth.resolved",
+        "auth.failed",
+        "policy.exposure_denied",
+        "policy.surface_deferred",
+        "policy.session_compiled",
         "trace.emitted",
         "subrun.spawned",
         "subrun.completed",
@@ -1586,6 +1620,7 @@ async fn submit_turn_selects_runtime_memory_and_emits_memory_events() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(FixedTokenRuntimeModelExecutor {
             total_tokens: Some(12),
         }),
@@ -1630,7 +1665,12 @@ async fn submit_turn_selects_runtime_memory_and_emits_memory_events() {
 
     assert_eq!(run.selected_memory.len(), 1);
     assert_eq!(run.selected_memory[0].memory_id, "mem-user-preference");
-    assert_eq!(run.freshness_summary.as_ref().map(|value| value.fresh_count), Some(1));
+    assert_eq!(
+        run.freshness_summary
+            .as_ref()
+            .map(|value| value.fresh_count),
+        Some(1)
+    );
     assert_eq!(
         run.pending_memory_proposal
             .as_ref()
@@ -1649,8 +1689,12 @@ async fn submit_turn_selects_runtime_memory_and_emits_memory_events() {
         .list_events(&session.summary.id, None)
         .await
         .expect("events");
-    assert!(events.iter().any(|event| event.event_type == "memory.selected"));
-    assert!(events.iter().any(|event| event.event_type == "memory.proposed"));
+    assert!(events
+        .iter()
+        .any(|event| event.event_type == "memory.selected"));
+    assert!(events
+        .iter()
+        .any(|event| event.event_type == "memory.proposed"));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -1668,6 +1712,7 @@ async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(FixedTokenRuntimeModelExecutor {
             total_tokens: Some(12),
         }),
@@ -1725,7 +1770,10 @@ async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
         .expect("resolved proposal");
     assert_eq!(proposal.proposal_state, "approved");
     assert_eq!(
-        proposal.review.as_ref().and_then(|review| review.note.as_deref()),
+        proposal
+            .review
+            .as_ref()
+            .and_then(|review| review.note.as_deref()),
         Some("validated")
     );
 
@@ -1738,7 +1786,9 @@ async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
             && record.freshness_state == "fresh"
     }));
     assert!(
-        adapter.runtime_memory_body_path(&proposal.memory_id).exists(),
+        adapter
+            .runtime_memory_body_path(&proposal.memory_id)
+            .exists(),
         "memory body should be persisted under data/knowledge"
     );
 
@@ -1746,7 +1796,9 @@ async fn resolving_memory_proposal_persists_runtime_memory_record_and_event() {
         .list_events(&session.summary.id, None)
         .await
         .expect("events");
-    assert!(events.iter().any(|event| event.event_type == "memory.approved"));
+    assert!(events
+        .iter()
+        .any(|event| event.event_type == "memory.approved"));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -1759,6 +1811,7 @@ async fn create_session_populates_real_capability_plan_and_state_snapshot() {
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
     );
+    grant_owner_permissions(&infra, "user-owner");
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
     connection
@@ -1790,6 +1843,7 @@ async fn create_session_populates_real_capability_plan_and_state_snapshot() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -1874,6 +1928,7 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
         &infra.paths.runtime_config_dir.join("workspace.json"),
         Some(100),
     );
+    grant_owner_permissions(&infra, "user-owner");
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
     connection
@@ -1905,6 +1960,7 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -1932,14 +1988,34 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
         .expect("run");
 
     let pending = run.pending_mediation.clone().expect("pending mediation");
-    assert_eq!(pending.tool_name.as_deref(), Some("runtime.turn"));
+    assert_eq!(pending.tool_name.as_deref(), Some("Capability Approval Agent"));
     assert_eq!(pending.mediation_kind, "approval");
+    assert_eq!(pending.target_kind, "runtime-execution");
+    assert_eq!(pending.target_ref, "agent:agent-capability-approval");
     assert!(run.capability_state_ref.is_some());
+    assert_eq!(
+        run.approval_target
+            .as_ref()
+            .and_then(|approval| approval.target_kind.as_deref()),
+        Some("runtime-execution")
+    );
+    assert_eq!(
+        run.approval_target
+            .as_ref()
+            .and_then(|approval| approval.target_ref.as_deref()),
+        Some("agent:agent-capability-approval")
+    );
+    assert!(
+        run.checkpoint
+            .checkpoint_artifact_ref
+            .as_deref()
+            .is_some_and(|value| value.contains("runtime/checkpoints/mediation/"))
+    );
     let outcome = run
         .last_execution_outcome
         .clone()
         .expect("last execution outcome");
-    assert_eq!(outcome.tool_name.as_deref(), Some("runtime.turn"));
+    assert_eq!(outcome.tool_name.as_deref(), Some("Capability Approval Agent"));
     assert_eq!(outcome.outcome, "require_approval");
     assert!(outcome.requires_approval);
     assert_eq!(
@@ -1947,7 +2023,15 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
             .pending_mediation
             .as_ref()
             .and_then(|value| value.tool_name.as_deref()),
-        Some("runtime.turn")
+        Some("Capability Approval Agent")
+    );
+    assert_eq!(
+        run.checkpoint.target_kind.as_deref(),
+        Some("runtime-execution")
+    );
+    assert_eq!(
+        run.checkpoint.target_ref.as_deref(),
+        Some("agent:agent-capability-approval")
     );
     assert_eq!(
         run.checkpoint
@@ -1977,7 +2061,7 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
         .expect("run capability projection");
     let persisted_pending: RuntimePendingMediationSummary =
         serde_json::from_str(&persisted.0).expect("pending mediation json");
-    assert_eq!(persisted_pending.tool_name.as_deref(), Some("runtime.turn"));
+    assert_eq!(persisted_pending.tool_name.as_deref(), Some("Capability Approval Agent"));
     assert_eq!(
         persisted.1,
         run.capability_state_ref.clone().expect("state ref")
@@ -2033,6 +2117,7 @@ async fn submit_turn_with_configured_mcp_server_stays_async_safe() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -2110,6 +2195,7 @@ async fn resolve_approval_with_configured_mcp_server_stays_async_safe() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 
@@ -2166,6 +2252,167 @@ async fn resolve_approval_with_configured_mcp_server_stays_async_safe() {
 }
 
 #[tokio::test]
+async fn loads_legacy_runtime_projection_missing_selected_actor_ref() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    let detail_json = json!({
+        "summary": {
+            "id": "rt-legacy-selected-actor",
+            "conversationId": "conv-legacy-selected-actor",
+            "projectId": "proj-redesign",
+            "title": "Legacy Session",
+            "sessionKind": "project",
+            "status": "draft",
+            "updatedAt": 1,
+            "lastMessagePreview": null,
+            "configSnapshotId": "cfgsnap-legacy",
+            "effectiveConfigHash": "hash-legacy",
+            "startedFromScopeSet": ["workspace", "project"],
+            "sessionPolicy": {
+                "selectedConfiguredModelId": "quota-model",
+                "executionPermissionMode": "workspace-write",
+                "configSnapshotId": "cfgsnap-legacy",
+                "manifestRevision": "asset-manifest/v2",
+                "capabilityPolicy": {},
+                "memoryPolicy": {},
+                "delegationPolicy": {},
+                "approvalPreference": {}
+            },
+            "activeRunId": "run-legacy-selected-actor",
+            "subrunCount": 0,
+            "memorySummary": {
+                "summary": "",
+                "durableMemoryCount": 0,
+                "selectedMemoryIds": []
+            },
+            "capabilitySummary": {
+                "visibleTools": [],
+                "discoverableSkills": []
+            }
+        },
+        "sessionPolicy": {
+            "selectedConfiguredModelId": "quota-model",
+            "executionPermissionMode": "workspace-write",
+            "configSnapshotId": "cfgsnap-legacy",
+            "manifestRevision": "asset-manifest/v2",
+            "capabilityPolicy": {},
+            "memoryPolicy": {},
+            "delegationPolicy": {},
+            "approvalPreference": {}
+        },
+        "activeRunId": "run-legacy-selected-actor",
+        "subrunCount": 0,
+        "memorySummary": {
+            "summary": "",
+            "durableMemoryCount": 0,
+            "selectedMemoryIds": []
+        },
+        "capabilitySummary": {
+            "visibleTools": [],
+            "discoverableSkills": []
+        },
+        "run": {
+            "id": "run-legacy-selected-actor",
+            "sessionId": "rt-legacy-selected-actor",
+            "conversationId": "conv-legacy-selected-actor",
+            "status": "draft",
+            "currentStep": "ready",
+            "startedAt": 1,
+            "updatedAt": 1,
+            "configuredModelId": null,
+            "configuredModelName": null,
+            "modelId": null,
+            "consumedTokens": null,
+            "nextAction": "submit_turn",
+            "configSnapshotId": "cfgsnap-legacy",
+            "effectiveConfigHash": "hash-legacy",
+            "startedFromScopeSet": ["workspace", "project"],
+            "runKind": "primary",
+            "parentRunId": null,
+            "actorRef": "agent:agent-architect",
+            "delegatedByToolCallId": null,
+            "approvalState": "not-required",
+            "usageSummary": {
+                "inputTokens": 0,
+                "outputTokens": 0,
+                "totalTokens": 0
+            },
+            "artifactRefs": [],
+            "traceContext": {
+                "sessionId": "rt-legacy-selected-actor",
+                "traceId": "trace-legacy-selected-actor",
+                "turnId": "turn-legacy-selected-actor",
+                "parentRunId": null
+            },
+            "checkpoint": {
+                "serializedSession": {},
+                "currentIterationIndex": 0,
+                "usageSummary": {
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "totalTokens": 0
+                },
+                "pendingApproval": null,
+                "compactionMetadata": {}
+            },
+            "resolvedTarget": null,
+            "requestedActorKind": null,
+            "requestedActorId": null,
+            "resolvedActorKind": null,
+            "resolvedActorId": null,
+            "resolvedActorLabel": null
+        },
+        "messages": [],
+        "trace": [],
+        "pendingApproval": null
+    });
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT INTO runtime_session_projections (
+                id, conversation_id, project_id, title, status, updated_at,
+                config_snapshot_id, effective_config_hash, started_from_scope_set, detail_json
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                "rt-legacy-selected-actor",
+                "conv-legacy-selected-actor",
+                "proj-redesign",
+                "Legacy Session",
+                "draft",
+                1_i64,
+                "cfgsnap-legacy",
+                "hash-legacy",
+                serde_json::to_string(&vec!["workspace", "project"]).expect("scope set"),
+                serde_json::to_string(&detail_json).expect("detail json"),
+            ],
+        )
+        .expect("insert legacy session projection");
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelExecutor),
+    );
+
+    let sessions = adapter.list_sessions().await.expect("sessions");
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].id, "rt-legacy-selected-actor");
+    assert_eq!(sessions[0].selected_actor_ref, "agent:agent-architect");
+
+    let detail = adapter
+        .get_session("rt-legacy-selected-actor")
+        .await
+        .expect("legacy session detail");
+    assert_eq!(detail.selected_actor_ref, "agent:agent-architect");
+    assert_eq!(detail.summary.selected_actor_ref, "agent:agent-architect");
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
 async fn quota_enabled_models_require_provider_token_usage_metadata() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
@@ -2178,6 +2425,7 @@ async fn quota_enabled_models_require_provider_token_usage_metadata() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(FixedTokenRuntimeModelExecutor { total_tokens: None }),
     );
 

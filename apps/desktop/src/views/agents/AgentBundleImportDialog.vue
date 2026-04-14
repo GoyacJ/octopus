@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Loader2 } from 'lucide-vue-next'
 
 import type {
   ImportIssue,
@@ -130,6 +131,17 @@ function issueTone(issue: ImportIssue): 'default' | 'success' | 'warning' | 'err
       tone="error"
       :description="props.errorMessage"
     />
+
+    <div
+      v-if="props.loading && !report && !props.errorMessage"
+      class="flex min-h-56 flex-col items-center justify-center gap-3 rounded-[var(--radius-l)] border border-border bg-surface-muted/60 px-6 py-10 text-center"
+    >
+      <Loader2 class="h-5 w-5 animate-spin text-primary" />
+      <div class="space-y-1">
+        <div class="text-sm font-semibold text-text-primary">正在分析导入内容</div>
+        <div class="text-xs text-text-secondary">已读取所选模板，正在生成导入预览，请稍候。</div>
+      </div>
+    </div>
 
     <div v-if="report" class="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
       <div class="space-y-4">

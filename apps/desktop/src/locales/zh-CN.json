@@ -9,6 +9,7 @@
     "selected": "已选中",
     "send": "发送",
     "approve": "批准",
+    "resolveAuth": "完成认证",
     "reject": "驳回",
     "saveDraft": "保存草稿",
     "requestReview": "发起审阅",
@@ -261,7 +262,6 @@
       "knowledge": "知识",
       "trace": "追踪",
       "projectSettings": "项目配置",
-      "runtime": "运行配置",
       "agents": "数字员工",
       "projects": "项目管理",
       "teams": "团队",
@@ -429,21 +429,128 @@
     "header": {
       "eyebrow": "项目控制台",
       "titleFallback": "项目仪表盘",
-      "subtitleFallback": "查看项目指标、动态与最近会话。"
+      "subtitleFallback": "查看项目指标、使用趋势、资源结构与最近会话。",
+      "meta": {
+        "members": "{count} 名成员",
+        "health": "{approvals} 个审批流转中"
+      }
     },
     "conversations": {
       "title": "最近会话"
     },
     "activity": {
-      "title": "最新项目动态"
+      "title": "最新项目动态",
+      "actorHelper": "{actor} • {outcome}"
+    },
+    "common": {
+      "system": "系统事件",
+      "unknown": "未知"
+    },
+    "metrics": {
+      "totalTokens": "Token 总量",
+      "totalTokensHint": "{records} 条使用记录",
+      "activeUsers": "活跃用户",
+      "activeUsersHint": "项目内共 {total} 名成员",
+      "agentTeamCapacity": "数字劳动力",
+      "agentTeamCapacityHint": "{agents} 名数字员工 • {teams} 个数字团队",
+      "sessions": "会话数",
+      "sessionsHint": "{messages} 条消息",
+      "toolCalls": "工具调用",
+      "toolCallsHint": "{tools} 个已配置工具",
+      "approvals": "审批次数",
+      "approvalsHint": "累计跟踪 {activity} 条项目动态",
+      "resources": "资源总量",
+      "resourcesHint": "{knowledge} 条知识内容",
+      "messages": "消息次数",
+      "messagesHint": "平均每个会话 {average}"
+    },
+    "sections": {
+      "usageTrend": {
+        "title": "使用趋势",
+        "subtitle": "跟踪最近运行窗口内的 Token 消耗、消息规模与工具活跃度。",
+        "cards": {
+          "tokens": "Token 体量",
+          "tokensHint": "当前项目窗口内的累计消耗。",
+          "messages": "消息体量",
+          "messagesHint": "包含全部项目对话与系统消息。",
+          "tools": "工具吞吐",
+          "toolsHint": "覆盖 builtin、skill 与 MCP 工具调用密度。"
+        }
+      },
+      "resourceMix": {
+        "title": "资源结构",
+        "subtitle": "查看项目资产在会话、资源、知识、团队与工具之间的分布。",
+        "total": "资产"
+      },
+      "topContributors": {
+        "title": "核心贡献者",
+        "subtitle": "按 Token 占比、活跃度与工具调用对项目成员进行对比。"
+      },
+      "approvalQueue": {
+        "title": "审批队列",
+        "subtitle": "突出待处理审批及其周边运行动态，便于及时介入。",
+        "cards": {
+          "approvals": "待处理审批",
+          "approvalsHint": "来自运行会话与审计事件的审批信号。",
+          "activity": "观测到的动态",
+          "activityHint": "与当前执行链路相关的最近项目操作。"
+        }
+      },
+      "toolUsage": {
+        "title": "工具使用",
+        "subtitle": "对驱动项目工作的工具与集成端点进行排行。"
+      },
+      "sessionRanking": {
+        "title": "会话排行",
+        "subtitle": "识别 Token 消耗和工具活跃度最高的会话。"
+      },
+      "recentSessions": {
+        "title": "最近会话",
+        "subtitle": "查看最新会话更新，并快速进入当前协作线程。",
+        "meta": "{status}"
+      },
+      "modelMix": {
+        "title": "模型占比",
+        "subtitle": "了解哪些配置模型贡献了项目 Token 消耗。",
+        "total": "Tokens"
+      },
+      "activity": {
+        "title": "项目动态",
+        "subtitle": "跟踪最新操作事件、审批流转与运行结果。"
+      }
+    },
+    "sessions": {
+      "rankingHelper": "{messages} 条消息 • {tools} 次工具调用"
+    },
+    "userSummary": {
+      "helper": "{activity} 次动态 • {tools} 次工具调用",
+      "cardHelper": "{activity} 次动态 • {messages} 条消息"
+    },
+    "breakdown": {
+      "items": {
+        "resources": "资源",
+        "knowledge": "知识",
+        "agents": "数字员工",
+        "teams": "数字团队",
+        "tools": "工具",
+        "sessions": "会话"
+      }
     },
     "empty": {
+      "snapshotTitle": "项目快照暂不可用",
+      "snapshotDescription": "当前还没有拿到仪表盘快照，待项目数据同步完成后再试。",
       "conversationsTitle": "暂无项目会话",
       "conversationsDescription": "项目运行态会话启动后，这里会展示最近会话。",
       "activityTitle": "暂无项目动态",
       "activityDescription": "当前项目还没有任何操作日志。",
       "rankingTitle": "暂无会话排行",
-      "rankingDescription": "没有足够的数据进行排行。"
+      "rankingDescription": "没有足够的数据进行排行。",
+      "usersTitle": "暂无成员分析",
+      "usersDescription": "项目成员开始协作后，这里会显示用户活跃度与 Token 分配情况。",
+      "toolsTitle": "暂无工具活跃数据",
+      "toolsDescription": "项目开始调用工具或 MCP 端点后，这里会生成工具排行。",
+      "sessionsTitle": "暂无会话洞察",
+      "sessionsDescription": "积累足够的运行数据后，这里会展示会话排行。"
     },
     "info": {
       "title": "项目详情",
@@ -498,23 +605,6 @@
       "activity": "活动数"
     }
   },
-  "projectRuntime": {
-    "header": {
-      "eyebrow": "项目运行配置",
-      "title": "项目运行配置",
-      "subtitle": "管理当前项目的 runtime override，同时避免暴露宿主机真实路径。"
-    },
-    "editor": {
-      "title": "项目覆盖配置",
-      "description": "编辑当前项目的 runtime override 文档。"
-    },
-    "effective": {
-      "title": "项目 Effective 预览",
-      "description": "预览从当前项目启动新 session 时会使用的合并配置。"
-    },
-    "emptyTitle": "当前无法读取项目运行配置",
-    "emptyDescription": "当前项目还没有可用的运行配置。"
-  },
   "projectSettings": {
     "header": {
       "eyebrow": "项目配置",
@@ -541,6 +631,11 @@
       "allowedHint": "项目只允许在这里勾选的工作区模型参与运行。",
       "defaultLabel": "默认模型",
       "defaultHint": "未显式指定模型时，将使用这里的默认模型。",
+      "totalTokensLabel": "Token 总量",
+      "totalTokensHint": "留空表示当前项目不限量。",
+      "totalTokensPlaceholder": "留空表示不限量",
+      "usedTokensLabel": "已使用量",
+      "usedTokensHint": "只读展示当前项目的 Token 使用量。",
       "saveError": "保存项目模型配置失败。",
       "emptyTitle": "当前工作区还没有可用模型",
       "emptyDescription": "请先在工作区模型页完成模型配置，再回到项目配置页选择。",
@@ -1292,7 +1387,6 @@
       "general": "通用设置",
       "connection": "连接配置",
       "theme": "外观设置",
-      "runtime": "运行配置",
       "version": "版本与更新"
     },
     "preferences": {
@@ -1488,6 +1582,10 @@
       "total": "数字员工总数",
       "active": "启用中的数字员工"
     },
+    "status": {
+      "active": "启用",
+      "archived": "禁用"
+    },
     "empty": {
       "workspaceTitle": "暂无工作区数字员工",
       "workspaceDescription": "创建第一个可复用的工作区数字员工。",
@@ -1595,6 +1693,8 @@
       "name": "项目名称",
       "description": "项目说明",
       "resourceDirectory": "资源目录",
+      "totalTokens": "Token 总量",
+      "usedTokens": "已使用量",
       "models": "已分配模型",
       "defaultModel": "默认模型",
       "tools": "已分配工具",
@@ -1604,6 +1704,8 @@
     "hints": {
       "resourceDirectoryLocal": "本地连接时可通过系统文件管理器选择项目资源目录。",
       "resourceDirectoryRemote": "远程连接时必须通过远程目录浏览器选择项目资源目录。",
+      "totalTokens": "设置当前项目允许使用的 Token 总量上限。",
+      "usedTokens": "只读显示当前项目已经消耗的 Token 总量。",
       "models": "项目配置页只能在这里选中的模型范围内继续细化。",
       "defaultModel": "这里的默认模型会作为项目级默认模型的初始范围。",
       "tools": "从工作区工具目录中选择 builtin、skill、mcp 工具。",

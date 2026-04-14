@@ -401,12 +401,15 @@ pub fn pick_skill_folder() -> Result<Option<Vec<Vec<WorkspaceDirectoryUploadEntr
 }
 
 #[tauri::command]
-pub fn pick_agent_bundle_folder() -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, String> {
+pub async fn pick_agent_bundle_folder() -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, String> {
     let Some(path) = FileDialog::new().pick_folder() else {
         return Ok(None);
     };
 
-    Ok(Some(read_folder_entries(&path, &path)?))
+    tauri::async_runtime::spawn_blocking(move || read_folder_entries(&path, &path))
+        .await
+        .map_err(|error| error.to_string())?
+        .map(Some)
 }
 
 fn read_archive_entries(path: &Path) -> Result<Vec<WorkspaceDirectoryUploadEntry>, String> {
@@ -448,7 +451,7 @@ fn read_archive_entries(path: &Path) -> Result<Vec<WorkspaceDirectoryUploadEntry
 }
 
 #[tauri::command]
-pub fn pick_agent_bundle_archive() -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, String> {
+pub async fn pick_agent_bundle_archive() -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, String> {
     let Some(path) = FileDialog::new()
         .add_filter("Agent bundle archive", &["zip"])
         .pick_file()
@@ -456,7 +459,10 @@ pub fn pick_agent_bundle_archive() -> Result<Option<Vec<WorkspaceDirectoryUpload
         return Ok(None);
     };
 
-    Ok(Some(read_archive_entries(&path)?))
+    tauri::async_runtime::spawn_blocking(move || read_archive_entries(&path))
+        .await
+        .map_err(|error| error.to_string())?
+        .map(Some)
 }
 
 fn decode_directory_entry(entry: &WorkspaceDirectoryUploadEntry) -> Result<Vec<u8>, String> {
@@ -482,13 +488,15 @@ fn write_bundle_entries(
 }
 
 #[tauri::command]
-pub fn save_agent_bundle_folder(
+pub async fn save_agent_bundle_folder(
     export_payload: ExportWorkspaceAgentBundleResult,
 ) -> Result<(), String> {
     let Some(root) = FileDialog::new().pick_folder() else {
         return Ok(());
     };
-    write_bundle_entries(&root, &export_payload.files)
+    tauri::async_runtime::spawn_blocking(move || write_bundle_entries(&root, &export_payload.files))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 fn build_bundle_archive_bytes(
@@ -514,12 +522,16 @@ fn build_bundle_archive_bytes(
 }
 
 #[tauri::command]
-pub fn save_agent_bundle_zip(
+pub async fn save_agent_bundle_zip(
     export_payload: ExportWorkspaceAgentBundleResult,
 ) -> Result<(), String> {
     let suggested_name = format!("{}.zip", export_payload.root_dir_name);
     let Some(path) = FileDialog::new().set_file_name(&suggested_name).save_file() else {
         return Ok(());
     };
-    fs::write(path, build_bundle_archive_bytes(&export_payload)?).map_err(|error| error.to_string())
+    tauri::async_runtime::spawn_blocking(move || {
+        fs::write(path, build_bundle_archive_bytes(&export_payload)?).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }

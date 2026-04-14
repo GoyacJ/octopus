@@ -28,11 +28,10 @@ use runtime::{
     read_file,
     summary_compression::compress_summary_text,
     write_file, ApiClient, ApiRequest, AssistantEvent, BashCommandInput, BashCommandOutput,
-    BranchFreshness, ContentBlock, ConversationMessage, ConversationRuntime,
-    GrepSearchInput, LaneCommitProvenance, LaneEvent, LaneEventBlocker, LaneEventName,
-    LaneEventStatus, LaneFailureClass, McpDegradedReport, MessageRole, PermissionMode,
-    PermissionPolicy, PromptCacheEvent, RuntimeError, Session, ToolError,
-    ToolExecutionOutcome, ToolExecutor,
+    BranchFreshness, ContentBlock, ConversationMessage, ConversationRuntime, GrepSearchInput,
+    LaneCommitProvenance, LaneEvent, LaneEventBlocker, LaneEventName, LaneEventStatus,
+    LaneFailureClass, McpDegradedReport, MessageRole, PermissionMode, PermissionPolicy,
+    PromptCacheEvent, RuntimeError, Session, ToolError, ToolExecutionOutcome, ToolExecutor,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -84,10 +83,9 @@ pub(crate) use fs_shell::{
 pub(crate) use lsp_runtime::{run_lsp, LspInput};
 #[allow(unused_imports)]
 pub(crate) use subagent_runtime::{
-    agent_permission_policy, allowed_tools_for_subagent, classify_lane_failure,
-    derive_agent_state, final_assistant_text, iso8601_now, maybe_commit_provenance,
-    persist_agent_terminal_state, push_output_block, spawn_subagent_job, spawn_subagent_task,
-    spawn_subagent_with_job,
+    agent_permission_policy, allowed_tools_for_subagent, classify_lane_failure, derive_agent_state,
+    final_assistant_text, iso8601_now, maybe_commit_provenance, persist_agent_terminal_state,
+    push_output_block, spawn_subagent_job, spawn_subagent_task, spawn_subagent_with_job,
     spawn_subagent_with_job_detailed, AgentInput, AgentJob, AgentOutput, AgentSpawnFailure,
     SubagentToolExecutor,
 };

@@ -1350,21 +1350,27 @@ export function createWorkspaceClientFixture(
   const buildAgentBundleExport = (
     input: ExportWorkspaceAgentBundleInput,
   ): ExportWorkspaceAgentBundleResult => {
-    const rootDirName = input.mode === 'single' ? 'agent-bundle-single' : 'agent-bundle-batch'
+    const rootDirName = input.mode === 'single'
+      ? input.agentIds[0] || input.teamIds[0] || 'templates'
+      : 'templates'
     const files = [
-      ...input.agentIds.map((agentId, index) => ({
+      ...input.agentIds.map((agentId) => ({
         fileName: `${agentId}.md`,
         contentType: 'text/markdown',
         byteSize: 64,
         dataBase64: btoa(`# ${agentId}\n`),
-        relativePath: `${rootDirName}/agents/${index + 1}-${agentId}/${agentId}.md`,
+        relativePath: input.mode === 'single'
+          ? `${rootDirName}/${agentId}.md`
+          : `templates/${agentId}/${agentId}.md`,
       })),
-      ...input.teamIds.map((teamId, index) => ({
-        fileName: `${teamId}.md`,
+      ...input.teamIds.map((teamId) => ({
+        fileName: `${teamId}说明.md`,
         contentType: 'text/markdown',
         byteSize: 64,
         dataBase64: btoa(`# ${teamId}\n`),
-        relativePath: `${rootDirName}/teams/${index + 1}-${teamId}/${teamId}.md`,
+        relativePath: input.mode === 'single'
+          ? `${rootDirName}/${teamId}说明.md`
+          : `templates/${teamId}/${teamId}说明.md`,
       })),
     ]
 
@@ -1618,6 +1624,7 @@ export function createWorkspaceClientFixture(
         workspaceState.projects = [...workspaceState.projects, project]
         workspaceState.dashboards[project.id] = {
           project: clone(project),
+          usedTokens: 0,
           metrics: [],
           recentConversations: [],
           recentActivity: [],
@@ -3235,6 +3242,30 @@ export function createWorkspaceClientFixture(
       async submitUserTurn(sessionId, input) {
         const state = ensureRuntimeState(sessionId)
         const permissionMode = resolveRuntimePermissionMode(input.permissionMode ?? 'read-only')
+        const baseSelectedMemory = state.detail.run.selectedMemory ?? []
+        const ignoredMemoryIds = new Set(input.ignoredMemoryIds ?? [])
+        const selectedMemory = input.recallMode === 'skip'
+          ? []
+          : baseSelectedMemory.filter(item => !ignoredMemoryIds.has(item.memoryId))
+        const freshnessSummary = {
+          freshnessRequired: true,
+          freshCount: selectedMemory.filter(item => item.freshnessState === 'fresh').length,
+          staleCount: selectedMemory.filter(item => item.freshnessState !== 'fresh').length,
+        }
+        const pendingMemoryProposal = input.memoryIntent
+          ? {
+              proposalId: `memory-proposal-${state.detail.summary.conversationId}`,
+              sessionId,
+              sourceRunId: state.detail.run.id,
+              memoryId: `mem-${state.detail.summary.conversationId}-${input.memoryIntent}`,
+              title: `${input.memoryIntent} memory proposal`,
+              summary: `Capture ${input.memoryIntent} durable memory from the latest user turn.`,
+              kind: input.memoryIntent,
+              scope: state.detail.summary.projectId ? 'project' : 'user',
+              proposalState: 'pending',
+              proposalReason: 'user-feedback',
+            }
+          : undefined
         const configuredModelId = state.detail.summary.sessionPolicy.selectedConfiguredModelId
         const configuredModel = workspaceState.catalog.configuredModels.find(model => model.configuredModelId === configuredModelId)
         const registryModelId = configuredModel?.modelId ?? state.detail.run.modelId ?? 'claude-sonnet-4-5'
@@ -3255,6 +3286,14 @@ export function createWorkspaceClientFixture(
         state.detail.messages.push(userMessage)
         state.detail.summary.lastMessagePreview = input.content
         state.detail.summary.updatedAt = userMessage.timestamp
+        state.detail.summary.memorySelectionSummary = {
+          totalCandidateCount: baseSelectedMemory.length,
+          selectedCount: selectedMemory.length,
+          ignoredCount: ignoredMemoryIds.size,
+          recallMode: input.recallMode ?? 'default',
+          selectedMemoryIds: selectedMemory.map(item => item.memoryId),
+        }
+        state.detail.summary.pendingMemoryProposalCount = pendingMemoryProposal ? 1 : 0
         state.events.push(createEvent(state, workspaceState.workspace.id, 'runtime.message.created', { message: clone(userMessage) }))
 
         const requiresApproval = permissionMode === 'workspace-write'
@@ -3270,6 +3309,9 @@ export function createWorkspaceClientFixture(
             status: 'waiting_approval',
             currentStep: 'runtime.run.waitingApproval',
             updatedAt: approval.createdAt,
+            selectedMemory: clone(selectedMemory),
+            freshnessSummary: clone(freshnessSummary),
+            pendingMemoryProposal: pendingMemoryProposal ? clone(pendingMemoryProposal) : undefined,
             configuredModelId,
             configuredModelName,
             modelId: registryModelId,
@@ -3315,6 +3357,9 @@ export function createWorkspaceClientFixture(
           status: 'running',
           currentStep: 'runtime.run.processing',
           updatedAt: assistantMessage.timestamp,
+          selectedMemory: clone(selectedMemory),
+          freshnessSummary: clone(freshnessSummary),
+          pendingMemoryProposal: pendingMemoryProposal ? clone(pendingMemoryProposal) : undefined,
           configuredModelId,
           configuredModelName,
           modelId: registryModelId,
@@ -3330,6 +3375,20 @@ export function createWorkspaceClientFixture(
         state.detail.summary.updatedAt = assistantMessage.timestamp
         state.events.push(createEvent(state, workspaceState.workspace.id, 'runtime.message.created', { message: clone(assistantMessage) }))
         state.events.push(createEvent(state, workspaceState.workspace.id, 'runtime.trace.emitted', { trace: clone(trace) }))
+        if (selectedMemory.length > 0) {
+          state.events.push(createEvent(state, workspaceState.workspace.id, 'memory.selected', {
+            selectedMemory: clone(selectedMemory),
+            memorySelectionSummary: clone(state.detail.summary.memorySelectionSummary),
+            freshnessSummary: clone(freshnessSummary),
+            run: clone(state.detail.run),
+          }))
+        }
+        if (pendingMemoryProposal) {
+          state.events.push(createEvent(state, workspaceState.workspace.id, 'memory.proposed', {
+            memoryProposal: clone(pendingMemoryProposal),
+            run: clone(state.detail.run),
+          }))
+        }
         state.detail.run = {
           ...state.detail.run,
           status: 'completed',
@@ -3395,6 +3454,49 @@ export function createWorkspaceClientFixture(
           state.events.push(createEvent(state, workspaceState.workspace.id, 'runtime.message.created', { message: clone(assistantMessage) }))
           state.events.push(createEvent(state, workspaceState.workspace.id, 'runtime.trace.emitted', { trace: clone(trace) }))
         }
+      },
+      async resolveMemoryProposal(sessionId, proposalId, input) {
+        const state = ensureRuntimeState(sessionId)
+        const pendingProposal = state.detail.run.pendingMemoryProposal
+        if (!pendingProposal || pendingProposal.proposalId !== proposalId) {
+          return
+        }
+
+        const reviewedAt = Date.now()
+        const proposalState = input.decision === 'approve'
+          ? 'approved'
+          : input.decision === 'revalidate'
+            ? 'revalidated'
+            : input.decision === 'ignore'
+              ? 'ignored'
+              : 'rejected'
+
+        state.detail.run = {
+          ...state.detail.run,
+          pendingMemoryProposal: {
+            ...pendingProposal,
+            proposalState,
+            review: {
+              decision: input.decision,
+              note: input.note,
+              reviewedAt,
+            },
+          },
+        }
+        state.detail.summary.pendingMemoryProposalCount = proposalState === 'pending' ? 1 : 0
+        state.events.push(createEvent(
+          state,
+          workspaceState.workspace.id,
+          input.decision === 'approve'
+            ? 'memory.approved'
+            : input.decision === 'revalidate'
+              ? 'memory.revalidated'
+              : 'memory.rejected',
+          {
+            memoryProposal: clone(state.detail.run.pendingMemoryProposal),
+            run: clone(state.detail.run),
+          },
+        ))
       },
     },
   }

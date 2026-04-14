@@ -13,7 +13,7 @@
     "prepare:desktop-backend:dev": "node scripts/prepare-desktop-backend.mjs",
     "prepare:desktop-backend:sidecar": "node scripts/prepare-desktop-sidecar.mjs",
     "clean:desktop-shell": "cargo clean -p octopus-desktop-shell",
-    "prepare:agent-bundle-seed": "node scripts/prepare-agent-bundle-seed.mjs",
+    "prepare:template-snapshots": "node scripts/prepare-template-snapshots.mjs",
     "dev:web": "node scripts/dev-web.mjs",
     "dev:backend": "node scripts/run-desktop-backend.mjs",
     "build": "pnpm -C apps/desktop build:ui",

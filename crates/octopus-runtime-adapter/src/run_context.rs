@@ -1,15 +1,20 @@
 use super::*;
+use octopus_core::RuntimeTargetPolicyDecision;
 
 #[derive(Debug, Clone)]
 pub(crate) struct RunContext {
     pub(crate) session_id: String,
     pub(crate) conversation_id: String,
+    pub(crate) run_id: String,
     pub(crate) actor_manifest: actor_manifest::CompiledActorManifest,
     pub(crate) requested_permission_mode: String,
     pub(crate) resolved_target: ResolvedExecutionTarget,
     pub(crate) configured_model: ConfiguredModelRecord,
     pub(crate) capability_plan_summary: RuntimeCapabilityPlanSummary,
     pub(crate) provider_state_summary: Vec<RuntimeCapabilityProviderState>,
+    pub(crate) auth_state_summary: RuntimeAuthStateSummary,
+    pub(crate) policy_decision_summary: RuntimePolicyDecisionSummary,
+    pub(crate) provider_auth_policy_decision: Option<RuntimeTargetPolicyDecision>,
     pub(crate) capability_state_ref: String,
     pub(crate) memory_selection: memory_selector::RuntimeMemorySelection,
     pub(crate) pending_memory_proposal: Option<RuntimeMemoryProposal>,
@@ -24,7 +29,13 @@ impl RuntimeAdapter {
         input: &SubmitRuntimeTurnInput,
         now: u64,
     ) -> Result<RunContext, AppError> {
-        let (conversation_id, project_id, session_policy_snapshot_ref, run_id, capability_state_ref) = {
+        let (
+            conversation_id,
+            project_id,
+            session_policy_snapshot_ref,
+            run_id,
+            capability_state_ref,
+        ) = {
             let sessions = self
                 .state
                 .sessions
@@ -60,6 +71,7 @@ impl RuntimeAdapter {
         let capability_projection = self
             .project_capability_state_async(
                 &actor_manifest,
+                &session_policy,
                 &session_policy.config_snapshot_id,
                 capability_state_ref.clone(),
                 &capability_store,
@@ -75,16 +87,24 @@ impl RuntimeAdapter {
             input,
             &memory_selection.selected_memory,
         );
+        let provider_auth_policy_decision = session_policy
+            .target_decisions
+            .get(&format!("provider-auth:{}", actor_manifest.actor_ref()))
+            .cloned();
 
         Ok(RunContext {
             session_id: session_id.to_string(),
             conversation_id,
+            run_id,
             actor_manifest,
             requested_permission_mode,
             resolved_target,
             configured_model,
             capability_plan_summary: capability_projection.plan_summary,
             provider_state_summary: capability_projection.provider_state_summary,
+            auth_state_summary: capability_projection.auth_state_summary,
+            policy_decision_summary: capability_projection.policy_decision_summary,
+            provider_auth_policy_decision,
             capability_state_ref: capability_projection.capability_state_ref,
             memory_selection,
             pending_memory_proposal,

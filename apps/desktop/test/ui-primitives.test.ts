@@ -83,7 +83,7 @@ function createInboxItem(overrides: Partial<InboxItemRecord> = {}): InboxItemRec
     status: 'pending',
     priority: 'high',
     actionable: true,
-    routeTo: '/workspaces/ws-local/projects/proj-redesign/runtime',
+    routeTo: '/workspaces/ws-local/projects/proj-redesign/settings',
     actionLabel: 'Review approval',
     createdAt: 1,
     ...overrides,
@@ -255,24 +255,73 @@ describe('Shared UI primitives', () => {
     wrapper.unmount()
   })
   it('renders UiDropdownMenu items and emits selection', async () => {
-    const wrapper = mount(UiDropdownMenu, {
-      attachTo: document.body,
-      props: {
-        open: true,
-        items: [
-          { key: 'rename', label: 'Rename' },
-          { key: 'delete', label: 'Delete', tone: 'danger' },
-        ],
+    const Demo = defineComponent({
+      components: { UiDropdownMenu },
+      setup() {
+        const open = ref(false)
+        const selected = ref('')
+        return { open, selected }
       },
-      slots: {
-        trigger: '<button type="button">Open</button>',
-      },
+      template: `
+        <UiDropdownMenu
+          v-model:open="open"
+          :items="[
+            { key: 'rename', label: 'Rename' },
+            { key: 'delete', label: 'Delete', tone: 'danger' },
+          ]"
+          @select="selected = $event"
+        >
+          <template #trigger>
+            <button type="button" data-testid="dropdown-trigger">Open</button>
+          </template>
+        </UiDropdownMenu>
+      `,
     })
 
-    await wrapper.get('[data-testid="ui-dropdown-item-delete"]').trigger('click')
+    const wrapper = mount(Demo, {
+      attachTo: document.body,
+    })
 
-    expect(wrapper.emitted('select')).toEqual([['delete']])
-    expect(wrapper.emitted('update:open')).toEqual([[false]])
+    await wrapper.get('[data-testid="dropdown-trigger"]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const deleteItem = document.body.querySelector('[data-testid="ui-dropdown-item-delete"]') as HTMLElement | null
+    expect(deleteItem).not.toBeNull()
+    deleteItem?.click()
+
+    expect(wrapper.vm.selected).toBe('delete')
+    wrapper.unmount()
+  })
+
+  it('opens UiDropdownMenu from its trigger in controlled mode', async () => {
+    const Demo = defineComponent({
+      components: { UiDropdownMenu },
+      setup() {
+        const open = ref(false)
+        return { open }
+      },
+      template: `
+        <UiDropdownMenu
+          v-model:open="open"
+          :items="[{ key: 'export-folder', label: 'Export folder' }]"
+        >
+          <template #trigger>
+            <button type="button" data-testid="dropdown-trigger">Open menu</button>
+          </template>
+        </UiDropdownMenu>
+      `,
+    })
+
+    const wrapper = mount(Demo, {
+      attachTo: document.body,
+    })
+
+    await wrapper.get('[data-testid="dropdown-trigger"]').trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.vm.open).toBe(true)
+    expect(document.body.textContent).toContain('Export folder')
+
     wrapper.unmount()
   })
 
@@ -501,6 +550,28 @@ describe('Shared UI primitives', () => {
 
     expect(wrapper.emitted('update:modelValue')).toEqual([['architect']])
     expect(wrapper.emitted('select')).toEqual([['architect']])
+    wrapper.unmount()
+  })
+
+  it('renders the selected UiCombobox label instead of the raw value', async () => {
+    const wrapper = mount(UiCombobox, {
+      attachTo: document.body,
+      props: {
+        modelValue: 'agent-7849d6eq',
+        options: [
+          { value: 'agent-7849d6eq', label: '产品负责人', keywords: ['product'] },
+          { value: 'agent-analyst', label: '市场研究员', keywords: ['research'] },
+        ],
+      },
+    })
+
+    const input = wrapper.get('[data-testid="ui-combobox-input"]')
+    expect((input.element as HTMLInputElement).value).toBe('产品负责人')
+
+    await input.trigger('focus')
+    await wrapper.vm.$nextTick()
+
+    expect((input.element as HTMLInputElement).value).toBe('产品负责人')
     wrapper.unmount()
   })
 

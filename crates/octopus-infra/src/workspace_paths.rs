@@ -31,6 +31,8 @@ pub struct WorkspacePaths {
     pub runtime_events_dir: PathBuf,
     pub runtime_traces_dir: PathBuf,
     pub runtime_approvals_dir: PathBuf,
+    pub runtime_checkpoints_dir: PathBuf,
+    pub runtime_mediation_checkpoints_dir: PathBuf,
     pub runtime_cache_dir: PathBuf,
     pub audit_log_dir: PathBuf,
     pub server_log_dir: PathBuf,
@@ -61,6 +63,8 @@ impl WorkspacePaths {
         let runtime_events_dir = runtime_dir.join("events");
         let runtime_traces_dir = runtime_dir.join("traces");
         let runtime_approvals_dir = runtime_dir.join("approvals");
+        let runtime_checkpoints_dir = runtime_dir.join("checkpoints");
+        let runtime_mediation_checkpoints_dir = runtime_checkpoints_dir.join("mediation");
         let runtime_cache_dir = runtime_dir.join("cache");
         let audit_log_dir = logs_dir.join("audit");
         let server_log_dir = logs_dir.join("server");
@@ -93,6 +97,8 @@ impl WorkspacePaths {
             runtime_events_dir,
             runtime_traces_dir,
             runtime_approvals_dir,
+            runtime_checkpoints_dir,
+            runtime_mediation_checkpoints_dir,
             runtime_cache_dir,
             audit_log_dir,
             server_log_dir,
@@ -124,6 +130,8 @@ impl WorkspacePaths {
             &self.runtime_events_dir,
             &self.runtime_traces_dir,
             &self.runtime_approvals_dir,
+            &self.runtime_checkpoints_dir,
+            &self.runtime_mediation_checkpoints_dir,
             &self.runtime_cache_dir,
             &self.audit_log_dir,
             &self.server_log_dir,

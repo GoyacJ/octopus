@@ -7,6 +7,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import App from '@/App.vue'
 import i18n from '@/plugins/i18n'
 import { router } from '@/router'
+import { useNotificationStore } from '@/stores/notifications'
 import { useWorkspaceStore } from '@/stores/workspace'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 
@@ -222,9 +223,58 @@ describe('Project settings view', () => {
     mounted.destroy()
   })
 
+  it('shows and saves project token quota in the models tab', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const projectSource = state.runtimeProjectConfigs['proj-redesign']?.sources.find(source => source.scope === 'project')
+        const projectDocument = (projectSource?.document ?? {}) as Record<string, any>
+        projectSource!.document = projectDocument
+        const projectSettings = (projectDocument.projectSettings ??= {}) as Record<string, any>
+        const models = (projectSettings.models ??= {}) as Record<string, any>
+
+        models.totalTokens = 500000
+        ;(state.dashboards['proj-redesign'] as Record<string, any>).usedTokens = 125000
+      },
+    })
+
+    const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
+    const workspaceStore = useWorkspaceStore()
+
+    await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-models"]')?.click()
+    await waitFor(() => mounted.container.querySelector('[data-testid="project-settings-total-tokens-input"]') !== null)
+
+    const totalTokensInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="project-settings-total-tokens-input"]')
+    const saveButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="project-settings-models-save-button"]')
+
+    expect(totalTokensInput).not.toBeNull()
+    expect(saveButton).not.toBeNull()
+    expect(totalTokensInput?.value).toBe('500000')
+    expect(mounted.container.querySelector('[data-testid="project-settings-used-tokens-value"]')?.textContent).toContain('125,000')
+
+    totalTokensInput!.value = '750000'
+    totalTokensInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    totalTokensInput!.dispatchEvent(new Event('change', { bubbles: true }))
+    await nextTick()
+
+    saveButton?.click()
+
+    await waitFor(() => workspaceStore.getProjectSettings('proj-redesign').models?.totalTokens === 750000)
+
+    expect(mounted.container.querySelector('[data-testid="project-settings-used-tokens-value"]')?.textContent).toContain('125,000')
+
+    mounted.destroy()
+  })
+
   it('saves workspace and builtin actor selections back into project assignments and runtime settings', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/settings')
     const workspaceStore = useWorkspaceStore()
+    const notificationStore = useNotificationStore()
 
     await waitForSelector(mounted.container, '[data-testid="project-settings-view"]')
 
@@ -255,6 +305,12 @@ describe('Project settings view', () => {
     expect(project?.assignments?.agents?.teamIds).toEqual(['team-studio', 'team-template-finance'])
     expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledAgentIds).toEqual(['agent-architect', 'agent-template-finance'])
     expect(workspaceStore.getProjectSettings('proj-redesign').agents?.enabledTeamIds).toEqual(['team-studio', 'team-template-finance'])
+    expect(
+      notificationStore.notificationsState.some(notification =>
+        notification.title.includes('保存完成')
+        && (notification.body?.includes('Desktop Redesign') ?? false),
+      ),
+    ).toBe(true)
 
     mounted.destroy()
   })

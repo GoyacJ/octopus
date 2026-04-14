@@ -14,7 +14,8 @@ pub(crate) fn apply_team_runtime_projection(
         &mailbox_ref,
         now,
     );
-    let handoffs = handoff_runtime::build_handoff_projection(&detail.run, &subruns, &mailbox_ref, now);
+    let handoffs =
+        handoff_runtime::build_handoff_projection(&detail.run, &subruns, &mailbox_ref, now);
     let mailbox = mailbox_runtime::build_mailbox_summary(
         &mailbox_ref,
         &detail.run.status,

@@ -14,6 +14,17 @@ pub(crate) fn memory_proposal_decision_status(decision: &str) -> Result<&'static
     memory_runtime::memory_proposal_state_from_decision(decision)
 }
 
+pub(crate) fn auth_challenge_resolution_status(resolution: &str) -> Result<&'static str, AppError> {
+    match resolution {
+        "resolved" => Ok("resolved"),
+        "failed" => Ok("failed"),
+        "cancelled" => Ok("cancelled"),
+        _ => Err(AppError::invalid_input(
+            "auth challenge resolution must be resolved, failed, or cancelled",
+        )),
+    }
+}
+
 pub(super) async fn resolve_approval(
     adapter: &RuntimeAdapter,
     session_id: &str,
@@ -24,6 +35,21 @@ pub(super) async fn resolve_approval(
         adapter,
         session_id,
         approval_id,
+        input,
+    )
+    .await
+}
+
+pub(super) async fn resolve_auth_challenge(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    challenge_id: &str,
+    input: ResolveRuntimeAuthChallengeInput,
+) -> Result<RuntimeRunSnapshot, AppError> {
+    agent_runtime_core::AgentRuntimeCore::resolve_auth_challenge(
+        adapter,
+        session_id,
+        challenge_id,
         input,
     )
     .await

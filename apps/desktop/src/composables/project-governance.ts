@@ -68,5 +68,5 @@ export function projectModuleForRouteName(
 }
 
 export function isProjectOwnerOnlyRoute(routeName?: string | null): boolean {
-  return routeName === 'project-settings' || routeName === 'project-runtime'
+  return routeName === 'project-settings'
 }

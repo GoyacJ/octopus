@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue'
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute } from 'vue-router'
 
@@ -9,6 +9,7 @@ import {
   UiPageHeader,
   UiPageShell,
   UiPanelFrame,
+  UiRankingList,
   UiRecordCard,
   UiTimelineList,
 } from '@octopus/ui'
@@ -24,25 +25,28 @@ const route = useRoute()
 const workspaceStore = useWorkspaceStore()
 
 async function loadOverview() {
-  await workspaceStore.bootstrap()
   const projectId = typeof route.query.project === 'string' ? route.query.project : workspaceStore.currentProjectId
   if (projectId) {
     await workspaceStore.loadProjectDashboard(projectId)
   }
 }
 
-onMounted(() => {
+watch(() => [route.query.project, workspaceStore.activeConnectionId], () => {
   void loadOverview()
-})
-
-watch(() => route.query.project, () => {
-  void loadOverview()
-})
+}, { immediate: true })
 
 const snapshot = computed(() => workspaceStore.activeOverview)
 const metrics = computed(() => snapshot.value?.metrics ?? [])
 const projects = computed(() => snapshot.value?.projects ?? [])
 const conversations = computed(() => snapshot.value?.recentConversations ?? [])
+const projectTokenUsage = computed(() =>
+  (snapshot.value?.projectTokenUsage ?? []).map(item => ({
+    id: item.projectId,
+    label: item.projectName,
+    value: item.usedTokens.toLocaleString(),
+    ratio: undefined,
+  })),
+)
 const activities = computed(() =>
   (snapshot.value?.recentActivity ?? []).map(item => ({
     id: item.id,
@@ -118,22 +122,41 @@ function resolveMetricTone(tone?: string): MetricTone {
         />
       </UiPanelFrame>
 
-      <UiPanelFrame
-        variant="subtle"
-        padding="md"
-        :title="t('overview.activity.title')"
-      >
-        <UiTimelineList
-          v-if="activities.length"
-          :items="activities"
-          density="compact"
-        />
-        <UiEmptyState
-          v-else
-          :title="t('overview.empty.activityTitle')"
-          :description="t('overview.empty.activityDescription')"
-        />
-      </UiPanelFrame>
+      <div class="grid gap-4">
+        <UiPanelFrame
+          variant="subtle"
+          padding="md"
+          :title="t('overview.activity.title')"
+        >
+          <UiTimelineList
+            v-if="activities.length"
+            :items="activities"
+            density="compact"
+          />
+          <UiEmptyState
+            v-else
+            :title="t('overview.empty.activityTitle')"
+            :description="t('overview.empty.activityDescription')"
+          />
+        </UiPanelFrame>
+
+        <UiPanelFrame
+          variant="subtle"
+          padding="md"
+          :title="t('overview.sections.workspace.projectRanking')"
+        >
+          <UiRankingList
+            v-if="projectTokenUsage.length"
+            :items="projectTokenUsage"
+            class="gap-2"
+          />
+          <UiEmptyState
+            v-else
+            :title="t('overview.empty.rankingTitle')"
+            :description="t('overview.empty.rankingDescription')"
+          />
+        </UiPanelFrame>
+      </div>
     </section>
 
     <UiPanelFrame

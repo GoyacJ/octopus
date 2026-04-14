@@ -61,7 +61,10 @@ impl RuntimeSessionService for RuntimeAdapter {
             &snapshot,
             input.selected_configured_model_id.as_deref(),
             &input.execution_permission_mode,
-        )?;
+            user_id,
+            Some(&project_id),
+        )
+        .await?;
         self.persist_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref, &manifest)?;
         self.persist_session_policy_snapshot(
             &session_policy.session_policy_snapshot_ref,
@@ -71,6 +74,7 @@ impl RuntimeSessionService for RuntimeAdapter {
         let capability_projection = self
             .project_capability_state_async(
                 &manifest,
+                &session_policy,
                 &snapshot.id,
                 format!("{run_id}-capability-state"),
                 &tools::SessionCapabilityStore::default(),
@@ -107,7 +111,9 @@ impl RuntimeSessionService for RuntimeAdapter {
                 memory_state_ref: memory_state_ref.clone(),
                 capability_summary: capability_summary.clone(),
                 provider_state_summary: capability_projection.provider_state_summary.clone(),
+                auth_state_summary: capability_projection.auth_state_summary.clone(),
                 pending_mediation: None,
+                policy_decision_summary: capability_projection.policy_decision_summary.clone(),
                 capability_state_ref: Some(capability_projection.capability_state_ref.clone()),
                 last_execution_outcome: None,
             },
@@ -125,7 +131,9 @@ impl RuntimeSessionService for RuntimeAdapter {
             memory_state_ref: memory_state_ref.clone(),
             capability_summary: capability_summary.clone(),
             provider_state_summary: capability_projection.provider_state_summary.clone(),
+            auth_state_summary: capability_projection.auth_state_summary.clone(),
             pending_mediation: None,
+            policy_decision_summary: capability_projection.policy_decision_summary.clone(),
             capability_state_ref: Some(capability_projection.capability_state_ref.clone()),
             last_execution_outcome: None,
             run: RuntimeRunSnapshot {
@@ -159,25 +167,41 @@ impl RuntimeSessionService for RuntimeAdapter {
                 background_state: None,
                 worker_dispatch: None,
                 approval_state: "not-required".into(),
+                approval_target: None,
+                auth_target: None,
                 usage_summary: RuntimeUsageSummary::default(),
                 artifact_refs: Vec::new(),
                 trace_context: trace_context::runtime_trace_context(&session_id, None),
                 checkpoint: RuntimeRunCheckpoint {
+                    approval_layer: None,
+                    broker_decision: None,
+                    capability_id: None,
+                    checkpoint_artifact_ref: None,
                     serialized_session: json!({}),
                     current_iteration_index: 0,
                     usage_summary: RuntimeUsageSummary::default(),
                     pending_approval: None,
+                    pending_auth_challenge: None,
                     compaction_metadata: json!({}),
                     pending_mediation: None,
+                    provider_key: None,
+                    reason: None,
+                    required_permission: None,
+                    requires_approval: None,
+                    requires_auth: None,
+                    target_kind: None,
+                    target_ref: None,
                     capability_state_ref: Some(capability_projection.capability_state_ref.clone()),
                     capability_plan_summary: capability_summary.clone(),
                     last_execution_outcome: None,
+                    last_mediation_outcome: None,
                 },
                 capability_plan_summary: capability_summary,
                 provider_state_summary: capability_projection.provider_state_summary.clone(),
                 pending_mediation: None,
                 capability_state_ref: Some(capability_projection.capability_state_ref),
                 last_execution_outcome: None,
+                last_mediation_outcome: None,
                 resolved_target: None,
                 requested_actor_kind: Some(manifest.actor_kind_label().into()),
                 requested_actor_id: Some(input.selected_actor_ref.clone()),
@@ -213,6 +237,36 @@ impl RuntimeSessionService for RuntimeAdapter {
             .insert(0, session_id.clone());
         self.persist_session(&session_id, &aggregate)?;
 
+        let policy_event = RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "policy.session_compiled".into(),
+            kind: Some("policy.session_compiled".into()),
+            workspace_id: self.state.workspace_id.clone(),
+            project_id: optional_project_id(&detail.summary.project_id),
+            session_id: session_id.clone(),
+            conversation_id: detail.summary.conversation_id.clone(),
+            run_id: Some(detail.run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            outcome: Some("compiled".into()),
+            payload: Some(json!({
+                "sessionPolicy": detail.session_policy.clone(),
+                "policyDecisionSummary": detail.policy_decision_summary.clone(),
+                "summary": detail.summary.clone(),
+                "run": detail.run.clone(),
+            })),
+            run: Some(detail.run.clone()),
+            summary: Some(detail.summary.clone()),
+            capability_plan_summary: Some(detail.summary.capability_summary.clone()),
+            provider_state_summary: Some(detail.summary.provider_state_summary.clone()),
+            pending_mediation: detail.summary.pending_mediation.clone(),
+            capability_state_ref: detail.summary.capability_state_ref.clone(),
+            last_execution_outcome: detail.summary.last_execution_outcome.clone(),
+            last_mediation_outcome: detail.run.last_mediation_outcome.clone(),
+            ..Default::default()
+        };
+        self.emit_event(&session_id, policy_event).await?;
+
         let event = RuntimeEventEnvelope {
             id: format!("evt-{}", Uuid::new_v4()),
             event_type: "runtime.session.updated".into(),
@@ -231,6 +285,9 @@ impl RuntimeSessionService for RuntimeAdapter {
             actor_ref: Some(detail.run.actor_ref.clone()),
             tool_use_id: None,
             outcome: None,
+            approval_layer: None,
+            target_kind: None,
+            target_ref: None,
             payload: Some(json!({
                 "summary": detail.summary.clone(),
                 "run": detail.run.clone(),
@@ -243,6 +300,7 @@ impl RuntimeSessionService for RuntimeAdapter {
             selected_memory: Some(detail.run.selected_memory.clone()),
             trace: None,
             approval: None,
+            auth_challenge: None,
             decision: None,
             summary: Some(detail.summary.clone()),
             error: None,
@@ -251,6 +309,7 @@ impl RuntimeSessionService for RuntimeAdapter {
             pending_mediation: detail.summary.pending_mediation.clone(),
             capability_state_ref: detail.summary.capability_state_ref.clone(),
             last_execution_outcome: detail.summary.last_execution_outcome.clone(),
+            last_mediation_outcome: detail.run.last_mediation_outcome.clone(),
         };
         self.emit_event(&session_id, event).await?;
 

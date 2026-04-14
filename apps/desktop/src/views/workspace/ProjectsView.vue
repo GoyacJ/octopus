@@ -48,6 +48,7 @@ const form = reactive({
   resourceDirectory: '',
   configuredModelIds: [] as string[],
   defaultConfiguredModelId: '',
+  totalTokens: '',
   toolSourceKeys: [] as string[],
   agentIds: [] as string[],
   teamIds: [] as string[],
@@ -65,6 +66,14 @@ const viewReady = computed(() =>
 const selectedProject = computed(() =>
   projects.value.find(project => project.id === selectedProjectId.value) ?? null,
 )
+const selectedProjectSettings = computed(() =>
+  selectedProjectId.value ? workspaceStore.getProjectSettings(selectedProjectId.value) : {},
+)
+const selectedProjectDashboard = computed(() =>
+  selectedProjectId.value ? workspaceStore.getProjectDashboard(selectedProjectId.value) : null,
+)
+const usedTokens = computed(() => selectedProjectDashboard.value?.usedTokens ?? 0)
+const detailsError = ref('')
 const TOOL_GROUP_ORDER: WorkspaceToolKind[] = ['builtin', 'skill', 'mcp']
 const workspaceToolSections = computed<{ kind: WorkspaceToolKind, entries: CapabilityAssetManifest[] }[]>(() =>
   TOOL_GROUP_ORDER
@@ -99,7 +108,7 @@ watch(
     if (!connectionId) {
       return
     }
-    await workspaceStore.bootstrap(connectionId)
+    await workspaceStore.ensureWorkspaceBootstrap(connectionId)
     await Promise.all([
       catalogStore.load(connectionId),
       agentStore.load(connectionId),
@@ -127,6 +136,31 @@ watch(
 )
 
 watch(
+  () => [shell.activeWorkspaceConnectionId, selectedProjectId.value] as const,
+  async ([connectionId, projectId]) => {
+    if (!connectionId || !projectId) {
+      return
+    }
+    await Promise.all([
+      workspaceStore.loadProjectDashboard(projectId, connectionId),
+      workspaceStore.loadProjectRuntimeConfig(projectId, false, connectionId),
+    ])
+  },
+  { immediate: true },
+)
+
+watch(
+  () => `${selectedProjectId.value}|${selectedProjectSettings.value.models?.totalTokens ?? ''}|${usedTokens.value}`,
+  () => {
+    form.totalTokens = selectedProjectSettings.value.models?.totalTokens
+      ? String(selectedProjectSettings.value.models.totalTokens)
+      : ''
+    detailsError.value = ''
+  },
+  { immediate: true },
+)
+
+watch(
   () => [...form.configuredModelIds].join(','),
   (value) => {
     const selectedIds = value ? value.split(',').filter(Boolean) : []
@@ -149,9 +183,20 @@ function applyProject(projectId?: string) {
   form.resourceDirectory = project?.resourceDirectory ?? ''
   form.configuredModelIds = [...(project?.assignments?.models?.configuredModelIds ?? [])]
   form.defaultConfiguredModelId = project?.assignments?.models?.defaultConfiguredModelId ?? ''
+  form.totalTokens = projectSettingsTotalTokens(project?.id)
   form.toolSourceKeys = [...(project?.assignments?.tools?.sourceKeys ?? [])]
   form.agentIds = [...(project?.assignments?.agents?.agentIds ?? [])]
   form.teamIds = [...(project?.assignments?.agents?.teamIds ?? [])]
+  detailsError.value = ''
+}
+
+function projectSettingsTotalTokens(projectId?: string) {
+  if (!projectId) {
+    return ''
+  }
+
+  const totalTokens = workspaceStore.getProjectSettings(projectId).models?.totalTokens
+  return totalTokens ? String(totalTokens) : ''
 }
 
 function buildAssignments() {
@@ -183,7 +228,17 @@ async function submitProject() {
     return
   }
 
+  detailsError.value = ''
   const assignments = buildAssignments()
+  const totalTokens = (() => {
+    const trimmed = form.totalTokens.trim()
+    if (!trimmed) {
+      return undefined
+    }
+
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : undefined
+  })()
 
   if (selectedProject.value) {
     const updated = await workspaceStore.updateProject(selectedProject.value.id, {
@@ -194,6 +249,18 @@ async function submitProject() {
       assignments,
     })
     if (updated) {
+      const saved = await workspaceStore.saveProjectModelSettings(updated.id, {
+        allowedConfiguredModelIds: [...new Set(form.configuredModelIds)],
+        defaultConfiguredModelId: form.configuredModelIds.includes(form.defaultConfiguredModelId)
+          ? form.defaultConfiguredModelId
+          : '',
+        totalTokens,
+      })
+      if (!saved) {
+        detailsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
+          || workspaceStore.error
+          || String(t('projectSettings.models.saveError'))
+      }
       applyProject(updated.id)
     }
     return
@@ -206,6 +273,18 @@ async function submitProject() {
     assignments,
   })
   if (created) {
+    const saved = await workspaceStore.saveProjectModelSettings(created.id, {
+      allowedConfiguredModelIds: [...new Set(form.configuredModelIds)],
+      defaultConfiguredModelId: form.configuredModelIds.includes(form.defaultConfiguredModelId)
+        ? form.defaultConfiguredModelId
+        : '',
+      totalTokens,
+    })
+    if (!saved) {
+      detailsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
+        || workspaceStore.error
+        || String(t('projectSettings.models.saveError'))
+    }
     applyProject(created.id)
   }
 }
@@ -325,6 +404,26 @@ function statusLabel(status: ProjectRecord['status']) {
           path-test-id="projects-resource-directory-path"
           pick-test-id="projects-resource-directory-pick"
         />
+
+        <div class="grid gap-4 md:grid-cols-2">
+          <UiField :label="t('projects.fields.totalTokens')" :hint="t('projects.hints.totalTokens')">
+            <UiInput
+              v-model="form.totalTokens"
+              data-testid="projects-total-tokens-input"
+              type="number"
+              :placeholder="t('projectSettings.models.totalTokensPlaceholder')"
+            />
+          </UiField>
+
+          <UiField :label="t('projects.fields.usedTokens')" :hint="t('projects.hints.usedTokens')">
+            <div
+              data-testid="projects-used-tokens-value"
+              class="flex min-h-8 items-center rounded-[var(--radius-s)] border border-border bg-surface-muted px-3 text-sm text-text-primary"
+            >
+              {{ usedTokens.toLocaleString() }}
+            </div>
+          </UiField>
+        </div>
 
         <UiField
           :label="t('projects.fields.models')"
@@ -506,6 +605,12 @@ function statusLabel(status: ProjectRecord['status']) {
             {{ t('projects.actions.restore') }}
           </UiButton>
         </div>
+        <UiStatusCallout
+          v-if="detailsError"
+          data-testid="projects-detail-error"
+          tone="error"
+          :description="detailsError"
+        />
         </div>
       </UiInspectorPanel>
     </UiListDetailShell>

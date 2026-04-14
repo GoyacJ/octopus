@@ -49,7 +49,11 @@ const hasFocusedToolEntry = computed(() => detailEntries.value.some(entry => ent
 const showProcessPanel = computed(() => !isUserMessage.value && hasProcessPanel.value)
 const hasPendingApproval = computed(() => props.message.approval?.status !== 'approved' && props.message.approval?.status !== 'rejected')
 const approvalRiskLabel = computed(() => props.message.approval?.riskLevel ?? '')
-const isMessageRunning = computed(() => props.message.status === 'running' || props.message.status === 'waiting_approval')
+const isMessageRunning = computed(() =>
+  props.message.status === 'running'
+  || props.message.status === 'waiting_approval'
+  || props.message.status === 'waiting_input',
+)
 const actorKindLabel = computed(() => {
   if (props.message.actorKind === 'team') {
     return 'Team'

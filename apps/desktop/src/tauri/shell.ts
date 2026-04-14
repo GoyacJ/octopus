@@ -22,9 +22,13 @@ import type {
 import { subscribeToNotifications, type NotificationSubscriber } from './notifications'
 import { browserShellClient } from './shell_browser'
 import { tauriShellClient } from './shell_tauri'
-import { resolveHostRuntime } from './shared'
+import { isTauriRuntime, resolveHostRuntime } from './shared'
 
 function resolveShellClient() {
+  if (isTauriRuntime()) {
+    return tauriShellClient
+  }
+
   return resolveHostRuntime() === 'browser'
     ? browserShellClient
     : tauriShellClient

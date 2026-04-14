@@ -2,7 +2,6 @@ import { watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 import { useAuthStore } from '@/stores/auth'
-import { useUserProfileStore } from '@/stores/user-profile'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
@@ -13,19 +12,28 @@ export function useWorkbenchRouteSync(): void {
   const auth = useAuthStore()
   const runtime = useRuntimeStore()
   const shell = useShellStore()
-  const userProfileStore = useUserProfileStore()
   const workspaceAccessControlStore = useWorkspaceAccessControlStore()
   const workspaceStore = useWorkspaceStore()
 
   watch(
     () => [
-      route.fullPath,
+      typeof route.name === 'string' ? route.name : '',
+      typeof route.params.workspaceId === 'string' ? route.params.workspaceId : '',
+      typeof route.params.projectId === 'string' ? route.params.projectId : '',
+      typeof route.params.conversationId === 'string' ? route.params.conversationId : '',
+      route.name === 'workspace-overview' && typeof route.query.project === 'string' ? route.query.project : '',
+      typeof route.query.detail === 'string' ? route.query.detail : '',
+      typeof route.query.pane === 'string' ? route.query.pane : '',
+      typeof route.query.artifact === 'string' ? route.query.artifact : '',
       shell.activeWorkspaceConnectionId,
       shell.activeWorkspaceSession?.token ?? '',
       auth.isReady,
       auth.isAuthenticated,
     ],
-    async () => {
+    async (next, previous) => {
+      const startedAt = performance.now()
+      const previousToken = previous?.[9] ?? ''
+      const previousAuthenticated = previous?.[11] ?? false
       const workspaceId = typeof route.params.workspaceId === 'string' ? route.params.workspaceId : undefined
       const projectId = typeof route.params.projectId === 'string' ? route.params.projectId : undefined
       const conversationId = typeof route.params.conversationId === 'string' ? route.params.conversationId : undefined
@@ -33,10 +41,10 @@ export function useWorkbenchRouteSync(): void {
         ? route.query.project
         : undefined
 
-      if (workspaceId) {
+      if (workspaceId && shell.activeWorkspaceConnection?.workspaceId !== workspaceId) {
         await shell.activateWorkspaceByWorkspaceId(workspaceId)
-        runtime.syncWorkspaceScopeFromShell()
       }
+      runtime.syncWorkspaceScopeFromShell()
 
       workspaceStore.syncRouteScope(workspaceId, projectId ?? overviewProjectId, conversationId)
 
@@ -48,20 +56,16 @@ export function useWorkbenchRouteSync(): void {
 
       if (shell.activeWorkspaceConnectionId) {
         if (auth.isReady && auth.isAuthenticated) {
-          await workspaceStore.bootstrap(shell.activeWorkspaceConnectionId)
-          await workspaceAccessControlStore.load(shell.activeWorkspaceConnectionId)
-          await userProfileStore.load(shell.activeWorkspaceConnectionId)
-          await runtime.bootstrap()
+          const force = previousToken !== next[9] || previousAuthenticated !== next[11]
+          await workspaceStore.ensureWorkspaceBootstrap(shell.activeWorkspaceConnectionId, { force })
+          await workspaceAccessControlStore.ensureAuthorizationContext(shell.activeWorkspaceConnectionId, { force })
         }
       }
 
-      if (auth.isReady && auth.isAuthenticated && projectId) {
-        await workspaceStore.loadProjectDashboard(projectId, shell.activeWorkspaceConnectionId)
-      } else if (auth.isReady && auth.isAuthenticated && overviewProjectId) {
-        await workspaceStore.loadProjectDashboard(overviewProjectId, shell.activeWorkspaceConnectionId)
-      }
-
       void shell.persistLastRoute(route.fullPath)
+      if (import.meta.env.DEV) {
+        console.debug(`[route-sync] ${route.fullPath} ${Math.round(performance.now() - startedAt)}ms`)
+      }
     },
     { immediate: true },
   )

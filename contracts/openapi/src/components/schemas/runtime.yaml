@@ -117,6 +117,20 @@ ResolveRuntimeApprovalInput:
   required:
     - decision
   type: object
+ResolveRuntimeAuthChallengeInput:
+  additionalProperties: false
+  properties:
+    resolution:
+      enum:
+        - resolved
+        - failed
+        - cancelled
+      type: string
+    note:
+      type: string
+  required:
+    - resolution
+  type: object
 ResolvedExecutionTarget:
   additionalProperties: false
   properties:
@@ -163,6 +177,10 @@ RuntimeApprovalRequest:
   properties:
     approvalLayer:
       type: string
+    capabilityId:
+      type: string
+    checkpointRef:
+      type: string
     conversationId:
       type: string
     createdAt:
@@ -173,10 +191,18 @@ RuntimeApprovalRequest:
       type: string
     id:
       type: string
+    providerKey:
+      type: string
     riskLevel:
       $ref: "#/components/schemas/RiskLevel"
     runId:
       type: string
+    requiredPermission:
+      type: string
+    requiresApproval:
+      type: boolean
+    requiresAuth:
+      type: boolean
     sessionId:
       type: string
     status:
@@ -205,9 +231,125 @@ RuntimeApprovalRequest:
     - createdAt
     - status
     - approvalLayer
+    - requiresApproval
+    - requiresAuth
     - targetKind
     - targetRef
     - escalationReason
+  type: object
+RuntimeAuthChallengeSummary:
+  additionalProperties: false
+  properties:
+    approvalLayer:
+      type: string
+    capabilityId:
+      type: string
+    checkpointRef:
+      type: string
+    conversationId:
+      type: string
+    createdAt:
+      type: integer
+    detail:
+      type: string
+    escalationReason:
+      type: string
+    id:
+      type: string
+    providerKey:
+      type: string
+    resolution:
+      type: string
+    requiredPermission:
+      type: string
+    requiresApproval:
+      type: boolean
+    requiresAuth:
+      type: boolean
+    runId:
+      type: string
+    sessionId:
+      type: string
+    status:
+      enum:
+        - pending
+        - resolved
+        - failed
+        - cancelled
+      type: string
+    summary:
+      type: string
+    targetKind:
+      type: string
+    targetRef:
+      type: string
+    toolName:
+      type: string
+  required:
+    - id
+    - sessionId
+    - conversationId
+    - runId
+    - status
+    - summary
+    - detail
+    - createdAt
+    - approvalLayer
+    - targetKind
+    - targetRef
+    - escalationReason
+    - requiresApproval
+    - requiresAuth
+  type: object
+RuntimeAuthStateSummary:
+  additionalProperties: false
+  properties:
+    pendingChallengeCount:
+      type: integer
+    resolvedProviderKeys:
+      items:
+        type: string
+      type: array
+    challengedProviderKeys:
+      items:
+        type: string
+      type: array
+    failedProviderKeys:
+      items:
+        type: string
+      type: array
+    lastChallengeAt:
+      type: integer
+  required:
+    - pendingChallengeCount
+    - resolvedProviderKeys
+    - challengedProviderKeys
+    - failedProviderKeys
+  type: object
+RuntimePolicyDecisionSummary:
+  additionalProperties: false
+  properties:
+    hiddenCapabilityCount:
+      type: integer
+    deferredCapabilityCount:
+      type: integer
+    deniedExposureCount:
+      type: integer
+    approvalRequiredCount:
+      type: integer
+    authRequiredCount:
+      type: integer
+    allowCount:
+      type: integer
+    compiledAt:
+      type: integer
+  required:
+    - hiddenCapabilityCount
+    - deferredCapabilityCount
+    - deniedExposureCount
+    - approvalRequiredCount
+    - authRequiredCount
+    - allowCount
   type: object
 RuntimeCapabilityProviderState:
   additionalProperties: false
@@ -446,10 +588,24 @@ RuntimeCapabilityExecutionOutcome:
     - requiresApproval
     - requiresAuth
   type: object
-RuntimePendingMediationSummary:
+RuntimePendingMediation:
   additionalProperties: false
   properties:
+    approvalId:
+      type: string
+    approvalLayer:
+      type: string
+    authChallengeId:
+      type: string
     capabilityId:
+      type: string
+    checkpointRef:
+      type: string
+    detail:
+      type: string
+    escalationReason:
+      type: string
+    mediationId:
       type: string
     toolName:
       type: string
@@ -457,10 +613,72 @@ RuntimePendingMediationSummary:
       type: string
     mediationKind:
       type: string
+    requiredPermission:
+      type: string
     reason:
+      type: string
+    requiresApproval:
+      type: boolean
+    requiresAuth:
+      type: boolean
+    state:
+      type: string
+    summary:
+      type: string
+    targetKind:
+      type: string
+    targetRef:
       type: string
   required:
     - mediationKind
+    - requiresApproval
+    - requiresAuth
+    - state
+    - targetKind
+    - targetRef
+  type: object
+RuntimePendingMediationSummary:
+  $ref: "#/components/schemas/RuntimePendingMediation"
+RuntimeMediationOutcome:
+  additionalProperties: false
+  properties:
+    approvalLayer:
+      type: string
+    capabilityId:
+      type: string
+    checkpointRef:
+      type: string
+    detail:
+      type: string
+    mediationId:
+      type: string
+    mediationKind:
+      type: string
+    outcome:
+      type: string
+    providerKey:
+      type: string
+    reason:
+      type: string
+    requiresApproval:
+      type: boolean
+    requiresAuth:
+      type: boolean
+    resolvedAt:
+      type: integer
+    targetKind:
+      type: string
+    targetRef:
+      type: string
+    toolName:
+      type: string
+  required:
+    - mediationKind
+    - outcome
+    - requiresApproval
+    - requiresAuth
+    - targetKind
+    - targetRef
   type: object
 RuntimeMemorySummary:
   additionalProperties: false
@@ -675,9 +893,17 @@ RuntimePolicySnapshot:
 RuntimeRunCheckpoint:
   additionalProperties: false
   properties:
+    approvalLayer:
+      type: string
+    brokerDecision:
+      type: string
+    capabilityId:
+      type: string
     capabilityPlanSummary:
       $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
     capabilityStateRef:
+      type: string
+    checkpointArtifactRef:
       type: string
     compactionMetadata:
       $ref: "#/components/schemas/RuntimePermissionEnvelope"
@@ -686,13 +912,31 @@ RuntimeRunCheckpoint:
     lastExecutionOutcome:
       $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
     pendingMediation:
-      $ref: "#/components/schemas/RuntimePendingMediationSummary"
+      $ref: "#/components/schemas/RuntimePendingMediation"
     pendingApproval:
       $ref: "#/components/schemas/RuntimeApprovalRequest"
+    pendingAuthChallenge:
+      $ref: "#/components/schemas/RuntimeAuthChallengeSummary"
+    providerKey:
+      type: string
+    reason:
+      type: string
+    requiredPermission:
+      type: string
+    requiresApproval:
+      type: boolean
+    requiresAuth:
+      type: boolean
     serializedSession:
       $ref: "#/components/schemas/RuntimePermissionEnvelope"
+    targetKind:
+      type: string
+    targetRef:
+      type: string
     usageSummary:
       $ref: "#/components/schemas/RuntimeUsageSummary"
+    lastMediationOutcome:
+      $ref: "#/components/schemas/RuntimeMediationOutcome"
   required:
     - serializedSession
     - currentIterationIndex
@@ -1062,6 +1306,8 @@ RuntimeEventEnvelope:
   properties:
     approval:
       $ref: "#/components/schemas/RuntimeApprovalRequest"
+    authChallenge:
+      $ref: "#/components/schemas/RuntimeAuthChallengeSummary"
     capabilityPlanSummary:
       $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
     capabilityStateRef:
@@ -1082,6 +1328,8 @@ RuntimeEventEnvelope:
       $ref: "#/components/schemas/RuntimeEventKind"
     lastExecutionOutcome:
       $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+    lastMediationOutcome:
+      $ref: "#/components/schemas/RuntimeMediationOutcome"
     iteration:
       type: integer
     message:
@@ -1093,7 +1341,7 @@ RuntimeEventEnvelope:
     freshnessSummary:
       $ref: "#/components/schemas/RuntimeMemoryFreshnessSummary"
     pendingMediation:
-      $ref: "#/components/schemas/RuntimePendingMediationSummary"
+      $ref: "#/components/schemas/RuntimePendingMediation"
     payload:
       additionalProperties: true
       type: object
@@ -1112,6 +1360,12 @@ RuntimeEventEnvelope:
     actorRef:
       type: string
     outcome:
+      type: string
+    approvalLayer:
+      type: string
+    targetKind:
+      type: string
+    targetRef:
       type: string
     sequence:
       type: integer
@@ -1164,6 +1418,13 @@ RuntimeEventKind:
     - mcp.failed
     - approval.requested
     - approval.resolved
+    - approval.cancelled
+    - auth.challenge_requested
+    - auth.resolved
+    - auth.failed
+    - policy.exposure_denied
+    - policy.surface_deferred
+    - policy.session_compiled
     - trace.emitted
     - subrun.spawned
     - subrun.completed
@@ -1266,8 +1527,12 @@ RuntimeRunSnapshot:
   properties:
     actorRef:
       type: string
+    approvalTarget:
+      $ref: "#/components/schemas/RuntimeApprovalRequest"
     approvalState:
       type: string
+    authTarget:
+      $ref: "#/components/schemas/RuntimeAuthChallengeSummary"
     artifactRefs:
       items:
         type: string
@@ -1296,6 +1561,8 @@ RuntimeRunSnapshot:
       type: string
     lastExecutionOutcome:
       $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+    lastMediationOutcome:
+      $ref: "#/components/schemas/RuntimeMediationOutcome"
     freshnessSummary:
       $ref: "#/components/schemas/RuntimeMemoryFreshnessSummary"
     memoryStateRef:
@@ -1311,7 +1578,7 @@ RuntimeRunSnapshot:
     parentRunId:
       type: string
     pendingMediation:
-      $ref: "#/components/schemas/RuntimePendingMediationSummary"
+      $ref: "#/components/schemas/RuntimePendingMediation"
     pendingMemoryProposal:
       $ref: "#/components/schemas/RuntimeMemoryProposal"
     nextAction:
@@ -1420,6 +1687,8 @@ RuntimeSessionDetail:
   properties:
     activeRunId:
       type: string
+    authStateSummary:
+      $ref: "#/components/schemas/RuntimeAuthStateSummary"
     backgroundRun:
       $ref: "#/components/schemas/RuntimeBackgroundRunSummary"
     capabilityPlanSummary:
@@ -1451,7 +1720,9 @@ RuntimeSessionDetail:
     pendingApproval:
       $ref: "#/components/schemas/RuntimeApprovalRequest"
     pendingMediation:
-      $ref: "#/components/schemas/RuntimePendingMediationSummary"
+      $ref: "#/components/schemas/RuntimePendingMediation"
+    policyDecisionSummary:
+      $ref: "#/components/schemas/RuntimePolicyDecisionSummary"
     providerStateSummary:
       items:
         $ref: "#/components/schemas/RuntimeCapabilityProviderState"
@@ -1494,6 +1765,8 @@ RuntimeSessionDetail:
     - memoryStateRef
     - capabilityPlanSummary
     - providerStateSummary
+    - authStateSummary
+    - policyDecisionSummary
   type: object
 RuntimeSessionKind:
   enum:
@@ -1505,6 +1778,8 @@ RuntimeSessionSummary:
   properties:
     activeRunId:
       type: string
+    authStateSummary:
+      $ref: "#/components/schemas/RuntimeAuthStateSummary"
     backgroundRun:
       $ref: "#/components/schemas/RuntimeBackgroundRunSummary"
     configSnapshotId:
@@ -1540,7 +1815,9 @@ RuntimeSessionSummary:
     lastExecutionOutcome:
       $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
     pendingMediation:
-      $ref: "#/components/schemas/RuntimePendingMediationSummary"
+      $ref: "#/components/schemas/RuntimePendingMediation"
+    policyDecisionSummary:
+      $ref: "#/components/schemas/RuntimePolicyDecisionSummary"
     providerStateSummary:
       items:
         $ref: "#/components/schemas/RuntimeCapabilityProviderState"
@@ -1585,6 +1862,8 @@ RuntimeSessionSummary:
     - memoryStateRef
     - capabilityPlanSummary
     - providerStateSummary
+    - authStateSummary
+    - policyDecisionSummary
   type: object
 RuntimeTraceItem:
   additionalProperties: false

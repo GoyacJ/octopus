@@ -15,8 +15,9 @@ use octopus_core::{
     default_team_memory_policy, default_team_shared_capability_policy, normalize_task_domains,
     team_topology_from_refs, timestamp_now, workflow_affordance_from_task_domains, AgentRecord,
     AppError, AssetBundleManifestV2, AssetDependency, AssetDependencyResolution,
-    AssetTranslationReport, BundleAssetDescriptorRecord, ExportWorkspaceAgentBundleInput,
-    ImportIssue, TeamRecord, WorkspaceDirectoryUploadEntry, ASSET_MANIFEST_REVISION_V2,
+    AssetTranslationReport, BundleAssetDescriptorRecord, DefaultModelStrategy,
+    ExportWorkspaceAgentBundleInput, ImportIssue, TeamRecord, WorkspaceDirectoryUploadEntry,
+    ASSET_MANIFEST_REVISION_V2,
 };
 use rusqlite::{params, Connection};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
@@ -46,6 +47,7 @@ pub(crate) const SOURCE_SCOPE_AVATAR: &str = "avatar";
 pub(crate) const SKILL_FRONTMATTER_FILE: &str = "SKILL.md";
 pub(crate) const BUNDLE_ASSET_STATE_PATH: &str = ".octopus/asset-state.json";
 const RESERVED_DIRS: &[&str] = &["skills", "mcps", ".octopus"];
+const IGNORED_TEMPLATE_ROOTS: &[&str] = &["系统通用", "管理层与PMO"];
 const FILTERED_DIR_NAMES: &[&str] = &[
     "node_modules",
     ".git",
@@ -63,8 +65,7 @@ static DEFAULT_EMPLOYEE_AVATARS: Dir<'_> =
     include_dir!("$CARGO_MANIFEST_DIR/../../packages/assets/header/employee");
 static DEFAULT_LEADER_AVATARS: Dir<'_> =
     include_dir!("$CARGO_MANIFEST_DIR/../../packages/assets/header/leader");
-static BUILTIN_BUNDLE_ASSET_DIR: Dir<'_> =
-    include_dir!("$CARGO_MANIFEST_DIR/seed/builtin-assets/bundle");
+static BUILTIN_BUNDLE_ASSET_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../../templates");
 
 pub(crate) const BUILTIN_SKILL_DISPLAY_ROOT: &str = "builtin-assets/skills";
 
@@ -155,6 +156,7 @@ pub(crate) struct BuiltinAgentTemplateSource {
     pub(crate) builtin_tool_keys: Vec<String>,
     pub(crate) skill_source_ids: Vec<String>,
     pub(crate) mcp_server_names: Vec<String>,
+    pub(crate) model: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -169,6 +171,9 @@ pub(crate) struct BuiltinTeamTemplateSource {
     pub(crate) builtin_tool_keys: Vec<String>,
     pub(crate) skill_source_ids: Vec<String>,
     pub(crate) mcp_server_names: Vec<String>,
+    pub(crate) leader_agent_source_id: Option<String>,
+    pub(crate) member_agent_source_ids: Vec<String>,
+    pub(crate) model: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -209,6 +214,7 @@ pub(crate) struct ParsedAgent {
     pub(crate) skill_source_ids: Vec<String>,
     pub(crate) mcp_source_ids: Vec<String>,
     pub(crate) avatar: ParsedAssetAvatar,
+    pub(crate) model: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -226,6 +232,7 @@ pub(crate) struct ParsedTeam {
     pub(crate) member_names: Vec<String>,
     pub(crate) agent_source_ids: Vec<String>,
     pub(crate) avatar: ParsedAssetAvatar,
+    pub(crate) model: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -307,6 +314,7 @@ pub(crate) struct PlannedAgent {
     pub(crate) skill_slugs: Vec<String>,
     pub(crate) mcp_server_names: Vec<String>,
     pub(crate) avatar: ParsedAssetAvatar,
+    pub(crate) model: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -326,6 +334,7 @@ pub(crate) struct PlannedTeam {
     pub(crate) member_names: Vec<String>,
     pub(crate) agent_source_ids: Vec<String>,
     pub(crate) avatar: ParsedAssetAvatar,
+    pub(crate) model: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -379,12 +388,10 @@ pub(crate) struct ExportContext {
     pub(crate) root_dir_name: String,
     pub(crate) agents: Vec<AgentRecord>,
     pub(crate) teams: Vec<TeamRecord>,
-    pub(crate) descriptors: Vec<BundleAssetDescriptorRecord>,
     pub(crate) skill_paths: HashMap<String, PathBuf>,
     pub(crate) builtin_skill_assets: HashMap<String, BuiltinSkillAsset>,
     pub(crate) mcp_configs: HashMap<String, JsonValue>,
-    pub(crate) avatar_payloads: HashMap<String, (String, String, Vec<u8>)>,
-    pub(crate) asset_state: BundleAssetStateDocument,
+    pub(crate) avatar_payloads: HashMap<String, Option<(String, String, Vec<u8>)>>,
     pub(crate) bundle_manifest: AssetBundleManifestV2,
     pub(crate) translation_report: AssetTranslationReport,
     pub(crate) issues: Vec<ImportIssue>,
@@ -412,6 +419,15 @@ pub(crate) struct ParsedBundleDescriptor {
     pub(crate) task_domains: Vec<String>,
     pub(crate) translation_mode: String,
     pub(crate) bytes: Vec<u8>,
+}
+
+#[derive(Debug, Default)]
+struct ParsedPackage {
+    agents: Vec<ParsedAgent>,
+    teams: Vec<ParsedTeam>,
+    skills: Vec<ParsedSkillSource>,
+    mcps: Vec<ParsedMcpSource>,
+    avatars: Vec<ParsedAssetAvatar>,
 }
 
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -443,145 +459,40 @@ pub(crate) fn parse_bundle_files(
         .collect::<Vec<_>>();
     let descriptor_assets =
         parse_bundle_descriptors(bundle_manifest.as_ref(), &content_files, issues);
-    let grouped = group_top_level(&content_files);
     let builtin_tool_keys = builtin_tool_keys();
+    let mut collected = ParsedPackage::default();
 
-    let mut agents = Vec::new();
-    let mut teams = Vec::new();
-    let mut skills = Vec::new();
-    let mut mcps = Vec::new();
-    let mut avatars = Vec::new();
-
-    for (root_name, root_files) in grouped {
-        let root_md = format!("{root_name}/{root_name}.md");
-        let Some(team_or_agent_file) = root_files.iter().find(|file| file.relative_path == root_md)
-        else {
-            issues.push(issue(
-                ISSUE_WARNING,
-                SOURCE_SCOPE_BUNDLE,
-                Some(root_name.clone()),
-                format!("skipped '{root_name}': missing required '{root_md}'"),
-            ));
-            continue;
-        };
-
-        let member_dirs = immediate_child_dirs(&root_files, &root_name)
-            .into_iter()
-            .filter(|item| !RESERVED_DIRS.iter().any(|reserved| reserved == item))
-            .filter(|child| {
-                let expected = format!("{root_name}/{child}/{child}.md");
-                root_files.iter().any(|file| file.relative_path == expected)
-            })
-            .collect::<Vec<_>>();
-
-        if member_dirs.is_empty() {
-            let parsed_agent = parse_agent_dir(
-                &root_name,
-                None,
-                team_or_agent_file,
-                &root_files,
-                target,
-                &builtin_tool_keys,
-                issues,
-            )?;
-            skills.extend(parsed_agent.1);
-            mcps.extend(parsed_agent.2);
-            avatars.push(parsed_agent.0.avatar.clone());
-            agents.push(parsed_agent.0);
-            continue;
-        }
-
-        let team_source = String::from_utf8_lossy(&team_or_agent_file.bytes).to_string();
-        let (frontmatter, body) = parse_frontmatter(&team_source)?;
-        let team_name = yaml_string(&frontmatter, "name").unwrap_or_else(|| root_name.clone());
-        let team_description = yaml_string(&frontmatter, "description")
-            .or_else(|| first_non_empty_paragraph(&body))
-            .unwrap_or_else(|| team_name.clone());
-        let team_prompt = body.trim().to_string();
-        let team_personality =
-            first_non_empty_paragraph(&body).unwrap_or_else(|| team_name.clone());
-        let team_tags = split_tags(yaml_string(&frontmatter, "tag"));
-        let team_builtin_tools =
-            resolve_builtin_tool_keys(yaml_string_list(&frontmatter, "tools"), &builtin_tool_keys);
-        let team_avatar = resolve_avatar(
-            "team",
-            &root_name,
-            &team_name,
-            &root_name,
-            yaml_string(&frontmatter, "avatar"),
-            &root_files,
-            target,
-            issues,
-        )?;
-        let team_skills =
-            parse_skill_sources(&root_name, &root_name, &team_name, &root_files, issues)?;
-        let team_mcps = parse_mcp_sources(
-            &root_name,
-            &root_name,
-            &team_name,
-            yaml_string_list(&frontmatter, "mcps"),
-            &root_files,
-            issues,
-        )?;
-        let mut team_agent_source_ids = Vec::new();
-        let mut parsed_member_names = Vec::new();
-        let mut member_skill_sources = Vec::new();
-        let mut member_mcp_sources = Vec::new();
-        for member_dir in member_dirs.iter().cloned() {
-            let member_md = format!("{root_name}/{member_dir}/{member_dir}.md");
-            let Some(member_file) = root_files
-                .iter()
-                .find(|file| file.relative_path == member_md)
+    if let Some(rootless_package) =
+        parse_rootless_package(&content_files, target, &builtin_tool_keys, issues)?
+    {
+        collected.agents.extend(rootless_package.agents);
+        collected.teams.extend(rootless_package.teams);
+        collected.skills.extend(rootless_package.skills);
+        collected.mcps.extend(rootless_package.mcps);
+        collected.avatars.extend(rootless_package.avatars);
+    } else {
+        for (root_name, root_files) in group_top_level(&content_files) {
+            if RESERVED_DIRS.iter().any(|reserved| reserved == &root_name)
+                || IGNORED_TEMPLATE_ROOTS
+                    .iter()
+                    .any(|candidate| candidate == &root_name)
+            {
+                continue;
+            }
+            let Some(package) =
+                parse_named_package(&root_name, &root_files, target, &builtin_tool_keys, issues)?
             else {
                 continue;
             };
-            let (agent, mut agent_skills, mut agent_mcps) = parse_agent_dir(
-                &format!("{root_name}/{member_dir}"),
-                Some(team_name.clone()),
-                member_file,
-                &root_files,
-                target,
-                &builtin_tool_keys,
-                issues,
-            )?;
-            team_agent_source_ids.push(agent.source_id.clone());
-            parsed_member_names.push(agent.name.clone());
-            avatars.push(agent.avatar.clone());
-            agents.push(agent);
-            member_skill_sources.append(&mut agent_skills);
-            member_mcp_sources.append(&mut agent_mcps);
+            collected.agents.extend(package.agents);
+            collected.teams.extend(package.teams);
+            collected.skills.extend(package.skills);
+            collected.mcps.extend(package.mcps);
+            collected.avatars.extend(package.avatars);
         }
-        skills.extend(team_skills.clone());
-        skills.extend(member_skill_sources);
-        mcps.extend(team_mcps.clone());
-        mcps.extend(member_mcp_sources);
-        avatars.push(team_avatar.clone());
-
-        teams.push(ParsedTeam {
-            source_id: root_name.clone(),
-            name: team_name.clone(),
-            description: team_description,
-            personality: team_personality,
-            prompt: team_prompt,
-            tags: team_tags,
-            builtin_tool_keys: team_builtin_tools,
-            skill_source_ids: team_skills.into_iter().map(|item| item.source_id).collect(),
-            mcp_source_ids: team_mcps.into_iter().map(|item| item.source_id).collect(),
-            leader_name: yaml_string(&frontmatter, "leader"),
-            member_names: {
-                let members = split_csv(yaml_string(&frontmatter, "member"));
-                if members.is_empty() {
-                    parsed_member_names
-                } else {
-                    members
-                }
-            },
-            agent_source_ids: team_agent_source_ids,
-            avatar: team_avatar,
-        });
     }
 
-    if agents.is_empty() && teams.is_empty() {
+    if collected.agents.is_empty() && collected.teams.is_empty() {
         issues.push(issue(
             ISSUE_ERROR,
             SOURCE_SCOPE_BUNDLE,
@@ -593,12 +504,267 @@ pub(crate) fn parse_bundle_files(
     Ok(ParsedBundle {
         bundle_manifest,
         descriptor_assets,
-        agents,
-        teams,
+        agents: collected.agents,
+        teams: collected.teams,
+        skills: collected.skills,
+        mcps: collected.mcps,
+        avatars: collected.avatars,
+        asset_state,
+    })
+}
+
+fn parse_rootless_package(
+    files: &[BundleFile],
+    target: &AssetTargetScope<'_>,
+    builtin_tool_keys: &[String],
+    issues: &mut Vec<ImportIssue>,
+) -> Result<Option<ParsedPackage>, AppError> {
+    let root_level_markdown = files
+        .iter()
+        .filter(|file| !file.relative_path.contains('/') && file.relative_path.ends_with(".md"))
+        .collect::<Vec<_>>();
+    if root_level_markdown.is_empty() {
+        return Ok(None);
+    }
+
+    if let Some(team_file) = root_level_markdown
+        .iter()
+        .find(|file| file.relative_path.ends_with("说明.md"))
+    {
+        let source_id = team_source_id_from_file(team_file)?;
+        return Ok(Some(parse_team_package(
+            &source_id,
+            "",
+            team_file,
+            files,
+            target,
+            builtin_tool_keys,
+            issues,
+        )?));
+    }
+
+    let agent_markdown = root_level_markdown
+        .into_iter()
+        .filter(|file| !file.relative_path.ends_with("说明.md"))
+        .collect::<Vec<_>>();
+    if agent_markdown.len() != 1 {
+        return Ok(None);
+    }
+    let agent_file = agent_markdown[0];
+    let source_id = markdown_stem(&agent_file.relative_path).to_string();
+    Ok(Some(parse_agent_package(
+        &source_id,
+        "",
+        None,
+        agent_file,
+        files,
+        target,
+        builtin_tool_keys,
+        issues,
+    )?))
+}
+
+fn parse_named_package(
+    root_name: &str,
+    root_files: &[BundleFile],
+    target: &AssetTargetScope<'_>,
+    builtin_tool_keys: &[String],
+    issues: &mut Vec<ImportIssue>,
+) -> Result<Option<ParsedPackage>, AppError> {
+    let root_prefix = format!("{root_name}/");
+    let root_level_markdown = root_files
+        .iter()
+        .filter(|file| {
+            file.relative_path
+                .strip_prefix(&root_prefix)
+                .is_some_and(|suffix| !suffix.contains('/') && suffix.ends_with(".md"))
+        })
+        .collect::<Vec<_>>();
+
+    if let Some(team_file) = root_level_markdown
+        .iter()
+        .find(|file| file.relative_path.ends_with("说明.md"))
+    {
+        return Ok(Some(parse_team_package(
+            root_name,
+            root_name,
+            team_file,
+            root_files,
+            target,
+            builtin_tool_keys,
+            issues,
+        )?));
+    }
+
+    let preferred_agent_markdown = format!("{root_name}/{root_name}.md");
+    let agent_file = root_level_markdown
+        .iter()
+        .find(|file| file.relative_path == preferred_agent_markdown)
+        .copied()
+        .or_else(|| {
+            let candidates = root_level_markdown
+                .iter()
+                .filter(|file| !file.relative_path.ends_with("说明.md"))
+                .copied()
+                .collect::<Vec<_>>();
+            if candidates.len() == 1 {
+                Some(candidates[0])
+            } else {
+                None
+            }
+        });
+    let Some(agent_file) = agent_file else {
+        issues.push(issue(
+            ISSUE_WARNING,
+            SOURCE_SCOPE_BUNDLE,
+            Some(root_name.to_string()),
+            format!(
+                "skipped '{root_name}': missing root markdown entry like '{root_name}/{root_name}.md' or '*说明.md'"
+            ),
+        ));
+        return Ok(None);
+    };
+
+    Ok(Some(parse_agent_package(
+        root_name,
+        root_name,
+        None,
+        agent_file,
+        root_files,
+        target,
+        builtin_tool_keys,
+        issues,
+    )?))
+}
+
+fn parse_team_package(
+    source_id: &str,
+    owner_dir: &str,
+    team_file: &BundleFile,
+    files: &[BundleFile],
+    target: &AssetTargetScope<'_>,
+    builtin_tool_keys: &[String],
+    issues: &mut Vec<ImportIssue>,
+) -> Result<ParsedPackage, AppError> {
+    let team_source = String::from_utf8_lossy(&team_file.bytes).to_string();
+    let (frontmatter, body) = parse_frontmatter(&team_source)?;
+    let team_name = yaml_string(&frontmatter, "name").unwrap_or_else(|| source_id.to_string());
+    let team_description = yaml_string(&frontmatter, "description")
+        .or_else(|| first_non_empty_paragraph(&body))
+        .unwrap_or_else(|| team_name.clone());
+    let team_prompt = body.trim().to_string();
+    let team_personality = first_non_empty_paragraph(&body).unwrap_or_else(|| team_name.clone());
+    let team_tags = split_tags(yaml_string(&frontmatter, "tag"));
+    let team_builtin_tools =
+        resolve_builtin_tool_keys(yaml_string_list(&frontmatter, "tools"), builtin_tool_keys);
+    let team_avatar = resolve_avatar(
+        "team",
+        source_id,
+        &team_name,
+        owner_dir,
+        yaml_string(&frontmatter, "avatar"),
+        files,
+        target,
+        issues,
+    )?;
+    let team_skills = parse_skill_sources(owner_dir, source_id, &team_name, files, issues)?;
+    let team_mcps = parse_mcp_sources(
+        owner_dir,
+        source_id,
+        &team_name,
+        yaml_string_list(&frontmatter, "mcps"),
+        files,
+        issues,
+    )?;
+
+    let mut package = ParsedPackage::default();
+    let mut team_agent_source_ids = Vec::new();
+    let mut parsed_member_names = Vec::new();
+
+    for member_dir in member_dirs_for_owner(files, owner_dir) {
+        let member_source_id = join_bundle_path(source_id, &member_dir);
+        let member_owner_dir = join_bundle_path(owner_dir, &member_dir);
+        let member_md = join_bundle_path(&member_owner_dir, &format!("{member_dir}.md"));
+        let Some(member_file) = files.iter().find(|file| file.relative_path == member_md) else {
+            continue;
+        };
+        let member_package = parse_agent_package(
+            &member_source_id,
+            &member_owner_dir,
+            Some(team_name.clone()),
+            member_file,
+            files,
+            target,
+            builtin_tool_keys,
+            issues,
+        )?;
+        let agent =
+            member_package.agents.first().cloned().ok_or_else(|| {
+                AppError::invalid_input("team member package missing parsed agent")
+            })?;
+        parsed_member_names.push(agent.name.clone());
+        team_agent_source_ids.push(agent.source_id.clone());
+        package.agents.extend(member_package.agents);
+        package.skills.extend(member_package.skills);
+        package.mcps.extend(member_package.mcps);
+        package.avatars.extend(member_package.avatars);
+    }
+
+    package.skills.extend(team_skills.clone());
+    package.mcps.extend(team_mcps.clone());
+    package.avatars.push(team_avatar.clone());
+    package.teams.push(ParsedTeam {
+        source_id: source_id.to_string(),
+        name: team_name.clone(),
+        description: team_description,
+        personality: team_personality,
+        prompt: team_prompt,
+        tags: team_tags,
+        builtin_tool_keys: team_builtin_tools,
+        skill_source_ids: team_skills.into_iter().map(|item| item.source_id).collect(),
+        mcp_source_ids: team_mcps.into_iter().map(|item| item.source_id).collect(),
+        leader_name: yaml_string(&frontmatter, "leader"),
+        member_names: {
+            let members = yaml_string_list(&frontmatter, "member");
+            if members.is_empty() {
+                parsed_member_names
+            } else {
+                members
+            }
+        },
+        agent_source_ids: team_agent_source_ids,
+        avatar: team_avatar,
+        model: yaml_string(&frontmatter, "model"),
+    });
+    Ok(package)
+}
+
+fn parse_agent_package(
+    source_id: &str,
+    owner_dir: &str,
+    team_name: Option<String>,
+    agent_file: &BundleFile,
+    files: &[BundleFile],
+    target: &AssetTargetScope<'_>,
+    builtin_tool_keys: &[String],
+    issues: &mut Vec<ImportIssue>,
+) -> Result<ParsedPackage, AppError> {
+    let (agent, skills, mcps) = parse_agent_dir(
+        source_id,
+        owner_dir,
+        team_name,
+        agent_file,
+        files,
+        target,
+        builtin_tool_keys,
+        issues,
+    )?;
+    Ok(ParsedPackage {
+        agents: vec![agent.clone()],
+        teams: Vec::new(),
         skills,
         mcps,
-        avatars,
-        asset_state,
+        avatars: vec![agent.avatar],
     })
 }
 
@@ -697,16 +863,24 @@ fn parse_bundle_descriptors(
 }
 
 pub(crate) fn load_builtin_catalog_sources() -> Result<BuiltinCatalogSources, AppError> {
-    let parsed = parse_builtin_bundle()?;
-    let mcp_name_by_source = parsed
-        .mcps
+    let ParsedBundle {
+        agents,
+        teams,
+        skills,
+        mcps,
+        ..
+    } = parse_builtin_bundle()?;
+    let mcp_name_by_source = mcps
         .iter()
         .map(|mcp| (mcp.source_id.clone(), mcp.server_name.clone()))
         .collect::<HashMap<_, _>>();
+    let agent_name_by_source = agents
+        .iter()
+        .map(|agent| (agent.source_id.clone(), agent.name.clone()))
+        .collect::<HashMap<_, _>>();
 
     Ok(BuiltinCatalogSources {
-        skill_sources: parsed
-            .skills
+        skill_sources: skills
             .into_iter()
             .map(|source| {
                 let description = source
@@ -728,10 +902,8 @@ pub(crate) fn load_builtin_catalog_sources() -> Result<BuiltinCatalogSources, Ap
             })
             .collect(),
         agent_sources: {
-            let mut records = parsed
-                .agents
+            let mut records = agents
                 .into_iter()
-                .filter(|agent| agent.team_name.is_none())
                 .map(|agent| BuiltinAgentTemplateSource {
                     source_id: agent.source_id,
                     name: agent.name.clone(),
@@ -747,6 +919,7 @@ pub(crate) fn load_builtin_catalog_sources() -> Result<BuiltinCatalogSources, Ap
                         .filter_map(|source_id| mcp_name_by_source.get(source_id))
                         .cloned()
                         .collect(),
+                    model: agent.model,
                     description: agent.description,
                 })
                 .collect::<Vec<_>>();
@@ -758,25 +931,66 @@ pub(crate) fn load_builtin_catalog_sources() -> Result<BuiltinCatalogSources, Ap
             records
         },
         team_sources: {
-            let mut records = parsed
-                .teams
+            let mut records = teams
                 .into_iter()
-                .map(|team| BuiltinTeamTemplateSource {
-                    source_id: team.source_id,
-                    name: team.name.clone(),
-                    avatar_data_url: avatar_data_url(&team.avatar),
-                    personality: team.personality.clone(),
-                    tags: team.tags.clone(),
-                    prompt: team.prompt.clone(),
-                    builtin_tool_keys: team.builtin_tool_keys.clone(),
-                    skill_source_ids: team.skill_source_ids,
-                    mcp_server_names: team
-                        .mcp_source_ids
+                .map(|team| {
+                    let member_name_set = team
+                        .member_names
                         .iter()
-                        .filter_map(|source_id| mcp_name_by_source.get(source_id))
                         .cloned()
-                        .collect(),
-                    description: team.description,
+                        .collect::<std::collections::HashSet<_>>();
+                    let mut member_agent_source_ids = team
+                        .agent_source_ids
+                        .iter()
+                        .filter(|source_id| {
+                            agent_name_by_source
+                                .get(*source_id)
+                                .map(|name| {
+                                    member_name_set.is_empty() || member_name_set.contains(name)
+                                })
+                                .unwrap_or(false)
+                        })
+                        .cloned()
+                        .collect::<Vec<_>>();
+                    if member_agent_source_ids.is_empty() {
+                        member_agent_source_ids = team.agent_source_ids.clone();
+                    }
+                    let leader_agent_source_id = team
+                        .leader_name
+                        .as_ref()
+                        .and_then(|leader_name| {
+                            team.agent_source_ids
+                                .iter()
+                                .find(|source_id| {
+                                    agent_name_by_source
+                                        .get(*source_id)
+                                        .map(|name| name == leader_name)
+                                        .unwrap_or(false)
+                                })
+                                .cloned()
+                        })
+                        .or_else(|| member_agent_source_ids.first().cloned());
+
+                    BuiltinTeamTemplateSource {
+                        source_id: team.source_id,
+                        name: team.name.clone(),
+                        avatar_data_url: avatar_data_url(&team.avatar),
+                        personality: team.personality.clone(),
+                        tags: team.tags.clone(),
+                        prompt: team.prompt.clone(),
+                        builtin_tool_keys: team.builtin_tool_keys.clone(),
+                        skill_source_ids: team.skill_source_ids,
+                        mcp_server_names: team
+                            .mcp_source_ids
+                            .iter()
+                            .filter_map(|source_id| mcp_name_by_source.get(source_id))
+                            .cloned()
+                            .collect(),
+                        leader_agent_source_id,
+                        member_agent_source_ids,
+                        model: team.model,
+                        description: team.description,
+                    }
                 })
                 .collect::<Vec<_>>();
             records.sort_by(|left, right| {
@@ -819,6 +1033,7 @@ fn avatar_data_url(avatar: &ParsedAssetAvatar) -> Option<String> {
 
 fn parse_agent_dir(
     source_id: &str,
+    owner_dir: &str,
     team_name: Option<String>,
     agent_file: &BundleFile,
     root_files: &[BundleFile],
@@ -841,9 +1056,9 @@ fn parse_agent_dir(
     let tags = split_tags(yaml_string(&frontmatter, "tag"));
     let builtin_tool_keys =
         resolve_builtin_tool_keys(yaml_string_list(&frontmatter, "tools"), builtin_tool_keys);
-    let skills = parse_skill_sources(source_id, source_id, &name, root_files, issues)?;
+    let skills = parse_skill_sources(owner_dir, source_id, &name, root_files, issues)?;
     let mcps = parse_mcp_sources(
-        source_id,
+        owner_dir,
         source_id,
         &name,
         yaml_string_list(&frontmatter, "mcps"),
@@ -854,7 +1069,7 @@ fn parse_agent_dir(
         "agent",
         source_id,
         &name,
-        source_id,
+        owner_dir,
         yaml_string(&frontmatter, "avatar"),
         root_files,
         target,
@@ -873,6 +1088,7 @@ fn parse_agent_dir(
             skill_source_ids: skills.iter().map(|item| item.source_id.clone()).collect(),
             mcp_source_ids: mcps.iter().map(|item| item.source_id.clone()).collect(),
             avatar,
+            model: yaml_string(&frontmatter, "model"),
         },
         skills,
         mcps,
@@ -886,7 +1102,7 @@ fn parse_skill_sources(
     files: &[BundleFile],
     issues: &mut Vec<ImportIssue>,
 ) -> Result<Vec<ParsedSkillSource>, AppError> {
-    let prefix = format!("{owner_dir}/skills/");
+    let prefix = join_bundle_path(owner_dir, "skills/");
     let mut grouped = BTreeMap::<String, Vec<(String, Vec<u8>)>>::new();
     for file in files {
         if !file.relative_path.starts_with(&prefix) {
@@ -943,7 +1159,7 @@ fn parse_mcp_sources(
     files: &[BundleFile],
     issues: &mut Vec<ImportIssue>,
 ) -> Result<Vec<ParsedMcpSource>, AppError> {
-    let prefix = format!("{owner_dir}/mcps/");
+    let prefix = join_bundle_path(owner_dir, "mcps/");
     let mut parsed = Vec::new();
     let mut seen_names = BTreeSet::new();
     for file in files {
@@ -1020,19 +1236,27 @@ fn resolve_avatar(
         .as_ref()
         .filter(|value| !value.trim().is_empty())
     {
-        let path = format!("{owner_dir}/{}", avatar_name.trim());
+        let path = join_bundle_path(owner_dir, avatar_name.trim());
         if let Some(file) = files.iter().find(|file| file.relative_path == path) {
             candidates.push((avatar_name.trim().to_string(), file.bytes.clone()));
         }
     }
 
     if candidates.is_empty() {
-        let prefix = format!("{owner_dir}/");
+        let prefix = if owner_dir.trim().is_empty() {
+            String::new()
+        } else {
+            format!("{owner_dir}/")
+        };
         for file in files {
-            if !file.relative_path.starts_with(&prefix) {
+            if !prefix.is_empty() && !file.relative_path.starts_with(&prefix) {
                 continue;
             }
-            let suffix = &file.relative_path[prefix.len()..];
+            let suffix = if prefix.is_empty() {
+                file.relative_path.as_str()
+            } else {
+                &file.relative_path[prefix.len()..]
+            };
             if suffix.contains('/') || !is_supported_avatar_file(suffix) {
                 continue;
             }
@@ -1198,11 +1422,65 @@ fn group_top_level(files: &[BundleFile]) -> BTreeMap<String, Vec<BundleFile>> {
     grouped
 }
 
+fn join_bundle_path(base: &str, child: &str) -> String {
+    if base.trim().is_empty() {
+        child.to_string()
+    } else {
+        format!("{base}/{child}")
+    }
+}
+
+fn markdown_stem(path: &str) -> &str {
+    Path::new(path)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or(path)
+}
+
+fn team_source_id_from_file(file: &BundleFile) -> Result<String, AppError> {
+    let markdown = String::from_utf8_lossy(&file.bytes).to_string();
+    let (frontmatter, _) = parse_frontmatter(&markdown)?;
+    if let Some(name) = yaml_string(&frontmatter, "name") {
+        return Ok(name);
+    }
+    Ok(markdown_stem(&file.relative_path)
+        .trim_end_matches("说明")
+        .to_string())
+}
+
+fn member_dirs_for_owner(files: &[BundleFile], owner_dir: &str) -> Vec<String> {
+    immediate_child_dirs(files, owner_dir)
+        .into_iter()
+        .filter(|item| {
+            !RESERVED_DIRS.iter().any(|reserved| reserved == item)
+                && !IGNORED_TEMPLATE_ROOTS
+                    .iter()
+                    .any(|candidate| candidate == item)
+        })
+        .filter(|child| {
+            let child_dir = join_bundle_path(owner_dir, child);
+            let expected = join_bundle_path(&child_dir, &format!("{child}.md"));
+            files.iter().any(|file| file.relative_path == expected)
+        })
+        .collect()
+}
+
 fn immediate_child_dirs(files: &[BundleFile], root: &str) -> BTreeSet<String> {
-    let prefix = format!("{root}/");
+    let prefix = if root.trim().is_empty() {
+        String::new()
+    } else {
+        format!("{root}/")
+    };
     files
         .iter()
-        .filter_map(|file| file.relative_path.strip_prefix(&prefix))
+        .filter_map(|file| {
+            if prefix.is_empty() {
+                Some(file.relative_path.as_str())
+            } else {
+                file.relative_path.strip_prefix(&prefix)
+            }
+        })
+        .filter(|suffix| suffix.contains('/'))
         .filter_map(|suffix| suffix.split('/').next())
         .map(ToOwned::to_owned)
         .collect()
@@ -1240,13 +1518,113 @@ fn parse_frontmatter(
         body_index += 1;
     }
 
-    let frontmatter = if frontmatter_lines.is_empty() {
+    let normalized_frontmatter_lines = frontmatter_lines
+        .into_iter()
+        .map(|line| sanitize_frontmatter_line(line))
+        .collect::<Vec<_>>();
+
+    let frontmatter = if normalized_frontmatter_lines.is_empty() {
         BTreeMap::new()
     } else {
-        serde_yaml::from_str::<BTreeMap<String, serde_yaml::Value>>(&frontmatter_lines.join("\n"))
-            .map_err(|error| AppError::invalid_input(format!("invalid frontmatter yaml: {error}")))?
+        let normalized_frontmatter = normalized_frontmatter_lines.join("\n");
+        match serde_yaml::from_str::<BTreeMap<String, serde_yaml::Value>>(&normalized_frontmatter) {
+            Ok(frontmatter) => frontmatter,
+            Err(_) => parse_frontmatter_fallback(&normalized_frontmatter_lines)?,
+        }
     };
     Ok((frontmatter, lines[body_index..].join("\n")))
+}
+
+fn sanitize_frontmatter_line(line: &str) -> String {
+    let trimmed = line.trim_end();
+    if trimmed != "---" && trimmed.ends_with("---") && trimmed.contains(':') {
+        trimmed.trim_end_matches('-').trim_end().to_string()
+    } else {
+        line.to_string()
+    }
+}
+
+fn parse_frontmatter_fallback(
+    lines: &[String],
+) -> Result<BTreeMap<String, serde_yaml::Value>, AppError> {
+    let mut frontmatter = BTreeMap::new();
+    let mut current_key: Option<String> = None;
+    let mut current_value_lines: Vec<String> = Vec::new();
+
+    for line in lines {
+        if let Some((key, value)) = parse_frontmatter_entry_line(line) {
+            flush_frontmatter_entry(&mut frontmatter, &mut current_key, &mut current_value_lines)?;
+            current_key = Some(key);
+            current_value_lines.push(value);
+            continue;
+        }
+
+        if current_key.is_some() {
+            let trimmed = line.trim();
+            if !trimmed.is_empty() {
+                current_value_lines.push(trimmed.to_string());
+            }
+        }
+    }
+
+    flush_frontmatter_entry(&mut frontmatter, &mut current_key, &mut current_value_lines)?;
+    Ok(frontmatter)
+}
+
+fn flush_frontmatter_entry(
+    frontmatter: &mut BTreeMap<String, serde_yaml::Value>,
+    current_key: &mut Option<String>,
+    current_value_lines: &mut Vec<String>,
+) -> Result<(), AppError> {
+    let Some(key) = current_key.take() else {
+        current_value_lines.clear();
+        return Ok(());
+    };
+
+    let normalized_value_lines = current_value_lines
+        .iter()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty())
+        .map(strip_wrapping_quotes)
+        .collect::<Vec<_>>()
+        .join(" ");
+    current_value_lines.clear();
+
+    let value = if normalized_value_lines.is_empty() {
+        serde_yaml::Value::Null
+    } else {
+        serde_yaml::from_str::<serde_yaml::Value>(&normalized_value_lines).unwrap_or_else(|_| {
+            serde_yaml::Value::String(strip_wrapping_quotes(&normalized_value_lines))
+        })
+    };
+    frontmatter.insert(key, value);
+    Ok(())
+}
+
+fn parse_frontmatter_entry_line(line: &str) -> Option<(String, String)> {
+    if line.trim().is_empty() || line.starts_with(char::is_whitespace) {
+        return None;
+    }
+
+    let colon_index = line.find(':')?;
+    let key = line[..colon_index].trim();
+    if key.is_empty() {
+        return None;
+    }
+
+    Some((key.to_string(), line[colon_index + 1..].trim().to_string()))
+}
+
+fn strip_wrapping_quotes(value: &str) -> String {
+    if value.len() >= 2 {
+        let bytes = value.as_bytes();
+        let first = bytes[0];
+        let last = bytes[value.len() - 1];
+        if (first == b'"' && last == b'"') || (first == b'\'' && last == b'\'') {
+            return value[1..value.len() - 1].to_string();
+        }
+    }
+    value.to_string()
 }
 
 fn is_frontmatter_delimiter(line: &str) -> bool {
@@ -1495,10 +1873,6 @@ fn apply_asset_metadata(
     }
 }
 
-pub(crate) fn asset_metadata_has_values(metadata: &WorkspaceCapabilityAssetMetadata) -> bool {
-    metadata.enabled.is_some() || metadata.trusted.is_some()
-}
-
 pub(crate) fn bundle_mcp_source_key(target: &AssetTargetScope<'_>, server_name: &str) -> String {
     match target {
         AssetTargetScope::Project(project_id) => format!("mcp:project:{project_id}:{server_name}"),
@@ -1641,6 +2015,27 @@ pub(crate) fn issue(
         suggestion: None,
         details: None,
     }
+}
+
+pub(crate) fn model_strategy_from_template(model: Option<&str>) -> DefaultModelStrategy {
+    let trimmed = model.map(str::trim).filter(|value| !value.is_empty());
+    match trimmed {
+        Some(model_ref) => DefaultModelStrategy {
+            selection_mode: "actor-default".into(),
+            preferred_model_ref: Some(model_ref.to_string()),
+            fallback_model_refs: Vec::new(),
+            allow_turn_override: true,
+        },
+        None => default_model_strategy(),
+    }
+}
+
+fn model_ref_for_export(strategy: &DefaultModelStrategy) -> String {
+    strategy
+        .preferred_model_ref
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_default()
 }
 
 pub(crate) fn build_agent_record(
@@ -1789,6 +2184,7 @@ fn compute_agent_hash(
         "builtinToolKeys": record.builtin_tool_keys,
         "skillIds": skill_ids,
         "mcpServerNames": record.mcp_server_names,
+        "model": record.model,
         "status": "active",
     }))?))
 }
@@ -1806,6 +2202,7 @@ fn compute_existing_agent_hash(record: &AgentRecord) -> Result<String, AppError>
         "builtinToolKeys": record.builtin_tool_keys,
         "skillIds": record.skill_ids,
         "mcpServerNames": record.mcp_server_names,
+        "model": record.default_model_strategy.preferred_model_ref,
         "status": record.status,
     }))?))
 }
@@ -1832,6 +2229,7 @@ fn compute_team_hash(
         "mcpServerNames": record.mcp_server_names,
         "leaderAgentId": leader_agent_id,
         "memberAgentIds": member_agent_ids,
+        "model": record.model,
         "status": "active",
     }))?))
 }
@@ -1851,6 +2249,7 @@ fn compute_existing_team_hash(record: &TeamRecord) -> Result<String, AppError> {
         "mcpServerNames": record.mcp_server_names,
         "leaderAgentId": record.leader_agent_id,
         "memberAgentIds": record.member_agent_ids,
+        "model": record.default_model_strategy.preferred_model_ref,
         "status": record.status,
     }))?))
 }
@@ -2149,6 +2548,7 @@ pub(crate) fn persist_avatar(
         "image/png" => "png",
         "image/webp" => "webp",
         "image/jpeg" | "image/jpg" => "jpg",
+        "image/svg+xml" => "svg",
         other => {
             return Err(AppError::invalid_input(format!(
                 "unsupported avatar content type: {other}"
@@ -2350,6 +2750,7 @@ fn content_type_for_avatar(file_name: &str) -> Option<&'static str> {
         Some("png") => Some("image/png"),
         Some("jpg") | Some("jpeg") => Some("image/jpeg"),
         Some("webp") => Some("image/webp"),
+        Some("svg") => Some("image/svg+xml"),
         _ => None,
     }
 }
@@ -2366,6 +2767,7 @@ pub(crate) fn content_type_for_export(path: &str) -> &'static str {
         Some("png") => "image/png",
         Some("jpg") | Some("jpeg") => "image/jpeg",
         Some("webp") => "image/webp",
+        Some("svg") => "image/svg+xml",
         _ => "application/octet-stream",
     }
 }
@@ -2417,7 +2819,10 @@ fn render_agent_markdown(
             "mcps: {}",
             serde_json::to_string(&agent.mcp_server_names).unwrap_or_else(|_| "[]".into())
         ),
-        "model: \"\"".into(),
+        format!(
+            "model: {}",
+            yaml_inline_string(&model_ref_for_export(&agent.default_model_strategy))
+        ),
         "-----------".into(),
         String::new(),
         agent.prompt.clone(),
@@ -2438,13 +2843,27 @@ fn render_team_markdown(
         format!("avatar: {}", yaml_inline_string(avatar_file_name)),
         format!("tag: {}", yaml_inline_string(&team.tags.join("、"))),
         format!("leader: {}", yaml_inline_string(leader_name)),
-        format!("member: {}", yaml_inline_string(&member_names.join("、"))),
-        "model: \"\"".into(),
+        format!(
+            "member: {}",
+            serde_json::to_string(member_names).unwrap_or_else(|_| "[]".into())
+        ),
+        format!(
+            "model: {}",
+            yaml_inline_string(&model_ref_for_export(&team.default_model_strategy))
+        ),
         "-----------".into(),
         String::new(),
         team.prompt.clone(),
     ]
     .join("\n")
+}
+
+fn team_summary_file_name(team_name: &str) -> String {
+    if team_name.ends_with('部') {
+        format!("{team_name}门说明.md")
+    } else {
+        format!("{team_name}说明.md")
+    }
 }
 
 fn yaml_inline_string(value: &str) -> String {
@@ -2471,16 +2890,18 @@ pub(crate) fn export_team_files(
         format!("{root_dir_name}/{team_dir_name}")
     };
     let mut files = Vec::new();
-    let (avatar_name, avatar_bytes) = context
-        .avatar_payloads
-        .get(&format!("team:{}", team.id))
-        .map(|(name, _content_type, bytes)| (name.clone(), bytes.clone()))
-        .ok_or_else(|| AppError::not_found("team avatar payload"))?;
-    files.push(encode_file(
-        &format!("{base_dir}/{avatar_name}"),
-        content_type_for_export(&avatar_name),
-        avatar_bytes,
-    ));
+    let avatar_name = if let Some(Some((avatar_name, _content_type, avatar_bytes))) =
+        context.avatar_payloads.get(&format!("team:{}", team.id))
+    {
+        files.push(encode_file(
+            &format!("{base_dir}/{avatar_name}"),
+            content_type_for_export(avatar_name),
+            avatar_bytes.clone(),
+        ));
+        avatar_name.clone()
+    } else {
+        String::from("头像")
+    };
     let member_names = team
         .member_agent_ids
         .iter()
@@ -2494,7 +2915,7 @@ pub(crate) fn export_team_files(
         .map(|agent| agent.name.clone())
         .unwrap_or_default();
     files.push(encode_file(
-        &format!("{base_dir}/{team_dir_name}.md"),
+        &format!("{base_dir}/{}", team_summary_file_name(&team_dir_name)),
         "text/markdown",
         render_team_markdown(team, &avatar_name, &leader_name, &member_names).into_bytes(),
     ));
@@ -2528,16 +2949,18 @@ pub(crate) fn export_agent_files(
         None => format!("{root_dir_name}/{agent_dir_name}"),
     };
     let mut files = Vec::new();
-    let (avatar_name, avatar_bytes) = context
-        .avatar_payloads
-        .get(&format!("agent:{}", agent.id))
-        .map(|(name, _content_type, bytes)| (name.clone(), bytes.clone()))
-        .ok_or_else(|| AppError::not_found("agent avatar payload"))?;
-    files.push(encode_file(
-        &format!("{base_dir}/{avatar_name}"),
-        content_type_for_export(&avatar_name),
-        avatar_bytes,
-    ));
+    let avatar_name = if let Some(Some((avatar_name, _content_type, avatar_bytes))) =
+        context.avatar_payloads.get(&format!("agent:{}", agent.id))
+    {
+        files.push(encode_file(
+            &format!("{base_dir}/{avatar_name}"),
+            content_type_for_export(avatar_name),
+            avatar_bytes.clone(),
+        ));
+        avatar_name.clone()
+    } else {
+        String::from("头像")
+    };
     let exported_skill_slugs = agent
         .skill_ids
         .iter()
@@ -2547,6 +2970,12 @@ pub(crate) fn export_agent_files(
                 .get(skill_id)
                 .and_then(|path| path.file_name().and_then(|value| value.to_str()))
                 .map(ToOwned::to_owned)
+                .or_else(|| {
+                    context
+                        .builtin_skill_assets
+                        .get(skill_id)
+                        .map(|asset| asset.slug.clone())
+                })
         })
         .collect::<Vec<_>>();
     files.push(encode_file(
@@ -2822,12 +3251,6 @@ pub(crate) fn build_export_context(
     let descriptors = load_scoped_bundle_asset_descriptors(connection, &target)?
         .into_values()
         .collect::<Vec<_>>();
-    let asset_state = crate::agent_bundle::manifest_v2::build_bundle_asset_state(
-        paths,
-        &target,
-        &skill_paths,
-        &mcp_configs,
-    )?;
     let root_dir_name = if input.mode == "single"
         && teams.len() == 1
         && agents
@@ -2838,7 +3261,7 @@ pub(crate) fn build_export_context(
     } else if input.mode == "single" && agents.len() == 1 && teams.is_empty() {
         sanitize_export_dir_name(&agents[0].name)
     } else {
-        String::from("agent-bundle")
+        String::from("templates")
     };
     let bundle_manifest = crate::agent_bundle::manifest_v2::build_export_bundle_manifest(
         &agents,
@@ -2856,12 +3279,10 @@ pub(crate) fn build_export_context(
         root_dir_name,
         agents,
         teams,
-        descriptors,
         skill_paths,
         builtin_skill_assets,
         mcp_configs,
         avatar_payloads,
-        asset_state,
         bundle_manifest,
         translation_report,
         issues: Vec::new(),
@@ -2961,7 +3382,7 @@ fn resolve_avatar_payloads(
     target: &AssetTargetScope<'_>,
     agents: &[AgentRecord],
     teams: &[TeamRecord],
-) -> Result<HashMap<String, (String, String, Vec<u8>)>, AppError> {
+) -> Result<HashMap<String, Option<(String, String, Vec<u8>)>>, AppError> {
     let mut payloads = HashMap::new();
     for agent in agents {
         payloads.insert(
@@ -2993,7 +3414,7 @@ fn export_avatar_payload(
     avatar_path: Option<&str>,
     owner_kind: &str,
     seed_key: &str,
-) -> Result<(String, String, Vec<u8>), AppError> {
+) -> Result<Option<(String, String, Vec<u8>)>, AppError> {
     if let Some(avatar_path) = avatar_path {
         let absolute_path = paths.root.join(avatar_path);
         if absolute_path.is_file() {
@@ -3003,15 +3424,16 @@ fn export_avatar_payload(
                 .unwrap_or("avatar.png")
                 .to_string();
             if let Some(content_type) = content_type_for_avatar(&file_name) {
-                return Ok((
+                return Ok(Some((
                     file_name,
                     content_type.to_string(),
                     fs::read(absolute_path)?,
-                ));
+                )));
             }
         }
     }
-    default_avatar_payload(owner_kind, seed_key)
+    let _ = (owner_kind, seed_key);
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -3242,6 +3664,84 @@ mod tests {
     }
 
     #[test]
+    fn default_avatar_payload_accepts_svg_header_assets() {
+        let (file_name, content_type, bytes) =
+            default_avatar_payload("agent", "workspace:agent-svg").expect("default avatar");
+
+        assert!(file_name.ends_with(".svg"));
+        assert_eq!(content_type, "image/svg+xml");
+        assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn persist_avatar_writes_svg_files() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = WorkspacePaths::new(temp.path());
+        let avatar = ParsedAssetAvatar {
+            source_id: "agent-svg".into(),
+            owner_kind: "agent".into(),
+            owner_name: "SVG Agent".into(),
+            file_name: "portrait.svg".into(),
+            content_type: "image/svg+xml".into(),
+            bytes: br#"<svg xmlns="http://www.w3.org/2000/svg"></svg>"#.to_vec(),
+            generated: false,
+        };
+
+        let relative_path = persist_avatar(&paths, "agent-svg", &avatar)
+            .expect("persist avatar")
+            .expect("avatar path");
+
+        assert_eq!(relative_path, "data/blobs/avatars/agent-svg.svg");
+        assert_eq!(
+            fs::read(paths.root.join(&relative_path)).expect("read avatar"),
+            avatar.bytes
+        );
+    }
+
+    #[test]
+    fn content_type_for_export_returns_svg_mime_type() {
+        assert_eq!(content_type_for_export("avatar.svg"), "image/svg+xml");
+    }
+
+    #[test]
+    fn parse_frontmatter_tolerates_inline_closing_delimiter_suffix() {
+        let markdown = "---\nname: 简历筛选师\ndescription: 负责候选人简历初筛输出---\ncharacter: 活泼可爱\n---\n\n# 角色定义\n说明\n";
+
+        let (frontmatter, body) = parse_frontmatter(markdown).expect("parse frontmatter");
+
+        assert_eq!(
+            yaml_string(&frontmatter, "name").as_deref(),
+            Some("简历筛选师")
+        );
+        assert_eq!(
+            yaml_string(&frontmatter, "description").as_deref(),
+            Some("负责候选人简历初筛输出")
+        );
+        assert_eq!(
+            yaml_string(&frontmatter, "character").as_deref(),
+            Some("活泼可爱")
+        );
+        assert!(body.contains("# 角色定义"));
+    }
+
+    #[test]
+    fn parse_frontmatter_fallback_merges_indented_continuation_lines() {
+        let markdown = "---\nversion: \"2.0.0\"\nname: Performance Review\ndescription: \"第一段说明。\"\n  第二段说明。\nauthor: BytesAgain\n---\n\n# Body\n";
+
+        let (frontmatter, body) = parse_frontmatter(markdown).expect("parse frontmatter");
+
+        assert_eq!(
+            yaml_string(&frontmatter, "description").as_deref(),
+            Some("第一段说明。 第二段说明。")
+        );
+        assert_eq!(
+            yaml_string(&frontmatter, "author").as_deref(),
+            Some("BytesAgain")
+        );
+        assert!(body.contains("# Body"));
+    }
+
+    #[test]
     fn preview_supports_standalone_agent_root_and_yaml_arrays() {
         let temp = tempfile::tempdir().expect("tempdir");
         let paths = WorkspacePaths::new(temp.path());
@@ -3296,8 +3796,8 @@ mod tests {
             ImportWorkspaceAgentBundlePreviewInput {
                 files: vec![
                     encoded_file(
-                        "财务部/财务部.md",
-                        "---\nname: 财务部\ndescription: 财务团队\nleader: 财务负责人\nmember: 财务负责人、财务分析师\n---\n\n# leader职责\n负责统筹\n",
+                        "财务部/财务部门说明.md",
+                        "---\nname: 财务部\ndescription: 财务团队\nleader: 财务负责人\nmember: [\"财务负责人\", \"财务分析师\"]\n---\n\n# leader职责\n负责统筹\n",
                     ),
                     encoded_file(
                         "财务部/财务负责人/财务负责人.md",
@@ -3435,7 +3935,7 @@ mod tests {
         assert!(exported
             .files
             .iter()
-            .any(|file| file.relative_path == "财务部/财务部.md"));
+            .any(|file| file.relative_path == "财务部/财务部门说明.md"));
         assert!(exported
             .files
             .iter()
@@ -3502,7 +4002,7 @@ mod tests {
         .expect("export");
 
         assert!(exported.files.iter().any(|file| {
-            file.relative_path == "agent-bundle/项目财务分析师/skills/project-skill/SKILL.md"
+            file.relative_path == "templates/项目财务分析师/skills/project-skill/SKILL.md"
         }));
     }
 
@@ -3517,12 +4017,9 @@ mod tests {
         let builtin_skill = crate::agent_bundle::list_builtin_skill_assets()
             .expect("builtin skills")
             .into_iter()
-            .find(|asset| asset.slug == "financial-calculator")
-            .expect("financial-calculator builtin skill");
+            .next()
+            .expect("builtin skill");
         let builtin_skill_id = catalog_hash_id("skill", &builtin_skill.display_path);
-        let builtin_mcp = crate::agent_bundle::find_builtin_mcp_asset("finance-data")
-            .expect("builtin mcp lookup")
-            .expect("finance-data builtin mcp");
 
         let agent_id = "agent-linked-workspace";
         let record = test_agent_record(
@@ -3536,7 +4033,7 @@ mod tests {
             "# 角色定义\n处理项目财务联动\n",
             vec!["bash".into()],
             vec![builtin_skill_id],
-            vec![builtin_mcp.server_name.clone()],
+            Vec::new(),
             "工作区级财务员工",
         );
         write_agent_record(&connection, &record, false).expect("write workspace agent");
@@ -3592,24 +4089,14 @@ mod tests {
         .expect("export");
 
         assert_eq!(exported.root_dir_name, "财务联动员工");
-        assert!(exported
+        assert!(exported.files.iter().any(|file| {
+            file.relative_path.starts_with("财务联动员工/skills/")
+                && file.relative_path.ends_with("/SKILL.md")
+        }));
+        assert!(!exported
             .files
             .iter()
-            .any(|file| file.relative_path == "财务联动员工/.octopus/manifest.json"));
-        assert!(exported.files.iter().any(|file| {
-            file.relative_path == "财务联动员工/skills/financial-calculator/SKILL.md"
-        }));
-        assert!(exported
-            .files
-            .iter()
-            .any(|file| { file.relative_path == "财务联动员工/mcps/finance-data.json" }));
-        assert!(exported.files.iter().any(|file| {
-            file.relative_path.starts_with("财务联动员工/")
-                && (file.relative_path.ends_with(".png")
-                    || file.relative_path.ends_with(".jpg")
-                    || file.relative_path.ends_with(".jpeg")
-                    || file.relative_path.ends_with(".webp"))
-        }));
+            .any(|file| file.relative_path.contains("/.octopus/")));
     }
 
     #[test]
@@ -3623,8 +4110,8 @@ mod tests {
         let builtin_skill = crate::agent_bundle::list_builtin_skill_assets()
             .expect("builtin skills")
             .into_iter()
-            .find(|asset| asset.slug == "financial-calculator")
-            .expect("financial-calculator builtin skill");
+            .next()
+            .expect("builtin skill");
         let builtin_skill_id = catalog_hash_id("skill", &builtin_skill.display_path);
 
         let agent_id = "agent-linked-roundtrip";
@@ -3639,7 +4126,7 @@ mod tests {
             "# 角色定义\n导出后重新导入\n",
             vec!["bash".into()],
             vec![builtin_skill_id],
-            vec!["finance-data".into()],
+            Vec::new(),
             "验证项目导出闭包",
         );
         write_agent_record(&connection, &record, false).expect("write workspace agent");
@@ -3709,12 +4196,12 @@ mod tests {
         assert_eq!(imported.agent_count, 1);
         assert_eq!(imported.team_count, 0);
         assert_eq!(imported.skill_count, 1);
-        assert_eq!(imported.mcp_count, 1);
+        assert_eq!(imported.mcp_count, 0);
         assert_eq!(imported.avatar_count, 1);
     }
 
     #[test]
-    fn export_import_roundtrips_asset_state_metadata_for_managed_skill_and_mcp() {
+    fn export_import_skips_legacy_asset_state_sidecar_files() {
         let source_temp = tempfile::tempdir().expect("source tempdir");
         let source_paths = WorkspacePaths::new(source_temp.path());
         source_paths.ensure_layout().expect("source layout");
@@ -3808,11 +4295,11 @@ mod tests {
         )
         .expect("export source assets");
         assert!(
-            exported
+            !exported
                 .files
                 .iter()
-                .any(|file| file.relative_path.ends_with(".octopus/asset-state.json")),
-            "bundle should carry serialized asset metadata"
+                .any(|file| file.relative_path.contains("/.octopus/")),
+            "template export should not emit legacy .octopus metadata files"
         );
 
         let destination_temp = tempfile::tempdir().expect("destination tempdir");
@@ -3835,26 +4322,21 @@ mod tests {
         )
         .expect("import destination assets");
 
-        let destination_asset_state: JsonValue = serde_json::from_str(
-            &fs::read_to_string(&destination_paths.workspace_asset_state_path)
-                .expect("destination asset state file"),
-        )
-        .expect("parse destination asset state");
-        assert_eq!(
-            destination_asset_state["assets"][skill_source_key.as_str()]["enabled"],
-            JsonValue::Bool(false)
+        assert!(
+            !destination_paths.workspace_asset_state_path.exists(),
+            "template import should not materialize legacy asset state sidecar"
         );
-        assert_eq!(
-            destination_asset_state["assets"][skill_source_key.as_str()]["trusted"],
-            JsonValue::Bool(true)
-        );
-        assert_eq!(
-            destination_asset_state["assets"][mcp_source_key.as_str()]["enabled"],
-            JsonValue::Bool(false)
-        );
-        assert_eq!(
-            destination_asset_state["assets"][mcp_source_key.as_str()]["trusted"],
-            JsonValue::Bool(true)
-        );
+
+        let destination_asset_state =
+            crate::resources_skills::load_workspace_asset_state_document(&destination_paths)
+                .expect("load destination asset state");
+        let destination_asset_state = serde_json::to_value(destination_asset_state)
+            .expect("serialize destination asset state");
+        assert!(destination_asset_state["assets"]
+            .get(skill_source_key.as_str())
+            .is_none());
+        assert!(destination_asset_state["assets"]
+            .get(mcp_source_key.as_str())
+            .is_none());
     }
 }

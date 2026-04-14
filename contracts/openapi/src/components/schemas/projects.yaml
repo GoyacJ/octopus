@@ -103,10 +103,20 @@ ProjectAgentLinkRecord:
 ProjectDashboardSnapshot:
   additionalProperties: false
   properties:
+    conversationInsights:
+      items:
+        $ref: "#/components/schemas/ProjectDashboardConversationInsight"
+      type: array
     metrics:
       items:
         $ref: "#/components/schemas/WorkspaceMetricRecord"
       type: array
+    modelBreakdown:
+      items:
+        $ref: "#/components/schemas/ProjectDashboardBreakdownItem"
+      type: array
+    overview:
+      $ref: "#/components/schemas/ProjectDashboardSummary"
     project:
       $ref: "#/components/schemas/ProjectRecord"
     recentActivity:
@@ -117,11 +127,254 @@ ProjectDashboardSnapshot:
       items:
         $ref: "#/components/schemas/ConversationRecord"
       type: array
+    resourceBreakdown:
+      items:
+        $ref: "#/components/schemas/ProjectDashboardBreakdownItem"
+      type: array
+    toolRanking:
+      items:
+        $ref: "#/components/schemas/ProjectDashboardRankingItem"
+      type: array
+    trend:
+      items:
+        $ref: "#/components/schemas/ProjectDashboardTrendPoint"
+      type: array
+    userStats:
+      items:
+        $ref: "#/components/schemas/ProjectDashboardUserStat"
+      type: array
+    usedTokens:
+      minimum: 0
+      type: integer
   required:
     - project
     - metrics
+    - overview
+    - trend
+    - userStats
+    - conversationInsights
+    - toolRanking
+    - resourceBreakdown
+    - modelBreakdown
     - recentConversations
     - recentActivity
+    - usedTokens
+  type: object
+ProjectDashboardSummary:
+  additionalProperties: false
+  properties:
+    activeUserCount:
+      minimum: 0
+      type: integer
+    activityCount:
+      minimum: 0
+      type: integer
+    agentCount:
+      minimum: 0
+      type: integer
+    approvalCount:
+      minimum: 0
+      type: integer
+    conversationCount:
+      minimum: 0
+      type: integer
+    knowledgeCount:
+      minimum: 0
+      type: integer
+    memberCount:
+      minimum: 0
+      type: integer
+    messageCount:
+      minimum: 0
+      type: integer
+    resourceCount:
+      minimum: 0
+      type: integer
+    teamCount:
+      minimum: 0
+      type: integer
+    tokenRecordCount:
+      minimum: 0
+      type: integer
+    toolCallCount:
+      minimum: 0
+      type: integer
+    toolCount:
+      minimum: 0
+      type: integer
+    totalTokens:
+      minimum: 0
+      type: integer
+  required:
+    - memberCount
+    - activeUserCount
+    - agentCount
+    - teamCount
+    - conversationCount
+    - messageCount
+    - toolCallCount
+    - approvalCount
+    - resourceCount
+    - knowledgeCount
+    - toolCount
+    - tokenRecordCount
+    - totalTokens
+    - activityCount
+  type: object
+ProjectDashboardTrendPoint:
+  additionalProperties: false
+  properties:
+    approvalCount:
+      minimum: 0
+      type: integer
+    conversationCount:
+      minimum: 0
+      type: integer
+    id:
+      type: string
+    label:
+      type: string
+    messageCount:
+      minimum: 0
+      type: integer
+    timestamp:
+      minimum: 0
+      type: integer
+    tokenCount:
+      minimum: 0
+      type: integer
+    toolCallCount:
+      minimum: 0
+      type: integer
+  required:
+    - id
+    - label
+    - timestamp
+    - conversationCount
+    - messageCount
+    - toolCallCount
+    - approvalCount
+    - tokenCount
+  type: object
+ProjectDashboardUserStat:
+  additionalProperties: false
+  properties:
+    activityCount:
+      minimum: 0
+      type: integer
+    activityTrend:
+      items:
+        minimum: 0
+        type: integer
+      type: array
+    approvalCount:
+      minimum: 0
+      type: integer
+    conversationCount:
+      minimum: 0
+      type: integer
+    displayName:
+      type: string
+    messageCount:
+      minimum: 0
+      type: integer
+    tokenCount:
+      minimum: 0
+      type: integer
+    tokenTrend:
+      items:
+        minimum: 0
+        type: integer
+      type: array
+    toolCallCount:
+      minimum: 0
+      type: integer
+    userId:
+      type: string
+  required:
+    - userId
+    - displayName
+    - activityCount
+    - conversationCount
+    - messageCount
+    - toolCallCount
+    - approvalCount
+    - tokenCount
+    - activityTrend
+    - tokenTrend
+  type: object
+ProjectDashboardRankingItem:
+  additionalProperties: false
+  properties:
+    helper:
+      type: string
+    id:
+      type: string
+    label:
+      type: string
+    value:
+      minimum: 0
+      type: integer
+  required:
+    - id
+    - label
+    - value
+  type: object
+ProjectDashboardConversationInsight:
+  additionalProperties: false
+  properties:
+    approvalCount:
+      minimum: 0
+      type: integer
+    conversationId:
+      type: string
+    id:
+      type: string
+    lastMessagePreview:
+      type: string
+    messageCount:
+      minimum: 0
+      type: integer
+    status:
+      type: string
+    title:
+      type: string
+    tokenCount:
+      minimum: 0
+      type: integer
+    toolCallCount:
+      minimum: 0
+      type: integer
+    updatedAt:
+      minimum: 0
+      type: integer
+  required:
+    - id
+    - conversationId
+    - title
+    - status
+    - updatedAt
+    - messageCount
+    - toolCallCount
+    - approvalCount
+    - tokenCount
+  type: object
+ProjectDashboardBreakdownItem:
+  additionalProperties: false
+  properties:
+    helper:
+      type: string
+    id:
+      type: string
+    label:
+      type: string
+    value:
+      minimum: 0
+      type: integer
+  required:
+    - id
+    - label
+    - value
   type: object
 ProjectModelAssignments:
   additionalProperties: false

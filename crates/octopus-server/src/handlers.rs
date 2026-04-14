@@ -220,16 +220,6 @@ fn system_menu_definitions() -> Vec<MenuDefinition> {
             feature_code: "feature:project-settings".into(),
         },
         MenuDefinition {
-            id: "menu-project-runtime".into(),
-            parent_id: None,
-            label: "Runtime".into(),
-            route_name: Some("project-runtime".into()),
-            source: "main-sidebar".into(),
-            status: "active".into(),
-            order: 75,
-            feature_code: "feature:project-runtime".into(),
-        },
-        MenuDefinition {
             id: "menu-workspace-automations".into(),
             parent_id: None,
             label: "自动化".into(),
@@ -1546,6 +1536,14 @@ fn default_permission_definitions() -> Vec<PermissionDefinition> {
             description: "Resolve runtime approvals.".into(),
             category: "runtime".into(),
             resource_type: "runtime.approval".into(),
+            actions: vec!["resolve".into()],
+        },
+        PermissionDefinition {
+            code: "runtime.auth.resolve".into(),
+            name: "Runtime Auth Resolve".into(),
+            description: "Resolve runtime auth challenges.".into(),
+            category: "runtime".into(),
+            resource_type: "runtime.auth".into(),
             actions: vec!["resolve".into()],
         },
         PermissionDefinition {

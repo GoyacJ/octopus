@@ -31,6 +31,7 @@ const {
   viewReady,
   toolSections,
   summaryAllowedModels,
+  projectUsedTokens,
   summaryOverrideCount,
   summaryActorCount,
   summaryMemberCount,
@@ -109,6 +110,7 @@ const {
             :model-tab-ready="modelTabReady"
             :allowed-workspace-configured-models="allowedWorkspaceConfiguredModels"
             :models-form="modelsForm"
+            :project-used-tokens="projectUsedTokens"
             :models-error="modelsError"
             :saving-models="savingModels"
             @reset="resetModels"

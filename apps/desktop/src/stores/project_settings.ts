@@ -33,14 +33,18 @@ export function parseProjectModelSettings(value: unknown): ProjectModelSettings 
   const defaultConfiguredModelId = typeof value.defaultConfiguredModelId === 'string'
     ? value.defaultConfiguredModelId
     : ''
+  const totalTokens = typeof value.totalTokens === 'number' && Number.isFinite(value.totalTokens) && value.totalTokens > 0
+    ? Math.trunc(value.totalTokens)
+    : undefined
 
-  if (!allowedConfiguredModelIds.length && !defaultConfiguredModelId) {
+  if (!allowedConfiguredModelIds.length && !defaultConfiguredModelId && totalTokens === undefined) {
     return undefined
   }
 
   return {
     allowedConfiguredModelIds,
     defaultConfiguredModelId,
+    totalTokens,
   }
 }
 

@@ -2,17 +2,16 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { createDefaultHostUpdateStatus, createDefaultShellPreferences } from '@octopus/schema'
-import type { HostUpdateChannel, RuntimeConfigSource } from '@octopus/schema'
+import type { HostUpdateChannel } from '@octopus/schema'
 
 import { enumLabel } from '@/i18n/copy'
 import { useAppUpdateStore } from '@/stores/app-update'
-import { useRuntimeStore } from '@/stores/runtime'
 import { useShellStore } from '@/stores/shell'
 
-export type SettingsTab = 'general' | 'connection' | 'theme' | 'runtime' | 'version'
+export type SettingsTab = 'general' | 'connection' | 'theme' | 'version'
 
 function resolveSettingsTab(value: unknown): SettingsTab {
-  return ['general', 'connection', 'theme', 'runtime', 'version'].includes(String(value))
+  return ['general', 'connection', 'theme', 'version'].includes(String(value))
     ? value as SettingsTab
     : 'general'
 }
@@ -21,44 +20,7 @@ export function useAppSettingsView() {
   const { t } = useI18n()
   const appUpdate = useAppUpdateStore()
   const shell = useShellStore()
-  const runtime = useRuntimeStore()
   const route = useRoute()
-
-  function resolveValidationTone(validation = runtime.configValidation.workspace): 'default' | 'success' | 'warning' | 'error' | 'info' {
-    if (!validation) {
-      return 'default'
-    }
-
-    return validation.valid ? 'success' : 'error'
-  }
-
-  function resolveValidationLabel(validation = runtime.configValidation.workspace): string {
-    if (!validation) {
-      return t('settings.runtime.validation.idle')
-    }
-
-    return validation.valid
-      ? t('settings.runtime.validation.valid')
-      : t('settings.runtime.validation.invalid')
-  }
-
-  function resolveSourceStatusLabel(source?: RuntimeConfigSource): string {
-    if (!source?.exists) {
-      return t('settings.runtime.sourceStatuses.missing')
-    }
-
-    return source.loaded
-      ? t('settings.runtime.sourceStatuses.loaded')
-      : t('settings.runtime.sourceStatuses.detected')
-  }
-
-  function resolveSourceStatusTone(source?: RuntimeConfigSource): 'default' | 'success' | 'warning' | 'error' | 'info' {
-    if (!source?.exists) {
-      return 'warning'
-    }
-
-    return source.loaded ? 'success' : 'info'
-  }
 
   const activeTab = ref<SettingsTab>(resolveSettingsTab(route.query.tab))
   const theme = ref(shell.preferences.theme)
@@ -70,18 +32,8 @@ export function useAppSettingsView() {
     { value: 'general', label: t('settings.tabs.general') },
     { value: 'connection', label: t('settings.tabs.connection') },
     { value: 'theme', label: t('settings.tabs.theme') },
-    { value: 'runtime', label: t('settings.tabs.runtime') },
     { value: 'version', label: t('settings.tabs.version') },
   ])
-
-  const workspaceRuntimeSource = computed<RuntimeConfigSource | undefined>(() =>
-    runtime.config?.sources.filter(item => item.scope === 'workspace').at(-1),
-  )
-  const workspaceRuntimeDraft = computed(() => runtime.configDrafts.workspace)
-  const runtimeEffectivePreview = computed(() =>
-    JSON.stringify(runtime.config?.effectiveConfig ?? {}, null, 2),
-  )
-  const runtimeSecretStatuses = computed(() => runtime.config?.secretReferences ?? [])
 
   const hostBackendBadges = computed((): Array<{ id: string, label: string, tone: 'info' | 'success' | 'warning' }> => {
     if (!shell.backendConnection) {
@@ -270,38 +222,9 @@ export function useAppSettingsView() {
     },
   )
 
-  watch(
-    () => ({
-      tab: activeTab.value,
-      workspaceConnectionId: shell.activeWorkspaceConnection?.workspaceConnectionId ?? '',
-    }),
-    ({ tab, workspaceConnectionId }, previous) => {
-      if (tab !== 'runtime' || !workspaceConnectionId) {
-        return
-      }
-
-      if (!runtime.config || previous?.workspaceConnectionId !== workspaceConnectionId) {
-        void runtime.loadConfig(previous?.workspaceConnectionId !== workspaceConnectionId)
-      }
-    },
-    { immediate: true },
-  )
-
   async function resetToDefault() {
     const defaults = createDefaultShellPreferences(shell.defaultWorkspaceId, shell.defaultProjectId)
     await shell.updatePreferences(defaults)
-  }
-
-  async function validateWorkspaceRuntime() {
-    await runtime.validateConfig('workspace')
-  }
-
-  async function saveWorkspaceRuntime() {
-    await runtime.saveConfig('workspace')
-  }
-
-  async function reloadRuntimeConfig() {
-    await runtime.loadConfig(true)
   }
 
   function formatRelativeTimestamp(value: number | null): string {
@@ -350,7 +273,6 @@ export function useAppSettingsView() {
     t,
     appUpdate,
     shell,
-    runtime,
     activeTab,
     theme,
     locale,
@@ -358,10 +280,6 @@ export function useAppSettingsView() {
     leftSidebarCollapsed,
     rightSidebarCollapsed,
     tabs,
-    workspaceRuntimeSource,
-    workspaceRuntimeDraft,
-    runtimeEffectivePreview,
-    runtimeSecretStatuses,
     hostBackendBadges,
     workspaceLabel,
     themeOptions,
@@ -377,14 +295,7 @@ export function useAppSettingsView() {
     primaryUpdateActionLabel,
     primaryUpdateActionDisabled,
     hasReleaseNotesLink,
-    resolveValidationTone,
-    resolveValidationLabel,
-    resolveSourceStatusLabel,
-    resolveSourceStatusTone,
     resetToDefault,
-    validateWorkspaceRuntime,
-    saveWorkspaceRuntime,
-    reloadRuntimeConfig,
     formatRelativeTimestamp,
     formatReleaseDate,
     handlePrimaryUpdateAction,

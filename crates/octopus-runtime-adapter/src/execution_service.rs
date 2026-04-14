@@ -29,6 +29,15 @@ impl RuntimeExecutionService for RuntimeAdapter {
         approval_flow::resolve_approval(self, session_id, approval_id, input).await
     }
 
+    async fn resolve_auth_challenge(
+        &self,
+        session_id: &str,
+        challenge_id: &str,
+        input: ResolveRuntimeAuthChallengeInput,
+    ) -> Result<RuntimeRunSnapshot, AppError> {
+        approval_flow::resolve_auth_challenge(self, session_id, challenge_id, input).await
+    }
+
     async fn resolve_memory_proposal(
         &self,
         session_id: &str,

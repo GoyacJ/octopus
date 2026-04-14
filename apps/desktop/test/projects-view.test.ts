@@ -311,6 +311,58 @@ describe('Workspace project management view', () => {
     mounted.destroy()
   })
 
+  it('shows and saves token quota fields in the selected project detail', async () => {
+    installWorkspaceApiFixture({
+      stateTransform(state, connection) {
+        if (connection.workspaceId !== 'ws-local') {
+          return
+        }
+
+        const projectSource = state.runtimeProjectConfigs['proj-redesign']?.sources.find(source => source.scope === 'project')
+        const projectDocument = (projectSource?.document ?? {}) as Record<string, any>
+        projectSource!.document = projectDocument
+        const projectSettings = (projectDocument.projectSettings ??= {}) as Record<string, any>
+        const models = (projectSettings.models ??= {}) as Record<string, any>
+
+        models.totalTokens = 500000
+        ;(state.dashboards['proj-redesign'] as Record<string, any>).usedTokens = 125000
+      },
+    })
+
+    const mounted = mountApp()
+    const workspaceStore = useWorkspaceStore()
+
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-select-proj-redesign"]') !== null)
+
+    mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-select-proj-redesign"]')?.click()
+    await waitFor(() => mounted.container.querySelector('[data-testid="projects-total-tokens-input"]') !== null)
+
+    const totalTokensInput = mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-total-tokens-input"]')
+    const saveButton = mounted.container.querySelector<HTMLButtonElement>('[data-testid="projects-save-button"]')
+
+    await waitFor(() =>
+      mounted.container.querySelector<HTMLInputElement>('[data-testid="projects-total-tokens-input"]')?.value === '500000',
+    )
+
+    expect(totalTokensInput).not.toBeNull()
+    expect(saveButton).not.toBeNull()
+    expect(totalTokensInput?.value).toBe('500000')
+    expect(mounted.container.querySelector('[data-testid="projects-used-tokens-value"]')?.textContent).toContain('125,000')
+
+    totalTokensInput!.value = '750000'
+    totalTokensInput!.dispatchEvent(new Event('input', { bubbles: true }))
+    totalTokensInput!.dispatchEvent(new Event('change', { bubbles: true }))
+    await nextTick()
+
+    saveButton?.click()
+
+    await waitFor(() => workspaceStore.getProjectSettings('proj-redesign').models?.totalTokens === 750000)
+
+    expect(mounted.container.querySelector('[data-testid="projects-used-tokens-value"]')?.textContent).toContain('125,000')
+
+    mounted.destroy()
+  })
+
   it('archives the current project, hides it from the sidebar tree, and switches to the next active project', async () => {
     const mounted = mountApp()
     const workspaceStore = useWorkspaceStore()

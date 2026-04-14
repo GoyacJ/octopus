@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -62,6 +62,32 @@ pub struct ApprovalPreference {
     pub team_spawn: String,
     pub workflow_escalation: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeTargetPolicyDecision {
+    pub target_kind: String,
+    pub action: String,
+    pub hidden: bool,
+    pub visible: bool,
+    pub deferred: bool,
+    pub requires_approval: bool,
+    pub requires_auth: bool,
+    pub reason: Option<String>,
+    pub capability_id: Option<String>,
+    pub provider_key: Option<String>,
+    pub required_permission: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeCapabilityPolicyDecisions {
+    pub builtin: RuntimeTargetPolicyDecision,
+    pub skill: RuntimeTargetPolicyDecision,
+    pub mcp: RuntimeTargetPolicyDecision,
+}
+
+pub type RuntimeTargetPolicyDecisions = BTreeMap<String, RuntimeTargetPolicyDecision>;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

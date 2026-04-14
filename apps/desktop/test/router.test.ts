@@ -36,7 +36,6 @@ describe('desktop router contract', () => {
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/knowledge')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/trace')
     expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/settings')
-    expect(routePaths).toContain('/workspaces/:workspaceId/projects/:projectId/runtime')
     expect(routePaths).toContain('/workspaces/:workspaceId/teams')
     expect(routePaths).toContain('/settings')
     expect(routePaths).toContain('/connections')
@@ -144,7 +143,7 @@ describe('desktop router contract', () => {
     expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
   })
 
-  it('redirects non-owners away from project governance routes', async () => {
+  it('redirects removed project runtime deep links through the existing fallback route', async () => {
     vi.restoreAllMocks()
     installWorkspaceApiFixture({
       stateTransform(state, connection) {
@@ -168,9 +167,8 @@ describe('desktop router contract', () => {
 
     await router.push('/workspaces/ws-local/projects/proj-redesign/runtime')
 
-    expect(router.currentRoute.value.name).toBe('project-dashboard')
+    expect(router.currentRoute.value.name).toBe('workspace-overview')
     expect(router.currentRoute.value.params.workspaceId).toBe('ws-local')
-    expect(router.currentRoute.value.params.projectId).toBe('proj-redesign')
   })
 
   it('redirects denied project modules back to the project dashboard', async () => {

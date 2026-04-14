@@ -111,8 +111,23 @@ function downloadBlob(blob: Blob, fileName: string) {
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = fileName
+  anchor.style.position = 'fixed'
+  anchor.style.left = '-9999px'
+  document.body.append(anchor)
   anchor.click()
+  anchor.remove()
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function mountHiddenInput(input: HTMLInputElement) {
+  input.style.position = 'fixed'
+  input.style.left = '-9999px'
+  input.style.top = '0'
+  input.style.width = '1px'
+  input.style.height = '1px'
+  input.style.opacity = '0'
+  input.style.pointerEvents = 'none'
+  document.body.append(input)
 }
 
 async function unzipBrowserArchive(file: File): Promise<WorkspaceDirectoryUploadEntry[]> {
@@ -173,7 +188,7 @@ async function saveBundleZipInBrowser(
     archive.file(entry.relativePath, decodeBase64(entry.dataBase64))
   }
   const blob = await archive.generateAsync({ type: 'blob' })
-  downloadBlob(blob, `${exportPayload.rootDirName || 'agent-bundle'}.zip`)
+  downloadBlob(blob, `${exportPayload.rootDirName || 'templates'}.zip`)
 }
 
 async function readBrowserFile(file: File): Promise<WorkspaceFileUploadPayload> {
@@ -293,8 +308,10 @@ async function pickAvatarImage(): Promise<AvatarUploadPayload | null> {
   input.accept = 'image/png,image/jpeg,image/webp'
 
   return await new Promise<AvatarUploadPayload | null>((resolve) => {
+    mountHiddenInput(input)
     input.addEventListener('change', async () => {
       const file = input.files?.[0]
+      input.remove()
       if (!file) {
         resolve(null)
         return
@@ -321,8 +338,10 @@ async function pickResourceDirectory(): Promise<string | null> {
   input.multiple = true
 
   return await new Promise<string | null>((resolve) => {
+    mountHiddenInput(input)
     input.addEventListener('change', () => {
       const firstFile = input.files?.[0]
+      input.remove()
       if (!firstFile) {
         resolve(null)
         return
@@ -341,8 +360,10 @@ async function pickResourceFile(): Promise<WorkspaceFileUploadPayload | null> {
   input.type = 'file'
 
   return await new Promise<WorkspaceFileUploadPayload | null>((resolve) => {
+    mountHiddenInput(input)
     input.addEventListener('change', async () => {
       const file = input.files?.[0]
+      input.remove()
       if (!file) {
         resolve(null)
         return
@@ -361,8 +382,10 @@ async function pickResourceFolder(): Promise<WorkspaceDirectoryUploadEntry[] | n
   input.multiple = true
 
   return await new Promise<WorkspaceDirectoryUploadEntry[] | null>((resolve) => {
+    mountHiddenInput(input)
     input.addEventListener('change', async () => {
       const files = Array.from(input.files ?? [])
+      input.remove()
       if (!files.length) {
         resolve(null)
         return
@@ -384,8 +407,10 @@ async function pickSkillArchive(): Promise<WorkspaceFileUploadPayload[] | null> 
   input.multiple = true
 
   return await new Promise<WorkspaceFileUploadPayload[] | null>((resolve) => {
+    mountHiddenInput(input)
     input.addEventListener('change', async () => {
       const files = Array.from(input.files ?? [])
+      input.remove()
       if (!files.length) {
         resolve(null)
         return
@@ -404,8 +429,10 @@ async function pickSkillFolder(): Promise<WorkspaceDirectoryUploadEntry[][] | nu
   input.multiple = true
 
   return await new Promise<WorkspaceDirectoryUploadEntry[][] | null>((resolve) => {
+    mountHiddenInput(input)
     input.addEventListener('change', async () => {
       const files = Array.from(input.files ?? [])
+      input.remove()
       if (!files.length) {
         resolve(null)
         return
@@ -433,8 +460,10 @@ async function pickAgentBundleFolder(): Promise<WorkspaceDirectoryUploadEntry[] 
   input.multiple = true
 
   return await new Promise<WorkspaceDirectoryUploadEntry[] | null>((resolve) => {
+    mountHiddenInput(input)
     input.addEventListener('change', async () => {
       const files = Array.from(input.files ?? [])
+      input.remove()
       if (!files.length) {
         resolve(null)
         return
@@ -468,8 +497,10 @@ async function pickAgentBundleArchive(): Promise<WorkspaceDirectoryUploadEntry[]
   input.accept = '.zip,application/zip'
 
   return await new Promise<WorkspaceDirectoryUploadEntry[] | null>((resolve) => {
+    mountHiddenInput(input)
     input.addEventListener('change', async () => {
       const file = input.files?.[0]
+      input.remove()
       if (!file) {
         resolve(null)
         return

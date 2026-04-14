@@ -103,23 +103,19 @@ describe('Settings view', () => {
     mounted.destroy()
   })
 
-  it('renders only the workspace runtime editor and effective preview on the runtime tab', async () => {
+  it('does not expose a runtime tab in settings anymore', async () => {
     const mounted = mountApp()
 
     await waitForSelector(mounted.container, '[data-testid="settings-tabs"]')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-runtime"]')?.click()
-    await waitForSelector(mounted.container, '[data-testid="settings-runtime-editor-workspace"]')
-
-    expect(mounted.container.querySelector('[data-testid="settings-runtime-editor-workspace"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="settings-runtime-editor-project"]')).toBeNull()
-    expect(mounted.container.querySelector('[data-testid="settings-runtime-editor-user"]')).toBeNull()
-    expect(mounted.container.querySelector('[data-testid="settings-runtime-effective-preview"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-runtime"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="settings-runtime-editor-workspace"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="settings-runtime-effective-preview"]')).toBeNull()
 
     mounted.destroy()
   })
 
-  it('shows workspace displayPath metadata instead of absolute source paths', async () => {
+  it('falls back to the general tab when the removed runtime query tab is requested', async () => {
     installWorkspaceApiFixture({
       localRuntimeConfigTransform(config) {
         return {
@@ -137,16 +133,16 @@ describe('Settings view', () => {
       },
     })
 
+    await router.push('/settings?tab=runtime')
+    await router.isReady()
+
     const mounted = mountApp()
 
     await waitForSelector(mounted.container, '[data-testid="settings-tabs"]')
 
-    mounted.container.querySelector<HTMLButtonElement>('[data-testid="ui-tabs-trigger-runtime"]')?.click()
-    await waitForSelector(mounted.container, '[data-testid="settings-runtime-editor-workspace"]')
-
-    const workspaceCard = mounted.container.querySelector('[data-testid="settings-runtime-editor-workspace"]')
-    expect(workspaceCard?.textContent).toContain('config/runtime/workspace.json')
-    expect(workspaceCard?.textContent).not.toContain('/tmp/octopus-workspace')
+    expect(mounted.container.querySelector('[data-testid="ui-tabs-trigger-runtime"]')).toBeNull()
+    expect(mounted.container.querySelector('[data-testid="settings-layout-row-leftSidebarCollapsed"]')).not.toBeNull()
+    expect(mounted.container.querySelector('[data-testid="settings-runtime-editor-workspace"]')).toBeNull()
 
     mounted.destroy()
   })

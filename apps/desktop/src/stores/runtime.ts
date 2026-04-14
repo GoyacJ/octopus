@@ -10,8 +10,11 @@ import {
   type Message,
   type ProviderConfig,
   type RuntimeApprovalRequest,
+  type RuntimeAuthChallengeSummary,
   type RuntimeConfiguredModelProbeResult,
   type RuntimeEffectiveConfig,
+  type RuntimeMediationOutcome,
+  type RuntimePendingMediation,
   type RuntimeRunSnapshot,
   type RuntimeSessionDetail,
   type RuntimeSessionSummary,
@@ -72,10 +75,26 @@ export const useRuntimeStore = defineStore('runtime', {
       return this.activeSession?.trace ?? []
     },
     activeMessages(): Message[] {
-      return (this.activeSession?.messages ?? []).map((message) => toConversationMessage(message, this.activeSession?.pendingApproval))
+      return (this.activeSession?.messages ?? []).map((message) => toConversationMessage(message, this.pendingApproval))
     },
     pendingApproval(): RuntimeApprovalRequest | null {
-      return this.activeSession?.pendingApproval ?? null
+      return this.activeRun?.approvalTarget ?? this.activeSession?.pendingApproval ?? null
+    },
+    pendingMediation(): RuntimePendingMediation | null {
+      if (this.activeRun) {
+        return this.activeRun.pendingMediation ?? null
+      }
+      return this.activeSession?.pendingMediation ?? this.activeSession?.summary.pendingMediation ?? null
+    },
+    authTarget(): RuntimeAuthChallengeSummary | null {
+      return this.activeRun?.authTarget
+        ?? this.activeRun?.checkpoint.pendingAuthChallenge
+        ?? null
+    },
+    lastMediationOutcome(): RuntimeMediationOutcome | null {
+      return this.activeRun?.lastMediationOutcome
+        ?? this.activeSession?.lastMediationOutcome
+        ?? null
     },
     activeRunStatusLabel(): string {
       const status = this.activeRun?.status

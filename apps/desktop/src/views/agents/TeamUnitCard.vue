@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ChevronDown, Trash2, UsersRound } from 'lucide-vue-next'
+import { ChevronDown, Trash2 } from 'lucide-vue-next'
 import { UiBadge, UiButton, UiCheckbox, UiDropdownMenu } from '@octopus/ui'
 
 const props = defineProps<{
   id: string
   name: string
+  avatar?: string
   title: string
   description: string
   leadLabel: string
@@ -34,6 +35,16 @@ function openCard() {
   emit('open', props.id)
 }
 
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join('')
+    .toUpperCase()
+}
+
 const exportMenuItems = [
   { key: 'export-folder', label: '导出为文件夹' },
   { key: 'export-zip', label: '导出为 ZIP' },
@@ -51,8 +62,15 @@ const exportMenuItems = [
   >
     <div class="space-y-4">
       <div class="flex items-start gap-3">
-        <div class="flex size-11 shrink-0 items-center justify-center rounded-[var(--radius-m)] border border-border bg-subtle text-text-secondary">
-          <UsersRound :size="18" />
+        <div class="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-m)] border border-border bg-subtle text-[13px] font-semibold text-text-secondary">
+          <img
+            v-if="props.avatar"
+            :src="props.avatar"
+            alt=""
+            class="size-full object-cover"
+            :data-testid="`agent-center-team-card-avatar-${props.id}`"
+          >
+          <span v-else>{{ initials(props.name) }}</span>
         </div>
 
         <div class="min-w-0 flex-1 space-y-2">

@@ -10,7 +10,6 @@ import ProjectAgentsView from '@/views/project/ProjectAgentsView.vue'
 import ProjectDashboardView from '@/views/project/ProjectDashboardView.vue'
 import ProjectKnowledgeView from '@/views/project/ProjectKnowledgeView.vue'
 import ProjectResourcesView from '@/views/project/ProjectResourcesView.vue'
-import ProjectRuntimeConfigView from '@/views/project/ProjectRuntimeConfigView.vue'
 import ProjectSettingsView from '@/views/project/ProjectSettingsView.vue'
 import TraceView from '@/views/project/TraceView.vue'
 import AutomationsView from '@/views/workspace/AutomationsView.vue'
@@ -128,7 +127,6 @@ function resolveConsoleFallback(workspaceId: string) {
     workspaceAccessControlStore
     && (
       workspaceAccessControlStore.menuDefinitions.length
-      || workspaceAccessControlStore.roles.length
       || workspaceAccessControlStore.currentUser
     ),
   )
@@ -162,8 +160,14 @@ async function ensureProjectGuardContext(workspaceId: string, projectId: string)
     return null
   }
 
-  await workspaceStore.bootstrap(shell.activeWorkspaceConnectionId)
-  await workspaceAccessControlStore.load(shell.activeWorkspaceConnectionId)
+  const startedAt = performance.now()
+  await workspaceStore.ensureWorkspaceBootstrap(shell.activeWorkspaceConnectionId)
+  await workspaceAccessControlStore.ensureAuthorizationContext(shell.activeWorkspaceConnectionId)
+  if (import.meta.env.DEV) {
+    console.debug(
+      `[router] ensureProjectGuardContext ${shell.activeWorkspaceConnectionId} ${Math.round(performance.now() - startedAt)}ms`,
+    )
+  }
 
   return {
     shell,
@@ -353,11 +357,6 @@ function createRoutes(): RouteRecordRaw[] {
       path: '/workspaces/:workspaceId/projects/:projectId/settings',
       name: 'project-settings',
       component: ProjectSettingsView,
-    },
-    {
-      path: '/workspaces/:workspaceId/projects/:projectId/runtime',
-      name: 'project-runtime',
-      component: ProjectRuntimeConfigView,
     },
     {
       path: '/workspaces/:workspaceId/teams',
@@ -602,7 +601,7 @@ function installRouterGuards(router: Router) {
       return true
     }
 
-    if (!workspaceAccessControlStore.menuDefinitions.length && !workspaceAccessControlStore.roles.length && !workspaceAccessControlStore.currentUser) {
+    if (!workspaceAccessControlStore.menuDefinitions.length && !workspaceAccessControlStore.currentUser) {
       return true
     }
 

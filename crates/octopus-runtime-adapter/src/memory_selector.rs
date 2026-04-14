@@ -70,7 +70,9 @@ impl RuntimeAdapter {
             candidates
                 .into_iter()
                 .filter(|record| !ignored_memory_ids.contains(record.memory_id.as_str()))
-                .filter(|record| !policy.freshness_required || is_fresh_memory(&record.freshness_state))
+                .filter(|record| {
+                    !policy.freshness_required || is_fresh_memory(&record.freshness_state)
+                })
                 .take(policy.max_selections as usize)
                 .map(|record| RuntimeSelectedMemoryItem {
                     memory_id: record.memory_id,

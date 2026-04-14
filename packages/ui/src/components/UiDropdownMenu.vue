@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import {
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuPortal,
   DropdownMenuRoot,
   DropdownMenuTrigger,
 } from 'reka-ui'
@@ -52,25 +53,27 @@ function handleSelect(item: UiMenuItem) {
         <slot name="trigger" />
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent
-        :align="props.align"
-        :side-offset="4"
-        :class="contentClasses"
-      >
-        <DropdownMenuItem
-          v-for="item in props.items"
-          :key="item.key"
-          :data-testid="`ui-dropdown-item-${item.key}`"
-          :disabled="item.disabled"
-          class="flex cursor-default items-center rounded-[var(--radius-xs)] px-2.5 py-1.5 text-[13px] outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
-          :class="item.tone === 'danger' ? 'text-destructive data-[highlighted]:bg-destructive/10' : 'text-text-primary'"
-          @select="handleSelect(item)"
+      <DropdownMenuPortal>
+        <DropdownMenuContent
+          :align="props.align"
+          :side-offset="4"
+          :class="contentClasses"
         >
-          <slot name="item" :item="item">
-            {{ item.label }}
-          </slot>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
+          <DropdownMenuItem
+            v-for="item in props.items"
+            :key="item.key"
+            :data-testid="`ui-dropdown-item-${item.key}`"
+            :disabled="item.disabled"
+            class="flex cursor-default items-center rounded-[var(--radius-xs)] px-2.5 py-1.5 text-[13px] outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent"
+            :class="item.tone === 'danger' ? 'text-destructive data-[highlighted]:bg-destructive/10' : 'text-text-primary'"
+            @select="handleSelect(item)"
+          >
+            <slot name="item" :item="item">
+              {{ item.label }}
+            </slot>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenuPortal>
     </DropdownMenuRoot>
   </div>
 </template>

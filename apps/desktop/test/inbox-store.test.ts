@@ -28,7 +28,7 @@ function createInboxItem(overrides: Partial<InboxItemRecord> = {}): InboxItemRec
     status: 'pending',
     priority: 'high',
     actionable: true,
-    routeTo: '/workspaces/ws-local/projects/proj-redesign/runtime',
+    routeTo: '/workspaces/ws-local/projects/proj-redesign/settings',
     actionLabel: 'Review approval',
     createdAt: 1,
     ...overrides,

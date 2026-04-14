@@ -10,7 +10,11 @@ pub(crate) fn build_mailbox_summary(
         mailbox_ref: mailbox_ref.to_string(),
         channel: "team-mailbox".into(),
         status: status.to_string(),
-        pending_count: if status == "completed" { 0 } else { total_messages },
+        pending_count: if status == "completed" {
+            0
+        } else {
+            total_messages
+        },
         total_messages,
         updated_at: now,
     }

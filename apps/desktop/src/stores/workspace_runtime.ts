@@ -240,6 +240,7 @@ export function createWorkspaceRuntimeActions(context: WorkspaceRuntimeContext) 
         models: {
           allowedConfiguredModelIds: [...settings.allowedConfiguredModelIds],
           defaultConfiguredModelId: settings.defaultConfiguredModelId,
+          totalTokens: settings.totalTokens ?? null,
         },
       },
     }, workspaceConnectionId)

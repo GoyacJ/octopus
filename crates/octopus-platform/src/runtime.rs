@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use octopus_core::{
     AppError, CreateRuntimeSessionInput, ModelCatalogSnapshot, ResolveRuntimeApprovalInput,
-    ResolveRuntimeMemoryProposalInput, RuntimeBootstrap, RuntimeConfigPatch, RuntimeConfigValidationResult,
-    RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
-    RuntimeEventEnvelope, RuntimeRunSnapshot, RuntimeSessionDetail, RuntimeSessionSummary,
-    SubmitRuntimeTurnInput,
+    ResolveRuntimeAuthChallengeInput, ResolveRuntimeMemoryProposalInput, RuntimeBootstrap, RuntimeConfigPatch,
+    RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
+    RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
+    RuntimeRunSnapshot, RuntimeSessionDetail, RuntimeSessionSummary, SubmitRuntimeTurnInput,
 };
 
 #[async_trait]
@@ -37,6 +37,12 @@ pub trait RuntimeExecutionService: Send + Sync {
         session_id: &str,
         approval_id: &str,
         input: ResolveRuntimeApprovalInput,
+    ) -> Result<RuntimeRunSnapshot, AppError>;
+    async fn resolve_auth_challenge(
+        &self,
+        session_id: &str,
+        challenge_id: &str,
+        input: ResolveRuntimeAuthChallengeInput,
     ) -> Result<RuntimeRunSnapshot, AppError>;
     async fn resolve_memory_proposal(
         &self,

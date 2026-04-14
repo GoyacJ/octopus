@@ -478,6 +478,10 @@ pub(crate) fn runtime_routes() -> Router<ServerState> {
             post(resolve_runtime_approval),
         )
         .route(
+            "/sessions/:session_id/auth-challenges/:challenge_id",
+            post(resolve_runtime_auth_challenge),
+        )
+        .route(
             "/sessions/:session_id/memory-proposals/:proposal_id",
             post(resolve_runtime_memory_proposal),
         )

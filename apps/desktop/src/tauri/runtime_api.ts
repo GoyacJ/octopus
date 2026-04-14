@@ -143,7 +143,7 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
       })
     },
     async resolveApproval(sessionId, approvalId, input, idempotencyKey) {
-      await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions/{sessionId}/approvals/{approvalId}', 'post', {
+      return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions/{sessionId}/approvals/{approvalId}', 'post', {
         session: assertWorkspaceRequestReady(context),
         pathParams: {
           sessionId,
@@ -153,8 +153,24 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
         idempotencyKey,
       })
     },
+    async resolveAuthChallenge(sessionId, challengeId, input, idempotencyKey) {
+      return await fetchWorkspaceOpenApi(
+        context.connection,
+        '/api/v1/runtime/sessions/{sessionId}/auth-challenges/{challengeId}',
+        'post',
+        {
+          session: assertWorkspaceRequestReady(context),
+          pathParams: {
+            sessionId,
+            challengeId,
+          },
+          body: JSON.stringify(input),
+          idempotencyKey,
+        },
+      )
+    },
     async resolveMemoryProposal(sessionId, proposalId, input, idempotencyKey) {
-      await fetchWorkspaceOpenApi(
+      return await fetchWorkspaceOpenApi(
         context.connection,
         '/api/v1/runtime/sessions/{sessionId}/memory-proposals/{proposalId}',
         'post',

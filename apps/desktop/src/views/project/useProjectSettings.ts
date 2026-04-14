@@ -13,6 +13,7 @@ import type {
 
 import { useAgentStore } from '@/stores/agent'
 import { useCatalogStore } from '@/stores/catalog'
+import { useNotificationStore } from '@/stores/notifications'
 import { useTeamStore } from '@/stores/team'
 import { useWorkspaceAccessControlStore } from '@/stores/workspace-access-control'
 import { useWorkspaceStore } from '@/stores/workspace'
@@ -35,6 +36,7 @@ export function useProjectSettings() {
   const agentStore = useAgentStore()
   const catalogStore = useCatalogStore()
   const teamStore = useTeamStore()
+  const notificationStore = useNotificationStore()
   const workspaceAccessControlStore = useWorkspaceAccessControlStore()
 
   const activeTab = ref<ProjectSettingsTab>('basics')
@@ -58,6 +60,7 @@ export function useProjectSettings() {
   const modelsForm = reactive({
     allowedConfiguredModelIds: [] as string[],
     defaultConfiguredModelId: '',
+    totalTokens: '',
   })
 
   const enabledAgentIds = ref<string[]>([])
@@ -148,6 +151,7 @@ export function useProjectSettings() {
     return {
       allowedConfiguredModelIds,
       defaultConfiguredModelId,
+      totalTokens: saved?.totalTokens,
     }
   })
 
@@ -193,6 +197,7 @@ export function useProjectSettings() {
   const summaryAllowedModels = computed(() =>
     allowedWorkspaceConfiguredModels.value.filter(item => modelsForm.allowedConfiguredModelIds.includes(item.value)),
   )
+  const projectUsedTokens = computed(() => workspaceStore.getProjectDashboard(projectId.value)?.usedTokens ?? 0)
   const summaryOverrideCount = computed(() =>
     Object.values(toolPermissionDraft.value).filter(value => value !== 'inherit').length,
   )
@@ -211,6 +216,18 @@ export function useProjectSettings() {
     })),
   )
 
+  async function notifyAgentsSaved(projectName: string) {
+    await notificationStore.notify({
+      scopeKind: 'workspace',
+      scopeOwnerId: workspaceStore.currentWorkspaceId || undefined,
+      level: 'success',
+      title: '保存完成',
+      body: `已更新项目「${projectName}」的数字员工与数字团队配置。`,
+      source: 'project-settings',
+      toastDurationMs: 4000,
+    })
+  }
+
   watch(
     () => [
       connectionId.value,
@@ -224,6 +241,7 @@ export function useProjectSettings() {
       loadingDependencies.value = true
       try {
         await Promise.all([
+          workspaceStore.loadProjectDashboard(nextProjectId, nextConnectionId),
           workspaceStore.loadProjectRuntimeConfig(nextProjectId, false, nextConnectionId),
           agentStore.load(nextConnectionId),
           catalogStore.load(nextConnectionId),
@@ -248,10 +266,11 @@ export function useProjectSettings() {
   )
 
   watch(
-    () => `${projectId.value}|${resolvedModelSettings.value.allowedConfiguredModelIds.join(',')}|${resolvedModelSettings.value.defaultConfiguredModelId}`,
+    () => `${projectId.value}|${resolvedModelSettings.value.allowedConfiguredModelIds.join(',')}|${resolvedModelSettings.value.defaultConfiguredModelId}|${resolvedModelSettings.value.totalTokens ?? ''}|${projectUsedTokens.value}`,
     () => {
       modelsForm.allowedConfiguredModelIds = [...resolvedModelSettings.value.allowedConfiguredModelIds]
       modelsForm.defaultConfiguredModelId = resolvedModelSettings.value.defaultConfiguredModelId
+      modelsForm.totalTokens = resolvedModelSettings.value.totalTokens ? String(resolvedModelSettings.value.totalTokens) : ''
       modelsError.value = ''
     },
     { immediate: true },
@@ -367,6 +386,7 @@ export function useProjectSettings() {
   function resetModels() {
     modelsForm.allowedConfiguredModelIds = [...resolvedModelSettings.value.allowedConfiguredModelIds]
     modelsForm.defaultConfiguredModelId = resolvedModelSettings.value.defaultConfiguredModelId
+    modelsForm.totalTokens = resolvedModelSettings.value.totalTokens ? String(resolvedModelSettings.value.totalTokens) : ''
     modelsError.value = ''
   }
 
@@ -441,11 +461,7 @@ export function useProjectSettings() {
     }
 
     const allowedConfiguredModelIds = [...new Set(modelsForm.allowedConfiguredModelIds)]
-    if (!allowedConfiguredModelIds.length) {
-      modelsError.value = t('projectSettings.models.validation.required')
-      return
-    }
-    if (!allowedConfiguredModelIds.includes(modelsForm.defaultConfiguredModelId)) {
+    if (allowedConfiguredModelIds.length && !allowedConfiguredModelIds.includes(modelsForm.defaultConfiguredModelId)) {
       modelsError.value = t('projectSettings.models.validation.defaultMustBeAllowed')
       return
     }
@@ -456,7 +472,16 @@ export function useProjectSettings() {
     try {
       const saved = await workspaceStore.saveProjectModelSettings(project.value.id, {
         allowedConfiguredModelIds,
-        defaultConfiguredModelId: modelsForm.defaultConfiguredModelId,
+        defaultConfiguredModelId: allowedConfiguredModelIds.length ? modelsForm.defaultConfiguredModelId : '',
+        totalTokens: (() => {
+          const trimmed = modelsForm.totalTokens.trim()
+          if (!trimmed) {
+            return undefined
+          }
+
+          const parsed = Number(trimmed)
+          return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : undefined
+        })(),
       })
       if (!saved) {
         modelsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
@@ -535,7 +560,9 @@ export function useProjectSettings() {
         agentsError.value = workspaceStore.activeProjectRuntimeValidation?.errors.join(' ')
           || workspaceStore.error
           || t('projectSettings.agents.saveError')
+        return
       }
+      await notifyAgentsSaved(project.value.name)
     } finally {
       savingAgents.value = false
     }
@@ -589,6 +616,7 @@ export function useProjectSettings() {
     viewReady,
     toolSections,
     summaryAllowedModels,
+    projectUsedTokens,
     summaryOverrideCount,
     summaryActorCount,
     summaryMemberCount,

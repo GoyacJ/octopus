@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 const repoRoot = path.resolve(__dirname, '../../..')
 const nodeExecutable = process.execPath
-const scriptPath = path.join(repoRoot, 'scripts', 'prepare-agent-bundle-seed.mjs')
+const scriptPath = path.join(repoRoot, 'scripts', 'prepare-template-snapshots.mjs')
 const tempDirectories: string[] = []
 
 function createTempDir(prefix: string) {
@@ -38,7 +38,6 @@ function runGenerator(options: {
   templatesRoot: string
   outputRoot: string
   exampleRoot: string
-  avatarLibraryRoot: string
 }) {
   execFileSync(nodeExecutable, [
     scriptPath,
@@ -48,23 +47,47 @@ function runGenerator(options: {
     options.outputRoot,
     '--example-root',
     options.exampleRoot,
-    '--avatar-library-root',
-    options.avatarLibraryRoot,
   ], {
     cwd: repoRoot,
     stdio: 'pipe',
   })
 }
 
-function createAvatarLibrary(root: string) {
-  writeFile(path.join(root, 'employee', 'employee-1.png'), Buffer.from('employee-1'))
-  writeFile(path.join(root, 'employee', 'employee-2.png'), Buffer.from('employee-2'))
-  writeFile(path.join(root, 'leader', 'leader-1.png'), Buffer.from('leader-1'))
-  writeFile(path.join(root, 'leader', 'leader-2.png'), Buffer.from('leader-2'))
-}
-
 function createBaseTemplates(root: string) {
-  writeFile(path.join(root, 'skills', 'ledger-skill', 'SKILL.md'), [
+  writeFile(path.join(root, '财务部', '财务部门说明.md'), [
+    '---',
+    'name: 财务部',
+    'description: 负责财务统筹。',
+    'leader: 财务负责人',
+    'member:',
+    '  - 财务负责人',
+    '  - 财务分析师',
+    'avatar: 头像',
+    '---',
+    '',
+    '# 团队职责',
+    '',
+    '负责财务统筹。',
+    '',
+  ].join('\n'))
+
+  writeFile(path.join(root, '财务部', '财务负责人', '财务负责人.md'), [
+    '---',
+    'name: 财务负责人',
+    'description: 负责财务管理。',
+    'avatar: 头像',
+    'skills:',
+    '  - ledger-skill',
+    'mcps:',
+    '  - finance-ops',
+    '---',
+    '',
+    '# 角色定义',
+    '',
+    '管理财务流程。',
+    '',
+  ].join('\n'))
+  writeFile(path.join(root, '财务部', '财务负责人', 'skills', 'ledger-skill', 'SKILL.md'), [
     '---',
     'name: Ledger Skill',
     'description: Handle ledger calculations.',
@@ -75,54 +98,46 @@ function createBaseTemplates(root: string) {
     'Compute finance ledgers.',
     '',
   ].join('\n'))
-  writeFile(path.join(root, 'skills', 'ledger-skill', 'templates', 'formula.md'), 'FORMULA\n')
-  writeFile(path.join(root, 'mcps', 'finance-ops.json'), JSON.stringify({
-    type: 'http',
-    url: 'https://example.com/mcp/finance',
-  }, null, 2))
-  writeFile(path.join(root, 'agents', 'Finance Planner', 'Finance Planner.md'), [
+  writeFile(
+    path.join(root, '财务部', '财务负责人', 'mcps', 'finance-ops.json'),
+    JSON.stringify({ type: 'http', url: 'https://example.com/mcp/finance' }, null, 2),
+  )
+
+  writeFile(path.join(root, '财务部', '财务分析师', '财务分析师.md'), [
     '---',
-    'name: Finance Planner',
-    'description: Plans finance work.',
-    'skills:',
-    '  - ledger-skill',
-    'mcps:',
-    '  - finance-ops',
+    'name: 财务分析师',
+    'description: 审核财务数据。',
+    'avatar: 头像',
     '---',
     '',
-    '# Finance Planner',
-    '',
-    'Own finance planning.',
-    '',
-  ].join('\n'))
-  writeFile(path.join(root, 'teams', 'Finance Ops Team', 'Finance Ops Team.md'), [
-    '---',
-    'name: Finance Ops Team',
-    'description: Coordinates finance delivery.',
-    'skills:',
-    '  - ledger-skill',
-    'mcps:',
-    '  - finance-ops',
-    '---',
-    '',
-    '# Finance Ops Team',
-    '',
-    'Coordinate finance delivery.',
-    '',
-  ].join('\n'))
-  writeFile(path.join(root, 'teams', 'Finance Ops Team', 'Analyst', 'Analyst.md'), [
-    '---',
-    'name: Analyst',
-    'description: Reviews financial data.',
-    'skills:',
-    '  - ledger-skill',
-    'mcps:',
-    '  - finance-ops',
-    '---',
-    '',
-    '# Analyst',
+    '# 角色定义',
     '',
     'Review the numbers.',
+    '',
+  ].join('\n'))
+
+  writeFile(path.join(root, '市场部', '技术写作者', '技术写作者.md'), [
+    '---',
+    'name: 技术写作者',
+    'description: 负责文档编写。',
+    'avatar: 头像',
+    '---',
+    '',
+    '# 角色定义',
+    '',
+    'Write technical content.',
+    '',
+  ].join('\n'))
+
+  writeFile(path.join(root, '管理层与PMO', '项目经理', '项目经理.md'), [
+    '---',
+    'name: 项目经理',
+    'description: 应被忽略。',
+    '---',
+    '',
+    '# 角色定义',
+    '',
+    'Ignored.',
     '',
   ].join('\n'))
 }
@@ -133,112 +148,95 @@ afterEach(() => {
   }
 })
 
-describe('prepare-agent-bundle-seed', () => {
-  it('builds stable bundle and example outputs from templates with deterministic fallback avatars', () => {
-    const tempDir = createTempDir('octopus-agent-bundle-seed-')
+describe('prepare-template-snapshots', () => {
+  it('mirrors current template trees into output snapshots and skips ignored template roots', () => {
+    const tempDir = createTempDir('octopus-template-snapshot-')
     const templatesRoot = path.join(tempDir, 'templates')
     const outputRoot = path.join(tempDir, 'seed', 'builtin-assets')
     const exampleRoot = path.join(tempDir, 'example', 'agent')
-    const avatarLibraryRoot = path.join(tempDir, 'avatar-library')
 
-    createAvatarLibrary(avatarLibraryRoot)
     createBaseTemplates(templatesRoot)
 
-    runGenerator({ templatesRoot, outputRoot, exampleRoot, avatarLibraryRoot })
-    const firstManifest = readFileSync(path.join(outputRoot, '.octopus', 'manifest.json'), 'utf8')
+    runGenerator({ templatesRoot, outputRoot, exampleRoot })
 
-    runGenerator({ templatesRoot, outputRoot, exampleRoot, avatarLibraryRoot })
-    const secondManifest = readFileSync(path.join(outputRoot, '.octopus', 'manifest.json'), 'utf8')
-
-    expect(secondManifest).toBe(firstManifest)
-
-    const manifest = JSON.parse(secondManifest) as {
-      sourceMetadata?: Record<string, string>
-      agents: Array<{ path: string, avatar: string, generatedAvatar: boolean, templatePath?: string }>
-      teams: Array<{ path: string, avatar: string, generatedAvatar: boolean, templatePath?: string }>
-      skills: Array<{ path: string, templatePath?: string }>
-      mcps: Array<{ path: string, templatePath?: string }>
-    }
-
-    expect(manifest.sourceMetadata).toEqual(expect.objectContaining({
-      generatedBy: 'scripts/prepare-agent-bundle-seed.mjs',
-    }))
-    expect(manifest.agents[0]?.generatedAvatar).toBe(true)
-    expect(['employee-1.png', 'employee-2.png']).toContain(manifest.agents[0]?.avatar)
-    expect(manifest.agents[0]?.templatePath).toBe('templates/agents/Finance Planner')
-    expect(manifest.teams[0]?.generatedAvatar).toBe(true)
-    expect(['leader-1.png', 'leader-2.png']).toContain(manifest.teams[0]?.avatar)
-    expect(manifest.teams[0]?.templatePath).toBe('templates/teams/Finance Ops Team')
-    expect(manifest.skills[0]?.templatePath).toBe('templates/skills/ledger-skill')
-    expect(manifest.mcps[0]?.templatePath).toBe('templates/mcps/finance-ops.json')
-
-    expect(collectRelativeFiles(path.join(outputRoot, 'bundle'))).toEqual(collectRelativeFiles(exampleRoot))
-    expect(readFileSync(path.join(outputRoot, 'bundle', 'Finance Planner', 'Finance Planner.md'), 'utf8')).toContain(`avatar: ${manifest.agents[0]?.avatar}`)
-    expect(readFileSync(path.join(outputRoot, 'bundle', 'Finance Ops Team', 'Finance Ops Team.md'), 'utf8')).toContain(`avatar: ${manifest.teams[0]?.avatar}`)
-    expect(collectRelativeFiles(path.join(outputRoot, 'bundle'))).toContain('Finance Planner/mcps/finance-ops.json')
-    expect(collectRelativeFiles(path.join(outputRoot, 'bundle'))).toContain('Finance Planner/skills/ledger-skill/SKILL.md')
-    expect(collectRelativeFiles(path.join(outputRoot, 'bundle'))).toContain('.octopus/manifest.json')
+    expect(collectRelativeFiles(outputRoot)).toEqual(collectRelativeFiles(exampleRoot))
+    expect(collectRelativeFiles(outputRoot)).toContain('财务部/财务部门说明.md')
+    expect(collectRelativeFiles(outputRoot)).toContain('财务部/财务负责人/skills/ledger-skill/SKILL.md')
+    expect(collectRelativeFiles(outputRoot)).toContain('市场部/技术写作者/技术写作者.md')
+    expect(collectRelativeFiles(outputRoot)).not.toContain('管理层与PMO/项目经理/项目经理.md')
+    expect(collectRelativeFiles(outputRoot)).not.toContain('.octopus/manifest.json')
+    expect(readFileSync(path.join(outputRoot, '财务部', '财务负责人', '财务负责人.md'), 'utf8'))
+      .toContain('skills:')
   })
 
-  it('fails when a template references a missing skill', () => {
-    const tempDir = createTempDir('octopus-agent-bundle-missing-skill-')
+  it('preserves explicit svg avatars from current template directories', () => {
+    const tempDir = createTempDir('octopus-template-avatar-')
     const templatesRoot = path.join(tempDir, 'templates')
     const outputRoot = path.join(tempDir, 'seed', 'builtin-assets')
     const exampleRoot = path.join(tempDir, 'example', 'agent')
-    const avatarLibraryRoot = path.join(tempDir, 'avatar-library')
 
-    createAvatarLibrary(avatarLibraryRoot)
-    mkdirSync(path.join(templatesRoot, 'skills'), { recursive: true })
-    writeFile(path.join(templatesRoot, 'mcps', 'finance-ops.json'), JSON.stringify({ type: 'http', url: 'https://example.com' }, null, 2))
-    writeFile(path.join(templatesRoot, 'agents', 'Broken Agent', 'Broken Agent.md'), [
+    writeFile(path.join(templatesRoot, '产品部', '视觉设计师', '视觉设计师.md'), [
       '---',
-      'name: Broken Agent',
-      'skills:',
-      '  - missing-skill',
-      'mcps:',
-      '  - finance-ops',
+      'name: 视觉设计师',
+      'avatar: portrait.svg',
       '---',
       '',
-      '# Broken Agent',
+      '# 角色定义',
+      '',
+      'Design visuals.',
+      '',
+    ].join('\n'))
+    writeFile(
+      path.join(templatesRoot, '产品部', '视觉设计师', 'portrait.svg'),
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect width="8" height="8"/></svg>',
+    )
+
+    runGenerator({ templatesRoot, outputRoot, exampleRoot })
+
+    expect(readFileSync(path.join(outputRoot, '产品部', '视觉设计师', '视觉设计师.md'), 'utf8'))
+      .toContain('avatar: portrait.svg')
+    expect(collectRelativeFiles(outputRoot)).toContain('产品部/视觉设计师/portrait.svg')
+  })
+
+  it('fails when an agent template references a missing local skill', () => {
+    const tempDir = createTempDir('octopus-template-missing-skill-')
+    const templatesRoot = path.join(tempDir, 'templates')
+    const outputRoot = path.join(tempDir, 'seed', 'builtin-assets')
+    const exampleRoot = path.join(tempDir, 'example', 'agent')
+
+    writeFile(path.join(templatesRoot, '财务部', '财务分析师', '财务分析师.md'), [
+      '---',
+      'name: 财务分析师',
+      'skills:',
+      '  - missing-skill',
+      '---',
+      '',
+      '# 角色定义',
       '',
     ].join('\n'))
 
-    expect(() => runGenerator({ templatesRoot, outputRoot, exampleRoot, avatarLibraryRoot }))
+    expect(() => runGenerator({ templatesRoot, outputRoot, exampleRoot }))
       .toThrowError(/missing skill/i)
   })
 
-  it('fails when a template references a missing MCP', () => {
-    const tempDir = createTempDir('octopus-agent-bundle-missing-mcp-')
+  it('fails when an agent template references a missing local MCP', () => {
+    const tempDir = createTempDir('octopus-template-missing-mcp-')
     const templatesRoot = path.join(tempDir, 'templates')
     const outputRoot = path.join(tempDir, 'seed', 'builtin-assets')
     const exampleRoot = path.join(tempDir, 'example', 'agent')
-    const avatarLibraryRoot = path.join(tempDir, 'avatar-library')
 
-    createAvatarLibrary(avatarLibraryRoot)
-    writeFile(path.join(templatesRoot, 'skills', 'ledger-skill', 'SKILL.md'), [
+    writeFile(path.join(templatesRoot, '财务部', '财务分析师', '财务分析师.md'), [
       '---',
-      'name: Ledger Skill',
-      'description: Handle ledger calculations.',
-      '---',
-      '',
-      '# Overview',
-      '',
-    ].join('\n'))
-    mkdirSync(path.join(templatesRoot, 'mcps'), { recursive: true })
-    writeFile(path.join(templatesRoot, 'agents', 'Broken Agent', 'Broken Agent.md'), [
-      '---',
-      'name: Broken Agent',
-      'skills:',
-      '  - ledger-skill',
+      'name: 财务分析师',
       'mcps:',
       '  - missing-mcp',
       '---',
       '',
-      '# Broken Agent',
+      '# 角色定义',
       '',
     ].join('\n'))
 
-    expect(() => runGenerator({ templatesRoot, outputRoot, exampleRoot, avatarLibraryRoot }))
+    expect(() => runGenerator({ templatesRoot, outputRoot, exampleRoot }))
       .toThrowError(/missing MCP/i)
   })
 })

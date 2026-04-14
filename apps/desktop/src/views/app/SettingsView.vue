@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import { enumLabel } from '@/i18n/copy'
-
 import { UiPageHeader, UiPageShell, UiTabs } from '@octopus/ui'
 
 import SettingsConnectionPanel from './SettingsConnectionPanel.vue'
 import SettingsGeneralPanel from './SettingsGeneralPanel.vue'
-import SettingsRuntimePanel from './SettingsRuntimePanel.vue'
 import SettingsThemePanel from './SettingsThemePanel.vue'
 import SettingsVersionPanel from './SettingsVersionPanel.vue'
 import { useAppSettingsView } from './useAppSettingsView'
@@ -14,7 +11,6 @@ const {
   t,
   appUpdate,
   shell,
-  runtime,
   activeTab,
   theme,
   locale,
@@ -22,10 +18,6 @@ const {
   leftSidebarCollapsed,
   rightSidebarCollapsed,
   tabs,
-  workspaceRuntimeSource,
-  workspaceRuntimeDraft,
-  runtimeEffectivePreview,
-  runtimeSecretStatuses,
   hostBackendBadges,
   workspaceLabel,
   themeOptions,
@@ -41,14 +33,7 @@ const {
   primaryUpdateActionLabel,
   primaryUpdateActionDisabled,
   hasReleaseNotesLink,
-  resolveValidationTone,
-  resolveValidationLabel,
-  resolveSourceStatusLabel,
-  resolveSourceStatusTone,
   resetToDefault,
-  validateWorkspaceRuntime,
-  saveWorkspaceRuntime,
-  reloadRuntimeConfig,
   formatRelativeTimestamp,
   formatReleaseDate,
   handlePrimaryUpdateAction,
@@ -114,22 +99,6 @@ function updateUpdateChannel(value: string) {
           @reset="resetToDefault"
           @update:theme="updateTheme"
           @update:font-size="fontSize = $event"
-        />
-
-        <SettingsRuntimePanel
-          v-else-if="activeTab === 'runtime'"
-          :runtime="runtime"
-          :workspace-runtime-source="workspaceRuntimeSource"
-          :workspace-runtime-draft="workspaceRuntimeDraft"
-          :runtime-effective-preview="runtimeEffectivePreview"
-          :runtime-secret-statuses="runtimeSecretStatuses"
-          :resolve-validation-tone="resolveValidationTone"
-          :resolve-validation-label="resolveValidationLabel"
-          :resolve-source-status-label="resolveSourceStatusLabel"
-          :resolve-source-status-tone="resolveSourceStatusTone"
-          @reload="reloadRuntimeConfig"
-          @validate="validateWorkspaceRuntime"
-          @save="saveWorkspaceRuntime"
         />
 
         <SettingsVersionPanel

@@ -35,6 +35,17 @@ watch(
   { immediate: true },
 )
 
+watch(
+  () => workspaceStore.activeConnectionId,
+  (connectionId) => {
+    if (!connectionId) {
+      return
+    }
+    void userProfileStore.load(connectionId)
+  },
+  { immediate: true },
+)
+
 function handleTabChange(routeName: string) {
   void router.push({
     name: routeName,

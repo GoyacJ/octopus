@@ -117,6 +117,45 @@ describe('Conversation surfaces', () => {
     mounted.destroy()
   })
 
+  it('does not fetch admin access-control collections when opening a conversation', async () => {
+    let accessUsersCalls = 0
+    let accessRolesCalls = 0
+    let accessPermissionCalls = 0
+
+    configureWorkspaceClient(client => ({
+      ...client,
+      accessControl: {
+        ...client.accessControl,
+        async listUsers() {
+          accessUsersCalls += 1
+          return await client.accessControl.listUsers()
+        },
+        async listRoles() {
+          accessRolesCalls += 1
+          return await client.accessControl.listRoles()
+        },
+        async listPermissionDefinitions() {
+          accessPermissionCalls += 1
+          return await client.accessControl.listPermissionDefinitions()
+        },
+      },
+    }))
+
+    await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
+    await router.isReady()
+
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await waitFor(() => runtime.activeMessages.length >= 3)
+
+    expect(accessUsersCalls).toBe(0)
+    expect(accessRolesCalls).toBe(0)
+    expect(accessPermissionCalls).toBe(0)
+
+    mounted.destroy()
+  })
+
   it('renders runtime actor and artifact labels from real entity records', async () => {
     await router.push('/workspaces/ws-local/projects/proj-redesign/conversations/conv-redesign')
     await router.isReady()

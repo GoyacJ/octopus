@@ -349,6 +349,26 @@ export function createWorkspaceFixtureState(
           lastMessagePreview: 'Runtime-only conversation state is active.',
         },
         {
+          id: 'conv-redesign-ops',
+          workspaceId: workspace.id,
+          projectId: 'proj-redesign',
+          sessionId: 'rt-conv-redesign-ops',
+          title: 'Operator Handoff',
+          status: 'running',
+          updatedAt: 99,
+          lastMessagePreview: 'Queued operator follow-up and review items.',
+        },
+        {
+          id: 'conv-redesign-review',
+          workspaceId: workspace.id,
+          projectId: 'proj-redesign',
+          sessionId: 'rt-conv-redesign-review',
+          title: 'QA Review Sweep',
+          status: 'completed',
+          updatedAt: 98,
+          lastMessagePreview: 'Closed dashboard accessibility fixes.',
+        },
+        {
           id: 'conv-governance',
           workspaceId: workspace.id,
           projectId: 'proj-governance',
@@ -374,12 +394,67 @@ export function createWorkspaceFixtureState(
 
   const recentActivity = local
     ? [
-        { id: 'activity-sync', title: 'Workspace synced', description: 'Bootstrap and projections loaded.', timestamp: 100 },
-        { id: 'activity-runtime', title: 'Runtime event replay', description: 'Recovered session stream after reconnect.', timestamp: 96 },
+        {
+          id: 'activity-sync',
+          title: 'Workspace synced',
+          description: 'Bootstrap and projections loaded.',
+          timestamp: 100,
+          actorId: 'user-owner',
+          actorType: 'user',
+          resource: 'workspace.dashboard',
+          outcome: 'success',
+        },
+        {
+          id: 'activity-runtime',
+          title: 'Runtime event replay',
+          description: 'Recovered session stream after reconnect.',
+          timestamp: 96,
+          actorId: 'user-owner',
+          actorType: 'user',
+          resource: 'runtime.session',
+          outcome: 'success',
+        },
+        {
+          id: 'activity-approval',
+          title: 'Approval queue updated',
+          description: 'A runtime approval item was routed to the owner queue.',
+          timestamp: 95,
+          actorId: 'user-operator',
+          actorType: 'user',
+          resource: 'runtime.approval',
+          outcome: 'pending',
+        },
+        {
+          id: 'activity-tooling',
+          title: 'Tooling observation refreshed',
+          description: 'Tool usage and token ledgers were re-aggregated.',
+          timestamp: 94,
+          actorId: 'user-operator',
+          actorType: 'user',
+          resource: 'tool.usage',
+          outcome: 'success',
+        },
       ]
     : [
-        { id: 'activity-launch', title: 'Launch dashboard refreshed', description: 'Enterprise projection rebuilt.', timestamp: 120 },
+        {
+          id: 'activity-launch',
+          title: 'Launch dashboard refreshed',
+          description: 'Enterprise projection rebuilt.',
+          timestamp: 120,
+          actorId: 'user-owner',
+          actorType: 'user',
+          resource: 'workspace.dashboard',
+          outcome: 'success',
+        },
       ]
+
+  const projectTokenUsage = projects
+    .map(project => ({
+      projectId: project.id,
+      projectName: project.name,
+      usedTokens: project.id === 'proj-redesign' ? 125000 : 24000,
+    }))
+    .sort((left, right) => right.usedTokens - left.usedTokens)
 
   const overview: WorkspaceOverviewSnapshot = {
     workspace,
@@ -390,6 +465,7 @@ export function createWorkspaceFixtureState(
       { id: 'alerts', label: 'Alerts', value: local ? '0' : '1', tone: local ? 'default' : 'warning' },
     ],
     projects,
+    projectTokenUsage,
     recentConversations,
     recentActivity,
   }
@@ -398,12 +474,187 @@ export function createWorkspaceFixtureState(
     project.id,
     {
       project,
+      usedTokens: project.id === 'proj-redesign' ? 125000 : 24000,
       metrics: [
         { id: 'sessions', label: 'Sessions', value: String(recentConversations.filter(item => item.projectId === project.id).length), tone: 'accent' },
         { id: 'resources', label: 'Resources', value: local ? '2' : '1', tone: 'info' },
       ],
+      overview: project.id === 'proj-redesign'
+        ? {
+            memberCount: 2,
+            activeUserCount: 2,
+            agentCount: 4,
+            teamCount: 2,
+            conversationCount: 3,
+            messageCount: 98,
+            toolCallCount: 43,
+            approvalCount: 4,
+            resourceCount: 8,
+            knowledgeCount: 5,
+            toolCount: 3,
+            tokenRecordCount: 7,
+            totalTokens: 125000,
+            activityCount: 24,
+          }
+        : {
+            memberCount: 1,
+            activeUserCount: 1,
+            agentCount: 1,
+            teamCount: 1,
+            conversationCount: recentConversations.filter(item => item.projectId === project.id).length,
+            messageCount: 12,
+            toolCallCount: 5,
+            approvalCount: 0,
+            resourceCount: 4,
+            knowledgeCount: 2,
+            toolCount: 2,
+            tokenRecordCount: 3,
+            totalTokens: 24000,
+            activityCount: 6,
+          },
+      trend: project.id === 'proj-redesign'
+        ? [
+            { id: 'bucket-0', label: '1', timestamp: 1712620800000, conversationCount: 0, messageCount: 8, toolCallCount: 3, approvalCount: 0, tokenCount: 12000 },
+            { id: 'bucket-1', label: '2', timestamp: 1712707200000, conversationCount: 1, messageCount: 10, toolCallCount: 4, approvalCount: 1, tokenCount: 14000 },
+            { id: 'bucket-2', label: '3', timestamp: 1712793600000, conversationCount: 0, messageCount: 13, toolCallCount: 5, approvalCount: 0, tokenCount: 16000 },
+            { id: 'bucket-3', label: '4', timestamp: 1712880000000, conversationCount: 1, messageCount: 15, toolCallCount: 6, approvalCount: 1, tokenCount: 18000 },
+            { id: 'bucket-4', label: '5', timestamp: 1712966400000, conversationCount: 0, messageCount: 14, toolCallCount: 7, approvalCount: 0, tokenCount: 17000 },
+            { id: 'bucket-5', label: '6', timestamp: 1713052800000, conversationCount: 1, messageCount: 18, toolCallCount: 8, approvalCount: 1, tokenCount: 22000 },
+            { id: 'bucket-6', label: '7', timestamp: 1713139200000, conversationCount: 1, messageCount: 20, toolCallCount: 10, approvalCount: 1, tokenCount: 26000 },
+          ]
+        : [
+            { id: `${project.id}-bucket-0`, label: '1', timestamp: 1712620800000, conversationCount: 0, messageCount: 4, toolCallCount: 1, approvalCount: 0, tokenCount: 6000 },
+            { id: `${project.id}-bucket-1`, label: '2', timestamp: 1712707200000, conversationCount: 1, messageCount: 8, toolCallCount: 4, approvalCount: 0, tokenCount: 18000 },
+          ],
+      userStats: project.id === 'proj-redesign'
+        ? [
+            {
+              userId: 'user-owner',
+              displayName: 'Octopus Owner',
+              activityCount: 14,
+              conversationCount: 2,
+              messageCount: 58,
+              toolCallCount: 25,
+              approvalCount: 3,
+              tokenCount: 76000,
+              activityTrend: [2, 2, 2, 2, 2, 2, 2],
+              tokenTrend: [7000, 8000, 9000, 11000, 10000, 14000, 17000],
+            },
+            {
+              userId: 'user-operator',
+              displayName: 'Lin Zhou',
+              activityCount: 10,
+              conversationCount: 2,
+              messageCount: 40,
+              toolCallCount: 18,
+              approvalCount: 1,
+              tokenCount: 49000,
+              activityTrend: [1, 1, 1, 2, 1, 2, 2],
+              tokenTrend: [5000, 6000, 7000, 7000, 7000, 8000, 9000],
+            },
+          ]
+        : [
+            {
+              userId: 'user-owner',
+              displayName: local ? 'Octopus Owner' : 'Enterprise Owner',
+              activityCount: 6,
+              conversationCount: 1,
+              messageCount: 12,
+              toolCallCount: 5,
+              approvalCount: 0,
+              tokenCount: 24000,
+              activityTrend: [2, 4],
+              tokenTrend: [6000, 18000],
+            },
+          ],
+      conversationInsights: project.id === 'proj-redesign'
+        ? [
+            {
+              id: 'rt-conv-redesign',
+              conversationId: 'conv-redesign',
+              title: 'Conversation Redesign',
+              status: 'completed',
+              updatedAt: 100,
+              lastMessagePreview: 'Runtime-only conversation state is active.',
+              messageCount: 28,
+              toolCallCount: 12,
+              approvalCount: 1,
+              tokenCount: 42000,
+            },
+            {
+              id: 'rt-conv-redesign-ops',
+              conversationId: 'conv-redesign-ops',
+              title: 'Operator Handoff',
+              status: 'running',
+              updatedAt: 99,
+              lastMessagePreview: 'Queued operator follow-up and review items.',
+              messageCount: 24,
+              toolCallCount: 16,
+              approvalCount: 2,
+              tokenCount: 47000,
+            },
+            {
+              id: 'rt-conv-redesign-review',
+              conversationId: 'conv-redesign-review',
+              title: 'QA Review Sweep',
+              status: 'completed',
+              updatedAt: 98,
+              lastMessagePreview: 'Closed dashboard accessibility fixes.',
+              messageCount: 18,
+              toolCallCount: 8,
+              approvalCount: 1,
+              tokenCount: 36000,
+            },
+          ]
+        : recentConversations
+            .filter(item => item.projectId === project.id)
+            .map(item => ({
+              id: item.sessionId,
+              conversationId: item.id,
+              title: item.title,
+              status: item.status,
+              updatedAt: item.updatedAt,
+              lastMessagePreview: item.lastMessagePreview,
+              messageCount: 12,
+              toolCallCount: 5,
+              approvalCount: 0,
+              tokenCount: 24000,
+            })),
+      toolRanking: project.id === 'proj-redesign'
+        ? [
+            { id: 'read', label: 'Read', value: 18, helper: 'Documentation and resource lookups' },
+            { id: 'terminal', label: 'Terminal', value: 14, helper: 'Command execution and checks' },
+            { id: 'ops-mcp', label: 'Ops MCP', value: 9, helper: 'Workspace-side integrations' },
+          ]
+        : [
+            { id: 'terminal', label: 'Terminal', value: 5, helper: 'Operational validation' },
+          ],
+      resourceBreakdown: project.id === 'proj-redesign'
+        ? [
+            { id: 'resources', label: 'Resources', value: 8 },
+            { id: 'knowledge', label: 'Knowledge', value: 5 },
+            { id: 'agents', label: 'Agents', value: 4 },
+            { id: 'teams', label: 'Teams', value: 2 },
+            { id: 'tools', label: 'Tools', value: 3 },
+            { id: 'sessions', label: 'Sessions', value: 3 },
+          ]
+        : [
+            { id: 'resources', label: 'Resources', value: 4 },
+            { id: 'knowledge', label: 'Knowledge', value: 2 },
+            { id: 'agents', label: 'Agents', value: 1 },
+            { id: 'teams', label: 'Teams', value: 1 },
+            { id: 'tools', label: 'Tools', value: 2 },
+          ],
+      modelBreakdown: project.id === 'proj-redesign'
+        ? [
+            { id: 'anthropic-primary', label: 'Claude Primary', value: 82000 },
+            { id: 'openai-primary', label: 'GPT-4o', value: 43000 },
+          ]
+        : [
+            { id: 'anthropic-primary', label: 'Claude Primary', value: 24000 },
+          ],
       recentConversations: recentConversations.filter(item => item.projectId === project.id),
-      recentActivity: recentActivity,
+      recentActivity: recentActivity.filter(item => project.id === 'proj-redesign' || item.id === 'activity-launch'),
     },
   ]))
 
@@ -738,7 +989,7 @@ export function createWorkspaceFixtureState(
           status: 'pending',
           priority: 'high',
           actionable: true,
-          routeTo: `/workspaces/${workspace.id}/projects/proj-redesign/runtime`,
+          routeTo: `/workspaces/${workspace.id}/projects/proj-redesign/settings`,
           actionLabel: 'Review approval',
           createdAt: 105,
         },

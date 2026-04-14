@@ -39,11 +39,14 @@ function findLabel(value?: string) {
   return props.options.find((option) => option.value === value)?.label ?? ''
 }
 
-watch(() => props.modelValue, (value) => {
+function syncQuery(value = props.modelValue) {
   if (!open.value) {
     query.value = findLabel(value)
   }
-}, { immediate: true })
+}
+
+watch(() => props.modelValue, value => syncQuery(value), { immediate: true })
+watch(() => props.options, () => syncQuery(), { deep: true })
 
 function handleModelValueUpdate(value: string | undefined) {
   const nextValue = value ?? ''
@@ -74,6 +77,7 @@ function handleOpenChange(value: boolean) {
       <ComboboxAnchor as-child>
         <ComboboxInput
           :model-value="query"
+          :display-value="findLabel"
           :placeholder="props.placeholder"
           class="flex h-8 w-full rounded-[var(--radius-xs)] border border-input bg-background px-3 py-1.5 text-[13px] text-text-primary placeholder:text-text-tertiary transition-colors duration-fast focus-visible:outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
           data-testid="ui-combobox-input"

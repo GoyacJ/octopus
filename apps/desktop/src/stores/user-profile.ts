@@ -118,7 +118,7 @@ export const useUserProfileStore = defineStore('user-profile', () => {
     }
   }
 
-  async function load(workspaceConnectionId?: string) {
+  async function load(workspaceConnectionId?: string, options: { force?: boolean } = {}) {
     const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
     if (!resolvedClient) {
       return null
@@ -126,8 +126,13 @@ export const useUserProfileStore = defineStore('user-profile', () => {
 
     const { connectionId } = resolvedClient
     const accessControlStore = useWorkspaceAccessControlStore()
-    if (connectionId !== activeConnectionId.value || !accessControlStore.currentUser) {
-      await accessControlStore.load(connectionId)
+    if (connectionId !== activeConnectionId.value || !accessControlStore.currentUser || options.force) {
+      await accessControlStore.ensureAuthorizationContext(connectionId, options)
+    }
+
+    const cachedUser = profilesByConnection.value[connectionId]?.currentUser ?? null
+    if (!options.force && cachedUser && accessControlStore.currentUser?.id === cachedUser.id) {
+      return cachedUser
     }
 
     const current = accessControlStore.currentUser

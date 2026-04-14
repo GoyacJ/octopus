@@ -1418,11 +1418,10 @@ mod tests {
         let db = bundle.auth.state.open_db().expect("db");
         db.execute(
             "UPDATE access_roles SET permission_codes = ?1 WHERE id = 'owner'",
-            params![serde_json::to_string(&vec![
-                "runtime.session.read",
-                "custom.permission",
-            ])
-            .expect("owner permissions json")],
+            params![
+                serde_json::to_string(&vec!["runtime.session.read", "custom.permission",])
+                    .expect("owner permissions json")
+            ],
         )
         .expect("downgrade owner role");
 
@@ -1445,7 +1444,9 @@ mod tests {
             "bootstrap should backfill missing runtime submit permission"
         );
         assert!(
-            permission_codes.iter().any(|code| code == "custom.permission"),
+            permission_codes
+                .iter()
+                .any(|code| code == "custom.permission"),
             "bootstrap should preserve existing custom owner permissions"
         );
     }

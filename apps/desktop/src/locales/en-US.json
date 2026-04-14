@@ -9,6 +9,7 @@
     "selected": "Selected",
     "send": "Send",
     "approve": "Approve",
+    "resolveAuth": "Resolve auth",
     "reject": "Reject",
     "saveDraft": "Save Draft",
     "requestReview": "Request Review",
@@ -261,7 +262,6 @@
       "knowledge": "Knowledge",
       "trace": "Trace",
       "projectSettings": "Project Settings",
-      "runtime": "Runtime",
       "agents": "Agents",
       "projects": "Projects",
       "teams": "Teams",
@@ -429,21 +429,128 @@
     "header": {
       "eyebrow": "Project Console",
       "titleFallback": "Project Dashboard",
-      "subtitleFallback": "Review project metrics, activity, and recent conversations."
+      "subtitleFallback": "Review project metrics, usage, resources, and recent conversations.",
+      "meta": {
+        "members": "{count} members",
+        "health": "{approvals} approvals in flow"
+      }
     },
     "conversations": {
       "title": "Recent conversations"
     },
     "activity": {
-      "title": "Recent Project Activity"
+      "title": "Recent Project Activity",
+      "actorHelper": "{actor} • {outcome}"
+    },
+    "common": {
+      "system": "System event",
+      "unknown": "Unknown"
+    },
+    "metrics": {
+      "totalTokens": "Total tokens",
+      "totalTokensHint": "{records} usage records",
+      "activeUsers": "Active users",
+      "activeUsersHint": "{total} members in project",
+      "agentTeamCapacity": "Digital workforce",
+      "agentTeamCapacityHint": "{agents} digital employees • {teams} digital teams",
+      "sessions": "Sessions",
+      "sessionsHint": "{messages} total messages",
+      "toolCalls": "Tool calls",
+      "toolCallsHint": "{tools} configured tools",
+      "approvals": "Approvals",
+      "approvalsHint": "{activity} activity records tracked",
+      "resources": "Resources",
+      "resourcesHint": "{knowledge} knowledge items",
+      "messages": "Messages",
+      "messagesHint": "{average} avg per session"
+    },
+    "sections": {
+      "usageTrend": {
+        "title": "Usage trend",
+        "subtitle": "Track token consumption, message volume, and tool activity across the latest operating window.",
+        "cards": {
+          "tokens": "Token volume",
+          "tokensHint": "Cumulative usage across the current project window.",
+          "messages": "Message volume",
+          "messagesHint": "All project turns and system messages counted together.",
+          "tools": "Tool throughput",
+          "toolsHint": "Invocation density across builtin, skill, and MCP tools."
+        }
+      },
+      "resourceMix": {
+        "title": "Resource mix",
+        "subtitle": "See how project assets are distributed across sessions, resources, knowledge, teams, and tools.",
+        "total": "Assets"
+      },
+      "topContributors": {
+        "title": "Top contributors",
+        "subtitle": "Compare the most active members by token share, activity volume, and tool usage."
+      },
+      "approvalQueue": {
+        "title": "Approval queue",
+        "subtitle": "Surface pending approvals and surrounding operational activity that may need attention.",
+        "cards": {
+          "approvals": "Pending approvals",
+          "approvalsHint": "Approvals detected from sessions and audit activity.",
+          "activity": "Observed activity",
+          "activityHint": "Recent project actions associated with ongoing execution."
+        }
+      },
+      "toolUsage": {
+        "title": "Tool usage",
+        "subtitle": "Rank the tools and integration endpoints driving project work."
+      },
+      "sessionRanking": {
+        "title": "Session ranking",
+        "subtitle": "Identify the sessions consuming the most tokens and tool activity."
+      },
+      "recentSessions": {
+        "title": "Recent sessions",
+        "subtitle": "Review the latest session updates and jump directly into the active collaboration thread.",
+        "meta": "{status}"
+      },
+      "modelMix": {
+        "title": "Model mix",
+        "subtitle": "Understand which configured models account for project token consumption.",
+        "total": "Tokens"
+      },
+      "activity": {
+        "title": "Project activity",
+        "subtitle": "Follow the latest operational events, approvals, and runtime outcomes."
+      }
+    },
+    "sessions": {
+      "rankingHelper": "{messages} messages • {tools} tool calls"
+    },
+    "userSummary": {
+      "helper": "{activity} activities • {tools} tool calls",
+      "cardHelper": "{activity} activities • {messages} messages"
+    },
+    "breakdown": {
+      "items": {
+        "resources": "Resources",
+        "knowledge": "Knowledge",
+        "agents": "Digital employees",
+        "teams": "Digital teams",
+        "tools": "Tools",
+        "sessions": "Sessions"
+      }
     },
     "empty": {
+      "snapshotTitle": "Project snapshot unavailable",
+      "snapshotDescription": "The dashboard snapshot has not loaded yet. Try again after the project data sync completes.",
       "conversationsTitle": "No project conversations yet",
       "conversationsDescription": "Project runtime sessions will appear here after conversations start.",
       "activityTitle": "No project activity yet",
       "activityDescription": "There are no project logs available.",
       "rankingTitle": "No session rankings yet",
-      "rankingDescription": "Insufficient data for rankings."
+      "rankingDescription": "Insufficient data for rankings.",
+      "usersTitle": "No contributor analytics yet",
+      "usersDescription": "User activity and token allocation will appear after project members begin working.",
+      "toolsTitle": "No tool activity yet",
+      "toolsDescription": "Tool rankings appear once the project starts invoking tools or MCP endpoints.",
+      "sessionsTitle": "No session insights yet",
+      "sessionsDescription": "Session rankings appear after enough runtime usage data has been collected."
     },
     "info": {
       "title": "Project Details",
@@ -498,23 +605,6 @@
       "activity": "Activity"
     }
   },
-  "projectRuntime": {
-    "header": {
-      "eyebrow": "Project Runtime",
-      "title": "Project Runtime Config",
-      "subtitle": "Manage runtime overrides for the active project without exposing host filesystem paths."
-    },
-    "editor": {
-      "title": "Project Override",
-      "description": "Edit the current project's runtime override document."
-    },
-    "effective": {
-      "title": "Project Effective Preview",
-      "description": "Preview the merged runtime config for new sessions started from this project."
-    },
-    "emptyTitle": "Project runtime config is unavailable",
-    "emptyDescription": "No project runtime config could be loaded for the active project."
-  },
   "projectSettings": {
     "header": {
       "eyebrow": "Project Settings",
@@ -541,6 +631,11 @@
       "allowedHint": "Only the selected workspace models are available to this project.",
       "defaultLabel": "Default model",
       "defaultHint": "New turns without an explicit model use this default selection.",
+      "totalTokensLabel": "Token quota",
+      "totalTokensHint": "Leave blank to keep this project unlimited.",
+      "totalTokensPlaceholder": "Leave blank for unlimited",
+      "usedTokensLabel": "Used tokens",
+      "usedTokensHint": "Read-only usage synced from project runtime state.",
       "saveError": "Failed to save project model settings.",
       "emptyTitle": "No configured workspace models are available",
       "emptyDescription": "Configure workspace models first, then return here to scope them per project.",
@@ -1292,7 +1387,6 @@
       "general": "General Settings",
       "connection": "Connections",
       "theme": "Aesthetics",
-      "runtime": "Runtime Settings",
       "version": "Updates & Version"
     },
     "preferences": {
@@ -1486,7 +1580,11 @@
     },
     "stats": {
       "total": "Total agents",
-      "active": "Active agents"
+      "active": "Enabled agents"
+    },
+    "status": {
+      "active": "Enabled",
+      "archived": "Disabled"
     },
     "empty": {
       "workspaceTitle": "No workspace agents yet",
@@ -1595,6 +1693,8 @@
       "name": "Project name",
       "description": "Description",
       "resourceDirectory": "Resource directory",
+      "totalTokens": "Token quota",
+      "usedTokens": "Used tokens",
       "models": "Assigned models",
       "defaultModel": "Default model",
       "tools": "Assigned tools",
@@ -1604,6 +1704,8 @@
     "hints": {
       "resourceDirectoryLocal": "For local connections, choose the project's resource directory from the system file picker.",
       "resourceDirectoryRemote": "For remote connections, choose the project's resource directory from the remote directory browser.",
+      "totalTokens": "Set the total token limit available to this project.",
+      "usedTokens": "This value is read-only and reflects current project token consumption.",
       "models": "Projects can only refine models selected here.",
       "defaultModel": "This default seeds the project-level default model selection.",
       "tools": "Choose builtin, skill, and mcp tools from the workspace catalog.",
@@ -1620,8 +1722,8 @@
       "teams": "No workspace teams are available yet."
     },
     "status": {
-      "active": "active",
-      "archived": "archived"
+      "active": "Active",
+      "archived": "Archived"
     },
     "errors": {
       "lastActiveProject": "Keep at least one active project. The last active project cannot be archived."

@@ -543,6 +543,11 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               used_tokens INTEGER NOT NULL,
               updated_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS project_token_usage_projections (
+              project_id TEXT PRIMARY KEY,
+              used_tokens INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS runtime_config_snapshots (
               id TEXT PRIMARY KEY,
               effective_config_hash TEXT NOT NULL,
@@ -751,6 +756,40 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
               status TEXT NOT NULL,
               approval_json TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS runtime_memory_records (
+              memory_id TEXT PRIMARY KEY,
+              workspace_id TEXT NOT NULL,
+              project_id TEXT,
+              owner_ref TEXT,
+              source_run_id TEXT,
+              kind TEXT NOT NULL,
+              scope TEXT NOT NULL,
+              title TEXT NOT NULL,
+              summary TEXT NOT NULL,
+              freshness_state TEXT NOT NULL,
+              last_validated_at INTEGER,
+              proposal_state TEXT NOT NULL,
+              storage_path TEXT,
+              content_hash TEXT,
+              updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS runtime_memory_proposals (
+              proposal_id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              run_id TEXT NOT NULL,
+              memory_id TEXT NOT NULL,
+              kind TEXT NOT NULL,
+              scope TEXT NOT NULL,
+              title TEXT NOT NULL,
+              summary TEXT NOT NULL,
+              proposal_state TEXT NOT NULL,
+              proposal_reason TEXT NOT NULL,
+              review_json TEXT,
+              artifact_storage_path TEXT,
+              artifact_content_hash TEXT,
+              updated_at INTEGER NOT NULL,
+              proposal_json TEXT NOT NULL
+            );
             ",
         )
         .map_err(|error| AppError::database(error.to_string()))?;
@@ -767,6 +806,7 @@ pub(super) fn initialize_database(paths: &WorkspacePaths) -> Result<(), AppError
     ensure_runtime_session_projection_columns(&connection)?;
     ensure_runtime_run_projection_columns(&connection)?;
     ensure_runtime_phase_four_projection_tables(&connection)?;
+    ensure_runtime_memory_projection_tables(&connection)?;
     ensure_cost_entry_columns(&connection)?;
     ensure_resource_columns(&connection)?;
     agent_seed::ensure_import_source_tables(&connection)?;
@@ -1664,8 +1704,22 @@ pub(super) fn ensure_runtime_session_projection_columns(
             ("capability_plan_summary_json", "TEXT NOT NULL DEFAULT '{}'"),
             ("provider_state_summary_json", "TEXT NOT NULL DEFAULT '[]'"),
             ("pending_mediation_json", "TEXT"),
+            ("pending_mediation_kind", "TEXT"),
+            ("pending_target_kind", "TEXT"),
+            ("pending_target_ref", "TEXT"),
+            ("pending_approval_layer", "TEXT"),
+            ("pending_provider_key", "TEXT"),
+            ("pending_checkpoint_ref", "TEXT"),
             ("capability_state_ref", "TEXT"),
             ("last_execution_outcome_json", "TEXT"),
+            ("last_mediation_outcome_json", "TEXT"),
+            ("last_mediation_outcome", "TEXT"),
+            ("last_mediation_target_kind", "TEXT"),
+            ("last_mediation_target_ref", "TEXT"),
+            ("last_mediation_at", "INTEGER"),
+            ("auth_challenge_state", "TEXT"),
+            ("approval_lineage_json", "TEXT"),
+            ("denied_exposure_count", "INTEGER NOT NULL DEFAULT 0"),
             ("granted_tool_count", "INTEGER NOT NULL DEFAULT 0"),
             ("injected_skill_message_count", "INTEGER NOT NULL DEFAULT 0"),
             ("deferred_capability_count", "INTEGER NOT NULL DEFAULT 0"),
@@ -1708,8 +1762,22 @@ pub(super) fn ensure_runtime_run_projection_columns(
             ("capability_plan_summary_json", "TEXT NOT NULL DEFAULT '{}'"),
             ("provider_state_summary_json", "TEXT NOT NULL DEFAULT '[]'"),
             ("pending_mediation_json", "TEXT"),
+            ("pending_mediation_kind", "TEXT"),
+            ("pending_target_kind", "TEXT"),
+            ("pending_target_ref", "TEXT"),
+            ("pending_approval_layer", "TEXT"),
+            ("pending_provider_key", "TEXT"),
+            ("pending_checkpoint_ref", "TEXT"),
             ("capability_state_ref", "TEXT"),
             ("last_execution_outcome_json", "TEXT"),
+            ("last_mediation_outcome_json", "TEXT"),
+            ("last_mediation_outcome", "TEXT"),
+            ("last_mediation_target_kind", "TEXT"),
+            ("last_mediation_target_ref", "TEXT"),
+            ("last_mediation_at", "INTEGER"),
+            ("auth_challenge_state", "TEXT"),
+            ("approval_lineage_json", "TEXT"),
+            ("denied_exposure_count", "INTEGER NOT NULL DEFAULT 0"),
             ("granted_tool_count", "INTEGER NOT NULL DEFAULT 0"),
             ("injected_skill_message_count", "INTEGER NOT NULL DEFAULT 0"),
             ("deferred_capability_count", "INTEGER NOT NULL DEFAULT 0"),
@@ -1929,6 +1997,208 @@ pub(super) fn ensure_runtime_phase_four_projection_tables(
         ],
     )?;
 
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS runtime_approval_projections (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                risk_level TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                approval_layer TEXT,
+                capability_id TEXT,
+                checkpoint_ref TEXT,
+                provider_key TEXT,
+                required_permission TEXT,
+                requires_approval INTEGER NOT NULL DEFAULT 0,
+                requires_auth INTEGER NOT NULL DEFAULT 0,
+                target_kind TEXT,
+                target_ref TEXT,
+                escalation_reason TEXT,
+                approval_json TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "runtime_approval_projections",
+        &[
+            ("session_id", "TEXT NOT NULL DEFAULT ''"),
+            ("run_id", "TEXT NOT NULL DEFAULT ''"),
+            ("conversation_id", "TEXT NOT NULL DEFAULT ''"),
+            ("tool_name", "TEXT NOT NULL DEFAULT ''"),
+            ("summary", "TEXT NOT NULL DEFAULT ''"),
+            ("detail", "TEXT NOT NULL DEFAULT ''"),
+            ("risk_level", "TEXT NOT NULL DEFAULT 'medium'"),
+            ("created_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("status", "TEXT NOT NULL DEFAULT 'pending'"),
+            ("approval_layer", "TEXT"),
+            ("capability_id", "TEXT"),
+            ("checkpoint_ref", "TEXT"),
+            ("provider_key", "TEXT"),
+            ("required_permission", "TEXT"),
+            ("requires_approval", "INTEGER NOT NULL DEFAULT 0"),
+            ("requires_auth", "INTEGER NOT NULL DEFAULT 0"),
+            ("target_kind", "TEXT"),
+            ("target_ref", "TEXT"),
+            ("escalation_reason", "TEXT"),
+            ("approval_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ],
+    )?;
+
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS runtime_auth_challenge_projections (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                status TEXT NOT NULL,
+                resolution TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                approval_layer TEXT,
+                capability_id TEXT,
+                checkpoint_ref TEXT,
+                provider_key TEXT,
+                required_permission TEXT,
+                requires_approval INTEGER NOT NULL DEFAULT 0,
+                requires_auth INTEGER NOT NULL DEFAULT 0,
+                target_kind TEXT,
+                target_ref TEXT,
+                escalation_reason TEXT,
+                challenge_json TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "runtime_auth_challenge_projections",
+        &[
+            ("session_id", "TEXT NOT NULL DEFAULT ''"),
+            ("run_id", "TEXT NOT NULL DEFAULT ''"),
+            ("conversation_id", "TEXT NOT NULL DEFAULT ''"),
+            ("summary", "TEXT NOT NULL DEFAULT ''"),
+            ("detail", "TEXT NOT NULL DEFAULT ''"),
+            ("status", "TEXT NOT NULL DEFAULT 'pending'"),
+            ("resolution", "TEXT"),
+            ("created_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("approval_layer", "TEXT"),
+            ("capability_id", "TEXT"),
+            ("checkpoint_ref", "TEXT"),
+            ("provider_key", "TEXT"),
+            ("required_permission", "TEXT"),
+            ("requires_approval", "INTEGER NOT NULL DEFAULT 0"),
+            ("requires_auth", "INTEGER NOT NULL DEFAULT 0"),
+            ("target_kind", "TEXT"),
+            ("target_ref", "TEXT"),
+            ("escalation_reason", "TEXT"),
+            ("challenge_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ],
+    )?;
+
+    Ok(())
+}
+
+pub(super) fn ensure_runtime_memory_projection_tables(
+    connection: &Connection,
+) -> Result<(), AppError> {
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS runtime_memory_records (
+                memory_id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                project_id TEXT,
+                owner_ref TEXT,
+                source_run_id TEXT,
+                kind TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                freshness_state TEXT NOT NULL,
+                last_validated_at INTEGER,
+                proposal_state TEXT NOT NULL,
+                storage_path TEXT,
+                content_hash TEXT,
+                updated_at INTEGER NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "runtime_memory_records",
+        &[
+            ("workspace_id", "TEXT NOT NULL DEFAULT ''"),
+            ("project_id", "TEXT"),
+            ("owner_ref", "TEXT"),
+            ("source_run_id", "TEXT"),
+            ("kind", "TEXT NOT NULL DEFAULT 'reference'"),
+            ("scope", "TEXT NOT NULL DEFAULT 'user'"),
+            ("title", "TEXT NOT NULL DEFAULT ''"),
+            ("summary", "TEXT NOT NULL DEFAULT ''"),
+            ("freshness_state", "TEXT NOT NULL DEFAULT 'fresh'"),
+            ("last_validated_at", "INTEGER"),
+            ("proposal_state", "TEXT NOT NULL DEFAULT 'pending'"),
+            ("storage_path", "TEXT"),
+            ("content_hash", "TEXT"),
+            ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+        ],
+    )?;
+
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS runtime_memory_proposals (
+                proposal_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                memory_id TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                scope TEXT NOT NULL,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                proposal_state TEXT NOT NULL,
+                proposal_reason TEXT NOT NULL,
+                review_json TEXT,
+                artifact_storage_path TEXT,
+                artifact_content_hash TEXT,
+                updated_at INTEGER NOT NULL,
+                proposal_json TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "runtime_memory_proposals",
+        &[
+            ("session_id", "TEXT NOT NULL DEFAULT ''"),
+            ("run_id", "TEXT NOT NULL DEFAULT ''"),
+            ("memory_id", "TEXT NOT NULL DEFAULT ''"),
+            ("kind", "TEXT NOT NULL DEFAULT 'reference'"),
+            ("scope", "TEXT NOT NULL DEFAULT 'user'"),
+            ("title", "TEXT NOT NULL DEFAULT ''"),
+            ("summary", "TEXT NOT NULL DEFAULT ''"),
+            ("proposal_state", "TEXT NOT NULL DEFAULT 'pending'"),
+            ("proposal_reason", "TEXT NOT NULL DEFAULT ''"),
+            ("review_json", "TEXT"),
+            ("artifact_storage_path", "TEXT"),
+            ("artifact_content_hash", "TEXT"),
+            ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("proposal_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ],
+    )?;
+
     Ok(())
 }
 
@@ -1961,7 +2231,49 @@ pub(super) fn ensure_cost_entry_columns(connection: &Connection) -> Result<(), A
             [],
         )
         .map_err(|error| AppError::database(error.to_string()))?;
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS project_token_usage_projections (
+              project_id TEXT PRIMARY KEY,
+              used_tokens INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
 
+    let project_projection_count: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM project_token_usage_projections",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    if project_projection_count == 0 {
+        rebuild_project_token_usage_projections(connection)?;
+    }
+
+    Ok(())
+}
+
+fn rebuild_project_token_usage_projections(connection: &Connection) -> Result<(), AppError> {
+    connection
+        .execute("DELETE FROM project_token_usage_projections", [])
+        .map_err(|error| AppError::database(error.to_string()))?;
+    connection
+        .execute(
+            "INSERT INTO project_token_usage_projections (project_id, used_tokens, updated_at)
+             SELECT project_id,
+                    SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) AS used_tokens,
+                    MAX(created_at) AS updated_at
+             FROM cost_entries
+             WHERE project_id IS NOT NULL
+               AND metric = 'tokens'
+             GROUP BY project_id
+             HAVING SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) > 0",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
     Ok(())
 }
 
@@ -2899,6 +3211,7 @@ pub(super) fn agent_avatar(paths: &WorkspacePaths, avatar_path: Option<&str>) ->
         Some("png") => "image/png",
         Some("webp") => "image/webp",
         Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("svg") => "image/svg+xml",
         _ => return Some(avatar_path.to_string()),
     };
     Some(format!(
@@ -3798,4 +4111,27 @@ pub(super) fn content_hash(bytes: &[u8]) -> String {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     bytes.hash(&mut hasher);
     format!("hash-{:x}", hasher.finish())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn agent_avatar_returns_svg_data_url() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let paths = WorkspacePaths::new(temp.path());
+        let relative_path = "data/blobs/avatars/agent-svg.svg";
+        let absolute_path = paths.root.join(relative_path);
+        fs::create_dir_all(absolute_path.parent().expect("avatar parent")).expect("avatar dir");
+        fs::write(
+            &absolute_path,
+            br#"<svg xmlns="http://www.w3.org/2000/svg"></svg>"#,
+        )
+        .expect("write avatar");
+
+        let avatar = agent_avatar(&paths, Some(relative_path)).expect("avatar");
+
+        assert!(avatar.starts_with("data:image/svg+xml;base64,"));
+    }
 }

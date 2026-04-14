@@ -26,10 +26,43 @@ const workspaceStore = useWorkspaceStore()
 
 const traceStatusLabel = computed(() => runtime.activeRunStatusLabel || t('common.na'))
 const resolvedActorLabel = computed(() => runtime.activeRun?.resolvedActorLabel || t('common.na'))
-const canApproveTrace = computed(() =>
+const canResolveApprovalTrace = computed(() =>
   workspaceAccessControlStore.currentResourceActionGrants.some(grant =>
     (grant.resourceType === 'runtime.approval' && grant.actions.includes('resolve'))
     || (grant.resourceType === 'runtime' && grant.actions.includes('approval.resolve'))),
+)
+const canResolveAuthTrace = computed(() =>
+  workspaceAccessControlStore.currentResourceActionGrants.some(grant =>
+    (grant.resourceType === 'runtime.auth' && grant.actions.includes('resolve'))
+    || (grant.resourceType === 'runtime' && grant.actions.includes('auth.resolve'))),
+)
+const pendingMemoryProposal = computed(() => runtime.activeRun?.pendingMemoryProposal ?? null)
+const activeMediationKind = computed(() => {
+  const mediationKind = runtime.pendingMediation?.mediationKind
+  if (mediationKind && mediationKind !== 'none') {
+    return mediationKind
+  }
+  if (runtime.pendingApproval) {
+    return 'approval'
+  }
+  if (runtime.authTarget) {
+    return 'auth'
+  }
+  return pendingMemoryProposal.value ? 'memory' : ''
+})
+const activeMediationTitle = computed(() =>
+  runtime.pendingMediation?.summary
+  ?? runtime.pendingApproval?.summary
+  ?? runtime.authTarget?.summary
+  ?? pendingMemoryProposal.value?.summary
+  ?? '',
+)
+const activeMediationDetail = computed(() =>
+  runtime.pendingMediation?.detail
+  ?? runtime.pendingApproval?.detail
+  ?? runtime.authTarget?.detail
+  ?? pendingMemoryProposal.value?.proposalReason
+  ?? '',
 )
 
 const runtimeTraceTone = computed<'default' | 'success' | 'warning' | 'error' | 'info'>(() => {
@@ -46,6 +79,22 @@ async function approveRuntime() {
 
 async function rejectRuntime() {
   await runtime.resolveApproval('reject')
+}
+
+async function resolveRuntimeAuthChallenge() {
+  await runtime.resolveAuthChallenge('resolved')
+}
+
+async function cancelRuntimeAuthChallenge() {
+  await runtime.resolveAuthChallenge('cancelled')
+}
+
+async function approveMemoryProposal() {
+  await runtime.resolveMemoryProposal('approve')
+}
+
+async function rejectMemoryProposal() {
+  await runtime.resolveMemoryProposal('reject')
 }
 </script>
 
@@ -95,19 +144,31 @@ async function rejectRuntime() {
         :title="t('trace.recovery.title')"
         :subtitle="t('trace.recovery.subtitle')"
       >
-        <div v-if="runtime.pendingApproval" data-testid="trace-runtime-approval">
+        <div v-if="activeMediationKind" data-testid="trace-runtime-approval">
           <UiStatusCallout
             tone="warning"
-            :title="runtime.pendingApproval.summary"
-            :description="runtime.pendingApproval.detail"
+            :title="activeMediationTitle"
+            :description="activeMediationDetail"
           >
             <div class="flex flex-wrap gap-2.5">
-              <UiBadge :label="runtime.pendingApproval.toolName" subtle />
-              <UiBadge :label="runtime.pendingApproval.riskLevel" tone="warning" />
+              <UiBadge v-if="runtime.pendingApproval?.toolName" :label="runtime.pendingApproval.toolName" subtle />
+              <UiBadge v-if="runtime.pendingApproval?.riskLevel" :label="runtime.pendingApproval.riskLevel" tone="warning" />
+              <UiBadge v-if="runtime.authTarget?.providerKey" :label="runtime.authTarget.providerKey" subtle />
+              <UiBadge v-if="runtime.pendingMediation?.targetKind" :label="runtime.pendingMediation.targetKind" subtle />
             </div>
-            <div v-if="canApproveTrace" class="flex flex-wrap gap-2 pt-1">
-              <UiButton data-testid="trace-runtime-approve" size="sm" @click="approveRuntime">{{ t('common.approve') }}</UiButton>
-              <UiButton data-testid="trace-runtime-reject" variant="ghost" size="sm" @click="rejectRuntime">{{ t('common.reject') }}</UiButton>
+            <div class="flex flex-wrap gap-2 pt-1">
+              <template v-if="activeMediationKind === 'approval' && runtime.pendingApproval && canResolveApprovalTrace">
+                <UiButton data-testid="trace-runtime-approve" size="sm" @click="approveRuntime">{{ t('common.approve') }}</UiButton>
+                <UiButton data-testid="trace-runtime-reject" variant="ghost" size="sm" @click="rejectRuntime">{{ t('common.reject') }}</UiButton>
+              </template>
+              <template v-else-if="activeMediationKind === 'auth' && runtime.authTarget && canResolveAuthTrace">
+                <UiButton data-testid="trace-runtime-auth-resolve" size="sm" @click="resolveRuntimeAuthChallenge">{{ t('common.resolveAuth') }}</UiButton>
+                <UiButton data-testid="trace-runtime-auth-cancel" variant="ghost" size="sm" @click="cancelRuntimeAuthChallenge">{{ t('common.cancel') }}</UiButton>
+              </template>
+              <template v-else-if="activeMediationKind === 'memory' && pendingMemoryProposal">
+                <UiButton data-testid="trace-runtime-memory-approve" size="sm" @click="approveMemoryProposal">{{ t('common.approve') }}</UiButton>
+                <UiButton data-testid="trace-runtime-memory-reject" variant="ghost" size="sm" @click="rejectMemoryProposal">{{ t('common.reject') }}</UiButton>
+              </template>
             </div>
           </UiStatusCallout>
         </div>

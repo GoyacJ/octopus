@@ -29,13 +29,21 @@ pub(crate) fn build_subrun_projection(
     let total_subruns = subruns.len() as u64;
     let dispatch = RuntimeWorkerDispatchSummary {
         total_subruns,
-        active_subruns: if run.status == "running" { total_subruns } else { 0 },
+        active_subruns: if run.status == "running" {
+            total_subruns
+        } else {
+            0
+        },
         completed_subruns: if run.status == "completed" {
             total_subruns
         } else {
             0
         },
-        failed_subruns: if run.status == "failed" { total_subruns } else { 0 },
+        failed_subruns: if run.status == "failed" {
+            total_subruns
+        } else {
+            0
+        },
     };
 
     (subruns, dispatch)

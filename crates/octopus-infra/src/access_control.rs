@@ -441,7 +441,9 @@ pub(super) fn resolve_effective_permission_codes(
     Ok((permission_codes, bindings))
 }
 
-pub(super) fn ensure_default_owner_role_permissions(connection: &Connection) -> Result<(), AppError> {
+pub(super) fn ensure_default_owner_role_permissions(
+    connection: &Connection,
+) -> Result<(), AppError> {
     let default_permissions = default_owner_permission_codes();
     let existing_role = connection
         .query_row(

@@ -9,6 +9,7 @@ import i18n from '@/plugins/i18n'
 import { router } from '@/router'
 import { useRuntimeStore } from '@/stores/runtime'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
+import { createSessionDetail } from './support/workspace-fixture-runtime'
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -152,6 +153,68 @@ describe('TraceView runtime integration', () => {
     expect(mounted.container.querySelector('[data-testid="trace-runtime-approval"]')).toBeNull()
     expect(mounted.container.querySelector('[data-testid="trace-runtime-status"]')?.textContent).toMatch(/completed|已完成/)
     expect(mounted.container.querySelectorAll('[data-testid="trace-runtime-item"]').length).toBeGreaterThan(0)
+
+    runtime.dispose()
+    mounted.destroy()
+  })
+
+  it('renders auth mediation from typed runtime state', async () => {
+    const mounted = mountApp()
+    const runtime = useRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-auth-trace',
+      projectId: 'proj-redesign',
+      title: 'Auth Trace Runtime Session',
+    })
+
+    const detail = createSessionDetail(
+      'conv-auth-trace',
+      'proj-redesign',
+      'Auth Trace Runtime Session',
+    )
+    detail.summary.status = 'waiting_input'
+    detail.pendingMediation = {
+      mediationKind: 'auth',
+      state: 'pending',
+      summary: 'Provider sign-in required',
+      detail: 'Resolve the provider auth challenge before execution can continue.',
+      targetKind: 'provider-auth',
+      targetRef: 'provider:workspace-api',
+      providerKey: 'workspace-api',
+      authChallengeId: 'auth-workspace-api',
+      requiresAuth: true,
+      requiresApproval: false,
+    }
+    detail.summary.pendingMediation = detail.pendingMediation
+    detail.run.status = 'waiting_input'
+    detail.run.currentStep = 'awaiting_auth'
+    detail.run.nextAction = 'auth'
+    detail.run.pendingMediation = detail.pendingMediation
+    detail.run.authTarget = {
+      id: 'auth-workspace-api',
+      sessionId: detail.summary.id,
+      conversationId: detail.summary.conversationId,
+      runId: detail.run.id,
+      summary: 'Provider sign-in required',
+      detail: 'Resolve the provider auth challenge before execution can continue.',
+      status: 'pending',
+      createdAt: detail.run.updatedAt,
+      approvalLayer: 'provider-auth',
+      escalationReason: 'provider authentication required',
+      targetKind: 'provider-auth',
+      targetRef: 'provider:workspace-api',
+      providerKey: 'workspace-api',
+      requiresAuth: true,
+      requiresApproval: false,
+    }
+
+    runtime.setActiveSession(detail)
+    await flushUi()
+
+    expect(mounted.container.querySelector('[data-testid="trace-runtime-approval"]')).not.toBeNull()
+    expect(mounted.container.textContent).toContain('Provider sign-in required')
+    expect(mounted.container.textContent).toContain('workspace-api')
 
     runtime.dispose()
     mounted.destroy()

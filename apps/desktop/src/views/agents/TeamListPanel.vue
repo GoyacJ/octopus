@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ChevronDown, Download, LayoutGrid, List, Trash2, Upload, UsersRound } from 'lucide-vue-next'
+import { useI18n } from 'vue-i18n'
+import { ChevronDown, Download, LayoutGrid, List, Trash2, Upload } from 'lucide-vue-next'
 
 import type { AgentRecord, TeamRecord } from '@octopus/schema'
 import { UiBadge, UiButton, UiCheckbox, UiDropdownMenu, UiEmptyState, UiInput, UiPagination, UiRecordCard, UiToolbarRow } from '@octopus/ui'
@@ -15,7 +16,7 @@ const props = defineProps<{
   page: number
   pageCount: number
   pagedTeams: TeamRecord[]
-  currentAgents: AgentRecord[]
+  resolvedAgents: AgentRecord[]
   isProjectScope: boolean
   importLoading: boolean
   exportLoading: boolean
@@ -41,6 +42,13 @@ const queryModel = computed({
   get: () => props.query,
   set: value => emit('update:query', value),
 })
+const { t } = useI18n()
+
+function statusLabel(status: string) {
+  const key = `agents.status.${status}`
+  const localized = t(key)
+  return localized === key ? status : localized
+}
 
 function teamOriginLabel(team: TeamRecord) {
   if (team.integrationSource?.kind === 'builtin-template') {
@@ -77,20 +85,24 @@ function canRemoveTeam(team: TeamRecord) {
 }
 
 function openLabel(team: TeamRecord) {
-  if (props.isProjectScope && !isProjectOwnedTeam(team)) {
-    return '复制到项目'
-  }
-  if (isBuiltinTemplateTeam(team)) {
-    return props.isProjectScope ? '复制到项目' : '复制到工作区'
-  }
-  return isWorkspaceLinkedTeam(team) ? '查看' : '编辑'
+  return '查看'
 }
 
 function resolveAgentName(agentId?: string) {
   if (!agentId) {
     return '未设置负责人'
   }
-  return props.currentAgents.find(agent => agent.id === agentId)?.name ?? agentId
+  return props.resolvedAgents.find(agent => agent.id === agentId)?.name ?? agentId
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join('')
+    .toUpperCase()
 }
 
 const importMenuItems = [
@@ -99,9 +111,13 @@ const importMenuItems = [
 ]
 
 const exportMenuItems = computed(() => [
-  { key: 'export-folder', label: '导出为文件夹', disabled: props.selectedTeamIds.length === 0 },
-  { key: 'export-zip', label: '导出为 ZIP', disabled: props.selectedTeamIds.length === 0 },
-])
+  props.selectedTeamIds.length > 0
+    ? { key: 'export-folder', label: '导出为文件夹', disabled: false }
+    : { key: 'export-empty', label: '请先选择要导出的数字团队', disabled: true },
+  props.selectedTeamIds.length > 0
+    ? { key: 'export-zip', label: '导出为 ZIP', disabled: false }
+    : null,
+].filter((item): item is { key: string, label: string, disabled: boolean } => Boolean(item)))
 
 const rowExportMenuItems = [
   { key: 'export-folder', label: '导出为文件夹' },
@@ -194,7 +210,6 @@ function updateSelectedTeams(teamId: string, nextSelected: boolean) {
               <UiButton
                 variant="outline"
                 size="sm"
-              :disabled="selectedTeamIds.length === 0"
               :loading="exportLoading"
               loading-label="Exporting"
               data-testid="agent-center-export-teams-trigger"
@@ -222,6 +237,7 @@ function updateSelectedTeams(teamId: string, nextSelected: boolean) {
           v-if="viewMode === 'card'"
           :id="team.id"
           :name="team.name"
+          :avatar="team.avatar"
           :title="team.personality || 'Digital Team'"
           :description="team.description"
           :lead-label="resolveAgentName(team.leaderAgentId)"
@@ -252,12 +268,20 @@ function updateSelectedTeams(teamId: string, nextSelected: boolean) {
           @click="emit('open-team', team)"
         >
           <template #leading>
-            <div class="flex size-10 items-center justify-center overflow-hidden rounded-[var(--radius-m)] border border-border bg-subtle text-text-secondary">
-              <UsersRound :size="18" />
+            <div class="flex size-10 items-center justify-center overflow-hidden rounded-[var(--radius-m)] border border-border bg-subtle text-xs font-semibold text-text-secondary">
+              <img
+                v-if="team.avatar"
+                :src="team.avatar"
+                alt=""
+                class="size-full object-cover"
+                :data-testid="`agent-center-team-row-avatar-${team.id}`"
+              >
+              <span v-else>{{ initials(team.name) }}</span>
             </div>
           </template>
           <template #badges>
             <div class="flex items-center gap-1.5">
+              <UiBadge :label="statusLabel(team.status)" :tone="team.status === 'active' ? 'success' : 'default'" />
               <div
                 class="size-2 rounded-full"
                 :class="team.status === 'active' ? 'bg-status-success' : 'bg-text-tertiary'"

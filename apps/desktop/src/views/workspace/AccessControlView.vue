@@ -50,7 +50,7 @@ watch(
       return
     }
 
-    await workspaceAccessControlStore.load(workspaceConnectionId)
+    await workspaceAccessControlStore.loadAdminData(workspaceConnectionId)
   },
   { immediate: true },
 )

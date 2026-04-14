@@ -16,6 +16,9 @@ declare module '*.png' {
 }
 
 interface ImportMetaEnv {
+  readonly DEV: boolean
+  readonly PROD: boolean
+  readonly SSR: boolean
   readonly VITE_HOST_RUNTIME?: 'tauri' | 'browser'
   readonly VITE_HOST_API_BASE_URL?: string
   readonly VITE_HOST_AUTH_TOKEN?: string

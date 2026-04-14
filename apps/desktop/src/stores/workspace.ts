@@ -36,6 +36,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
   const loadingByConnection = ref<Record<string, boolean>>({})
   const errors = ref<Record<string, string>>({})
   const requestTokens = ref<Record<string, number>>({})
+  const bootstrapLoadedAtByConnection = ref<Record<string, number>>({})
+  const dashboardLoadedAtByKey = ref<Record<string, number>>({})
 
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
   const activeWorkspace = computed(() => summaries.value[activeConnectionId.value] ?? overviews.value[activeConnectionId.value]?.workspace ?? null)
@@ -106,6 +108,8 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     loadingByConnection,
     errors,
     requestTokens,
+    bootstrapLoadedAtByConnection,
+    dashboardLoadedAtByKey,
   })
   const runtimeActions = createWorkspaceRuntimeActions({
     activeConnectionId,
@@ -140,11 +144,13 @@ export const useWorkspaceStore = defineStore('workspace', () => {
     error,
     syncRouteScope: workspaceActions.syncRouteScope,
     bootstrap: workspaceActions.bootstrap,
+    ensureWorkspaceBootstrap: workspaceActions.ensureWorkspaceBootstrap,
     createProject: workspaceActions.createProject,
     updateProject: workspaceActions.updateProject,
     archiveProject: workspaceActions.archiveProject,
     restoreProject: workspaceActions.restoreProject,
     loadProjectDashboard: workspaceActions.loadProjectDashboard,
+    getProjectDashboard: workspaceActions.getProjectDashboard,
     setProjectRuntimeDraft: runtimeActions.setProjectRuntimeDraft,
     getProjectSettings: runtimeActions.getProjectSettings,
     loadProjectRuntimeConfig: runtimeActions.loadProjectRuntimeConfig,

@@ -233,6 +233,114 @@ describe('useRuntimeStore', () => {
     runtime.dispose()
   })
 
+  it('merges auth challenge updates into the optimistic assistant placeholder', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-auth-placeholder',
+      projectId: 'proj-redesign',
+      title: 'Auth Placeholder Session',
+    })
+
+    runtime.addOptimisticUserMessage({
+      content: 'Connect the workspace provider before executing.',
+      permissionMode: 'auto',
+    })
+
+    const baseRun = runtime.activeRun!
+    const authChallenge = {
+      id: 'auth-placeholder',
+      sessionId: runtime.activeSessionId,
+      conversationId: 'conv-auth-placeholder',
+      runId: baseRun.id,
+      summary: 'Provider sign-in required',
+      detail: 'Resolve the provider auth challenge before execution can continue.',
+      status: 'pending',
+      createdAt: 110,
+      approvalLayer: 'provider-auth',
+      escalationReason: 'provider authentication required',
+      targetKind: 'provider-auth',
+      targetRef: 'provider:workspace-api',
+      providerKey: 'workspace-api',
+      requiresAuth: true,
+      requiresApproval: false,
+    } as const
+
+    runtime.applyRuntimeEvent({
+      id: 'evt-auth-placeholder',
+      eventType: 'auth.challenge_requested',
+      kind: 'auth.challenge_requested',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      sessionId: runtime.activeSessionId,
+      conversationId: 'conv-auth-placeholder',
+      runId: baseRun.id,
+      emittedAt: 110,
+      sequence: 1,
+      authChallenge,
+      run: {
+        ...baseRun,
+        status: 'waiting_input',
+        currentStep: 'awaiting_auth',
+        updatedAt: 110,
+        nextAction: 'auth',
+        authTarget: authChallenge,
+        pendingMediation: {
+          mediationKind: 'auth',
+          state: 'pending',
+          summary: authChallenge.summary,
+          detail: authChallenge.detail,
+          targetKind: authChallenge.targetKind,
+          targetRef: authChallenge.targetRef,
+          providerKey: authChallenge.providerKey,
+          authChallengeId: authChallenge.id,
+          requiresAuth: true,
+          requiresApproval: false,
+        },
+      },
+    })
+
+    const placeholder = runtime.activeSession?.messages.find(message => message.id.startsWith('optimistic-assistant-'))
+    expect(placeholder?.content).toBe('Awaiting authentication…')
+    expect(placeholder?.status).toBe('waiting_input')
+    expect(placeholder?.processEntries?.some(entry => entry.title === 'Provider sign-in required')).toBe(true)
+    expect(runtime.pendingMediation?.mediationKind).toBe('auth')
+    expect(runtime.authTarget?.id).toBe('auth-placeholder')
+
+    runtime.applyRuntimeEvent({
+      id: 'evt-auth-resolved',
+      eventType: 'auth.resolved',
+      kind: 'auth.resolved',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      sessionId: runtime.activeSessionId,
+      conversationId: 'conv-auth-placeholder',
+      runId: baseRun.id,
+      emittedAt: 120,
+      sequence: 2,
+      authChallenge: {
+        ...authChallenge,
+        status: 'resolved',
+        resolution: 'resolved',
+      },
+      run: {
+        ...baseRun,
+        status: 'completed',
+        currentStep: 'completed',
+        updatedAt: 120,
+        nextAction: 'idle',
+        authTarget: undefined,
+        pendingMediation: undefined,
+      },
+    })
+
+    expect(runtime.pendingMediation).toBeNull()
+    expect(runtime.authTarget).toBeNull()
+    expect(runtime.activeRun?.status).toBe('completed')
+
+    runtime.dispose()
+  })
+
   it('carries placeholder process entries into the final assistant message', async () => {
     const { runtime } = await prepareRuntimeStore()
 
@@ -351,6 +459,56 @@ describe('useRuntimeStore', () => {
       && runtime.activeRun?.status === 'completed'
       && runtime.activeMessages.some((message) => message.content === 'Then summarize the output.'),
     )
+
+    runtime.dispose()
+  })
+
+  it('treats typed mediation and auth targets as the canonical paused runtime state', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    const detail = createSessionDetail(
+      'conv-auth-mediation',
+      'proj-redesign',
+      'Auth Mediation Session',
+    )
+    detail.summary.pendingMediation = {
+      mediationKind: 'auth',
+      state: 'pending',
+      summary: 'Provider sign-in required',
+      detail: 'Resolve the provider auth challenge before execution can continue.',
+      targetKind: 'provider-auth',
+      targetRef: 'provider:workspace-api',
+      providerKey: 'workspace-api',
+      authChallengeId: 'auth-workspace-api',
+      requiresAuth: true,
+      requiresApproval: false,
+    }
+    detail.pendingMediation = detail.summary.pendingMediation
+    detail.run.status = 'blocked'
+    detail.run.pendingMediation = detail.summary.pendingMediation
+    detail.run.authTarget = {
+      id: 'auth-workspace-api',
+      sessionId: detail.summary.id,
+      conversationId: detail.summary.conversationId,
+      runId: detail.run.id,
+      summary: 'Provider sign-in required',
+      detail: 'Resolve the provider auth challenge before execution can continue.',
+      status: 'pending',
+      createdAt: detail.run.updatedAt,
+      approvalLayer: 'provider-auth',
+      escalationReason: 'provider authentication required',
+      targetKind: 'provider-auth',
+      targetRef: 'provider:workspace-api',
+      providerKey: 'workspace-api',
+      requiresAuth: true,
+      requiresApproval: false,
+    }
+
+    runtime.setActiveSession(detail)
+
+    expect(runtime.pendingMediation?.mediationKind).toBe('auth')
+    expect(runtime.authTarget?.id).toBe('auth-workspace-api')
+    expect(runtime.pendingApproval).toBeNull()
 
     runtime.dispose()
   })

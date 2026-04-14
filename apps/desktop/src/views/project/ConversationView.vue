@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowUp, Bot, Plus, Shield, Sparkles } from 'lucide-vue-next'
@@ -56,6 +56,9 @@ const selectedActorValue = ref('')
 const expandedMessageIds = ref<string[]>([])
 const focusedToolByMessageId = ref<Record<string, string>>({})
 const scrollContainer = ref<HTMLElement | null>(null)
+let lastProjectContextKey = ''
+let lastSessionKey = ''
+let sessionLoadPromise: Promise<void> | null = null
 
 const conversationId = computed(() =>
   typeof route.params.conversationId === 'string' ? route.params.conversationId : '',
@@ -165,6 +168,44 @@ const runtimeOrchestrationBadges = computed(() => {
   }
   return badges
 })
+const canResolveApproval = computed(() =>
+  workspaceAccessControlStore.currentResourceActionGrants.some(grant =>
+    (grant.resourceType === 'runtime.approval' && grant.actions.includes('resolve'))
+    || (grant.resourceType === 'runtime' && grant.actions.includes('approval.resolve'))),
+)
+const canResolveAuth = computed(() =>
+  workspaceAccessControlStore.currentResourceActionGrants.some(grant =>
+    (grant.resourceType === 'runtime.auth' && grant.actions.includes('resolve'))
+    || (grant.resourceType === 'runtime' && grant.actions.includes('auth.resolve'))),
+)
+const pendingMemoryProposal = computed(() => runtime.activeRun?.pendingMemoryProposal ?? null)
+const activeMediationKind = computed(() => {
+  const mediationKind = runtime.pendingMediation?.mediationKind
+  if (mediationKind && mediationKind !== 'none') {
+    return mediationKind
+  }
+  if (runtime.pendingApproval) {
+    return 'approval'
+  }
+  if (runtime.authTarget) {
+    return 'auth'
+  }
+  return pendingMemoryProposal.value ? 'memory' : ''
+})
+const activeMediationTitle = computed(() =>
+  runtime.pendingMediation?.summary
+  ?? runtime.pendingApproval?.summary
+  ?? runtime.authTarget?.summary
+  ?? pendingMemoryProposal.value?.summary
+  ?? '',
+)
+const activeMediationDetail = computed(() =>
+  runtime.pendingMediation?.detail
+  ?? runtime.pendingApproval?.detail
+  ?? runtime.authTarget?.detail
+  ?? pendingMemoryProposal.value?.proposalReason
+  ?? '',
+)
 const hasModelOptions = computed(() => modelOptions.value.length > 0)
 const hasActorOptions = computed(() => actorOptions.value.length > 0)
 const canSubmit = computed(() => messageDraft.value.trim().length > 0 && hasModelOptions.value && !!selectedActor.value)
@@ -176,38 +217,78 @@ function createConversationId() {
   return `conversation-${Date.now()}`
 }
 
-async function ensureRuntimeSession() {
-  if (!conversationId.value || !projectId.value) {
+async function ensureConversationProjectContext(connectionId: string, nextProjectId: string) {
+  const projectContextKey = `${connectionId}:${nextProjectId}`
+  if (lastProjectContextKey === projectContextKey) {
     return
   }
 
-  await workspaceAccessControlStore.load()
-  await userProfileStore.load()
-
   await Promise.all([
-    workspaceStore.loadProjectRuntimeConfig(projectId.value),
-    catalogStore.load(),
-    agentStore.load(),
-    teamStore.load(),
-    resourceStore.loadProjectResources(projectId.value),
-    artifactStore.loadWorkspaceArtifacts(),
+    workspaceStore.loadProjectRuntimeConfig(nextProjectId),
+    catalogStore.load(connectionId),
+    agentStore.load(connectionId),
+    teamStore.load(connectionId),
+    resourceStore.loadProjectResources(nextProjectId, connectionId),
+    artifactStore.loadWorkspaceArtifacts(connectionId),
   ])
+  lastProjectContextKey = projectContextKey
+}
 
-  if (!modelOptions.value.some(option => option.value === selectedModelId.value)) {
-    selectedModelId.value = modelOptions.value[0]?.value ?? ''
-  }
-  if (!actorOptions.value.some(option => option.value === selectedActorValue.value)) {
-    selectedActorValue.value = actorOptions.value[0]?.value ?? ''
+async function ensureRuntimeSession() {
+  const nextConversationId = conversationId.value
+  const nextProjectId = projectId.value
+  const connectionId = shell.activeWorkspaceConnectionId
+  const sessionToken = shell.activeWorkspaceSession?.token ?? ''
+
+  if (!nextConversationId || !nextProjectId || !connectionId || !sessionToken) {
+    return
   }
 
-  await runtime.ensureSession({
-    conversationId: conversationId.value,
-    projectId: projectId.value,
-    title: `Conversation ${conversationId.value.slice(-6)}`,
-    selectedActorRef: selectedActorValue.value || actorOptions.value[0]?.value || '',
-    selectedConfiguredModelId: selectedModelId.value || modelOptions.value[0]?.value || undefined,
-    executionPermissionMode: resolveRuntimePermissionMode(selectedPermissionMode.value),
-  })
+  const sessionKey = `${connectionId}:${sessionToken}:${nextProjectId}:${nextConversationId}`
+  if (
+    sessionKey === lastSessionKey
+    && runtime.activeConversationId === nextConversationId
+    && runtime.activeSession?.summary.projectId === nextProjectId
+  ) {
+    return
+  }
+
+  if (sessionLoadPromise && sessionKey === lastSessionKey) {
+    await sessionLoadPromise
+    return
+  }
+
+  const task = (async () => {
+    await workspaceAccessControlStore.ensureAuthorizationContext(connectionId)
+    await userProfileStore.load(connectionId)
+    await ensureConversationProjectContext(connectionId, nextProjectId)
+
+    if (!modelOptions.value.some(option => option.value === selectedModelId.value)) {
+      selectedModelId.value = modelOptions.value[0]?.value ?? ''
+    }
+    if (!actorOptions.value.some(option => option.value === selectedActorValue.value)) {
+      selectedActorValue.value = actorOptions.value[0]?.value ?? ''
+    }
+
+    await runtime.ensureSession({
+      conversationId: nextConversationId,
+      projectId: nextProjectId,
+      title: `Conversation ${nextConversationId.slice(-6)}`,
+      selectedActorRef: selectedActorValue.value || actorOptions.value[0]?.value || '',
+      selectedConfiguredModelId: selectedModelId.value || modelOptions.value[0]?.value || undefined,
+      executionPermissionMode: resolveRuntimePermissionMode(selectedPermissionMode.value),
+    })
+  })()
+
+  lastSessionKey = sessionKey
+  sessionLoadPromise = task
+  try {
+    await task
+  } finally {
+    if (sessionLoadPromise === task) {
+      sessionLoadPromise = null
+    }
+  }
 }
 
 watch(renderedMessages, (messages) => {
@@ -229,10 +310,6 @@ watch(
   },
   { immediate: true },
 )
-
-onMounted(() => {
-  void ensureRuntimeSession()
-})
 
 async function createConversationFromEmpty() {
   await router.push(createProjectConversationTarget(workspaceId.value, projectId.value, createConversationId()))
@@ -357,6 +434,22 @@ async function approveMessageApproval() {
 async function rejectMessageApproval() {
   await runtime.resolveApproval('reject')
 }
+
+async function resolveMessageAuthChallenge() {
+  await runtime.resolveAuthChallenge('resolved')
+}
+
+async function cancelMessageAuthChallenge() {
+  await runtime.resolveAuthChallenge('cancelled')
+}
+
+async function approveMemoryProposal() {
+  await runtime.resolveMemoryProposal('approve')
+}
+
+async function rejectMemoryProposal() {
+  await runtime.resolveMemoryProposal('reject')
+}
 </script>
 
 <template>
@@ -423,6 +516,47 @@ async function rejectMessageApproval() {
             subtle
           />
         </div>
+
+        <UiStatusCallout
+          v-if="activeMediationKind"
+          data-testid="conversation-runtime-mediation"
+          class="mx-auto mt-4 w-full max-w-[840px]"
+          tone="warning"
+          :title="activeMediationTitle"
+          :description="activeMediationDetail"
+        >
+          <div class="flex flex-wrap gap-2.5">
+            <UiBadge
+              v-if="runtime.pendingApproval?.toolName"
+              :label="runtime.pendingApproval.toolName"
+              subtle
+            />
+            <UiBadge
+              v-if="runtime.authTarget?.providerKey"
+              :label="runtime.authTarget.providerKey"
+              subtle
+            />
+            <UiBadge
+              v-if="runtime.pendingMediation?.targetKind"
+              :label="runtime.pendingMediation.targetKind"
+              subtle
+            />
+          </div>
+          <div class="flex flex-wrap gap-2 pt-1">
+            <template v-if="activeMediationKind === 'approval' && runtime.pendingApproval && canResolveApproval">
+              <UiButton size="sm" @click="approveMessageApproval">{{ t('common.approve') }}</UiButton>
+              <UiButton variant="ghost" size="sm" @click="rejectMessageApproval">{{ t('common.reject') }}</UiButton>
+            </template>
+            <template v-else-if="activeMediationKind === 'auth' && runtime.authTarget && canResolveAuth">
+              <UiButton size="sm" @click="resolveMessageAuthChallenge">{{ t('common.resolveAuth') }}</UiButton>
+              <UiButton variant="ghost" size="sm" @click="cancelMessageAuthChallenge">{{ t('common.cancel') }}</UiButton>
+            </template>
+            <template v-else-if="activeMediationKind === 'memory' && pendingMemoryProposal">
+              <UiButton size="sm" @click="approveMemoryProposal">{{ t('common.approve') }}</UiButton>
+              <UiButton variant="ghost" size="sm" @click="rejectMemoryProposal">{{ t('common.reject') }}</UiButton>
+            </template>
+          </div>
+        </UiStatusCallout>
 
         <UiConversationComposerShell
           data-testid="conversation-composer"

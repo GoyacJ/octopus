@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 95634dc5bc4a73ad15b842f67db96b518dc446c632ea4f3e1f19d5dbbde6bafa
+// Source hash: 74a480c7193a96dd35e7f716bbf4ab1e25fae58a461b51f5674fc0f6f9102765
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "95634dc5bc4a73ad15b842f67db96b518dc446c632ea4f3e1f19d5dbbde6bafa"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "74a480c7193a96dd35e7f716bbf4ab1e25fae58a461b51f5674fc0f6f9102765"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -1154,11 +1154,87 @@ export interface ProjectAgentLinkRecord {
 
 export type ProjectAssetType = "agent" | "resource" | "knowledge" | "tool.skill" | "tool.mcp"
 
+export interface ProjectDashboardBreakdownItem {
+  helper?: string
+  id: string
+  label: string
+  value: number
+}
+
+export interface ProjectDashboardConversationInsight {
+  approvalCount: number
+  conversationId: string
+  id: string
+  lastMessagePreview?: string
+  messageCount: number
+  status: string
+  title: string
+  tokenCount: number
+  toolCallCount: number
+  updatedAt: number
+}
+
+export interface ProjectDashboardRankingItem {
+  helper?: string
+  id: string
+  label: string
+  value: number
+}
+
 export interface ProjectDashboardSnapshot {
+  conversationInsights: ProjectDashboardConversationInsight[]
   metrics: WorkspaceMetricRecord[]
+  modelBreakdown: ProjectDashboardBreakdownItem[]
+  overview: ProjectDashboardSummary
   project: ProjectRecord
   recentActivity: WorkspaceActivityRecord[]
   recentConversations: ConversationRecord[]
+  resourceBreakdown: ProjectDashboardBreakdownItem[]
+  toolRanking: ProjectDashboardRankingItem[]
+  trend: ProjectDashboardTrendPoint[]
+  usedTokens: number
+  userStats: ProjectDashboardUserStat[]
+}
+
+export interface ProjectDashboardSummary {
+  activeUserCount: number
+  activityCount: number
+  agentCount: number
+  approvalCount: number
+  conversationCount: number
+  knowledgeCount: number
+  memberCount: number
+  messageCount: number
+  resourceCount: number
+  teamCount: number
+  tokenRecordCount: number
+  toolCallCount: number
+  toolCount: number
+  totalTokens: number
+}
+
+export interface ProjectDashboardTrendPoint {
+  approvalCount: number
+  conversationCount: number
+  id: string
+  label: string
+  messageCount: number
+  timestamp: number
+  tokenCount: number
+  toolCallCount: number
+}
+
+export interface ProjectDashboardUserStat {
+  activityCount: number
+  activityTrend: number[]
+  approvalCount: number
+  conversationCount: number
+  displayName: string
+  messageCount: number
+  tokenCount: number
+  tokenTrend: number[]
+  toolCallCount: number
+  userId: string
 }
 
 export interface ProjectDefaultPermissions {
@@ -1240,6 +1316,12 @@ export interface ProjectTeamLinkRecord {
   workspaceId: string
 }
 
+export interface ProjectTokenUsageRecord {
+  projectId: string
+  projectName: string
+  usedTokens: number
+}
+
 export interface ProjectToolAssignments {
   sourceKeys: string[]
 }
@@ -1311,6 +1393,11 @@ export interface ResolveRuntimeApprovalInput {
   decision: DecisionAction
 }
 
+export interface ResolveRuntimeAuthChallengeInput {
+  note?: string
+  resolution: "resolved" | "failed" | "cancelled"
+}
+
 export interface ResolveRuntimeMemoryProposalInput {
   decision: RuntimeMemoryProposalDecisionAction
   note?: string
@@ -1378,11 +1465,17 @@ export type RuntimeActorType = "user" | "assistant" | "system"
 
 export interface RuntimeApprovalRequest {
   approvalLayer: string
+  capabilityId?: string
+  checkpointRef?: string
   conversationId: string
   createdAt: number
   detail: string
   escalationReason: string
   id: string
+  providerKey?: string
+  requiredPermission?: string
+  requiresApproval: boolean
+  requiresAuth: boolean
   riskLevel: RiskLevel
   runId: string
   sessionId: string
@@ -1391,6 +1484,37 @@ export interface RuntimeApprovalRequest {
   targetKind: string
   targetRef: string
   toolName: string
+}
+
+export interface RuntimeAuthChallengeSummary {
+  approvalLayer: string
+  capabilityId?: string
+  checkpointRef?: string
+  conversationId: string
+  createdAt: number
+  detail: string
+  escalationReason: string
+  id: string
+  providerKey?: string
+  requiredPermission?: string
+  requiresApproval: boolean
+  requiresAuth: boolean
+  resolution?: string
+  runId: string
+  sessionId: string
+  status: "pending" | "resolved" | "failed" | "cancelled"
+  summary: string
+  targetKind: string
+  targetRef: string
+  toolName?: string
+}
+
+export interface RuntimeAuthStateSummary {
+  challengedProviderKeys: string[]
+  failedProviderKeys: string[]
+  lastChallengeAt?: number
+  pendingChallengeCount: number
+  resolvedProviderKeys: string[]
 }
 
 export interface RuntimeBackgroundRunSummary {
@@ -1526,6 +1650,8 @@ export interface RuntimeEffectiveConfig {
 export interface RuntimeEventEnvelope {
   actorRef?: string
   approval?: RuntimeApprovalRequest
+  approvalLayer?: string
+  authChallenge?: RuntimeAuthChallengeSummary
   capabilityPlanSummary?: RuntimeCapabilityPlanSummary
   capabilityStateRef?: string
   conversationId: string
@@ -1538,13 +1664,14 @@ export interface RuntimeEventEnvelope {
   iteration?: number
   kind?: RuntimeEventKind
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
+  lastMediationOutcome?: RuntimeMediationOutcome
   memoryProposal?: RuntimeMemoryProposal
   memorySelectionSummary?: RuntimeMemorySelectionSummary
   message?: RuntimeMessage
   outcome?: string
   parentRunId?: string
   payload?: Record<string, unknown>
-  pendingMediation?: RuntimePendingMediationSummary
+  pendingMediation?: RuntimePendingMediation
   projectId?: string
   providerStateSummary?: RuntimeCapabilityProviderState[]
   run?: RuntimeRunSnapshot
@@ -1553,6 +1680,8 @@ export interface RuntimeEventEnvelope {
   sequence: number
   sessionId: string
   summary?: RuntimeSessionSummary
+  targetKind?: string
+  targetRef?: string
   toolUseId?: string
   trace?: RuntimeTraceItem
   workflowRunId?: string
@@ -1560,7 +1689,7 @@ export interface RuntimeEventEnvelope {
   workspaceId: string
 }
 
-export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "trace.emitted" | "subrun.spawned" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "memory.selected" | "memory.proposed" | "memory.approved" | "memory.rejected" | "memory.revalidated" | "runtime.session.updated" | "runtime.error"
+export type RuntimeEventKind = "planner.started" | "planner.completed" | "model.started" | "model.streaming" | "model.completed" | "model.failed" | "tool.requested" | "tool.started" | "tool.completed" | "tool.failed" | "skill.requested" | "skill.started" | "skill.completed" | "skill.failed" | "mcp.requested" | "mcp.started" | "mcp.completed" | "mcp.failed" | "approval.requested" | "approval.resolved" | "approval.cancelled" | "auth.challenge_requested" | "auth.resolved" | "auth.failed" | "policy.exposure_denied" | "policy.surface_deferred" | "policy.session_compiled" | "trace.emitted" | "subrun.spawned" | "subrun.completed" | "subrun.failed" | "workflow.started" | "workflow.step.started" | "workflow.step.completed" | "workflow.completed" | "workflow.failed" | "runtime.run.updated" | "runtime.message.created" | "runtime.trace.emitted" | "runtime.approval.requested" | "runtime.approval.resolved" | "memory.selected" | "memory.proposed" | "memory.approved" | "memory.rejected" | "memory.revalidated" | "runtime.session.updated" | "runtime.error"
 
 export interface RuntimeHandoffSummary {
   artifactRefs: string[]
@@ -1579,6 +1708,24 @@ export interface RuntimeMailboxSummary {
   status: string
   totalMessages: number
   updatedAt: number
+}
+
+export interface RuntimeMediationOutcome {
+  approvalLayer?: string
+  capabilityId?: string
+  checkpointRef?: string
+  detail?: string
+  mediationId?: string
+  mediationKind: string
+  outcome: string
+  providerKey?: string
+  reason?: string
+  requiresApproval: boolean
+  requiresAuth: boolean
+  resolvedAt?: number
+  targetKind: string
+  targetRef: string
+  toolName?: string
 }
 
 export type RuntimeMemoryFreshnessState = "fresh" | "stale" | "unknown"
@@ -1662,17 +1809,43 @@ export interface RuntimeMessage {
   usedDefaultActor?: boolean
 }
 
-export interface RuntimePendingMediationSummary {
+export interface RuntimePendingMediation {
+  approvalId?: string
+  approvalLayer?: string
+  authChallengeId?: string
   capabilityId?: string
+  checkpointRef?: string
+  detail?: string
+  escalationReason?: string
+  mediationId?: string
   mediationKind: string
   providerKey?: string
   reason?: string
+  requiredPermission?: string
+  requiresApproval: boolean
+  requiresAuth: boolean
+  state: string
+  summary?: string
+  targetKind: string
+  targetRef: string
   toolName?: string
 }
+
+export type RuntimePendingMediationSummary = RuntimePendingMediation
 
 export type RuntimePermissionEnvelope = Record<string, unknown>
 
 export type RuntimePermissionMode = "read-only" | "workspace-write" | "danger-full-access"
+
+export interface RuntimePolicyDecisionSummary {
+  allowCount: number
+  approvalRequiredCount: number
+  authRequiredCount: number
+  compiledAt?: number
+  deferredCapabilityCount: number
+  deniedExposureCount: number
+  hiddenCapabilityCount: number
+}
 
 export interface RuntimePolicySnapshot {
   approvalPreference?: RuntimePermissionEnvelope
@@ -1687,14 +1860,27 @@ export interface RuntimePolicySnapshot {
 }
 
 export interface RuntimeRunCheckpoint {
+  approvalLayer?: string
+  brokerDecision?: string
+  capabilityId?: string
   capabilityPlanSummary: RuntimeCapabilityPlanSummary
   capabilityStateRef?: string
+  checkpointArtifactRef?: string
   compactionMetadata?: RuntimePermissionEnvelope
   currentIterationIndex: number
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
+  lastMediationOutcome?: RuntimeMediationOutcome
   pendingApproval?: RuntimeApprovalRequest
-  pendingMediation?: RuntimePendingMediationSummary
+  pendingAuthChallenge?: RuntimeAuthChallengeSummary
+  pendingMediation?: RuntimePendingMediation
+  providerKey?: string
+  reason?: string
+  requiredPermission?: string
+  requiresApproval?: boolean
+  requiresAuth?: boolean
   serializedSession: RuntimePermissionEnvelope
+  targetKind?: string
+  targetRef?: string
   usageSummary: RuntimeUsageSummary
 }
 
@@ -1703,7 +1889,9 @@ export type RuntimeRunKind = "primary" | "subrun"
 export interface RuntimeRunSnapshot {
   actorRef: string
   approvalState?: string
+  approvalTarget?: RuntimeApprovalRequest
   artifactRefs: string[]
+  authTarget?: RuntimeAuthChallengeSummary
   backgroundState?: string
   capabilityPlanSummary: RuntimeCapabilityPlanSummary
   capabilityStateRef?: string
@@ -1720,12 +1908,13 @@ export interface RuntimeRunSnapshot {
   handoffRef?: string
   id: string
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
+  lastMediationOutcome?: RuntimeMediationOutcome
   mailboxRef?: string
   memoryStateRef?: string
   modelId?: string
   nextAction?: string
   parentRunId?: string
-  pendingMediation?: RuntimePendingMediationSummary
+  pendingMediation?: RuntimePendingMediation
   pendingMemoryProposal?: RuntimeMemoryProposal
   providerStateSummary: RuntimeCapabilityProviderState[]
   requestedActorId?: string
@@ -1771,6 +1960,7 @@ export interface RuntimeSelectedMemoryItem {
 
 export interface RuntimeSessionDetail {
   activeRunId: string
+  authStateSummary: RuntimeAuthStateSummary
   backgroundRun?: RuntimeBackgroundRunSummary
   capabilityPlanSummary: RuntimeCapabilityPlanSummary
   capabilityStateRef?: string
@@ -1783,8 +1973,9 @@ export interface RuntimeSessionDetail {
   messages: RuntimeMessage[]
   pendingApproval?: RuntimeApprovalRequest
   pendingMailbox?: RuntimeMailboxSummary
-  pendingMediation?: RuntimePendingMediationSummary
+  pendingMediation?: RuntimePendingMediation
   pendingMemoryProposalCount: number
+  policyDecisionSummary: RuntimePolicyDecisionSummary
   providerStateSummary: RuntimeCapabilityProviderState[]
   run: RuntimeRunSnapshot
   selectedActorRef: string
@@ -1800,6 +1991,7 @@ export type RuntimeSessionKind = "project" | "pet"
 
 export interface RuntimeSessionSummary {
   activeRunId: string
+  authStateSummary: RuntimeAuthStateSummary
   backgroundRun?: RuntimeBackgroundRunSummary
   capabilityPlanSummary: RuntimeCapabilityPlanSummary
   capabilityStateRef?: string
@@ -1814,8 +2006,9 @@ export interface RuntimeSessionSummary {
   memoryStateRef: string
   memorySummary: RuntimeMemorySummary
   pendingMailbox?: RuntimeMailboxSummary
-  pendingMediation?: RuntimePendingMediationSummary
+  pendingMediation?: RuntimePendingMediation
   pendingMemoryProposalCount: number
+  policyDecisionSummary: RuntimePolicyDecisionSummary
   projectId: string
   providerStateSummary: RuntimeCapabilityProviderState[]
   selectedActorRef: string
@@ -2218,8 +2411,12 @@ export interface WorkflowAffordance {
 }
 
 export interface WorkspaceActivityRecord {
+  actorId?: string
+  actorType?: string
   description: string
   id: string
+  outcome?: string
+  resource?: string
   timestamp: number
   title: string
 }
@@ -2333,6 +2530,7 @@ export type WorkspaceMetricTone = "default" | "success" | "warning" | "error" | 
 export interface WorkspaceOverviewSnapshot {
   metrics: WorkspaceMetricRecord[]
   projects: ProjectRecord[]
+  projectTokenUsage: ProjectTokenUsageRecord[]
   recentActivity: WorkspaceActivityRecord[]
   recentConversations: ConversationRecord[]
   workspace: WorkspaceSummary
@@ -2798,6 +2996,9 @@ export interface OctopusApiPaths {
   }
   "/api/v1/runtime/sessions/{sessionId}/approvals/{approvalId}": {
     post: { operationId: "resolveRuntimeApproval"; response: RuntimeRunSnapshot; error: ApiErrorEnvelope }
+  }
+  "/api/v1/runtime/sessions/{sessionId}/auth-challenges/{challengeId}": {
+    post: { operationId: "resolveRuntimeAuthChallenge"; response: RuntimeRunSnapshot; error: ApiErrorEnvelope }
   }
   "/api/v1/runtime/sessions/{sessionId}/events": {
     get: { operationId: "listRuntimeSessionEvents"; response: RuntimeEventEnvelope[]; error: ApiErrorEnvelope }

@@ -1,4 +1,5 @@
 use super::*;
+use octopus_core::ProjectTokenUsageProjection;
 
 #[async_trait]
 impl ArtifactService for InfraArtifactService {
@@ -81,6 +82,45 @@ impl ObservationService for InfraObservationService {
             .clone())
     }
 
+    async fn list_project_token_usage(&self) -> Result<Vec<ProjectTokenUsageProjection>, AppError> {
+        let connection = self.state.open_db()?;
+        let mut statement = connection
+            .prepare(
+                "SELECT project_id, used_tokens, updated_at
+                 FROM project_token_usage_projections
+                 ORDER BY used_tokens DESC, project_id ASC",
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        let rows = statement
+            .query_map([], |row| {
+                Ok(ProjectTokenUsageProjection {
+                    project_id: row.get(0)?,
+                    used_tokens: row.get::<_, i64>(1)?.max(0) as u64,
+                    updated_at: row.get::<_, i64>(2)? as u64,
+                })
+            })
+            .map_err(|error| AppError::database(error.to_string()))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| AppError::database(error.to_string()))
+    }
+
+    async fn project_used_tokens(&self, project_id: &str) -> Result<u64, AppError> {
+        let connection = self.state.open_db()?;
+        let used_tokens = connection
+            .query_row(
+                "SELECT used_tokens
+                 FROM project_token_usage_projections
+                 WHERE project_id = ?1",
+                [project_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()
+            .map_err(|error| AppError::database(error.to_string()))?
+            .unwrap_or(0);
+        Ok(used_tokens.max(0) as u64)
+    }
+
     async fn append_trace(&self, record: TraceEventRecord) -> Result<(), AppError> {
         self.state
             .open_db()?
@@ -148,8 +188,8 @@ impl ObservationService for InfraObservationService {
     }
 
     async fn append_cost(&self, record: CostLedgerEntry) -> Result<(), AppError> {
-        self.state
-            .open_db()?
+        let connection = self.state.open_db()?;
+        connection
             .execute(
                 "INSERT INTO cost_entries (id, workspace_id, project_id, run_id, configured_model_id, metric, amount, unit, created_at)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
@@ -166,6 +206,23 @@ impl ObservationService for InfraObservationService {
                 ],
             )
             .map_err(|error| AppError::database(error.to_string()))?;
+        if record.metric == "tokens" {
+            if let (Some(project_id), amount) = (record.project_id.as_deref(), record.amount) {
+                if amount > 0 {
+                    connection
+                        .execute(
+                            "INSERT INTO project_token_usage_projections (project_id, used_tokens, updated_at)
+                             VALUES (?1, ?2, ?3)
+                             ON CONFLICT(project_id)
+                             DO UPDATE SET
+                               used_tokens = project_token_usage_projections.used_tokens + excluded.used_tokens,
+                               updated_at = excluded.updated_at",
+                            params![project_id, amount, record.created_at as i64],
+                        )
+                        .map_err(|error| AppError::database(error.to_string()))?;
+                }
+            }
+        }
         append_json_line(
             &self.state.paths.server_log_dir.join("cost-ledger.jsonl"),
             &record,
@@ -184,8 +241,10 @@ mod tests {
     use super::{
         build_infra_bundle, initialize_workspace, CopyWorkspaceSkillToManagedInput, WorkspacePaths,
     };
-    use octopus_core::{CapabilityAssetDisablePatch, CreateProjectRequest, UpdateProjectRequest};
-    use octopus_platform::{InboxService, WorkspaceService};
+    use octopus_core::{
+        CapabilityAssetDisablePatch, CostLedgerEntry, CreateProjectRequest, UpdateProjectRequest,
+    };
+    use octopus_platform::{InboxService, ObservationService, WorkspaceService};
     use rusqlite::Connection;
     use serde_json::Value as JsonValue;
 
@@ -259,6 +318,103 @@ mod tests {
         assert_eq!(paths.runtime_events_dir, temp.path().join("runtime/events"));
         assert_eq!(paths.audit_log_dir, temp.path().join("logs/audit"));
         assert_eq!(paths.db_path, temp.path().join("data/main.db"));
+    }
+
+    #[test]
+    fn observation_service_tracks_project_token_usage_projection() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let bundle = build_infra_bundle(temp.path()).expect("infra bundle");
+        let runtime = tokio::runtime::Runtime::new().expect("runtime");
+
+        for record in [
+            CostLedgerEntry {
+                id: "cost-1".into(),
+                workspace_id: "ws-local".into(),
+                project_id: Some("proj-redesign".into()),
+                run_id: Some("run-1".into()),
+                configured_model_id: Some("anthropic-primary".into()),
+                metric: "tokens".into(),
+                amount: 120,
+                unit: "tokens".into(),
+                created_at: 1,
+            },
+            CostLedgerEntry {
+                id: "cost-2".into(),
+                workspace_id: "ws-local".into(),
+                project_id: Some("proj-redesign".into()),
+                run_id: Some("run-2".into()),
+                configured_model_id: Some("anthropic-primary".into()),
+                metric: "turns".into(),
+                amount: 1,
+                unit: "count".into(),
+                created_at: 2,
+            },
+            CostLedgerEntry {
+                id: "cost-3".into(),
+                workspace_id: "ws-local".into(),
+                project_id: Some("proj-redesign".into()),
+                run_id: Some("run-3".into()),
+                configured_model_id: Some("anthropic-primary".into()),
+                metric: "tokens".into(),
+                amount: 5,
+                unit: "tokens".into(),
+                created_at: 3,
+            },
+            CostLedgerEntry {
+                id: "cost-4".into(),
+                workspace_id: "ws-local".into(),
+                project_id: Some("proj-other".into()),
+                run_id: Some("run-4".into()),
+                configured_model_id: Some("anthropic-primary".into()),
+                metric: "tokens".into(),
+                amount: 999,
+                unit: "tokens".into(),
+                created_at: 4,
+            },
+            CostLedgerEntry {
+                id: "cost-5".into(),
+                workspace_id: "ws-local".into(),
+                project_id: Some("proj-redesign".into()),
+                run_id: Some("run-5".into()),
+                configured_model_id: Some("anthropic-primary".into()),
+                metric: "tokens".into(),
+                amount: -50,
+                unit: "tokens".into(),
+                created_at: 5,
+            },
+        ] {
+            runtime
+                .block_on(bundle.observation.append_cost(record))
+                .expect("append cost");
+        }
+
+        let used_tokens = runtime
+            .block_on(bundle.observation.project_used_tokens("proj-redesign"))
+            .expect("project used tokens");
+        assert_eq!(used_tokens, 125);
+        let usage_rows = runtime
+            .block_on(bundle.observation.list_project_token_usage())
+            .expect("project token usage rows");
+        assert_eq!(usage_rows[0].project_id, "proj-other");
+        assert_eq!(usage_rows[0].used_tokens, 999);
+        assert_eq!(usage_rows[1].project_id, "proj-redesign");
+        assert_eq!(usage_rows[1].used_tokens, 125);
+
+        let connection = Connection::open(&bundle.paths.db_path).expect("open sqlite");
+        let stored_used_tokens: i64 = connection
+            .query_row(
+                "SELECT used_tokens FROM project_token_usage_projections WHERE project_id = ?1",
+                ["proj-redesign"],
+                |row| row.get(0),
+            )
+            .expect("stored project used tokens");
+        assert_eq!(stored_used_tokens, 125);
+
+        let reloaded_bundle = build_infra_bundle(temp.path()).expect("reloaded bundle");
+        let reloaded_used_tokens = runtime
+            .block_on(reloaded_bundle.observation.project_used_tokens("proj-redesign"))
+            .expect("reloaded project used tokens");
+        assert_eq!(reloaded_used_tokens, 125);
     }
 
     #[test]
@@ -693,7 +849,7 @@ default_project_id = "proj-redesign"
                 status: "pending".into(),
                 priority: "high".into(),
                 actionable: true,
-                route_to: Some("/workspaces/ws-local/projects/proj-redesign/runtime".into()),
+                route_to: Some("/workspaces/ws-local/projects/proj-redesign/settings".into()),
                 action_label: Some("Review approval".into()),
                 created_at: 42,
             });
@@ -707,7 +863,7 @@ default_project_id = "proj-redesign"
         assert!(items[0].actionable);
         assert_eq!(
             items[0].route_to.as_deref(),
-            Some("/workspaces/ws-local/projects/proj-redesign/runtime")
+            Some("/workspaces/ws-local/projects/proj-redesign/settings")
         );
         assert_eq!(items[0].action_label.as_deref(), Some("Review approval"));
     }

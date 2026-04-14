@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { ChevronDown, Download, LayoutGrid, List, Trash2, Upload } from 'lucide-vue-next'
 
 import type { AgentRecord } from '@octopus/schema'
@@ -40,6 +41,13 @@ const queryModel = computed({
   get: () => props.query,
   set: value => emit('update:query', value),
 })
+const { t } = useI18n()
+
+function statusLabel(status: string) {
+  const key = `agents.status.${status}`
+  const localized = t(key)
+  return localized === key ? status : localized
+}
 
 function initials(name: string) {
   return name
@@ -58,7 +66,7 @@ function agentBadgeLabel(agent: AgentRecord) {
   if (agent.integrationSource?.kind === 'workspace-link') {
     return '工作区接入'
   }
-  return agent.status
+  return statusLabel(agent.status)
 }
 
 function isBuiltinTemplateAgent(agent: AgentRecord) {
@@ -86,13 +94,7 @@ function canRemoveAgent(agent: AgentRecord) {
 }
 
 function openLabel(agent: AgentRecord) {
-  if (props.isProjectScope && !isProjectOwnedAgent(agent)) {
-    return '复制到项目'
-  }
-  if (isBuiltinTemplateAgent(agent)) {
-    return props.isProjectScope ? '复制到项目' : '复制到工作区'
-  }
-  return isWorkspaceLinkedAgent(agent) ? '查看' : '编辑'
+  return '查看'
 }
 
 function originLabel(agent: AgentRecord) {
@@ -108,9 +110,13 @@ const importMenuItems = [
 ]
 
 const exportMenuItems = computed(() => [
-  { key: 'export-folder', label: '导出为文件夹', disabled: props.selectedAgentIds.length === 0 },
-  { key: 'export-zip', label: '导出为 ZIP', disabled: props.selectedAgentIds.length === 0 },
-])
+  props.selectedAgentIds.length > 0
+    ? { key: 'export-folder', label: '导出为文件夹', disabled: false }
+    : { key: 'export-empty', label: '请先选择要导出的数字员工', disabled: true },
+  props.selectedAgentIds.length > 0
+    ? { key: 'export-zip', label: '导出为 ZIP', disabled: false }
+    : null,
+].filter((item): item is { key: string, label: string, disabled: boolean } => Boolean(item)))
 
 const rowExportMenuItems = [
   { key: 'export-folder', label: '导出为文件夹' },
@@ -203,7 +209,6 @@ function updateSelectedAgents(agentId: string, nextSelected: boolean) {
               <UiButton
                 variant="outline"
                 size="sm"
-              :disabled="selectedAgentIds.length === 0"
               :loading="exportLoading"
               loading-label="Exporting"
               data-testid="agent-center-export-agents-trigger"
@@ -232,8 +237,8 @@ function updateSelectedAgents(agentId: string, nextSelected: boolean) {
           :id="agent.id"
           :name="agent.name"
           :role="agent.personality"
-          :summary="agent.description"
-          :recent-task="agent.prompt || agent.description"
+          :summary="agent.description || ''"
+          :recent-task="agent.prompt || agent.description || ''"
           :avatar="agent.avatar || initials(agent.name)"
           :status-label="agentBadgeLabel(agent)"
           :status-tone="agent.status === 'active' ? 'success' : 'default'"

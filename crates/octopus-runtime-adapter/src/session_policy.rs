@@ -1,4 +1,6 @@
 use super::*;
+use octopus_core::RuntimeTargetPolicyDecision;
+use std::collections::BTreeMap;
 
 fn permission_rank(value: &str) -> Option<u8> {
     match value {
@@ -12,6 +14,8 @@ fn permission_rank(value: &str) -> Option<u8> {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CompiledSessionPolicy {
+    #[serde(default)]
+    pub(crate) user_id: String,
     pub(crate) selected_actor_ref: String,
     pub(crate) selected_configured_model_id: Option<String>,
     pub(crate) execution_permission_mode: String,
@@ -23,6 +27,10 @@ pub(crate) struct CompiledSessionPolicy {
     pub(crate) memory_policy: serde_json::Value,
     pub(crate) delegation_policy: serde_json::Value,
     pub(crate) approval_preference: serde_json::Value,
+    #[serde(default)]
+    pub(crate) capability_decisions: RuntimeCapabilityPolicyDecisions,
+    #[serde(default)]
+    pub(crate) target_decisions: BTreeMap<String, RuntimeTargetPolicyDecision>,
     pub(crate) manifest_snapshot_ref: String,
     pub(crate) session_policy_snapshot_ref: String,
 }
@@ -77,50 +85,27 @@ impl RuntimeAdapter {
         Ok(serde_json::from_slice(&raw)?)
     }
 
-    pub(crate) fn compile_session_policy(
+    pub(crate) async fn compile_session_policy(
         &self,
         session_id: &str,
         manifest: &actor_manifest::CompiledActorManifest,
         snapshot: &RuntimeConfigSnapshotSummary,
         selected_configured_model_id: Option<&str>,
         execution_permission_mode: &str,
+        user_id: &str,
+        project_id: Option<&str>,
     ) -> Result<CompiledSessionPolicy, AppError> {
-        let normalized_execution_permission_mode =
-            octopus_core::normalize_runtime_permission_mode_label(execution_permission_mode)
-                .ok_or_else(|| {
-                    AppError::invalid_input(format!(
-                        "unsupported permission mode: {execution_permission_mode}"
-                    ))
-                })?
-                .to_string();
-        let manifest_permission_ceiling =
-            octopus_core::normalize_runtime_permission_mode_label(manifest.permission_ceiling())
-                .unwrap_or(RUNTIME_PERMISSION_WORKSPACE_WRITE);
-        if permission_rank(&normalized_execution_permission_mode)
-            > permission_rank(manifest_permission_ceiling)
-        {
-            return Err(AppError::invalid_input(format!(
-                "session permission mode `{normalized_execution_permission_mode}` exceeds actor permission ceiling `{manifest_permission_ceiling}`"
-            )));
-        }
-
-        Ok(CompiledSessionPolicy {
-            selected_actor_ref: manifest.actor_ref().to_string(),
-            selected_configured_model_id: selected_configured_model_id
-                .map(ToOwned::to_owned)
-                .or_else(|| manifest.default_model_ref().map(ToOwned::to_owned)),
-            execution_permission_mode: normalized_execution_permission_mode,
-            config_snapshot_id: snapshot.id.clone(),
-            effective_config_hash: snapshot.effective_config_hash.clone(),
-            started_from_scope_set: snapshot.started_from_scope_set.clone(),
-            manifest_revision: manifest.manifest_revision().to_string(),
-            capability_policy: manifest.capability_policy_value(),
-            memory_policy: manifest.memory_policy_value(),
-            delegation_policy: manifest.delegation_policy_value(),
-            approval_preference: manifest.approval_preference_value(),
-            manifest_snapshot_ref: format!("{session_id}-manifest"),
-            session_policy_snapshot_ref: format!("{session_id}-policy"),
-        })
+        policy_compiler::compile_session_policy(
+            self,
+            session_id,
+            manifest,
+            snapshot,
+            selected_configured_model_id,
+            execution_permission_mode,
+            user_id,
+            project_id,
+        )
+        .await
     }
 
     pub(crate) fn narrow_permission_mode(

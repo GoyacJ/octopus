@@ -36,6 +36,7 @@ async fn main() -> Result<(), AppError> {
         DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
     ));
     let services = PlatformServices {
         workspace: infra.workspace.clone(),

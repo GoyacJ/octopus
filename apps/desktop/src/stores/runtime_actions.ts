@@ -1,5 +1,6 @@
 import type {
   ResolveRuntimeApprovalInput,
+  ResolveRuntimeAuthChallengeInput,
   ResolveRuntimeMemoryProposalInput,
   RuntimeConfigScope,
   RuntimeConfigValidationResult,
@@ -538,6 +539,51 @@ export const runtimeStoreActions = {
       this.saveActiveWorkspaceSnapshot()
     } catch (error) {
       this.error = error instanceof Error ? error.message : 'Failed to resolve runtime approval'
+    }
+  },
+  async resolveAuthChallenge(
+    this: any,
+    resolution: ResolveRuntimeAuthChallengeInput['resolution'],
+    note?: string,
+  ) {
+    const challengeId = this.authTarget?.id
+    if (!this.activeSessionId || !challengeId) {
+      return
+    }
+
+    this.error = ''
+    const resolvedClient = this.resolveWorkspaceClient(this.activeWorkspaceConnectionId)
+    if (!resolvedClient) {
+      return
+    }
+    const { connectionId, client } = resolvedClient
+
+    try {
+      const input: ResolveRuntimeAuthChallengeInput = { resolution, note }
+      await client.runtime.resolveAuthChallenge(
+        this.activeSessionId,
+        challengeId,
+        input,
+        tauriClient.createIdempotencyKey(`runtime-auth-${connectionId}-${challengeId}`),
+      )
+      if (this.activeWorkspaceConnectionId !== connectionId) {
+        return
+      }
+
+      const detail = await client.runtime.loadSession(this.activeSessionId)
+      if (this.activeWorkspaceConnectionId !== connectionId) {
+        return
+      }
+
+      this.setActiveSession(detail)
+      if (isBusyStatus(detail.run.status)) {
+        await this.startEventTransport(this.activeSessionId)
+      } else {
+        await this.finishTransportCycle(this.activeSessionId, connectionId)
+      }
+      this.saveActiveWorkspaceSnapshot()
+    } catch (error) {
+      this.error = error instanceof Error ? error.message : 'Failed to resolve runtime auth challenge'
     }
   },
   async resolveMemoryProposal(this: any, decision: string, note?: string) {

@@ -1,12 +1,13 @@
+use octopus_core::AppError;
+#[cfg(test)]
 use octopus_core::{
     capability_policy_from_sources, default_agent_delegation_policy, default_agent_memory_policy,
     default_agent_shared_capability_policy, default_approval_preference,
     default_asset_import_metadata, default_asset_trust_metadata, default_model_strategy,
     default_output_contract, default_permission_envelope, normalize_task_domains, timestamp_now,
-    AgentRecord, AppError, ASSET_MANIFEST_REVISION_V2,
+    AgentRecord, ASSET_MANIFEST_REVISION_V2,
 };
-use rusqlite::{params, Connection};
-use serde_json::json;
+use rusqlite::Connection;
 use sha2::{Digest, Sha256};
 
 use crate::catalog_hash_id;
@@ -67,13 +68,7 @@ pub(crate) fn managed_skill_id(path_or_slug: &str) -> String {
     catalog_hash_id("skill", path_or_slug)
 }
 
-pub(crate) fn builtin_tool_keys() -> Vec<String> {
-    tools::mvp_tool_specs()
-        .iter()
-        .map(|spec| spec.name.to_string())
-        .collect()
-}
-
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn build_imported_agent_record(
     workspace_id: &str,
@@ -121,105 +116,6 @@ pub(crate) fn build_imported_agent_record(
         status: "active".into(),
         updated_at: timestamp_now(),
     }
-}
-
-pub(crate) fn compute_agent_hash(
-    workspace_id: &str,
-    name: &str,
-    description: &str,
-    personality: &str,
-    prompt: &str,
-    tags: &[String],
-    builtin_tool_keys: &[String],
-    skill_ids: &[String],
-) -> Result<String, AppError> {
-    let payload = json!({
-        "workspaceId": workspace_id,
-        "scope": "workspace",
-        "name": name.trim(),
-        "description": description.trim(),
-        "personality": personality.trim(),
-        "prompt": prompt.trim(),
-        "tags": tags,
-        "builtinToolKeys": builtin_tool_keys,
-        "skillIds": skill_ids,
-        "mcpServerNames": [],
-        "status": "active",
-    });
-    Ok(hash_text(&serde_json::to_string(&payload)?))
-}
-
-pub(crate) fn compute_existing_agent_hash(record: &AgentRecord) -> Result<String, AppError> {
-    compute_agent_hash(
-        &record.workspace_id,
-        &record.name,
-        &record.description,
-        &record.personality,
-        &record.prompt,
-        &record.tags,
-        &record.builtin_tool_keys,
-        &record.skill_ids,
-    )
-}
-
-pub(crate) fn upsert_skill_import_source(
-    connection: &Connection,
-    source_kind: &str,
-    source_id: &str,
-    content_hash: &str,
-    skill_slug: &str,
-    department: &str,
-    now: u64,
-) -> Result<(), AppError> {
-    connection
-        .execute(
-            "INSERT OR REPLACE INTO skill_import_sources (
-                source_kind, source_id, source_path, content_hash, skill_slug, department, last_imported_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![
-                source_kind,
-                source_id,
-                source_id,
-                content_hash,
-                skill_slug,
-                department,
-                now as i64,
-            ],
-        )
-        .map_err(|error| AppError::database(error.to_string()))?;
-    Ok(())
-}
-
-pub(crate) fn upsert_agent_import_source(
-    connection: &Connection,
-    source_kind: &str,
-    source_id: &str,
-    content_hash: &str,
-    agent_id: &str,
-    department: &str,
-    now: u64,
-) -> Result<(), AppError> {
-    connection
-        .execute(
-            "INSERT OR REPLACE INTO agent_import_sources (
-                source_kind, source_id, source_path, content_hash, agent_id, department, last_imported_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![
-                source_kind,
-                source_id,
-                source_id,
-                content_hash,
-                agent_id,
-                department,
-                now as i64,
-            ],
-        )
-        .map_err(|error| AppError::database(error.to_string()))?;
-    Ok(())
-}
-
-pub(crate) fn deterministic_seeded_agent_id(source_id: &str, prefix: &str) -> String {
-    format!("{prefix}-{}", short_hash(source_id))
 }
 
 pub(crate) fn hash_text(value: &str) -> String {

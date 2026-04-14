@@ -222,6 +222,105 @@ describe('runtime client transport', () => {
     expect(headers.get('Idempotency-Key')).toBe('idem-memory-proposal-1')
   })
 
+  it('posts auth challenge resolutions to the runtime auth challenge endpoint', async () => {
+    invokeSpy.mockResolvedValue(createHostBootstrap())
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: async () => ({
+        id: 'runtime-run-conv-auth-1',
+        sessionId: 'runtime-session-conv-auth-1',
+        conversationId: 'conv-auth-1',
+        status: 'completed',
+        currentStep: 'runtime.run.completed',
+        startedAt: 1,
+        updatedAt: 2,
+        runKind: 'primary',
+        actorRef: 'agent:agent-architect',
+        usageSummary: {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+        },
+        artifactRefs: [],
+        traceContext: {
+          sessionId: 'runtime-session-conv-auth-1',
+          traceId: 'trace-auth-1',
+          turnId: 'turn-auth-1',
+        },
+        checkpoint: {
+          serializedSession: {},
+          currentIterationIndex: 0,
+          usageSummary: {
+            inputTokens: 0,
+            outputTokens: 0,
+            totalTokens: 0,
+          },
+          capabilityPlanSummary: {
+            activatedTools: [],
+            approvedTools: [],
+            authResolvedTools: [],
+            availableResources: [],
+            deferredTools: [],
+            discoverableSkills: [],
+            grantedTools: [],
+            hiddenCapabilities: [],
+            pendingTools: [],
+            providerFallbacks: [],
+            visibleTools: [],
+          },
+        },
+        capabilityPlanSummary: {
+          activatedTools: [],
+          approvedTools: [],
+          authResolvedTools: [],
+          availableResources: [],
+          deferredTools: [],
+          discoverableSkills: [],
+          grantedTools: [],
+          hiddenCapabilities: [],
+          pendingTools: [],
+          providerFallbacks: [],
+          visibleTools: [],
+        },
+        providerStateSummary: [],
+      }),
+    })
+
+    const client = await loadClientModule()
+    const payload = await client.bootstrapShellHost('ws-local', 'proj-redesign', [])
+    const connection = payload.workspaceConnections?.[0]
+    const workspaceClient = client.createWorkspaceClient({
+      connection: connection!,
+      session: createWorkspaceSession(connection!),
+    })
+
+    await (workspaceClient.runtime as any).resolveAuthChallenge(
+      'runtime-session-conv-auth-1',
+      'auth-challenge-1',
+      {
+        resolution: 'resolved',
+        note: 'Provider login completed.',
+      },
+      'idem-auth-challenge-1',
+    )
+
+    const request = firstRequest()
+    const headers = request.headers as Headers
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:43127/api/v1/runtime/sessions/runtime-session-conv-auth-1/auth-challenges/auth-challenge-1',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.any(Headers),
+      }),
+    )
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      resolution: 'resolved',
+      note: 'Provider login completed.',
+    })
+    expect(headers.get('Idempotency-Key')).toBe('idem-auth-challenge-1')
+  })
+
   it('preserves danger-full-access for authenticated runtime requests', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({

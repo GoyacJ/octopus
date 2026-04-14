@@ -1,20 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use include_dir::{Dir, DirEntry};
-use octopus_core::{
-    capability_policy_from_sources, default_agent_delegation_policy, default_agent_memory_policy,
-    default_agent_shared_capability_policy, default_approval_preference,
-    default_artifact_handoff_policy, default_asset_import_metadata, default_asset_trust_metadata,
-    default_mailbox_policy, default_model_strategy, default_output_contract,
-    default_permission_envelope, default_shared_memory_policy, default_team_delegation_policy,
-    default_team_memory_policy, default_team_shared_capability_policy, normalize_task_domains,
-    team_topology_from_refs, workflow_affordance_from_task_domains, AgentRecord, AppError,
-    TeamRecord, WorkspaceDirectoryUploadEntry, ASSET_MANIFEST_REVISION_V2,
-};
-use serde_json::Value as JsonValue;
-
 use crate::{
     agent_assets::{
         BuiltinAgentTemplateSource, BuiltinCatalogSources, BuiltinMcpAsset, BuiltinSkillAsset,
@@ -22,11 +8,21 @@ use crate::{
     },
     catalog_hash_id,
 };
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
+use include_dir::{Dir, DirEntry};
+use octopus_core::{
+    capability_policy_from_sources, default_agent_delegation_policy, default_agent_memory_policy,
+    default_agent_shared_capability_policy, default_approval_preference,
+    default_artifact_handoff_policy, default_asset_import_metadata, default_asset_trust_metadata,
+    default_mailbox_policy, default_output_contract, default_permission_envelope,
+    default_shared_memory_policy, default_team_delegation_policy, default_team_memory_policy,
+    default_team_shared_capability_policy, normalize_task_domains, team_topology_from_refs,
+    workflow_affordance_from_task_domains, AgentRecord, AppError, TeamRecord,
+    WorkspaceDirectoryUploadEntry, ASSET_MANIFEST_REVISION_V2,
+};
 
 static BUILTIN_BUNDLE_ASSET_DIR: include_dir::Dir<'_> =
-    include_dir::include_dir!("$CARGO_MANIFEST_DIR/seed/builtin-assets/bundle");
-static BUILTIN_MCP_ASSET_DIR: include_dir::Dir<'_> =
-    include_dir::include_dir!("$CARGO_MANIFEST_DIR/seed/builtin-assets/mcps");
+    include_dir::include_dir!("$CARGO_MANIFEST_DIR/../../templates");
 
 pub(crate) fn embedded_bundle_files(dir: &Dir<'_>) -> Result<Vec<BundleFile>, AppError> {
     let mut files = Vec::new();
@@ -149,30 +145,7 @@ pub(crate) fn find_builtin_team_template_root(team_id: &str) -> Result<Option<St
 }
 
 pub(crate) fn list_builtin_mcp_assets() -> Result<Vec<BuiltinMcpAsset>, AppError> {
-    let mut assets = embedded_bundle_files(&BUILTIN_MCP_ASSET_DIR)?
-        .into_iter()
-        .filter(|file| file.relative_path.ends_with(".json"))
-        .map(|file| {
-            let server_name = Path::new(&file.relative_path)
-                .file_stem()
-                .and_then(|value| value.to_str())
-                .ok_or_else(|| AppError::invalid_input("invalid builtin MCP file name"))?
-                .to_string();
-            let config = serde_json::from_slice::<JsonValue>(&file.bytes)?;
-            if !config.is_object() {
-                return Err(AppError::invalid_input(
-                    "builtin MCP config must be a JSON object",
-                ));
-            }
-            Ok(BuiltinMcpAsset {
-                server_name: server_name.clone(),
-                display_path: format!("builtin-assets/mcps/{}.json", server_name),
-                config,
-            })
-        })
-        .collect::<Result<Vec<_>, AppError>>()?;
-    assets.sort_by(|left, right| left.server_name.cmp(&right.server_name));
-    Ok(assets)
+    Ok(Vec::new())
 }
 
 pub(crate) fn find_builtin_mcp_asset(
@@ -327,7 +300,9 @@ fn build_builtin_agent_record(
         mcp_server_names: source.mcp_server_names.clone(),
         task_domains,
         manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
-        default_model_strategy: default_model_strategy(),
+        default_model_strategy: crate::agent_assets::model_strategy_from_template(
+            source.model.as_deref(),
+        ),
         capability_policy: capability_policy_from_sources(
             &source.builtin_tool_keys,
             &skill_ids,
@@ -365,6 +340,16 @@ fn build_builtin_team_record(
         .collect::<Vec<_>>();
     let task_domains = normalize_task_domains(source.tags.clone());
     let delegation_policy = default_team_delegation_policy();
+    let leader_agent_id = source
+        .leader_agent_source_id
+        .as_ref()
+        .map(|source_id| catalog_hash_id("builtin-agent", source_id));
+    let member_agent_ids = source
+        .member_agent_source_ids
+        .iter()
+        .map(|source_id| catalog_hash_id("builtin-agent", source_id))
+        .collect::<Vec<_>>();
+    let leader_ref = leader_agent_id.clone().unwrap_or_default();
 
     TeamRecord {
         id: catalog_hash_id("builtin-team", &source.source_id),
@@ -382,7 +367,9 @@ fn build_builtin_team_record(
         mcp_server_names: source.mcp_server_names.clone(),
         task_domains: task_domains.clone(),
         manifest_revision: ASSET_MANIFEST_REVISION_V2.into(),
-        default_model_strategy: default_model_strategy(),
+        default_model_strategy: crate::agent_assets::model_strategy_from_template(
+            source.model.as_deref(),
+        ),
         capability_policy: capability_policy_from_sources(
             &source.builtin_tool_keys,
             &skill_ids,
@@ -394,11 +381,11 @@ fn build_builtin_team_record(
         approval_preference: default_approval_preference(),
         output_contract: default_output_contract(),
         shared_capability_policy: default_team_shared_capability_policy(),
-        leader_agent_id: None,
-        member_agent_ids: Vec::new(),
-        leader_ref: String::new(),
-        member_refs: Vec::new(),
-        team_topology: team_topology_from_refs(None, Vec::new()),
+        leader_agent_id,
+        member_agent_ids: member_agent_ids.clone(),
+        leader_ref: leader_ref.clone(),
+        member_refs: member_agent_ids.clone(),
+        team_topology: team_topology_from_refs(Some(leader_ref), member_agent_ids.clone()),
         shared_memory_policy: default_shared_memory_policy(),
         mailbox_policy: default_mailbox_policy(),
         artifact_handoff_policy: default_artifact_handoff_policy(),
@@ -514,17 +501,12 @@ mod tests {
     }
 
     #[test]
-    fn list_builtin_mcp_assets_exposes_finance_data_template() {
+    fn list_builtin_mcp_assets_returns_empty_when_templates_do_not_embed_mcp_configs() {
         let assets = list_builtin_mcp_assets().expect("builtin mcp assets");
-
-        assert!(assets
-            .iter()
-            .any(|asset| asset.server_name == "finance-data"));
-        let finance = find_builtin_mcp_asset("finance-data")
+        assert!(assets.is_empty());
+        assert!(find_builtin_mcp_asset("finance-data")
             .expect("find builtin mcp")
-            .expect("finance-data asset");
-        assert_eq!(finance.server_name, "finance-data");
-        assert!(finance.config.is_object());
+            .is_none());
     }
 
     #[test]
@@ -574,5 +556,43 @@ mod tests {
         assert!(!catalog.skill_sources.is_empty());
         assert!(!catalog.agent_sources.is_empty());
         assert!(!catalog.team_sources.is_empty());
+    }
+
+    #[test]
+    fn builtin_team_templates_keep_member_relationships_resolvable_to_builtin_agents() {
+        let builtin_agents = list_builtin_agent_templates("ws-local").expect("builtin agents");
+        let builtin_teams = list_builtin_team_templates("ws-local").expect("builtin teams");
+
+        assert!(!builtin_teams.is_empty());
+
+        let builtin_agent_ids = builtin_agents
+            .iter()
+            .map(|agent| agent.id.clone())
+            .collect::<std::collections::BTreeSet<_>>();
+
+        let team_with_members = builtin_teams
+            .iter()
+            .find(|team| !team.member_agent_ids.is_empty())
+            .expect("expected at least one builtin team with members");
+
+        assert!(
+            team_with_members
+                .member_agent_ids
+                .iter()
+                .all(|agent_id| builtin_agent_ids.contains(agent_id)),
+            "builtin team members should resolve to builtin agent ids",
+        );
+
+        if let Some(leader_agent_id) = team_with_members.leader_agent_id.as_ref() {
+            assert!(
+                builtin_agent_ids.contains(leader_agent_id),
+                "builtin team leader should resolve to a builtin agent id",
+            );
+        }
+
+        assert_eq!(
+            team_with_members.member_refs, team_with_members.member_agent_ids,
+            "builtin team member refs should stay aligned with member agent ids",
+        );
     }
 }

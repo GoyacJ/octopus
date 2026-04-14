@@ -6,6 +6,8 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(crate) struct CapabilityProjection {
     pub(crate) plan_summary: RuntimeCapabilityPlanSummary,
     pub(crate) provider_state_summary: Vec<RuntimeCapabilityProviderState>,
+    pub(crate) auth_state_summary: RuntimeAuthStateSummary,
+    pub(crate) policy_decision_summary: RuntimePolicyDecisionSummary,
     pub(crate) capability_state_ref: String,
 }
 
@@ -109,18 +111,21 @@ impl RuntimeAdapter {
     pub(crate) async fn project_capability_state_async(
         &self,
         manifest: &actor_manifest::CompiledActorManifest,
+        session_policy: &session_policy::CompiledSessionPolicy,
         config_snapshot_id: &str,
         capability_state_ref: impl Into<String>,
         store: &tools::SessionCapabilityStore,
     ) -> Result<CapabilityProjection, AppError> {
         let adapter = self.clone();
         let manifest = manifest.clone();
+        let session_policy = session_policy.clone();
         let config_snapshot_id = config_snapshot_id.to_string();
         let capability_state_ref = capability_state_ref.into();
         let store = store.clone();
         tokio::task::spawn_blocking(move || {
             adapter.project_capability_state(
                 &manifest,
+                &session_policy,
                 &config_snapshot_id,
                 capability_state_ref,
                 &store,
@@ -133,6 +138,7 @@ impl RuntimeAdapter {
     pub(crate) fn project_capability_state(
         &self,
         manifest: &actor_manifest::CompiledActorManifest,
+        session_policy: &session_policy::CompiledSessionPolicy,
         config_snapshot_id: &str,
         capability_state_ref: impl Into<String>,
         store: &tools::SessionCapabilityStore,
@@ -271,10 +277,67 @@ impl RuntimeAdapter {
                 .map(|capability| capability.display_name.clone()),
         );
 
+        let mut visible_tools = Vec::new();
+        let mut deferred_tools = Vec::new();
+        let mut denied_exposures = 0_u64;
+
+        for capability in &plan.visible_tools {
+            let decision = policy_compiler::policy_decision_for_capability(session_policy, capability);
+            if decision.hidden || decision.action == "deny" {
+                hidden_capabilities.push(capability.display_name.clone());
+                denied_exposures += 1;
+            } else {
+                visible_tools.push(capability.display_name.clone());
+            }
+        }
+
+        for capability in &plan.deferred_tools {
+            let decision = policy_compiler::policy_decision_for_capability(session_policy, capability);
+            if decision.hidden || decision.action == "deny" {
+                hidden_capabilities.push(capability.display_name.clone());
+                denied_exposures += 1;
+            } else {
+                deferred_tools.push(capability.display_name.clone());
+            }
+        }
+
+        hidden_capabilities.sort();
+        hidden_capabilities.dedup();
+
+        let pending_auth_challenge = None;
+        let auth_state_summary =
+            auth_mediation::summarize_auth_state(&provider_state_summary, pending_auth_challenge);
+        let compiled_target_allow_count = session_policy
+            .target_decisions
+            .values()
+            .filter(|decision| decision.action == "allow")
+            .count() as u64;
+        let compiled_target_approval_count = session_policy
+            .target_decisions
+            .values()
+            .filter(|decision| decision.requires_approval)
+            .count() as u64;
+        let compiled_target_auth_count = session_policy
+            .target_decisions
+            .values()
+            .filter(|decision| decision.requires_auth)
+            .count() as u64;
+        let policy_decision_summary = RuntimePolicyDecisionSummary {
+            allow_count: (visible_tools.len() + discoverable_skills.len()) as u64
+                + compiled_target_allow_count,
+            approval_required_count: compiled_target_approval_count,
+            auth_required_count: auth_state_summary.pending_challenge_count
+                + compiled_target_auth_count,
+            compiled_at: Some(timestamp_now()),
+            deferred_capability_count: deferred_tools.len() as u64,
+            denied_exposure_count: denied_exposures,
+            hidden_capability_count: hidden_capabilities.len() as u64,
+        };
+
         Ok(CapabilityProjection {
             plan_summary: RuntimeCapabilityPlanSummary {
-                visible_tools: capability_names(&plan.visible_tools),
-                deferred_tools: capability_names(&plan.deferred_tools),
+                visible_tools,
+                deferred_tools,
                 discoverable_skills,
                 available_resources: capability_names(&plan.available_resources),
                 hidden_capabilities,
@@ -286,6 +349,8 @@ impl RuntimeAdapter {
                 provider_fallbacks: plan.provider_fallbacks,
             },
             provider_state_summary,
+            auth_state_summary,
+            policy_decision_summary,
             capability_state_ref,
         })
     }

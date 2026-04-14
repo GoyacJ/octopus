@@ -15,8 +15,6 @@ export * from './agent-runtime'
 export * from './capability-runtime'
 export * from './memory-runtime'
 export * from './runtime-policy'
-export * from './team-runtime'
-export * from './workflow-runtime'
 
 export type JsonValue =
   | string
@@ -37,6 +35,7 @@ export interface RuntimeConfigPatch extends Omit<OpenApiRuntimeConfigPatch, 'pat
 export interface ProjectModelSettings {
   allowedConfiguredModelIds: string[]
   defaultConfiguredModelId: string
+  totalTokens?: number
 }
 
 export interface ProjectToolPermissionOverride {

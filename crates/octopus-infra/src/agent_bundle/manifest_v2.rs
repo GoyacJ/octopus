@@ -1,15 +1,12 @@
 use octopus_core::{
     default_agent_delegation_policy, default_agent_memory_policy, default_approval_preference,
     default_asset_trust_metadata, default_model_strategy, default_permission_envelope,
-    normalize_task_domains, AgentRecord, AppError, AssetBundleAssetEntry,
-    AssetBundleCompatibilityMapping, AssetBundleManifestV2, AssetBundlePolicyDefaults,
-    AssetTranslationReport, BundleAssetDescriptorRecord, TeamRecord, ASSET_IMPORT_MANIFEST_VERSION,
+    normalize_task_domains, AgentRecord, AssetBundleAssetEntry, AssetBundleCompatibilityMapping,
+    AssetBundleManifestV2, AssetBundlePolicyDefaults, AssetTranslationReport,
+    BundleAssetDescriptorRecord, TeamRecord, ASSET_IMPORT_MANIFEST_VERSION,
 };
 
-use crate::{
-    agent_assets::{self, BundlePlan},
-    WorkspacePaths,
-};
+use crate::agent_assets::{self, BundlePlan};
 
 pub(crate) fn bundle_manifest_from_plan(plan: &BundlePlan) -> AssetBundleManifestV2 {
     let manifest_template = plan.bundle_manifest_template.as_ref();
@@ -194,49 +191,6 @@ pub(crate) fn build_export_translation_report(
         dependency_resolution,
         diagnostics: Vec::new(),
     }
-}
-
-pub(crate) fn build_bundle_asset_state(
-    paths: &WorkspacePaths,
-    target: &agent_assets::AssetTargetScope<'_>,
-    skill_paths: &std::collections::HashMap<String, std::path::PathBuf>,
-    mcp_configs: &std::collections::HashMap<String, serde_json::Value>,
-) -> Result<agent_assets::BundleAssetStateDocument, AppError> {
-    let document = crate::resources_skills::load_workspace_asset_state_document(paths)?;
-    let mut asset_state = agent_assets::BundleAssetStateDocument::default();
-
-    for path in skill_paths.values() {
-        let source_key = crate::resources_skills::skill_source_key(
-            &path.join(agent_assets::SKILL_FRONTMATTER_FILE),
-            &paths.root,
-        );
-        if let Some(metadata) = document
-            .assets
-            .get(&source_key)
-            .filter(|metadata| agent_assets::asset_metadata_has_values(metadata))
-        {
-            if let Some(slug) = path.file_name().and_then(|segment| segment.to_str()) {
-                asset_state
-                    .skills
-                    .insert(slug.to_string(), metadata.clone());
-            }
-        }
-    }
-
-    for server_name in mcp_configs.keys() {
-        let source_key = agent_assets::bundle_mcp_source_key(target, server_name);
-        if let Some(metadata) = document
-            .assets
-            .get(&source_key)
-            .filter(|metadata| agent_assets::asset_metadata_has_values(metadata))
-        {
-            asset_state
-                .mcps
-                .insert(server_name.clone(), metadata.clone());
-        }
-    }
-
-    Ok(asset_state)
 }
 
 fn plan_asset_entries(plan: &BundlePlan) -> Vec<AssetBundleAssetEntry> {

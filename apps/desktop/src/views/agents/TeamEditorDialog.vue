@@ -19,6 +19,11 @@ const props = defineProps<{
   avatarPreview: string
   dialogTeamLeader: AgentRecord | null | undefined
   dialogTeamMembers: AgentRecord[]
+  contentReadonly: boolean
+  statusReadonly: boolean
+  canSave: boolean
+  canCopy: boolean
+  copyLabel: string
   canPromote: boolean
   promoting: boolean
 }>()
@@ -28,6 +33,7 @@ const emit = defineEmits<{
   'pick-avatar': []
   'remove-avatar': []
   'save': []
+  copy: []
   'promote': []
 }>()
 
@@ -45,6 +51,14 @@ function initials(name: string) {
     .join('')
     .toUpperCase()
 }
+
+const readonlyLeaderLabel = computed(() =>
+  props.dialogTeamLeader?.name || props.form.leaderAgentId || '未设置负责人',
+)
+
+const readonlyMemberLabel = computed(() =>
+  props.dialogTeamMembers.map(member => member.name).join('、') || '暂无成员',
+)
 </script>
 
 <template>
@@ -60,10 +74,10 @@ function initials(name: string) {
       <UiSurface variant="subtle" padding="md" title="基础信息" subtitle="设置数字团队名称、头像和运行状态。" class="space-y-4">
         <div class="grid gap-4 md:grid-cols-2">
           <UiField label="数字团队名称">
-            <UiInput v-model="form.name" placeholder="例如: 核心研发组" />
+            <UiInput v-model="form.name" :disabled="contentReadonly" placeholder="例如: 核心研发组" />
           </UiField>
           <UiField label="状态">
-            <UiSelect v-model="form.status" :options="statusOptions" />
+            <UiSelect v-model="form.status" :options="statusOptions" :disabled="statusReadonly" />
           </UiField>
           <UiField class="md:col-span-2" label="团队头像">
             <div class="flex items-center gap-4 rounded-[var(--radius-l)] border border-border bg-surface p-4">
@@ -71,7 +85,7 @@ function initials(name: string) {
                 <img v-if="avatarPreview" :src="avatarPreview" alt="" class="size-full object-cover">
                 <span v-else>{{ initials(form.name || 'T') }}</span>
               </div>
-              <div class="flex flex-col gap-2">
+              <div v-if="!contentReadonly" class="flex flex-col gap-2">
                 <div class="flex gap-2">
                   <UiButton variant="outline" size="sm" class="h-8" @click="emit('pick-avatar')">上传新头像</UiButton>
                   <UiButton v-if="avatarPreview" variant="ghost" size="sm" class="h-8 text-text-tertiary" @click="emit('remove-avatar')">移除</UiButton>
@@ -81,7 +95,7 @@ function initials(name: string) {
             </div>
           </UiField>
           <UiField class="md:col-span-2" label="核心愿景">
-            <UiInput v-model="form.personality" placeholder="定义团队的协作风格和长期目标" />
+            <UiInput v-model="form.personality" :disabled="contentReadonly" placeholder="定义团队的协作风格和长期目标" />
           </UiField>
         </div>
       </UiSurface>
@@ -89,14 +103,27 @@ function initials(name: string) {
       <UiSurface variant="subtle" padding="md" title="编组管理" subtitle="指定数字团队负责人 (Leader) 并选择参与协作的成员。" class="space-y-4">
         <div class="grid gap-4 md:grid-cols-2">
           <UiField label="负责人 (Leader)">
+            <UiInput
+              v-if="contentReadonly"
+              :model-value="readonlyLeaderLabel"
+              data-testid="agent-center-team-leader-display"
+              disabled
+            />
             <UiCombobox
+              v-else
               v-model="form.leaderAgentId"
               :options="leaderOptions"
               placeholder="选择负责人"
             />
           </UiField>
           <UiField class="md:col-span-2" label="协作成员">
+            <UiInput
+              v-if="contentReadonly"
+              :model-value="readonlyMemberLabel"
+              disabled
+            />
             <UiSearchableMultiSelect
+              v-else
               v-model="form.memberAgentIds"
               :options="teamAgentOptions"
               placeholder="搜索并添加数字员工成员"
@@ -151,13 +178,13 @@ function initials(name: string) {
       <UiSurface variant="subtle" padding="md" title="协作上下文" subtitle="定义团队的工作流程标签、协作摘要及核心指令。" class="space-y-4">
         <div class="grid gap-4">
           <UiField label="数字团队摘要">
-            <UiTextarea v-model="form.description" :rows="2" placeholder="简述团队的主要工作职责和产出目标..." />
+            <UiTextarea v-model="form.description" :rows="2" :disabled="contentReadonly" placeholder="简述团队的主要工作职责和产出目标..." />
           </UiField>
           <UiField label="协作提示词 (Team Prompt)">
-            <UiTextarea v-model="form.prompt" :rows="5" class="font-mono text-sm" placeholder="定义团队的协作 SOP 和核心指令..." />
+            <UiTextarea v-model="form.prompt" :rows="5" :disabled="contentReadonly" class="font-mono text-sm" placeholder="定义团队的协作 SOP 和核心指令..." />
           </UiField>
           <UiField label="工作流标签">
-            <UiInput v-model="form.tagsText" placeholder="用逗号分隔，例如: 并行研发, 自动化测试" />
+            <UiInput v-model="form.tagsText" :disabled="contentReadonly" placeholder="用逗号分隔，例如: 并行研发, 自动化测试" />
           </UiField>
         </div>
       </UiSurface>
@@ -165,13 +192,13 @@ function initials(name: string) {
       <UiSurface variant="subtle" padding="md" title="扩展能力" subtitle="为整个团队集成工具能力。" class="space-y-4">
         <div class="grid gap-4 md:grid-cols-2">
           <UiField label="内置工具">
-            <UiSearchableMultiSelect v-model="form.builtinToolKeys" :options="builtinOptions" placeholder="选择内置工具" />
+            <UiSearchableMultiSelect v-model="form.builtinToolKeys" :options="builtinOptions" :disabled="contentReadonly" placeholder="选择内置工具" />
           </UiField>
           <UiField label="技能插件 (Skills)">
-            <UiSearchableMultiSelect v-model="form.skillIds" :options="skillOptions" placeholder="选择 Skill" />
+            <UiSearchableMultiSelect v-model="form.skillIds" :options="skillOptions" :disabled="contentReadonly" placeholder="选择 Skill" />
           </UiField>
           <UiField class="md:col-span-2" label="MCP 服务集成">
-            <UiSearchableMultiSelect v-model="form.mcpServerNames" :options="mcpOptions" placeholder="选择 MCP 服务器" />
+            <UiSearchableMultiSelect v-model="form.mcpServerNames" :options="mcpOptions" :disabled="contentReadonly" placeholder="选择 MCP 服务器" />
           </UiField>
         </div>
       </UiSurface>
@@ -181,7 +208,7 @@ function initials(name: string) {
         <div class="flex items-center gap-2">
           <span class="text-xs text-text-tertiary">数字团队更改将应用于所有成员的协作上下文</span>
           <UiButton
-            v-if="canPromote"
+            v-if="canPromote && canSave"
             data-testid="agent-center-promote-team-button"
             variant="outline"
             size="sm"
@@ -193,8 +220,16 @@ function initials(name: string) {
           </UiButton>
         </div>
         <div class="flex items-center gap-2">
-          <UiButton variant="ghost" @click="emit('update:open', false)">取消</UiButton>
-          <UiButton class="px-6" @click="emit('save')">保存配置</UiButton>
+          <UiButton variant="ghost" @click="emit('update:open', false)">{{ canSave ? '取消' : '关闭' }}</UiButton>
+          <UiButton
+            v-if="canCopy"
+            data-testid="agent-center-copy-team-button"
+            variant="outline"
+            @click="emit('copy')"
+          >
+            {{ copyLabel }}
+          </UiButton>
+          <UiButton v-if="canSave" class="px-6" @click="emit('save')">保存配置</UiButton>
         </div>
       </div>
     </template>

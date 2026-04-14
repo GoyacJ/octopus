@@ -581,6 +581,10 @@ pub struct WorkspaceActivityRecord {
     pub title: String,
     pub description: String,
     pub timestamp: u64,
+    pub actor_id: Option<String>,
+    pub actor_type: Option<String>,
+    pub resource: Option<String>,
+    pub outcome: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -598,10 +602,19 @@ pub struct ConversationRecord {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct ProjectTokenUsageRecord {
+    pub project_id: String,
+    pub project_name: String,
+    pub used_tokens: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkspaceOverviewSnapshot {
     pub workspace: WorkspaceSummary,
     pub metrics: Vec<WorkspaceMetricRecord>,
     pub projects: Vec<ProjectRecord>,
+    pub project_token_usage: Vec<ProjectTokenUsageRecord>,
     pub recent_conversations: Vec<ConversationRecord>,
     pub recent_activity: Vec<WorkspaceActivityRecord>,
 }
@@ -611,8 +624,96 @@ pub struct WorkspaceOverviewSnapshot {
 pub struct ProjectDashboardSnapshot {
     pub project: ProjectRecord,
     pub metrics: Vec<WorkspaceMetricRecord>,
+    pub overview: ProjectDashboardSummary,
+    pub trend: Vec<ProjectDashboardTrendPoint>,
+    pub user_stats: Vec<ProjectDashboardUserStat>,
+    pub conversation_insights: Vec<ProjectDashboardConversationInsight>,
+    pub tool_ranking: Vec<ProjectDashboardRankingItem>,
+    pub resource_breakdown: Vec<ProjectDashboardBreakdownItem>,
+    pub model_breakdown: Vec<ProjectDashboardBreakdownItem>,
     pub recent_conversations: Vec<ConversationRecord>,
     pub recent_activity: Vec<WorkspaceActivityRecord>,
+    pub used_tokens: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDashboardSummary {
+    pub member_count: u64,
+    pub active_user_count: u64,
+    pub agent_count: u64,
+    pub team_count: u64,
+    pub conversation_count: u64,
+    pub message_count: u64,
+    pub tool_call_count: u64,
+    pub approval_count: u64,
+    pub resource_count: u64,
+    pub knowledge_count: u64,
+    pub tool_count: u64,
+    pub token_record_count: u64,
+    pub total_tokens: u64,
+    pub activity_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDashboardTrendPoint {
+    pub id: String,
+    pub label: String,
+    pub timestamp: u64,
+    pub conversation_count: u64,
+    pub message_count: u64,
+    pub tool_call_count: u64,
+    pub approval_count: u64,
+    pub token_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDashboardUserStat {
+    pub user_id: String,
+    pub display_name: String,
+    pub activity_count: u64,
+    pub conversation_count: u64,
+    pub message_count: u64,
+    pub tool_call_count: u64,
+    pub approval_count: u64,
+    pub token_count: u64,
+    pub activity_trend: Vec<u64>,
+    pub token_trend: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDashboardRankingItem {
+    pub id: String,
+    pub label: String,
+    pub value: u64,
+    pub helper: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDashboardConversationInsight {
+    pub id: String,
+    pub conversation_id: String,
+    pub title: String,
+    pub status: String,
+    pub updated_at: u64,
+    pub last_message_preview: Option<String>,
+    pub message_count: u64,
+    pub tool_call_count: u64,
+    pub approval_count: u64,
+    pub token_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDashboardBreakdownItem {
+    pub id: String,
+    pub label: String,
+    pub value: u64,
+    pub helper: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2052,7 +2153,166 @@ pub struct RuntimeCapabilityExecutionOutcome {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimePendingMediationSummary {
+pub struct RuntimePendingMediation {
+    #[serde(default)]
+    pub approval_id: Option<String>,
+    #[serde(default)]
+    pub approval_layer: Option<String>,
+    #[serde(default)]
+    pub auth_challenge_id: Option<String>,
+    #[serde(default)]
+    pub capability_id: Option<String>,
+    #[serde(default)]
+    pub checkpoint_ref: Option<String>,
+    #[serde(default)]
+    pub detail: Option<String>,
+    #[serde(default)]
+    pub escalation_reason: Option<String>,
+    #[serde(default)]
+    pub mediation_id: Option<String>,
+    #[serde(default)]
+    pub mediation_kind: String,
+    #[serde(default)]
+    pub provider_key: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub required_permission: Option<String>,
+    #[serde(default)]
+    pub requires_approval: bool,
+    #[serde(default)]
+    pub requires_auth: bool,
+    #[serde(default)]
+    pub state: String,
+    #[serde(default)]
+    pub summary: Option<String>,
+    #[serde(default)]
+    pub target_kind: String,
+    #[serde(default)]
+    pub target_ref: String,
+    #[serde(default)]
+    pub tool_name: Option<String>,
+}
+
+pub type RuntimePendingMediationSummary = RuntimePendingMediation;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeMediationOutcome {
+    #[serde(default)]
+    pub approval_layer: Option<String>,
+    #[serde(default)]
+    pub capability_id: Option<String>,
+    #[serde(default)]
+    pub checkpoint_ref: Option<String>,
+    #[serde(default)]
+    pub detail: Option<String>,
+    #[serde(default)]
+    pub mediation_id: Option<String>,
+    #[serde(default)]
+    pub mediation_kind: String,
+    #[serde(default)]
+    pub outcome: String,
+    #[serde(default)]
+    pub provider_key: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub requires_approval: bool,
+    #[serde(default)]
+    pub requires_auth: bool,
+    #[serde(default)]
+    pub resolved_at: Option<u64>,
+    #[serde(default)]
+    pub target_kind: String,
+    #[serde(default)]
+    pub target_ref: String,
+    #[serde(default)]
+    pub tool_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeAuthChallengeSummary {
+    #[serde(default)]
+    pub approval_layer: String,
+    #[serde(default)]
+    pub capability_id: Option<String>,
+    #[serde(default)]
+    pub checkpoint_ref: Option<String>,
+    #[serde(default)]
+    pub conversation_id: String,
+    #[serde(default)]
+    pub created_at: u64,
+    #[serde(default)]
+    pub detail: String,
+    #[serde(default)]
+    pub escalation_reason: String,
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub provider_key: Option<String>,
+    #[serde(default)]
+    pub required_permission: Option<String>,
+    #[serde(default)]
+    pub requires_approval: bool,
+    #[serde(default)]
+    pub requires_auth: bool,
+    #[serde(default)]
+    pub resolution: Option<String>,
+    #[serde(default)]
+    pub run_id: String,
+    #[serde(default)]
+    pub session_id: String,
+    #[serde(default)]
+    pub status: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub target_kind: String,
+    #[serde(default)]
+    pub target_ref: String,
+    #[serde(default)]
+    pub tool_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeAuthStateSummary {
+    #[serde(default)]
+    pub challenged_provider_keys: Vec<String>,
+    #[serde(default)]
+    pub failed_provider_keys: Vec<String>,
+    #[serde(default)]
+    pub last_challenge_at: Option<u64>,
+    #[serde(default)]
+    pub pending_challenge_count: u64,
+    #[serde(default)]
+    pub resolved_provider_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimePolicyDecisionSummary {
+    #[serde(default)]
+    pub allow_count: u64,
+    #[serde(default)]
+    pub approval_required_count: u64,
+    #[serde(default)]
+    pub auth_required_count: u64,
+    #[serde(default)]
+    pub compiled_at: Option<u64>,
+    #[serde(default)]
+    pub deferred_capability_count: u64,
+    #[serde(default)]
+    pub denied_exposure_count: u64,
+    #[serde(default)]
+    pub hidden_capability_count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimePendingMediationSummaryLegacy {
     #[serde(default)]
     pub capability_id: Option<String>,
     #[serde(default)]
@@ -2074,6 +2334,7 @@ pub struct RuntimeSessionPolicySnapshot {
     pub selected_actor_ref: String,
     #[serde(default)]
     pub selected_configured_model_id: String,
+    #[serde(default)]
     pub execution_permission_mode: String,
     #[serde(default)]
     pub config_snapshot_id: String,
@@ -2145,6 +2406,14 @@ fn default_runtime_serialized_session() -> serde_json::Value {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeRunCheckpoint {
+    #[serde(default)]
+    pub approval_layer: Option<String>,
+    #[serde(default)]
+    pub broker_decision: Option<String>,
+    #[serde(default)]
+    pub capability_id: Option<String>,
+    #[serde(default)]
+    pub checkpoint_artifact_ref: Option<String>,
     #[serde(default = "default_runtime_serialized_session")]
     pub serialized_session: serde_json::Value,
     #[serde(default)]
@@ -2153,16 +2422,34 @@ pub struct RuntimeRunCheckpoint {
     pub usage_summary: RuntimeUsageSummary,
     #[serde(default)]
     pub pending_approval: Option<ApprovalRequestRecord>,
+    #[serde(default)]
+    pub pending_auth_challenge: Option<RuntimeAuthChallengeSummary>,
     #[serde(default = "default_runtime_policy_envelope")]
     pub compaction_metadata: serde_json::Value,
     #[serde(default)]
     pub pending_mediation: Option<RuntimePendingMediationSummary>,
+    #[serde(default)]
+    pub provider_key: Option<String>,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub required_permission: Option<String>,
+    #[serde(default)]
+    pub requires_approval: Option<bool>,
+    #[serde(default)]
+    pub requires_auth: Option<bool>,
+    #[serde(default)]
+    pub target_kind: Option<String>,
+    #[serde(default)]
+    pub target_ref: Option<String>,
     #[serde(default)]
     pub capability_state_ref: Option<String>,
     #[serde(default)]
     pub capability_plan_summary: RuntimeCapabilityPlanSummary,
     #[serde(default)]
     pub last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
+    #[serde(default)]
+    pub last_mediation_outcome: Option<RuntimeMediationOutcome>,
 }
 
 fn default_runtime_session_kind() -> String {
@@ -2269,12 +2556,15 @@ pub struct RuntimeSessionSummary {
     pub config_snapshot_id: String,
     pub effective_config_hash: String,
     pub started_from_scope_set: Vec<String>,
+    #[serde(default)]
     pub selected_actor_ref: String,
+    #[serde(default)]
     pub manifest_revision: String,
     #[serde(default)]
     pub session_policy: RuntimeSessionPolicySnapshot,
     #[serde(default)]
     pub active_run_id: String,
+    #[serde(default)]
     pub subrun_count: u64,
     #[serde(default)]
     pub workflow: Option<RuntimeWorkflowSummary>,
@@ -2290,12 +2580,20 @@ pub struct RuntimeSessionSummary {
     pub pending_memory_proposal_count: u64,
     #[serde(default)]
     pub memory_state_ref: String,
-    #[serde(default)]
+    #[serde(
+        default,
+        rename = "capabilityPlanSummary",
+        alias = "capabilitySummary"
+    )]
     pub capability_summary: RuntimeCapabilityPlanSummary,
     #[serde(default)]
     pub provider_state_summary: Vec<RuntimeCapabilityProviderState>,
     #[serde(default)]
+    pub auth_state_summary: RuntimeAuthStateSummary,
+    #[serde(default)]
     pub pending_mediation: Option<RuntimePendingMediationSummary>,
+    #[serde(default)]
+    pub policy_decision_summary: RuntimePolicyDecisionSummary,
     #[serde(default)]
     pub capability_state_ref: Option<String>,
     #[serde(default)]
@@ -2346,6 +2644,10 @@ pub struct RuntimeRunSnapshot {
     #[serde(default)]
     pub worker_dispatch: Option<RuntimeWorkerDispatchSummary>,
     pub approval_state: String,
+    #[serde(default)]
+    pub approval_target: Option<ApprovalRequestRecord>,
+    #[serde(default)]
+    pub auth_target: Option<RuntimeAuthChallengeSummary>,
     pub usage_summary: RuntimeUsageSummary,
     pub artifact_refs: Vec<String>,
     pub trace_context: RuntimeTraceContext,
@@ -2361,6 +2663,8 @@ pub struct RuntimeRunSnapshot {
     pub capability_state_ref: Option<String>,
     #[serde(default)]
     pub last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
+    #[serde(default)]
+    pub last_mediation_outcome: Option<RuntimeMediationOutcome>,
     pub resolved_target: Option<ResolvedExecutionTarget>,
     pub requested_actor_kind: Option<String>,
     pub requested_actor_id: Option<String>,
@@ -2429,9 +2733,25 @@ pub struct ApprovalRequestRecord {
     pub risk_level: String,
     pub created_at: u64,
     pub status: String,
+    #[serde(default)]
     pub approval_layer: Option<String>,
+    #[serde(default)]
+    pub capability_id: Option<String>,
+    #[serde(default)]
+    pub checkpoint_ref: Option<String>,
+    #[serde(default)]
+    pub provider_key: Option<String>,
+    #[serde(default)]
+    pub required_permission: Option<String>,
+    #[serde(default)]
+    pub requires_approval: bool,
+    #[serde(default)]
+    pub requires_auth: bool,
+    #[serde(default)]
     pub target_kind: Option<String>,
+    #[serde(default)]
     pub target_ref: Option<String>,
+    #[serde(default)]
     pub escalation_reason: Option<String>,
 }
 
@@ -2462,6 +2782,12 @@ pub struct RuntimeEventEnvelope {
     pub tool_use_id: Option<String>,
     #[serde(default)]
     pub outcome: Option<String>,
+    #[serde(default)]
+    pub approval_layer: Option<String>,
+    #[serde(default)]
+    pub target_kind: Option<String>,
+    #[serde(default)]
+    pub target_ref: Option<String>,
     pub payload: Option<serde_json::Value>,
     pub run: Option<RuntimeRunSnapshot>,
     pub message: Option<RuntimeMessage>,
@@ -2475,6 +2801,8 @@ pub struct RuntimeEventEnvelope {
     pub selected_memory: Option<Vec<RuntimeSelectedMemoryItem>>,
     pub trace: Option<RuntimeTraceItem>,
     pub approval: Option<ApprovalRequestRecord>,
+    #[serde(default)]
+    pub auth_challenge: Option<RuntimeAuthChallengeSummary>,
     pub decision: Option<String>,
     pub summary: Option<RuntimeSessionSummary>,
     pub error: Option<String>,
@@ -2488,6 +2816,8 @@ pub struct RuntimeEventEnvelope {
     pub capability_state_ref: Option<String>,
     #[serde(default)]
     pub last_execution_outcome: Option<RuntimeCapabilityExecutionOutcome>,
+    #[serde(default)]
+    pub last_mediation_outcome: Option<RuntimeMediationOutcome>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2518,12 +2848,20 @@ pub struct RuntimeSessionDetail {
     pub pending_memory_proposal_count: u64,
     #[serde(default)]
     pub memory_state_ref: String,
-    #[serde(default)]
+    #[serde(
+        default,
+        rename = "capabilityPlanSummary",
+        alias = "capabilitySummary"
+    )]
     pub capability_summary: RuntimeCapabilityPlanSummary,
     #[serde(default)]
     pub provider_state_summary: Vec<RuntimeCapabilityProviderState>,
     #[serde(default)]
+    pub auth_state_summary: RuntimeAuthStateSummary,
+    #[serde(default)]
     pub pending_mediation: Option<RuntimePendingMediationSummary>,
+    #[serde(default)]
+    pub policy_decision_summary: RuntimePolicyDecisionSummary,
     #[serde(default)]
     pub capability_state_ref: Option<String>,
     #[serde(default)]
@@ -2601,6 +2939,14 @@ pub struct SubmitRuntimeTurnInput {
 #[serde(rename_all = "camelCase")]
 pub struct ResolveRuntimeApprovalInput {
     pub decision: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolveRuntimeAuthChallengeInput {
+    pub resolution: String,
+    #[serde(default)]
+    pub note: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -2698,6 +3044,14 @@ pub struct CostLedgerEntry {
     pub amount: i64,
     pub unit: String,
     pub created_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectTokenUsageProjection {
+    pub project_id: String,
+    pub used_tokens: u64,
+    pub updated_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

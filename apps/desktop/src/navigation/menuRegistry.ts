@@ -8,7 +8,6 @@ export type MenuIconKey =
   | 'resources'
   | 'knowledge'
   | 'trace'
-  | 'runtime'
   | 'projects'
   | 'models'
   | 'tools'
@@ -184,17 +183,6 @@ export const MENU_DEFINITIONS: MenuDefinition[] = [
     labelKey: 'sidebar.navigation.projectSettings',
     icon: 'settings',
     order: 74,
-  },
-  {
-    id: 'menu-project-runtime',
-    source: 'main-sidebar',
-    section: 'project',
-    routeName: 'project-runtime',
-    routeNames: ['project-runtime'],
-    defaultLabel: 'Runtime',
-    labelKey: 'sidebar.navigation.runtime',
-    icon: 'runtime',
-    order: 75,
   },
   {
     id: 'menu-workspace-automations',

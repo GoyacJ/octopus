@@ -819,9 +819,17 @@ UserStatus:
 WorkspaceActivityRecord:
   additionalProperties: false
   properties:
+    actorId:
+      type: string
+    actorType:
+      type: string
     description:
       type: string
     id:
+      type: string
+    outcome:
+      type: string
+    resource:
       type: string
     timestamp:
       type: integer
@@ -871,12 +879,31 @@ WorkspaceMetricTone:
     - info
     - accent
   type: string
+ProjectTokenUsageRecord:
+  additionalProperties: false
+  properties:
+    projectId:
+      type: string
+    projectName:
+      type: string
+    usedTokens:
+      minimum: 0
+      type: integer
+  required:
+    - projectId
+    - projectName
+    - usedTokens
+  type: object
 WorkspaceOverviewSnapshot:
   additionalProperties: false
   properties:
     metrics:
       items:
         $ref: "#/components/schemas/WorkspaceMetricRecord"
+      type: array
+    projectTokenUsage:
+      items:
+        $ref: "#/components/schemas/ProjectTokenUsageRecord"
       type: array
     projects:
       items:
@@ -896,6 +923,7 @@ WorkspaceOverviewSnapshot:
     - workspace
     - metrics
     - projects
+    - projectTokenUsage
     - recentConversations
     - recentActivity
   type: object

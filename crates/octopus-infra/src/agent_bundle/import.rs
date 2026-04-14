@@ -223,6 +223,8 @@ pub(crate) fn execute_import(
                 &skill_ids,
                 &agent.mcp_server_names,
             );
+            record.default_model_strategy =
+                agent_assets::model_strategy_from_template(agent.model.as_deref());
             record.trust_metadata = plan
                 .bundle_manifest_template
                 .as_ref()
@@ -369,6 +371,8 @@ pub(crate) fn execute_import(
                 leader_agent_id.clone(),
                 member_agent_ids.clone(),
             );
+            record.default_model_strategy =
+                agent_assets::model_strategy_from_template(team.model.as_deref());
             record.trust_metadata = plan
                 .bundle_manifest_template
                 .as_ref()
@@ -722,6 +726,7 @@ pub(crate) fn build_bundle_plan(
                 skill_slugs: skill_slugs.clone(),
                 mcp_server_names: mcp_server_names.clone(),
                 avatar: parsed_agent.avatar.clone(),
+                model: parsed_agent.model.clone(),
             },
             &skill_slugs
                 .iter()
@@ -742,6 +747,7 @@ pub(crate) fn build_bundle_plan(
             skill_slugs,
             mcp_server_names,
             avatar: parsed_agent.avatar.clone(),
+            model: parsed_agent.model.clone(),
         });
     }
     planned_agents.sort_by(|left, right| left.source_id.cmp(&right.source_id));
@@ -831,6 +837,7 @@ pub(crate) fn build_bundle_plan(
                 member_names: member_names.clone(),
                 agent_source_ids: parsed_team.agent_source_ids.clone(),
                 avatar: parsed_team.avatar.clone(),
+                model: parsed_team.model.clone(),
             },
             &skill_slugs
                 .iter()
@@ -855,6 +862,7 @@ pub(crate) fn build_bundle_plan(
             member_names,
             agent_source_ids: parsed_team.agent_source_ids.clone(),
             avatar: parsed_team.avatar.clone(),
+            model: parsed_team.model.clone(),
         });
     }
     planned_teams.sort_by(|left, right| left.source_id.cmp(&right.source_id));

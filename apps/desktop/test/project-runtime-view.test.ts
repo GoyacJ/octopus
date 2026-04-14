@@ -63,7 +63,7 @@ async function waitForSelector(container: HTMLElement, selector: string, timeout
   }
 }
 
-describe('Project runtime config view', () => {
+describe('Removed project runtime route', () => {
   beforeEach(async () => {
     vi.restoreAllMocks()
     window.localStorage.clear()
@@ -71,13 +71,13 @@ describe('Project runtime config view', () => {
     document.body.innerHTML = ''
   })
 
-  it('renders the project runtime editor and effective preview from the project route', async () => {
+  it('falls back to workspace overview when the removed project runtime route is visited', async () => {
     const mounted = await mountRoutedApp('/workspaces/ws-local/projects/proj-redesign/runtime')
 
-    await waitForSelector(mounted.container, '[data-testid="project-runtime-editor"]')
+    await waitForSelector(mounted.container, '[data-testid="workspace-overview-view"]')
 
-    expect(mounted.container.querySelector('[data-testid="project-runtime-editor"]')).not.toBeNull()
-    expect(mounted.container.querySelector('[data-testid="project-runtime-effective-preview"]')).not.toBeNull()
+    expect(router.currentRoute.value.name).toBe('workspace-overview')
+    expect(mounted.container.querySelector('[data-testid="project-runtime-editor"]')).toBeNull()
 
     mounted.destroy()
   })

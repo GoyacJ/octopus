@@ -466,7 +466,7 @@ describe('workspace client transport', () => {
           status: 'pending',
           priority: 'high',
           actionable: true,
-          routeTo: '/workspaces/ws-local/projects/proj-redesign/runtime',
+          routeTo: '/workspaces/ws-local/projects/proj-redesign/settings',
           actionLabel: 'Review approval',
           createdAt: 1,
         },
@@ -482,7 +482,7 @@ describe('workspace client transport', () => {
     const records = await workspaceClient.inbox.list()
 
     expect(records[0]?.actionable).toBe(true)
-    expect(records[0]?.routeTo).toBe('/workspaces/ws-local/projects/proj-redesign/runtime')
+    expect(records[0]?.routeTo).toBe('/workspaces/ws-local/projects/proj-redesign/settings')
     expect(fetchSpy).toHaveBeenCalledWith(
       'http://127.0.0.1:43127/api/v1/inbox',
       expect.objectContaining({ method: 'GET', headers: expect.any(Headers) }),

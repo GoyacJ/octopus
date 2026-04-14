@@ -64,6 +64,104 @@ fn hash_bytes(bytes: &[u8]) -> String {
     format!("sha256-{:x}", hasher.finalize())
 }
 
+fn pending_mediation_projection_fields(
+    pending: Option<&RuntimePendingMediationSummary>,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+) {
+    let Some(pending) = pending else {
+        return (None, None, None, None, None, None);
+    };
+
+    (
+        Some(pending.mediation_kind.clone()),
+        Some(pending.target_kind.clone()),
+        Some(pending.target_ref.clone()),
+        pending.approval_layer.clone(),
+        pending.provider_key.clone(),
+        pending.checkpoint_ref.clone(),
+    )
+}
+
+fn last_mediation_projection_fields(
+    outcome: Option<&RuntimeMediationOutcome>,
+) -> (
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    Option<i64>,
+) {
+    let Some(outcome) = outcome else {
+        return (None, None, None, None);
+    };
+
+    (
+        Some(outcome.outcome.clone()),
+        Some(outcome.target_kind.clone()),
+        Some(outcome.target_ref.clone()),
+        outcome.resolved_at.map(|value| value as i64),
+    )
+}
+
+fn auth_challenge_state(run: &RuntimeRunSnapshot) -> Option<String> {
+    run.auth_target
+        .as_ref()
+        .map(|challenge| challenge.status.clone())
+        .or_else(|| {
+            run.checkpoint
+                .pending_auth_challenge
+                .as_ref()
+                .map(|challenge| challenge.status.clone())
+        })
+}
+
+fn approval_lineage_json(
+    pending_approval: Option<&ApprovalRequestRecord>,
+    auth_target: Option<&RuntimeAuthChallengeSummary>,
+    last_outcome: Option<&RuntimeMediationOutcome>,
+) -> Result<Option<String>, AppError> {
+    let mut lineage = Vec::new();
+
+    if let Some(approval) = pending_approval {
+        lineage.push(json!({
+            "id": approval.id,
+            "kind": "approval",
+            "status": approval.status,
+            "targetKind": approval.target_kind,
+            "targetRef": approval.target_ref,
+        }));
+    }
+    if let Some(challenge) = auth_target {
+        lineage.push(json!({
+            "id": challenge.id,
+            "kind": "auth",
+            "status": challenge.status,
+            "targetKind": challenge.target_kind,
+            "targetRef": challenge.target_ref,
+        }));
+    }
+    if let Some(outcome) = last_outcome {
+        lineage.push(json!({
+            "id": outcome.mediation_id,
+            "kind": outcome.mediation_kind,
+            "status": outcome.outcome,
+            "targetKind": outcome.target_kind,
+            "targetRef": outcome.target_ref,
+        }));
+    }
+
+    if lineage.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(serde_json::to_string(&lineage)?))
+    }
+}
+
 impl RuntimeAdapter {
     pub(super) fn runtime_events_path(&self, session_id: &str) -> PathBuf {
         self.state
@@ -134,6 +232,46 @@ impl RuntimeAdapter {
             .join(format!("{proposal_id}.json"))
     }
 
+    pub(super) fn runtime_mediation_checkpoint_path(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        mediation_id: &str,
+    ) -> PathBuf {
+        self.state
+            .paths
+            .runtime_mediation_checkpoints_dir
+            .join(session_id)
+            .join(run_id)
+            .join(format!("{mediation_id}.json"))
+    }
+
+    pub(super) fn runtime_mediation_checkpoint_ref(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        mediation_id: &str,
+    ) -> String {
+        self.relative_storage_path(&self.runtime_mediation_checkpoint_path(
+            session_id,
+            run_id,
+            mediation_id,
+        ))
+    }
+
+    pub(super) fn persist_runtime_mediation_checkpoint(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        mediation_id: &str,
+        checkpoint: &RuntimeRunCheckpoint,
+    ) -> Result<(String, String), AppError> {
+        self.persist_runtime_artifact(
+            self.runtime_mediation_checkpoint_path(session_id, run_id, mediation_id),
+            checkpoint,
+        )
+    }
+
     fn relative_storage_path(&self, path: &Path) -> String {
         path.strip_prefix(&self.state.paths.root)
             .unwrap_or(path)
@@ -154,7 +292,7 @@ impl RuntimeAdapter {
         Ok((self.relative_storage_path(&path), hash_bytes(&payload)))
     }
 
-    fn load_runtime_artifact<T: DeserializeOwned>(
+    pub(super) fn load_runtime_artifact<T: DeserializeOwned>(
         &self,
         storage_path: Option<&str>,
     ) -> Result<Option<T>, AppError> {
@@ -542,7 +680,11 @@ impl RuntimeAdapter {
                     proposal.summary,
                     proposal.proposal_state,
                     proposal.proposal_reason,
-                    proposal.review.as_ref().map(serde_json::to_string).transpose()?,
+                    proposal
+                        .review
+                        .as_ref()
+                        .map(serde_json::to_string)
+                        .transpose()?,
                     artifact_storage_path,
                     artifact_content_hash,
                     updated_at as i64,
@@ -596,11 +738,40 @@ impl RuntimeAdapter {
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
+        let (
+            pending_mediation_kind,
+            pending_target_kind,
+            pending_target_ref,
+            pending_approval_layer,
+            pending_provider_key,
+            pending_checkpoint_ref,
+        ) = pending_mediation_projection_fields(summary.pending_mediation.as_ref());
         let last_execution_outcome_json = summary
             .last_execution_outcome
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
+        let last_mediation_outcome_json = run
+            .last_mediation_outcome
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
+        let (
+            last_mediation_outcome,
+            last_mediation_target_kind,
+            last_mediation_target_ref,
+            last_mediation_at,
+        ) = last_mediation_projection_fields(run.last_mediation_outcome.as_ref());
+        let session_auth_challenge_state = auth_challenge_state(run);
+        let session_approval_lineage_json = approval_lineage_json(
+            aggregate.detail.pending_approval.as_ref(),
+            run.auth_target
+                .as_ref()
+                .or(run.checkpoint.pending_auth_challenge.as_ref()),
+            run.last_mediation_outcome.as_ref(),
+        )?;
+        let denied_exposure_count =
+            aggregate.detail.policy_decision_summary.denied_exposure_count as i64;
         let granted_tool_count = session_capability_snapshot.granted_tool_count as i64;
         let injected_skill_message_count =
             session_capability_snapshot.injected_skill_message_count as i64;
@@ -624,11 +795,38 @@ impl RuntimeAdapter {
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
+        let (
+            run_pending_mediation_kind,
+            run_pending_target_kind,
+            run_pending_target_ref,
+            run_pending_approval_layer,
+            run_pending_provider_key,
+            run_pending_checkpoint_ref,
+        ) = pending_mediation_projection_fields(run.pending_mediation.as_ref());
         let run_last_execution_outcome_json = run
             .last_execution_outcome
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
+        let run_last_mediation_outcome_json = run
+            .last_mediation_outcome
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?;
+        let (
+            run_last_mediation_outcome,
+            run_last_mediation_target_kind,
+            run_last_mediation_target_ref,
+            run_last_mediation_at,
+        ) = last_mediation_projection_fields(run.last_mediation_outcome.as_ref());
+        let run_auth_challenge_state = auth_challenge_state(run);
+        let run_approval_lineage_json = approval_lineage_json(
+            aggregate.detail.pending_approval.as_ref(),
+            run.auth_target
+                .as_ref()
+                .or(run.checkpoint.pending_auth_challenge.as_ref()),
+            run.last_mediation_outcome.as_ref(),
+        )?;
         let run_granted_tool_count = run_capability_snapshot.granted_tool_count as i64;
         let run_injected_skill_message_count =
             run_capability_snapshot.injected_skill_message_count as i64;
@@ -640,6 +838,7 @@ impl RuntimeAdapter {
             .iter()
             .filter(|provider| provider.degraded)
             .count() as i64;
+        let run_denied_exposure_count = aggregate.detail.policy_decision_summary.denied_exposure_count as i64;
         let workflow_run_id = summary
             .workflow
             .as_ref()
@@ -736,15 +935,20 @@ impl RuntimeAdapter {
                  (id, conversation_id, project_id, title, session_kind, status, updated_at, last_message_preview,
                   config_snapshot_id, effective_config_hash, started_from_scope_set, selected_actor_ref,
                   manifest_revision, active_run_id, subrun_count, workflow_run_id, workflow_status,
-                  workflow_total_steps, workflow_completed_steps, workflow_current_step_id,
+                 workflow_total_steps, workflow_completed_steps, workflow_current_step_id,
                   workflow_current_step_label, workflow_background_capable, pending_mailbox_ref,
                   pending_mailbox_count, handoff_count, background_run_id,
                   background_workflow_run_id, background_status, manifest_snapshot_ref,
                   session_policy_snapshot_ref, capability_plan_summary_json, provider_state_summary_json,
-                  pending_mediation_json, capability_state_ref, last_execution_outcome_json,
-                  granted_tool_count, injected_skill_message_count, deferred_capability_count,
-                  hidden_capability_count, degraded_provider_count, detail_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41)",
+                  pending_mediation_json, pending_mediation_kind, pending_target_kind,
+                  pending_target_ref, pending_approval_layer, pending_provider_key,
+                  pending_checkpoint_ref, capability_state_ref, last_execution_outcome_json,
+                  last_mediation_outcome_json, last_mediation_outcome, last_mediation_target_kind,
+                  last_mediation_target_ref, last_mediation_at, auth_challenge_state,
+                  approval_lineage_json, denied_exposure_count, granted_tool_count,
+                  injected_skill_message_count, deferred_capability_count, hidden_capability_count,
+                  degraded_provider_count, detail_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55)",
                 params![
                     summary.id,
                     summary.conversation_id,
@@ -779,8 +983,22 @@ impl RuntimeAdapter {
                     capability_plan_summary_json,
                     provider_state_summary_json,
                     pending_mediation_json,
+                    pending_mediation_kind,
+                    pending_target_kind,
+                    pending_target_ref,
+                    pending_approval_layer,
+                    pending_provider_key,
+                    pending_checkpoint_ref,
                     summary.capability_state_ref,
                     last_execution_outcome_json,
+                    last_mediation_outcome_json,
+                    last_mediation_outcome,
+                    last_mediation_target_kind,
+                    last_mediation_target_ref,
+                    last_mediation_at,
+                    session_auth_challenge_state,
+                    session_approval_lineage_json,
+                    denied_exposure_count,
                     granted_tool_count,
                     injected_skill_message_count,
                     deferred_capability_count,
@@ -797,14 +1015,19 @@ impl RuntimeAdapter {
                  (id, session_id, conversation_id, status, current_step, started_at, updated_at,
                   model_id, next_action, config_snapshot_id, effective_config_hash,
                   started_from_scope_set, run_kind, parent_run_id, actor_ref, delegated_by_tool_call_id,
-                  workflow_run_id, workflow_step_id, workflow_status, mailbox_ref, handoff_ref,
+                 workflow_run_id, workflow_step_id, workflow_status, mailbox_ref, handoff_ref,
                   background_state, worker_total_subruns, worker_active_subruns,
                   worker_completed_subruns, worker_failed_subruns, worker_dispatch_json,
                   workflow_run_detail_json, approval_state, trace_id, turn_id, capability_plan_summary_json,
-                  provider_state_summary_json, pending_mediation_json, capability_state_ref,
-                  last_execution_outcome_json, granted_tool_count, injected_skill_message_count,
-                  deferred_capability_count, hidden_capability_count, degraded_provider_count, run_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42)",
+                  provider_state_summary_json, pending_mediation_json, pending_mediation_kind,
+                  pending_target_kind, pending_target_ref, pending_approval_layer,
+                  pending_provider_key, pending_checkpoint_ref, capability_state_ref,
+                  last_execution_outcome_json, last_mediation_outcome_json, last_mediation_outcome,
+                  last_mediation_target_kind, last_mediation_target_ref, last_mediation_at,
+                  auth_challenge_state, approval_lineage_json, denied_exposure_count,
+                  granted_tool_count, injected_skill_message_count, deferred_capability_count,
+                  hidden_capability_count, degraded_provider_count, run_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44, ?45, ?46, ?47, ?48, ?49, ?50, ?51, ?52, ?53, ?54, ?55, ?56)",
                 params![
                     run.id,
                     run.session_id,
@@ -840,8 +1063,22 @@ impl RuntimeAdapter {
                     run_capability_plan_summary_json,
                     run_provider_state_summary_json,
                     run_pending_mediation_json,
+                    run_pending_mediation_kind,
+                    run_pending_target_kind,
+                    run_pending_target_ref,
+                    run_pending_approval_layer,
+                    run_pending_provider_key,
+                    run_pending_checkpoint_ref,
                     run.capability_state_ref,
                     run_last_execution_outcome_json,
+                    run_last_mediation_outcome_json,
+                    run_last_mediation_outcome,
+                    run_last_mediation_target_kind,
+                    run_last_mediation_target_ref,
+                    run_last_mediation_at,
+                    run_auth_challenge_state,
+                    run_approval_lineage_json,
+                    run_denied_exposure_count,
                     run_granted_tool_count,
                     run_injected_skill_message_count,
                     run_deferred_capability_count,
@@ -1085,8 +1322,10 @@ impl RuntimeAdapter {
                 .execute(
                     "INSERT OR REPLACE INTO runtime_approval_projections
                      (id, session_id, run_id, conversation_id, tool_name, summary, detail,
-                      risk_level, created_at, status, approval_json)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                      risk_level, created_at, status, approval_layer, capability_id,
+                      checkpoint_ref, provider_key, required_permission, requires_approval,
+                      requires_auth, target_kind, target_ref, escalation_reason, approval_json)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
                     params![
                         approval.id,
                         approval.session_id,
@@ -1098,7 +1337,64 @@ impl RuntimeAdapter {
                         approval.risk_level,
                         approval.created_at as i64,
                         approval.status,
+                        approval.approval_layer,
+                        approval.capability_id,
+                        approval.checkpoint_ref,
+                        approval.provider_key,
+                        approval.required_permission,
+                        bool_to_sql(approval.requires_approval),
+                        bool_to_sql(approval.requires_auth),
+                        approval.target_kind,
+                        approval.target_ref,
+                        approval.escalation_reason,
                         serde_json::to_string(approval)?,
+                    ],
+                )
+                .map_err(|error| AppError::database(error.to_string()))?;
+        }
+
+        connection
+            .execute(
+                "DELETE FROM runtime_auth_challenge_projections WHERE session_id = ?1",
+                [summary.id.as_str()],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+
+        if let Some(challenge) = run
+            .auth_target
+            .as_ref()
+            .or(run.checkpoint.pending_auth_challenge.as_ref())
+        {
+            connection
+                .execute(
+                    "INSERT OR REPLACE INTO runtime_auth_challenge_projections
+                     (id, session_id, run_id, conversation_id, summary, detail, status,
+                      resolution, created_at, updated_at, approval_layer, capability_id,
+                      checkpoint_ref, provider_key, required_permission, requires_approval,
+                      requires_auth, target_kind, target_ref, escalation_reason, challenge_json)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+                    params![
+                        challenge.id,
+                        challenge.session_id,
+                        challenge.run_id,
+                        challenge.conversation_id,
+                        challenge.summary,
+                        challenge.detail,
+                        challenge.status,
+                        challenge.resolution,
+                        challenge.created_at as i64,
+                        run.updated_at as i64,
+                        challenge.approval_layer,
+                        challenge.capability_id,
+                        challenge.checkpoint_ref,
+                        challenge.provider_key,
+                        challenge.required_permission,
+                        bool_to_sql(challenge.requires_approval),
+                        bool_to_sql(challenge.requires_auth),
+                        challenge.target_kind,
+                        challenge.target_ref,
+                        challenge.escalation_reason,
+                        serde_json::to_string(challenge)?,
                     ],
                 )
                 .map_err(|error| AppError::database(error.to_string()))?;

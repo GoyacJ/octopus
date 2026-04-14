@@ -4,6 +4,7 @@ import type {
   RuntimeCapabilityProviderState as OpenApiRuntimeCapabilityProviderState,
   RuntimeCapabilityStateSnapshot as OpenApiRuntimeCapabilityStateSnapshot,
   RuntimeCapabilitySurface as OpenApiRuntimeCapabilitySurface,
+  RuntimePendingMediation as OpenApiRuntimePendingMediation,
   RuntimePendingMediationSummary as OpenApiRuntimePendingMediationSummary,
 } from './generated'
 
@@ -12,4 +13,5 @@ export type RuntimeCapabilityPlanSummary = OpenApiRuntimeCapabilityPlanSummary
 export type RuntimeCapabilitySurface = OpenApiRuntimeCapabilitySurface
 export type RuntimeCapabilityStateSnapshot = OpenApiRuntimeCapabilityStateSnapshot
 export type RuntimeCapabilityExecutionOutcome = OpenApiRuntimeCapabilityExecutionOutcome
+export type RuntimePendingMediation = OpenApiRuntimePendingMediation
 export type RuntimePendingMediationSummary = OpenApiRuntimePendingMediationSummary

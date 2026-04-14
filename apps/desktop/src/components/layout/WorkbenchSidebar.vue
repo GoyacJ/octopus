@@ -97,7 +97,6 @@ const iconMap: Record<MenuIconKey, unknown> = {
   resources: FolderOpen,
   knowledge: LibraryBig,
   trace: Bell,
-  runtime: Settings,
   projects: FolderKanban,
   models: Cpu,
   tools: Wrench,
@@ -278,14 +277,6 @@ function projectModules(projectId: string): NavigationItem[] {
       icon: iconMap.settings,
       to: createProjectSurfaceTarget('project-settings', workspaceId, projectId),
       testId: `sidebar-project-module-${projectId}-settings`,
-    },
-    {
-      id: `${projectId}:runtime`,
-      label: t('sidebar.navigation.runtime'),
-      routeNames: ['project-runtime'],
-      icon: iconMap.runtime,
-      to: createProjectSurfaceTarget('project-runtime', workspaceId, projectId),
-      testId: `sidebar-project-module-${projectId}-runtime`,
     },
   ].filter((item) => {
     const routeName = item.routeNames[0]

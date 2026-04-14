@@ -70,7 +70,9 @@ pub(crate) fn build_memory_proposal(
     let kind = normalize_memory_kind(intent);
     let summary = memory_runtime::truncate_memory_summary(content);
     if selected_memory.iter().any(|item| {
-        item.kind == kind && item.summary.eq_ignore_ascii_case(&summary) && item.freshness_state == "fresh"
+        item.kind == kind
+            && item.summary.eq_ignore_ascii_case(&summary)
+            && item.freshness_state == "fresh"
     }) {
         return None;
     }
@@ -102,11 +104,13 @@ pub(crate) fn build_persisted_memory_record(
         } else {
             Some(project_id.to_string())
         },
-        owner_ref: Some(if proposal.scope == "project" && !project_id.trim().is_empty() {
-            format!("project:{project_id}")
-        } else {
-            "user:runtime".into()
-        }),
+        owner_ref: Some(
+            if proposal.scope == "project" && !project_id.trim().is_empty() {
+                format!("project:{project_id}")
+            } else {
+                "user:runtime".into()
+            },
+        ),
         source_run_id: Some(proposal.source_run_id.clone()),
         kind: proposal.kind.clone(),
         scope: proposal.scope.clone(),

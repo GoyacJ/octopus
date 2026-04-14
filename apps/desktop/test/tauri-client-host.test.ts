@@ -157,6 +157,25 @@ describe('host client transport', () => {
     expect(payload.workspaceConnections?.[0]?.workspaceConnectionId).toBe('conn-local')
   })
 
+  it('prefers the Tauri bridge when desktop internals are present even if browser runtime is configured', async () => {
+    vi.stubEnv('VITE_HOST_RUNTIME', 'browser')
+    vi.stubEnv('VITE_HOST_API_BASE_URL', 'http://127.0.0.1:43127')
+    vi.stubEnv('VITE_HOST_AUTH_TOKEN', 'browser-host-token')
+    Object.defineProperty(window, '__TAURI_INTERNALS__', {
+      configurable: true,
+      value: {},
+    })
+    invokeSpy.mockResolvedValue(null)
+
+    const client = await loadClientModule()
+    await (client as typeof client & {
+      pickAgentBundleArchive: () => Promise<unknown>
+    }).pickAgentBundleArchive()
+
+    expect(invokeSpy).toHaveBeenCalledWith('pick_agent_bundle_archive')
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it('persists browser host preferences through the host HTTP API instead of local storage fallback', async () => {
     vi.stubEnv('VITE_HOST_RUNTIME', 'browser')
     vi.stubEnv('VITE_HOST_API_BASE_URL', 'http://127.0.0.1:43127')

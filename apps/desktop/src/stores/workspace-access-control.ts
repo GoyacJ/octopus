@@ -40,7 +40,6 @@ import { getMenuDefinition } from '@/navigation/menuRegistry'
 
 import {
   activeWorkspaceConnectionId,
-  createWorkspaceRequestToken,
   ensureWorkspaceClientForConnection,
   resolveWorkspaceClientForConnection,
 } from './workspace-scope'
@@ -72,9 +71,12 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
   const menuGatesByConnection = ref<Record<string, MenuGateResult[]>>({})
   const menuPoliciesByConnection = ref<Record<string, MenuPolicyRecord[]>>({})
   const protectedResourcesByConnection = ref<Record<string, ProtectedResourceDescriptor[]>>({})
-  const requestTokens = ref<Record<string, number>>({})
   const loadingByConnection = ref<Record<string, boolean>>({})
   const errorsByConnection = ref<Record<string, string>>({})
+  const authorizationContextLoadedAtByConnection = ref<Record<string, number>>({})
+  const adminDataLoadedAtByConnection = ref<Record<string, number>>({})
+  const authorizationContextInflightByConnection: Record<string, Promise<void> | undefined> = {}
+  const adminDataInflightByConnection: Record<string, Promise<void> | undefined> = {}
 
   const activeConnectionId = computed(() => activeWorkspaceConnectionId())
   const authorization = computed(() => authorizationsByConnection.value[activeConnectionId.value] ?? null)
@@ -129,23 +131,113 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     availableAccessControlMenus.value.find(menu => Boolean(getMenuDefinition(menu.id)?.routeName))?.routeName ?? null,
   )
 
-  async function load(workspaceConnectionId?: string) {
+  function logDevTiming(label: string, startedAt: number, detail?: string) {
+    if (!import.meta.env.DEV) {
+      return
+    }
+
+    const suffix = detail ? ` ${detail}` : ''
+    console.debug(`[access-control] ${label}${suffix} ${Math.round(performance.now() - startedAt)}ms`)
+  }
+
+  function hasAuthorizationContext(connectionId: string) {
+    return Boolean(authorizationsByConnection.value[connectionId] && menuDefinitionsByConnection.value[connectionId])
+  }
+
+  async function ensureAuthorizationContext(
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
     const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
     if (!resolvedClient) {
       return
     }
 
     const { client, connectionId } = resolvedClient
-    const token = createWorkspaceRequestToken(requestTokens.value[connectionId] ?? 0)
-    requestTokens.value[connectionId] = token
+    if (!options.force && hasAuthorizationContext(connectionId)) {
+      return
+    }
+
+    const inflight = authorizationContextInflightByConnection[connectionId]
+    if (inflight && !options.force) {
+      await inflight
+      return
+    }
+
+    const startedAt = performance.now()
+    const task = (async () => {
+      const [
+        nextAuthorization,
+        nextMenuDefinitions,
+      ] = await Promise.all([
+        client.accessControl.getCurrentAuthorization(),
+        client.accessControl.listMenuDefinitions(),
+      ])
+
+      authorizationsByConnection.value = {
+        ...authorizationsByConnection.value,
+        [connectionId]: nextAuthorization,
+      }
+      menuDefinitionsByConnection.value = {
+        ...menuDefinitionsByConnection.value,
+        [connectionId]: nextMenuDefinitions,
+      }
+      authorizationContextLoadedAtByConnection.value = {
+        ...authorizationContextLoadedAtByConnection.value,
+        [connectionId]: Date.now(),
+      }
+      errorsByConnection.value = {
+        ...errorsByConnection.value,
+        [connectionId]: '',
+      }
+    })()
+    authorizationContextInflightByConnection[connectionId] = task
+
+    try {
+      await task
+    } catch (cause) {
+      errorsByConnection.value = {
+        ...errorsByConnection.value,
+        [connectionId]: cause instanceof Error ? cause.message : 'Failed to load authorization context',
+      }
+    } finally {
+      if (authorizationContextInflightByConnection[connectionId] === task) {
+        delete authorizationContextInflightByConnection[connectionId]
+      }
+      logDevTiming('ensureAuthorizationContext', startedAt, connectionId)
+    }
+  }
+
+  async function loadAdminData(
+    workspaceConnectionId?: string,
+    options: { force?: boolean } = {},
+  ) {
+    const resolvedClient = resolveWorkspaceClientForConnection(workspaceConnectionId)
+    if (!resolvedClient) {
+      return
+    }
+
+    const { client, connectionId } = resolvedClient
+    if (!options.force && adminDataLoadedAtByConnection.value[connectionId]) {
+      return
+    }
+
+    const inflight = adminDataInflightByConnection[connectionId]
+    if (inflight && !options.force) {
+      await inflight
+      return
+    }
+
+    await ensureAuthorizationContext(connectionId, options)
+
+    const startedAt = performance.now()
     loadingByConnection.value = {
       ...loadingByConnection.value,
       [connectionId]: true,
     }
 
-    try {
+    const task = (async () => {
       const [
-        nextAuthorization,
         nextAudit,
         nextSessions,
         nextUsers,
@@ -158,13 +250,11 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
         nextRoleBindings,
         nextDataPolicies,
         nextResourcePolicies,
-        nextMenuDefinitions,
         nextFeatureDefinitions,
         nextMenuGates,
         nextMenuPolicies,
         nextProtectedResources,
       ] = await Promise.all([
-        client.accessControl.getCurrentAuthorization(),
         client.accessControl.listAudit(),
         client.accessControl.listSessions(),
         client.accessControl.listUsers(),
@@ -177,21 +267,12 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
         client.accessControl.listRoleBindings(),
         client.accessControl.listDataPolicies(),
         client.accessControl.listResourcePolicies(),
-        client.accessControl.listMenuDefinitions(),
         client.accessControl.listFeatureDefinitions(),
         client.accessControl.listMenuGateResults(),
         client.accessControl.listMenuPolicies(),
         client.accessControl.listProtectedResources(),
       ])
 
-      if (requestTokens.value[connectionId] !== token) {
-        return
-      }
-
-      authorizationsByConnection.value = {
-        ...authorizationsByConnection.value,
-        [connectionId]: nextAuthorization,
-      }
       auditByConnection.value = {
         ...auditByConnection.value,
         [connectionId]: nextAudit.items,
@@ -252,10 +333,6 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
         ...resourcePoliciesByConnection.value,
         [connectionId]: nextResourcePolicies,
       }
-      menuDefinitionsByConnection.value = {
-        ...menuDefinitionsByConnection.value,
-        [connectionId]: nextMenuDefinitions,
-      }
       featureDefinitionsByConnection.value = {
         ...featureDefinitionsByConnection.value,
         [connectionId]: nextFeatureDefinitions,
@@ -272,24 +349,33 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
         ...protectedResourcesByConnection.value,
         [connectionId]: nextProtectedResources,
       }
+      adminDataLoadedAtByConnection.value = {
+        ...adminDataLoadedAtByConnection.value,
+        [connectionId]: Date.now(),
+      }
       errorsByConnection.value = {
         ...errorsByConnection.value,
         [connectionId]: '',
       }
+    })()
+    adminDataInflightByConnection[connectionId] = task
+
+    try {
+      await task
     } catch (cause) {
-      if (requestTokens.value[connectionId] === token) {
-        errorsByConnection.value = {
-          ...errorsByConnection.value,
-          [connectionId]: cause instanceof Error ? cause.message : 'Failed to load access-control data',
-        }
+      errorsByConnection.value = {
+        ...errorsByConnection.value,
+        [connectionId]: cause instanceof Error ? cause.message : 'Failed to load access-control data',
       }
     } finally {
-      if (requestTokens.value[connectionId] === token) {
-        loadingByConnection.value = {
-          ...loadingByConnection.value,
-          [connectionId]: false,
-        }
+      if (adminDataInflightByConnection[connectionId] === task) {
+        delete adminDataInflightByConnection[connectionId]
       }
+      loadingByConnection.value = {
+        ...loadingByConnection.value,
+        [connectionId]: false,
+      }
+      logDevTiming('loadAdminData', startedAt, connectionId)
     }
   }
 
@@ -394,9 +480,12 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     menuGatesByConnection.value = clearRecord(menuGatesByConnection.value)
     menuPoliciesByConnection.value = clearRecord(menuPoliciesByConnection.value)
     protectedResourcesByConnection.value = clearRecord(protectedResourcesByConnection.value)
-    requestTokens.value = clearRecord(requestTokens.value)
     loadingByConnection.value = clearRecord(loadingByConnection.value)
     errorsByConnection.value = clearRecord(errorsByConnection.value)
+    authorizationContextLoadedAtByConnection.value = clearRecord(authorizationContextLoadedAtByConnection.value)
+    adminDataLoadedAtByConnection.value = clearRecord(adminDataLoadedAtByConnection.value)
+    delete authorizationContextInflightByConnection[workspaceConnectionId]
+    delete adminDataInflightByConnection[workspaceConnectionId]
   }
 
   async function revokeSession(sessionId: string, workspaceConnectionId?: string) {
@@ -412,7 +501,7 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
   }
 
   async function reloadAll(workspaceConnectionId?: string) {
-    await load(workspaceConnectionId)
+    await loadAdminData(workspaceConnectionId, { force: true })
   }
 
   async function createUser(input: AccessUserUpsertRequest, workspaceConnectionId?: string) {
@@ -704,7 +793,9 @@ export const useWorkspaceAccessControlStore = defineStore('workspace-access-cont
     availableAccessControlMenus,
     firstAccessibleConsoleRouteName,
     firstAccessibleAccessControlRouteName,
-    load,
+    ensureAuthorizationContext,
+    loadAdminData,
+    load: loadAdminData,
     loadAudit,
     loadMoreAudit,
     reloadAll,

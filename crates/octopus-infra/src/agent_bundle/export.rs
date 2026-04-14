@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, fs};
+use std::collections::BTreeSet;
 
 use octopus_core::{AppError, ExportWorkspaceAgentBundleInput, ExportWorkspaceAgentBundleResult};
 use rusqlite::Connection;
@@ -44,31 +44,6 @@ pub(crate) fn export_assets(
         )?);
     }
 
-    for descriptor in &context.descriptors {
-        let absolute_path = paths.root.join(&descriptor.storage_path);
-        if !absolute_path.is_file() {
-            continue;
-        }
-        files.push(agent_assets::encode_file(
-            &format!("{root_dir_name}/{}", descriptor.source_path),
-            agent_assets::content_type_for_export(&descriptor.source_path),
-            fs::read(absolute_path)?,
-        ));
-    }
-
-    files.push(agent_assets::encode_file(
-        &format!("{root_dir_name}/.octopus/manifest.json"),
-        "application/json",
-        serde_json::to_vec_pretty(&context.bundle_manifest)?,
-    ));
-    if !context.asset_state.is_empty() {
-        files.push(agent_assets::encode_file(
-            &format!("{root_dir_name}/{}", agent_assets::BUNDLE_ASSET_STATE_PATH),
-            "application/json",
-            serde_json::to_vec_pretty(&context.asset_state)?,
-        ));
-    }
-
     Ok(ExportWorkspaceAgentBundleResult {
         root_dir_name,
         file_count: files.len() as u64,
@@ -76,7 +51,11 @@ pub(crate) fn export_assets(
         team_count: context.teams.len() as u64,
         skill_count: context.skill_paths.len() as u64,
         mcp_count: context.mcp_configs.len() as u64,
-        avatar_count: context.avatar_payloads.len() as u64,
+        avatar_count: context
+            .avatar_payloads
+            .values()
+            .filter(|payload| payload.is_some())
+            .count() as u64,
         bundle_manifest: context.bundle_manifest.clone(),
         translation_report: context.translation_report.clone(),
         files,

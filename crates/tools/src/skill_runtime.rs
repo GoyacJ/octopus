@@ -14,6 +14,8 @@ use crate::capability_runtime::{
     CapabilityVisibility,
 };
 
+const IGNORED_TEMPLATE_ROOTS: &[&str] = &["系统通用", "管理层与PMO"];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum SkillContextKind {
@@ -762,8 +764,51 @@ fn resolve_bundled_skill_roots() -> Vec<PathBuf> {
         }
     }
 
-    vec![PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../octopus-infra/seed/builtin-assets/skills")]
+    discover_template_skill_roots(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../templates"),
+    )
+}
+
+fn discover_template_skill_roots(templates_root: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(templates_root) else {
+        return Vec::new();
+    };
+
+    let mut roots = Vec::new();
+    for entry in entries.flatten() {
+        let department_root = entry.path();
+        if !department_root.is_dir() {
+            continue;
+        }
+        let department_name = department_root
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default();
+        if IGNORED_TEMPLATE_ROOTS
+            .iter()
+            .any(|candidate| candidate == &department_name)
+        {
+            continue;
+        }
+
+        let Ok(role_entries) = std::fs::read_dir(&department_root) else {
+            continue;
+        };
+        for role_entry in role_entries.flatten() {
+            let role_root = role_entry.path();
+            if !role_root.is_dir() {
+                continue;
+            }
+            let skill_root = role_root.join("skills");
+            if skill_root.is_dir() {
+                roots.push(skill_root);
+            }
+        }
+    }
+
+    roots.sort();
+    roots.dedup();
+    roots
 }
 
 fn load_skill_capability_from_path(
@@ -1015,4 +1060,44 @@ fn spawn_skill_fork_job(job: crate::AgentJob) -> Result<(), String> {
 fn load_fork_agent_manifest(path: &str) -> Option<crate::AgentOutput> {
     let contents = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&contents).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::discover_template_skill_roots;
+
+    #[test]
+    fn discover_template_skill_roots_collects_nested_role_skill_dirs() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let root = temp.path();
+        std::fs::create_dir_all(root.join("财务部/财务分析师/skills/reporting"))
+            .expect("create finance skill");
+        std::fs::create_dir_all(root.join("产品部/产品经理/skills/discovery"))
+            .expect("create product skill");
+        std::fs::create_dir_all(root.join("管理层与PMO/项目经理/skills/ignored"))
+            .expect("create ignored skill");
+        std::fs::write(
+            root.join("财务部/财务分析师/skills/reporting/SKILL.md"),
+            "---\nname: reporting\n---\n",
+        )
+        .expect("write finance skill");
+        std::fs::write(
+            root.join("产品部/产品经理/skills/discovery/SKILL.md"),
+            "---\nname: discovery\n---\n",
+        )
+        .expect("write product skill");
+
+        let roots = discover_template_skill_roots(root);
+
+        assert_eq!(roots.len(), 2);
+        assert!(roots
+            .iter()
+            .any(|path| path.ends_with("财务部/财务分析师/skills")));
+        assert!(roots
+            .iter()
+            .any(|path| path.ends_with("产品部/产品经理/skills")));
+        assert!(!roots
+            .iter()
+            .any(|path| path.ends_with("管理层与PMO/项目经理/skills")));
+    }
 }

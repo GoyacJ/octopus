@@ -28,6 +28,7 @@ fn split_persistence_module_exposes_runtime_debug_paths() {
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
         infra.observation.clone(),
+        infra.authorization.clone(),
         Arc::new(MockRuntimeModelExecutor),
     );
 

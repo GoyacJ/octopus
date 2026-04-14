@@ -4,7 +4,9 @@ mod adapter_state;
 #[cfg(test)]
 mod adapter_tests;
 mod agent_runtime_core;
+mod approval_broker;
 mod approval_flow;
+mod auth_mediation;
 mod background_runtime;
 mod capability_planner_bridge;
 mod capability_state;
@@ -21,6 +23,7 @@ mod memory_selector;
 mod memory_writer;
 mod model_usage;
 mod persistence;
+mod policy_compiler;
 mod registry;
 mod run_context;
 mod runtime_config;
@@ -49,29 +52,30 @@ use async_trait::async_trait;
 use octopus_core::{
     timestamp_now, AgentRecord, AppError, ApprovalRequestRecord, AuditRecord,
     ConfiguredModelRecord, CostLedgerEntry, CreateRuntimeSessionInput, ModelCatalogSnapshot,
-    ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput, ResolveRuntimeMemoryProposalInput,
-    ResolvedExecutionTarget,
-    RuntimeBackgroundRunSummary, RuntimeBootstrap, RuntimeCapabilityExecutionOutcome,
-    RuntimeCapabilityPlanSummary, RuntimeCapabilityProviderState, RuntimeCapabilityStateSnapshot,
-    RuntimeConfigPatch, RuntimeConfigSnapshotSummary, RuntimeConfigSource,
-    RuntimeConfigValidationResult, RuntimeConfiguredModelProbeInput,
-    RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig, RuntimeEventEnvelope,
-    RuntimeHandoffSummary, RuntimeMailboxSummary, RuntimeMemorySummary, RuntimeMessage,
-    RuntimeMemoryFreshnessSummary, RuntimeMemoryProposal, RuntimeMemoryProposalReview,
-    RuntimeMemorySelectionSummary,
-    RuntimePendingMediationSummary, RuntimeRunCheckpoint, RuntimeRunSnapshot,
-    RuntimeSecretReferenceStatus, RuntimeSessionDetail, RuntimeSessionPolicySnapshot,
-    RuntimeSessionSummary, RuntimeSelectedMemoryItem, RuntimeSubrunSummary,
-    RuntimeTraceContext, RuntimeTraceItem, RuntimeUsageSummary,
-    RuntimeWorkerDispatchSummary, RuntimeWorkflowRunDetail, RuntimeWorkflowSummary,
-    SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord,
+    ProjectWorkspaceAssignments, ResolveRuntimeApprovalInput, ResolveRuntimeAuthChallengeInput,
+    ResolveRuntimeMemoryProposalInput, ResolvedExecutionTarget, RuntimeAuthChallengeSummary,
+    RuntimeAuthStateSummary, RuntimeBackgroundRunSummary, RuntimeBootstrap,
+    RuntimeCapabilityExecutionOutcome, RuntimeCapabilityPlanSummary,
+    RuntimeCapabilityPolicyDecisions,
+    RuntimeCapabilityProviderState, RuntimeCapabilityStateSnapshot, RuntimeConfigPatch,
+    RuntimeConfigSnapshotSummary, RuntimeConfigSource, RuntimeConfigValidationResult,
+    RuntimeConfiguredModelProbeInput, RuntimeConfiguredModelProbeResult, RuntimeEffectiveConfig,
+    RuntimeEventEnvelope, RuntimeHandoffSummary, RuntimeMailboxSummary,
+    RuntimeMediationOutcome, RuntimeMemoryFreshnessSummary, RuntimeMemoryProposal,
+    RuntimeMemoryProposalReview, RuntimeMemorySelectionSummary, RuntimeMemorySummary,
+    RuntimeMessage, RuntimePendingMediationSummary, RuntimePolicyDecisionSummary,
+    RuntimeRunCheckpoint, RuntimeRunSnapshot, RuntimeSecretReferenceStatus,
+    RuntimeSelectedMemoryItem, RuntimeSessionDetail, RuntimeSessionPolicySnapshot,
+    RuntimeSessionSummary, RuntimeSubrunSummary, RuntimeTraceContext, RuntimeTraceItem,
+    RuntimeUsageSummary, RuntimeWorkerDispatchSummary, RuntimeWorkflowRunDetail,
+    RuntimeWorkflowSummary, SubmitRuntimeTurnInput, TeamRecord, TraceEventRecord,
     RUNTIME_PERMISSION_DANGER_FULL_ACCESS, RUNTIME_PERMISSION_READ_ONLY,
     RUNTIME_PERMISSION_WORKSPACE_WRITE,
 };
 use octopus_infra::WorkspacePaths;
 use octopus_platform::{
-    ModelRegistryService, ObservationService, RuntimeConfigService, RuntimeExecutionService,
-    RuntimeSessionService,
+    AuthorizationService, ModelRegistryService, ObservationService, RuntimeConfigService,
+    RuntimeExecutionService, RuntimeSessionService,
 };
 use plugins as _;
 use runtime::{apply_config_patch, ConfigDocument, ConfigLoader, ConfigSource, JsonValue};
@@ -102,11 +106,13 @@ impl RuntimeAdapter {
         workspace_id: impl Into<String>,
         paths: WorkspacePaths,
         observation: Arc<dyn ObservationService>,
+        authorization: Arc<dyn AuthorizationService>,
     ) -> Self {
         Self::new_with_executor(
             workspace_id,
             paths,
             observation,
+            authorization,
             Arc::new(LiveRuntimeModelExecutor::new()),
         )
     }
@@ -115,6 +121,7 @@ impl RuntimeAdapter {
         workspace_id: impl Into<String>,
         paths: WorkspacePaths,
         observation: Arc<dyn ObservationService>,
+        authorization: Arc<dyn AuthorizationService>,
         executor: Arc<dyn RuntimeModelExecutor>,
     ) -> Self {
         let config_loader = ConfigLoader::new(&paths.root, paths.runtime_config_dir.clone());
@@ -123,6 +130,7 @@ impl RuntimeAdapter {
                 workspace_id: workspace_id.into(),
                 paths,
                 observation,
+                authorization,
                 config_loader,
                 executor,
                 sessions: Mutex::new(HashMap::new()),

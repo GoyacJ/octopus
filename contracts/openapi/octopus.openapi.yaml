@@ -2574,6 +2574,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiErrorEnvelope"
           description: API error envelope.
+  /api/v1/runtime/sessions/{sessionId}/auth-challenges/{challengeId}:
+    post:
+      operationId: resolveRuntimeAuthChallenge
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: challengeId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResolveRuntimeAuthChallengeInput"
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntimeRunSnapshot"
+          description: Runtime run snapshot payload after auth challenge resolution.
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorEnvelope"
+          description: API error envelope.
   /api/v1/runtime/sessions/{sessionId}/events:
     get:
       operationId: listRuntimeSessionEvents
@@ -7333,13 +7366,96 @@ components:
         - tool.skill
         - tool.mcp
       type: string
+    ProjectDashboardBreakdownItem:
+      additionalProperties: false
+      properties:
+        helper:
+          type: string
+        id:
+          type: string
+        label:
+          type: string
+        value:
+          minimum: 0
+          type: integer
+      required:
+        - id
+        - label
+        - value
+      type: object
+    ProjectDashboardConversationInsight:
+      additionalProperties: false
+      properties:
+        approvalCount:
+          minimum: 0
+          type: integer
+        conversationId:
+          type: string
+        id:
+          type: string
+        lastMessagePreview:
+          type: string
+        messageCount:
+          minimum: 0
+          type: integer
+        status:
+          type: string
+        title:
+          type: string
+        tokenCount:
+          minimum: 0
+          type: integer
+        toolCallCount:
+          minimum: 0
+          type: integer
+        updatedAt:
+          minimum: 0
+          type: integer
+      required:
+        - id
+        - conversationId
+        - title
+        - status
+        - updatedAt
+        - messageCount
+        - toolCallCount
+        - approvalCount
+        - tokenCount
+      type: object
+    ProjectDashboardRankingItem:
+      additionalProperties: false
+      properties:
+        helper:
+          type: string
+        id:
+          type: string
+        label:
+          type: string
+        value:
+          minimum: 0
+          type: integer
+      required:
+        - id
+        - label
+        - value
+      type: object
     ProjectDashboardSnapshot:
       additionalProperties: false
       properties:
+        conversationInsights:
+          items:
+            $ref: "#/components/schemas/ProjectDashboardConversationInsight"
+          type: array
         metrics:
           items:
             $ref: "#/components/schemas/WorkspaceMetricRecord"
           type: array
+        modelBreakdown:
+          items:
+            $ref: "#/components/schemas/ProjectDashboardBreakdownItem"
+          type: array
+        overview:
+          $ref: "#/components/schemas/ProjectDashboardSummary"
         project:
           $ref: "#/components/schemas/ProjectRecord"
         recentActivity:
@@ -7350,11 +7466,181 @@ components:
           items:
             $ref: "#/components/schemas/ConversationRecord"
           type: array
+        resourceBreakdown:
+          items:
+            $ref: "#/components/schemas/ProjectDashboardBreakdownItem"
+          type: array
+        toolRanking:
+          items:
+            $ref: "#/components/schemas/ProjectDashboardRankingItem"
+          type: array
+        trend:
+          items:
+            $ref: "#/components/schemas/ProjectDashboardTrendPoint"
+          type: array
+        usedTokens:
+          minimum: 0
+          type: integer
+        userStats:
+          items:
+            $ref: "#/components/schemas/ProjectDashboardUserStat"
+          type: array
       required:
         - project
         - metrics
+        - overview
+        - trend
+        - userStats
+        - conversationInsights
+        - toolRanking
+        - resourceBreakdown
+        - modelBreakdown
         - recentConversations
         - recentActivity
+        - usedTokens
+      type: object
+    ProjectDashboardSummary:
+      additionalProperties: false
+      properties:
+        activeUserCount:
+          minimum: 0
+          type: integer
+        activityCount:
+          minimum: 0
+          type: integer
+        agentCount:
+          minimum: 0
+          type: integer
+        approvalCount:
+          minimum: 0
+          type: integer
+        conversationCount:
+          minimum: 0
+          type: integer
+        knowledgeCount:
+          minimum: 0
+          type: integer
+        memberCount:
+          minimum: 0
+          type: integer
+        messageCount:
+          minimum: 0
+          type: integer
+        resourceCount:
+          minimum: 0
+          type: integer
+        teamCount:
+          minimum: 0
+          type: integer
+        tokenRecordCount:
+          minimum: 0
+          type: integer
+        toolCallCount:
+          minimum: 0
+          type: integer
+        toolCount:
+          minimum: 0
+          type: integer
+        totalTokens:
+          minimum: 0
+          type: integer
+      required:
+        - memberCount
+        - activeUserCount
+        - agentCount
+        - teamCount
+        - conversationCount
+        - messageCount
+        - toolCallCount
+        - approvalCount
+        - resourceCount
+        - knowledgeCount
+        - toolCount
+        - tokenRecordCount
+        - totalTokens
+        - activityCount
+      type: object
+    ProjectDashboardTrendPoint:
+      additionalProperties: false
+      properties:
+        approvalCount:
+          minimum: 0
+          type: integer
+        conversationCount:
+          minimum: 0
+          type: integer
+        id:
+          type: string
+        label:
+          type: string
+        messageCount:
+          minimum: 0
+          type: integer
+        timestamp:
+          minimum: 0
+          type: integer
+        tokenCount:
+          minimum: 0
+          type: integer
+        toolCallCount:
+          minimum: 0
+          type: integer
+      required:
+        - id
+        - label
+        - timestamp
+        - conversationCount
+        - messageCount
+        - toolCallCount
+        - approvalCount
+        - tokenCount
+      type: object
+    ProjectDashboardUserStat:
+      additionalProperties: false
+      properties:
+        activityCount:
+          minimum: 0
+          type: integer
+        activityTrend:
+          items:
+            minimum: 0
+            type: integer
+          type: array
+        approvalCount:
+          minimum: 0
+          type: integer
+        conversationCount:
+          minimum: 0
+          type: integer
+        displayName:
+          type: string
+        messageCount:
+          minimum: 0
+          type: integer
+        tokenCount:
+          minimum: 0
+          type: integer
+        tokenTrend:
+          items:
+            minimum: 0
+            type: integer
+          type: array
+        toolCallCount:
+          minimum: 0
+          type: integer
+        userId:
+          type: string
+      required:
+        - userId
+        - displayName
+        - activityCount
+        - conversationCount
+        - messageCount
+        - toolCallCount
+        - approvalCount
+        - tokenCount
+        - activityTrend
+        - tokenTrend
       type: object
     ProjectDefaultPermissions:
       additionalProperties: false
@@ -7571,6 +7857,21 @@ components:
         - teamId
         - linkedAt
       type: object
+    ProjectTokenUsageRecord:
+      additionalProperties: false
+      properties:
+        projectId:
+          type: string
+        projectName:
+          type: string
+        usedTokens:
+          minimum: 0
+          type: integer
+      required:
+        - projectId
+        - projectName
+        - usedTokens
+      type: object
     ProjectToolAssignments:
       additionalProperties: false
       properties:
@@ -7735,6 +8036,20 @@ components:
           $ref: "#/components/schemas/DecisionAction"
       required:
         - decision
+      type: object
+    ResolveRuntimeAuthChallengeInput:
+      additionalProperties: false
+      properties:
+        note:
+          type: string
+        resolution:
+          enum:
+            - resolved
+            - failed
+            - cancelled
+          type: string
+      required:
+        - resolution
       type: object
     ResolveRuntimeMemoryProposalInput:
       additionalProperties: false
@@ -7921,6 +8236,10 @@ components:
       properties:
         approvalLayer:
           type: string
+        capabilityId:
+          type: string
+        checkpointRef:
+          type: string
         conversationId:
           type: string
         createdAt:
@@ -7931,6 +8250,14 @@ components:
           type: string
         id:
           type: string
+        providerKey:
+          type: string
+        requiredPermission:
+          type: string
+        requiresApproval:
+          type: boolean
+        requiresAuth:
+          type: boolean
         riskLevel:
           $ref: "#/components/schemas/RiskLevel"
         runId:
@@ -7963,9 +8290,100 @@ components:
         - createdAt
         - status
         - approvalLayer
+        - requiresApproval
+        - requiresAuth
         - targetKind
         - targetRef
         - escalationReason
+      type: object
+    RuntimeAuthChallengeSummary:
+      additionalProperties: false
+      properties:
+        approvalLayer:
+          type: string
+        capabilityId:
+          type: string
+        checkpointRef:
+          type: string
+        conversationId:
+          type: string
+        createdAt:
+          type: integer
+        detail:
+          type: string
+        escalationReason:
+          type: string
+        id:
+          type: string
+        providerKey:
+          type: string
+        requiredPermission:
+          type: string
+        requiresApproval:
+          type: boolean
+        requiresAuth:
+          type: boolean
+        resolution:
+          type: string
+        runId:
+          type: string
+        sessionId:
+          type: string
+        status:
+          enum:
+            - pending
+            - resolved
+            - failed
+            - cancelled
+          type: string
+        summary:
+          type: string
+        targetKind:
+          type: string
+        targetRef:
+          type: string
+        toolName:
+          type: string
+      required:
+        - id
+        - sessionId
+        - conversationId
+        - runId
+        - status
+        - summary
+        - detail
+        - createdAt
+        - approvalLayer
+        - targetKind
+        - targetRef
+        - escalationReason
+        - requiresApproval
+        - requiresAuth
+      type: object
+    RuntimeAuthStateSummary:
+      additionalProperties: false
+      properties:
+        challengedProviderKeys:
+          items:
+            type: string
+          type: array
+        failedProviderKeys:
+          items:
+            type: string
+          type: array
+        lastChallengeAt:
+          type: integer
+        pendingChallengeCount:
+          type: integer
+        resolvedProviderKeys:
+          items:
+            type: string
+          type: array
+      required:
+        - pendingChallengeCount
+        - resolvedProviderKeys
+        - challengedProviderKeys
+        - failedProviderKeys
       type: object
     RuntimeBackgroundRunSummary:
       additionalProperties: false
@@ -8376,6 +8794,10 @@ components:
           type: string
         approval:
           $ref: "#/components/schemas/RuntimeApprovalRequest"
+        approvalLayer:
+          type: string
+        authChallenge:
+          $ref: "#/components/schemas/RuntimeAuthChallengeSummary"
         capabilityPlanSummary:
           $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
         capabilityStateRef:
@@ -8400,6 +8822,8 @@ components:
           $ref: "#/components/schemas/RuntimeEventKind"
         lastExecutionOutcome:
           $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+        lastMediationOutcome:
+          $ref: "#/components/schemas/RuntimeMediationOutcome"
         memoryProposal:
           $ref: "#/components/schemas/RuntimeMemoryProposal"
         memorySelectionSummary:
@@ -8414,7 +8838,7 @@ components:
           additionalProperties: true
           type: object
         pendingMediation:
-          $ref: "#/components/schemas/RuntimePendingMediationSummary"
+          $ref: "#/components/schemas/RuntimePendingMediation"
         projectId:
           type: string
         providerStateSummary:
@@ -8435,6 +8859,10 @@ components:
           type: string
         summary:
           $ref: "#/components/schemas/RuntimeSessionSummary"
+        targetKind:
+          type: string
+        targetRef:
+          type: string
         toolUseId:
           type: string
         trace:
@@ -8476,6 +8904,13 @@ components:
         - mcp.failed
         - approval.requested
         - approval.resolved
+        - approval.cancelled
+        - auth.challenge_requested
+        - auth.resolved
+        - auth.failed
+        - policy.exposure_denied
+        - policy.surface_deferred
+        - policy.session_compiled
         - trace.emitted
         - subrun.spawned
         - subrun.completed
@@ -8548,6 +8983,47 @@ components:
         - pendingCount
         - totalMessages
         - updatedAt
+      type: object
+    RuntimeMediationOutcome:
+      additionalProperties: false
+      properties:
+        approvalLayer:
+          type: string
+        capabilityId:
+          type: string
+        checkpointRef:
+          type: string
+        detail:
+          type: string
+        mediationId:
+          type: string
+        mediationKind:
+          type: string
+        outcome:
+          type: string
+        providerKey:
+          type: string
+        reason:
+          type: string
+        requiresApproval:
+          type: boolean
+        requiresAuth:
+          type: boolean
+        resolvedAt:
+          type: integer
+        targetKind:
+          type: string
+        targetRef:
+          type: string
+        toolName:
+          type: string
+      required:
+        - mediationKind
+        - outcome
+        - requiresApproval
+        - requiresAuth
+        - targetKind
+        - targetRef
       type: object
     RuntimeMemoryFreshnessState:
       enum:
@@ -8768,10 +9244,24 @@ components:
         - timestamp
         - status
       type: object
-    RuntimePendingMediationSummary:
+    RuntimePendingMediation:
       additionalProperties: false
       properties:
+        approvalId:
+          type: string
+        approvalLayer:
+          type: string
+        authChallengeId:
+          type: string
         capabilityId:
+          type: string
+        checkpointRef:
+          type: string
+        detail:
+          type: string
+        escalationReason:
+          type: string
+        mediationId:
           type: string
         mediationKind:
           type: string
@@ -8779,11 +9269,32 @@ components:
           type: string
         reason:
           type: string
+        requiredPermission:
+          type: string
+        requiresApproval:
+          type: boolean
+        requiresAuth:
+          type: boolean
+        state:
+          type: string
+        summary:
+          type: string
+        targetKind:
+          type: string
+        targetRef:
+          type: string
         toolName:
           type: string
       required:
         - mediationKind
+        - requiresApproval
+        - requiresAuth
+        - state
+        - targetKind
+        - targetRef
       type: object
+    RuntimePendingMediationSummary:
+      $ref: "#/components/schemas/RuntimePendingMediation"
     RuntimePermissionEnvelope:
       additionalProperties: true
       type: object
@@ -8793,6 +9304,31 @@ components:
         - workspace-write
         - danger-full-access
       type: string
+    RuntimePolicyDecisionSummary:
+      additionalProperties: false
+      properties:
+        allowCount:
+          type: integer
+        approvalRequiredCount:
+          type: integer
+        authRequiredCount:
+          type: integer
+        compiledAt:
+          type: integer
+        deferredCapabilityCount:
+          type: integer
+        deniedExposureCount:
+          type: integer
+        hiddenCapabilityCount:
+          type: integer
+      required:
+        - hiddenCapabilityCount
+        - deferredCapabilityCount
+        - deniedExposureCount
+        - approvalRequiredCount
+        - authRequiredCount
+        - allowCount
+      type: object
     RuntimePolicySnapshot:
       additionalProperties: false
       properties:
@@ -8824,9 +9360,17 @@ components:
     RuntimeRunCheckpoint:
       additionalProperties: false
       properties:
+        approvalLayer:
+          type: string
+        brokerDecision:
+          type: string
+        capabilityId:
+          type: string
         capabilityPlanSummary:
           $ref: "#/components/schemas/RuntimeCapabilityPlanSummary"
         capabilityStateRef:
+          type: string
+        checkpointArtifactRef:
           type: string
         compactionMetadata:
           $ref: "#/components/schemas/RuntimePermissionEnvelope"
@@ -8834,12 +9378,30 @@ components:
           type: integer
         lastExecutionOutcome:
           $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+        lastMediationOutcome:
+          $ref: "#/components/schemas/RuntimeMediationOutcome"
         pendingApproval:
           $ref: "#/components/schemas/RuntimeApprovalRequest"
+        pendingAuthChallenge:
+          $ref: "#/components/schemas/RuntimeAuthChallengeSummary"
         pendingMediation:
-          $ref: "#/components/schemas/RuntimePendingMediationSummary"
+          $ref: "#/components/schemas/RuntimePendingMediation"
+        providerKey:
+          type: string
+        reason:
+          type: string
+        requiredPermission:
+          type: string
+        requiresApproval:
+          type: boolean
+        requiresAuth:
+          type: boolean
         serializedSession:
           $ref: "#/components/schemas/RuntimePermissionEnvelope"
+        targetKind:
+          type: string
+        targetRef:
+          type: string
         usageSummary:
           $ref: "#/components/schemas/RuntimeUsageSummary"
       required:
@@ -8860,10 +9422,14 @@ components:
           type: string
         approvalState:
           type: string
+        approvalTarget:
+          $ref: "#/components/schemas/RuntimeApprovalRequest"
         artifactRefs:
           items:
             type: string
           type: array
+        authTarget:
+          $ref: "#/components/schemas/RuntimeAuthChallengeSummary"
         backgroundState:
           type: string
         capabilityPlanSummary:
@@ -8896,6 +9462,8 @@ components:
           type: string
         lastExecutionOutcome:
           $ref: "#/components/schemas/RuntimeCapabilityExecutionOutcome"
+        lastMediationOutcome:
+          $ref: "#/components/schemas/RuntimeMediationOutcome"
         mailboxRef:
           type: string
         memoryStateRef:
@@ -8907,7 +9475,7 @@ components:
         parentRunId:
           type: string
         pendingMediation:
-          $ref: "#/components/schemas/RuntimePendingMediationSummary"
+          $ref: "#/components/schemas/RuntimePendingMediation"
         pendingMemoryProposal:
           $ref: "#/components/schemas/RuntimeMemoryProposal"
         providerStateSummary:
@@ -9031,6 +9599,8 @@ components:
       properties:
         activeRunId:
           type: string
+        authStateSummary:
+          $ref: "#/components/schemas/RuntimeAuthStateSummary"
         backgroundRun:
           $ref: "#/components/schemas/RuntimeBackgroundRunSummary"
         capabilityPlanSummary:
@@ -9060,9 +9630,11 @@ components:
         pendingMailbox:
           $ref: "#/components/schemas/RuntimeMailboxSummary"
         pendingMediation:
-          $ref: "#/components/schemas/RuntimePendingMediationSummary"
+          $ref: "#/components/schemas/RuntimePendingMediation"
         pendingMemoryProposalCount:
           type: integer
+        policyDecisionSummary:
+          $ref: "#/components/schemas/RuntimePolicyDecisionSummary"
         providerStateSummary:
           items:
             $ref: "#/components/schemas/RuntimeCapabilityProviderState"
@@ -9105,6 +9677,8 @@ components:
         - memoryStateRef
         - capabilityPlanSummary
         - providerStateSummary
+        - authStateSummary
+        - policyDecisionSummary
       type: object
     RuntimeSessionKind:
       enum:
@@ -9116,6 +9690,8 @@ components:
       properties:
         activeRunId:
           type: string
+        authStateSummary:
+          $ref: "#/components/schemas/RuntimeAuthStateSummary"
         backgroundRun:
           $ref: "#/components/schemas/RuntimeBackgroundRunSummary"
         capabilityPlanSummary:
@@ -9145,9 +9721,11 @@ components:
         pendingMailbox:
           $ref: "#/components/schemas/RuntimeMailboxSummary"
         pendingMediation:
-          $ref: "#/components/schemas/RuntimePendingMediationSummary"
+          $ref: "#/components/schemas/RuntimePendingMediation"
         pendingMemoryProposalCount:
           type: integer
+        policyDecisionSummary:
+          $ref: "#/components/schemas/RuntimePolicyDecisionSummary"
         projectId:
           type: string
         providerStateSummary:
@@ -9196,6 +9774,8 @@ components:
         - memoryStateRef
         - capabilityPlanSummary
         - providerStateSummary
+        - authStateSummary
+        - policyDecisionSummary
       type: object
     RuntimeSubrunSummary:
       additionalProperties: false
@@ -10265,9 +10845,17 @@ components:
     WorkspaceActivityRecord:
       additionalProperties: false
       properties:
+        actorId:
+          type: string
+        actorType:
+          type: string
         description:
           type: string
         id:
+          type: string
+        outcome:
+          type: string
+        resource:
           type: string
         timestamp:
           type: integer
@@ -10585,6 +11173,10 @@ components:
           items:
             $ref: "#/components/schemas/ProjectRecord"
           type: array
+        projectTokenUsage:
+          items:
+            $ref: "#/components/schemas/ProjectTokenUsageRecord"
+          type: array
         recentActivity:
           items:
             $ref: "#/components/schemas/WorkspaceActivityRecord"
@@ -10599,6 +11191,7 @@ components:
         - workspace
         - metrics
         - projects
+        - projectTokenUsage
         - recentConversations
         - recentActivity
       type: object

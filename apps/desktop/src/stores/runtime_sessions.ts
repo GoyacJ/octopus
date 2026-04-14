@@ -19,7 +19,10 @@ import {
   type RuntimeConfigDrafts,
   type RuntimeConfigValidationState,
 } from './runtime-config'
-import { createPendingApprovalAssistantMessage } from './runtime_messages'
+import {
+  createPendingApprovalAssistantMessage,
+  createPendingAuthAssistantMessage,
+} from './runtime_messages'
 
 export interface RuntimeTurnDraftInput extends Omit<SubmitRuntimeTurnInput, 'permissionMode'> {
   permissionMode?: PermissionMode | RuntimePermissionMode
@@ -88,16 +91,46 @@ export function isBusyStatus(status?: string): boolean {
 }
 
 export function normalizeRuntimeSessionDetail(detail: RuntimeSessionDetail): RuntimeSessionDetail {
-  if (!detail.pendingApproval) {
+  const pendingApproval = detail.run.approvalTarget ?? detail.pendingApproval
+  if (pendingApproval) {
+    const hasApprovalMessage = detail.messages.some(message => message.senderType === 'assistant' && (
+      message.id === `approval-assistant-${pendingApproval.id}`
+      || message.status === 'waiting_approval'
+    ))
+
+    if (hasApprovalMessage) {
+      return {
+        ...detail,
+        pendingApproval,
+      }
+    }
+
+    return {
+      ...detail,
+      pendingApproval,
+      messages: [
+        ...detail.messages,
+        createPendingApprovalAssistantMessage(
+          detail.summary.id,
+          detail.summary.conversationId,
+          pendingApproval,
+          detail.run,
+        ),
+      ],
+    }
+  }
+
+  const pendingAuthChallenge = detail.run.authTarget ?? detail.run.checkpoint.pendingAuthChallenge
+  if (!pendingAuthChallenge) {
     return detail
   }
 
-  const hasApprovalMessage = detail.messages.some(message => message.senderType === 'assistant' && (
-    message.id === `approval-assistant-${detail.pendingApproval!.id}`
-    || message.status === 'waiting_approval'
+  const hasAuthMessage = detail.messages.some(message => message.senderType === 'assistant' && (
+    message.id === `auth-assistant-${pendingAuthChallenge.id}`
+    || (message.status === 'waiting_input' && message.conversationId === pendingAuthChallenge.conversationId)
   ))
 
-  if (hasApprovalMessage) {
+  if (hasAuthMessage) {
     return detail
   }
 
@@ -105,10 +138,10 @@ export function normalizeRuntimeSessionDetail(detail: RuntimeSessionDetail): Run
     ...detail,
     messages: [
       ...detail.messages,
-      createPendingApprovalAssistantMessage(
+      createPendingAuthAssistantMessage(
         detail.summary.id,
         detail.summary.conversationId,
-        detail.pendingApproval,
+        pendingAuthChallenge,
         detail.run,
       ),
     ],

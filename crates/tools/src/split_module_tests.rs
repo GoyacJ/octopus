@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener};
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -33,6 +34,31 @@ use serde_json::json;
 fn env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
+}
+
+struct EnvVarRestore {
+    key: &'static str,
+    value: Option<OsString>,
+}
+
+impl Drop for EnvVarRestore {
+    fn drop(&mut self) {
+        if let Some(value) = self.value.take() {
+            std::env::set_var(self.key, value);
+        } else {
+            std::env::remove_var(self.key);
+        }
+    }
+}
+
+fn override_env_var(key: &'static str, value: impl Into<OsString>) -> EnvVarRestore {
+    let previous = std::env::var_os(key);
+    let value = value.into();
+    std::env::set_var(key, &value);
+    EnvVarRestore {
+        key,
+        value: previous,
+    }
 }
 
 fn temp_path(name: &str) -> PathBuf {
@@ -283,8 +309,12 @@ fn rejects_legacy_orchestration_tool_names() {
         legacy_tool_name(&["Cron", "Delete"]),
         legacy_tool_name(&["Cron", "List"]),
     ] {
-        let error = execute_tool(&tool_name, &json!({})).expect_err("legacy tool should be rejected");
-        assert!(error.contains("unsupported tool"), "{tool_name} should be unsupported");
+        let error =
+            execute_tool(&tool_name, &json!({})).expect_err("legacy tool should be rejected");
+        assert!(
+            error.contains("unsupported tool"),
+            "{tool_name} should be unsupported"
+        );
     }
 }
 
@@ -1370,10 +1400,12 @@ fn skill_discovery_lists_only_model_invocable_skills() {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let home = temp_path("skill-discovery-home");
+    let bundled_root = temp_path("skill-discovery-bundled-root");
     let executable_skill_dir = home.join(".agents").join("skills").join("help");
     let doc_skill_dir = home.join(".agents").join("skills").join("reference");
     fs::create_dir_all(&executable_skill_dir).expect("executable skill dir should exist");
     fs::create_dir_all(&doc_skill_dir).expect("doc skill dir should exist");
+    fs::create_dir_all(&bundled_root).expect("bundled root should exist");
     fs::write(
         executable_skill_dir.join("SKILL.md"),
         r#"---
@@ -1406,8 +1438,16 @@ Reference notes only.
     )
     .expect("doc skill file should exist");
 
-    let original_home = std::env::var("HOME").ok();
-    std::env::set_var("HOME", &home);
+    let _home_restore = override_env_var("HOME", home.as_os_str());
+    let _codex_restore = override_env_var("CODEX_HOME", home.join(".codex").into_os_string());
+    let _claw_restore = override_env_var(
+        "CLAW_CONFIG_HOME",
+        home.join(".claw").into_os_string(),
+    );
+    let _bundled_roots_restore = override_env_var(
+        "OCTOPUS_BUNDLED_SKILLS_ROOTS",
+        bundled_root.as_os_str(),
+    );
 
     let capability_runtime = CapabilityRuntime::builtin();
     let discovered = serde_json::to_string_pretty(&capability_runtime.skill_discovery(
@@ -1425,13 +1465,8 @@ Reference notes only.
     assert_eq!(results[0]["source_kind"], "local_skill");
     assert_eq!(results[0]["execution_kind"], "prompt_skill");
     assert_eq!(results[0]["tool_grants"][0], "WebSearch");
-
-    if let Some(home) = original_home {
-        std::env::set_var("HOME", home);
-    } else {
-        std::env::remove_var("HOME");
-    }
     fs::remove_dir_all(home).expect("temp home should clean up");
+    fs::remove_dir_all(bundled_root).expect("temp bundled root should clean up");
 }
 
 #[test]
@@ -2542,6 +2577,18 @@ fn capability_runtime_execute_tool_serializes_non_read_only_dispatches() {
 
 #[test]
 fn capability_runtime_execute_tool_allows_parallel_read_dispatches() {
+    let _guard = env_lock()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let home = temp_path("parallel-read-home");
+    fs::create_dir_all(home.join(".agents").join("skills"))
+        .expect("temp skills dir should exist");
+    let _home_restore = override_env_var("HOME", home.as_os_str());
+    let _codex_restore = override_env_var("CODEX_HOME", home.join(".codex").into_os_string());
+    let _claw_restore = override_env_var(
+        "CLAW_CONFIG_HOME",
+        home.join(".claw").into_os_string(),
+    );
     let runtime = capability_runtime_with_runtime_tools(vec![super::RuntimeToolDefinition {
         name: "RuntimeRead".to_string(),
         description: Some("Parallel runtime read.".to_string()),
@@ -2610,6 +2657,7 @@ fn capability_runtime_execute_tool_allows_parallel_read_dispatches() {
         started.elapsed() < Duration::from_millis(220),
         "parallel read dispatches should finish without serialized delay"
     );
+    fs::remove_dir_all(home).expect("temp home should clean up");
 }
 
 #[test]

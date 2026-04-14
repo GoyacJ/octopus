@@ -136,6 +136,7 @@ pub(super) async fn emit_submit_turn_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
         },
         RuntimeEventEnvelope {
@@ -195,6 +196,68 @@ pub(super) async fn emit_submit_turn_events(
             ..Default::default()
         },
     ];
+
+    if !run.capability_plan_summary.hidden_capabilities.is_empty() {
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "policy.exposure_denied".into(),
+            kind: Some("policy.exposure_denied".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            outcome: Some("deny".into()),
+            payload: Some(json!({
+                "hiddenCapabilities": run.capability_plan_summary.hidden_capabilities.clone(),
+                "run": run.clone(),
+            })),
+            run: Some(run.clone()),
+            capability_plan_summary: Some(run.capability_plan_summary.clone()),
+            provider_state_summary: Some(run.provider_state_summary.clone()),
+            pending_mediation: run.pending_mediation.clone(),
+            capability_state_ref: run.capability_state_ref.clone(),
+            last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
+            ..Default::default()
+        });
+    }
+
+    if !run.capability_plan_summary.deferred_tools.is_empty() || run.pending_mediation.is_some() {
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "policy.surface_deferred".into(),
+            kind: Some("policy.surface_deferred".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            outcome: Some(
+                run.pending_mediation
+                    .as_ref()
+                    .map(|mediation| mediation.state.clone())
+                    .unwrap_or_else(|| "deferred".into()),
+            ),
+            payload: Some(json!({
+                "deferredTools": run.capability_plan_summary.deferred_tools.clone(),
+                "pendingMediation": run.pending_mediation.clone(),
+                "run": run.clone(),
+            })),
+            run: Some(run.clone()),
+            capability_plan_summary: Some(run.capability_plan_summary.clone()),
+            provider_state_summary: Some(run.provider_state_summary.clone()),
+            pending_mediation: run.pending_mediation.clone(),
+            capability_state_ref: run.capability_state_ref.clone(),
+            last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
+            ..Default::default()
+        });
+    }
 
     if let Some(message) = assistant_message {
         events.push(RuntimeEventEnvelope {
@@ -333,7 +396,7 @@ pub(super) async fn emit_submit_turn_events(
             run: Some(run.clone()),
             message: None,
             trace: None,
-            approval: Some(approval),
+            approval: Some(approval.clone()),
             decision: None,
             summary: None,
             error: None,
@@ -342,6 +405,60 @@ pub(super) async fn emit_submit_turn_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            ..Default::default()
+        });
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "runtime.approval.requested".into(),
+            kind: Some("runtime.approval.requested".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            payload: Some(json!({
+                "approval": approval.clone(),
+                "run": run.clone(),
+            })),
+            run: Some(run.clone()),
+            approval: Some(approval.clone()),
+            capability_plan_summary: Some(run.capability_plan_summary.clone()),
+            provider_state_summary: Some(run.provider_state_summary.clone()),
+            pending_mediation: run.pending_mediation.clone(),
+            capability_state_ref: run.capability_state_ref.clone(),
+            last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
+            ..Default::default()
+        });
+    }
+
+    if let Some(challenge) = run.auth_target.clone() {
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "auth.challenge_requested".into(),
+            kind: Some("auth.challenge_requested".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            outcome: Some(challenge.status.clone()),
+            payload: Some(json!({
+                "authChallenge": challenge.clone(),
+                "run": run.clone(),
+            })),
+            run: Some(run.clone()),
+            auth_challenge: Some(challenge),
+            capability_plan_summary: Some(run.capability_plan_summary.clone()),
+            provider_state_summary: Some(run.provider_state_summary.clone()),
+            pending_mediation: run.pending_mediation.clone(),
+            capability_state_ref: run.capability_state_ref.clone(),
+            last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
         });
     }
@@ -677,7 +794,7 @@ pub(super) async fn emit_memory_proposal_resolution_events(
                 "decision": decision,
                 "run": run.clone(),
             })),
-            run: Some(run),
+            run: Some(run.clone()),
             message: None,
             memory_proposal: None,
             memory_selection_summary: None,
@@ -693,6 +810,7 @@ pub(super) async fn emit_memory_proposal_resolution_events(
             pending_mediation: None,
             capability_state_ref: None,
             last_execution_outcome: None,
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
         },
     ];
@@ -798,6 +916,101 @@ pub(super) async fn record_approval_resolution_activity(
     Ok(())
 }
 
+pub(super) async fn record_auth_challenge_resolution_activity(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    now: u64,
+    project_id: &str,
+    run: &RuntimeRunSnapshot,
+    challenge: &RuntimeAuthChallengeSummary,
+    resolution: &str,
+    execution_trace: Option<&RuntimeTraceItem>,
+    execution: Option<&ExecutionResponse>,
+    consumed_tokens: Option<u32>,
+) -> Result<(), AppError> {
+    adapter
+        .state
+        .observation
+        .append_trace(TraceEventRecord {
+            id: format!("trace-{}", Uuid::new_v4()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: Some(project_id.to_string()),
+            run_id: Some(run.id.clone()),
+            session_id: Some(session_id.into()),
+            event_kind: "auth_challenge_resolved".into(),
+            title: "Auth challenge resolved".into(),
+            detail: resolution.to_string(),
+            created_at: now,
+        })
+        .await?;
+    if let Some(execution_trace) = execution_trace {
+        adapter
+            .state
+            .observation
+            .append_trace(TraceEventRecord {
+                id: execution_trace.id.clone(),
+                workspace_id: adapter.state.workspace_id.clone(),
+                project_id: Some(project_id.to_string()),
+                run_id: Some(run.id.clone()),
+                session_id: Some(session_id.into()),
+                event_kind: "turn_executed".into(),
+                title: execution_trace.title.clone(),
+                detail: execution_trace.detail.clone(),
+                created_at: now,
+            })
+            .await?;
+    }
+    adapter
+        .state
+        .observation
+        .append_audit(AuditRecord {
+            id: format!("audit-{}", Uuid::new_v4()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: Some(project_id.to_string()),
+            actor_type: "session".into(),
+            actor_id: session_id.into(),
+            action: "runtime.resolve_auth_challenge".into(),
+            resource: challenge.id.clone(),
+            outcome: resolution.to_string(),
+            created_at: now,
+        })
+        .await?;
+
+    if let Some(response) = execution {
+        let (metric, amount, unit) = usage_cost_shape(response.total_tokens);
+        adapter
+            .state
+            .observation
+            .append_cost(CostLedgerEntry {
+                id: format!("cost-{}", Uuid::new_v4()),
+                workspace_id: adapter.state.workspace_id.clone(),
+                project_id: Some(project_id.to_string()),
+                run_id: Some(run.id.clone()),
+                configured_model_id: run
+                    .resolved_target
+                    .as_ref()
+                    .map(|target| target.configured_model_id.clone()),
+                metric: metric.into(),
+                amount,
+                unit: unit.into(),
+                created_at: now,
+            })
+            .await?;
+    }
+
+    if let (Some(consumed_tokens), Some(resolved_target)) =
+        (consumed_tokens, run.resolved_target.as_ref())
+    {
+        adapter.increment_configured_model_usage(
+            &resolved_target.configured_model_id,
+            consumed_tokens,
+            now,
+        )?;
+    }
+
+    Ok(())
+}
+
 pub(super) async fn emit_approval_resolution_events(
     adapter: &RuntimeAdapter,
     session_id: &str,
@@ -838,6 +1051,7 @@ pub(super) async fn emit_approval_resolution_events(
         pending_mediation: run.pending_mediation.clone(),
         capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
+        last_mediation_outcome: run.last_mediation_outcome.clone(),
         ..Default::default()
     }];
 
@@ -868,6 +1082,7 @@ pub(super) async fn emit_approval_resolution_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
         });
     }
@@ -898,6 +1113,7 @@ pub(super) async fn emit_approval_resolution_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
         });
         events.push(RuntimeEventEnvelope {
@@ -926,6 +1142,66 @@ pub(super) async fn emit_approval_resolution_events(
             pending_mediation: run.pending_mediation.clone(),
             capability_state_ref: run.capability_state_ref.clone(),
             last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
+            ..Default::default()
+        });
+    }
+    events.push(RuntimeEventEnvelope {
+        id: format!("evt-{}", Uuid::new_v4()),
+        event_type: "runtime.approval.resolved".into(),
+        kind: Some("runtime.approval.resolved".into()),
+        workspace_id: adapter.state.workspace_id.clone(),
+        project_id: optional_project_id(&project_id),
+        session_id: session_id.into(),
+        conversation_id: conversation_id.clone(),
+        run_id: Some(run.id.clone()),
+        emitted_at: now,
+        sequence: 0,
+        payload: Some(json!({
+            "approval": approval.clone(),
+            "decision": decision.clone(),
+            "run": run.clone(),
+        })),
+        run: Some(run.clone()),
+        approval: Some(approval.clone()),
+        decision: Some(decision.clone()),
+        capability_plan_summary: Some(run.capability_plan_summary.clone()),
+        provider_state_summary: Some(run.provider_state_summary.clone()),
+        pending_mediation: run.pending_mediation.clone(),
+        capability_state_ref: run.capability_state_ref.clone(),
+        last_execution_outcome: run.last_execution_outcome.clone(),
+        last_mediation_outcome: run.last_mediation_outcome.clone(),
+        ..Default::default()
+    });
+    if let Some(challenge) = run.auth_target.clone() {
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "auth.challenge_requested".into(),
+            kind: Some("auth.challenge_requested".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            outcome: Some(challenge.status.clone()),
+            payload: Some(json!({
+                "approval": approval.clone(),
+                "authChallenge": challenge.clone(),
+                "decision": decision.clone(),
+                "run": run.clone(),
+            })),
+            run: Some(run.clone()),
+            approval: Some(approval.clone()),
+            auth_challenge: Some(challenge),
+            decision: Some(decision.clone()),
+            capability_plan_summary: Some(run.capability_plan_summary.clone()),
+            provider_state_summary: Some(run.provider_state_summary.clone()),
+            pending_mediation: run.pending_mediation.clone(),
+            capability_state_ref: run.capability_state_ref.clone(),
+            last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
             ..Default::default()
         });
     }
@@ -1011,6 +1287,156 @@ pub(super) async fn emit_approval_resolution_events(
         pending_mediation: run.pending_mediation.clone(),
         capability_state_ref: run.capability_state_ref.clone(),
         last_execution_outcome: run.last_execution_outcome.clone(),
+        ..Default::default()
+    });
+
+    for event in events {
+        adapter.emit_event(session_id, event).await?;
+    }
+
+    Ok(())
+}
+
+pub(super) async fn emit_auth_resolution_events(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    now: u64,
+    conversation_id: String,
+    project_id: String,
+    run: RuntimeRunSnapshot,
+    challenge: RuntimeAuthChallengeSummary,
+    resolution: String,
+    assistant_message: Option<RuntimeMessage>,
+    execution_trace: Option<RuntimeTraceItem>,
+) -> Result<(), AppError> {
+    let auth_event_type = if resolution == "resolved" {
+        "auth.resolved"
+    } else {
+        "auth.failed"
+    };
+    let mut events = vec![RuntimeEventEnvelope {
+        id: format!("evt-{}", Uuid::new_v4()),
+        event_type: auth_event_type.into(),
+        kind: Some(auth_event_type.into()),
+        workspace_id: adapter.state.workspace_id.clone(),
+        project_id: optional_project_id(&project_id),
+        session_id: session_id.into(),
+        conversation_id: conversation_id.clone(),
+        run_id: Some(run.id.clone()),
+        emitted_at: now,
+        sequence: 0,
+        outcome: Some(resolution.clone()),
+        payload: Some(json!({
+            "authChallenge": challenge.clone(),
+            "resolution": resolution.clone(),
+            "run": run.clone(),
+        })),
+        run: Some(run.clone()),
+        auth_challenge: Some(challenge.clone()),
+        decision: Some(resolution.clone()),
+        capability_plan_summary: Some(run.capability_plan_summary.clone()),
+        provider_state_summary: Some(run.provider_state_summary.clone()),
+        pending_mediation: run.pending_mediation.clone(),
+        capability_state_ref: run.capability_state_ref.clone(),
+        last_execution_outcome: run.last_execution_outcome.clone(),
+        last_mediation_outcome: run.last_mediation_outcome.clone(),
+        ..Default::default()
+    }];
+
+    if let Some(message) = assistant_message {
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "runtime.message.created".into(),
+            kind: Some("runtime.message.created".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            payload: Some(json!({
+                "message": message.clone(),
+            })),
+            message: Some(message),
+            capability_plan_summary: Some(run.capability_plan_summary.clone()),
+            provider_state_summary: Some(run.provider_state_summary.clone()),
+            pending_mediation: run.pending_mediation.clone(),
+            capability_state_ref: run.capability_state_ref.clone(),
+            last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
+            ..Default::default()
+        });
+    }
+    if let Some(trace) = execution_trace {
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "model.completed".into(),
+            kind: Some("model.completed".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            payload: Some(json!({
+                "trace": trace.clone(),
+            })),
+            trace: Some(trace.clone()),
+            capability_plan_summary: Some(run.capability_plan_summary.clone()),
+            provider_state_summary: Some(run.provider_state_summary.clone()),
+            pending_mediation: run.pending_mediation.clone(),
+            capability_state_ref: run.capability_state_ref.clone(),
+            last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
+            ..Default::default()
+        });
+        events.push(RuntimeEventEnvelope {
+            id: format!("evt-{}", Uuid::new_v4()),
+            event_type: "trace.emitted".into(),
+            kind: Some("trace.emitted".into()),
+            workspace_id: adapter.state.workspace_id.clone(),
+            project_id: optional_project_id(&project_id),
+            session_id: session_id.into(),
+            conversation_id: conversation_id.clone(),
+            run_id: Some(run.id.clone()),
+            emitted_at: now,
+            sequence: 0,
+            payload: Some(json!({
+                "trace": trace.clone(),
+            })),
+            trace: Some(trace),
+            capability_plan_summary: Some(run.capability_plan_summary.clone()),
+            provider_state_summary: Some(run.provider_state_summary.clone()),
+            pending_mediation: run.pending_mediation.clone(),
+            capability_state_ref: run.capability_state_ref.clone(),
+            last_execution_outcome: run.last_execution_outcome.clone(),
+            last_mediation_outcome: run.last_mediation_outcome.clone(),
+            ..Default::default()
+        });
+    }
+    events.push(RuntimeEventEnvelope {
+        id: format!("evt-{}", Uuid::new_v4()),
+        event_type: "runtime.run.updated".into(),
+        kind: Some("runtime.run.updated".into()),
+        workspace_id: adapter.state.workspace_id.clone(),
+        project_id: optional_project_id(&project_id),
+        session_id: session_id.into(),
+        conversation_id,
+        run_id: Some(run.id.clone()),
+        emitted_at: now,
+        sequence: 0,
+        payload: Some(json!({
+            "run": run.clone(),
+        })),
+        run: Some(run.clone()),
+        capability_plan_summary: Some(run.capability_plan_summary.clone()),
+        provider_state_summary: Some(run.provider_state_summary.clone()),
+        pending_mediation: run.pending_mediation.clone(),
+        capability_state_ref: run.capability_state_ref.clone(),
+        last_execution_outcome: run.last_execution_outcome.clone(),
+        last_mediation_outcome: run.last_mediation_outcome.clone(),
         ..Default::default()
     });
 

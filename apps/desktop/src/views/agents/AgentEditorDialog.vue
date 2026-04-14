@@ -14,6 +14,11 @@ const props = defineProps<{
   mcpOptions: SelectOption[]
   avatarPreview: string
   scope: string
+  contentReadonly: boolean
+  statusReadonly: boolean
+  canSave: boolean
+  canCopy: boolean
+  copyLabel: string
   canPromote: boolean
   promoting: boolean
 }>()
@@ -23,6 +28,7 @@ const emit = defineEmits<{
   'pick-avatar': []
   'remove-avatar': []
   'save': []
+  copy: []
   'promote': []
 }>()
 
@@ -55,10 +61,10 @@ function initials(name: string) {
       <UiSurface variant="subtle" padding="md" title="基本信息" subtitle="设置员工的展示名称、状态和视觉标识。" class="space-y-4">
         <div class="grid gap-4 md:grid-cols-2">
           <UiField label="员工名称">
-            <UiInput v-model="form.name" placeholder="例如: 研发专家" />
+            <UiInput v-model="form.name" :disabled="contentReadonly" placeholder="例如: 研发专家" />
           </UiField>
           <UiField label="状态">
-            <UiSelect v-model="form.status" :options="statusOptions" />
+            <UiSelect v-model="form.status" :options="statusOptions" :disabled="statusReadonly" />
           </UiField>
           <UiField class="md:col-span-2" label="头像标识">
             <div class="flex items-center gap-4 rounded-[var(--radius-l)] border border-border bg-surface p-4">
@@ -66,7 +72,7 @@ function initials(name: string) {
                 <img v-if="avatarPreview" :src="avatarPreview" alt="" class="size-full object-cover">
                 <span v-else>{{ initials(form.name || 'A') }}</span>
               </div>
-              <div class="flex flex-col gap-2">
+              <div v-if="!contentReadonly" class="flex flex-col gap-2">
                 <div class="flex gap-2">
                   <UiButton variant="outline" size="sm" class="h-8" @click="emit('pick-avatar')">上传新头像</UiButton>
                   <UiButton v-if="avatarPreview" variant="ghost" size="sm" class="h-8 text-text-tertiary" @click="emit('remove-avatar')">移除</UiButton>
@@ -76,7 +82,7 @@ function initials(name: string) {
             </div>
           </UiField>
           <UiField class="md:col-span-2" label="核心摘要">
-            <UiTextarea v-model="form.description" :rows="2" placeholder="简要描述该员工的主要职责..." />
+            <UiTextarea v-model="form.description" :rows="2" :disabled="contentReadonly" placeholder="简要描述该员工的主要职责..." />
           </UiField>
         </div>
       </UiSurface>
@@ -84,13 +90,13 @@ function initials(name: string) {
       <UiSurface variant="subtle" padding="md" title="性格与提示词" subtitle="定义员工的行事风格、专业背景和核心工作指令。" class="space-y-4">
         <div class="grid gap-4 md:grid-cols-1">
           <UiField label="性格设定">
-            <UiInput v-model="form.personality" placeholder="例如: 严谨、专业、富有逻辑" />
+            <UiInput v-model="form.personality" :disabled="contentReadonly" placeholder="例如: 严谨、专业、富有逻辑" />
           </UiField>
           <UiField label="系统提示词 (System Prompt)">
-            <UiTextarea v-model="form.prompt" :rows="6" class="font-mono text-sm" placeholder="编写核心指令..." />
+            <UiTextarea v-model="form.prompt" :rows="6" :disabled="contentReadonly" class="font-mono text-sm" placeholder="编写核心指令..." />
           </UiField>
           <UiField label="分类标签">
-            <UiInput v-model="form.tagsText" placeholder="用逗号分隔，例如: 开发, 代码审查, Rust" />
+            <UiInput v-model="form.tagsText" :disabled="contentReadonly" placeholder="用逗号分隔，例如: 开发, 代码审查, Rust" />
           </UiField>
         </div>
       </UiSurface>
@@ -101,6 +107,7 @@ function initials(name: string) {
             <UiSearchableMultiSelect
               v-model="form.builtinToolKeys"
               :options="builtinOptions"
+              :disabled="contentReadonly"
               placeholder="搜索并选择工具"
             />
           </UiField>
@@ -108,6 +115,7 @@ function initials(name: string) {
             <UiSearchableMultiSelect
               v-model="form.skillIds"
               :options="skillOptions"
+              :disabled="contentReadonly"
               placeholder="搜索并选择技能"
             />
           </UiField>
@@ -115,6 +123,7 @@ function initials(name: string) {
             <UiSearchableMultiSelect
               v-model="form.mcpServerNames"
               :options="mcpOptions"
+              :disabled="contentReadonly"
               placeholder="搜索并选择 MCP 服务器"
             />
           </UiField>
@@ -126,7 +135,7 @@ function initials(name: string) {
         <div class="flex items-center gap-2">
           <span class="text-xs text-text-tertiary">所有更改将立即同步至 {{ scope }}</span>
           <UiButton
-            v-if="canPromote"
+            v-if="canPromote && canSave"
             data-testid="agent-center-promote-agent-button"
             variant="outline"
             size="sm"
@@ -138,8 +147,16 @@ function initials(name: string) {
           </UiButton>
         </div>
         <div class="flex items-center gap-2">
-          <UiButton variant="ghost" @click="emit('update:open', false)">取消</UiButton>
-          <UiButton class="px-6" @click="emit('save')">保存配置</UiButton>
+          <UiButton variant="ghost" @click="emit('update:open', false)">{{ canSave ? '取消' : '关闭' }}</UiButton>
+          <UiButton
+            v-if="canCopy"
+            data-testid="agent-center-copy-agent-button"
+            variant="outline"
+            @click="emit('copy')"
+          >
+            {{ copyLabel }}
+          </UiButton>
+          <UiButton v-if="canSave" class="px-6" @click="emit('save')">保存配置</UiButton>
         </div>
       </div>
     </template>

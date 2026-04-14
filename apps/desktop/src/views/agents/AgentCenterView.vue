@@ -43,6 +43,7 @@ const {
   teamForm,
   isProjectScope,
   currentAgents,
+  resolvedAgents,
   pageTitle,
   pageDescription,
   builtinOptions,
@@ -53,6 +54,16 @@ const {
   dialogTeamLeader,
   dialogTeamMembers,
   leaderOptions,
+  agentDialogContentReadonly,
+  teamDialogContentReadonly,
+  agentDialogStatusReadonly,
+  teamDialogStatusReadonly,
+  canSaveAgentDialog,
+  canSaveTeamDialog,
+  canCopyCurrentEditingAgent,
+  canCopyCurrentEditingTeam,
+  currentEditingAgentCopyLabel,
+  currentEditingTeamCopyLabel,
   tabs,
   pagedAgents,
   pagedTeams,
@@ -98,6 +109,8 @@ const {
   clearTeamAvatar,
   saveAgent,
   saveTeam,
+  copyCurrentEditingAgent,
+  copyCurrentEditingTeam,
   promoteAgentToWorkspace,
   promoteTeamToWorkspace,
   removeAgent,
@@ -165,7 +178,7 @@ const {
       :page="teamPage"
       :page-count="teamPageCount"
       :paged-teams="pagedTeams"
-      :current-agents="currentAgents"
+      :resolved-agents="resolvedAgents"
       :is-project-scope="isProjectScope"
       :import-loading="agentImportLoading && !agentImportDialogOpen"
       :export-loading="teamExportLoading"
@@ -204,12 +217,18 @@ const {
       :mcp-options="mcpOptions"
       :avatar-preview="agentAvatarPreview(currentEditingAgent())"
       :scope="props.scope"
+      :content-readonly="agentDialogContentReadonly"
+      :status-readonly="agentDialogStatusReadonly"
+      :can-save="canSaveAgentDialog"
+      :can-copy="canCopyCurrentEditingAgent"
+      :copy-label="currentEditingAgentCopyLabel"
       :can-promote="Boolean(isProjectScope && currentEditingAgent()?.projectId)"
       :promoting="promoteAgentLoading"
       @update:open="agentDialogOpen = $event"
       @pick-avatar="pickAgentAvatar"
       @remove-avatar="clearAgentAvatar"
       @save="saveAgent"
+      @copy="copyCurrentEditingAgent"
       @promote="promoteAgentToWorkspace"
     />
 
@@ -225,12 +244,18 @@ const {
       :avatar-preview="teamAvatarPreview(currentEditingTeam())"
       :dialog-team-leader="dialogTeamLeader"
       :dialog-team-members="dialogTeamMembers"
+      :content-readonly="teamDialogContentReadonly"
+      :status-readonly="teamDialogStatusReadonly"
+      :can-save="canSaveTeamDialog"
+      :can-copy="canCopyCurrentEditingTeam"
+      :copy-label="currentEditingTeamCopyLabel"
       :can-promote="Boolean(isProjectScope && currentEditingTeam()?.projectId)"
       :promoting="promoteTeamLoading"
       @update:open="teamDialogOpen = $event"
       @pick-avatar="pickTeamAvatar"
       @remove-avatar="clearTeamAvatar"
       @save="saveTeam"
+      @copy="copyCurrentEditingTeam"
       @promote="promoteTeamToWorkspace"
     />
 

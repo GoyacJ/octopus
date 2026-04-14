@@ -109,7 +109,9 @@ pub(super) fn build_memory_summary(
     )
 }
 
-pub(super) fn memory_proposal_state_from_decision(decision: &str) -> Result<&'static str, AppError> {
+pub(super) fn memory_proposal_state_from_decision(
+    decision: &str,
+) -> Result<&'static str, AppError> {
     match decision {
         "approve" => Ok("approved"),
         "reject" => Ok("rejected"),
