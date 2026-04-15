@@ -412,7 +412,11 @@ mod tests {
 
         let reloaded_bundle = build_infra_bundle(temp.path()).expect("reloaded bundle");
         let reloaded_used_tokens = runtime
-            .block_on(reloaded_bundle.observation.project_used_tokens("proj-redesign"))
+            .block_on(
+                reloaded_bundle
+                    .observation
+                    .project_used_tokens("proj-redesign"),
+            )
             .expect("reloaded project used tokens");
         assert_eq!(reloaded_used_tokens, 125);
     }

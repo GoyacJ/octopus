@@ -1106,7 +1106,10 @@ fn json_string<T: Serialize>(value: &T) -> Result<String, AppError> {
     serde_json::to_string(value).map_err(AppError::from)
 }
 
-fn merge_json_with_defaults(base: serde_json::Value, patch: serde_json::Value) -> serde_json::Value {
+fn merge_json_with_defaults(
+    base: serde_json::Value,
+    patch: serde_json::Value,
+) -> serde_json::Value {
     match (base, patch) {
         (serde_json::Value::Object(mut base_map), serde_json::Value::Object(patch_map)) => {
             for (key, patch_value) in patch_map {
@@ -1940,6 +1943,47 @@ pub(super) fn ensure_runtime_phase_four_projection_tables(
             ("artifact_refs_json", "TEXT NOT NULL DEFAULT '[]'"),
             ("envelope_storage_path", "TEXT"),
             ("envelope_content_hash", "TEXT"),
+            ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
+            ("summary_json", "TEXT NOT NULL DEFAULT '{}'"),
+        ],
+    )?;
+
+    connection
+        .execute(
+            "CREATE TABLE IF NOT EXISTS runtime_artifact_projections (
+                artifact_ref TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                conversation_id TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                parent_run_id TEXT,
+                delegated_by_tool_call_id TEXT,
+                actor_ref TEXT NOT NULL DEFAULT '',
+                workflow_run_id TEXT,
+                storage_path TEXT NOT NULL DEFAULT '',
+                content_hash TEXT NOT NULL DEFAULT '',
+                byte_size INTEGER NOT NULL DEFAULT 0,
+                content_type TEXT NOT NULL DEFAULT 'application/json',
+                updated_at INTEGER NOT NULL DEFAULT 0,
+                summary_json TEXT NOT NULL DEFAULT '{}'
+            )",
+            [],
+        )
+        .map_err(|error| AppError::database(error.to_string()))?;
+    ensure_columns(
+        connection,
+        "runtime_artifact_projections",
+        &[
+            ("session_id", "TEXT NOT NULL DEFAULT ''"),
+            ("conversation_id", "TEXT NOT NULL DEFAULT ''"),
+            ("run_id", "TEXT NOT NULL DEFAULT ''"),
+            ("parent_run_id", "TEXT"),
+            ("delegated_by_tool_call_id", "TEXT"),
+            ("actor_ref", "TEXT NOT NULL DEFAULT ''"),
+            ("workflow_run_id", "TEXT"),
+            ("storage_path", "TEXT NOT NULL DEFAULT ''"),
+            ("content_hash", "TEXT NOT NULL DEFAULT ''"),
+            ("byte_size", "INTEGER NOT NULL DEFAULT 0"),
+            ("content_type", "TEXT NOT NULL DEFAULT 'application/json'"),
             ("updated_at", "INTEGER NOT NULL DEFAULT 0"),
             ("summary_json", "TEXT NOT NULL DEFAULT '{}'"),
         ],
@@ -4143,6 +4187,7 @@ pub(super) fn content_hash(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use octopus_core::ApprovalPreference;
+    use std::collections::BTreeMap;
 
     #[test]
     fn agent_avatar_returns_svg_data_url() {
@@ -4175,5 +4220,48 @@ mod tests {
         assert_eq!(parsed.mcp_auth, defaults.mcp_auth);
         assert_eq!(parsed.team_spawn, defaults.team_spawn);
         assert_eq!(parsed.workflow_escalation, defaults.workflow_escalation);
+    }
+
+    #[test]
+    fn runtime_artifact_projection_table_includes_recovery_metadata_columns() {
+        let connection = Connection::open_in_memory().expect("in-memory db");
+
+        ensure_runtime_phase_four_projection_tables(&connection).expect("phase four tables");
+
+        let mut statement = connection
+            .prepare("PRAGMA table_info(runtime_artifact_projections)")
+            .expect("table info statement");
+        let columns = statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(1)?, row.get::<_, String>(2)?))
+            })
+            .expect("table info rows")
+            .collect::<Result<BTreeMap<_, _>, _>>()
+            .expect("collect columns");
+
+        assert_eq!(
+            columns.get("artifact_ref").map(String::as_str),
+            Some("TEXT")
+        );
+        assert_eq!(
+            columns.get("storage_path").map(String::as_str),
+            Some("TEXT")
+        );
+        assert_eq!(
+            columns.get("content_hash").map(String::as_str),
+            Some("TEXT")
+        );
+        assert_eq!(
+            columns.get("byte_size").map(String::as_str),
+            Some("INTEGER")
+        );
+        assert_eq!(
+            columns.get("content_type").map(String::as_str),
+            Some("TEXT")
+        );
+        assert_eq!(
+            columns.get("summary_json").map(String::as_str),
+            Some("TEXT")
+        );
     }
 }

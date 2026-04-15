@@ -32,7 +32,10 @@ pub(crate) struct ActorRef {
     pub(crate) id: String,
 }
 
-fn merge_json_with_defaults(base: serde_json::Value, patch: serde_json::Value) -> serde_json::Value {
+fn merge_json_with_defaults(
+    base: serde_json::Value,
+    patch: serde_json::Value,
+) -> serde_json::Value {
     match (base, patch) {
         (serde_json::Value::Object(mut base_map), serde_json::Value::Object(patch_map)) => {
             for (key, patch_value) in patch_map {

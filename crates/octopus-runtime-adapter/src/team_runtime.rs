@@ -134,7 +134,11 @@ fn workflow_step_from_subruns(
     (Some("leader-plan".into()), Some("Leader plan".into()))
 }
 
-fn apply_subrun_lineage_state(detail: &mut RuntimeSessionDetail, subruns: &[RuntimeSubrunSummary]) {
+fn apply_subrun_lineage_state(
+    detail: &mut RuntimeSessionDetail,
+    subruns: &[RuntimeSubrunSummary],
+    subrun_states: &BTreeMap<String, PersistedSubrunState>,
+) {
     let mailbox_ref = detail
         .pending_mailbox
         .as_ref()
@@ -156,6 +160,10 @@ fn apply_subrun_lineage_state(detail: &mut RuntimeSessionDetail, subruns: &[Runt
         .collect::<BTreeMap<_, _>>();
     let mut handoffs = Vec::with_capacity(subruns.len());
     for subrun in subruns {
+        let runtime_artifact_refs = subrun_states
+            .get(&subrun.run_id)
+            .map(|state| state.run.artifact_refs.clone())
+            .unwrap_or_default();
         let handoff_ref = subrun
             .handoff_ref
             .clone()
@@ -173,7 +181,7 @@ fn apply_subrun_lineage_state(detail: &mut RuntimeSessionDetail, subruns: &[Runt
                     sender_actor_ref: detail.run.actor_ref.clone(),
                     receiver_actor_ref: subrun.actor_ref.clone(),
                     state: handoff_state_from_subrun_status(&subrun.status).into(),
-                    artifact_refs: vec![format!("artifact-{}", subrun.run_id)],
+                    artifact_refs: runtime_artifact_refs.clone(),
                     updated_at: subrun.updated_at,
                 });
         handoff.mailbox_ref = subrun
@@ -183,8 +191,8 @@ fn apply_subrun_lineage_state(detail: &mut RuntimeSessionDetail, subruns: &[Runt
         handoff.receiver_actor_ref = subrun.actor_ref.clone();
         handoff.state = handoff_state_from_subrun_status(&subrun.status).into();
         handoff.updated_at = subrun.updated_at;
-        if handoff.artifact_refs.is_empty() {
-            handoff.artifact_refs = vec![format!("artifact-{}", subrun.run_id)];
+        if !runtime_artifact_refs.is_empty() {
+            handoff.artifact_refs = runtime_artifact_refs;
         }
         handoffs.push(handoff);
     }
@@ -353,7 +361,7 @@ pub(crate) fn apply_subrun_state_projection(
 
     detail.subrun_count = subruns.len() as u64;
     detail.run.worker_dispatch = Some(build_worker_dispatch_summary(&subruns));
-    apply_subrun_lineage_state(detail, &subruns);
+    apply_subrun_lineage_state(detail, &subruns, subrun_states);
     detail.subruns = subruns;
 }
 
@@ -408,36 +416,79 @@ pub(crate) fn apply_team_runtime_projection(
     detail.run.worker_dispatch = Some(worker_dispatch);
 }
 
-pub(crate) fn ensure_subrun_state_metadata(
+pub(crate) fn apply_team_runtime_state(
+    detail: &mut RuntimeSessionDetail,
+    team: &actor_manifest::CompiledTeamManifest,
+    subrun_states: &BTreeMap<String, PersistedSubrunState>,
+    now: u64,
+) {
+    apply_team_runtime_projection(detail, team, now);
+    apply_subrun_state_projection(detail, subrun_states);
+}
+
+fn worker_session_policy(
+    adapter: &RuntimeAdapter,
+    session_policy: &session_policy::CompiledSessionPolicy,
+    subrun: &RuntimeSubrunSummary,
+) -> Result<
+    (
+        actor_manifest::CompiledActorManifest,
+        session_policy::CompiledSessionPolicy,
+    ),
+    AppError,
+> {
+    let worker_manifest = adapter.compile_actor_manifest(&subrun.actor_ref)?;
+    let mut worker_policy = session_policy.clone();
+    worker_policy.selected_actor_ref = worker_manifest.actor_ref().into();
+    worker_policy.manifest_revision = worker_manifest.manifest_revision().into();
+    worker_policy.capability_policy = worker_manifest.capability_policy_value();
+    worker_policy.memory_policy = worker_manifest.memory_policy_value();
+    worker_policy.delegation_policy = worker_manifest.delegation_policy_value();
+    worker_policy.approval_preference = worker_manifest.approval_preference_value();
+    worker_policy.target_decisions = policy_compiler::compile_manifest_target_decisions(
+        &worker_manifest,
+        &worker_policy.execution_permission_mode,
+        worker_policy.selected_configured_model_id.as_deref(),
+    );
+    Ok((worker_manifest, worker_policy))
+}
+
+pub(crate) fn ensure_subrun_state_metadata_for_session(
     adapter: &RuntimeAdapter,
     aggregate: &mut RuntimeAggregate,
-    run_context: &run_context::RunContext,
+    session_policy: &session_policy::CompiledSessionPolicy,
+    now: u64,
 ) -> Result<(), AppError> {
     for subrun in &aggregate.detail.subruns {
-        let worker_manifest = adapter.compile_actor_manifest(&subrun.actor_ref)?;
+        if let Some(existing) = aggregate.metadata.subrun_states.get_mut(&subrun.run_id) {
+            existing.run.status = subrun.status.clone();
+            existing.run.current_step = subrun_current_step(&subrun.status).into();
+            existing.run.updated_at = now;
+            existing.run.next_action = Some(subrun_next_action(&subrun.status).into());
+            existing.run.run_kind = subrun.run_kind.clone();
+            existing.run.parent_run_id = subrun.parent_run_id.clone();
+            existing.run.actor_ref = subrun.actor_ref.clone();
+            existing.run.delegated_by_tool_call_id = subrun.delegated_by_tool_call_id.clone();
+            existing.run.workflow_run = subrun.workflow_run_id.clone();
+            existing.run.mailbox_ref = subrun.mailbox_ref.clone();
+            existing.run.handoff_ref = subrun.handoff_ref.clone();
+            existing.run.approval_state = subrun_approval_state(&subrun.status).into();
+            continue;
+        }
+
+        let (worker_manifest, mut worker_policy) =
+            worker_session_policy(adapter, session_policy, subrun)?;
         let manifest_snapshot_ref = format!("{}-manifest", subrun.run_id);
         adapter.persist_actor_manifest_snapshot(&manifest_snapshot_ref, &worker_manifest)?;
         let session_policy_snapshot_ref = format!("{}-policy", subrun.run_id);
-        let mut session_policy = run_context.session_policy.clone();
-        session_policy.selected_actor_ref = worker_manifest.actor_ref().into();
-        session_policy.manifest_revision = worker_manifest.manifest_revision().into();
-        session_policy.capability_policy = worker_manifest.capability_policy_value();
-        session_policy.memory_policy = worker_manifest.memory_policy_value();
-        session_policy.delegation_policy = worker_manifest.delegation_policy_value();
-        session_policy.approval_preference = worker_manifest.approval_preference_value();
-        session_policy.target_decisions = policy_compiler::compile_manifest_target_decisions(
-            &worker_manifest,
-            &session_policy.execution_permission_mode,
-            session_policy.selected_configured_model_id.as_deref(),
-        );
-        session_policy.manifest_snapshot_ref = manifest_snapshot_ref.clone();
-        session_policy.session_policy_snapshot_ref = session_policy_snapshot_ref.clone();
-        adapter.persist_session_policy_snapshot(&session_policy_snapshot_ref, &session_policy)?;
+        worker_policy.manifest_snapshot_ref = manifest_snapshot_ref.clone();
+        worker_policy.session_policy_snapshot_ref = session_policy_snapshot_ref.clone();
+        adapter.persist_session_policy_snapshot(&session_policy_snapshot_ref, &worker_policy)?;
         let capability_state_ref = format!("{}-capability-state", subrun.run_id);
         let capability_projection = adapter.project_capability_state(
             &worker_manifest,
-            &session_policy,
-            &session_policy.config_snapshot_id,
+            &worker_policy,
+            &worker_policy.config_snapshot_id,
             capability_state_ref.clone(),
             &tools::SessionCapabilityStore::default(),
         )?;
@@ -451,8 +502,8 @@ pub(crate) fn ensure_subrun_state_metadata(
                 session_policy_snapshot_ref,
                 run: RuntimeRunSnapshot {
                     id: subrun.run_id.clone(),
-                    session_id: run_context.session_id.clone(),
-                    conversation_id: run_context.conversation_id.clone(),
+                    session_id: aggregate.detail.summary.id.clone(),
+                    conversation_id: aggregate.detail.summary.conversation_id.clone(),
                     status: subrun.status.clone(),
                     current_step: subrun_current_step(&subrun.status).into(),
                     started_at: subrun.started_at,
@@ -461,14 +512,14 @@ pub(crate) fn ensure_subrun_state_metadata(
                     freshness_summary: Some(RuntimeMemoryFreshnessSummary::default()),
                     pending_memory_proposal: None,
                     memory_state_ref,
-                    configured_model_id: session_policy.selected_configured_model_id.clone(),
+                    configured_model_id: worker_policy.selected_configured_model_id.clone(),
                     configured_model_name: None,
                     model_id: None,
                     consumed_tokens: None,
                     next_action: Some(subrun_next_action(&subrun.status).into()),
-                    config_snapshot_id: session_policy.config_snapshot_id.clone(),
-                    effective_config_hash: session_policy.effective_config_hash.clone(),
-                    started_from_scope_set: session_policy.started_from_scope_set.clone(),
+                    config_snapshot_id: worker_policy.config_snapshot_id.clone(),
+                    effective_config_hash: worker_policy.effective_config_hash.clone(),
+                    started_from_scope_set: worker_policy.started_from_scope_set.clone(),
                     run_kind: subrun.run_kind.clone(),
                     parent_run_id: subrun.parent_run_id.clone(),
                     actor_ref: subrun.actor_ref.clone(),
@@ -485,8 +536,8 @@ pub(crate) fn ensure_subrun_state_metadata(
                     usage_summary: RuntimeUsageSummary::default(),
                     artifact_refs: Vec::new(),
                     trace_context: trace_context::runtime_trace_context(
-                        &run_context.session_id,
-                        Some(run_context.run_id.clone()),
+                        &aggregate.detail.summary.id,
+                        Some(subrun.run_id.clone()),
                     ),
                     checkpoint: RuntimeRunCheckpoint {
                         approval_layer: None,
@@ -495,7 +546,7 @@ pub(crate) fn ensure_subrun_state_metadata(
                         checkpoint_artifact_ref: None,
                         serialized_session: json!({
                             "subrun": {
-                                "parentRunId": run_context.run_id.clone(),
+                                "parentRunId": aggregate.detail.run.id.clone(),
                                 "actorRef": subrun.actor_ref.clone(),
                             }
                         }),
@@ -537,7 +588,7 @@ pub(crate) fn ensure_subrun_state_metadata(
             },
         );
     }
-    sync_subrun_state_metadata(aggregate, run_context.now);
+    sync_subrun_state_metadata(aggregate, now);
     let active_subrun_ids = aggregate
         .detail
         .subruns
@@ -550,6 +601,19 @@ pub(crate) fn ensure_subrun_state_metadata(
         .retain(|run_id, _| active_subrun_ids.contains(run_id));
 
     Ok(())
+}
+
+pub(crate) fn ensure_subrun_state_metadata(
+    adapter: &RuntimeAdapter,
+    aggregate: &mut RuntimeAggregate,
+    run_context: &run_context::RunContext,
+) -> Result<(), AppError> {
+    ensure_subrun_state_metadata_for_session(
+        adapter,
+        aggregate,
+        &run_context.session_policy,
+        run_context.now,
+    )
 }
 
 pub(crate) fn sync_subrun_state_metadata(aggregate: &mut RuntimeAggregate, now: u64) {

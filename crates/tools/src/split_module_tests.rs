@@ -5,10 +5,10 @@ fn seam_registry_module_exposes_builtin_specs() {
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::ffi::OsString;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener};
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1440,14 +1440,9 @@ Reference notes only.
 
     let _home_restore = override_env_var("HOME", home.as_os_str());
     let _codex_restore = override_env_var("CODEX_HOME", home.join(".codex").into_os_string());
-    let _claw_restore = override_env_var(
-        "CLAW_CONFIG_HOME",
-        home.join(".claw").into_os_string(),
-    );
-    let _bundled_roots_restore = override_env_var(
-        "OCTOPUS_BUNDLED_SKILLS_ROOTS",
-        bundled_root.as_os_str(),
-    );
+    let _claw_restore = override_env_var("CLAW_CONFIG_HOME", home.join(".claw").into_os_string());
+    let _bundled_roots_restore =
+        override_env_var("OCTOPUS_BUNDLED_SKILLS_ROOTS", bundled_root.as_os_str());
 
     let capability_runtime = CapabilityRuntime::builtin();
     let discovered = serde_json::to_string_pretty(&capability_runtime.skill_discovery(
@@ -2581,14 +2576,10 @@ fn capability_runtime_execute_tool_allows_parallel_read_dispatches() {
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let home = temp_path("parallel-read-home");
-    fs::create_dir_all(home.join(".agents").join("skills"))
-        .expect("temp skills dir should exist");
+    fs::create_dir_all(home.join(".agents").join("skills")).expect("temp skills dir should exist");
     let _home_restore = override_env_var("HOME", home.as_os_str());
     let _codex_restore = override_env_var("CODEX_HOME", home.join(".codex").into_os_string());
-    let _claw_restore = override_env_var(
-        "CLAW_CONFIG_HOME",
-        home.join(".claw").into_os_string(),
-    );
+    let _claw_restore = override_env_var("CLAW_CONFIG_HOME", home.join(".claw").into_os_string());
     let runtime = capability_runtime_with_runtime_tools(vec![super::RuntimeToolDefinition {
         name: "RuntimeRead".to_string(),
         description: Some("Parallel runtime read.".to_string()),

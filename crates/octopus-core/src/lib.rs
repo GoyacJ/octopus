@@ -2602,11 +2602,7 @@ pub struct RuntimeSessionSummary {
     pub pending_memory_proposal_count: u64,
     #[serde(default)]
     pub memory_state_ref: String,
-    #[serde(
-        default,
-        rename = "capabilityPlanSummary",
-        alias = "capabilitySummary"
-    )]
+    #[serde(default, rename = "capabilityPlanSummary", alias = "capabilitySummary")]
     pub capability_summary: RuntimeCapabilityPlanSummary,
     #[serde(default)]
     pub provider_state_summary: Vec<RuntimeCapabilityProviderState>,
@@ -2876,11 +2872,7 @@ pub struct RuntimeSessionDetail {
     pub pending_memory_proposal_count: u64,
     #[serde(default)]
     pub memory_state_ref: String,
-    #[serde(
-        default,
-        rename = "capabilityPlanSummary",
-        alias = "capabilitySummary"
-    )]
+    #[serde(default, rename = "capabilityPlanSummary", alias = "capabilitySummary")]
     pub capability_summary: RuntimeCapabilityPlanSummary,
     #[serde(default)]
     pub provider_state_summary: Vec<RuntimeCapabilityProviderState>,

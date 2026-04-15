@@ -401,7 +401,8 @@ pub fn pick_skill_folder() -> Result<Option<Vec<Vec<WorkspaceDirectoryUploadEntr
 }
 
 #[tauri::command]
-pub async fn pick_agent_bundle_folder() -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, String> {
+pub async fn pick_agent_bundle_folder() -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, String>
+{
     let Some(path) = FileDialog::new().pick_folder() else {
         return Ok(None);
     };
@@ -451,7 +452,8 @@ fn read_archive_entries(path: &Path) -> Result<Vec<WorkspaceDirectoryUploadEntry
 }
 
 #[tauri::command]
-pub async fn pick_agent_bundle_archive() -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, String> {
+pub async fn pick_agent_bundle_archive(
+) -> Result<Option<Vec<WorkspaceDirectoryUploadEntry>>, String> {
     let Some(path) = FileDialog::new()
         .add_filter("Agent bundle archive", &["zip"])
         .pick_file()
@@ -530,7 +532,8 @@ pub async fn save_agent_bundle_zip(
         return Ok(());
     };
     tauri::async_runtime::spawn_blocking(move || {
-        fs::write(path, build_bundle_archive_bytes(&export_payload)?).map_err(|error| error.to_string())
+        fs::write(path, build_bundle_archive_bytes(&export_payload)?)
+            .map_err(|error| error.to_string())
     })
     .await
     .map_err(|error| error.to_string())?

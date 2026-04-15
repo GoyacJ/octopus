@@ -1511,6 +1511,52 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
         .1
         .as_deref()
         .is_some_and(|hash| hash.starts_with("sha256-")));
+    let artifact_refs = detail
+        .handoffs
+        .iter()
+        .flat_map(|handoff| handoff.artifact_refs.iter().cloned())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(!artifact_refs.is_empty());
+    for artifact_ref in &artifact_refs {
+        assert!(!artifact_ref.starts_with("artifact-"));
+        let artifact_projection: (
+            String,
+            String,
+            i64,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+        ) = connection
+            .query_row(
+                "SELECT storage_path, content_hash, byte_size, content_type, actor_ref, parent_run_id, delegated_by_tool_call_id
+                 FROM runtime_artifact_projections
+                 WHERE artifact_ref = ?1",
+                [artifact_ref],
+                |row| {
+                    Ok((
+                        row.get(0)?,
+                        row.get(1)?,
+                        row.get(2)?,
+                        row.get(3)?,
+                        row.get(4)?,
+                        row.get(5)?,
+                        row.get(6)?,
+                    ))
+                },
+            )
+            .expect("runtime artifact projection");
+        assert!(root.join(&artifact_projection.0).exists());
+        assert!(artifact_projection.1.starts_with("sha256-"));
+        assert!(artifact_projection.2 > 0);
+        assert_eq!(artifact_projection.3, "application/json");
+        assert!(
+            artifact_projection.4.starts_with("agent:")
+                || artifact_projection.4.starts_with("team:")
+        );
+        assert_eq!(artifact_projection.5.as_deref(), Some(run.id.as_str()));
+        assert!(artifact_projection.6.is_some());
+    }
 
     let events = adapter
         .list_events(&session.summary.id, None)
@@ -1545,7 +1591,10 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
     assert_eq!(completed_subruns.len(), detail.subruns.len());
     let first_subrun_event = spawned_subruns.first().expect("subrun spawned event");
     assert_eq!(first_subrun_event.run_id.as_deref(), Some(run.id.as_str()));
-    assert_eq!(first_subrun_event.parent_run_id.as_deref(), Some(run.id.as_str()));
+    assert_eq!(
+        first_subrun_event.parent_run_id.as_deref(),
+        Some(run.id.as_str())
+    );
     assert_eq!(
         first_subrun_event.workflow_run_id.as_deref(),
         run.workflow_run.as_deref()
@@ -2002,10 +2051,7 @@ async fn team_subrun_policy_snapshots_recompile_worker_target_decisions() {
 async fn team_spawn_approval_blocks_subrun_dispatch_until_resolved() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
-    write_workspace_config(
-        &infra.paths.runtime_config_dir.join("workspace.json"),
-        None,
-    );
+    write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), None);
     grant_owner_permissions(&infra, "user-owner");
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
@@ -2095,10 +2141,24 @@ async fn team_spawn_approval_blocks_subrun_dispatch_until_resolved() {
         .expect("upsert team spawn approval team");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![vec![
-        runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
-        runtime::AssistantEvent::MessageStop,
-    ]]));
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Delegation plan ready.".into()),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta(
+                "Leader subrun completed the delegated task.".into(),
+            ),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta(
+                "Worker subrun completed the delegated task.".into(),
+            ),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
     let adapter = RuntimeAdapter::new_with_executor(
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
@@ -2167,7 +2227,7 @@ async fn team_spawn_approval_blocks_subrun_dispatch_until_resolved() {
         .expect("resolved approval");
 
     assert_eq!(resolved.status, "completed");
-    assert_eq!(executor.request_count(), 1);
+    assert_eq!(executor.request_count(), 3);
 
     let resolved_detail = adapter
         .get_session(&session.summary.id)
@@ -2178,7 +2238,13 @@ async fn team_spawn_approval_blocks_subrun_dispatch_until_resolved() {
     assert!(resolved_detail
         .subruns
         .iter()
+        .all(|subrun| subrun.status == "completed"));
+    assert!(resolved_detail
+        .subruns
+        .iter()
         .any(|subrun| subrun.actor_ref == "agent:agent-team-spawn-worker"));
+    assert!(resolved_detail.workflow.is_some());
+    assert!(resolved_detail.background_run.is_some());
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -2187,10 +2253,7 @@ async fn team_spawn_approval_blocks_subrun_dispatch_until_resolved() {
 async fn workflow_continuation_approval_blocks_workflow_projection_until_resolved() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
-    write_workspace_config(
-        &infra.paths.runtime_config_dir.join("workspace.json"),
-        None,
-    );
+    write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), None);
     grant_owner_permissions(&infra, "user-owner");
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
@@ -2279,10 +2342,20 @@ async fn workflow_continuation_approval_blocks_workflow_projection_until_resolve
         .expect("upsert workflow approval team");
     drop(connection);
 
-    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![vec![
-        runtime::AssistantEvent::TextDelta("Workflow plan ready.".into()),
-        runtime::AssistantEvent::MessageStop,
-    ]]));
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Workflow plan ready.".into()),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Workflow leader subrun completed its step.".into()),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta("Workflow worker subrun completed its step.".into()),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
     let adapter = RuntimeAdapter::new_with_executor(
         octopus_core::DEFAULT_WORKSPACE_ID,
         infra.paths.clone(),
@@ -2307,7 +2380,10 @@ async fn workflow_continuation_approval_blocks_workflow_projection_until_resolve
         .expect("session");
 
     let run = adapter
-        .submit_turn(&session.summary.id, turn_input("Continue the workflow", None))
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Continue the workflow", None),
+        )
         .await
         .expect("pending workflow continuation approval");
 
@@ -2324,8 +2400,8 @@ async fn workflow_continuation_approval_blocks_workflow_projection_until_resolve
         .worker_dispatch
         .as_ref()
         .is_some_and(|dispatch| dispatch.total_subruns >= 1));
-    assert!(run.workflow_run.is_none());
-    assert!(run.background_state.is_none());
+    assert!(run.workflow_run.is_some());
+    assert!(run.background_state.is_some());
 
     let detail = adapter
         .get_session(&session.summary.id)
@@ -2334,8 +2410,35 @@ async fn workflow_continuation_approval_blocks_workflow_projection_until_resolve
     assert!(detail.subrun_count >= 1);
     assert!(!detail.subruns.is_empty());
     assert!(detail.pending_mailbox.is_some());
-    assert!(detail.workflow.is_none());
-    assert!(detail.background_run.is_none());
+    assert!(detail.workflow.is_some());
+    assert!(detail.background_run.is_some());
+    let initial_events = adapter
+        .list_events(&session.summary.id, None)
+        .await
+        .expect("initial workflow events");
+    assert!(initial_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("workflow.started")));
+    assert!(initial_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("workflow.step.started")));
+    assert!(!initial_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("workflow.step.completed")));
+    assert!(!initial_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("workflow.completed")));
+    assert_eq!(
+        initial_events
+            .iter()
+            .filter(|event| event.kind.as_deref() == Some("subrun.completed"))
+            .count(),
+        0
+    );
+    let replay_after = initial_events
+        .last()
+        .map(|event| event.id.clone())
+        .expect("last initial event id");
     assert_eq!(
         detail
             .pending_approval
@@ -2361,7 +2464,7 @@ async fn workflow_continuation_approval_blocks_workflow_projection_until_resolve
         .expect("resolved workflow continuation approval");
 
     assert_eq!(resolved.status, "completed");
-    assert_eq!(executor.request_count(), 1);
+    assert_eq!(executor.request_count(), 3);
     assert!(resolved.workflow_run.is_some());
     assert!(resolved.background_state.is_some());
     assert_eq!(
@@ -2378,6 +2481,266 @@ async fn workflow_continuation_approval_blocks_workflow_projection_until_resolve
         .expect("resolved detail");
     assert!(resolved_detail.workflow.is_some());
     assert!(resolved_detail.background_run.is_some());
+    assert!(resolved_detail
+        .subruns
+        .iter()
+        .all(|subrun| subrun.status == "completed"));
+    let resolved_events = adapter
+        .list_events(&session.summary.id, Some(&replay_after))
+        .await
+        .expect("resolved workflow events");
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("workflow.step.completed")));
+    assert!(resolved_events
+        .iter()
+        .any(|event| event.kind.as_deref() == Some("workflow.completed")));
+    assert_eq!(
+        resolved_events
+            .iter()
+            .filter(|event| event.kind.as_deref() == Some("subrun.completed"))
+            .count(),
+        resolved_detail.subruns.len()
+    );
+    let workflow_terminal = resolved_events
+        .iter()
+        .find(|event| event.kind.as_deref() == Some("workflow.completed"))
+        .expect("workflow completed event");
+    assert_eq!(
+        workflow_terminal.run_id.as_deref(),
+        Some(resolved.id.as_str())
+    );
+    assert_eq!(
+        workflow_terminal.parent_run_id.as_deref(),
+        Some(resolved.id.as_str())
+    );
+    assert_eq!(
+        workflow_terminal.workflow_run_id.as_deref(),
+        resolved.workflow_run.as_deref()
+    );
+    assert!(workflow_terminal.workflow_step_id.is_some());
+    assert_eq!(workflow_terminal.outcome.as_deref(), Some("completed"));
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn workflow_continuation_approval_resume_survives_adapter_restart() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), None);
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-workflow-restart-leader",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Workflow Restart Leader",
+                Option::<String>::None,
+                "Coordinator",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Lead the workflow after restart.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Leader for workflow restart approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert workflow restart leader");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-workflow-restart-worker",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Workflow Restart Worker",
+                Option::<String>::None,
+                "Executor",
+                serde_json::to_string(&vec!["delivery"]).expect("tags"),
+                "Do the delegated work after restart.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                "Worker for workflow restart approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert workflow restart worker");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO teams (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, approval_preference_json, leader_agent_id, member_agent_ids, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                "team-workflow-restart-approval",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                Option::<String>::None,
+                "workspace",
+                "Workflow Restart Approval Team",
+                Option::<String>::None,
+                "Approval aware workflow team",
+                serde_json::to_string(&vec!["coordination"]).expect("tags"),
+                "Delegate, pause for workflow approval, then resume after restart.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&Vec::<String>::new()).expect("mcp server names"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "auto",
+                    "memoryWrite": "require-approval",
+                    "mcpAuth": "require-approval",
+                    "teamSpawn": "auto",
+                    "workflowEscalation": "require-approval"
+                }))
+                .expect("approval preference"),
+                "agent-workflow-restart-leader",
+                serde_json::to_string(&vec![
+                    "agent-workflow-restart-leader",
+                    "agent-workflow-restart-worker"
+                ])
+                .expect("member ids"),
+                "Team for workflow restart approval tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert workflow restart approval team");
+    drop(connection);
+
+    let executor = Arc::new(ScriptedConversationRuntimeModelExecutor::new(vec![
+        vec![
+            runtime::AssistantEvent::TextDelta("Workflow plan ready for restart.".into()),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta(
+                "Workflow leader subrun resumed after restart.".into(),
+            ),
+            runtime::AssistantEvent::MessageStop,
+        ],
+        vec![
+            runtime::AssistantEvent::TextDelta(
+                "Workflow worker subrun resumed after restart.".into(),
+            ),
+            runtime::AssistantEvent::MessageStop,
+        ],
+    ]));
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-workflow-restart-approval",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Workflow Restart Approval",
+                "team:team-workflow-restart-approval",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let run = adapter
+        .submit_turn(
+            &session.summary.id,
+            turn_input("Continue the workflow after restart", None),
+        )
+        .await
+        .expect("pending workflow continuation approval");
+
+    assert_eq!(run.status, "waiting_approval");
+    assert_eq!(
+        run.pending_mediation
+            .as_ref()
+            .map(|mediation| mediation.target_kind.as_str()),
+        Some("workflow-continuation")
+    );
+    assert_eq!(executor.request_count(), 1);
+
+    let detail = adapter
+        .get_session(&session.summary.id)
+        .await
+        .expect("session detail");
+    assert!(!detail.subruns.is_empty());
+    assert!(detail.pending_mailbox.is_some());
+    assert!(detail.workflow.is_some());
+    assert!(detail.background_run.is_some());
+    let pending_subrun_count = detail.subruns.len();
+    let approval_id = detail
+        .pending_approval
+        .as_ref()
+        .map(|approval| approval.id.clone())
+        .expect("approval id");
+
+    let reloaded = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        executor.clone(),
+    );
+    let reloaded_detail = reloaded
+        .get_session(&session.summary.id)
+        .await
+        .expect("reloaded session detail");
+
+    assert_eq!(reloaded_detail.subruns.len(), pending_subrun_count);
+    assert!(reloaded_detail.pending_mailbox.is_some());
+    assert!(reloaded_detail.workflow.is_some());
+    assert!(reloaded_detail.background_run.is_some());
+    assert_eq!(
+        reloaded_detail
+            .pending_approval
+            .as_ref()
+            .and_then(|approval| approval.target_kind.as_deref()),
+        Some("workflow-continuation")
+    );
+
+    let resolved = reloaded
+        .resolve_approval(
+            &session.summary.id,
+            &approval_id,
+            ResolveRuntimeApprovalInput {
+                decision: "approve".into(),
+            },
+        )
+        .await
+        .expect("resolved workflow continuation approval after restart");
+
+    assert_eq!(resolved.status, "completed");
+    assert_eq!(executor.request_count(), 3);
+    assert!(resolved.workflow_run.is_some());
+    assert!(resolved.background_state.is_some());
+
+    let resolved_detail = reloaded
+        .get_session(&session.summary.id)
+        .await
+        .expect("resolved detail after restart");
+    assert!(resolved_detail.workflow.is_some());
+    assert!(resolved_detail.background_run.is_some());
+    assert_eq!(resolved_detail.subruns.len(), pending_subrun_count);
+    assert!(resolved_detail
+        .subruns
+        .iter()
+        .all(|subrun| subrun.status == "completed"));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
 }
@@ -2386,10 +2749,7 @@ async fn workflow_continuation_approval_blocks_workflow_projection_until_resolve
 async fn team_spawn_approval_chains_into_workflow_continuation_approval_when_required() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
-    write_workspace_config(
-        &infra.paths.runtime_config_dir.join("workspace.json"),
-        None,
-    );
+    write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), None);
     grant_owner_permissions(&infra, "user-owner");
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
@@ -2547,7 +2907,8 @@ async fn team_spawn_approval_chains_into_workflow_continuation_approval_when_req
         Some("workflow-continuation")
     );
     assert!(spawn_resolved.worker_dispatch.is_some());
-    assert!(spawn_resolved.workflow_run.is_none());
+    assert!(spawn_resolved.workflow_run.is_some());
+    assert!(spawn_resolved.background_state.is_some());
     assert_eq!(executor.request_count(), 1);
 
     let detail = adapter
@@ -2555,7 +2916,8 @@ async fn team_spawn_approval_chains_into_workflow_continuation_approval_when_req
         .await
         .expect("session detail after spawn approval");
     assert!(!detail.subruns.is_empty());
-    assert!(detail.workflow.is_none());
+    assert!(detail.workflow.is_some());
+    assert!(detail.background_run.is_some());
     assert_eq!(
         detail
             .pending_approval
@@ -2571,10 +2933,7 @@ async fn team_spawn_approval_chains_into_workflow_continuation_approval_when_req
 async fn team_spawn_policy_deny_suppresses_subrun_projection_on_main_runtime_path() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
-    write_workspace_config(
-        &infra.paths.runtime_config_dir.join("workspace.json"),
-        None,
-    );
+    write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), None);
     grant_owner_permissions(&infra, "user-owner");
 
     let connection = Connection::open(&infra.paths.db_path).expect("db");
@@ -3850,8 +4209,7 @@ async fn submit_turn_replans_and_executes_selected_plugin_tools_through_capabili
         })
         .find(|block| {
             block.get("type").and_then(serde_json::Value::as_str) == Some("tool_result")
-                && block.get("toolName").and_then(serde_json::Value::as_str)
-                    == Some("plugin_echo")
+                && block.get("toolName").and_then(serde_json::Value::as_str) == Some("plugin_echo")
         })
         .expect("plugin tool result");
     assert_eq!(
@@ -3884,9 +4242,10 @@ async fn submit_turn_replans_and_executes_selected_plugin_tools_through_capabili
         "runtime loop should emit planner completion events for real replans"
     );
     assert!(planner_completed.iter().any(|event| {
-        event.capability_plan_summary.as_ref().is_some_and(|summary| {
-            summary.visible_tools.contains(&"plugin_echo".to_string())
-        })
+        event
+            .capability_plan_summary
+            .as_ref()
+            .is_some_and(|summary| summary.visible_tools.contains(&"plugin_echo".to_string()))
     }));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
@@ -4082,9 +4441,10 @@ async fn non_coding_research_docs_agent_runs_through_same_capability_trunk() {
         "research/docs runtime loop should emit real replans"
     );
     assert!(planner_completed.iter().any(|event| {
-        event.capability_plan_summary.as_ref().is_some_and(|summary| {
-            summary.visible_tools.contains(&"plugin_echo".to_string())
-        })
+        event
+            .capability_plan_summary
+            .as_ref()
+            .is_some_and(|summary| summary.visible_tools.contains(&"plugin_echo".to_string()))
     }));
 
     fs::remove_dir_all(root).expect("cleanup temp dir");
@@ -4169,7 +4529,10 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
     assert_eq!(pending.dispatch_kind.as_deref(), Some("model_execution"));
     assert_eq!(pending.concurrency_policy.as_deref(), Some("serialized"));
     assert_eq!(
-        pending.input.as_ref().and_then(|value| value.get("content")),
+        pending
+            .input
+            .as_ref()
+            .and_then(|value| value.get("content")),
         Some(&json!("Do the write action"))
     );
     assert_eq!(
@@ -4194,7 +4557,10 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
         Some("serialized")
     );
     assert_eq!(
-        run.checkpoint.input.as_ref().and_then(|value| value.get("content")),
+        run.checkpoint
+            .input
+            .as_ref()
+            .and_then(|value| value.get("content")),
         Some(&json!("Do the write action"))
     );
     assert_eq!(
@@ -4328,13 +4694,19 @@ async fn submit_turn_requiring_approval_persists_real_mediation_and_outcome() {
     );
     assert_eq!(persisted_pending.target_kind, "model-execution");
     assert_eq!(persisted_pending.target_ref, expected_target_ref);
-    assert_eq!(persisted_pending.dispatch_kind.as_deref(), Some("model_execution"));
+    assert_eq!(
+        persisted_pending.dispatch_kind.as_deref(),
+        Some("model_execution")
+    );
     assert_eq!(
         persisted_pending.concurrency_policy.as_deref(),
         Some("serialized")
     );
     assert_eq!(
-        persisted_pending.input.as_ref().and_then(|value| value.get("content")),
+        persisted_pending
+            .input
+            .as_ref()
+            .and_then(|value| value.get("content")),
         Some(&json!("Do the write action"))
     );
     assert_eq!(
@@ -4936,7 +5308,10 @@ async fn submit_turn_executes_runtime_tool_loop_on_main_path() {
     let expected_target_ref = format!("capability-call:{}:tool-read-note", run.id);
     assert_eq!(tool_started.run_id.as_deref(), Some(run.id.as_str()));
     assert_eq!(tool_started.parent_run_id, None);
-    assert_eq!(tool_started.actor_ref.as_deref(), Some(run.actor_ref.as_str()));
+    assert_eq!(
+        tool_started.actor_ref.as_deref(),
+        Some(run.actor_ref.as_str())
+    );
     assert_eq!(tool_started.tool_use_id.as_deref(), Some("tool-read-note"));
     assert_eq!(tool_started.target_kind.as_deref(), Some("capability-call"));
     assert_eq!(

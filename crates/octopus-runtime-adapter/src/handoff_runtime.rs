@@ -21,7 +21,7 @@ pub(crate) fn build_handoff_projection(
             } else {
                 "pending".into()
             },
-            artifact_refs: vec![format!("artifact-{}", subrun.run_id)],
+            artifact_refs: Vec::new(),
             updated_at: now,
         })
         .collect()

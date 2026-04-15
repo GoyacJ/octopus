@@ -142,7 +142,13 @@ fn selected_plugin_tools(
     config_loader: &ConfigLoader,
     root: &Path,
     runtime_config: &runtime::RuntimeConfig,
-) -> Result<(Vec<plugins::PluginTool>, Vec<RuntimeCapabilityProviderState>), AppError> {
+) -> Result<
+    (
+        Vec<plugins::PluginTool>,
+        Vec<RuntimeCapabilityProviderState>,
+    ),
+    AppError,
+> {
     let selected_refs = manifest
         .plugin_capability_refs()
         .iter()
@@ -425,7 +431,9 @@ impl RuntimeAdapter {
         planned_tool_names.extend(
             provided_capabilities
                 .iter()
-                .filter(|capability| capability.execution_kind == tools::CapabilityExecutionKind::Tool)
+                .filter(|capability| {
+                    capability.execution_kind == tools::CapabilityExecutionKind::Tool
+                })
                 .map(|capability| capability.display_name.clone()),
         );
 
@@ -476,10 +484,7 @@ impl RuntimeAdapter {
         let session_state = store.snapshot();
         let plan = capability_runtime
             .execution_plan(
-                tools::CapabilityPlannerInput::new(
-                    Some(&planned_tool_names),
-                    Some(&session_state),
-                )
+                tools::CapabilityPlannerInput::new(Some(&planned_tool_names), Some(&session_state))
                     .with_current_dir(Some(self.state.paths.root.as_path())),
             )
             .map_err(AppError::runtime)?;

@@ -1,5 +1,6 @@
 use super::*;
 use serde::de::DeserializeOwned;
+use std::collections::BTreeMap;
 
 pub(super) fn append_json_line(path: &Path, value: &impl Serialize) -> Result<(), AppError> {
     if let Some(parent) = path.parent() {
@@ -48,6 +49,45 @@ struct PersistedWorkflowState {
 #[serde(rename_all = "camelCase")]
 struct PersistedBackgroundState {
     summary: RuntimeBackgroundRunSummary,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PersistedRuntimeOutputArtifact {
+    artifact_ref: String,
+    session_id: String,
+    conversation_id: String,
+    run_id: String,
+    parent_run_id: Option<String>,
+    delegated_by_tool_call_id: Option<String>,
+    actor_ref: String,
+    workflow_run_id: Option<String>,
+    checkpoint_artifact_ref: Option<String>,
+    serialized_session: Value,
+    usage_summary: RuntimeUsageSummary,
+    updated_at: u64,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeArtifactProjectionRow {
+    artifact_ref: String,
+    session_id: String,
+    conversation_id: String,
+    run_id: String,
+    parent_run_id: Option<String>,
+    delegated_by_tool_call_id: Option<String>,
+    actor_ref: String,
+    workflow_run_id: Option<String>,
+    storage_path: String,
+    content_hash: String,
+    byte_size: u64,
+    content_type: String,
+    updated_at: u64,
+}
+
+pub(super) fn runtime_output_artifact_ref(run_id: &str) -> String {
+    format!("runtime-artifact-{run_id}")
 }
 
 fn bool_to_sql(value: bool) -> i64 {
@@ -288,11 +328,24 @@ impl RuntimeAdapter {
         value: &T,
     ) -> Result<(String, String), AppError> {
         let payload = serde_json::to_vec_pretty(value)?;
+        let (storage_path, content_hash, _) = self.persist_runtime_payload(path, &payload)?;
+        Ok((storage_path, content_hash))
+    }
+
+    fn persist_runtime_payload(
+        &self,
+        path: PathBuf,
+        payload: &[u8],
+    ) -> Result<(String, String, u64), AppError> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&path, &payload)?;
-        Ok((self.relative_storage_path(&path), hash_bytes(&payload)))
+        fs::write(&path, payload)?;
+        Ok((
+            self.relative_storage_path(&path),
+            hash_bytes(payload),
+            payload.len() as u64,
+        ))
     }
 
     pub(super) fn load_runtime_artifact<T: DeserializeOwned>(
@@ -308,6 +361,63 @@ impl RuntimeAdapter {
         }
         let raw = fs::read(path)?;
         Ok(Some(serde_json::from_slice(&raw)?))
+    }
+
+    fn runtime_output_artifact_path(&self, artifact_ref: &str) -> PathBuf {
+        self.state
+            .paths
+            .artifacts_dir
+            .join("runtime")
+            .join(format!("{artifact_ref}.json"))
+    }
+
+    fn persist_runtime_output_artifacts_for_run(
+        &self,
+        session_id: &str,
+        conversation_id: &str,
+        run: &RuntimeRunSnapshot,
+    ) -> Result<BTreeMap<String, RuntimeArtifactProjectionRow>, AppError> {
+        let mut rows = BTreeMap::new();
+        for artifact_ref in &run.artifact_refs {
+            let body = PersistedRuntimeOutputArtifact {
+                artifact_ref: artifact_ref.clone(),
+                session_id: session_id.to_string(),
+                conversation_id: conversation_id.to_string(),
+                run_id: run.id.clone(),
+                parent_run_id: run.parent_run_id.clone(),
+                delegated_by_tool_call_id: run.delegated_by_tool_call_id.clone(),
+                actor_ref: run.actor_ref.clone(),
+                workflow_run_id: run.workflow_run.clone(),
+                checkpoint_artifact_ref: run.checkpoint.checkpoint_artifact_ref.clone(),
+                serialized_session: run.checkpoint.serialized_session.clone(),
+                usage_summary: run.usage_summary.clone(),
+                updated_at: run.updated_at,
+            };
+            let payload = serde_json::to_vec_pretty(&body)?;
+            let (storage_path, content_hash, byte_size) = self.persist_runtime_payload(
+                self.runtime_output_artifact_path(artifact_ref),
+                &payload,
+            )?;
+            rows.insert(
+                artifact_ref.clone(),
+                RuntimeArtifactProjectionRow {
+                    artifact_ref: artifact_ref.clone(),
+                    session_id: session_id.to_string(),
+                    conversation_id: conversation_id.to_string(),
+                    run_id: run.id.clone(),
+                    parent_run_id: run.parent_run_id.clone(),
+                    delegated_by_tool_call_id: run.delegated_by_tool_call_id.clone(),
+                    actor_ref: run.actor_ref.clone(),
+                    workflow_run_id: run.workflow_run.clone(),
+                    storage_path,
+                    content_hash,
+                    byte_size,
+                    content_type: "application/json".into(),
+                    updated_at: run.updated_at,
+                },
+            );
+        }
+        Ok(rows)
     }
 
     fn load_subrun_state_artifacts(
@@ -1162,6 +1272,52 @@ impl RuntimeAdapter {
                         subrun.started_at as i64,
                         subrun.updated_at as i64,
                         serde_json::to_string(subrun)?,
+                    ],
+                )
+                .map_err(|error| AppError::database(error.to_string()))?;
+        }
+
+        connection
+            .execute(
+                "DELETE FROM runtime_artifact_projections WHERE session_id = ?1",
+                params![summary.id],
+            )
+            .map_err(|error| AppError::database(error.to_string()))?;
+        let mut runtime_artifact_rows = self.persist_runtime_output_artifacts_for_run(
+            &summary.id,
+            &summary.conversation_id,
+            run,
+        )?;
+        for state in aggregate.metadata.subrun_states.values() {
+            runtime_artifact_rows.extend(self.persist_runtime_output_artifacts_for_run(
+                &summary.id,
+                &summary.conversation_id,
+                &state.run,
+            )?);
+        }
+        for artifact in runtime_artifact_rows.values() {
+            connection
+                .execute(
+                    "INSERT OR REPLACE INTO runtime_artifact_projections
+                     (artifact_ref, session_id, conversation_id, run_id, parent_run_id,
+                      delegated_by_tool_call_id, actor_ref, workflow_run_id, storage_path,
+                      content_hash, byte_size, content_type, updated_at, summary_json)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                    params![
+                        artifact.artifact_ref,
+                        artifact.session_id,
+                        artifact.conversation_id,
+                        artifact.run_id,
+                        artifact.parent_run_id,
+                        artifact.delegated_by_tool_call_id,
+                        artifact.actor_ref,
+                        artifact.workflow_run_id,
+                        artifact.storage_path,
+                        artifact.content_hash,
+                        artifact.byte_size as i64,
+                        artifact.content_type,
+                        artifact.updated_at as i64,
+                        serde_json::to_string(artifact)?,
                     ],
                 )
                 .map_err(|error| AppError::database(error.to_string()))?;

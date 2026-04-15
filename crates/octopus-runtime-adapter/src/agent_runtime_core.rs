@@ -518,21 +518,6 @@ fn approval_blocks_team_projection(approval: Option<&ApprovalRequestRecord>) -> 
     })
 }
 
-fn approval_blocks_workflow_projection(approval: Option<&ApprovalRequestRecord>) -> bool {
-    approval.is_some_and(|approval| {
-        approval.status == "pending"
-            && approval.target_kind.as_deref() == Some("workflow-continuation")
-    })
-}
-
-fn clear_workflow_runtime_projection(detail: &mut RuntimeSessionDetail) {
-    detail.workflow = None;
-    detail.background_run = None;
-    detail.run.workflow_run = None;
-    detail.run.workflow_run_detail = None;
-    detail.run.background_state = None;
-}
-
 fn team_spawn_policy_decision(
     run_context: &run_context::RunContext,
 ) -> Option<RuntimeTargetPolicyDecision> {
@@ -578,7 +563,8 @@ fn team_spawn_mediation_request(
     checkpoint_ref: Option<String>,
     created_at: u64,
 ) -> Option<approval_broker::MediationRequest> {
-    let actor_manifest::CompiledActorManifest::Team(team_manifest) = &run_context.actor_manifest else {
+    let actor_manifest::CompiledActorManifest::Team(team_manifest) = &run_context.actor_manifest
+    else {
         return None;
     };
     let policy_decision = team_spawn_policy_decision(run_context)?;
@@ -590,10 +576,8 @@ fn team_spawn_mediation_request(
         return None;
     }
     let worker_refs = worker_runtime::worker_actor_refs(team_manifest);
-    let target_ref = team_spawn_target_ref(
-        &run_context.run_id,
-        run_context.actor_manifest.actor_ref(),
-    );
+    let target_ref =
+        team_spawn_target_ref(&run_context.run_id, run_context.actor_manifest.actor_ref());
     let detail = policy_decision.reason.clone().unwrap_or_else(|| {
         format!(
             "Approve spawning {worker_total} worker subruns before team execution can continue."
@@ -796,17 +780,14 @@ async fn execute_runtime_turn_loop(
                 pending_mcp_servers.clone(),
                 mcp_degraded.clone(),
             )?;
-            capability_events.extend(
-                execution
-                    .execution_events
-                    .into_iter()
-                    .map(|event| RuntimeLoopCapabilityEvent {
-                        iteration: current_iteration_index,
-                        tool_use_id: tool_use.tool_use_id.clone(),
-                        capability: execution.capability.clone(),
-                        execution: event,
-                    }),
-            );
+            capability_events.extend(execution.execution_events.into_iter().map(|event| {
+                RuntimeLoopCapabilityEvent {
+                    iteration: current_iteration_index,
+                    tool_use_id: tool_use.tool_use_id.clone(),
+                    capability: execution.capability.clone(),
+                    execution: event,
+                }
+            }));
             match execution.outcome {
                 runtime::ToolExecutionOutcome::Allow { output } => {
                     let result_message = runtime::ConversationMessage::tool_result(
@@ -826,15 +807,14 @@ async fn execute_runtime_turn_loop(
                             "runtime capability mediation did not capture a blocked request",
                         )
                     })?;
-                    let broker_decision =
-                        if matches!(
-                            execution.outcome,
-                            runtime::ToolExecutionOutcome::RequireAuth { .. }
-                        ) {
-                            approval_broker::require_auth(&mediation_request)
-                        } else {
-                            approval_broker::require_approval(&mediation_request)
-                        };
+                    let broker_decision = if matches!(
+                        execution.outcome,
+                        runtime::ToolExecutionOutcome::RequireAuth { .. }
+                    ) {
+                        approval_broker::require_auth(&mediation_request)
+                    } else {
+                        approval_broker::require_approval(&mediation_request)
+                    };
                     let updated_projection = adapter
                         .project_capability_state_async(
                             actor_manifest,
@@ -1616,6 +1596,232 @@ fn build_execution_trace(
     }
 }
 
+fn subrun_fallback_content(checkpoint: &RuntimeRunCheckpoint, fallback_content: &str) -> String {
+    checkpoint
+        .serialized_session
+        .get("content")
+        .or_else(|| checkpoint.serialized_session.get("pendingContent"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(fallback_content)
+        .to_string()
+}
+
+fn resumable_subrun_status(status: &str) -> bool {
+    matches!(status, "queued" | "running")
+}
+
+async fn execute_team_subrun(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    conversation_id: &str,
+    parent_run_id: &str,
+    state: &team_runtime::PersistedSubrunState,
+    fallback_content: &str,
+) -> Result<team_runtime::PersistedSubrunState, AppError> {
+    if !resumable_subrun_status(&state.run.status) {
+        return Ok(state.clone());
+    }
+
+    let session_policy =
+        adapter.load_session_policy_snapshot(&state.session_policy_snapshot_ref)?;
+    let actor_manifest = adapter.load_actor_manifest_snapshot(&state.manifest_snapshot_ref)?;
+    let configured_model_id = state
+        .run
+        .configured_model_id
+        .clone()
+        .or_else(|| session_policy.selected_configured_model_id.clone())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| AppError::runtime("configured model is unavailable for subrun execution"))?;
+    let (resolved_target, configured_model) = adapter
+        .resolve_approved_execution(&session_policy.config_snapshot_id, &configured_model_id)?;
+    let capability_state_ref = state
+        .run
+        .capability_state_ref
+        .clone()
+        .unwrap_or_else(|| format!("{}-capability-state", state.run.id));
+    let content = subrun_fallback_content(&state.run.checkpoint, fallback_content);
+    let trace_context = if state.run.trace_context.session_id.is_empty() {
+        let restored =
+            trace_context_from_serialized_session(&state.run.checkpoint.serialized_session);
+        if restored.session_id.is_empty() {
+            trace_context::runtime_trace_context(session_id, Some(state.run.id.clone()))
+        } else {
+            restored
+        }
+    } else {
+        state.run.trace_context.clone()
+    };
+    let session = restore_runtime_session(&state.run.checkpoint.serialized_session, &content)?;
+    let pending_tool_uses =
+        pending_tool_uses_from_serialized_session(&state.run.checkpoint.serialized_session)?;
+    let loop_result = execute_runtime_turn_loop(
+        adapter,
+        session_id,
+        conversation_id,
+        &state.run.id,
+        &resolved_target,
+        &configured_model,
+        &actor_manifest,
+        &session_policy,
+        &capability_state_ref,
+        &content,
+        &trace_context,
+        session,
+        pending_tool_uses,
+        state.run.checkpoint.current_iteration_index,
+        state.run.checkpoint.usage_summary.clone(),
+    )
+    .await?;
+
+    let mut updated = state.clone();
+    let updated_at = timestamp_now();
+    let checkpoint = build_runtime_checkpoint(
+        loop_result.serialized_session,
+        loop_result.current_iteration_index,
+        loop_result.usage_summary.clone(),
+        None,
+        None,
+        None,
+        Some(
+            loop_result
+                .capability_projection
+                .capability_state_ref
+                .clone(),
+        ),
+        loop_result.capability_projection.plan_summary.clone(),
+        None,
+        None,
+        None,
+        None,
+        None,
+    );
+
+    updated.run.status = "completed".into();
+    updated.run.current_step = "completed".into();
+    updated.run.updated_at = updated_at;
+    updated.run.consumed_tokens = loop_result.consumed_tokens;
+    updated.run.next_action = Some("idle".into());
+    updated.run.configured_model_id = Some(resolved_target.configured_model_id.clone());
+    updated.run.configured_model_name = Some(resolved_target.configured_model_name.clone());
+    updated.run.model_id = Some(resolved_target.registry_model_id.clone());
+    updated.run.run_kind = "subrun".into();
+    updated.run.parent_run_id = Some(parent_run_id.to_string());
+    updated.run.actor_ref = actor_manifest.actor_ref().to_string();
+    updated.run.workflow_run = state.run.workflow_run.clone();
+    updated.run.mailbox_ref = state.run.mailbox_ref.clone();
+    updated.run.handoff_ref = state.run.handoff_ref.clone();
+    updated.run.background_state = None;
+    updated.run.worker_dispatch = None;
+    updated.run.approval_state = "not-required".into();
+    updated.run.approval_target = None;
+    updated.run.auth_target = None;
+    updated.run.usage_summary = loop_result.usage_summary.clone();
+    updated.run.artifact_refs = vec![persistence::runtime_output_artifact_ref(&state.run.id)];
+    updated.run.trace_context = trace_context;
+    updated.run.checkpoint = checkpoint;
+    updated.run.capability_plan_summary = loop_result.capability_projection.plan_summary;
+    updated.run.provider_state_summary = loop_result.capability_projection.provider_state_summary;
+    updated.run.pending_mediation = None;
+    updated.run.capability_state_ref = Some(loop_result.capability_projection.capability_state_ref);
+    updated.run.last_execution_outcome = None;
+    updated.run.last_mediation_outcome = None;
+    updated.run.resolved_target = Some(resolved_target);
+    updated.run.requested_actor_kind = Some(actor_manifest.actor_kind_label().into());
+    updated.run.requested_actor_id = Some(actor_manifest.actor_ref().to_string());
+    updated.run.resolved_actor_kind = Some(actor_manifest.actor_kind_label().into());
+    updated.run.resolved_actor_id = Some(actor_manifest.actor_ref().to_string());
+    updated.run.resolved_actor_label = Some(actor_manifest.label().to_string());
+
+    Ok(updated)
+}
+
+async fn continue_team_runtime_subruns(
+    adapter: &RuntimeAdapter,
+    session_id: &str,
+    team_manifest: &actor_manifest::CompiledTeamManifest,
+    fallback_content: &str,
+) -> Result<Option<(RuntimeRunSnapshot, String, String)>, AppError> {
+    let (conversation_id, project_id, parent_run_id, blocked, subrun_states) = {
+        let sessions = adapter
+            .state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+        let aggregate = sessions
+            .get(session_id)
+            .ok_or_else(|| AppError::not_found("runtime session"))?;
+        (
+            aggregate.detail.summary.conversation_id.clone(),
+            aggregate.detail.summary.project_id.clone(),
+            aggregate.detail.run.id.clone(),
+            aggregate.detail.pending_approval.is_some()
+                || aggregate.detail.run.status != "completed",
+            aggregate
+                .metadata
+                .subrun_states
+                .iter()
+                .filter(|(_, state)| resumable_subrun_status(&state.run.status))
+                .map(|(run_id, state)| (run_id.clone(), state.clone()))
+                .collect::<Vec<_>>(),
+        )
+    };
+
+    if blocked || subrun_states.is_empty() {
+        return Ok(None);
+    }
+
+    for (run_id, state) in subrun_states {
+        let updated_state = execute_team_subrun(
+            adapter,
+            session_id,
+            &conversation_id,
+            &parent_run_id,
+            &state,
+            fallback_content,
+        )
+        .await?;
+        let updated_at = updated_state.run.updated_at;
+
+        let mut sessions = adapter
+            .state
+            .sessions
+            .lock()
+            .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+        let aggregate = sessions
+            .get_mut(session_id)
+            .ok_or_else(|| AppError::not_found("runtime session"))?;
+        aggregate
+            .metadata
+            .subrun_states
+            .insert(run_id, updated_state);
+        team_runtime::apply_team_runtime_state(
+            &mut aggregate.detail,
+            team_manifest,
+            &aggregate.metadata.subrun_states,
+            updated_at,
+        );
+        aggregate.detail.run.updated_at = updated_at;
+        aggregate.detail.summary.updated_at = updated_at;
+        sync_runtime_session_detail(&mut aggregate.detail);
+        adapter.persist_session(session_id, aggregate)?;
+    }
+
+    let sessions = adapter
+        .state
+        .sessions
+        .lock()
+        .map_err(|_| AppError::runtime("runtime sessions mutex poisoned"))?;
+    let aggregate = sessions
+        .get(session_id)
+        .ok_or_else(|| AppError::not_found("runtime session"))?;
+    Ok(Some((
+        aggregate.detail.run.clone(),
+        conversation_id,
+        project_id,
+    )))
+}
+
 impl AgentRuntimeCore {
     pub(crate) async fn submit_turn(
         adapter: &RuntimeAdapter,
@@ -1738,40 +1944,38 @@ impl AgentRuntimeCore {
             .as_ref()
             .and_then(|step| step.broker_decision.clone())
             .unwrap_or(broker_decision);
-        let team_spawn_mediation_request =
-            (blocking_broker_decision.state == "allow")
-                .then(|| team_spawn_mediation_request(&run_context, None, now))
-                .flatten();
+        let team_spawn_mediation_request = (blocking_broker_decision.state == "allow")
+            .then(|| team_spawn_mediation_request(&run_context, None, now))
+            .flatten();
         let team_spawn_broker_decision = team_spawn_mediation_request
             .as_ref()
             .map(approval_broker::require_approval);
         let blocking_mediation_request = team_spawn_mediation_request
             .as_ref()
             .unwrap_or(blocking_mediation_request);
-        let blocking_broker_decision = team_spawn_broker_decision
-            .unwrap_or(blocking_broker_decision);
-        let workflow_continuation_mediation_request =
-            (blocking_broker_decision.state == "allow")
-                .then(|| {
-                    workflow_continuation_mediation_request(
-                        &run_context.session_id,
-                        &run_context.conversation_id,
-                        &run_context.run_id,
-                        &run_context.actor_manifest,
-                        &run_context.session_policy,
-                        None,
-                        now,
-                    )
-                })
-                .flatten();
+        let blocking_broker_decision =
+            team_spawn_broker_decision.unwrap_or(blocking_broker_decision);
+        let workflow_continuation_mediation_request = (blocking_broker_decision.state == "allow")
+            .then(|| {
+                workflow_continuation_mediation_request(
+                    &run_context.session_id,
+                    &run_context.conversation_id,
+                    &run_context.run_id,
+                    &run_context.actor_manifest,
+                    &run_context.session_policy,
+                    None,
+                    now,
+                )
+            })
+            .flatten();
         let workflow_continuation_broker_decision = workflow_continuation_mediation_request
             .as_ref()
             .map(approval_broker::require_approval);
         let blocking_mediation_request = workflow_continuation_mediation_request
             .as_ref()
             .unwrap_or(blocking_mediation_request);
-        let blocking_broker_decision = workflow_continuation_broker_decision
-            .unwrap_or(blocking_broker_decision);
+        let blocking_broker_decision =
+            workflow_continuation_broker_decision.unwrap_or(blocking_broker_decision);
         let empty_model_iterations = Vec::new();
         let model_iterations = runtime_loop
             .as_ref()
@@ -1794,9 +1998,9 @@ impl AgentRuntimeCore {
             execution_trace,
             assistant_message,
             approval,
-            run,
-            conversation_id,
-            project_id,
+            mut run,
+            mut conversation_id,
+            mut project_id,
         ) = apply_submit_state(
             adapter,
             &run_context,
@@ -1809,6 +2013,18 @@ impl AgentRuntimeCore {
             usage_summary,
             serialized_session,
         )?;
+        if let actor_manifest::CompiledActorManifest::Team(team_manifest) =
+            &run_context.actor_manifest
+        {
+            if let Some((updated_run, updated_conversation_id, updated_project_id)) =
+                continue_team_runtime_subruns(adapter, session_id, team_manifest, &input.content)
+                    .await?
+            {
+                run = updated_run;
+                conversation_id = updated_conversation_id;
+                project_id = updated_project_id;
+            }
+        }
 
         execution_events::record_submit_turn_activity(
             adapter,
@@ -1881,35 +2097,35 @@ impl AgentRuntimeCore {
             && approval_replays_runtime_loop(approval.target_kind.as_deref())
             && !provider_auth_required(&capability_projection)
         {
-                let content = checkpoint
-                    .serialized_session
-                    .get("content")
-                    .or_else(|| checkpoint.serialized_session.get("pendingContent"))
-                    .and_then(Value::as_str)
-                    .ok_or_else(|| AppError::runtime("pending approval content is unavailable"))?;
-                let session = restore_runtime_session(&checkpoint.serialized_session, content)?;
-                let pending_tool_uses =
-                    pending_tool_uses_from_serialized_session(&checkpoint.serialized_session)?;
-                Some(
-                    execute_runtime_turn_loop(
-                        adapter,
-                        session_id,
-                        &approval.conversation_id,
-                        &approval.run_id,
-                        &resolved_target,
-                        &configured_model,
-                        &actor_manifest,
-                        &session_policy,
-                        &capability_projection.capability_state_ref,
-                        content,
-                        &trace_context_from_serialized_session(&checkpoint.serialized_session),
-                        session,
-                        pending_tool_uses,
-                        checkpoint.current_iteration_index,
-                        checkpoint.usage_summary.clone(),
-                    )
-                    .await?,
+            let content = checkpoint
+                .serialized_session
+                .get("content")
+                .or_else(|| checkpoint.serialized_session.get("pendingContent"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| AppError::runtime("pending approval content is unavailable"))?;
+            let session = restore_runtime_session(&checkpoint.serialized_session, content)?;
+            let pending_tool_uses =
+                pending_tool_uses_from_serialized_session(&checkpoint.serialized_session)?;
+            Some(
+                execute_runtime_turn_loop(
+                    adapter,
+                    session_id,
+                    &approval.conversation_id,
+                    &approval.run_id,
+                    &resolved_target,
+                    &configured_model,
+                    &actor_manifest,
+                    &session_policy,
+                    &capability_projection.capability_state_ref,
+                    content,
+                    &trace_context_from_serialized_session(&checkpoint.serialized_session),
+                    session,
+                    pending_tool_uses,
+                    checkpoint.current_iteration_index,
+                    checkpoint.usage_summary.clone(),
                 )
+                .await?,
+            )
         } else {
             None
         };
@@ -1946,22 +2162,41 @@ impl AgentRuntimeCore {
             .as_ref()
             .map(|step| step.capability_events.as_slice())
             .unwrap_or(empty_capability_events.as_slice());
-        let (approval, execution_trace, assistant_message, run, conversation_id, project_id) =
-            apply_approval_resolution_state(
-                adapter,
-                session_id,
-                approval_id,
-                now,
-                decision_status,
-                &actor_manifest,
-                &session_policy,
-                capability_projection,
-                execution,
-                consumed_tokens,
-                current_iteration_index,
-                usage_summary,
-                serialized_session,
-            )?;
+        let (
+            approval,
+            execution_trace,
+            assistant_message,
+            mut run,
+            mut conversation_id,
+            mut project_id,
+        ) = apply_approval_resolution_state(
+            adapter,
+            session_id,
+            approval_id,
+            now,
+            decision_status,
+            &actor_manifest,
+            &session_policy,
+            capability_projection,
+            execution,
+            consumed_tokens,
+            current_iteration_index,
+            usage_summary,
+            serialized_session,
+        )?;
+        if decision_status == "approved" {
+            if let actor_manifest::CompiledActorManifest::Team(team_manifest) = &actor_manifest {
+                let content = subrun_fallback_content(&checkpoint, "");
+                if let Some((updated_run, updated_conversation_id, updated_project_id)) =
+                    continue_team_runtime_subruns(adapter, session_id, team_manifest, &content)
+                        .await?
+                {
+                    run = updated_run;
+                    conversation_id = updated_conversation_id;
+                    project_id = updated_project_id;
+                }
+            }
+        }
 
         execution_events::record_approval_resolution_activity(
             adapter,
@@ -2492,7 +2727,9 @@ fn apply_submit_state(
         used_default_actor: Some(false),
         resource_ids: Some(Vec::new()),
         attachments: Some(Vec::new()),
-        artifacts: Some(vec![format!("artifact-{}", aggregate.detail.run.id)]),
+        artifacts: Some(vec![persistence::runtime_output_artifact_ref(
+            &aggregate.detail.run.id,
+        )]),
         usage: None,
         tool_calls: None,
         process_entries: None,
@@ -2617,7 +2854,9 @@ fn apply_submit_state(
     aggregate.detail.run.auth_target = auth_target.clone();
     aggregate.detail.run.usage_summary = usage_summary;
     aggregate.detail.run.artifact_refs = if execution.is_some() {
-        vec![format!("artifact-{}", aggregate.detail.run.id)]
+        vec![persistence::runtime_output_artifact_ref(
+            &aggregate.detail.run.id,
+        )]
     } else {
         Vec::new()
     };
@@ -2670,9 +2909,6 @@ fn apply_submit_state(
                 team_manifest,
                 run_context.now,
             );
-            if approval_blocks_workflow_projection(approval.as_ref()) {
-                clear_workflow_runtime_projection(&mut aggregate.detail);
-            }
             team_runtime::ensure_subrun_state_metadata(adapter, aggregate, run_context)?;
         }
     }
@@ -2984,7 +3220,9 @@ fn apply_approval_resolution_state(
         used_default_actor: Some(false),
         resource_ids: Some(Vec::new()),
         attachments: Some(Vec::new()),
-        artifacts: Some(vec![format!("artifact-{}", aggregate.detail.run.id)]),
+        artifacts: Some(vec![persistence::runtime_output_artifact_ref(
+            &aggregate.detail.run.id,
+        )]),
         usage: None,
         tool_calls: None,
         process_entries: None,
@@ -3056,7 +3294,9 @@ fn apply_approval_resolution_state(
     aggregate.detail.run.auth_target = auth_target.clone();
     aggregate.detail.run.usage_summary = usage_summary.clone();
     aggregate.detail.run.artifact_refs = if execution.is_some() {
-        vec![format!("artifact-{}", aggregate.detail.run.id)]
+        vec![persistence::runtime_output_artifact_ref(
+            &aggregate.detail.run.id,
+        )]
     } else {
         Vec::new()
     };
@@ -3158,14 +3398,18 @@ fn apply_approval_resolution_state(
             aggregate.detail.run.background_state = None;
             team_runtime::sync_subrun_state_metadata(aggregate, now);
         } else {
-            team_runtime::apply_team_runtime_projection(&mut aggregate.detail, team_manifest, now);
-            if resolved_target_kind.as_deref() == Some("workflow-continuation")
-                && decision_status != "approved"
-                || approval_blocks_workflow_projection(Some(&approval))
-            {
-                clear_workflow_runtime_projection(&mut aggregate.detail);
-            }
-            team_runtime::sync_subrun_state_metadata(aggregate, now);
+            team_runtime::apply_team_runtime_state(
+                &mut aggregate.detail,
+                team_manifest,
+                &aggregate.metadata.subrun_states,
+                now,
+            );
+            team_runtime::ensure_subrun_state_metadata_for_session(
+                adapter,
+                aggregate,
+                session_policy,
+                now,
+            )?;
         }
     }
     sync_runtime_session_detail(&mut aggregate.detail);
@@ -3271,7 +3515,9 @@ fn apply_auth_challenge_resolution_state(
         used_default_actor: Some(false),
         resource_ids: Some(Vec::new()),
         attachments: Some(Vec::new()),
-        artifacts: Some(vec![format!("artifact-{}", aggregate.detail.run.id)]),
+        artifacts: Some(vec![persistence::runtime_output_artifact_ref(
+            &aggregate.detail.run.id,
+        )]),
         usage: None,
         tool_calls: None,
         process_entries: None,
@@ -3322,7 +3568,9 @@ fn apply_auth_challenge_resolution_state(
     aggregate.detail.run.auth_target = None;
     aggregate.detail.run.usage_summary = usage_summary.clone();
     aggregate.detail.run.artifact_refs = if execution.is_some() {
-        vec![format!("artifact-{}", aggregate.detail.run.id)]
+        vec![persistence::runtime_output_artifact_ref(
+            &aggregate.detail.run.id,
+        )]
     } else {
         Vec::new()
     };

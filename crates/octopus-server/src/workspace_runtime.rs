@@ -1,6 +1,5 @@
 use super::*;
 use crate::dto_mapping::metric_record;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
 use octopus_core::{
     AuditRecord, AuthorizationRequest, CapabilityManagementProjection, CostLedgerEntry,
     CreateProjectPromotionRequestInput, ExportWorkspaceAgentBundleInput,
@@ -10,6 +9,7 @@ use octopus_core::{
     ProjectTokenUsageRecord, ProtectedResourceDescriptor, ResolveRuntimeAuthChallengeInput,
     ResolveRuntimeMemoryProposalInput, ReviewProjectPromotionRequestInput, RuntimeMessage,
 };
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -766,8 +766,13 @@ pub(crate) async fn project_dashboard(
     let user_stats = build_user_stats(&project, &users, &audit_records, &trend);
     let conversation_insights =
         build_conversation_insights(&sessions, &session_details, &audit_records);
-    let used_tokens = state.services.observation.project_used_tokens(&project_id).await?;
-    let total_tokens = used_tokens.max(cost_entries.iter().map(|record| record.amount as u64).sum());
+    let used_tokens = state
+        .services
+        .observation
+        .project_used_tokens(&project_id)
+        .await?;
+    let total_tokens =
+        used_tokens.max(cost_entries.iter().map(|record| record.amount as u64).sum());
     let approval_count = session_details
         .values()
         .filter(|detail| detail.pending_mediation.is_some())
@@ -809,12 +814,7 @@ pub(crate) async fn project_dashboard(
             tool_source_keys.len() as u64,
             Some(tool_source_keys.join(", ")),
         ),
-        dashboard_breakdown_item(
-            "sessions",
-            "sessions",
-            conversations.len() as u64,
-            None,
-        ),
+        dashboard_breakdown_item("sessions", "sessions", conversations.len() as u64, None),
     ];
 
     Ok(Json(ProjectDashboardSnapshot {
@@ -3080,7 +3080,11 @@ fn project_member_ids(project: &ProjectRecord) -> Vec<String> {
 fn collect_project_agent_ids(project: &ProjectRecord) -> BTreeSet<String> {
     let mut ids = BTreeSet::new();
     ids.extend(project.linked_workspace_assets.agent_ids.iter().cloned());
-    if let Some(assignments) = project.assignments.as_ref().and_then(|value| value.agents.as_ref()) {
+    if let Some(assignments) = project
+        .assignments
+        .as_ref()
+        .and_then(|value| value.agents.as_ref())
+    {
         ids.extend(assignments.agent_ids.iter().cloned());
     }
     ids
@@ -3092,7 +3096,11 @@ fn collect_project_team_ids(
 ) -> BTreeSet<String> {
     let mut ids = BTreeSet::new();
     ids.extend(links.iter().map(|record| record.team_id.clone()));
-    if let Some(assignments) = project.assignments.as_ref().and_then(|value| value.agents.as_ref()) {
+    if let Some(assignments) = project
+        .assignments
+        .as_ref()
+        .and_then(|value| value.agents.as_ref())
+    {
         ids.extend(assignments.team_ids.iter().cloned());
     }
     ids
@@ -3100,8 +3108,18 @@ fn collect_project_team_ids(
 
 fn project_tool_source_keys(project: &ProjectRecord) -> Vec<String> {
     let mut source_keys = BTreeSet::new();
-    source_keys.extend(project.linked_workspace_assets.tool_source_keys.iter().cloned());
-    if let Some(assignments) = project.assignments.as_ref().and_then(|value| value.tools.as_ref()) {
+    source_keys.extend(
+        project
+            .linked_workspace_assets
+            .tool_source_keys
+            .iter()
+            .cloned(),
+    );
+    if let Some(assignments) = project
+        .assignments
+        .as_ref()
+        .and_then(|value| value.tools.as_ref())
+    {
         source_keys.extend(assignments.source_keys.iter().cloned());
     }
     source_keys.into_iter().collect()
@@ -3129,7 +3147,12 @@ async fn load_project_session_details(
 ) -> Result<HashMap<String, octopus_core::RuntimeSessionDetail>, ApiError> {
     let mut details = HashMap::new();
     for session in sessions {
-        if let Ok(detail) = state.services.runtime_session.get_session(&session.id).await {
+        if let Ok(detail) = state
+            .services
+            .runtime_session
+            .get_session(&session.id)
+            .await
+        {
             details.insert(session.id.clone(), detail);
         }
     }
@@ -3192,15 +3215,18 @@ fn build_bucket_timestamps(
     audit_records: &[AuditRecord],
     bucket_count: usize,
 ) -> (Vec<ProjectDashboardTrendPoint>, u64, u64) {
-    let mut timestamps = sessions.iter().map(|record| record.updated_at).collect::<Vec<_>>();
+    let mut timestamps = sessions
+        .iter()
+        .map(|record| record.updated_at)
+        .collect::<Vec<_>>();
     timestamps.extend(cost_entries.iter().map(|record| record.created_at));
     timestamps.extend(audit_records.iter().map(|record| record.created_at));
 
     let max_timestamp = timestamps.iter().copied().max().unwrap_or(0);
     let min_timestamp = timestamps.iter().copied().min().unwrap_or(max_timestamp);
     let span = max_timestamp.saturating_sub(min_timestamp);
-    let step = ((span.max(bucket_count.saturating_sub(1) as u64)) / bucket_count.max(1) as u64)
-        .max(1);
+    let step =
+        ((span.max(bucket_count.saturating_sub(1) as u64)) / bucket_count.max(1) as u64).max(1);
     let start = max_timestamp.saturating_sub(step * bucket_count.saturating_sub(1) as u64);
 
     let buckets = (0..bucket_count)
@@ -3372,7 +3398,12 @@ fn build_tool_ranking(
             helper: None,
         })
         .collect::<Vec<_>>();
-    rows.sort_by(|left, right| right.value.cmp(&left.value).then_with(|| left.label.cmp(&right.label)));
+    rows.sort_by(|left, right| {
+        right
+            .value
+            .cmp(&left.value)
+            .then_with(|| left.label.cmp(&right.label))
+    });
     rows.into_iter().take(8).collect()
 }
 
@@ -3458,11 +3489,17 @@ fn build_user_stats(
     for (index, bucket) in trend.iter().enumerate() {
         let active_ids = stats
             .iter()
-            .filter_map(|(user_id, item)| (item.activity_trend[index] > 0).then_some(user_id.clone()))
+            .filter_map(|(user_id, item)| {
+                (item.activity_trend[index] > 0).then_some(user_id.clone())
+            })
             .collect::<Vec<_>>();
         let total_activity = active_ids
             .iter()
-            .map(|user_id| stats.get(user_id).map_or(0, |item| item.activity_trend[index]))
+            .map(|user_id| {
+                stats
+                    .get(user_id)
+                    .map_or(0, |item| item.activity_trend[index])
+            })
             .sum::<u64>();
 
         if active_ids.is_empty() {
@@ -3480,7 +3517,9 @@ fn build_user_stats(
         let mut remaining_messages = bucket.message_count;
         let mut remaining_tools = bucket.tool_call_count;
         for user_id in &active_ids {
-            let share = stats.get(user_id).map_or(0, |item| item.activity_trend[index]);
+            let share = stats
+                .get(user_id)
+                .map_or(0, |item| item.activity_trend[index]);
             let denominator = total_activity.max(1);
             let token_share = bucket.token_count * share / denominator;
             let message_share = bucket.message_count * share / denominator;
@@ -3934,6 +3973,8 @@ pub(crate) async fn runtime_events(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{body::to_bytes, response::IntoResponse};
+    use serde_json::Value;
 
     fn sample_session() -> SessionRecord {
         SessionRecord {
@@ -3968,6 +4009,183 @@ mod tests {
             updated_at: 1,
             tags: Vec::new(),
             source_artifact_id: None,
+        }
+    }
+
+    fn sample_runtime_run_snapshot() -> octopus_core::RuntimeRunSnapshot {
+        octopus_core::RuntimeRunSnapshot {
+            id: "run-1".into(),
+            session_id: "session-1".into(),
+            conversation_id: "conversation-1".into(),
+            status: "running".into(),
+            current_step: "workflow_step".into(),
+            started_at: 10,
+            updated_at: 20,
+            selected_memory: Vec::new(),
+            freshness_summary: None,
+            pending_memory_proposal: None,
+            memory_state_ref: "memory-state-1".into(),
+            configured_model_id: Some("quota-model".into()),
+            configured_model_name: Some("Quota Model".into()),
+            model_id: Some("provider-model".into()),
+            consumed_tokens: Some(42),
+            next_action: Some("await_workflow".into()),
+            config_snapshot_id: "config-1".into(),
+            effective_config_hash: "hash-1".into(),
+            started_from_scope_set: vec!["workspace".into()],
+            run_kind: "primary".into(),
+            parent_run_id: None,
+            actor_ref: "team:workspace-core".into(),
+            delegated_by_tool_call_id: Some("tool-call-1".into()),
+            workflow_run: Some("workflow-1".into()),
+            workflow_run_detail: Some(octopus_core::RuntimeWorkflowRunDetail {
+                workflow_run_id: "workflow-1".into(),
+                status: "background_running".into(),
+                current_step_id: Some("step-1".into()),
+                current_step_label: Some("Worker review".into()),
+                total_steps: 3,
+                completed_steps: 1,
+                background_capable: true,
+            }),
+            mailbox_ref: Some("mailbox-1".into()),
+            handoff_ref: Some("handoff-1".into()),
+            background_state: Some("background_running".into()),
+            worker_dispatch: Some(octopus_core::RuntimeWorkerDispatchSummary {
+                total_subruns: 1,
+                active_subruns: 1,
+                completed_subruns: 0,
+                failed_subruns: 0,
+            }),
+            approval_state: "not-required".into(),
+            approval_target: None,
+            auth_target: None,
+            usage_summary: octopus_core::RuntimeUsageSummary::default(),
+            artifact_refs: vec!["runtime-artifact-run-1".into()],
+            trace_context: octopus_core::RuntimeTraceContext::default(),
+            checkpoint: octopus_core::RuntimeRunCheckpoint::default(),
+            capability_plan_summary: octopus_core::RuntimeCapabilityPlanSummary::default(),
+            provider_state_summary: Vec::new(),
+            pending_mediation: None,
+            capability_state_ref: Some("capability-state-1".into()),
+            last_execution_outcome: None,
+            last_mediation_outcome: None,
+            resolved_target: None,
+            requested_actor_kind: Some("team".into()),
+            requested_actor_id: Some("team:workspace-core".into()),
+            resolved_actor_kind: Some("team".into()),
+            resolved_actor_id: Some("team:workspace-core".into()),
+            resolved_actor_label: Some("Workspace Core".into()),
+        }
+    }
+
+    fn sample_runtime_session_detail() -> octopus_core::RuntimeSessionDetail {
+        let run = sample_runtime_run_snapshot();
+        let workflow = octopus_core::RuntimeWorkflowSummary {
+            workflow_run_id: "workflow-1".into(),
+            label: "Team workflow".into(),
+            status: "background_running".into(),
+            total_steps: 3,
+            completed_steps: 1,
+            current_step_id: Some("step-1".into()),
+            current_step_label: Some("Worker review".into()),
+            background_capable: true,
+            updated_at: 20,
+        };
+        let mailbox = octopus_core::RuntimeMailboxSummary {
+            mailbox_ref: "mailbox-1".into(),
+            channel: "team-mailbox".into(),
+            status: "pending".into(),
+            pending_count: 1,
+            total_messages: 1,
+            updated_at: 20,
+        };
+        let background = octopus_core::RuntimeBackgroundRunSummary {
+            run_id: run.id.clone(),
+            workflow_run_id: Some("workflow-1".into()),
+            status: "background_running".into(),
+            background_capable: true,
+            updated_at: 20,
+        };
+
+        octopus_core::RuntimeSessionDetail {
+            summary: octopus_core::RuntimeSessionSummary {
+                id: "session-1".into(),
+                conversation_id: "conversation-1".into(),
+                project_id: "project-1".into(),
+                title: "Phase 4".into(),
+                session_kind: "project".into(),
+                status: "running".into(),
+                updated_at: 20,
+                last_message_preview: Some("Workflow in progress".into()),
+                config_snapshot_id: "config-1".into(),
+                effective_config_hash: "hash-1".into(),
+                started_from_scope_set: vec!["workspace".into()],
+                selected_actor_ref: "team:workspace-core".into(),
+                manifest_revision: "manifest-1".into(),
+                session_policy: octopus_core::RuntimeSessionPolicySnapshot::default(),
+                active_run_id: run.id.clone(),
+                subrun_count: 1,
+                workflow: Some(workflow.clone()),
+                pending_mailbox: Some(mailbox.clone()),
+                background_run: Some(background.clone()),
+                memory_summary: octopus_core::RuntimeMemorySummary::default(),
+                memory_selection_summary: octopus_core::RuntimeMemorySelectionSummary::default(),
+                pending_memory_proposal_count: 0,
+                memory_state_ref: "memory-state-1".into(),
+                capability_summary: octopus_core::RuntimeCapabilityPlanSummary::default(),
+                provider_state_summary: Vec::new(),
+                auth_state_summary: octopus_core::RuntimeAuthStateSummary::default(),
+                pending_mediation: None,
+                policy_decision_summary: octopus_core::RuntimePolicyDecisionSummary::default(),
+                capability_state_ref: Some("capability-state-1".into()),
+                last_execution_outcome: None,
+            },
+            selected_actor_ref: "team:workspace-core".into(),
+            manifest_revision: "manifest-1".into(),
+            session_policy: octopus_core::RuntimeSessionPolicySnapshot::default(),
+            active_run_id: run.id.clone(),
+            subrun_count: 1,
+            workflow: Some(workflow),
+            pending_mailbox: Some(mailbox),
+            background_run: Some(background),
+            memory_summary: octopus_core::RuntimeMemorySummary::default(),
+            memory_selection_summary: octopus_core::RuntimeMemorySelectionSummary::default(),
+            pending_memory_proposal_count: 0,
+            memory_state_ref: "memory-state-1".into(),
+            capability_summary: octopus_core::RuntimeCapabilityPlanSummary::default(),
+            provider_state_summary: Vec::new(),
+            auth_state_summary: octopus_core::RuntimeAuthStateSummary::default(),
+            pending_mediation: None,
+            policy_decision_summary: octopus_core::RuntimePolicyDecisionSummary::default(),
+            capability_state_ref: Some("capability-state-1".into()),
+            last_execution_outcome: None,
+            run,
+            subruns: vec![octopus_core::RuntimeSubrunSummary {
+                run_id: "subrun-1".into(),
+                parent_run_id: Some("run-1".into()),
+                actor_ref: "agent:worker".into(),
+                label: "Worker".into(),
+                status: "running".into(),
+                run_kind: "subrun".into(),
+                delegated_by_tool_call_id: Some("tool-call-1".into()),
+                workflow_run_id: Some("workflow-1".into()),
+                mailbox_ref: Some("mailbox-1".into()),
+                handoff_ref: Some("handoff-1".into()),
+                started_at: 11,
+                updated_at: 20,
+            }],
+            handoffs: vec![octopus_core::RuntimeHandoffSummary {
+                handoff_ref: "handoff-1".into(),
+                mailbox_ref: "mailbox-1".into(),
+                sender_actor_ref: "team:workspace-core".into(),
+                receiver_actor_ref: "agent:worker".into(),
+                state: "pending".into(),
+                artifact_refs: vec!["runtime-artifact-run-1".into()],
+                updated_at: 20,
+            }],
+            messages: Vec::new(),
+            trace: Vec::new(),
+            pending_approval: None,
         }
     }
 
@@ -4052,6 +4270,82 @@ mod tests {
             assignments: None,
         })
         .is_err());
+    }
+
+    #[tokio::test]
+    async fn runtime_session_detail_response_preserves_phase_four_fields() {
+        let response = Json(sample_runtime_session_detail()).into_response();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let json: Value = serde_json::from_slice(&body).expect("runtime session detail json");
+
+        assert_eq!(
+            json.pointer("/workflow/workflowRunId")
+                .and_then(Value::as_str),
+            Some("workflow-1")
+        );
+        assert_eq!(
+            json.pointer("/pendingMailbox/channel")
+                .and_then(Value::as_str),
+            Some("team-mailbox")
+        );
+        assert_eq!(
+            json.pointer("/backgroundRun/status")
+                .and_then(Value::as_str),
+            Some("background_running")
+        );
+        assert_eq!(
+            json.pointer("/subruns/0/workflowRunId")
+                .and_then(Value::as_str),
+            Some("workflow-1")
+        );
+        assert_eq!(
+            json.pointer("/handoffs/0/artifactRefs/0")
+                .and_then(Value::as_str),
+            Some("runtime-artifact-run-1")
+        );
+        assert_eq!(
+            json.pointer("/run/workflowRunDetail/currentStepId")
+                .and_then(Value::as_str),
+            Some("step-1")
+        );
+    }
+
+    #[tokio::test]
+    async fn runtime_run_response_preserves_phase_four_fields() {
+        let response = Json(sample_runtime_run_snapshot()).into_response();
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body");
+        let json: Value = serde_json::from_slice(&body).expect("runtime run json");
+
+        assert_eq!(
+            json.pointer("/workflowRun").and_then(Value::as_str),
+            Some("workflow-1")
+        );
+        assert_eq!(
+            json.pointer("/workflowRunDetail/status")
+                .and_then(Value::as_str),
+            Some("background_running")
+        );
+        assert_eq!(
+            json.pointer("/mailboxRef").and_then(Value::as_str),
+            Some("mailbox-1")
+        );
+        assert_eq!(
+            json.pointer("/backgroundState").and_then(Value::as_str),
+            Some("background_running")
+        );
+        assert_eq!(
+            json.pointer("/workerDispatch/totalSubruns")
+                .and_then(Value::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            json.pointer("/artifactRefs/0").and_then(Value::as_str),
+            Some("runtime-artifact-run-1")
+        );
     }
 
     #[test]

@@ -19,9 +19,7 @@ fn capability_dispatch_kind_label(dispatch_kind: tools::CapabilityDispatchKind) 
     }
 }
 
-fn capability_concurrency_policy_label(
-    policy: tools::CapabilityConcurrencyPolicy,
-) -> &'static str {
+fn capability_concurrency_policy_label(policy: tools::CapabilityConcurrencyPolicy) -> &'static str {
     match policy {
         tools::CapabilityConcurrencyPolicy::ParallelRead => "parallel_read",
         tools::CapabilityConcurrencyPolicy::Serialized => "serialized",

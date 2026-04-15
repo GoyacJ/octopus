@@ -1,5 +1,12 @@
 use super::*;
 
+fn projected_subrun_status(run_status: &str) -> &'static str {
+    match run_status {
+        "failed" => "failed",
+        _ => "queued",
+    }
+}
+
 pub(crate) fn build_subrun_projection(
     team: &actor_manifest::CompiledTeamManifest,
     run: &RuntimeRunSnapshot,
@@ -15,7 +22,7 @@ pub(crate) fn build_subrun_projection(
             parent_run_id: Some(run.id.clone()),
             actor_ref: actor_ref.clone(),
             label: worker_runtime::worker_label(&actor_ref),
-            status: run.status.clone(),
+            status: projected_subrun_status(&run.status).into(),
             run_kind: "subrun".into(),
             delegated_by_tool_call_id: Some(format!("team-dispatch-{}", index + 1)),
             workflow_run_id: Some(workflow_run_id.to_string()),
@@ -29,16 +36,8 @@ pub(crate) fn build_subrun_projection(
     let total_subruns = subruns.len() as u64;
     let dispatch = RuntimeWorkerDispatchSummary {
         total_subruns,
-        active_subruns: if run.status == "running" {
-            total_subruns
-        } else {
-            0
-        },
-        completed_subruns: if run.status == "completed" {
-            total_subruns
-        } else {
-            0
-        },
+        active_subruns: 0,
+        completed_subruns: 0,
         failed_subruns: if run.status == "failed" {
             total_subruns
         } else {

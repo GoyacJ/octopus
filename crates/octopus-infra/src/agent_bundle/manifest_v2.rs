@@ -328,10 +328,10 @@ fn plan_asset_entries(plan: &BundlePlan) -> Vec<AssetBundleAssetEntry> {
 #[cfg(test)]
 mod tests {
     use octopus_core::{
-        default_agent_delegation_policy, default_agent_memory_policy,
-        default_approval_preference, default_asset_trust_metadata, default_model_strategy,
-        default_permission_envelope, AssetBundleAssetEntry, AssetBundleCompatibilityMapping,
-        AssetBundleManifestV2, AssetBundlePolicyDefaults,
+        default_agent_delegation_policy, default_agent_memory_policy, default_approval_preference,
+        default_asset_trust_metadata, default_model_strategy, default_permission_envelope,
+        AssetBundleAssetEntry, AssetBundleCompatibilityMapping, AssetBundleManifestV2,
+        AssetBundlePolicyDefaults,
     };
 
     use super::build_export_translation_report;

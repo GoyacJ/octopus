@@ -270,7 +270,11 @@ mod tests {
         default_asset_trust_metadata, AssetImportMetadata, BundleAssetDescriptorRecord,
     };
 
-    fn descriptor(source_id: &str, translation_mode: &str, action: ImportAction) -> PlannedBundleDescriptor {
+    fn descriptor(
+        source_id: &str,
+        translation_mode: &str,
+        action: ImportAction,
+    ) -> PlannedBundleDescriptor {
         PlannedBundleDescriptor {
             action,
             record: BundleAssetDescriptorRecord {
@@ -349,9 +353,18 @@ mod tests {
         let preview = plan_to_preview(&plan);
         let report = translation_report_from_issues(&plan, &plan.issues, Vec::new());
 
-        assert_eq!(preview.translation_report.translated_count, report.translated_count);
-        assert_eq!(preview.translation_report.downgraded_count, report.downgraded_count);
-        assert_eq!(preview.translation_report.rejected_count, report.rejected_count);
+        assert_eq!(
+            preview.translation_report.translated_count,
+            report.translated_count
+        );
+        assert_eq!(
+            preview.translation_report.downgraded_count,
+            report.downgraded_count
+        );
+        assert_eq!(
+            preview.translation_report.rejected_count,
+            report.rejected_count
+        );
         assert_eq!(preview.translation_report.status, report.status);
     }
 }
