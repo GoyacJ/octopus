@@ -495,12 +495,13 @@ fn provider_auth_target_ref(provider_key: &str) -> String {
     provider_key.to_string()
 }
 
-fn legacy_or_model_execution_target(target_kind: Option<&str>) -> bool {
-    matches!(target_kind, Some("runtime-execution" | "model-execution"))
+fn legacy_runtime_turn_target(target_kind: Option<&str>) -> bool {
+    matches!(target_kind, Some("runtime-execution" | "runtime-turn"))
 }
 
 fn approval_replays_runtime_loop(target_kind: Option<&str>) -> bool {
-    legacy_or_model_execution_target(target_kind) || matches!(target_kind, Some("capability-call"))
+    legacy_runtime_turn_target(target_kind)
+        || matches!(target_kind, Some("model-execution" | "capability-call"))
 }
 
 fn resumable_approval_target(target_kind: Option<&str>) -> bool {
@@ -609,6 +610,8 @@ fn team_spawn_mediation_request(
         created_at,
         risk_level: "high".into(),
         checkpoint_ref,
+        policy_action: Some(policy_decision.action.clone()),
+        pending_state: None,
     })
 }
 
@@ -666,6 +669,8 @@ fn workflow_continuation_mediation_request(
         created_at,
         risk_level: "high".into(),
         checkpoint_ref,
+        policy_action: Some(policy_decision.action.clone()),
+        pending_state: None,
     })
 }
 
@@ -807,14 +812,7 @@ async fn execute_runtime_turn_loop(
                             "runtime capability mediation did not capture a blocked request",
                         )
                     })?;
-                    let broker_decision = if matches!(
-                        execution.outcome,
-                        runtime::ToolExecutionOutcome::RequireAuth { .. }
-                    ) {
-                        approval_broker::require_auth(&mediation_request)
-                    } else {
-                        approval_broker::require_approval(&mediation_request)
-                    };
+                    let broker_decision = approval_broker::mediate(&mediation_request);
                     let updated_projection = adapter
                         .project_capability_state_async(
                             actor_manifest,
@@ -1086,6 +1084,8 @@ fn runtime_execution_mediation_request(
         created_at,
         risk_level: "medium".into(),
         checkpoint_ref,
+        policy_action: policy_decision.map(|decision| decision.action.clone()),
+        pending_state: None,
     }
 }
 
@@ -1162,6 +1162,8 @@ fn provider_auth_mediation_request(
         created_at,
         risk_level: "medium".into(),
         checkpoint_ref,
+        policy_action: policy_decision.map(|value| value.action.clone()),
+        pending_state: None,
     })
 }
 
@@ -1249,35 +1251,37 @@ fn finalize_mediation_checkpoint_ref(
 fn memory_proposal_pending_mediation(
     run_context: &run_context::RunContext,
     proposal: &RuntimeMemoryProposal,
-) -> RuntimePendingMediationSummary {
-    RuntimePendingMediationSummary {
-        approval_id: None,
-        approval_layer: Some("memory-review".into()),
-        auth_challenge_id: None,
-        capability_id: Some(run_context.actor_manifest.actor_ref().to_string()),
-        checkpoint_ref: None,
-        detail: Some(proposal.proposal_reason.clone()),
-        escalation_reason: Some("durable memory writes remain proposal-only until review".into()),
-        mediation_id: Some(proposal.proposal_id.clone()),
+) -> approval_broker::MediationRequest {
+    approval_broker::MediationRequest {
+        session_id: run_context.session_id.clone(),
+        conversation_id: run_context.conversation_id.clone(),
+        run_id: run_context.run_id.clone(),
+        tool_name: run_context.actor_manifest.label().to_string(),
+        summary: proposal.summary.clone(),
+        detail: proposal.proposal_reason.clone(),
         mediation_kind: "memory".into(),
-        dispatch_kind: Some("memory_write".into()),
+        approval_layer: "memory-review".into(),
+        target_kind: "memory-write".into(),
+        target_ref: proposal.proposal_id.clone(),
+        capability_id: Some(run_context.actor_manifest.actor_ref().to_string()),
+        dispatch_kind: "memory_write".into(),
         provider_key: None,
-        concurrency_policy: Some("serialized".into()),
-        input: Some(json!({
+        concurrency_policy: "serialized".into(),
+        input: json!({
             "memoryId": proposal.memory_id,
             "scope": proposal.scope,
             "kind": proposal.kind,
             "summary": proposal.summary,
-        })),
-        reason: Some(proposal.proposal_reason.clone()),
+        }),
         required_permission: None,
+        escalation_reason: Some("durable memory writes remain proposal-only until review".into()),
         requires_approval: false,
         requires_auth: false,
-        state: proposal.proposal_state.clone(),
-        summary: Some(proposal.summary.clone()),
-        target_kind: "memory-write".into(),
-        target_ref: proposal.proposal_id.clone(),
-        tool_name: Some(run_context.actor_manifest.label().to_string()),
+        created_at: run_context.now,
+        risk_level: "low".into(),
+        checkpoint_ref: None,
+        policy_action: Some("defer".into()),
+        pending_state: Some(proposal.proposal_state.clone()),
     }
 }
 
@@ -2573,13 +2577,10 @@ impl AgentRuntimeCore {
         let mediation_request = auth_mediation_request
             .clone()
             .unwrap_or_else(|| execution_mediation_request.clone());
-        let broker_decision = if requires_approval {
-            approval_broker::require_approval(&execution_mediation_request)
-        } else if let Some(auth_request) = auth_mediation_request.as_ref() {
-            approval_broker::require_auth(auth_request)
-        } else {
-            approval_broker::allow(&execution_mediation_request)
-        };
+        let broker_decision = auth_mediation_request
+            .as_ref()
+            .map(approval_broker::mediate)
+            .unwrap_or_else(|| approval_broker::mediate(&execution_mediation_request));
         let runtime_loop = if broker_decision.state == "allow" {
             let session = initial_runtime_session(&input.content)?;
             Some(
@@ -2652,7 +2653,7 @@ impl AgentRuntimeCore {
             .flatten();
         let team_spawn_broker_decision = team_spawn_mediation_request
             .as_ref()
-            .map(approval_broker::require_approval);
+            .map(approval_broker::mediate);
         let blocking_mediation_request = team_spawn_mediation_request
             .as_ref()
             .unwrap_or(blocking_mediation_request);
@@ -2673,7 +2674,7 @@ impl AgentRuntimeCore {
             .flatten();
         let workflow_continuation_broker_decision = workflow_continuation_mediation_request
             .as_ref()
-            .map(approval_broker::require_approval);
+            .map(approval_broker::mediate);
         let blocking_mediation_request = workflow_continuation_mediation_request
             .as_ref()
             .unwrap_or(blocking_mediation_request);
@@ -3497,13 +3498,16 @@ fn apply_submit_state(
         aggregate.detail.run.workflow_run_detail.as_ref(),
         &run_context.memory_selection.candidate_memory,
     );
-    let memory_pending_mediation = if blocking_pending_mediation.is_none() {
-        pending_memory_proposal
-            .as_ref()
-            .map(|proposal| memory_proposal_pending_mediation(run_context, proposal))
+    let memory_broker_decision = if blocking_pending_mediation.is_none() {
+        pending_memory_proposal.as_ref().map(|proposal| {
+            approval_broker::mediate(&memory_proposal_pending_mediation(run_context, proposal))
+        })
     } else {
         None
     };
+    let memory_pending_mediation = memory_broker_decision
+        .as_ref()
+        .and_then(|decision| decision.pending_mediation.clone());
     let mut pending_mediation = blocking_pending_mediation
         .clone()
         .or(memory_pending_mediation.clone());
@@ -3913,7 +3917,7 @@ fn apply_approval_resolution_state(
             now,
         )
         .ok_or_else(|| AppError::runtime("provider auth mediation request missing target"))?;
-        let broker_decision = approval_broker::require_auth(&auth_request);
+        let broker_decision = approval_broker::mediate(&auth_request);
         let mut checkpoint_approval = Some(approval.clone());
 
         auth_target = broker_decision.auth_challenge.clone();
@@ -4005,7 +4009,7 @@ fn apply_approval_resolution_state(
             None,
             now,
         ) {
-            let workflow_broker_decision = approval_broker::require_approval(&workflow_request);
+            let workflow_broker_decision = approval_broker::mediate(&workflow_request);
             let mut next_approval = workflow_broker_decision.approval.clone();
             let mut next_pending_mediation = workflow_broker_decision.pending_mediation.clone();
             let mut next_mediation_outcome = workflow_broker_decision.mediation_outcome.clone();

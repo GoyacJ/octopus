@@ -107,6 +107,28 @@ fn deferred_decision(
     }
 }
 
+fn deny_decision(
+    target_kind: &str,
+    reason: impl Into<String>,
+    capability_id: Option<String>,
+    provider_key: Option<String>,
+    required_permission: Option<String>,
+) -> RuntimeTargetPolicyDecision {
+    RuntimeTargetPolicyDecision {
+        target_kind: target_kind.into(),
+        action: "deny".into(),
+        hidden: true,
+        visible: false,
+        deferred: false,
+        requires_approval: false,
+        requires_auth: false,
+        reason: Some(reason.into()),
+        capability_id,
+        provider_key,
+        required_permission,
+    }
+}
+
 fn allow_decision(
     target_kind: &str,
     capability_id: Option<String>,
@@ -167,6 +189,23 @@ async fn authorize_bucket(
     })
 }
 
+fn configured_model_enabled(effective_config: &serde_json::Value, configured_model_id: &str) -> bool {
+    effective_config
+        .get("configuredModels")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|models| models.get(configured_model_id))
+        .and_then(serde_json::Value::as_object)
+        .map(|model| model.get("enabled").and_then(serde_json::Value::as_bool).unwrap_or(true))
+        .unwrap_or(false)
+}
+
+fn mcp_server_configured(effective_config: &serde_json::Value, server_name: &str) -> bool {
+    effective_config
+        .get("mcpServers")
+        .and_then(serde_json::Value::as_object)
+        .is_some_and(|servers| servers.contains_key(server_name))
+}
+
 fn compile_target_decisions(
     manifest: &actor_manifest::CompiledActorManifest,
     approval_preference: &ApprovalPreference,
@@ -174,6 +213,7 @@ fn compile_target_decisions(
     delegation_policy: &DelegationPolicy,
     execution_permission_mode: &str,
     configured_model_id: Option<&str>,
+    effective_config: &serde_json::Value,
 ) -> RuntimeTargetPolicyDecisions {
     let actor_ref = manifest.actor_ref().to_string();
     let mut decisions = RuntimeTargetPolicyDecisions::new();
@@ -182,7 +222,15 @@ fn compile_target_decisions(
         let tool_execution_requires_approval =
             execution_target::requires_approval(execution_permission_mode).unwrap_or(false)
                 || approval_preference.tool_execution == "require-approval";
-        let model_execution_decision = if tool_execution_requires_approval {
+        let model_execution_decision = if !configured_model_enabled(effective_config, configured_model_id) {
+            deny_decision(
+                "model-execution",
+                "configured model is disabled or unavailable in the frozen runtime config",
+                Some(format!("model-execution:{configured_model_id}")),
+                None,
+                Some(execution_permission_mode.into()),
+            )
+        } else if tool_execution_requires_approval {
             RuntimeTargetPolicyDecision {
                 target_kind: "model-execution".into(),
                 action: "requireApproval".into(),
@@ -298,15 +346,25 @@ fn compile_target_decisions(
     );
 
     for provider_key in manifest.mcp_server_names() {
-        let provider_auth_decision = deferred_decision(
-            "provider-auth",
-            "requireAuth",
-            "provider or MCP auth must resolve before mediated execution can continue",
-            Some(format!("provider-auth:{provider_key}")),
-            Some(provider_key.clone()),
-            approval_preference.mcp_auth == "require-approval",
-            true,
-        );
+        let provider_auth_decision = if !mcp_server_configured(effective_config, provider_key) {
+            deny_decision(
+                "provider-auth",
+                "provider or MCP server is not configured in the frozen runtime config",
+                Some(format!("provider-auth:{provider_key}")),
+                Some(provider_key.clone()),
+                None,
+            )
+        } else {
+            deferred_decision(
+                "provider-auth",
+                "requireAuth",
+                "provider or MCP auth must resolve before mediated execution can continue",
+                Some(format!("provider-auth:{provider_key}")),
+                Some(provider_key.clone()),
+                approval_preference.mcp_auth == "require-approval",
+                true,
+            )
+        };
         decisions.insert(
             decision_key("provider-auth", provider_key),
             provider_auth_decision,
@@ -320,6 +378,7 @@ pub(crate) fn compile_manifest_target_decisions(
     manifest: &actor_manifest::CompiledActorManifest,
     execution_permission_mode: &str,
     selected_configured_model_id: Option<&str>,
+    effective_config: &serde_json::Value,
 ) -> RuntimeTargetPolicyDecisions {
     let normalized_execution_permission_mode =
         octopus_core::normalize_runtime_permission_mode_label(execution_permission_mode)
@@ -343,6 +402,7 @@ pub(crate) fn compile_manifest_target_decisions(
         &delegation_policy,
         normalized_execution_permission_mode,
         configured_model_id,
+        effective_config,
     )
 }
 
@@ -406,10 +466,12 @@ pub(super) async fn compile_session_policy(
     let configured_model_id = selected_configured_model_id
         .map(ToOwned::to_owned)
         .or_else(|| manifest.default_model_ref().map(ToOwned::to_owned));
+    let effective_config = adapter.config_snapshot_value(&snapshot.id)?;
     let target_decisions = compile_manifest_target_decisions(
         manifest,
         &normalized_execution_permission_mode,
         configured_model_id.as_deref(),
+        &effective_config,
     );
 
     Ok(session_policy::CompiledSessionPolicy {

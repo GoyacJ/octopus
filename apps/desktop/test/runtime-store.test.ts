@@ -206,7 +206,7 @@ describe('useRuntimeStore', () => {
         sessionId: runtime.activeSessionId,
         conversationId: 'conv-placeholder-process',
         runId: runtime.activeRun?.id ?? 'runtime-run-placeholder',
-        toolName: 'runtime.turn',
+        toolName: 'agent-architect',
         summary: 'Turn requires approval',
         detail: 'Permission mode workspace-write requires explicit approval.',
         riskLevel: 'medium',

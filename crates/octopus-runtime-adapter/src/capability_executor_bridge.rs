@@ -162,6 +162,8 @@ fn capability_call_mediation_request(
             "high".into()
         },
         checkpoint_ref: None,
+        policy_action: None,
+        pending_state: None,
     }
 }
 

@@ -533,10 +533,12 @@ fn worker_session_policy(
     worker_policy.memory_policy = worker_manifest.memory_policy_value();
     worker_policy.delegation_policy = worker_manifest.delegation_policy_value();
     worker_policy.approval_preference = worker_manifest.approval_preference_value();
+    let effective_config = adapter.config_snapshot_value(&worker_policy.config_snapshot_id)?;
     worker_policy.target_decisions = policy_compiler::compile_manifest_target_decisions(
         &worker_manifest,
         &worker_policy.execution_permission_mode,
         worker_policy.selected_configured_model_id.as_deref(),
+        &effective_config,
     );
     Ok((worker_manifest, worker_policy))
 }

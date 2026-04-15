@@ -46,10 +46,12 @@ The current repository already contains some policy and approval structure, but 
 - `contracts/openapi/src/components/schemas/runtime.yaml` and generated `packages/schema/src/generated.ts` already expose `approvalLayer`, `targetKind`, `targetRef`, and `escalationReason` on approval records.
 - Public runtime transport already exposes `sessionPolicy`, `executionPermissionMode`, and optional `pendingApproval` on session and run payloads.
 - `crates/octopus-runtime-adapter/src/approval_flow.rs` is currently a thin delegator into `AgentRuntimeCore::resume_after_approval`.
-- `crates/octopus-runtime-adapter/src/agent_runtime_core.rs` still creates a turn-level approval request centered on `tool_name = "runtime.turn"` when the requested permission mode exceeds the session ceiling. That path sets `approval_layer = "execution-permission"`, `target_kind = "runtime-turn"`, and `escalation_reason = "session ceiling requires approval"`.
+- `crates/octopus-runtime-adapter/src/agent_runtime_core.rs` now emits target-specific `model-execution` mediation metadata for execution ceiling checks, and only keeps `runtime-turn`-style semantics as explicit restart compatibility for already-persisted legacy data.
 - `crates/tools/src/capability_runtime/provider.rs` already has a mediation decision hook driven by `requiresApproval` and `requiresAuth`, and `SessionCapabilityStore` already remembers approved tools and auth-resolved tools.
 - Generated runtime transport already includes capability-facing approval or auth flags such as `requiresApproval`, `requiresAuth`, and `authResolvedTools`.
-- Even with those pieces in place, business authorization is not yet consistently merged into deny-before-expose planning, and approval remains mostly execution-time and turn-centric instead of target-specific across tool, memory, team, workflow, and MCP surfaces.
+- `crates/octopus-runtime-adapter/src/approval_broker.rs` now owns a single `mediate` entrypoint for allow, deny, approval, auth, and deferred review paths, including memory proposal review.
+- `crates/octopus-runtime-adapter/src/policy_compiler.rs` now folds runtime config enablement into frozen target decisions for configured model execution and MCP/provider auth surfaces, in addition to manifest defaults and workspace authorization buckets.
+- Remaining work is concentrated in acceptance-fence breadth and any residual bypasses discovered by full-package verification, not in missing transport fields.
 
 Phase 6 starts from that actual state: the public contract and internal runtime have mediation fragments, but not yet one merged control plane.
 
@@ -314,6 +316,32 @@ pnpm -C apps/desktop exec vitest run test/openapi-transport.test.ts test/runtime
 - approval and auth events are projected consistently across tool, memory, team, workflow, and MCP boundaries
 - pending mediation and last outcome state survive restart and reload
 - no runtime path can bypass the merged control plane after planning
+- browser host and Tauri host expose the same typed mediation state to desktop consumers
+
+**Closure status on 2026-04-15:**
+- Task 1 complete: typed runtime transport remains the single public control-plane surface, and desktop tests cover pending mediation, last outcome, approval target, and auth target hydration.
+- Task 2 complete: `policy_compiler` now folds runtime config enablement into frozen target decisions, and `approval_broker::mediate` is the single runtime broker entrypoint for allow, deny, approval, auth, and deferred review.
+- Task 3 complete: capability, memory proposal review, team spawn, workflow continuation, and provider auth all consume brokered decisions, with no remaining direct `approval_broker::{allow,require_approval,require_auth}` call sites in runtime adapter code.
+- Task 4 complete: restart compatibility for legacy `runtime-turn` data is explicit and bounded, while current approval or auth resume restores the blocked target family instead of relying on universal turn placeholders.
+- Task 5 complete: pending mediation and last outcome remain projected through runtime persistence, JSONL events, and typed session or run payloads and are verified by restart-focused runtime adapter tests.
+- Task 6 complete: browser host and Tauri host continue to project the same typed mediation surface, and desktop store logic is limited to presentation-only placeholder messages instead of canonical policy inference.
+- Task 7 complete: the full phase fence passed with the command set below, so Phase 6 can be treated as complete rather than partially implemented.
+
+**Fence run results on 2026-04-15:**
+```bash
+pnpm openapi:bundle
+pnpm schema:generate
+pnpm schema:check
+cargo test -p octopus-core
+cargo test -p tools
+cargo test -p octopus-infra
+cargo test -p octopus-runtime-adapter
+cargo test -p octopus-platform
+cargo test -p octopus-server
+pnpm -C apps/desktop exec vitest run test/openapi-transport.test.ts test/runtime-store.test.ts test/tauri-client-runtime.test.ts
+```
+
+All commands above passed during the Phase 6 closure run.
 
 ## Handoff To Later Phases
 

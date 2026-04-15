@@ -458,7 +458,7 @@ export const runtimeStoreActions = {
         recallMode: input.recallMode,
         ignoredMemoryIds: input.ignoredMemoryIds,
         memoryIntent: input.memoryIntent,
-      }, tauriClient.createIdempotencyKey(`runtime-turn-${connectionId}-${this.activeSessionId}`))
+      }, tauriClient.createIdempotencyKey(`runtime-submit-${connectionId}-${this.activeSessionId}`))
       if (this.activeWorkspaceConnectionId !== connectionId) {
         return false
       }

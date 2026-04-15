@@ -8414,6 +8414,188 @@ async fn partial_approval_preference_json_merges_with_defaults_for_policy_compil
 }
 
 #[tokio::test]
+async fn policy_compiler_uses_runtime_config_enablement_for_model_and_mcp_targets() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_json(
+        &infra.paths.runtime_config_dir.join("workspace.json"),
+        json!({
+            "configuredModels": {
+                "quota-model": {
+                    "configuredModelId": "quota-model",
+                    "name": "Quota Model",
+                    "providerId": "anthropic",
+                    "modelId": "claude-sonnet-4-5",
+                    "credentialRef": "env:ANTHROPIC_API_KEY",
+                    "enabled": false,
+                    "source": "workspace"
+                }
+            }
+        }),
+    );
+    grant_owner_permissions(&infra, "user-owner");
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, default_model_strategy_json, capability_policy_json, permission_envelope_json, memory_policy_json, delegation_policy_json, approval_preference_json, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+            params![
+                "agent-runtime-config-enablement",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Runtime Config Enablement Agent",
+                Option::<String>::None,
+                "Planner",
+                serde_json::to_string(&vec!["policy"]).expect("tags"),
+                "Respect the frozen runtime policy.",
+                serde_json::to_string(&Vec::<String>::new()).expect("builtin tool keys"),
+                serde_json::to_string(&Vec::<String>::new()).expect("skill ids"),
+                serde_json::to_string(&vec!["missing-mcp"]).expect("mcp server names"),
+                "Agent for runtime config enablement policy tests.",
+                serde_json::to_string(&json!({})).expect("default model strategy"),
+                serde_json::to_string(&json!({})).expect("capability policy"),
+                serde_json::to_string(&json!({})).expect("permission envelope"),
+                serde_json::to_string(&json!({})).expect("memory policy"),
+                serde_json::to_string(&json!({})).expect("delegation policy"),
+                serde_json::to_string(&json!({
+                    "toolExecution": "auto",
+                    "memoryWrite": "require-approval",
+                    "mcpAuth": "require-approval",
+                    "teamSpawn": "require-approval",
+                    "workflowEscalation": "require-approval"
+                }))
+                .expect("approval preference"),
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert enablement agent");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelExecutor),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-runtime-config-enablement",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Runtime Config Enablement Session",
+                "agent:agent-runtime-config-enablement",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-owner",
+        )
+        .await
+        .expect("session");
+
+    let session_policy = adapter
+        .load_session_policy_snapshot(&format!("{}-policy", session.summary.id))
+        .expect("session policy snapshot");
+
+    let execution_policy = session_policy
+        .target_decisions
+        .get("model-execution:quota-model")
+        .expect("model execution policy decision");
+    assert_eq!(execution_policy.action, "deny");
+    assert!(execution_policy.hidden);
+    assert_eq!(
+        execution_policy.reason.as_deref(),
+        Some("configured model is disabled or unavailable in the frozen runtime config")
+    );
+
+    let provider_auth_policy = session_policy
+        .target_decisions
+        .get("provider-auth:missing-mcp")
+        .expect("provider auth policy decision");
+    assert_eq!(provider_auth_policy.action, "deny");
+    assert!(provider_auth_policy.hidden);
+    assert_eq!(
+        provider_auth_policy.reason.as_deref(),
+        Some("provider or MCP server is not configured in the frozen runtime config")
+    );
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
+async fn policy_compiler_uses_workspace_authorization_for_capability_buckets() {
+    let root = test_root();
+    let infra = build_infra_bundle(&root).expect("infra bundle");
+    write_workspace_config(&infra.paths.runtime_config_dir.join("workspace.json"), Some(100));
+
+    let connection = Connection::open(&infra.paths.db_path).expect("db");
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO agents (id, workspace_id, project_id, scope, name, avatar_path, personality, tags, prompt, builtin_tool_keys, skill_ids, mcp_server_names, description, status, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                "agent-workspace-authz",
+                octopus_core::DEFAULT_WORKSPACE_ID,
+                octopus_core::DEFAULT_PROJECT_ID,
+                "project",
+                "Workspace Authz Agent",
+                Option::<String>::None,
+                "Planner",
+                serde_json::to_string(&vec!["policy"]).expect("tags"),
+                "Respect workspace authorization.",
+                serde_json::to_string(&vec!["shell"]).expect("builtin tool keys"),
+                serde_json::to_string(&vec!["repo_search"]).expect("skill ids"),
+                serde_json::to_string(&vec!["repo-mcp"]).expect("mcp server names"),
+                "Agent for workspace authorization policy tests.",
+                "active",
+                timestamp_now() as i64,
+            ],
+        )
+        .expect("upsert authz agent");
+    drop(connection);
+
+    let adapter = RuntimeAdapter::new_with_executor(
+        octopus_core::DEFAULT_WORKSPACE_ID,
+        infra.paths.clone(),
+        infra.observation.clone(),
+        infra.authorization.clone(),
+        Arc::new(MockRuntimeModelExecutor),
+    );
+
+    let session = adapter
+        .create_session(
+            session_input(
+                "conv-workspace-authz",
+                octopus_core::DEFAULT_PROJECT_ID,
+                "Workspace Authz Session",
+                "agent:agent-workspace-authz",
+                Some("quota-model"),
+                "readonly",
+            ),
+            "user-without-role",
+        )
+        .await
+        .expect("session");
+
+    let session_policy = adapter
+        .load_session_policy_snapshot(&format!("{}-policy", session.summary.id))
+        .expect("session policy snapshot");
+
+    assert_eq!(session_policy.capability_decisions.builtin.action, "deny");
+    assert!(session_policy.capability_decisions.builtin.hidden);
+    assert_eq!(session_policy.capability_decisions.skill.action, "deny");
+    assert!(session_policy.capability_decisions.skill.hidden);
+    assert_eq!(session_policy.capability_decisions.mcp.action, "deny");
+    assert!(session_policy.capability_decisions.mcp.hidden);
+
+    fs::remove_dir_all(root).expect("cleanup temp dir");
+}
+
+#[tokio::test]
 async fn submit_turn_with_configured_mcp_server_stays_async_safe() {
     let root = test_root();
     let infra = build_infra_bundle(&root).expect("infra bundle");
