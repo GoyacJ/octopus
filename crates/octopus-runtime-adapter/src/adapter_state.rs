@@ -17,6 +17,7 @@ pub(super) struct RuntimeState {
 pub(super) struct RuntimeAggregateMetadata {
     pub(super) manifest_snapshot_ref: String,
     pub(super) session_policy_snapshot_ref: String,
+    pub(super) primary_run_serialized_session: Value,
     pub(super) subrun_states: BTreeMap<String, team_runtime::PersistedSubrunState>,
 }
 

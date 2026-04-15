@@ -19,10 +19,7 @@ import {
   type RuntimeConfigDrafts,
   type RuntimeConfigValidationState,
 } from './runtime-config'
-import {
-  createPendingApprovalAssistantMessage,
-  createPendingAuthAssistantMessage,
-} from './runtime_messages'
+import { appendProcessEntry } from './runtime_messages'
 
 export interface RuntimeTurnDraftInput extends Omit<SubmitRuntimeTurnInput, 'permissionMode'> {
   permissionMode?: PermissionMode | RuntimePermissionMode
@@ -86,66 +83,59 @@ export function createQueueId(): string {
   return `queue-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-export function isBusyStatus(status?: string): boolean {
-  return status === 'running' || status === 'waiting_input' || status === 'waiting_approval'
-}
-
-export function normalizeRuntimeSessionDetail(detail: RuntimeSessionDetail): RuntimeSessionDetail {
+function rehydrateOptimisticAssistantMessage(
+  message: RuntimeSessionDetail['messages'][number],
+  detail: RuntimeSessionDetail,
+): RuntimeSessionDetail['messages'][number] {
   const pendingApproval = detail.run.approvalTarget ?? detail.pendingApproval
   if (pendingApproval) {
-    const hasApprovalMessage = detail.messages.some(message => message.senderType === 'assistant' && (
-      message.id === `approval-assistant-${pendingApproval.id}`
-      || message.status === 'waiting_approval'
-    ))
-
-    if (hasApprovalMessage) {
-      return {
-        ...detail,
-        pendingApproval,
-      }
-    }
-
     return {
-      ...detail,
-      pendingApproval,
-      messages: [
-        ...detail.messages,
-        createPendingApprovalAssistantMessage(
-          detail.summary.id,
-          detail.summary.conversationId,
-          pendingApproval,
-          detail.run,
-        ),
-      ],
+      ...appendProcessEntry(message, {
+        id: pendingApproval.id,
+        type: 'result',
+        title: pendingApproval.summary,
+        detail: pendingApproval.detail,
+        timestamp: pendingApproval.createdAt,
+      }),
+      content: 'Awaiting approval…',
+      status: 'waiting_approval',
     }
   }
 
   const pendingAuthChallenge = detail.run.authTarget ?? detail.run.checkpoint.pendingAuthChallenge
-  if (!pendingAuthChallenge) {
-    return detail
+  if (pendingAuthChallenge) {
+    return {
+      ...appendProcessEntry(message, {
+        id: pendingAuthChallenge.id,
+        type: 'result',
+        title: pendingAuthChallenge.summary,
+        detail: pendingAuthChallenge.detail,
+        timestamp: pendingAuthChallenge.createdAt,
+      }),
+      content: 'Awaiting authentication…',
+      status: 'waiting_input',
+    }
   }
 
-  const hasAuthMessage = detail.messages.some(message => message.senderType === 'assistant' && (
-    message.id === `auth-assistant-${pendingAuthChallenge.id}`
-    || (message.status === 'waiting_input' && message.conversationId === pendingAuthChallenge.conversationId)
-  ))
-
-  if (hasAuthMessage) {
-    return detail
+  const pendingMemoryProposal = detail.run.pendingMemoryProposal
+  if (pendingMemoryProposal?.proposalState === 'pending') {
+    return {
+      ...appendProcessEntry(message, {
+        id: pendingMemoryProposal.proposalId,
+        type: 'result',
+        title: pendingMemoryProposal.title,
+        detail: pendingMemoryProposal.summary,
+        timestamp: detail.run.updatedAt,
+      }),
+      status: 'waiting_input',
+    }
   }
 
-  return {
-    ...detail,
-    messages: [
-      ...detail.messages,
-      createPendingAuthAssistantMessage(
-        detail.summary.id,
-        detail.summary.conversationId,
-        pendingAuthChallenge,
-        detail.run,
-      ),
-    ],
-  }
+  return message
+}
+
+export function isBusyStatus(status?: string): boolean {
+  return status === 'running' || status === 'waiting_input' || status === 'waiting_approval'
 }
 
 export function upsertSessionSummary(
@@ -288,11 +278,27 @@ export const runtimeSessionActions = {
     this.sessions = upsertSessionSummary(this.sessions, detail.summary)
   },
   setActiveSession(this: any, detail: RuntimeSessionDetail) {
-    const normalizedDetail = normalizeRuntimeSessionDetail(detail)
-    this.activeSessionId = normalizedDetail.summary.id
-    this.activeConversationId = normalizedDetail.summary.conversationId
+    const existingDetail = this.sessionDetails[detail.summary.id]
+    const preservedOptimisticAssistantMessages = isBusyStatus(detail.run.status)
+      ? (existingDetail?.messages ?? []).filter((message: RuntimeSessionDetail['messages'][number]) => (
+          message.senderType === 'assistant'
+          && message.id.startsWith('optimistic-assistant-')
+          && !detail.messages.some(existingMessage => existingMessage.id === message.id)
+        )).map((message: RuntimeSessionDetail['messages'][number]) => rehydrateOptimisticAssistantMessage(message, detail))
+      : []
+
+    const nextDetail = preservedOptimisticAssistantMessages.length
+      ? {
+          ...detail,
+          messages: [...detail.messages, ...preservedOptimisticAssistantMessages]
+            .sort((left, right) => left.timestamp - right.timestamp),
+        }
+      : detail
+
+    this.activeSessionId = detail.summary.id
+    this.activeConversationId = detail.summary.conversationId
     this.error = ''
-    this.cacheSessionDetail(normalizedDetail)
+    this.cacheSessionDetail(nextDetail)
   },
   async ensureSession(this: any, input: CreateRuntimeSessionInput): Promise<RuntimeSessionDetail | null> {
     await this.bootstrap()

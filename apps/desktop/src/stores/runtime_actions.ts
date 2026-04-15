@@ -1,14 +1,15 @@
-import type {
-  ResolveRuntimeApprovalInput,
-  ResolveRuntimeAuthChallengeInput,
-  ResolveRuntimeMemoryProposalInput,
-  RuntimeConfigScope,
-  RuntimeConfigValidationResult,
-  RuntimeConfiguredModelProbeResult,
-  RuntimeDecisionAction,
-  RuntimeEffectiveConfig,
-  RuntimeSessionDetail,
-  SubmitRuntimeTurnInput,
+import {
+  resolveRuntimePermissionMode,
+  type ResolveRuntimeApprovalInput,
+  type ResolveRuntimeAuthChallengeInput,
+  type ResolveRuntimeMemoryProposalInput,
+  type RuntimeConfigScope,
+  type RuntimeConfigValidationResult,
+  type RuntimeConfiguredModelProbeResult,
+  type RuntimeDecisionAction,
+  type RuntimeEffectiveConfig,
+  type RuntimeSessionDetail,
+  type SubmitRuntimeTurnInput,
 } from '@octopus/schema'
 
 import * as tauriClient from '@/tauri/client'
@@ -23,7 +24,7 @@ import {
   createOptimisticAssistantMessage,
   createOptimisticRuntimeMessage,
 } from './runtime_messages'
-import { isBusyStatus } from './runtime_sessions'
+import { isBusyStatus, type RuntimeTurnDraftInput } from './runtime_sessions'
 
 export const runtimeStoreActions = {
   async loadWorkspaceConfig(this: any, force = false): Promise<RuntimeEffectiveConfig | null> {
@@ -320,7 +321,7 @@ export const runtimeStoreActions = {
       }
     }
   },
-  addOptimisticUserMessage(this: any, input: SubmitRuntimeTurnInput) {
+  addOptimisticUserMessage(this: any, input: RuntimeTurnDraftInput) {
     if (!this.activeSession) {
       return
     }
@@ -415,7 +416,7 @@ export const runtimeStoreActions = {
       this.loading = false
     }
   },
-  async submitTurn(this: any, input: SubmitRuntimeTurnInput): Promise<boolean> {
+  async submitTurn(this: any, input: RuntimeTurnDraftInput): Promise<boolean> {
     if (!this.activeSessionId) {
       throw new Error('No active runtime session selected')
     }
@@ -437,6 +438,9 @@ export const runtimeStoreActions = {
       ...input,
       content: trimmed,
     }
+    const requestPermissionMode = input.permissionMode
+      ? resolveRuntimePermissionMode(input.permissionMode)
+      : undefined
 
     this.error = ''
     this.addOptimisticUserMessage(normalizedInput)
@@ -450,7 +454,7 @@ export const runtimeStoreActions = {
     try {
       const run = await client.runtime.submitUserTurn(this.activeSessionId, {
         content: trimmed,
-        permissionMode: input.permissionMode,
+        permissionMode: requestPermissionMode,
         recallMode: input.recallMode,
         ignoredMemoryIds: input.ignoredMemoryIds,
         memoryIntent: input.memoryIntent,

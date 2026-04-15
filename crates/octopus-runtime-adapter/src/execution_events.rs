@@ -153,10 +153,6 @@ fn append_runtime_loop_events(
         started.iteration = Some(iteration.iteration);
         started.outcome = Some("started".into());
         started.run = Some(run.clone());
-        started.payload = Some(json!({
-            "iteration": iteration.iteration,
-            "run": run.clone(),
-        }));
         events.push(started);
 
         if iteration.streamed {
@@ -171,10 +167,6 @@ fn append_runtime_loop_events(
             );
             streaming.iteration = Some(iteration.iteration);
             streaming.outcome = Some("streaming".into());
-            streaming.payload = Some(json!({
-                "iteration": iteration.iteration,
-                "run": run.clone(),
-            }));
             if let Some(message) = assistant_message.cloned() {
                 streaming.message = Some(message);
             }
@@ -192,18 +184,10 @@ fn append_runtime_loop_events(
         );
         completed.iteration = Some(iteration.iteration);
         completed.outcome = Some("completed".into());
-        completed.payload = Some(json!({
-            "iteration": iteration.iteration,
-            "run": run.clone(),
-        }));
         if Some(iteration.iteration) == iterations.last().map(|item| item.iteration)
             && execution_trace.is_some()
         {
             completed.trace = execution_trace.cloned();
-            completed.payload = execution_trace
-                .cloned()
-                .map(|trace| json!({ "trace": trace }))
-                .or_else(|| completed.payload.clone());
         }
         events.push(completed);
     }
@@ -219,7 +203,6 @@ fn append_runtime_loop_events(
             "trace.emitted",
         );
         trace_event.trace = Some(trace.clone());
-        trace_event.payload = Some(json!({ "trace": trace }));
         events.push(trace_event);
     }
 
@@ -258,18 +241,6 @@ fn append_runtime_loop_events(
             requested.target_kind = Some("capability-call".into());
             requested.target_ref = Some(target_ref.clone());
             requested.outcome = Some("requested".into());
-            requested.payload = Some(json!({
-                "capabilityId": capability_id.clone(),
-                "toolName": tool_name.clone(),
-                "sourceKind": source_kind.clone(),
-                "executionKind": execution_kind.clone(),
-                "providerKey": provider_key.clone(),
-                "dispatchKind": capability_dispatch_kind_label(record.execution.dispatch_kind),
-                "requiredPermission": record.execution.required_permission.as_str(),
-                "concurrencyPolicy": capability_concurrency_policy_label(record.execution.concurrency_policy),
-                "requiresApproval": record.execution.requires_approval,
-                "requiresAuth": record.execution.requires_auth,
-            }));
             events.push(requested);
         }
 
@@ -300,19 +271,6 @@ fn append_runtime_loop_events(
         ) {
             capability_event.approval_layer = Some("capability-call".into());
         }
-        capability_event.payload = Some(json!({
-            "capabilityId": capability_id,
-            "toolName": tool_name,
-            "sourceKind": source_kind,
-            "executionKind": execution_kind,
-            "providerKey": provider_key,
-            "dispatchKind": capability_dispatch_kind_label(record.execution.dispatch_kind),
-            "requiredPermission": record.execution.required_permission.as_str(),
-            "concurrencyPolicy": capability_concurrency_policy_label(record.execution.concurrency_policy),
-            "requiresApproval": record.execution.requires_approval,
-            "requiresAuth": record.execution.requires_auth,
-            "detail": detail,
-        }));
         events.push(capability_event);
     }
 
@@ -335,7 +293,6 @@ fn append_runtime_loop_events(
         spawned.actor_ref = Some(subrun.actor_ref.clone());
         spawned.tool_use_id = subrun.delegated_by_tool_call_id.clone();
         spawned.outcome = Some("spawned".into());
-        spawned.payload = Some(json!({ "subrun": subrun }));
         events.push(spawned);
 
         let terminal_kind = match subrun.status.as_str() {
@@ -363,7 +320,6 @@ fn append_runtime_loop_events(
             terminal.actor_ref = Some(subrun.actor_ref.clone());
             terminal.tool_use_id = subrun.delegated_by_tool_call_id.clone();
             terminal.outcome = Some(subrun.status.clone());
-            terminal.payload = Some(json!({ "subrun": subrun }));
             events.push(terminal);
         }
     }
@@ -460,7 +416,6 @@ fn append_workflow_background_events(
                 .and_then(|step| step.delegated_by_tool_call_id.clone())
                 .or_else(|| run.delegated_by_tool_call_id.clone()),
             outcome: Some(run.status.clone()),
-            payload: Some(json!({ "workflow": workflow_detail.clone() })),
             ..Default::default()
         });
         events.push(RuntimeEventEnvelope {
@@ -485,11 +440,6 @@ fn append_workflow_background_events(
                 .and_then(|step| step.delegated_by_tool_call_id.clone())
                 .or_else(|| run.delegated_by_tool_call_id.clone()),
             outcome: Some("started".into()),
-            payload: Some(json!({
-                "workflowRunId": workflow_run_id.clone(),
-                "stepId": started_step.map(|step| step.step_id.clone()),
-                "stepLabel": started_step.map(|step| step.label.clone()),
-            })),
             ..Default::default()
         });
         if let Some(background) = background.clone() {
@@ -523,10 +473,6 @@ fn append_workflow_background_events(
                     .blocking
                     .as_ref()
                     .map(|blocking| blocking.run_id.clone()),
-                payload: Some(json!({
-                    "background": background,
-                    "workflow": workflow_detail.clone(),
-                })),
                 ..Default::default()
             });
         }
@@ -555,7 +501,6 @@ fn append_workflow_background_events(
                 .and_then(|step| step.delegated_by_tool_call_id.clone())
                 .or_else(|| run.delegated_by_tool_call_id.clone()),
             outcome: Some(run.status.clone()),
-            payload: Some(json!({ "workflow": workflow_detail.clone() })),
             ..Default::default()
         });
         events.push(RuntimeEventEnvelope {
@@ -580,7 +525,6 @@ fn append_workflow_background_events(
                 .and_then(|step| step.delegated_by_tool_call_id.clone())
                 .or_else(|| run.delegated_by_tool_call_id.clone()),
             outcome: Some(run.status.clone()),
-            payload: Some(json!({ "workflow": workflow_detail.clone() })),
             ..Default::default()
         });
     }
@@ -623,10 +567,6 @@ fn append_workflow_background_events(
                     .blocking
                     .as_ref()
                     .map(|blocking| blocking.run_id.clone()),
-                payload: Some(json!({
-                    "background": background,
-                    "workflow": workflow_detail.clone(),
-                })),
                 ..Default::default()
             });
         }
@@ -671,17 +611,6 @@ fn append_runtime_loop_planner_events(
         if let Some(capability_state_ref) = record.capability_state_ref.clone() {
             event.capability_state_ref = Some(capability_state_ref);
         }
-        event.payload = Some(match record.phase {
-            agent_runtime_core::RuntimeLoopPlannerPhase::Started => json!({
-                "iteration": record.iteration,
-            }),
-            agent_runtime_core::RuntimeLoopPlannerPhase::Completed => json!({
-                "iteration": record.iteration,
-                "capabilityPlanSummary": record.capability_plan_summary.clone(),
-                "providerStateSummary": record.provider_state_summary.clone(),
-                "capabilityStateRef": record.capability_state_ref.clone(),
-            }),
-        });
         events.push(event);
     }
 }
@@ -804,9 +733,6 @@ pub(super) async fn emit_submit_turn_events(
             run_id: Some(run.id.clone()),
             emitted_at: now,
             sequence: 0,
-            payload: Some(json!({
-                "message": user_message.clone(),
-            })),
             run: None,
             message: Some(user_message),
             trace: None,
@@ -833,9 +759,6 @@ pub(super) async fn emit_submit_turn_events(
             run_id: Some(run.id.clone()),
             emitted_at: now,
             sequence: 0,
-            payload: Some(json!({
-                "trace": submitted_trace.clone(),
-            })),
             run: None,
             message: None,
             trace: Some(submitted_trace.clone()),
@@ -876,10 +799,6 @@ pub(super) async fn emit_submit_turn_events(
             emitted_at: now,
             sequence: 0,
             outcome: Some("deny".into()),
-            payload: Some(json!({
-                "hiddenCapabilities": run.capability_plan_summary.hidden_capabilities.clone(),
-                "run": run.clone(),
-            })),
             run: Some(run.clone()),
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
@@ -909,11 +828,6 @@ pub(super) async fn emit_submit_turn_events(
                     .map(|mediation| mediation.state.clone())
                     .unwrap_or_else(|| "deferred".into()),
             ),
-            payload: Some(json!({
-                "deferredTools": run.capability_plan_summary.deferred_tools.clone(),
-                "pendingMediation": run.pending_mediation.clone(),
-                "run": run.clone(),
-            })),
             run: Some(run.clone()),
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
@@ -953,9 +867,6 @@ pub(super) async fn emit_submit_turn_events(
             run_id: Some(run.id.clone()),
             emitted_at: now,
             sequence: 0,
-            payload: Some(json!({
-                "message": message.clone(),
-            })),
             run: None,
             message: Some(message),
             trace: None,
@@ -984,10 +895,6 @@ pub(super) async fn emit_submit_turn_events(
             run_id: Some(run.id.clone()),
             emitted_at: now,
             sequence: 0,
-            payload: Some(json!({
-                "approval": approval.clone(),
-                "run": run.clone(),
-            })),
             run: Some(run.clone()),
             message: None,
             trace: None,
@@ -1013,10 +920,6 @@ pub(super) async fn emit_submit_turn_events(
             run_id: Some(run.id.clone()),
             emitted_at: now,
             sequence: 0,
-            payload: Some(json!({
-                "approval": approval.clone(),
-                "run": run.clone(),
-            })),
             run: Some(run.clone()),
             approval: Some(approval.clone()),
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
@@ -1042,10 +945,6 @@ pub(super) async fn emit_submit_turn_events(
             emitted_at: now,
             sequence: 0,
             outcome: Some(challenge.status.clone()),
-            payload: Some(json!({
-                "authChallenge": challenge.clone(),
-                "run": run.clone(),
-            })),
             run: Some(run.clone()),
             auth_challenge: Some(challenge),
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
@@ -1070,12 +969,6 @@ pub(super) async fn emit_submit_turn_events(
             run_id: Some(run.id.clone()),
             emitted_at: now,
             sequence: 0,
-            payload: Some(json!({
-                "selectedMemory": run.selected_memory.clone(),
-                "memorySelectionSummary": memory_selection_summary.clone(),
-                "freshnessSummary": run.freshness_summary.clone(),
-                "run": run.clone(),
-            })),
             run: Some(run.clone()),
             message: None,
             memory_proposal: None,
@@ -1108,10 +1001,6 @@ pub(super) async fn emit_submit_turn_events(
             run_id: Some(run.id.clone()),
             emitted_at: now,
             sequence: 0,
-            payload: Some(json!({
-                "memoryProposal": memory_proposal.clone(),
-                "run": run.clone(),
-            })),
             run: Some(run.clone()),
             message: None,
             memory_proposal: Some(memory_proposal),
@@ -1154,9 +1043,6 @@ pub(super) async fn emit_submit_turn_events(
         run_id: Some(run.id.clone()),
         emitted_at: now,
         sequence: 0,
-        payload: Some(json!({
-            "run": run.clone(),
-        })),
         run: Some(run.clone()),
         message: None,
         trace: None,
@@ -1278,12 +1164,6 @@ pub(super) async fn emit_subrun_cancellation_events(
         run_id: Some(run.id.clone()),
         emitted_at: now,
         sequence: 0,
-        payload: Some(json!({
-            "subrunId": subrun_id,
-            "note": note,
-            "subrun": cancelled_subrun,
-            "run": run.clone(),
-        })),
         run: Some(run.clone()),
         capability_plan_summary: Some(run.capability_plan_summary.clone()),
         provider_state_summary: Some(run.provider_state_summary.clone()),
@@ -1370,11 +1250,6 @@ pub(super) async fn emit_memory_proposal_resolution_events(
             run_id: Some(run.id.clone()),
             emitted_at: now,
             sequence: 0,
-            payload: Some(json!({
-                "memoryProposal": proposal.clone(),
-                "decision": decision.clone(),
-                "run": run.clone(),
-            })),
             run: Some(run.clone()),
             message: None,
             memory_proposal: Some(proposal.clone()),
@@ -1404,11 +1279,6 @@ pub(super) async fn emit_memory_proposal_resolution_events(
             run_id: Some(run.id.clone()),
             emitted_at: now,
             sequence: 0,
-            payload: Some(json!({
-                "memoryProposal": proposal,
-                "decision": decision,
-                "run": run.clone(),
-            })),
             run: Some(run.clone()),
             message: None,
             memory_proposal: None,
@@ -1652,11 +1522,6 @@ pub(super) async fn emit_approval_resolution_events(
         run_id: Some(run.id.clone()),
         emitted_at: now,
         sequence: 0,
-        payload: Some(json!({
-            "approval": approval.clone(),
-            "decision": decision.clone(),
-            "run": run.clone(),
-        })),
         run: Some(run.clone()),
         message: None,
         trace: None,
@@ -1711,9 +1576,6 @@ pub(super) async fn emit_approval_resolution_events(
             run_id: Some(run.id.clone()),
             emitted_at: now,
             sequence: 0,
-            payload: Some(json!({
-                "message": message.clone(),
-            })),
             run: None,
             message: Some(message),
             trace: None,
@@ -1741,11 +1603,6 @@ pub(super) async fn emit_approval_resolution_events(
         run_id: Some(run.id.clone()),
         emitted_at: now,
         sequence: 0,
-        payload: Some(json!({
-            "approval": approval.clone(),
-            "decision": decision.clone(),
-            "run": run.clone(),
-        })),
         run: Some(run.clone()),
         approval: Some(approval.clone()),
         decision: Some(decision.clone()),
@@ -1770,12 +1627,6 @@ pub(super) async fn emit_approval_resolution_events(
             emitted_at: now,
             sequence: 0,
             outcome: Some(challenge.status.clone()),
-            payload: Some(json!({
-                "approval": approval.clone(),
-                "authChallenge": challenge.clone(),
-                "decision": decision.clone(),
-                "run": run.clone(),
-            })),
             run: Some(run.clone()),
             approval: Some(approval.clone()),
             auth_challenge: Some(challenge),
@@ -1810,11 +1661,6 @@ pub(super) async fn emit_approval_resolution_events(
         run_id: Some(run.id.clone()),
         emitted_at: now,
         sequence: 0,
-        payload: Some(json!({
-            "approval": approval.clone(),
-            "decision": decision.clone(),
-            "run": run.clone(),
-        })),
         run: Some(run.clone()),
         message: None,
         trace: None,
@@ -1869,11 +1715,6 @@ pub(super) async fn emit_auth_resolution_events(
         emitted_at: now,
         sequence: 0,
         outcome: Some(resolution.clone()),
-        payload: Some(json!({
-            "authChallenge": challenge.clone(),
-            "resolution": resolution.clone(),
-            "run": run.clone(),
-        })),
         run: Some(run.clone()),
         auth_challenge: Some(challenge.clone()),
         decision: Some(resolution.clone()),
@@ -1934,9 +1775,6 @@ pub(super) async fn emit_auth_resolution_events(
             run_id: Some(run.id.clone()),
             emitted_at: now,
             sequence: 0,
-            payload: Some(json!({
-                "message": message.clone(),
-            })),
             message: Some(message),
             capability_plan_summary: Some(run.capability_plan_summary.clone()),
             provider_state_summary: Some(run.provider_state_summary.clone()),
@@ -1958,9 +1796,6 @@ pub(super) async fn emit_auth_resolution_events(
         run_id: Some(run.id.clone()),
         emitted_at: now,
         sequence: 0,
-        payload: Some(json!({
-            "run": run.clone(),
-        })),
         run: Some(run.clone()),
         capability_plan_summary: Some(run.capability_plan_summary.clone()),
         provider_state_summary: Some(run.provider_state_summary.clone()),

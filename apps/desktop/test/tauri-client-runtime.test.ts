@@ -17,7 +17,7 @@ import {
 describe('runtime client transport', () => {
   installTauriClientTestHooks()
 
-  it('normalizes permission mode and forwards idempotency headers on runtime write requests', async () => {
+  it('forwards runtime turn permission mode without adapter normalization and keeps idempotency headers', async () => {
     invokeSpy.mockResolvedValue(createHostBootstrap())
     fetchSpy.mockResolvedValue({
       ok: true,
@@ -54,7 +54,6 @@ describe('runtime client transport', () => {
           turnId: 'turn-1',
         },
         checkpoint: {
-          serializedSession: {},
           currentIterationIndex: 0,
           usageSummary: {
             inputTokens: 0,
@@ -112,7 +111,7 @@ describe('runtime client transport', () => {
     const headers = request.headers as Headers
     expect(JSON.parse(String(request.body))).toMatchObject({
       content: 'hello',
-      permissionMode: 'workspace-write',
+      permissionMode: 'auto',
       recallMode: 'skip',
       ignoredMemoryIds: ['mem-1', 'mem-2'],
       memoryIntent: 'feedback',
@@ -150,7 +149,6 @@ describe('runtime client transport', () => {
           turnId: 'turn-memory-1',
         },
         checkpoint: {
-          serializedSession: {},
           currentIterationIndex: 0,
           usageSummary: {
             inputTokens: 0,
@@ -249,7 +247,6 @@ describe('runtime client transport', () => {
           turnId: 'turn-auth-1',
         },
         checkpoint: {
-          serializedSession: {},
           currentIterationIndex: 0,
           usageSummary: {
             inputTokens: 0,

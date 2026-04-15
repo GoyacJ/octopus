@@ -12,6 +12,37 @@ use octopus_core::{
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+fn strip_runtime_transport_escape_hatches(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            map.remove("payload");
+            if let Some(serde_json::Value::Object(checkpoint)) = map.get_mut("checkpoint") {
+                checkpoint.remove("serializedSession");
+                checkpoint.remove("compactionMetadata");
+            }
+            for child in map.values_mut() {
+                strip_runtime_transport_escape_hatches(child);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for child in items {
+                strip_runtime_transport_escape_hatches(child);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn runtime_transport_payload<T: serde::Serialize>(
+    value: &T,
+    request_id: &str,
+) -> Result<serde_json::Value, ApiError> {
+    let mut payload = serde_json::to_value(value)
+        .map_err(|error| ApiError::new(AppError::Json(error), request_id))?;
+    strip_runtime_transport_escape_hatches(&mut payload);
+    Ok(payload)
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct WorkspaceDirectoryBrowserQuery {
@@ -3666,10 +3697,12 @@ pub(crate) async fn create_runtime_session(
         .create_session(input, &session.user_id)
         .await?;
     if let Some(scope) = idempotency_scope.as_deref() {
-        store_idempotent_response(&state, scope, &detail, &request_id)?;
+        let payload = runtime_transport_payload(&detail, &request_id)?;
+        store_idempotent_response(&state, scope, &payload, &request_id)?;
     }
 
-    let mut response = Json(detail).into_response();
+    let payload = runtime_transport_payload(&detail, &request_id)?;
+    let mut response = Json(payload).into_response();
     insert_request_id(&mut response, &request_id);
     Ok(response)
 }
@@ -3678,7 +3711,8 @@ pub(crate) async fn get_runtime_session(
     State(state): State<ServerState>,
     headers: HeaderMap,
     Path(session_id): Path<String>,
-) -> Result<Json<octopus_core::RuntimeSessionDetail>, ApiError> {
+) -> Result<Response, ApiError> {
+    let request_id = request_id(&headers);
     let project_id = runtime_project_scope(&state, &session_id).await?;
     ensure_capability_session(
         &state,
@@ -3689,13 +3723,15 @@ pub(crate) async fn get_runtime_session(
         Some(&session_id),
     )
     .await?;
-    Ok(Json(
-        state
-            .services
-            .runtime_session
-            .get_session(&session_id)
-            .await?,
-    ))
+    let detail = state
+        .services
+        .runtime_session
+        .get_session(&session_id)
+        .await?;
+    let payload = runtime_transport_payload(&detail, &request_id)?;
+    let mut response = Json(payload).into_response();
+    insert_request_id(&mut response, &request_id);
+    Ok(response)
 }
 
 pub(crate) async fn delete_runtime_session(
@@ -3752,10 +3788,12 @@ pub(crate) async fn submit_runtime_turn(
         .submit_turn(&session_id, input)
         .await?;
     if let Some(scope) = idempotency_scope.as_deref() {
-        store_idempotent_response(&state, scope, &run, &request_id)?;
+        let payload = runtime_transport_payload(&run, &request_id)?;
+        store_idempotent_response(&state, scope, &payload, &request_id)?;
     }
 
-    let mut response = Json(run).into_response();
+    let payload = runtime_transport_payload(&run, &request_id)?;
+    let mut response = Json(payload).into_response();
     insert_request_id(&mut response, &request_id);
     Ok(response)
 }
@@ -3790,10 +3828,12 @@ pub(crate) async fn resolve_runtime_approval(
         .resolve_approval(&session_id, &approval_id, input)
         .await?;
     if let Some(scope) = idempotency_scope.as_deref() {
-        store_idempotent_response(&state, scope, &run, &request_id)?;
+        let payload = runtime_transport_payload(&run, &request_id)?;
+        store_idempotent_response(&state, scope, &payload, &request_id)?;
     }
 
-    let mut response = Json(run).into_response();
+    let payload = runtime_transport_payload(&run, &request_id)?;
+    let mut response = Json(payload).into_response();
     insert_request_id(&mut response, &request_id);
     Ok(response)
 }
@@ -3834,10 +3874,12 @@ pub(crate) async fn resolve_runtime_auth_challenge(
         .resolve_auth_challenge(&session_id, &challenge_id, input)
         .await?;
     if let Some(scope) = idempotency_scope.as_deref() {
-        store_idempotent_response(&state, scope, &run, &request_id)?;
+        let payload = runtime_transport_payload(&run, &request_id)?;
+        store_idempotent_response(&state, scope, &payload, &request_id)?;
     }
 
-    let mut response = Json(run).into_response();
+    let payload = runtime_transport_payload(&run, &request_id)?;
+    let mut response = Json(payload).into_response();
     insert_request_id(&mut response, &request_id);
     Ok(response)
 }
@@ -3877,10 +3919,12 @@ pub(crate) async fn cancel_runtime_subrun(
         .cancel_subrun(&session_id, &subrun_id, input)
         .await?;
     if let Some(scope) = idempotency_scope.as_deref() {
-        store_idempotent_response(&state, scope, &run, &request_id)?;
+        let payload = runtime_transport_payload(&run, &request_id)?;
+        store_idempotent_response(&state, scope, &payload, &request_id)?;
     }
 
-    let mut response = Json(run).into_response();
+    let payload = runtime_transport_payload(&run, &request_id)?;
+    let mut response = Json(payload).into_response();
     insert_request_id(&mut response, &request_id);
     Ok(response)
 }
@@ -3921,10 +3965,12 @@ pub(crate) async fn resolve_runtime_memory_proposal(
         .resolve_memory_proposal(&session_id, &proposal_id, input)
         .await?;
     if let Some(scope) = idempotency_scope.as_deref() {
-        store_idempotent_response(&state, scope, &run, &request_id)?;
+        let payload = runtime_transport_payload(&run, &request_id)?;
+        store_idempotent_response(&state, scope, &payload, &request_id)?;
     }
 
-    let mut response = Json(run).into_response();
+    let payload = runtime_transport_payload(&run, &request_id)?;
+    let mut response = Json(payload).into_response();
     insert_request_id(&mut response, &request_id);
     Ok(response)
 }
@@ -3954,7 +4000,8 @@ pub(crate) async fn runtime_events(
             .runtime_session
             .list_events(&session_id, replay_after.as_deref())
             .await?;
-        let mut response = Json(events).into_response();
+        let payload = runtime_transport_payload(&events, &request_id)?;
+        let mut response = Json(payload).into_response();
         insert_request_id(&mut response, &request_id);
         return Ok(response);
     }
@@ -3973,15 +4020,18 @@ pub(crate) async fn runtime_events(
         .runtime_execution
         .subscribe_events(&session_id)
         .await?;
+    let stream_request_id = request_id.clone();
     let stream = stream! {
         for event in replay_events {
-            if let Ok(data) = serde_json::to_string(&event) {
-                yield Ok::<Event, std::convert::Infallible>(
-                    Event::default()
-                        .event(event.event_type.clone())
-                        .id(event.id.clone())
-                        .data(data)
-                );
+            if let Ok(payload) = runtime_transport_payload(&event, &stream_request_id) {
+                if let Ok(data) = serde_json::to_string(&payload) {
+                    yield Ok::<Event, std::convert::Infallible>(
+                        Event::default()
+                            .event(event.event_type.clone())
+                            .id(event.id.clone())
+                            .data(data)
+                    );
+                }
             }
         }
 
@@ -3989,13 +4039,15 @@ pub(crate) async fn runtime_events(
         loop {
             match receiver.recv().await {
                 Ok(event) => {
-                    if let Ok(data) = serde_json::to_string(&event) {
-                        yield Ok::<Event, std::convert::Infallible>(
-                            Event::default()
-                                .event(event.event_type.clone())
-                                .id(event.id.clone())
-                                .data(data)
-                        );
+                    if let Ok(payload) = runtime_transport_payload(&event, &stream_request_id) {
+                        if let Ok(data) = serde_json::to_string(&payload) {
+                            yield Ok::<Event, std::convert::Infallible>(
+                                Event::default()
+                                    .event(event.event_type.clone())
+                                    .id(event.id.clone())
+                                    .data(data)
+                            );
+                        }
                     }
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
@@ -4017,7 +4069,6 @@ pub(crate) async fn runtime_events(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::{body::to_bytes, response::IntoResponse};
     use serde_json::Value;
 
     fn sample_session() -> SessionRecord {
@@ -4333,13 +4384,28 @@ mod tests {
         .is_err());
     }
 
-    #[tokio::test]
-    async fn runtime_session_detail_response_preserves_phase_four_fields() {
-        let response = Json(sample_runtime_session_detail()).into_response();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("response body");
-        let json: Value = serde_json::from_slice(&body).expect("runtime session detail json");
+    fn sample_runtime_event() -> octopus_core::RuntimeEventEnvelope {
+        octopus_core::RuntimeEventEnvelope {
+            id: "evt-1".into(),
+            event_type: "runtime.run.updated".into(),
+            workspace_id: "ws-local".into(),
+            project_id: Some("project-1".into()),
+            session_id: "session-1".into(),
+            conversation_id: "conversation-1".into(),
+            run_id: Some("run-1".into()),
+            emitted_at: 20,
+            sequence: 1,
+            run: Some(sample_runtime_run_snapshot()),
+            capability_plan_summary: Some(octopus_core::RuntimeCapabilityPlanSummary::default()),
+            provider_state_summary: Some(Vec::new()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn runtime_session_detail_transport_preserves_phase_four_fields_without_escape_hatches() {
+        let json =
+            runtime_transport_payload(&sample_runtime_session_detail(), "req-test").expect("json");
 
         assert_eq!(
             json.pointer("/workflow/workflowRunId")
@@ -4371,15 +4437,14 @@ mod tests {
                 .and_then(Value::as_str),
             Some("step-1")
         );
+        assert!(json.pointer("/run/checkpoint/serializedSession").is_none());
+        assert!(json.pointer("/run/checkpoint/compactionMetadata").is_none());
     }
 
-    #[tokio::test]
-    async fn runtime_run_response_preserves_phase_four_fields() {
-        let response = Json(sample_runtime_run_snapshot()).into_response();
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("response body");
-        let json: Value = serde_json::from_slice(&body).expect("runtime run json");
+    #[test]
+    fn runtime_run_transport_preserves_phase_four_fields_without_escape_hatches() {
+        let json = runtime_transport_payload(&sample_runtime_run_snapshot(), "req-test")
+            .expect("runtime run json");
 
         assert_eq!(
             json.pointer("/workflowRun").and_then(Value::as_str),
@@ -4406,6 +4471,19 @@ mod tests {
         assert_eq!(
             json.pointer("/artifactRefs/0").and_then(Value::as_str),
             Some("runtime-artifact-run-1")
+        );
+        assert!(json.pointer("/checkpoint/serializedSession").is_none());
+        assert!(json.pointer("/checkpoint/compactionMetadata").is_none());
+    }
+
+    #[test]
+    fn runtime_event_transport_drops_payload_escape_hatch() {
+        let json = runtime_transport_payload(&sample_runtime_event(), "req-test").expect("json");
+
+        assert!(json.pointer("/payload").is_none());
+        assert_eq!(
+            json.pointer("/run/workflowRun").and_then(Value::as_str),
+            Some("workflow-1")
         );
     }
 

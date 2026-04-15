@@ -8878,9 +8878,6 @@ components:
           type: string
         parentRunId:
           type: string
-        payload:
-          additionalProperties: true
-          type: object
         pendingMediation:
           $ref: "#/components/schemas/RuntimePendingMediation"
         projectId:
@@ -9350,9 +9347,6 @@ components:
       type: object
     RuntimePendingMediationSummary:
       $ref: "#/components/schemas/RuntimePendingMediation"
-    RuntimePermissionEnvelope:
-      additionalProperties: true
-      type: object
     RuntimePermissionMode:
       enum:
         - read-only
@@ -9388,19 +9382,19 @@ components:
       additionalProperties: false
       properties:
         approvalPreference:
-          $ref: "#/components/schemas/RuntimePermissionEnvelope"
+          $ref: "#/components/schemas/ApprovalPreference"
         capabilityPolicy:
-          $ref: "#/components/schemas/RuntimePermissionEnvelope"
+          $ref: "#/components/schemas/CapabilityPolicy"
         configSnapshotId:
           type: string
         delegationPolicy:
-          $ref: "#/components/schemas/RuntimePermissionEnvelope"
+          $ref: "#/components/schemas/DelegationPolicy"
         executionPermissionMode:
           $ref: "#/components/schemas/RuntimePermissionMode"
         manifestRevision:
           type: string
         memoryPolicy:
-          $ref: "#/components/schemas/RuntimePermissionEnvelope"
+          $ref: "#/components/schemas/MemoryPolicy"
         selectedActorRef:
           type: string
         selectedConfiguredModelId:
@@ -9427,8 +9421,6 @@ components:
           type: string
         checkpointArtifactRef:
           type: string
-        compactionMetadata:
-          $ref: "#/components/schemas/RuntimePermissionEnvelope"
         currentIterationIndex:
           type: integer
         lastExecutionOutcome:
@@ -9451,8 +9443,6 @@ components:
           type: boolean
         requiresAuth:
           type: boolean
-        serializedSession:
-          $ref: "#/components/schemas/RuntimePermissionEnvelope"
         targetKind:
           type: string
         targetRef:
@@ -9460,7 +9450,6 @@ components:
         usageSummary:
           $ref: "#/components/schemas/RuntimeUsageSummary"
       required:
-        - serializedSession
         - currentIterationIndex
         - usageSummary
         - capabilityPlanSummary

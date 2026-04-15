@@ -1361,9 +1361,7 @@ async fn team_sessions_run_through_runtime_subruns_and_workflow_projection() {
     );
     assert_eq!(
         first_subrun_state
-            .get("run")
-            .and_then(|value| value.get("checkpoint"))
-            .and_then(|value| value.get("serializedSession"))
+            .get("serializedSession")
             .and_then(|value| value.get("session"))
             .and_then(|value| value.get("messages"))
             .and_then(serde_json::Value::as_array)
@@ -7632,10 +7630,24 @@ async fn submit_turn_replans_and_executes_selected_plugin_tools_through_capabili
         "final model request should include the plugin tool result"
     );
 
-    let serialized_messages = run
-        .checkpoint
-        .serialized_session
-        .get("session")
+    let output_artifact_ref = run
+        .artifact_refs
+        .first()
+        .cloned()
+        .expect("runtime output artifact ref");
+    let output_artifact: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(
+            root.join("data")
+                .join("artifacts")
+                .join("runtime")
+                .join(format!("{output_artifact_ref}.json")),
+        )
+        .expect("runtime output artifact"),
+    )
+    .expect("runtime output artifact json");
+    let serialized_messages = output_artifact
+        .get("serializedSession")
+        .and_then(|value| value.get("session"))
         .and_then(|value| value.get("messages"))
         .and_then(serde_json::Value::as_array)
         .expect("serialized runtime messages");
@@ -8699,10 +8711,31 @@ async fn submit_turn_executes_runtime_tool_loop_on_main_path() {
         .iter()
         .any(|message| matches!(message.role, runtime::MessageRole::Tool)));
 
-    let serialized_session = run
-        .checkpoint
-        .serialized_session
-        .get("session")
+    let public_run_json = serde_json::to_value(&run).expect("public run json");
+    assert!(
+        public_run_json
+            .pointer("/checkpoint/serializedSession")
+            .is_none(),
+        "public run payload should not expose serialized checkpoint state"
+    );
+
+    let output_artifact_ref = run
+        .artifact_refs
+        .first()
+        .cloned()
+        .expect("runtime output artifact ref");
+    let output_artifact_path = root
+        .join("data")
+        .join("artifacts")
+        .join("runtime")
+        .join(format!("{output_artifact_ref}.json"));
+    let output_artifact: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(&output_artifact_path).expect("runtime output artifact"),
+    )
+    .expect("runtime output artifact json");
+    let serialized_session = output_artifact
+        .get("serializedSession")
+        .and_then(|value| value.get("session"))
         .expect("serialized runtime session");
     let serialized_messages = serialized_session
         .get("messages")
@@ -8710,9 +8743,9 @@ async fn submit_turn_executes_runtime_tool_loop_on_main_path() {
         .expect("serialized session messages");
     assert_eq!(serialized_messages.len(), 4);
     assert_eq!(
-        run.checkpoint
-            .serialized_session
-            .get("content")
+        output_artifact
+            .get("serializedSession")
+            .and_then(|value| value.get("content"))
             .and_then(serde_json::Value::as_str),
         Some("Read the note")
     );
@@ -9030,20 +9063,33 @@ async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
             .map(|approval| approval.tool_name.as_str()),
         Some("write_file")
     );
+    let pending_run_json = serde_json::to_value(&pending_run).expect("pending run json");
+    assert!(
+        pending_run_json
+            .pointer("/checkpoint/serializedSession")
+            .is_none(),
+        "public pending run payload should not expose serialized checkpoint state"
+    );
+    let pending_checkpoint_ref = pending_run
+        .checkpoint
+        .checkpoint_artifact_ref
+        .clone()
+        .expect("pending checkpoint artifact ref");
+    let pending_checkpoint_artifact: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(root.join(&pending_checkpoint_ref)).expect("pending checkpoint artifact"),
+    )
+    .expect("pending checkpoint artifact json");
     assert_eq!(
-        pending_run
-            .checkpoint
-            .serialized_session
-            .get("pendingToolUses")
+        pending_checkpoint_artifact
+            .get("serializedSession")
+            .and_then(|value| value.get("pendingToolUses"))
             .and_then(serde_json::Value::as_array)
             .map(|items| items.len()),
         Some(1)
     );
     assert_eq!(
-        pending_run
-            .checkpoint
-            .serialized_session
-            .pointer("/pendingToolUses/0/toolUseId")
+        pending_checkpoint_artifact
+            .pointer("/serializedSession/pendingToolUses/0/toolUseId")
             .and_then(serde_json::Value::as_str),
         Some("tool-write-approved-note")
     );
@@ -9077,11 +9123,32 @@ async fn capability_call_approval_resume_replays_only_the_blocked_tool_use() {
         fs::read_to_string(&output_path).expect("written file"),
         "capability approval content\n"
     );
+    let resolved_run_json = serde_json::to_value(&resolved).expect("resolved run json");
+    assert!(
+        resolved_run_json
+            .pointer("/checkpoint/serializedSession")
+            .is_none(),
+        "resolved public run payload should not expose serialized checkpoint state"
+    );
+    let resolved_output_artifact_ref = resolved
+        .artifact_refs
+        .first()
+        .cloned()
+        .expect("resolved runtime output artifact ref");
+    let resolved_output_artifact: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(
+            root.join("data")
+                .join("artifacts")
+                .join("runtime")
+                .join(format!("{resolved_output_artifact_ref}.json")),
+        )
+        .expect("resolved runtime output artifact"),
+    )
+    .expect("resolved runtime output artifact json");
     assert_eq!(
-        resolved
-            .checkpoint
-            .serialized_session
-            .get("pendingToolUses")
+        resolved_output_artifact
+            .get("serializedSession")
+            .and_then(|value| value.get("pendingToolUses"))
             .and_then(serde_json::Value::as_array)
             .map(|items| items.len()),
         Some(0)

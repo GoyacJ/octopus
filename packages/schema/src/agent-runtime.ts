@@ -6,15 +6,11 @@ import type {
   ResolveRuntimeApprovalInput as OpenApiResolveRuntimeApprovalInput,
   ResolveRuntimeAuthChallengeInput as OpenApiResolveRuntimeAuthChallengeInput,
   RuntimeApprovalRequest as OpenApiRuntimeApprovalRequest,
-  RuntimeAuthChallengeSummary as OpenApiRuntimeAuthChallengeSummary,
-  RuntimeAuthStateSummary as OpenApiRuntimeAuthStateSummary,
   RuntimeBootstrap as OpenApiRuntimeBootstrap,
   RuntimeEventEnvelope as OpenApiRuntimeEventEnvelope,
   RuntimeHandoffSummary as OpenApiRuntimeHandoffSummary,
-  RuntimeMediationOutcome as OpenApiRuntimeMediationOutcome,
   RuntimeMailboxSummary as OpenApiRuntimeMailboxSummary,
   RuntimeMessage as OpenApiRuntimeMessage,
-  RuntimePolicyDecisionSummary as OpenApiRuntimePolicyDecisionSummary,
   RuntimeBackgroundRunSummary as OpenApiRuntimeBackgroundRunSummary,
   RuntimeRunCheckpoint as OpenApiRuntimeRunCheckpoint,
   RuntimeRunKind as OpenApiRuntimeRunKind,
@@ -40,10 +36,6 @@ export type RuntimeMessage = OpenApiRuntimeMessage
 export type RuntimeTraceItem = OpenApiRuntimeTraceItem
 export type RuntimeTraceContext = OpenApiRuntimeTraceContext
 export type RuntimeApprovalRequest = OpenApiRuntimeApprovalRequest
-export type RuntimeAuthChallengeSummary = OpenApiRuntimeAuthChallengeSummary
-export type RuntimeAuthStateSummary = OpenApiRuntimeAuthStateSummary
-export type RuntimeMediationOutcome = OpenApiRuntimeMediationOutcome
-export type RuntimePolicyDecisionSummary = OpenApiRuntimePolicyDecisionSummary
 export type RuntimeRunCheckpoint = OpenApiRuntimeRunCheckpoint
 export type RuntimeEventEnvelope = OpenApiRuntimeEventEnvelope
 export type RuntimeSessionDetail = OpenApiRuntimeSessionDetail

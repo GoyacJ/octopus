@@ -98,6 +98,18 @@ describe('OpenAPI transport helpers', () => {
     expect(generated).toContain('"background.failed"')
   })
 
+  it('removes opaque runtime escape hatches from the generated public transport contract', () => {
+    const generated = readFileSync(
+      resolve(import.meta.dirname, '../../../packages/schema/src/generated.ts'),
+      'utf8',
+    )
+
+    expect(generated).not.toContain('export type RuntimePermissionEnvelope = Record<string, unknown>')
+    expect(generated).not.toContain('payload?: Record<string, unknown>')
+    expect(generated).not.toContain('serializedSession:')
+    expect(generated).not.toContain('compactionMetadata?:')
+  })
+
   it('uses generated OpenAPI paths for host requests', async () => {
     fetchSpy.mockResolvedValue({
       ok: true,

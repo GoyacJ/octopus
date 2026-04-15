@@ -960,7 +960,6 @@ async fn execute_runtime_turn_loop(
 }
 
 fn build_runtime_checkpoint(
-    serialized_session: Value,
     current_iteration_index: u32,
     usage_summary: RuntimeUsageSummary,
     pending_approval: Option<ApprovalRequestRecord>,
@@ -1016,7 +1015,6 @@ fn build_runtime_checkpoint(
         broker_decision: broker_state,
         capability_id,
         checkpoint_artifact_ref,
-        serialized_session,
         current_iteration_index,
         tool_name,
         dispatch_kind,
@@ -1025,7 +1023,6 @@ fn build_runtime_checkpoint(
         usage_summary,
         pending_approval,
         pending_auth_challenge,
-        compaction_metadata: json!({}),
         pending_mediation,
         provider_key,
         reason,
@@ -1328,7 +1325,6 @@ fn blocking_mediation_state(
 fn apply_runtime_resolution_checkpoint(
     current_iteration_index: u32,
     usage_summary: RuntimeUsageSummary,
-    serialized_session: Value,
     pending_approval: Option<ApprovalRequestRecord>,
     pending_auth_challenge: Option<RuntimeAuthChallengeSummary>,
     pending_mediation: Option<RuntimePendingMediationSummary>,
@@ -1510,7 +1506,6 @@ fn apply_runtime_resolution_checkpoint(
         approval_layer,
         capability_id,
         usage_summary,
-        serialized_session,
         current_iteration_index,
         tool_name,
         dispatch_kind,
@@ -1596,7 +1591,10 @@ fn build_execution_trace(
     }
 }
 
-fn subrun_checkpoint_content(checkpoint: &RuntimeRunCheckpoint) -> Option<String> {
+fn subrun_checkpoint_content(
+    checkpoint: &RuntimeRunCheckpoint,
+    serialized_session: &Value,
+) -> Option<String> {
     checkpoint
         .input
         .as_ref()
@@ -1605,17 +1603,15 @@ fn subrun_checkpoint_content(checkpoint: &RuntimeRunCheckpoint) -> Option<String
         .filter(|value| !value.trim().is_empty())
         .map(ToString::to_string)
         .or_else(|| {
-            checkpoint
-                .serialized_session
+            serialized_session
                 .get("content")
-                .or_else(|| checkpoint.serialized_session.get("pendingContent"))
+                .or_else(|| serialized_session.get("pendingContent"))
                 .and_then(Value::as_str)
                 .filter(|value| !value.trim().is_empty())
                 .map(ToString::to_string)
         })
         .or_else(|| {
-            checkpoint
-                .serialized_session
+            serialized_session
                 .get("session")
                 .and_then(|session| session.get("messages"))
                 .and_then(Value::as_array)
@@ -1635,7 +1631,7 @@ fn durable_subrun_content(state: &team_runtime::PersistedSubrunState) -> Result<
         return Ok(state.dispatch.worker_input.content.clone());
     }
 
-    subrun_checkpoint_content(&state.run.checkpoint)
+    subrun_checkpoint_content(&state.run.checkpoint, &state.serialized_session)
         .ok_or_else(|| AppError::runtime("subrun checkpoint content is unavailable"))
 }
 
@@ -1700,8 +1696,7 @@ async fn execute_team_subrun(
         .unwrap_or_else(|| format!("{}-capability-state", state.run.id));
     let content = durable_subrun_content(state)?;
     let trace_context = if state.run.trace_context.session_id.is_empty() {
-        let restored =
-            trace_context_from_serialized_session(&state.run.checkpoint.serialized_session);
+        let restored = trace_context_from_serialized_session(&state.serialized_session);
         if restored.session_id.is_empty() {
             trace_context::runtime_trace_context(session_id, Some(state.run.id.clone()))
         } else {
@@ -1710,9 +1705,8 @@ async fn execute_team_subrun(
     } else {
         state.run.trace_context.clone()
     };
-    let session = restore_runtime_session(&state.run.checkpoint.serialized_session, &content)?;
-    let pending_tool_uses =
-        pending_tool_uses_from_serialized_session(&state.run.checkpoint.serialized_session)?;
+    let session = restore_runtime_session(&state.serialized_session, &content)?;
+    let pending_tool_uses = pending_tool_uses_from_serialized_session(&state.serialized_session)?;
     let loop_result = execute_runtime_turn_loop(
         adapter,
         session_id,
@@ -1733,6 +1727,7 @@ async fn execute_team_subrun(
     .await?;
 
     let mut updated = state.clone();
+    updated.serialized_session = loop_result.serialized_session.clone();
     let updated_at = timestamp_now();
     let mut approval = loop_result
         .broker_decision
@@ -1764,7 +1759,6 @@ async fn execute_team_subrun(
         &mut last_mediation_outcome,
     );
     let mut checkpoint = build_runtime_checkpoint(
-        loop_result.serialized_session,
         loop_result.current_iteration_index,
         loop_result.usage_summary.clone(),
         approval.clone(),
@@ -1787,11 +1781,16 @@ async fn execute_team_subrun(
         .as_ref()
         .and_then(|mediation| mediation.mediation_id.as_deref())
     {
+        let checkpoint_artifact = persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
+            checkpoint.clone(),
+            loop_result.serialized_session.clone(),
+            json!({}),
+        );
         let (storage_path, _) = adapter.persist_runtime_mediation_checkpoint(
             session_id,
             &state.run.id,
             mediation_id,
-            &checkpoint,
+            &checkpoint_artifact,
         )?;
         checkpoint.checkpoint_artifact_ref = Some(storage_path.clone());
         apply_checkpoint_ref(
@@ -2815,6 +2814,7 @@ impl AgentRuntimeCore {
             actor_manifest,
             session_policy,
             checkpoint,
+            checkpoint_serialized_session,
             resolved_target,
             configured_model,
             capability_state_ref,
@@ -2839,15 +2839,14 @@ impl AgentRuntimeCore {
             && approval_replays_runtime_loop(approval.target_kind.as_deref())
             && !provider_auth_required(&capability_projection)
         {
-            let content = checkpoint
-                .serialized_session
+            let content = checkpoint_serialized_session
                 .get("content")
-                .or_else(|| checkpoint.serialized_session.get("pendingContent"))
+                .or_else(|| checkpoint_serialized_session.get("pendingContent"))
                 .and_then(Value::as_str)
                 .ok_or_else(|| AppError::runtime("pending approval content is unavailable"))?;
-            let session = restore_runtime_session(&checkpoint.serialized_session, content)?;
+            let session = restore_runtime_session(&checkpoint_serialized_session, content)?;
             let pending_tool_uses =
-                pending_tool_uses_from_serialized_session(&checkpoint.serialized_session)?;
+                pending_tool_uses_from_serialized_session(&checkpoint_serialized_session)?;
             Some(
                 execute_runtime_turn_loop(
                     adapter,
@@ -2860,7 +2859,7 @@ impl AgentRuntimeCore {
                     &session_policy,
                     &capability_projection.capability_state_ref,
                     content,
-                    &trace_context_from_serialized_session(&checkpoint.serialized_session),
+                    &trace_context_from_serialized_session(&checkpoint_serialized_session),
                     session,
                     pending_tool_uses,
                     checkpoint.current_iteration_index,
@@ -2888,7 +2887,7 @@ impl AgentRuntimeCore {
         let serialized_session = runtime_loop
             .as_ref()
             .map(|step| step.serialized_session.clone())
-            .unwrap_or_else(|| checkpoint.serialized_session.clone());
+            .unwrap_or_else(|| checkpoint_serialized_session.clone());
         let empty_model_iterations = Vec::new();
         let model_iterations = runtime_loop
             .as_ref()
@@ -3022,6 +3021,7 @@ impl AgentRuntimeCore {
             actor_manifest,
             session_policy,
             checkpoint,
+            checkpoint_serialized_session,
             resolved_target,
             configured_model,
             capability_state_ref,
@@ -3046,15 +3046,14 @@ impl AgentRuntimeCore {
             .await?;
 
         let runtime_loop = if resolution == "resolved" {
-            let content = checkpoint
-                .serialized_session
+            let content = checkpoint_serialized_session
                 .get("content")
-                .or_else(|| checkpoint.serialized_session.get("pendingContent"))
+                .or_else(|| checkpoint_serialized_session.get("pendingContent"))
                 .and_then(Value::as_str)
                 .ok_or_else(|| AppError::runtime("pending auth content is unavailable"))?;
-            let session = restore_runtime_session(&checkpoint.serialized_session, content)?;
+            let session = restore_runtime_session(&checkpoint_serialized_session, content)?;
             let pending_tool_uses =
-                pending_tool_uses_from_serialized_session(&checkpoint.serialized_session)?;
+                pending_tool_uses_from_serialized_session(&checkpoint_serialized_session)?;
             Some(
                 execute_runtime_turn_loop(
                     adapter,
@@ -3067,7 +3066,7 @@ impl AgentRuntimeCore {
                     &session_policy,
                     &capability_projection.capability_state_ref,
                     content,
-                    &trace_context_from_serialized_session(&checkpoint.serialized_session),
+                    &trace_context_from_serialized_session(&checkpoint_serialized_session),
                     session,
                     pending_tool_uses,
                     checkpoint.current_iteration_index,
@@ -3095,7 +3094,7 @@ impl AgentRuntimeCore {
         let serialized_session = runtime_loop
             .as_ref()
             .map(|step| step.serialized_session.clone())
-            .unwrap_or_else(|| checkpoint.serialized_session.clone());
+            .unwrap_or_else(|| checkpoint_serialized_session.clone());
         let empty_model_iterations = Vec::new();
         let model_iterations = runtime_loop
             .as_ref()
@@ -3265,6 +3264,7 @@ fn load_pending_checkpoint(
         actor_manifest::CompiledActorManifest,
         session_policy::CompiledSessionPolicy,
         RuntimeRunCheckpoint,
+        Value,
         ResolvedExecutionTarget,
         ConfiguredModelRecord,
         String,
@@ -3275,6 +3275,7 @@ fn load_pending_checkpoint(
         approval,
         session_policy_snapshot_ref,
         persisted_checkpoint,
+        primary_run_serialized_session,
         configured_model_id,
         capability_state_ref,
     ) = {
@@ -3299,6 +3300,7 @@ fn load_pending_checkpoint(
             approval,
             aggregate.metadata.session_policy_snapshot_ref.clone(),
             checkpoint.clone(),
+            aggregate.metadata.primary_run_serialized_session.clone(),
             aggregate.detail.run.configured_model_id.clone(),
             aggregate
                 .detail
@@ -3309,11 +3311,18 @@ fn load_pending_checkpoint(
                 .unwrap_or_else(|| format!("{}-capability-state", aggregate.detail.run.id)),
         )
     };
-    let checkpoint = adapter
-        .load_runtime_artifact::<RuntimeRunCheckpoint>(
+    let (checkpoint, checkpoint_serialized_session) = if let Some(checkpoint_artifact) = adapter
+        .load_runtime_artifact::<persistence::PersistedRuntimeCheckpointArtifact>(
             persisted_checkpoint.checkpoint_artifact_ref.as_deref(),
         )?
-        .unwrap_or(persisted_checkpoint);
+    {
+        (
+            checkpoint_artifact.checkpoint,
+            checkpoint_artifact.serialized_session,
+        )
+    } else {
+        (persisted_checkpoint, primary_run_serialized_session)
+    };
     let session_policy = adapter.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
     let actor_manifest =
         adapter.load_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref)?;
@@ -3339,6 +3348,7 @@ fn load_pending_checkpoint(
         actor_manifest,
         session_policy,
         checkpoint,
+        checkpoint_serialized_session,
         resolved_target,
         configured_model,
         capability_state_ref,
@@ -3355,6 +3365,7 @@ fn load_pending_auth_checkpoint(
         actor_manifest::CompiledActorManifest,
         session_policy::CompiledSessionPolicy,
         RuntimeRunCheckpoint,
+        Value,
         ResolvedExecutionTarget,
         ConfiguredModelRecord,
         String,
@@ -3365,6 +3376,7 @@ fn load_pending_auth_checkpoint(
         challenge,
         session_policy_snapshot_ref,
         persisted_checkpoint,
+        primary_run_serialized_session,
         configured_model_id,
         capability_state_ref,
     ) = {
@@ -3392,6 +3404,7 @@ fn load_pending_auth_checkpoint(
             challenge,
             aggregate.metadata.session_policy_snapshot_ref.clone(),
             checkpoint.clone(),
+            aggregate.metadata.primary_run_serialized_session.clone(),
             aggregate.detail.run.configured_model_id.clone(),
             aggregate
                 .detail
@@ -3402,11 +3415,18 @@ fn load_pending_auth_checkpoint(
                 .unwrap_or_else(|| format!("{}-capability-state", aggregate.detail.run.id)),
         )
     };
-    let checkpoint = adapter
-        .load_runtime_artifact::<RuntimeRunCheckpoint>(
+    let (checkpoint, checkpoint_serialized_session) = if let Some(checkpoint_artifact) = adapter
+        .load_runtime_artifact::<persistence::PersistedRuntimeCheckpointArtifact>(
             persisted_checkpoint.checkpoint_artifact_ref.as_deref(),
         )?
-        .unwrap_or(persisted_checkpoint);
+    {
+        (
+            checkpoint_artifact.checkpoint,
+            checkpoint_artifact.serialized_session,
+        )
+    } else {
+        (persisted_checkpoint, primary_run_serialized_session)
+    };
     let session_policy = adapter.load_session_policy_snapshot(&session_policy_snapshot_ref)?;
     let actor_manifest =
         adapter.load_actor_manifest_snapshot(&session_policy.manifest_snapshot_ref)?;
@@ -3432,6 +3452,7 @@ fn load_pending_auth_checkpoint(
         actor_manifest,
         session_policy,
         checkpoint,
+        checkpoint_serialized_session,
         resolved_target,
         configured_model,
         capability_state_ref,
@@ -3605,7 +3626,6 @@ fn apply_submit_state(
         &mut last_mediation_outcome,
     );
     let mut checkpoint = build_runtime_checkpoint(
-        serialized_session.clone(),
         current_iteration_index,
         usage_summary.clone(),
         approval.clone(),
@@ -3623,11 +3643,16 @@ fn apply_submit_state(
         .as_ref()
         .and_then(|mediation| mediation.mediation_id.as_deref())
     {
+        let checkpoint_artifact = persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
+            checkpoint.clone(),
+            serialized_session.clone(),
+            json!({}),
+        );
         let (storage_path, _) = adapter.persist_runtime_mediation_checkpoint(
             &run_context.session_id,
             &run_context.run_id,
             mediation_id,
-            &checkpoint,
+            &checkpoint_artifact,
         )?;
         checkpoint.checkpoint_artifact_ref = Some(storage_path.clone());
         apply_checkpoint_ref(
@@ -3643,6 +3668,7 @@ fn apply_submit_state(
         checkpoint.last_mediation_outcome = last_mediation_outcome.clone();
     }
     aggregate.detail.run.checkpoint = checkpoint;
+    aggregate.metadata.primary_run_serialized_session = serialized_session;
 
     aggregate.detail.summary.status = run_status.into();
     aggregate.detail.summary.updated_at = run_context.now;
@@ -3905,7 +3931,6 @@ fn apply_approval_resolution_state(
         );
 
         let mut next_checkpoint = build_runtime_checkpoint(
-            serialized_session.clone(),
             current_iteration_index,
             usage_summary.clone(),
             None,
@@ -3923,11 +3948,16 @@ fn apply_approval_resolution_state(
             .as_ref()
             .and_then(|mediation| mediation.mediation_id.as_deref())
         {
+            let checkpoint_artifact = persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
+                next_checkpoint.clone(),
+                serialized_session.clone(),
+                json!({}),
+            );
             let (storage_path, _) = adapter.persist_runtime_mediation_checkpoint(
                 session_id,
                 &aggregate.detail.run.id,
                 mediation_id,
-                &next_checkpoint,
+                &checkpoint_artifact,
             )?;
             next_checkpoint.checkpoint_artifact_ref = Some(storage_path.clone());
             apply_checkpoint_ref(
@@ -3990,7 +4020,6 @@ fn apply_approval_resolution_state(
                 &mut next_mediation_outcome,
             );
             let mut next_checkpoint = build_runtime_checkpoint(
-                serialized_session.clone(),
                 current_iteration_index,
                 usage_summary.clone(),
                 next_approval.clone(),
@@ -4008,11 +4037,16 @@ fn apply_approval_resolution_state(
                 .as_ref()
                 .and_then(|mediation| mediation.mediation_id.as_deref())
             {
+                let checkpoint_artifact = persistence::PersistedRuntimeCheckpointArtifact::from_public_checkpoint(
+                    next_checkpoint.clone(),
+                    serialized_session.clone(),
+                    json!({}),
+                );
                 let (storage_path, _) = adapter.persist_runtime_mediation_checkpoint(
                     session_id,
                     &aggregate.detail.run.id,
                     mediation_id,
-                    &next_checkpoint,
+                    &checkpoint_artifact,
                 )?;
                 next_checkpoint.checkpoint_artifact_ref = Some(storage_path.clone());
                 apply_checkpoint_ref(
@@ -4142,7 +4176,6 @@ fn apply_approval_resolution_state(
         let mut checkpoint = apply_runtime_resolution_checkpoint(
             current_iteration_index,
             usage_summary.clone(),
-            serialized_session.clone(),
             None,
             None,
             pending_mediation.clone(),
@@ -4164,6 +4197,7 @@ fn apply_approval_resolution_state(
         checkpoint.target_ref = approval.target_ref.clone();
         checkpoint
     };
+    aggregate.metadata.primary_run_serialized_session = serialized_session;
 
     aggregate.detail.summary.status = aggregate.detail.run.status.clone();
     aggregate.detail.summary.updated_at = now;
@@ -4413,7 +4447,6 @@ fn apply_auth_challenge_resolution_state(
     };
     aggregate.detail.run.checkpoint.pending_auth_challenge = None;
     aggregate.detail.run.checkpoint.current_iteration_index = current_iteration_index;
-    aggregate.detail.run.checkpoint.serialized_session = serialized_session;
     aggregate.detail.run.checkpoint.usage_summary = usage_summary.clone();
     aggregate.detail.run.checkpoint.pending_mediation = pending_mediation.clone();
     aggregate.detail.run.checkpoint.capability_state_ref =
@@ -4422,6 +4455,7 @@ fn apply_auth_challenge_resolution_state(
         capability_projection.plan_summary.clone();
     aggregate.detail.run.checkpoint.last_execution_outcome = last_execution_outcome.clone();
     aggregate.detail.run.checkpoint.last_mediation_outcome = last_mediation_outcome.clone();
+    aggregate.metadata.primary_run_serialized_session = serialized_session;
 
     aggregate.detail.summary.status = aggregate.detail.run.status.clone();
     aggregate.detail.summary.updated_at = now;

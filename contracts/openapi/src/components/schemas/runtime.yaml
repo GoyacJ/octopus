@@ -871,26 +871,23 @@ RuntimeMemoryFreshnessSummary:
     - freshCount
     - staleCount
   type: object
-RuntimePermissionEnvelope:
-  additionalProperties: true
-  type: object
 RuntimePolicySnapshot:
   additionalProperties: false
   properties:
     approvalPreference:
-      $ref: "#/components/schemas/RuntimePermissionEnvelope"
+      $ref: "#/components/schemas/ApprovalPreference"
     capabilityPolicy:
-      $ref: "#/components/schemas/RuntimePermissionEnvelope"
+      $ref: "#/components/schemas/CapabilityPolicy"
     configSnapshotId:
       type: string
     delegationPolicy:
-      $ref: "#/components/schemas/RuntimePermissionEnvelope"
+      $ref: "#/components/schemas/DelegationPolicy"
     executionPermissionMode:
       $ref: "#/components/schemas/RuntimePermissionMode"
     manifestRevision:
       type: string
     memoryPolicy:
-      $ref: "#/components/schemas/RuntimePermissionEnvelope"
+      $ref: "#/components/schemas/MemoryPolicy"
     selectedConfiguredModelId:
       type: string
     selectedActorRef:
@@ -917,8 +914,6 @@ RuntimeRunCheckpoint:
       type: string
     checkpointArtifactRef:
       type: string
-    compactionMetadata:
-      $ref: "#/components/schemas/RuntimePermissionEnvelope"
     currentIterationIndex:
       type: integer
     lastExecutionOutcome:
@@ -939,8 +934,6 @@ RuntimeRunCheckpoint:
       type: boolean
     requiresAuth:
       type: boolean
-    serializedSession:
-      $ref: "#/components/schemas/RuntimePermissionEnvelope"
     targetKind:
       type: string
     targetRef:
@@ -950,7 +943,6 @@ RuntimeRunCheckpoint:
     lastMediationOutcome:
       $ref: "#/components/schemas/RuntimeMediationOutcome"
   required:
-    - serializedSession
     - currentIterationIndex
     - usageSummary
     - capabilityPlanSummary
@@ -1422,9 +1414,6 @@ RuntimeEventEnvelope:
       $ref: "#/components/schemas/RuntimeMemoryFreshnessSummary"
     pendingMediation:
       $ref: "#/components/schemas/RuntimePendingMediation"
-    payload:
-      additionalProperties: true
-      type: object
     parentRunId:
       type: string
     projectId:

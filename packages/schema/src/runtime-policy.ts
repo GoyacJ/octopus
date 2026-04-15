@@ -3,8 +3,6 @@ import type {
   RuntimeAuthStateSummary as OpenApiRuntimeAuthStateSummary,
   RuntimeEventKind as OpenApiRuntimeEventKind,
   RuntimeMediationOutcome as OpenApiRuntimeMediationOutcome,
-  RuntimePendingMediation as OpenApiRuntimePendingMediation,
-  RuntimePendingMediationSummary as OpenApiRuntimePendingMediationSummary,
   RuntimePolicyDecisionSummary as OpenApiRuntimePolicyDecisionSummary,
   RuntimePolicySnapshot as OpenApiRuntimePolicySnapshot,
   RuntimeUsageSummary as OpenApiRuntimeUsageSummary,
@@ -12,8 +10,6 @@ import type {
 import type { DecisionAction } from './shared'
 
 export type RuntimeEventKind = OpenApiRuntimeEventKind
-export type RuntimePendingMediation = OpenApiRuntimePendingMediation
-export type RuntimePendingMediationSummary = OpenApiRuntimePendingMediationSummary
 export type RuntimeMediationOutcome = OpenApiRuntimeMediationOutcome
 export type RuntimeAuthChallengeSummary = OpenApiRuntimeAuthChallengeSummary
 export type RuntimeAuthStateSummary = OpenApiRuntimeAuthStateSummary

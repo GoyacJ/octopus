@@ -2413,10 +2413,6 @@ fn default_runtime_policy_envelope() -> serde_json::Value {
     serde_json::Value::Object(serde_json::Map::new())
 }
 
-fn default_runtime_serialized_session() -> serde_json::Value {
-    serde_json::Value::Object(serde_json::Map::new())
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeRunCheckpoint {
@@ -2428,8 +2424,6 @@ pub struct RuntimeRunCheckpoint {
     pub capability_id: Option<String>,
     #[serde(default)]
     pub checkpoint_artifact_ref: Option<String>,
-    #[serde(default = "default_runtime_serialized_session")]
-    pub serialized_session: serde_json::Value,
     #[serde(default)]
     pub current_iteration_index: u32,
     #[serde(default)]
@@ -2446,8 +2440,6 @@ pub struct RuntimeRunCheckpoint {
     pub pending_approval: Option<ApprovalRequestRecord>,
     #[serde(default)]
     pub pending_auth_challenge: Option<RuntimeAuthChallengeSummary>,
-    #[serde(default = "default_runtime_policy_envelope")]
-    pub compaction_metadata: serde_json::Value,
     #[serde(default)]
     pub pending_mediation: Option<RuntimePendingMediationSummary>,
     #[serde(default)]
@@ -2852,7 +2844,6 @@ pub struct RuntimeEventEnvelope {
     pub target_kind: Option<String>,
     #[serde(default)]
     pub target_ref: Option<String>,
-    pub payload: Option<serde_json::Value>,
     pub run: Option<RuntimeRunSnapshot>,
     pub message: Option<RuntimeMessage>,
     #[serde(default)]
