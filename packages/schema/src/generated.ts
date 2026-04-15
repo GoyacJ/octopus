@@ -1,10 +1,10 @@
 /* eslint-disable */
 // Generated from contracts/openapi/octopus.openapi.yaml by scripts/generate-schema.mjs.
-// Source hash: 602058b74ea20e152bde1f4c95e87a71368e2272cb6775cced04e26ca1d2af88
+// Source hash: aeac21ba5dac0e57ced837e8a01ebba0629f540126caaa3c100ec86c57bbae31
 
 export const OCTOPUS_OPENAPI_VERSION = "3.1.0"
 export const OCTOPUS_API_VERSION = "0.2.4"
-export const OCTOPUS_OPENAPI_SOURCE_HASH = "602058b74ea20e152bde1f4c95e87a71368e2272cb6775cced04e26ca1d2af88"
+export const OCTOPUS_OPENAPI_SOURCE_HASH = "aeac21ba5dac0e57ced837e8a01ebba0629f540126caaa3c100ec86c57bbae31"
 
 export interface AccessAuditListResponse {
   items: AuditRecord[]
@@ -1676,7 +1676,6 @@ export interface RuntimeEventEnvelope {
   message?: RuntimeMessage
   outcome?: string
   parentRunId?: string
-  payload?: Record<string, unknown>
   pendingMediation?: RuntimePendingMediation
   projectId?: string
   providerStateSummary?: RuntimeCapabilityProviderState[]
@@ -1839,8 +1838,6 @@ export interface RuntimePendingMediation {
 
 export type RuntimePendingMediationSummary = RuntimePendingMediation
 
-export type RuntimePermissionEnvelope = Record<string, unknown>
-
 export type RuntimePermissionMode = "read-only" | "workspace-write" | "danger-full-access"
 
 export interface RuntimePolicyDecisionSummary {
@@ -1854,13 +1851,13 @@ export interface RuntimePolicyDecisionSummary {
 }
 
 export interface RuntimePolicySnapshot {
-  approvalPreference?: RuntimePermissionEnvelope
-  capabilityPolicy?: RuntimePermissionEnvelope
+  approvalPreference?: ApprovalPreference
+  capabilityPolicy?: CapabilityPolicy
   configSnapshotId: string
-  delegationPolicy?: RuntimePermissionEnvelope
+  delegationPolicy?: DelegationPolicy
   executionPermissionMode: RuntimePermissionMode
   manifestRevision: string
-  memoryPolicy?: RuntimePermissionEnvelope
+  memoryPolicy?: MemoryPolicy
   selectedActorRef: string
   selectedConfiguredModelId: string
 }
@@ -1872,7 +1869,6 @@ export interface RuntimeRunCheckpoint {
   capabilityPlanSummary: RuntimeCapabilityPlanSummary
   capabilityStateRef?: string
   checkpointArtifactRef?: string
-  compactionMetadata?: RuntimePermissionEnvelope
   currentIterationIndex: number
   lastExecutionOutcome?: RuntimeCapabilityExecutionOutcome
   lastMediationOutcome?: RuntimeMediationOutcome
@@ -1884,7 +1880,6 @@ export interface RuntimeRunCheckpoint {
   requiredPermission?: string
   requiresApproval?: boolean
   requiresAuth?: boolean
-  serializedSession: RuntimePermissionEnvelope
   targetKind?: string
   targetRef?: string
   usageSummary: RuntimeUsageSummary

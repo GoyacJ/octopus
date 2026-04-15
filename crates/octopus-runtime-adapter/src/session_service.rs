@@ -178,7 +178,6 @@ impl RuntimeSessionService for RuntimeAdapter {
                     broker_decision: None,
                     capability_id: None,
                     checkpoint_artifact_ref: None,
-                    serialized_session: json!({}),
                     current_iteration_index: 0,
                     tool_name: None,
                     dispatch_kind: None,
@@ -187,7 +186,6 @@ impl RuntimeSessionService for RuntimeAdapter {
                     usage_summary: RuntimeUsageSummary::default(),
                     pending_approval: None,
                     pending_auth_challenge: None,
-                    compaction_metadata: json!({}),
                     pending_mediation: None,
                     provider_key: None,
                     reason: None,
@@ -227,6 +225,7 @@ impl RuntimeSessionService for RuntimeAdapter {
             metadata: RuntimeAggregateMetadata {
                 manifest_snapshot_ref: session_policy.manifest_snapshot_ref.clone(),
                 session_policy_snapshot_ref: session_policy.session_policy_snapshot_ref.clone(),
+                primary_run_serialized_session: json!({}),
                 subrun_states: BTreeMap::new(),
             },
         };
@@ -255,12 +254,6 @@ impl RuntimeSessionService for RuntimeAdapter {
             emitted_at: now,
             sequence: 0,
             outcome: Some("compiled".into()),
-            payload: Some(json!({
-                "sessionPolicy": detail.session_policy.clone(),
-                "policyDecisionSummary": detail.policy_decision_summary.clone(),
-                "summary": detail.summary.clone(),
-                "run": detail.run.clone(),
-            })),
             run: Some(detail.run.clone()),
             summary: Some(detail.summary.clone()),
             capability_plan_summary: Some(detail.summary.capability_summary.clone()),
@@ -294,10 +287,6 @@ impl RuntimeSessionService for RuntimeAdapter {
             approval_layer: None,
             target_kind: None,
             target_ref: None,
-            payload: Some(json!({
-                "summary": detail.summary.clone(),
-                "run": detail.run.clone(),
-            })),
             run: Some(detail.run.clone()),
             message: None,
             memory_proposal: None,

@@ -55,6 +55,10 @@ pub(super) struct PersistedSubrunState {
     pub(super) session_policy_snapshot_ref: String,
     #[serde(default)]
     pub(super) dispatch: PersistedSubrunDispatch,
+    #[serde(default)]
+    pub(super) serialized_session: Value,
+    #[serde(default)]
+    pub(super) compaction_metadata: Value,
     pub(super) run: RuntimeRunSnapshot,
 }
 
@@ -686,24 +690,23 @@ fn subrun_checkpoint_missing_serialized_messages(serialized_session: &Value) -> 
         .is_some_and(|messages| !messages.is_empty())
 }
 
-fn seed_subrun_checkpoint_from_dispatch(
-    run: &mut RuntimeRunSnapshot,
-    dispatch: &PersistedSubrunDispatch,
-) {
-    if subrun_checkpoint_missing_serialized_messages(&run.checkpoint.serialized_session) {
-        run.checkpoint.serialized_session =
-            subrun_serialized_session(&dispatch.worker_input, &run.trace_context);
+fn seed_subrun_checkpoint_from_dispatch(state: &mut PersistedSubrunState) {
+    if subrun_checkpoint_missing_serialized_messages(&state.serialized_session) {
+        state.serialized_session =
+            subrun_serialized_session(&state.dispatch.worker_input, &state.run.trace_context);
     }
-    if run.checkpoint.input.is_none() && !dispatch.worker_input.content.trim().is_empty() {
-        run.checkpoint.input = Some(json!({
-            "content": dispatch.worker_input.content,
+    if state.run.checkpoint.input.is_none() && !state.dispatch.worker_input.content.trim().is_empty()
+    {
+        state.run.checkpoint.input = Some(json!({
+            "content": state.dispatch.worker_input.content,
         }));
     }
-    if run.checkpoint.dispatch_kind.is_none() {
-        run.checkpoint.dispatch_kind = Some("team-subrun".into());
+    if state.run.checkpoint.dispatch_kind.is_none() {
+        state.run.checkpoint.dispatch_kind = Some("team-subrun".into());
     }
-    if run.checkpoint.concurrency_policy.is_none() {
-        run.checkpoint.concurrency_policy = Some(if dispatch.worker_concurrency_ceiling <= 1 {
+    if state.run.checkpoint.concurrency_policy.is_none() {
+        state.run.checkpoint.concurrency_policy =
+            Some(if state.dispatch.worker_concurrency_ceiling <= 1 {
             "serialized".into()
         } else {
             "parallel".into()
@@ -742,7 +745,7 @@ pub(crate) fn ensure_subrun_state_metadata_for_session(
             existing.run.handoff_ref = subrun.handoff_ref.clone();
             existing.run.approval_state = subrun_approval_state(&existing.run.status).into();
             merge_frozen_subrun_dispatch(&mut existing.dispatch, dispatch);
-            seed_subrun_checkpoint_from_dispatch(&mut existing.run, &existing.dispatch);
+            seed_subrun_checkpoint_from_dispatch(existing);
             continue;
         }
 
@@ -771,6 +774,14 @@ pub(crate) fn ensure_subrun_state_metadata_for_session(
                 manifest_snapshot_ref,
                 session_policy_snapshot_ref,
                 dispatch: dispatch.clone(),
+                serialized_session: subrun_serialized_session(
+                    &dispatch.worker_input,
+                    &trace_context::runtime_trace_context(
+                        &aggregate.detail.summary.id,
+                        Some(subrun.run_id.clone()),
+                    ),
+                ),
+                compaction_metadata: json!({}),
                 run: RuntimeRunSnapshot {
                     id: subrun.run_id.clone(),
                     session_id: aggregate.detail.summary.id.clone(),
@@ -815,13 +826,6 @@ pub(crate) fn ensure_subrun_state_metadata_for_session(
                         broker_decision: None,
                         capability_id: None,
                         checkpoint_artifact_ref: None,
-                        serialized_session: subrun_serialized_session(
-                            &dispatch.worker_input,
-                            &trace_context::runtime_trace_context(
-                                &aggregate.detail.summary.id,
-                                Some(subrun.run_id.clone()),
-                            ),
-                        ),
                         current_iteration_index: 0,
                         tool_name: None,
                         dispatch_kind: Some("team-subrun".into()),
@@ -836,7 +840,6 @@ pub(crate) fn ensure_subrun_state_metadata_for_session(
                         usage_summary: RuntimeUsageSummary::default(),
                         pending_approval: None,
                         pending_auth_challenge: None,
-                        compaction_metadata: json!({}),
                         pending_mediation: None,
                         provider_key: None,
                         reason: Some("team-worker-subrun".into()),

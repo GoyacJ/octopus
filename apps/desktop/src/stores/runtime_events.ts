@@ -3,12 +3,9 @@ import type { RuntimeEventEnvelope, RuntimeMessage, RuntimeTraceItem, ToolCatalo
 import {
   appendProcessEntry,
   appendToolCall,
-  createPendingApprovalAssistantMessage,
-  createPendingAuthAssistantMessage,
   mergeAssistantMessageWithPlaceholder,
   updateOptimisticAssistantMessage,
 } from './runtime_messages'
-import { normalizeRuntimeSessionDetail } from './runtime_sessions'
 
 function buildToolStats(trace: RuntimeTraceItem[]): Array<{
   toolId: string
@@ -251,7 +248,7 @@ export const runtimeEventActions = {
       nextDetail.pendingApproval = event.approval
       nextDetail.pendingMediation = event.run?.pendingMediation ?? nextDetail.pendingMediation
       if (event.approval) {
-        const updatedMessages = updateOptimisticAssistantMessage(nextDetail.messages, (message) => ({
+        nextDetail.messages = updateOptimisticAssistantMessage(nextDetail.messages, (message) => ({
           ...appendProcessEntry(message, {
             id: event.approval!.id,
             type: 'result',
@@ -262,16 +259,6 @@ export const runtimeEventActions = {
           content: 'Awaiting approval…',
           status: 'waiting_approval',
         }))
-        nextDetail.messages = updatedMessages
-
-        if (!updatedMessages.some((message: RuntimeMessage) => message.id.startsWith('optimistic-assistant-') && message.senderType === 'assistant')) {
-          nextDetail.messages.push(createPendingApprovalAssistantMessage(
-            nextDetail.summary.id,
-            nextDetail.summary.conversationId,
-            event.approval,
-            event.run ?? nextDetail.run,
-          ))
-        }
       }
     }
 
@@ -283,7 +270,7 @@ export const runtimeEventActions = {
     if (eventType === 'auth.challenge_requested' && event.authChallenge) {
       nextDetail.pendingApproval = undefined
       nextDetail.pendingMediation = event.run?.pendingMediation ?? nextDetail.pendingMediation
-      const updatedMessages = updateOptimisticAssistantMessage(nextDetail.messages, (message) => ({
+      nextDetail.messages = updateOptimisticAssistantMessage(nextDetail.messages, (message) => ({
         ...appendProcessEntry(message, {
           id: event.authChallenge!.id,
           type: 'result',
@@ -294,16 +281,6 @@ export const runtimeEventActions = {
         content: 'Awaiting authentication…',
         status: 'waiting_input',
       }))
-      nextDetail.messages = updatedMessages
-
-      if (!updatedMessages.some((message: RuntimeMessage) => message.id === `auth-assistant-${event.authChallenge!.id}`)) {
-        nextDetail.messages.push(createPendingAuthAssistantMessage(
-          nextDetail.summary.id,
-          nextDetail.summary.conversationId,
-          event.authChallenge,
-          event.run ?? nextDetail.run,
-        ))
-      }
     }
 
     if (eventType === 'auth.resolved' || eventType === 'auth.failed') {
@@ -314,7 +291,7 @@ export const runtimeEventActions = {
       this.error = event.error
     }
 
-    this.cacheSessionDetail(normalizeRuntimeSessionDetail(nextDetail))
+    this.cacheSessionDetail(nextDetail)
     this.saveActiveWorkspaceSnapshot()
   },
   async pollSessionEvents(this: any, sessionId?: string, workspaceConnectionId?: string) {

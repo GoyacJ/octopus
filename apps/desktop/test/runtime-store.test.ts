@@ -9,6 +9,7 @@ import { useShellStore } from '@/stores/shell'
 import * as tauriClient from '@/tauri/client'
 import { installWorkspaceApiFixture } from './support/workspace-fixture'
 import { createSessionDetail } from './support/workspace-fixture-runtime'
+import { createPendingMediationSummary } from './support/workspace-fixture-runtime'
 
 async function waitFor(predicate: () => boolean, timeoutMs = 2000) {
   const startedAt = Date.now()
@@ -337,6 +338,159 @@ describe('useRuntimeStore', () => {
     expect(runtime.pendingMediation).toBeNull()
     expect(runtime.authTarget).toBeNull()
     expect(runtime.activeRun?.status).toBe('completed')
+
+    runtime.dispose()
+  })
+
+  it('preserves the optimistic assistant placeholder across session reload until approval events attach typed mediation state', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-approval-placeholder',
+      projectId: 'proj-redesign',
+      title: 'Approval Placeholder Session',
+    })
+
+    await runtime.submitTurn({
+      content: 'Run pwd in the workspace terminal.',
+      permissionMode: 'auto',
+    })
+
+    await waitFor(() => runtime.pendingApproval !== null)
+    await waitFor(() => runtime.activeMessages.some(message => message.id.startsWith('optimistic-assistant-')))
+    await waitFor(() => runtime.activeMessages.some(message => !!message.approval))
+
+    const approvalMessage = runtime.activeMessages.find(message => !!message.approval)
+    expect(approvalMessage?.content).toBe('Awaiting approval…')
+    expect(approvalMessage?.status).toBe('waiting_approval')
+    expect(approvalMessage?.approval?.summary).toBe('Approve workspace command execution')
+
+    runtime.dispose()
+  })
+
+  it('keeps loaded approval state typed without synthesizing an assistant message', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    const detail = createSessionDetail('conv-loaded-approval', 'proj-redesign')
+    detail.run.status = 'waiting_approval'
+    detail.run.currentStep = 'runtime.run.waitingApproval'
+    detail.run.approvalTarget = {
+      id: 'approval-loaded',
+      sessionId: detail.summary.id,
+      conversationId: detail.summary.conversationId,
+      runId: detail.run.id,
+      toolName: 'runtime.turn',
+      summary: 'Loaded approval',
+      detail: 'Server returned a pending approval target.',
+      riskLevel: 'medium',
+      createdAt: 10,
+      status: 'pending',
+    }
+    detail.pendingApproval = undefined
+    detail.messages = []
+
+    runtime.setActiveSession(detail)
+
+    expect(runtime.pendingApproval?.id).toBe('approval-loaded')
+    expect(runtime.activeSession?.messages).toEqual([])
+
+    runtime.dispose()
+  })
+
+  it('does not synthesize approval assistant messages when an approval event arrives without a placeholder', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    await runtime.ensureSession({
+      conversationId: 'conv-approval-event-without-placeholder',
+      projectId: 'proj-redesign',
+      title: 'Approval Event Without Placeholder',
+    })
+
+    runtime.applyRuntimeEvent({
+      id: 'evt-approval-no-placeholder',
+      eventType: 'approval.requested',
+      kind: 'approval.requested',
+      workspaceId: 'ws-local',
+      projectId: 'proj-redesign',
+      sessionId: runtime.activeSessionId,
+      conversationId: runtime.activeConversationId,
+      runId: runtime.activeRun?.id,
+      emittedAt: 110,
+      sequence: 1,
+      approval: {
+        id: 'approval-no-placeholder',
+        sessionId: runtime.activeSessionId,
+        conversationId: runtime.activeConversationId,
+        runId: runtime.activeRun?.id ?? 'runtime-run-approval-no-placeholder',
+        toolName: 'runtime.turn',
+        summary: 'Turn requires approval',
+        detail: 'The server surfaced a pending approval target.',
+        riskLevel: 'medium',
+        createdAt: 110,
+        status: 'pending',
+      },
+      run: {
+        ...runtime.activeRun!,
+        status: 'waiting_approval',
+        currentStep: 'runtime.run.waitingApproval',
+        updatedAt: 110,
+        nextAction: 'runtime.run.awaitingApproval',
+        pendingMediation: {
+          ...createPendingMediationSummary(),
+          mediationKind: 'approval',
+          state: 'pending',
+        },
+      },
+    })
+
+    expect(runtime.pendingApproval?.id).toBe('approval-no-placeholder')
+    expect(runtime.activeSession?.messages).toEqual([])
+
+    runtime.dispose()
+  })
+
+  it('keeps loaded auth state typed without synthesizing an assistant message', async () => {
+    const { runtime } = await prepareRuntimeStore()
+
+    const detail = createSessionDetail('conv-loaded-auth', 'proj-redesign')
+    detail.run.status = 'waiting_input'
+    detail.run.currentStep = 'runtime.run.awaitingAuth'
+    detail.run.authTarget = {
+      id: 'auth-loaded',
+      sessionId: detail.summary.id,
+      conversationId: detail.summary.conversationId,
+      runId: detail.run.id,
+      summary: 'Loaded auth challenge',
+      detail: 'Server returned a pending auth challenge.',
+      status: 'pending',
+      createdAt: 12,
+      approvalLayer: 'provider-auth',
+      escalationReason: 'provider authentication required',
+      targetKind: 'provider-auth',
+      targetRef: 'provider:workspace-api',
+      providerKey: 'workspace-api',
+      requiresAuth: true,
+      requiresApproval: false,
+    }
+    detail.run.pendingMediation = {
+      ...createPendingMediationSummary(),
+      mediationKind: 'auth',
+      state: 'pending',
+      summary: 'Loaded auth challenge',
+      detail: 'Server returned a pending auth challenge.',
+      targetKind: 'provider-auth',
+      targetRef: 'provider:workspace-api',
+      providerKey: 'workspace-api',
+      authChallengeId: 'auth-loaded',
+      requiresAuth: true,
+      requiresApproval: false,
+    }
+    detail.messages = []
+
+    runtime.setActiveSession(detail)
+
+    expect(runtime.authTarget?.id).toBe('auth-loaded')
+    expect(runtime.activeSession?.messages).toEqual([])
 
     runtime.dispose()
   })

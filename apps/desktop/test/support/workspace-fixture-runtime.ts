@@ -45,7 +45,7 @@ function createProviderStateSummary(): RuntimeCapabilityProviderState[] {
   ]
 }
 
-function createPendingMediationSummary(): RuntimePendingMediationSummary {
+export function createPendingMediationSummary(): RuntimePendingMediationSummary {
   return {
     mediationKind: 'none',
   }

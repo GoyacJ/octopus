@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { Blocks, FolderKanban, MessageSquare, Search, Waypoints } from 'lucide-vue-next'
 import type { RouteLocationRaw } from 'vue-router'
 
+import type { ConversationRecord } from '@octopus/schema'
 import { UiButton, UiDialog, UiInput, UiPanelFrame } from '@octopus/ui'
 
 import {
@@ -37,20 +38,49 @@ const runtime = useRuntimeStore()
 const query = ref('')
 const searchInput = ref<{ focus: () => void } | null>(null)
 
+function buildConversationResult(
+  conversation: Pick<ConversationRecord, 'sessionId' | 'title' | 'lastMessagePreview' | 'status' | 'workspaceId' | 'projectId' | 'id'>,
+): SearchResult {
+  return {
+    id: `conversation:${conversation.sessionId}`,
+    title: conversation.title,
+    subtitle: conversation.lastMessagePreview ?? conversation.status,
+    section: t('searchOverlay.sections.conversations'),
+    kind: 'conversation',
+    to: createProjectConversationTarget(
+      conversation.workspaceId,
+      conversation.projectId,
+      conversation.id,
+    ),
+  }
+}
+
 const results = computed<SearchResult[]>(() => {
   const workspaceId = workspaceStore.currentWorkspaceId
   const projectId = workspaceStore.currentProjectId
 
-  const conversations: SearchResult[] = runtime.sessions
-    .filter(session => session.sessionKind !== 'pet')
-    .map((session) => ({
+  const conversationResults = new Map<string, SearchResult>()
+
+  for (const conversation of workspaceStore.activeOverview?.recentConversations ?? []) {
+    conversationResults.set(conversation.sessionId, buildConversationResult(conversation))
+  }
+
+  for (const conversation of workspaceStore.activeDashboard?.recentConversations ?? []) {
+    conversationResults.set(conversation.sessionId, buildConversationResult(conversation))
+  }
+
+  for (const session of runtime.sessions.filter(session => session.sessionKind !== 'pet')) {
+    conversationResults.set(session.id, {
       id: `conversation:${session.id}`,
       title: session.title,
       subtitle: session.lastMessagePreview ?? session.status,
       section: t('searchOverlay.sections.conversations'),
       kind: 'conversation',
       to: createProjectConversationTarget(workspaceId, session.projectId, session.conversationId),
-    }))
+    })
+  }
+
+  const conversations = [...conversationResults.values()]
 
   const projects: SearchResult[] = workspaceStore.projects.map((project) => ({
     id: `project:${project.id}`,
@@ -120,6 +150,13 @@ watch(
       return
     }
 
+    if (shell.activeWorkspaceConnectionId) {
+      await workspaceStore.ensureWorkspaceBootstrap(shell.activeWorkspaceConnectionId)
+    }
+    if (workspaceStore.currentProjectId) {
+      await workspaceStore.loadProjectDashboard(workspaceStore.currentProjectId)
+    }
+    await runtime.bootstrap()
     await nextTick()
     searchInput.value?.focus()
   },

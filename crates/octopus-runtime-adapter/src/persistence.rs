@@ -117,6 +117,31 @@ struct PersistedRuntimeOutputArtifact {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub(super) struct PersistedRuntimeCheckpointArtifact {
+    #[serde(flatten)]
+    pub(super) checkpoint: RuntimeRunCheckpoint,
+    #[serde(default)]
+    pub(super) serialized_session: Value,
+    #[serde(default)]
+    pub(super) compaction_metadata: Value,
+}
+
+impl PersistedRuntimeCheckpointArtifact {
+    pub(super) fn from_public_checkpoint(
+        checkpoint: RuntimeRunCheckpoint,
+        serialized_session: Value,
+        compaction_metadata: Value,
+    ) -> Self {
+        Self {
+            checkpoint,
+            serialized_session,
+            compaction_metadata,
+        }
+    }
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RuntimeArtifactProjectionRow {
     artifact_ref: String,
     session_id: String,
@@ -340,7 +365,7 @@ impl RuntimeAdapter {
         session_id: &str,
         run_id: &str,
         mediation_id: &str,
-        checkpoint: &RuntimeRunCheckpoint,
+        checkpoint: &PersistedRuntimeCheckpointArtifact,
     ) -> Result<(String, String), AppError> {
         self.persist_runtime_artifact(
             self.runtime_mediation_checkpoint_path(session_id, run_id, mediation_id),
@@ -396,6 +421,40 @@ impl RuntimeAdapter {
         Ok(Some(serde_json::from_slice(&raw)?))
     }
 
+    fn load_runtime_output_artifact(
+        &self,
+        artifact_ref: Option<&str>,
+    ) -> Result<Option<PersistedRuntimeOutputArtifact>, AppError> {
+        let Some(artifact_ref) = artifact_ref.filter(|value| !value.trim().is_empty()) else {
+            return Ok(None);
+        };
+        let path = self.runtime_output_artifact_path(artifact_ref);
+        if !path.exists() {
+            return Ok(None);
+        }
+        let raw = fs::read(path)?;
+        Ok(Some(serde_json::from_slice(&raw)?))
+    }
+
+    fn load_primary_run_serialized_session(
+        &self,
+        detail: &RuntimeSessionDetail,
+    ) -> Result<Value, AppError> {
+        if let Some(checkpoint) = self.load_runtime_artifact::<PersistedRuntimeCheckpointArtifact>(
+            detail.run.checkpoint.checkpoint_artifact_ref.as_deref(),
+        )? {
+            return Ok(checkpoint.serialized_session);
+        }
+
+        if let Some(output_artifact) =
+            self.load_runtime_output_artifact(detail.run.artifact_refs.first().map(String::as_str))?
+        {
+            return Ok(output_artifact.serialized_session);
+        }
+
+        Ok(json!({}))
+    }
+
     fn runtime_output_artifact_path(&self, artifact_ref: &str) -> PathBuf {
         self.state
             .paths
@@ -409,6 +468,7 @@ impl RuntimeAdapter {
         session_id: &str,
         conversation_id: &str,
         run: &RuntimeRunSnapshot,
+        serialized_session: &Value,
     ) -> Result<BTreeMap<String, RuntimeArtifactProjectionRow>, AppError> {
         let mut rows = BTreeMap::new();
         for artifact_ref in &run.artifact_refs {
@@ -422,7 +482,7 @@ impl RuntimeAdapter {
                 actor_ref: run.actor_ref.clone(),
                 workflow_run_id: run.workflow_run.clone(),
                 checkpoint_artifact_ref: run.checkpoint.checkpoint_artifact_ref.clone(),
-                serialized_session: run.checkpoint.serialized_session.clone(),
+                serialized_session: serialized_session.clone(),
                 usage_summary: run.usage_summary.clone(),
                 updated_at: run.updated_at,
             };
@@ -817,6 +877,8 @@ impl RuntimeAdapter {
                 &detail.run.id,
                 &detail.subruns,
             )?;
+            let primary_run_serialized_session =
+                self.load_primary_run_serialized_session(&detail)?;
             team_runtime::apply_subrun_state_projection(&mut detail, &subrun_states);
             sync_runtime_session_detail(&mut detail);
             let events = self.load_event_log(&detail.summary.id)?;
@@ -833,6 +895,7 @@ impl RuntimeAdapter {
                             .unwrap_or(fallback_manifest_snapshot_ref),
                         session_policy_snapshot_ref: session_policy_snapshot_ref
                             .unwrap_or(fallback_session_policy_snapshot_ref),
+                        primary_run_serialized_session,
                         subrun_states,
                     },
                 },
@@ -1417,12 +1480,14 @@ impl RuntimeAdapter {
             &summary.id,
             &summary.conversation_id,
             run,
+            &aggregate.metadata.primary_run_serialized_session,
         )?;
         for state in aggregate.metadata.subrun_states.values() {
             runtime_artifact_rows.extend(self.persist_runtime_output_artifacts_for_run(
                 &summary.id,
                 &summary.conversation_id,
                 &state.run,
+                &state.serialized_session,
             )?);
         }
         for artifact in runtime_artifact_rows.values() {

@@ -75,7 +75,9 @@ export const useRuntimeStore = defineStore('runtime', {
       return this.activeSession?.trace ?? []
     },
     activeMessages(): Message[] {
-      return (this.activeSession?.messages ?? []).map((message) => toConversationMessage(message, this.pendingApproval))
+      return (this.activeSession?.messages ?? []).map((message) =>
+        toConversationMessage(message, this.pendingApproval ?? undefined),
+      )
     },
     pendingApproval(): RuntimeApprovalRequest | null {
       return this.activeRun?.approvalTarget ?? this.activeSession?.pendingApproval ?? null
@@ -96,9 +98,7 @@ export const useRuntimeStore = defineStore('runtime', {
       return proposal?.proposalState === 'pending' ? proposal : null
     },
     lastMediationOutcome(): RuntimeMediationOutcome | null {
-      return this.activeRun?.lastMediationOutcome
-        ?? this.activeSession?.lastMediationOutcome
-        ?? null
+      return this.activeRun?.lastMediationOutcome ?? null
     },
     activeRunStatusLabel(): string {
       const status = this.activeRun?.status

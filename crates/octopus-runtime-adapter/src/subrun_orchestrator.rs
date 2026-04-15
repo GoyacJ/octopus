@@ -152,7 +152,6 @@ mod tests {
                 broker_decision: None,
                 capability_id: None,
                 checkpoint_artifact_ref: None,
-                serialized_session: json!({}),
                 current_iteration_index: 0,
                 tool_name: None,
                 dispatch_kind: Some("team-subrun".into()),
@@ -161,7 +160,6 @@ mod tests {
                 usage_summary: RuntimeUsageSummary::default(),
                 pending_approval: None,
                 pending_auth_challenge: None,
-                compaction_metadata: json!({}),
                 pending_mediation: None,
                 provider_key: None,
                 reason: None,
@@ -200,6 +198,8 @@ mod tests {
             manifest_snapshot_ref: format!("manifest-{run_id}"),
             session_policy_snapshot_ref: format!("policy-{run_id}"),
             dispatch: team_runtime::PersistedSubrunDispatch::default(),
+            serialized_session: json!({}),
+            compaction_metadata: json!({}),
             run: test_run(run_id, status, started_at, updated_at),
         }
     }

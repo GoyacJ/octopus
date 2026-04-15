@@ -1,5 +1,3 @@
-import { resolveRuntimePermissionMode, type RuntimePermissionMode } from '@octopus/schema'
-
 import { fetchWorkspaceOpenApi } from './shared'
 import { openRuntimeSseStream } from './runtime_events'
 import { assertWorkspaceRequestReady } from './workspace_api'
@@ -129,16 +127,12 @@ export function createRuntimeApi(context: WorkspaceClientContext): WorkspaceClie
       return await openRuntimeSseStream(context, sessionId, options)
     },
     async submitUserTurn(sessionId, input, idempotencyKey) {
-      const resolvedPermissionMode: RuntimePermissionMode = resolveRuntimePermissionMode(input.permissionMode ?? 'read-only')
       return await fetchWorkspaceOpenApi(context.connection, '/api/v1/runtime/sessions/{sessionId}/turns', 'post', {
         session: assertWorkspaceRequestReady(context),
         pathParams: {
           sessionId,
         },
-        body: JSON.stringify({
-          ...input,
-          permissionMode: resolvedPermissionMode,
-        }),
+        body: JSON.stringify(input),
         idempotencyKey,
       })
     },
